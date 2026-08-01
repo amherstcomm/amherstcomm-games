@@ -65,6 +65,33 @@ export function solveBee(list: string[], input: BeeInput): string[] {
   return matches.sort((a, b) => b.length - a.length || (a < b ? -1 : 1));
 }
 
+export type BoxedInput = {
+  sides: string[][]; // four sides of the box, each holding up to 3 letters
+};
+
+export function solveBoxed(list: string[], input: BoxedInput): string[] {
+  const sideOf = new Map<string, number>();
+  input.sides.forEach((side, i) => {
+    for (const c of side) if (c) sideOf.set(c, i);
+  });
+  // need at least two sides in play for any word to be legal
+  if (new Set(sideOf.values()).size < 2) return [];
+
+  const matches = list.filter((w) => {
+    if (w.length < 3) return false; // Letter Boxed minimum
+    let prev = -1;
+    for (let i = 0; i < w.length; i++) {
+      const s = sideOf.get(w[i]);
+      if (s === undefined || s === prev) return false;
+      prev = s;
+    }
+    return true;
+  });
+
+  // longest words first, then alphabetical
+  return matches.sort((a, b) => b.length - a.length || (a < b ? -1 : 1));
+}
+
 export type DescrambleInput = {
   letters: string[]; // the rack, a-z only
   wildcards: number; // blank tiles that can stand in for any letter

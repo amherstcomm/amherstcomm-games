@@ -1,7 +1,7 @@
 import { useMemo, useState, useEffect, useRef, type ReactNode } from 'react';
-import { Search, Sparkles, Eraser, ArrowDown, ArrowUp, X, BookOpen, Grid3x3, Shuffle, Hexagon, Check, Keyboard, Delete, Github, Info } from 'lucide-react';
+import { Search, Sparkles, Eraser, ArrowDown, ArrowUp, X, BookOpen, Grid3x3, Shuffle, Hexagon, Check, Keyboard, Delete, Github, Info, Square, CalendarDays, Star } from 'lucide-react';
 import { DICTIONARIES, getDictionary, type DictionaryId } from '@/dictionaries';
-import { solvePattern, solveDescramble, solveBee } from '@/solvers';
+import { solvePattern, solveDescramble, solveBee, solveBoxed } from '@/solvers';
 import { loadState, saveState, type Mode, type SortPref } from '@/storage';
 
 const MIN_LEN = 3;
@@ -29,12 +29,20 @@ const MODES: { id: Mode; label: string; blurb: string; description: string }[] =
     description:
       "Enter the hive's seven letters and we'll find every word that uses the center — pangrams first.",
   },
+  {
+    id: 'boxed',
+    label: 'Letter Boxed',
+    blurb: "Twelve letters on four sides — consecutive letters can't share a side",
+    description:
+      "Enter the twelve letters, three per side. We'll find every legal word and the two-word solutions that use all twelve.",
+  },
 ];
 
 const MODE_ICONS: Record<Mode, typeof Grid3x3> = {
   pattern: Grid3x3,
   descramble: Shuffle,
   bee: Hexagon,
+  boxed: Square,
 };
 
 function normalizeLetters(s: string): string[] {
@@ -117,6 +125,56 @@ function Tile({
       )}
     </div>
   );
+}
+
+type ChainEntry = { w: string; m: number; last: string };
+
+type ChainIndex = {
+  entries: ChainEntry[];
+  byFirst: Map<string, ChainEntry[]>;
+  fullMask: number;
+};
+
+const CHAIN_CAP = 500;
+const CHAIN_BUDGET = 2_000_000;
+
+// depth-first search for k-word chains that cover every letter of the box;
+// capped by solution count and visited-node budget so the UI stays snappy
+function findChains(index: ChainIndex, k: number, cap = CHAIN_CAP, budget = CHAIN_BUDGET) {
+  const { entries, byFirst, fullMask } = index;
+  const solutions: string[][] = [];
+  const chain: string[] = [];
+  let nodes = 0;
+  let capped = false;
+
+  const dfs = (covered: number, last: string, depth: number) => {
+    const candidates = depth === 0 ? entries : byFirst.get(last) ?? [];
+    for (const e of candidates) {
+      if (solutions.length >= cap || ++nodes > budget) {
+        capped = true;
+        return;
+      }
+      const next = covered | e.m;
+      if (depth === k - 1) {
+        if (next === fullMask) {
+          chain.push(e.w);
+          solutions.push([...chain]);
+          chain.pop();
+        }
+      } else {
+        // chains that finish early belong to a shorter solution length
+        if (next === fullMask) continue;
+        chain.push(e.w);
+        dfs(next, e.last, depth + 1);
+        chain.pop();
+      }
+    }
+  };
+  dfs(0, '', 0);
+
+  const total = (s: string[]) => s.reduce((n, w) => n + w.length, 0);
+  solutions.sort((a, b) => total(a) - total(b) || (a.join(' ') < b.join(' ') ? -1 : 1));
+  return { solutions, capped };
 }
 
 function LetterChipInput({
@@ -243,6 +301,17 @@ function App() {
   const [minLength, setMinLength] = useState(initial.descramble.minLength);
   const [beeCenter, setBeeCenter] = useState(initial.bee.center);
   const [beeOuters, setBeeOuters] = useState<string[]>(initial.bee.outers);
+  const [boxedLetters, setBoxedLetters] = useState<string[]>(initial.boxed.letters);
+  const [solutionWords, setSolutionWords] = useState(initial.boxed.solutionWords);
+  const [todayStatus, setTodayStatus] = useState<'idle' | 'loading' | 'error'>('idle');
+  const [commonSet, setCommonSet] = useState<Set<string> | null>(null);
+
+  // common-word set used to rank recommended Letter Boxed solutions
+  useEffect(() => {
+    if (mode === 'boxed' && !commonSet) {
+      getDictionary('common').then((ws) => setCommonSet(new Set(ws)));
+    }
+  }, [mode, commonSet]);
   const [showAll, setShowAll] = useState(false);
   const [sorts, setSorts] = useState(initial.sort);
   const [kbOpen, setKbOpen] = useState(initial.keyboard);
@@ -285,8 +354,9 @@ function App() {
       pattern: { length, known, contains: containsStr, excluded: excludedStr },
       descramble: { rack: rackStr, useAll, minLength },
       bee: { center: beeCenter, outers: beeOuters },
+      boxed: { letters: boxedLetters, solutionWords },
     });
-  }, [mode, dictionaries, sorts, kbOpen, length, known, containsStr, excludedStr, rackStr, useAll, minLength, beeCenter, beeOuters]);
+  }, [mode, dictionaries, sorts, kbOpen, length, known, containsStr, excludedStr, rackStr, useAll, minLength, beeCenter, beeOuters, boxedLetters, solutionWords]);
 
   // keep known array sized to length
   useEffect(() => {
@@ -322,6 +392,11 @@ function App() {
     [beeCenter, beeOuters]
   );
 
+  const boxedSides = useMemo(
+    () => [0, 3, 6, 9].map((s) => boxedLetters.slice(s, s + 3).filter(Boolean)),
+    [boxedLetters]
+  );
+
   const results = useMemo(() => {
     if (mode === 'descramble') {
       return solveDescramble(words, { letters: rackLetters, wildcards, useAll, minLength });
@@ -329,8 +404,85 @@ function App() {
     if (mode === 'bee') {
       return solveBee(words, { center: beeCenter, outers: beeOuters });
     }
+    if (mode === 'boxed') {
+      return solveBoxed(words, { sides: boxedSides });
+    }
     return solvePattern(words, { length, known, contains, excluded });
-  }, [mode, words, length, known, contains, excluded, rackLetters, wildcards, useAll, minLength, beeCenter, beeOuters]);
+  }, [mode, words, length, known, contains, excluded, rackLetters, wildcards, useAll, minLength, beeCenter, beeOuters, boxedSides]);
+
+  // shared index for Letter Boxed chain searches; null until all 12 letters are in
+  const boxedIndex = useMemo<ChainIndex | null>(() => {
+    if (mode !== 'boxed') return null;
+    const letters = [...new Set(boxedLetters.filter(Boolean))];
+    if (letters.length !== 12) return null;
+    const idx = new Map(letters.map((c, i) => [c, i]));
+    const popcount = (m: number) => {
+      let n = 0;
+      while (m) {
+        m &= m - 1;
+        n++;
+      }
+      return n;
+    };
+    const entries: ChainEntry[] = results.map((w) => {
+      let m = 0;
+      for (let i = 0; i < w.length; i++) m |= 1 << (idx.get(w[i]) ?? 0);
+      return { w, m, last: w[w.length - 1] };
+    });
+    // trying letter-rich words first surfaces good solutions before the budget runs out
+    entries.sort((a, b) => popcount(b.m) - popcount(a.m));
+    const byFirst = new Map<string, ChainEntry[]>();
+    for (const e of entries) {
+      const g = byFirst.get(e.w[0]) ?? [];
+      g.push(e);
+      byFirst.set(e.w[0], g);
+    }
+    return { entries, byFirst, fullMask: (1 << 12) - 1 };
+  }, [mode, results, boxedLetters]);
+
+  const boxedChains = useMemo(
+    () => (boxedIndex ? findChains(boxedIndex, solutionWords) : { solutions: [], capped: false }),
+    [boxedIndex, solutionWords]
+  );
+
+  // recommended: fewest words, preferring everyday vocabulary, then fewest letters
+  const boxedRecommended = useMemo(() => {
+    if (!boxedIndex) return null;
+    for (let k = 1; k <= 5; k++) {
+      const { solutions } =
+        k === solutionWords ? boxedChains : findChains(boxedIndex, k, 200, 1_000_000);
+      if (solutions.length) {
+        const score = (s: string[]) => {
+          const allCommon = commonSet ? s.every((w) => commonSet.has(w)) : true;
+          return (allCommon ? 0 : 1000) + s.reduce((n, w) => n + w.length, 0);
+        };
+        let best = solutions[0];
+        for (const s of solutions) if (score(s) < score(best)) best = s;
+        return { words: best, allCommon: commonSet ? best.every((w) => commonSet.has(w)) : false };
+      }
+    }
+    return null;
+  }, [boxedIndex, boxedChains, solutionWords, commonSet]);
+
+  async function fillTodaysPuzzle() {
+    setTodayStatus('loading');
+    try {
+      const r = await fetch(
+        'https://raw.githubusercontent.com/rptetzloff/anagrimoire/puzzle-data/data/letterboxed.json',
+        { cache: 'no-store' }
+      );
+      if (!r.ok) throw new Error(String(r.status));
+      const d = await r.json();
+      const letters = (d.sides as string[])
+        .flatMap((s) => s.toLowerCase().replace(/[^a-z]/g, '').split(''))
+        .slice(0, 12);
+      if (letters.length !== 12) throw new Error('bad payload');
+      setBoxedLetters(letters);
+      setTodayStatus('idle');
+    } catch {
+      setTodayStatus('error');
+    }
+  }
 
   const sorted = useMemo(() => {
     const arr = [...results];
@@ -380,7 +532,7 @@ function App() {
     if (mode === 'descramble') {
       return document.querySelector<HTMLInputElement>('input[aria-label="Letters to descramble"]');
     }
-    const group = mode === 'bee' ? 'bee' : 'known';
+    const group = mode === 'bee' ? 'bee' : mode === 'boxed' ? 'boxed' : 'known';
     const tiles = [...document.querySelectorAll<HTMLInputElement>(`input[data-tile-group="${group}"]`)];
     return tiles.find((t) => !t.value) ?? tiles[0] ?? null;
   }
@@ -430,13 +582,43 @@ function App() {
     setRackStr('');
     setBeeCenter('');
     setBeeOuters(Array(6).fill(''));
+    setBoxedLetters(Array(12).fill(''));
   }
 
   return (
-    <div className="min-h-screen bg-slate-950 text-white relative overflow-hidden">
+    <div className="min-h-screen bg-slate-950 text-white relative overflow-x-clip">
       {/* ambient glow */}
       <div className="pointer-events-none absolute -top-40 -left-40 w-[500px] h-[500px] bg-amber-500/10 rounded-full blur-[120px]" />
       <div className="pointer-events-none absolute top-1/3 -right-40 w-[500px] h-[500px] bg-emerald-500/10 rounded-full blur-[120px]" />
+
+      {/* top nav bar */}
+      <nav className="sticky top-0 z-40 bg-slate-950/80 backdrop-blur border-b border-white/10">
+        <div className="max-w-3xl mx-auto px-2 sm:px-5 flex items-center justify-between gap-2">
+          <span className="hidden md:inline-flex items-center gap-2 text-lg font-bold tracking-tight">
+            <Sparkles className="w-4 h-4 text-amber-400" />
+            Anagrimoire
+          </span>
+          <div className="flex-1 md:flex-none grid grid-cols-4 md:flex gap-0.5 sm:gap-1 py-1.5">
+            {MODES.map((m) => {
+              const Icon = MODE_ICONS[m.id];
+              return (
+                <button
+                  key={m.id}
+                  onClick={() => setMode(m.id)}
+                  title={m.blurb}
+                  className={`flex flex-col md:flex-row items-center justify-center gap-0.5 md:gap-1.5 px-1 md:px-3 py-1.5 rounded-lg whitespace-nowrap text-[10px] md:text-sm font-medium md:font-semibold transition-colors
+                    ${mode === m.id
+                      ? 'bg-emerald-400/15 text-emerald-300'
+                      : 'text-slate-400 hover:text-white hover:bg-white/5'}`}
+                >
+                  <Icon className="w-5 h-5 md:w-4 md:h-4" />
+                  <span>{m.label}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      </nav>
 
       <div className={`relative max-w-3xl mx-auto px-5 py-10 sm:py-16 ${kbOpen ? 'pb-64 sm:pb-64' : ''}`}>
         {/* header */}
@@ -448,26 +630,7 @@ function App() {
           <h1 className="pb-2 text-4xl sm:text-5xl font-bold tracking-tight bg-gradient-to-br from-white via-white to-slate-400 bg-clip-text text-transparent">
             Anagrimoire
           </h1>
-          <div className="mt-6 inline-flex rounded-xl bg-white/5 border border-white/10 p-1 gap-1">
-            {MODES.map((m) => {
-              const Icon = MODE_ICONS[m.id];
-              return (
-                <button
-                  key={m.id}
-                  onClick={() => setMode(m.id)}
-                  title={m.blurb}
-                  className={`inline-flex items-center gap-1.5 px-4 h-10 rounded-lg text-sm font-semibold transition-all duration-150
-                    ${mode === m.id
-                      ? 'bg-emerald-400 text-slate-950 shadow-lg shadow-emerald-500/30'
-                      : 'text-slate-300 hover:bg-white/10'}`}
-                >
-                  <Icon className="w-4 h-4" />
-                  {m.label}
-                </button>
-              );
-            })}
-          </div>
-          <p className="mt-4 text-slate-400 max-w-md mx-auto text-sm sm:text-base">
+          <p className="mt-3 text-slate-400 max-w-md mx-auto text-sm sm:text-base">
             {MODES.find((m) => m.id === mode)?.description}
           </p>
         </header>
@@ -674,6 +837,85 @@ function App() {
         </div>
         )}
 
+        {mode === 'boxed' && (() => {
+          const boxTile = (i: number) => (
+            <Tile
+              key={i}
+              index={i}
+              group="boxed"
+              osk={kbOpen}
+              value={boxedLetters[i]}
+              state={boxedLetters[i] ? 'known' : 'empty'}
+              size="sm"
+              onChange={(c) =>
+                setBoxedLetters((prev) => prev.map((x, k) => (k === i ? c : x)))
+              }
+            />
+          );
+          return (
+            <div className="mb-8 text-center">
+              <label className="block text-xs font-medium text-slate-400 uppercase tracking-wider mb-3">
+                Sides of the box
+              </label>
+              <div className="relative w-72 h-72 mx-auto">
+                <div className="absolute inset-14 rounded-xl border-2 border-white/15 bg-white/[0.02]" />
+                {/* top */}
+                <div className="absolute top-0 left-14 right-14 flex justify-around">
+                  {[0, 1, 2].map(boxTile)}
+                </div>
+                {/* right */}
+                <div className="absolute right-0 top-14 bottom-14 flex flex-col justify-around items-end">
+                  {[3, 4, 5].map(boxTile)}
+                </div>
+                {/* bottom */}
+                <div className="absolute bottom-0 left-14 right-14 flex justify-around">
+                  {[6, 7, 8].map(boxTile)}
+                </div>
+                {/* left */}
+                <div className="absolute left-0 top-14 bottom-14 flex flex-col justify-around items-start">
+                  {[9, 10, 11].map(boxTile)}
+                </div>
+              </div>
+              <div className="mt-4 flex flex-wrap items-center justify-center gap-3">
+                <button
+                  onClick={fillTodaysPuzzle}
+                  disabled={todayStatus === 'loading'}
+                  className="inline-flex items-center gap-1.5 px-4 h-10 rounded-lg text-sm font-semibold bg-white/5 border border-white/10 text-slate-300 hover:bg-white/10 hover:text-white transition-colors disabled:opacity-50"
+                >
+                  <CalendarDays className="w-4 h-4" />
+                  {todayStatus === 'loading' ? 'Fetching…' : "Today's puzzle"}
+                </button>
+                <label className="inline-flex items-center gap-2 text-sm text-slate-300">
+                  Solution words
+                  <span className="inline-flex rounded-lg bg-white/5 border border-white/10 p-0.5 gap-0.5">
+                    {[1, 2, 3, 4, 5].map((n) => (
+                      <button
+                        key={n}
+                        onClick={() => setSolutionWords(n)}
+                        className={`w-8 h-8 rounded-md text-sm font-semibold transition-colors
+                          ${solutionWords === n
+                            ? 'bg-white/15 text-white'
+                            : 'text-slate-400 hover:text-white'}`}
+                      >
+                        {n}
+                      </button>
+                    ))}
+                  </span>
+                </label>
+              </div>
+              {todayStatus === 'error' && (
+                <p className="mt-2 text-xs text-rose-400">
+                  Couldn&apos;t fetch today&apos;s puzzle — try again in a minute.
+                </p>
+              )}
+              <p className="mt-3 text-xs text-slate-500">
+                Words are 3+ letters and may reuse letters, but consecutive letters can&apos;t
+                come from the same side.
+              </p>
+            </div>
+          );
+        })()}
+
         {/* results header */}
         <div className="flex items-center justify-between mb-4 flex-wrap gap-y-3">
           <div className="flex items-center gap-2.5">
@@ -743,7 +985,11 @@ function App() {
                   ? beeCenter === ''
                     ? 'Enter the center letter and the six outer letters to find words.'
                     : 'No words found from those letters. Double-check the puzzle.'
-                  : 'No words fit those clues. Try loosening a constraint.'}
+                  : mode === 'boxed'
+                    ? boxedLetters.filter(Boolean).length < 12
+                      ? 'Enter the twelve letters, three per side, to find words.'
+                      : 'No words fit this box. Double-check the puzzle.'
+                    : 'No words fit those clues. Try loosening a constraint.'}
             </p>
           </div>
         ) : (
@@ -762,6 +1008,75 @@ function App() {
               </div>
             ) : (
               <>
+              {boxedRecommended && (
+                <div className="mb-6">
+                  <p className="mb-2.5 text-xs font-medium text-amber-400/80 uppercase tracking-wider inline-flex items-center gap-1.5">
+                    <Star className="w-3.5 h-3.5" />
+                    Recommended
+                    <span className="text-amber-400/50 normal-case tracking-normal">
+                      · {boxedRecommended.words.length}{' '}
+                      {boxedRecommended.words.length === 1 ? 'word' : 'words'}
+                      {boxedRecommended.allCommon ? ', everyday vocabulary' : ''}
+                    </span>
+                  </p>
+                  <div className="grid grid-cols-1 gap-2.5">
+                    <WordChip
+                      word={boxedRecommended.words.join(' ')}
+                      className="bg-amber-400/10 border border-amber-400/30 text-amber-200 font-semibold hover:bg-amber-400/20"
+                    >
+                      {boxedRecommended.words.map((w, i) => (
+                        <span key={i}>
+                          {i > 0 && <span className="text-amber-400/60"> → </span>}
+                          {w}
+                        </span>
+                      ))}
+                    </WordChip>
+                  </div>
+                </div>
+              )}
+              {mode === 'boxed' && boxedIndex && (
+                <div className="mb-6">
+                  <p className="mb-2.5 text-xs font-medium text-emerald-400/80 uppercase tracking-wider">
+                    {solutionWords}-word solutions{' '}
+                    <span className="text-emerald-400/50">
+                      · {boxedChains.capped ? `${boxedChains.solutions.length}+` : boxedChains.solutions.length}
+                    </span>
+                  </p>
+                  {boxedChains.solutions.length === 0 ? (
+                    <p className="text-sm text-slate-500">
+                      No {solutionWords}-word solutions found — try allowing more words.
+                    </p>
+                  ) : (
+                    <>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                        {boxedChains.solutions.slice(0, 24).map((s) => (
+                          <WordChip
+                            key={s.join(' ')}
+                            word={s.join(' ')}
+                            className="bg-emerald-400/10 border border-emerald-400/30 text-emerald-200 font-semibold hover:bg-emerald-400/20"
+                          >
+                            {s.map((w, i) => (
+                              <span key={i}>
+                                {i > 0 && <span className="text-emerald-400/60"> → </span>}
+                                {w}
+                              </span>
+                            ))}
+                          </WordChip>
+                        ))}
+                      </div>
+                      {boxedChains.solutions.length > 24 && (
+                        <p className="mt-2 text-xs text-slate-500">
+                          Showing the 24 shortest of{' '}
+                          {boxedChains.capped
+                            ? `${boxedChains.solutions.length}+ (search capped)`
+                            : boxedChains.solutions.length}{' '}
+                          solutions.
+                        </p>
+                      )}
+                    </>
+                  )}
+                </div>
+              )}
               {pangrams.length > 0 && (
                 <div className="mb-6">
                   <p className="mb-2.5 text-xs font-medium text-amber-400/80 uppercase tracking-wider">
@@ -911,7 +1226,7 @@ function App() {
                 <p className="text-slate-400">
                   Anagrimoire is an independent project. It is not affiliated with,
                   endorsed by, or sponsored by The New York Times Company (Wordle, Spelling
-                  Bee), Hasbro or Mattel (Scrabble), Tribune Content Agency (Jumble), or any
+                  Bee, Letter Boxed), Hasbro or Mattel (Scrabble), Tribune Content Agency (Jumble), or any
                   other puzzle publisher. All game names and trademarks are the property of
                   their respective owners and are used here only to describe the kinds of
                   puzzles this tool can help with.
