@@ -2,7 +2,7 @@
 
 A word-game solver for puzzles like Wordle, crosswords, and hangman. Lock in the letters you know by position, list the letters that must appear somewhere, exclude the rest — Anagrimoire surfaces every dictionary word that fits.
 
-[![Open in Bolt](https://bolt.new/static/open-in-bolt.svg)](https://bolt.new/~/sb1-nblks7s6)
+*Vibe-coded with [Claude](https://claude.com/claude-code).*
 
 ## Features
 
