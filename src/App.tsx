@@ -1,7 +1,7 @@
 import { useMemo, useState, useEffect, useRef, type ReactNode } from 'react';
-import { Search, Sparkles, Eraser, ArrowDown, ArrowUp, X, BookOpen, Grid3x3, Shuffle, Hexagon, Check, Keyboard, Delete, Github, Info } from 'lucide-react';
+import { Search, Sparkles, Eraser, ArrowDown, ArrowUp, X, BookOpen, Grid3x3, Shuffle, Hexagon, Check, Keyboard, Delete, Github, Info, Square } from 'lucide-react';
 import { DICTIONARIES, getDictionary, type DictionaryId } from '@/dictionaries';
-import { solvePattern, solveDescramble, solveBee } from '@/solvers';
+import { solvePattern, solveDescramble, solveBee, solveBoxed } from '@/solvers';
 import { loadState, saveState, type Mode, type SortPref } from '@/storage';
 
 const MIN_LEN = 3;
@@ -29,12 +29,20 @@ const MODES: { id: Mode; label: string; blurb: string; description: string }[] =
     description:
       "Enter the hive's seven letters and we'll find every word that uses the center — pangrams first.",
   },
+  {
+    id: 'boxed',
+    label: 'Letter Boxed',
+    blurb: "Twelve letters on four sides — consecutive letters can't share a side",
+    description:
+      "Enter the twelve letters, three per side. We'll find every legal word and the two-word solutions that use all twelve.",
+  },
 ];
 
 const MODE_ICONS: Record<Mode, typeof Grid3x3> = {
   pattern: Grid3x3,
   descramble: Shuffle,
   bee: Hexagon,
+  boxed: Square,
 };
 
 function normalizeLetters(s: string): string[] {
@@ -243,6 +251,7 @@ function App() {
   const [minLength, setMinLength] = useState(initial.descramble.minLength);
   const [beeCenter, setBeeCenter] = useState(initial.bee.center);
   const [beeOuters, setBeeOuters] = useState<string[]>(initial.bee.outers);
+  const [boxedLetters, setBoxedLetters] = useState<string[]>(initial.boxed.letters);
   const [showAll, setShowAll] = useState(false);
   const [sorts, setSorts] = useState(initial.sort);
   const [kbOpen, setKbOpen] = useState(initial.keyboard);
@@ -285,8 +294,9 @@ function App() {
       pattern: { length, known, contains: containsStr, excluded: excludedStr },
       descramble: { rack: rackStr, useAll, minLength },
       bee: { center: beeCenter, outers: beeOuters },
+      boxed: { letters: boxedLetters },
     });
-  }, [mode, dictionaries, sorts, kbOpen, length, known, containsStr, excludedStr, rackStr, useAll, minLength, beeCenter, beeOuters]);
+  }, [mode, dictionaries, sorts, kbOpen, length, known, containsStr, excludedStr, rackStr, useAll, minLength, beeCenter, beeOuters, boxedLetters]);
 
   // keep known array sized to length
   useEffect(() => {
@@ -322,6 +332,11 @@ function App() {
     [beeCenter, beeOuters]
   );
 
+  const boxedSides = useMemo(
+    () => [0, 3, 6, 9].map((s) => boxedLetters.slice(s, s + 3).filter(Boolean)),
+    [boxedLetters]
+  );
+
   const results = useMemo(() => {
     if (mode === 'descramble') {
       return solveDescramble(words, { letters: rackLetters, wildcards, useAll, minLength });
@@ -329,8 +344,44 @@ function App() {
     if (mode === 'bee') {
       return solveBee(words, { center: beeCenter, outers: beeOuters });
     }
+    if (mode === 'boxed') {
+      return solveBoxed(words, { sides: boxedSides });
+    }
     return solvePattern(words, { length, known, contains, excluded });
-  }, [mode, words, length, known, contains, excluded, rackLetters, wildcards, useAll, minLength, beeCenter, beeOuters]);
+  }, [mode, words, length, known, contains, excluded, rackLetters, wildcards, useAll, minLength, beeCenter, beeOuters, boxedSides]);
+
+  // two-word Letter Boxed solutions covering all twelve letters
+  const boxedPairs = useMemo(() => {
+    if (mode !== 'boxed') return [];
+    const letters = [...new Set(boxedLetters.filter(Boolean))];
+    if (letters.length !== 12) return [];
+    const idx = new Map(letters.map((c, i) => [c, i]));
+    const fullMask = (1 << 12) - 1;
+    const entries = results.map((w) => {
+      let m = 0;
+      for (let i = 0; i < w.length; i++) m |= 1 << (idx.get(w[i]) ?? 0);
+      return { w, m, last: w[w.length - 1] };
+    });
+    const byFirst = new Map<string, typeof entries>();
+    for (const e of entries) {
+      const g = byFirst.get(e.w[0]) ?? [];
+      g.push(e);
+      byFirst.set(e.w[0], g);
+    }
+    const pairs: { a: string; b: string }[] = [];
+    outer: for (const e1 of entries) {
+      for (const e2 of byFirst.get(e1.last) ?? []) {
+        if ((e1.m | e2.m) === fullMask) {
+          pairs.push({ a: e1.w, b: e2.w });
+          if (pairs.length >= 2000) break outer;
+        }
+      }
+    }
+    // shortest total solutions first
+    return pairs.sort(
+      (p, q) => p.a.length + p.b.length - (q.a.length + q.b.length) || (p.a < q.a ? -1 : 1)
+    );
+  }, [mode, results, boxedLetters]);
 
   const sorted = useMemo(() => {
     const arr = [...results];
@@ -380,7 +431,7 @@ function App() {
     if (mode === 'descramble') {
       return document.querySelector<HTMLInputElement>('input[aria-label="Letters to descramble"]');
     }
-    const group = mode === 'bee' ? 'bee' : 'known';
+    const group = mode === 'bee' ? 'bee' : mode === 'boxed' ? 'boxed' : 'known';
     const tiles = [...document.querySelectorAll<HTMLInputElement>(`input[data-tile-group="${group}"]`)];
     return tiles.find((t) => !t.value) ?? tiles[0] ?? null;
   }
@@ -430,6 +481,7 @@ function App() {
     setRackStr('');
     setBeeCenter('');
     setBeeOuters(Array(6).fill(''));
+    setBoxedLetters(Array(12).fill(''));
   }
 
   return (
@@ -674,6 +726,47 @@ function App() {
         </div>
         )}
 
+        {mode === 'boxed' && (
+        <div className="mb-8 text-center">
+          <label className="block text-xs font-medium text-slate-400 uppercase tracking-wider mb-3">
+            Sides of the box
+          </label>
+          <div className="flex flex-col items-center gap-2.5">
+            {['Top', 'Right', 'Bottom', 'Left'].map((side, s) => (
+              <div key={side} className="flex items-center gap-3">
+                <span className="w-14 text-right text-xs text-slate-500 uppercase tracking-wider">
+                  {side}
+                </span>
+                <div className="flex gap-2">
+                  {[0, 1, 2].map((j) => {
+                    const i = s * 3 + j;
+                    return (
+                      <Tile
+                        key={i}
+                        index={i}
+                        group="boxed"
+                        osk={kbOpen}
+                        value={boxedLetters[i]}
+                        state={boxedLetters[i] ? 'known' : 'empty'}
+                        size="md"
+                        onChange={(c) =>
+                          setBoxedLetters((prev) => prev.map((x, k) => (k === i ? c : x)))
+                        }
+                      />
+                    );
+                  })}
+                </div>
+                <span className="w-14" aria-hidden="true" />
+              </div>
+            ))}
+          </div>
+          <p className="mt-3 text-xs text-slate-500">
+            Words are 3+ letters and may reuse letters, but consecutive letters can&apos;t
+            come from the same side.
+          </p>
+        </div>
+        )}
+
         {/* results header */}
         <div className="flex items-center justify-between mb-4 flex-wrap gap-y-3">
           <div className="flex items-center gap-2.5">
@@ -743,7 +836,11 @@ function App() {
                   ? beeCenter === ''
                     ? 'Enter the center letter and the six outer letters to find words.'
                     : 'No words found from those letters. Double-check the puzzle.'
-                  : 'No words fit those clues. Try loosening a constraint.'}
+                  : mode === 'boxed'
+                    ? boxedLetters.filter(Boolean).length < 12
+                      ? 'Enter the twelve letters, three per side, to find words.'
+                      : 'No words fit this box. Double-check the puzzle.'
+                    : 'No words fit those clues. Try loosening a constraint.'}
             </p>
           </div>
         ) : (
@@ -762,6 +859,33 @@ function App() {
               </div>
             ) : (
               <>
+              {boxedPairs.length > 0 && (
+                <div className="mb-6">
+                  <p className="mb-2.5 text-xs font-medium text-emerald-400/80 uppercase tracking-wider">
+                    Two-word solutions{' '}
+                    <span className="text-emerald-400/50">
+                      · {boxedPairs.length >= 2000 ? '2,000+' : boxedPairs.length}
+                    </span>
+                  </p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5">
+                    {boxedPairs.slice(0, 24).map((p) => (
+                      <WordChip
+                        key={`${p.a} ${p.b}`}
+                        word={`${p.a} ${p.b}`}
+                        className="bg-emerald-400/10 border border-emerald-400/30 text-emerald-200 font-semibold hover:bg-emerald-400/20"
+                      >
+                        {p.a} <span className="text-emerald-400/60">→</span> {p.b}
+                      </WordChip>
+                    ))}
+                  </div>
+                  {boxedPairs.length > 24 && (
+                    <p className="mt-2 text-xs text-slate-500">
+                      Showing the 24 shortest of{' '}
+                      {boxedPairs.length >= 2000 ? '2,000+' : boxedPairs.length} solutions.
+                    </p>
+                  )}
+                </div>
+              )}
               {pangrams.length > 0 && (
                 <div className="mb-6">
                   <p className="mb-2.5 text-xs font-medium text-amber-400/80 uppercase tracking-wider">

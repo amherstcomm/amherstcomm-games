@@ -1,10 +1,10 @@
 import type { DictionaryId } from '@/dictionaries';
 
-export type Mode = 'pattern' | 'descramble' | 'bee';
+export type Mode = 'pattern' | 'descramble' | 'bee' | 'boxed';
 
 const KEY = 'anagrimoire:v1';
 
-const ALL_MODES: Mode[] = ['pattern', 'descramble', 'bee'];
+const ALL_MODES: Mode[] = ['pattern', 'descramble', 'bee', 'boxed'];
 const ALL_DICTS: DictionaryId[] = ['common', 'standard', 'full'];
 
 export type SortKey = 'alpha' | 'length';
@@ -19,20 +19,23 @@ export type PersistedState = {
   pattern: { length: number; known: string[]; contains: string; excluded: string };
   descramble: { rack: string; useAll: boolean; minLength: number };
   bee: { center: string; outers: string[] };
+  boxed: { letters: string[] };
 };
 
 export const DEFAULT_STATE: PersistedState = {
   mode: 'pattern',
-  dictionaries: { pattern: 'common', descramble: 'common', bee: 'common' },
+  dictionaries: { pattern: 'common', descramble: 'common', bee: 'common', boxed: 'common' },
   sort: {
     pattern: { key: 'alpha', dir: 'asc' },
     descramble: { key: 'length', dir: 'desc' },
     bee: { key: 'length', dir: 'desc' },
+    boxed: { key: 'length', dir: 'desc' },
   },
   keyboard: false,
   pattern: { length: 5, known: Array(5).fill(''), contains: '', excluded: '' },
   descramble: { rack: '', useAll: false, minLength: 3 },
   bee: { center: '', outers: Array(6).fill('') },
+  boxed: { letters: Array(12).fill('') },
 };
 
 function singleLetter(v: unknown): string {
@@ -68,6 +71,7 @@ export function loadState(): PersistedState {
       pattern: { ...DEFAULT_STATE.sort.pattern },
       descramble: { ...DEFAULT_STATE.sort.descramble },
       bee: { ...DEFAULT_STATE.sort.bee },
+      boxed: { ...DEFAULT_STATE.sort.boxed },
     };
     for (const m of ALL_MODES) {
       const s = p?.sort?.[m];
@@ -86,6 +90,11 @@ export function loadState(): PersistedState {
     const outers = Array(6).fill('');
     if (Array.isArray(p?.bee?.outers)) {
       for (let i = 0; i < 6; i++) outers[i] = singleLetter(p.bee.outers[i]);
+    }
+
+    const boxedLetters = Array(12).fill('');
+    if (Array.isArray(p?.boxed?.letters)) {
+      for (let i = 0; i < 12; i++) boxedLetters[i] = singleLetter(p.boxed.letters[i]);
     }
 
     return {
@@ -108,6 +117,7 @@ export function loadState(): PersistedState {
         center: singleLetter(p?.bee?.center),
         outers,
       },
+      boxed: { letters: boxedLetters },
     };
   } catch {
     return DEFAULT_STATE;

@@ -1,6 +1,6 @@
 # Anagrimoire
 
-A word-game solver for puzzles like Wordle, crosswords, hangman, Scrabble, Jumble, and Spelling Bee. Solve by pattern — lock in the letters you know by position, list the letters that must appear somewhere, exclude the rest — descramble a rack of letters to see every word it can spell, or crack a Spelling Bee hive.
+A word-game solver for puzzles like Wordle, crosswords, hangman, Scrabble, Jumble, Spelling Bee, and Letter Boxed. Solve by pattern — lock in the letters you know by position, list the letters that must appear somewhere, exclude the rest — descramble a rack of letters, crack a Spelling Bee hive, or find two-word Letter Boxed solutions.
 
 *Vibe-coded with [Claude](https://claude.com/claude-code).*
 
@@ -13,6 +13,7 @@ A word-game solver for puzzles like Wordle, crosswords, hangman, Scrabble, Jumbl
 - **Pattern** (Wordle, crosswords, hangman) — word lengths from 3 to 15; tile inputs for known positions, must-contain letters (position unknown, duplicates respected), and excluded letters, with per-letter highlighting in the results
 - **Descramble** (Scrabble, Jumble) — find every word a rack of letters can spell, with `?` wildcards for blank tiles, an exact-anagram "use every letter" option, and a minimum-length filter
 - **Spelling Bee** — seven letters, 4+ letter words, center letter required, letters reusable; pangrams surface in their own highlighted group
+- **Letter Boxed** — twelve letters on four sides, 3+ letter words, letters reusable, but consecutive letters can't share a side; two-word solutions covering all twelve letters surface first, shortest first
 
 ### Dictionaries
 
