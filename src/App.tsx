@@ -48,6 +48,7 @@ function Tile({
   index,
   size,
   group,
+  osk,
 }: {
   value: string;
   onChange: (v: string) => void;
@@ -55,6 +56,7 @@ function Tile({
   index: number;
   size: 'sm' | 'md';
   group: string;
+  osk?: boolean; // on-screen keyboard active: suppress the device keyboard
 }) {
   const ref = useRef<HTMLInputElement>(null);
   const dims =
@@ -89,6 +91,7 @@ function Tile({
           else if (e.key === 'ArrowRight') focusTile(index + 1);
         }}
         maxLength={1}
+        inputMode={osk ? 'none' : undefined}
         aria-label={`Letter at position ${index + 1}`}
         placeholder="·"
         className={`${dims} text-center font-bold uppercase rounded-xl border-2 transition-all duration-150 outline-none
@@ -446,6 +449,7 @@ function App() {
                 key={i}
                 index={i}
                 group="known"
+                osk={kbOpen}
                 value={v}
                 state={v ? 'known' : 'empty'}
                 size={length > 10 ? 'sm' : 'md'}
@@ -469,6 +473,7 @@ function App() {
             <input
               value={containsStr}
               onChange={(e) => setContainsStr(e.target.value)}
+              inputMode={kbOpen ? 'none' : undefined}
               placeholder="e.g. d"
               className="w-full h-12 px-4 rounded-xl bg-white/5 border-2 border-white/10 text-lg font-semibold uppercase tracking-wider text-amber-200 placeholder-slate-600 placeholder-normal-case focus:border-amber-400 focus:bg-amber-400/5 outline-none transition-all"
             />
@@ -480,6 +485,7 @@ function App() {
             <input
               value={excludedStr}
               onChange={(e) => setExcludedStr(e.target.value)}
+              inputMode={kbOpen ? 'none' : undefined}
               placeholder="letters not in the word"
               className="w-full h-12 px-4 rounded-xl bg-white/5 border-2 border-white/10 text-lg font-semibold uppercase tracking-wider text-rose-300 placeholder-slate-600 placeholder-normal-case focus:border-rose-400 focus:bg-rose-400/5 outline-none transition-all"
             />
@@ -497,6 +503,7 @@ function App() {
             <input
               value={rackStr}
               onChange={(e) => setRackStr(e.target.value.toLowerCase().replace(/[^a-z?]/g, '').slice(0, MAX_LEN))}
+              inputMode={kbOpen ? 'none' : undefined}
               placeholder="e.g. aetrsn?"
               aria-label="Letters to descramble"
               className="w-full h-14 px-4 rounded-xl bg-white/5 border-2 border-white/10 text-2xl text-center font-bold uppercase tracking-[0.3em] text-amber-200 placeholder-slate-600 placeholder-normal-case focus:border-amber-400 focus:bg-amber-400/5 outline-none transition-all"
@@ -542,6 +549,7 @@ function App() {
               <Tile
                 index={0}
                 group="bee"
+                osk={kbOpen}
                 value={beeCenter}
                 state="center"
                 size="md"
@@ -558,6 +566,7 @@ function App() {
                     key={i}
                     index={i + 1}
                     group="bee"
+                    osk={kbOpen}
                     value={v}
                     state={v ? 'known' : 'empty'}
                     size="md"
@@ -577,7 +586,7 @@ function App() {
         )}
 
         {/* results header */}
-        <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center justify-between mb-4 flex-wrap gap-y-3">
           <div className="flex items-center gap-2.5">
             <div className="flex items-center justify-center w-9 h-9 rounded-lg bg-white/5 border border-white/10">
               <Search className="w-4 h-4 text-slate-300" />
@@ -598,7 +607,7 @@ function App() {
                   <button
                     key={k}
                     onClick={() => setSort({ key: k })}
-                    className={`px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors
+                    className={`px-2.5 py-1.5 rounded-md text-xs font-medium whitespace-nowrap transition-colors
                       ${sort.key === k
                         ? 'bg-white/15 text-white'
                         : 'text-slate-400 hover:text-white'}`}
@@ -898,21 +907,21 @@ function App() {
           >
             <X className="w-4 h-4" />
           </button>
-          <div className="max-w-xl mx-auto flex flex-col items-center gap-1.5">
+          <div className="w-full max-w-md mx-auto flex flex-col gap-1.5">
             {[
-              [...'qwertyuiop'.split(''), 'backspace'],
+              'qwertyuiop'.split(''),
               'asdfghjkl'.split(''),
-              [...'zxcvbnm'.split(''), ...(mode === 'descramble' ? ['?'] : [])],
+              [...(mode === 'descramble' ? ['?'] : []), ...'zxcvbnm'.split(''), 'backspace'],
             ].map((row, r) => (
-              <div key={r} className="flex gap-1.5">
+              <div key={r} className={`flex w-full gap-1 sm:gap-1.5 ${r === 1 ? 'px-[4.5%]' : ''}`}>
                 {row.map((k) => (
                   <button
                     key={k}
                     onMouseDown={(e) => e.preventDefault()}
                     onClick={() => pressKey(k)}
                     aria-label={k === 'backspace' ? 'Backspace' : `Key ${k}`}
-                    className={`h-11 rounded-md bg-white/10 hover:bg-white/20 active:bg-white/30 text-sm font-semibold uppercase text-white transition-colors flex items-center justify-center
-                      ${k === 'backspace' ? 'px-3 sm:px-4' : 'w-8 sm:w-9'}`}
+                    className={`h-11 min-w-0 rounded-md bg-white/10 hover:bg-white/20 active:bg-white/30 text-sm font-semibold uppercase text-white transition-colors flex items-center justify-center
+                      ${k === 'backspace' ? 'flex-[1.5]' : 'flex-1'}`}
                   >
                     {k === 'backspace' ? <Delete className="w-4 h-4" /> : k}
                   </button>
