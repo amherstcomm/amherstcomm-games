@@ -1,5 +1,5 @@
-import { useMemo, useState, useEffect, useRef } from 'react';
-import { Search, Sparkles, Eraser, ArrowDown, X, BookOpen, Grid3x3, Shuffle, Hexagon } from 'lucide-react';
+import { useMemo, useState, useEffect, useRef, type ReactNode } from 'react';
+import { Search, Sparkles, Eraser, ArrowDown, X, BookOpen, Grid3x3, Shuffle, Hexagon, Check } from 'lucide-react';
 import { DICTIONARIES, getDictionary, type DictionaryId } from '@/dictionaries';
 import { solvePattern, solveDescramble, solveBee } from '@/solvers';
 
@@ -67,6 +67,39 @@ function Tile({
             : 'bg-white/5 border-white/10 text-white placeholder-white/25 hover:border-white/20'}
         focus:border-amber-400 focus:bg-amber-400/10 focus:shadow-[0_0_24px_-6px] focus:shadow-amber-400/50`}
     />
+  );
+}
+
+function WordChip({
+  word,
+  className,
+  children,
+}: {
+  word: string;
+  className: string;
+  children?: ReactNode;
+}) {
+  const [copied, setCopied] = useState(false);
+
+  return (
+    <button
+      onClick={() => {
+        navigator.clipboard.writeText(word).then(() => {
+          setCopied(true);
+          setTimeout(() => setCopied(false), 1000);
+        });
+      }}
+      title="Click to copy"
+      className={`px-3 py-2.5 rounded-lg text-center text-lg tracking-wide transition-colors ${className}`}
+    >
+      {copied ? (
+        <span className="inline-flex items-center gap-1.5 text-emerald-300 text-base font-medium">
+          <Check className="w-4 h-4" /> Copied
+        </span>
+      ) : (
+        children ?? word
+      )}
+    </button>
   );
 }
 
@@ -448,12 +481,13 @@ function App() {
             {mode === 'pattern' ? (
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2.5">
                 {visible.map((w) => (
-                  <div
+                  <WordChip
                     key={w}
-                    className="px-3 py-2.5 rounded-lg bg-white/[0.04] border border-white/10 text-center text-lg tracking-wide hover:bg-white/[0.08] hover:border-white/20 transition-colors cursor-default"
+                    word={w}
+                    className="bg-white/[0.04] border border-white/10 hover:bg-white/[0.08] hover:border-white/20"
                   >
                     {highlight(w)}
-                  </div>
+                  </WordChip>
                 ))}
               </div>
             ) : (
@@ -465,12 +499,11 @@ function App() {
                   </p>
                   <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2.5">
                     {pangrams.map((w) => (
-                      <div
+                      <WordChip
                         key={w}
-                        className="px-3 py-2.5 rounded-lg bg-amber-400/10 border border-amber-400/30 text-center text-lg tracking-wide text-amber-200 font-semibold hover:bg-amber-400/20 transition-colors cursor-default"
-                      >
-                        {w}
-                      </div>
+                        word={w}
+                        className="bg-amber-400/10 border border-amber-400/30 text-amber-200 font-semibold hover:bg-amber-400/20"
+                      />
                     ))}
                   </div>
                 </div>
@@ -486,12 +519,11 @@ function App() {
                   </p>
                   <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2.5">
                     {ws.map((w) => (
-                      <div
+                      <WordChip
                         key={w}
-                        className="px-3 py-2.5 rounded-lg bg-white/[0.04] border border-white/10 text-center text-lg tracking-wide text-slate-300 hover:bg-white/[0.08] hover:border-white/20 transition-colors cursor-default"
-                      >
-                        {w}
-                      </div>
+                        word={w}
+                        className="bg-white/[0.04] border border-white/10 text-slate-300 hover:bg-white/[0.08] hover:border-white/20"
+                      />
                     ))}
                   </div>
                 </div>
