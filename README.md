@@ -1,6 +1,6 @@
 # Anagrimoire
 
-A word-game solver for puzzles like Wordle, crosswords, and hangman. Lock in the letters you know by position, list the letters that must appear somewhere, exclude the rest — Anagrimoire surfaces every dictionary word that fits.
+A word-game solver for puzzles like Wordle, crosswords, hangman, Scrabble, and Jumble. Solve by pattern — lock in the letters you know by position, list the letters that must appear somewhere, exclude the rest — or descramble a rack of letters to see every word it can spell.
 
 *Vibe-coded with [Claude](https://claude.com/claude-code).*
 
@@ -8,6 +8,7 @@ A word-game solver for puzzles like Wordle, crosswords, and hangman. Lock in the
 
 ## Features
 
+- **Two solver modes** — Pattern (Wordle, crosswords, hangman) and Descramble (Scrabble, Jumble: find every word a rack of letters can spell, with `?` wildcards for blank tiles, an exact-anagram option, and results grouped by length)
 - **Three dictionaries** — Common (everyday words, ideal for Wordle-style puzzles), Standard (adds less frequent words), and Full (~275,000 words, obscurities included); larger dictionaries load on demand
 - **Word lengths from 3 to 15 letters** — works for more than just 5-letter puzzles
 - **Known positions** — tile inputs for letters you've confirmed in place

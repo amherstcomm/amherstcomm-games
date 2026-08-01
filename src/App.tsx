@@ -1,50 +1,17 @@
 import { useMemo, useState, useEffect, useRef } from 'react';
-import { Search, Sparkles, Eraser, ArrowDown, X, BookOpen } from 'lucide-react';
+import { Search, Sparkles, Eraser, ArrowDown, X, BookOpen, Grid3x3, Shuffle } from 'lucide-react';
 import { DICTIONARIES, getDictionary, type DictionaryId } from '@/dictionaries';
+import { solvePattern, solveDescramble } from '@/solvers';
 
 const MIN_LEN = 3;
 const MAX_LEN = 15;
 
-type SolverInput = {
-  length: number;
-  known: string[]; // known letters by position, '' for unknown
-  contains: string[]; // letters that must appear (multiset)
-  excluded: string[]; // letters that must not appear
-};
+type Mode = 'pattern' | 'descramble';
 
-function solve(list: string[], input: SolverInput): string[] {
-  const { length, known, contains, excluded } = input;
-
-  const excludedSet = new Set(excluded.filter(Boolean));
-  const containsCounts = new Map<string, number>();
-  for (const c of contains) {
-    if (c) containsCounts.set(c, (containsCounts.get(c) ?? 0) + 1);
-  }
-
-  return list.filter((w) => {
-    if (w.length !== length) return false;
-
-    // excluded letters
-    for (let i = 0; i < w.length; i++) {
-      if (excludedSet.has(w[i])) return false;
-    }
-
-    // known positions
-    for (let i = 0; i < known.length; i++) {
-      const k = known[i];
-      if (k && w[i] !== k) return false;
-    }
-
-    // must-contain multiset
-    for (const [ch, need] of containsCounts) {
-      let count = 0;
-      for (let i = 0; i < w.length; i++) if (w[i] === ch) count++;
-      if (count < need) return false;
-    }
-
-    return true;
-  });
-}
+const MODES: { id: Mode; label: string; blurb: string }[] = [
+  { id: 'pattern', label: 'Pattern', blurb: 'Wordle, crosswords, hangman — clues about positions' },
+  { id: 'descramble', label: 'Descramble', blurb: 'Scrabble, Jumble — what can these letters spell?' },
+];
 
 function normalizeLetters(s: string): string[] {
   return s.toLowerCase().replace(/[^a-z]/g, '').split('');
@@ -95,11 +62,15 @@ function Tile({
 }
 
 function App() {
+  const [mode, setMode] = useState<Mode>('pattern');
   const [dictionaryId, setDictionaryId] = useState<DictionaryId>('common');
   const [length, setLength] = useState(5);
   const [known, setKnown] = useState<string[]>(Array(5).fill(''));
   const [containsStr, setContainsStr] = useState('');
   const [excludedStr, setExcludedStr] = useState('');
+  const [rackStr, setRackStr] = useState('');
+  const [useAll, setUseAll] = useState(false);
+  const [minLength, setMinLength] = useState(3);
   const [showAll, setShowAll] = useState(false);
 
   // keep known array sized to length
@@ -125,9 +96,18 @@ function App() {
     };
   }, [dictionaryId]);
 
+  const rackLetters = useMemo(
+    () => rackStr.toLowerCase().replace(/[^a-z]/g, '').split('').filter(Boolean),
+    [rackStr]
+  );
+  const wildcards = useMemo(() => (rackStr.match(/\?/g) ?? []).length, [rackStr]);
+
   const results = useMemo(() => {
-    return solve(words, { length, known, contains, excluded });
-  }, [words, length, known, contains, excluded]);
+    if (mode === 'descramble') {
+      return solveDescramble(words, { letters: rackLetters, wildcards, useAll, minLength });
+    }
+    return solvePattern(words, { length, known, contains, excluded });
+  }, [mode, words, length, known, contains, excluded, rackLetters, wildcards, useAll, minLength]);
 
   const visible = showAll ? results : results.slice(0, 200);
 
@@ -158,6 +138,7 @@ function App() {
     setKnown(Array(length).fill(''));
     setContainsStr('');
     setExcludedStr('');
+    setRackStr('');
   }
 
   return (
@@ -181,6 +162,29 @@ function App() {
             We'll surface every dictionary word that fits.
           </p>
         </header>
+
+        {/* mode selector */}
+        <section className="mb-7 text-center">
+          <div className="inline-flex rounded-xl bg-white/5 border border-white/10 p-1 gap-1">
+            {MODES.map((m) => (
+              <button
+                key={m.id}
+                onClick={() => setMode(m.id)}
+                title={m.blurb}
+                className={`inline-flex items-center gap-1.5 px-4 h-10 rounded-lg text-sm font-semibold transition-all duration-150
+                  ${mode === m.id
+                    ? 'bg-emerald-400 text-slate-950 shadow-lg shadow-emerald-500/30'
+                    : 'text-slate-300 hover:bg-white/10'}`}
+              >
+                {m.id === 'pattern' ? <Grid3x3 className="w-4 h-4" /> : <Shuffle className="w-4 h-4" />}
+                {m.label}
+              </button>
+            ))}
+          </div>
+          <p className="mt-2 text-xs text-slate-500">
+            {MODES.find((m) => m.id === mode)?.blurb}
+          </p>
+        </section>
 
         {/* dictionary selector */}
         <section className="mb-7 text-center">
@@ -208,6 +212,8 @@ function App() {
           </p>
         </section>
 
+        {mode === 'pattern' && (
+        <>
         {/* length selector */}
         <section className="mb-7 text-center">
           <label className="block text-xs font-medium text-slate-400 uppercase tracking-wider mb-2.5">
@@ -278,6 +284,52 @@ function App() {
             />
           </section>
         </div>
+        </>
+        )}
+
+        {mode === 'descramble' && (
+        <div className="mb-8">
+          <section className="mb-5">
+            <label className="block text-xs font-medium text-slate-400 uppercase tracking-wider mb-2.5 text-center">
+              Your letters <span className="text-amber-400/70 normal-case">(use ? for a blank tile)</span>
+            </label>
+            <input
+              value={rackStr}
+              onChange={(e) => setRackStr(e.target.value.toLowerCase().replace(/[^a-z?]/g, '').slice(0, MAX_LEN))}
+              placeholder="e.g. aetrsn?"
+              aria-label="Letters to descramble"
+              className="w-full h-14 px-4 rounded-xl bg-white/5 border-2 border-white/10 text-2xl text-center font-bold uppercase tracking-[0.3em] text-amber-200 placeholder-slate-600 placeholder-normal-case focus:border-amber-400 focus:bg-amber-400/5 outline-none transition-all"
+            />
+          </section>
+          <div className="flex flex-wrap items-center justify-center gap-3">
+            <button
+              onClick={() => setUseAll((v) => !v)}
+              className={`inline-flex items-center gap-1.5 px-4 h-10 rounded-lg text-sm font-semibold transition-all duration-150 border
+                ${useAll
+                  ? 'bg-amber-400 text-slate-950 border-amber-400 shadow-lg shadow-amber-500/30'
+                  : 'bg-white/5 border-white/10 text-slate-300 hover:bg-white/10'}`}
+            >
+              Use every letter
+            </button>
+            {!useAll && (
+              <label className="inline-flex items-center gap-2 text-sm text-slate-300">
+                Min length
+                <select
+                  value={minLength}
+                  onChange={(e) => setMinLength(Number(e.target.value))}
+                  className="h-10 px-3 rounded-lg bg-white/5 border border-white/10 text-sm font-semibold text-white outline-none focus:border-amber-400 [&>option]:bg-slate-900"
+                >
+                  {[2, 3, 4, 5, 6, 7].map((n) => (
+                    <option key={n} value={n}>
+                      {n}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
+          </div>
+        </div>
+        )}
 
         {/* results header */}
         <div className="flex items-center justify-between mb-4">
@@ -306,20 +358,50 @@ function App() {
         {/* results */}
         {results.length === 0 ? (
           <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-10 text-center">
-            <p className="text-slate-400">No words fit those clues. Try loosening a constraint.</p>
+            <p className="text-slate-400">
+              {mode === 'descramble'
+                ? rackLetters.length + wildcards === 0
+                  ? 'Type your letters above to see what they can spell.'
+                  : 'Nothing spells from those letters. Try adding a wildcard (?) or lowering the minimum length.'
+                : 'No words fit those clues. Try loosening a constraint.'}
+            </p>
           </div>
         ) : (
           <>
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2.5">
-              {visible.map((w) => (
-                <div
-                  key={w}
-                  className="px-3 py-2.5 rounded-lg bg-white/[0.04] border border-white/10 text-center text-lg tracking-wide hover:bg-white/[0.08] hover:border-white/20 transition-colors cursor-default"
-                >
-                  {highlight(w)}
+            {mode === 'pattern' ? (
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2.5">
+                {visible.map((w) => (
+                  <div
+                    key={w}
+                    className="px-3 py-2.5 rounded-lg bg-white/[0.04] border border-white/10 text-center text-lg tracking-wide hover:bg-white/[0.08] hover:border-white/20 transition-colors cursor-default"
+                  >
+                    {highlight(w)}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              [...visible.reduce((m, w) => {
+                const g = m.get(w.length) ?? [];
+                g.push(w);
+                return m.set(w.length, g);
+              }, new Map<number, string[]>())].map(([len, ws]) => (
+                <div key={len} className="mb-6">
+                  <p className="mb-2.5 text-xs font-medium text-slate-400 uppercase tracking-wider">
+                    {len} letters <span className="text-slate-600">· {ws.length}</span>
+                  </p>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2.5">
+                    {ws.map((w) => (
+                      <div
+                        key={w}
+                        className="px-3 py-2.5 rounded-lg bg-white/[0.04] border border-white/10 text-center text-lg tracking-wide text-slate-300 hover:bg-white/[0.08] hover:border-white/20 transition-colors cursor-default"
+                      >
+                        {w}
+                      </div>
+                    ))}
+                  </div>
                 </div>
-              ))}
-            </div>
+              ))
+            )}
             {results.length > 200 && (
               <button
                 onClick={() => setShowAll((s) => !s)}
