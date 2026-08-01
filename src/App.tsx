@@ -97,7 +97,7 @@ function Tile({
 function App() {
   const [length, setLength] = useState(5);
   const [known, setKnown] = useState<string[]>(Array(5).fill(''));
-  const [containsStr, setContainsStr] = useState('d');
+  const [containsStr, setContainsStr] = useState('');
   const [excludedStr, setExcludedStr] = useState('');
   const [showAll, setShowAll] = useState(false);
 
