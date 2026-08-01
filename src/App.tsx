@@ -586,10 +586,39 @@ function App() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-950 text-white relative overflow-hidden">
+    <div className="min-h-screen bg-slate-950 text-white relative overflow-x-clip">
       {/* ambient glow */}
       <div className="pointer-events-none absolute -top-40 -left-40 w-[500px] h-[500px] bg-amber-500/10 rounded-full blur-[120px]" />
       <div className="pointer-events-none absolute top-1/3 -right-40 w-[500px] h-[500px] bg-emerald-500/10 rounded-full blur-[120px]" />
+
+      {/* top nav bar */}
+      <nav className="sticky top-0 z-40 bg-slate-950/80 backdrop-blur border-b border-white/10">
+        <div className="max-w-3xl mx-auto px-2 sm:px-5 flex items-center justify-between gap-2">
+          <span className="hidden md:inline-flex items-center gap-2 text-lg font-bold tracking-tight">
+            <Sparkles className="w-4 h-4 text-amber-400" />
+            Anagrimoire
+          </span>
+          <div className="flex-1 md:flex-none grid grid-cols-4 md:flex gap-0.5 sm:gap-1 py-1.5">
+            {MODES.map((m) => {
+              const Icon = MODE_ICONS[m.id];
+              return (
+                <button
+                  key={m.id}
+                  onClick={() => setMode(m.id)}
+                  title={m.blurb}
+                  className={`flex flex-col md:flex-row items-center justify-center gap-0.5 md:gap-1.5 px-1 md:px-3 py-1.5 rounded-lg whitespace-nowrap text-[10px] md:text-sm font-medium md:font-semibold transition-colors
+                    ${mode === m.id
+                      ? 'bg-emerald-400/15 text-emerald-300'
+                      : 'text-slate-400 hover:text-white hover:bg-white/5'}`}
+                >
+                  <Icon className="w-5 h-5 md:w-4 md:h-4" />
+                  <span>{m.label}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      </nav>
 
       <div className={`relative max-w-3xl mx-auto px-5 py-10 sm:py-16 ${kbOpen ? 'pb-64 sm:pb-64' : ''}`}>
         {/* header */}
@@ -601,26 +630,7 @@ function App() {
           <h1 className="pb-2 text-4xl sm:text-5xl font-bold tracking-tight bg-gradient-to-br from-white via-white to-slate-400 bg-clip-text text-transparent">
             Anagrimoire
           </h1>
-          <div className="mt-6 inline-flex rounded-xl bg-white/5 border border-white/10 p-1 gap-1">
-            {MODES.map((m) => {
-              const Icon = MODE_ICONS[m.id];
-              return (
-                <button
-                  key={m.id}
-                  onClick={() => setMode(m.id)}
-                  title={m.blurb}
-                  className={`inline-flex items-center gap-1.5 px-4 h-10 rounded-lg text-sm font-semibold transition-all duration-150
-                    ${mode === m.id
-                      ? 'bg-emerald-400 text-slate-950 shadow-lg shadow-emerald-500/30'
-                      : 'text-slate-300 hover:bg-white/10'}`}
-                >
-                  <Icon className="w-4 h-4" />
-                  {m.label}
-                </button>
-              );
-            })}
-          </div>
-          <p className="mt-4 text-slate-400 max-w-md mx-auto text-sm sm:text-base">
+          <p className="mt-3 text-slate-400 max-w-md mx-auto text-sm sm:text-base">
             {MODES.find((m) => m.id === mode)?.description}
           </p>
         </header>
