@@ -1,5 +1,5 @@
 import { useMemo, useState, useEffect, useRef, type ReactNode } from 'react';
-import { Search, Sparkles, Eraser, ArrowDown, ArrowUp, X, BookOpen, Grid3x3, Shuffle, Hexagon, Check, Keyboard, Delete } from 'lucide-react';
+import { Search, Sparkles, Eraser, ArrowDown, ArrowUp, X, BookOpen, Grid3x3, Shuffle, Hexagon, Check, Keyboard, Delete, Github, Info } from 'lucide-react';
 import { DICTIONARIES, getDictionary, type DictionaryId } from '@/dictionaries';
 import { solvePattern, solveDescramble, solveBee } from '@/solvers';
 import { loadState, saveState, type Mode, type SortPref } from '@/storage';
@@ -166,6 +166,16 @@ function App() {
   const [showAll, setShowAll] = useState(false);
   const [sorts, setSorts] = useState(initial.sort);
   const [kbOpen, setKbOpen] = useState(initial.keyboard);
+  const [aboutOpen, setAboutOpen] = useState(false);
+
+  useEffect(() => {
+    if (!aboutOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setAboutOpen(false);
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [aboutOpen]);
 
   // the input the on-screen keyboard types into
   const lastFocused = useRef<HTMLInputElement | null>(null);
@@ -724,10 +734,159 @@ function App() {
         )}
 
         <footer className="mt-14 text-center text-xs text-slate-600">
-          Searching {words.length.toLocaleString()} English words (
-          {DICTIONARIES.find((d) => d.id === dictionaryId)?.label.toLowerCase()} dictionary).
+          <p>
+            Searching {words.length.toLocaleString()} English words (
+            {DICTIONARIES.find((d) => d.id === dictionaryId)?.label.toLowerCase()} dictionary).
+          </p>
+          <div className="mt-3 flex items-center justify-center gap-5">
+            <a
+              href="https://github.com/rptetzloff/anagrimoire"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 hover:text-slate-300 transition-colors"
+            >
+              <Github className="w-3.5 h-3.5" />
+              GitHub
+            </a>
+            <button
+              onClick={() => setAboutOpen(true)}
+              className="inline-flex items-center gap-1.5 hover:text-slate-300 transition-colors"
+            >
+              <Info className="w-3.5 h-3.5" />
+              About &amp; licenses
+            </button>
+          </div>
         </footer>
       </div>
+
+      {/* about & licenses modal */}
+      {aboutOpen && (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
+          onClick={() => setAboutOpen(false)}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label="About and licenses"
+            onClick={(e) => e.stopPropagation()}
+            className="relative w-full max-w-lg max-h-[80vh] overflow-y-auto rounded-2xl bg-slate-900 border border-white/10 p-6 sm:p-8 text-left shadow-2xl"
+          >
+            <button
+              onClick={() => setAboutOpen(false)}
+              aria-label="Close"
+              className="absolute top-4 right-4 w-8 h-8 flex items-center justify-center rounded-lg text-slate-400 hover:text-white hover:bg-white/10 transition-colors"
+            >
+              <X className="w-4 h-4" />
+            </button>
+
+            <h2 className="text-xl font-bold mb-5">About Anagrimoire</h2>
+
+            <div className="space-y-5 text-sm text-slate-300">
+              <p>
+                Anagrimoire is a free, open-source word-game solver. The code is released
+                under the{' '}
+                <a
+                  href="https://github.com/rptetzloff/anagrimoire/blob/main/LICENSE"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-amber-300 hover:text-amber-200 underline underline-offset-2"
+                >
+                  MIT License
+                </a>{' '}
+                and lives on{' '}
+                <a
+                  href="https://github.com/rptetzloff/anagrimoire"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-amber-300 hover:text-amber-200 underline underline-offset-2"
+                >
+                  GitHub
+                </a>
+                .
+              </p>
+
+              <div>
+                <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">
+                  Disclaimer
+                </h3>
+                <p className="text-slate-400">
+                  Anagrimoire is an independent project. It is not affiliated with,
+                  endorsed by, or sponsored by The New York Times Company (Wordle, Spelling
+                  Bee), Hasbro or Mattel (Scrabble), Tribune Content Agency (Jumble), or any
+                  other puzzle publisher. All game names and trademarks are the property of
+                  their respective owners and are used here only to describe the kinds of
+                  puzzles this tool can help with.
+                </p>
+              </div>
+
+              <div>
+                <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">
+                  Word lists
+                </h3>
+                <ul className="space-y-1.5 text-slate-400 list-disc list-inside">
+                  <li>
+                    Common &amp; Standard dictionaries:{' '}
+                    <a
+                      href="https://github.com/jacksonrayhamilton/wordlist-english"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-amber-300/90 hover:text-amber-200 underline underline-offset-2"
+                    >
+                      wordlist-english
+                    </a>{' '}
+                    (MIT), built from{' '}
+                    <a
+                      href="http://wordlist.aspell.net/"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-amber-300/90 hover:text-amber-200 underline underline-offset-2"
+                    >
+                      SCOWL
+                    </a>{' '}
+                    © Kevin Atkinson.
+                  </li>
+                  <li>
+                    Full dictionary:{' '}
+                    <a
+                      href="https://github.com/words/an-array-of-english-words"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-amber-300/90 hover:text-amber-200 underline underline-offset-2"
+                    >
+                      an-array-of-english-words
+                    </a>{' '}
+                    (MIT), derived from the{' '}
+                    <a
+                      href="https://github.com/lorenbrichter/Words"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-amber-300/90 hover:text-amber-200 underline underline-offset-2"
+                    >
+                      Letterpress word list
+                    </a>{' '}
+                    (CC0, public domain).
+                  </li>
+                </ul>
+              </div>
+
+              <p className="text-slate-500 text-xs">
+                No word list is guaranteed to match any game&apos;s official dictionary.
+                Vibe-coded with{' '}
+                <a
+                  href="https://claude.com/claude-code"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="hover:text-slate-300 underline underline-offset-2"
+                >
+                  Claude
+                </a>
+                .
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* on-screen keyboard */}
       {kbOpen ? (
