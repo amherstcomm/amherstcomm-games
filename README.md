@@ -24,7 +24,8 @@ Three tiers, selectable per mode: **Common** (everyday words, ideal for Wordle-s
 - **Sorting** — alphabetical asc/desc everywhere; Descramble and Spelling Bee also sort by word length with results grouped per length
 - **Click any result to copy it** to the clipboard
 - **Smart letter tiles** — typing auto-advances to the next box, Backspace steps back, arrow keys navigate, and filled tiles get a small × pill to clear them
-- **Toggleable on-screen keyboard** with a `?` key for blank tiles in Descramble
+- **Letter-pill inputs** — multi-letter fields (must contain, excluded, rack) show each letter as a removable pill with a corner ×
+- **Toggleable on-screen keyboard** — fluid-width QWERTY panel that fits any screen, with a `?` key for blank tiles in Descramble; while open, the device's native keyboard stays suppressed
 - **Everything is remembered** — active mode, per-mode dictionary and sort preferences, your last letters in each mode, and the keyboard state persist in localStorage
 
 ## Getting started
