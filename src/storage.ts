@@ -19,7 +19,7 @@ export type PersistedState = {
   pattern: { length: number; known: string[]; contains: string; excluded: string };
   descramble: { rack: string; useAll: boolean; minLength: number };
   bee: { center: string; outers: string[] };
-  boxed: { letters: string[] };
+  boxed: { letters: string[]; solutionWords: number };
 };
 
 export const DEFAULT_STATE: PersistedState = {
@@ -35,7 +35,7 @@ export const DEFAULT_STATE: PersistedState = {
   pattern: { length: 5, known: Array(5).fill(''), contains: '', excluded: '' },
   descramble: { rack: '', useAll: false, minLength: 3 },
   bee: { center: '', outers: Array(6).fill('') },
-  boxed: { letters: Array(12).fill('') },
+  boxed: { letters: Array(12).fill(''), solutionWords: 2 },
 };
 
 function singleLetter(v: unknown): string {
@@ -117,7 +117,10 @@ export function loadState(): PersistedState {
         center: singleLetter(p?.bee?.center),
         outers,
       },
-      boxed: { letters: boxedLetters },
+      boxed: {
+        letters: boxedLetters,
+        solutionWords: clampInt(p?.boxed?.solutionWords, 1, 5, DEFAULT_STATE.boxed.solutionWords),
+      },
     };
   } catch {
     return DEFAULT_STATE;

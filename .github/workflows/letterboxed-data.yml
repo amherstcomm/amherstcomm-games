@@ -1,0 +1,30 @@
+name: Fetch Letter Boxed puzzle
+
+on:
+  schedule:
+    # NYT rolls the puzzle over at 3am ET; fetch shortly after, with a
+    # second attempt later in case the first run races the rollover.
+    - cron: '15 7 * * *'
+    - cron: '15 10 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: node scripts/fetch-letterboxed.mjs
+      - name: Publish to puzzle-data branch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git checkout -B puzzle-data
+          git add -f data/letterboxed.json
+          git commit -m "Update Letter Boxed puzzle data"
+          git push -f origin puzzle-data
