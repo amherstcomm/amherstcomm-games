@@ -47,12 +47,14 @@ function Tile({
   state,
   index,
   size,
+  group,
 }: {
   value: string;
   onChange: (v: string) => void;
   state: 'known' | 'empty' | 'center';
   index: number;
   size: 'sm' | 'md';
+  group: string;
 }) {
   const ref = useRef<HTMLInputElement>(null);
   const dims =
@@ -60,18 +62,30 @@ function Tile({
       ? 'w-9 h-11 sm:w-10 sm:h-12 text-xl sm:text-2xl'
       : 'w-12 h-14 sm:w-14 sm:h-16 text-2xl sm:text-3xl';
 
+  const focusTile = (i: number) => {
+    const el = document.querySelector<HTMLInputElement>(
+      `input[data-tile-group="${group}"][data-tile-index="${i}"]`
+    );
+    el?.focus();
+    el?.select();
+  };
+
   return (
     <input
       ref={ref}
+      data-tile-group={group}
+      data-tile-index={index}
       value={value}
       onChange={(e) => {
         const raw = e.target.value.toLowerCase().replace(/[^a-z]/g, '');
-        onChange(raw.slice(-1));
+        const c = raw.slice(-1);
+        onChange(c);
+        if (c) focusTile(index + 1);
       }}
       onKeyDown={(e) => {
-        if (e.key === 'Backspace' && !value && ref.current) {
-          // move focus handled by parent via data attribute; keep simple
-        }
+        if (e.key === 'Backspace' && !value) focusTile(index - 1);
+        else if (e.key === 'ArrowLeft') focusTile(index - 1);
+        else if (e.key === 'ArrowRight') focusTile(index + 1);
       }}
       maxLength={1}
       aria-label={`Letter at position ${index + 1}`}
@@ -335,6 +349,7 @@ function App() {
               <Tile
                 key={i}
                 index={i}
+                group="known"
                 value={v}
                 state={v ? 'known' : 'empty'}
                 size={length > 10 ? 'sm' : 'md'}
@@ -430,6 +445,7 @@ function App() {
               </label>
               <Tile
                 index={0}
+                group="bee"
                 value={beeCenter}
                 state="center"
                 size="md"
@@ -445,6 +461,7 @@ function App() {
                   <Tile
                     key={i}
                     index={i + 1}
+                    group="bee"
                     value={v}
                     state={v ? 'known' : 'empty'}
                     size="md"
