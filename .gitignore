@@ -21,3 +21,6 @@ dist-ssr
 *.sln
 *.sw?
 .env
+
+# Local Claude Code tooling
+.claude/
