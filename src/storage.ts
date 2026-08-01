@@ -15,6 +15,7 @@ export type PersistedState = {
   mode: Mode;
   dictionaries: Record<Mode, DictionaryId>;
   sort: Record<Mode, SortPref>;
+  keyboard: boolean;
   pattern: { length: number; known: string[]; contains: string; excluded: string };
   descramble: { rack: string; useAll: boolean; minLength: number };
   bee: { center: string; outers: string[] };
@@ -28,6 +29,7 @@ export const DEFAULT_STATE: PersistedState = {
     descramble: { key: 'length', dir: 'desc' },
     bee: { key: 'length', dir: 'desc' },
   },
+  keyboard: false,
   pattern: { length: 5, known: Array(5).fill(''), contains: '', excluded: '' },
   descramble: { rack: '', useAll: false, minLength: 3 },
   bee: { center: '', outers: Array(6).fill('') },
@@ -90,6 +92,7 @@ export function loadState(): PersistedState {
       mode: ALL_MODES.includes(p?.mode) ? p.mode : DEFAULT_STATE.mode,
       dictionaries,
       sort,
+      keyboard: p?.keyboard === true,
       pattern: {
         length,
         known,

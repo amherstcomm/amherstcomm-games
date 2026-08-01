@@ -1,5 +1,5 @@
 import { useMemo, useState, useEffect, useRef, type ReactNode } from 'react';
-import { Search, Sparkles, Eraser, ArrowDown, ArrowUp, X, BookOpen, Grid3x3, Shuffle, Hexagon, Check } from 'lucide-react';
+import { Search, Sparkles, Eraser, ArrowDown, ArrowUp, X, BookOpen, Grid3x3, Shuffle, Hexagon, Check, Keyboard, Delete } from 'lucide-react';
 import { DICTIONARIES, getDictionary, type DictionaryId } from '@/dictionaries';
 import { solvePattern, solveDescramble, solveBee } from '@/solvers';
 import { loadState, saveState, type Mode, type SortPref } from '@/storage';
@@ -165,6 +165,17 @@ function App() {
   const [beeOuters, setBeeOuters] = useState<string[]>(initial.bee.outers);
   const [showAll, setShowAll] = useState(false);
   const [sorts, setSorts] = useState(initial.sort);
+  const [kbOpen, setKbOpen] = useState(initial.keyboard);
+
+  // the input the on-screen keyboard types into
+  const lastFocused = useRef<HTMLInputElement | null>(null);
+  useEffect(() => {
+    const onFocusIn = (e: FocusEvent) => {
+      if (e.target instanceof HTMLInputElement) lastFocused.current = e.target;
+    };
+    document.addEventListener('focusin', onFocusIn);
+    return () => document.removeEventListener('focusin', onFocusIn);
+  }, []);
 
   const dictionaryId = dictionaries[mode];
   const setDictionaryId = (id: DictionaryId) =>
@@ -180,11 +191,12 @@ function App() {
       mode,
       dictionaries,
       sort: sorts,
+      keyboard: kbOpen,
       pattern: { length, known, contains: containsStr, excluded: excludedStr },
       descramble: { rack: rackStr, useAll, minLength },
       bee: { center: beeCenter, outers: beeOuters },
     });
-  }, [mode, dictionaries, sorts, length, known, containsStr, excludedStr, rackStr, useAll, minLength, beeCenter, beeOuters]);
+  }, [mode, dictionaries, sorts, kbOpen, length, known, containsStr, excludedStr, rackStr, useAll, minLength, beeCenter, beeOuters]);
 
   // keep known array sized to length
   useEffect(() => {
@@ -274,6 +286,47 @@ function App() {
     });
   }
 
+  function pickDefaultTarget(): HTMLInputElement | null {
+    if (mode === 'descramble') {
+      return document.querySelector<HTMLInputElement>('input[aria-label="Letters to descramble"]');
+    }
+    const group = mode === 'bee' ? 'bee' : 'known';
+    const tiles = [...document.querySelectorAll<HTMLInputElement>(`input[data-tile-group="${group}"]`)];
+    return tiles.find((t) => !t.value) ?? tiles[0] ?? null;
+  }
+
+  function pressKey(k: string) {
+    const remembered =
+      lastFocused.current && document.contains(lastFocused.current) ? lastFocused.current : null;
+    const target = remembered ?? pickDefaultTarget();
+    if (!target) return;
+    target.focus();
+
+    const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!;
+    const isTile = target.hasAttribute('data-tile-group');
+
+    if (k === 'backspace') {
+      if (target.value) {
+        setValue.call(target, isTile ? '' : target.value.slice(0, -1));
+        target.dispatchEvent(new Event('input', { bubbles: true }));
+      } else if (isTile) {
+        const g = target.getAttribute('data-tile-group');
+        const i = Number(target.getAttribute('data-tile-index'));
+        const prev = document.querySelector<HTMLInputElement>(
+          `input[data-tile-group="${g}"][data-tile-index="${i - 1}"]`
+        );
+        if (prev) {
+          prev.focus();
+          prev.select();
+        }
+      }
+      return;
+    }
+
+    setValue.call(target, isTile ? k : target.value + k);
+    target.dispatchEvent(new Event('input', { bubbles: true }));
+  }
+
   function resetAll() {
     setKnown(Array(length).fill(''));
     setContainsStr('');
@@ -289,7 +342,7 @@ function App() {
       <div className="pointer-events-none absolute -top-40 -left-40 w-[500px] h-[500px] bg-amber-500/10 rounded-full blur-[120px]" />
       <div className="pointer-events-none absolute top-1/3 -right-40 w-[500px] h-[500px] bg-emerald-500/10 rounded-full blur-[120px]" />
 
-      <div className="relative max-w-3xl mx-auto px-5 py-10 sm:py-16">
+      <div className={`relative max-w-3xl mx-auto px-5 py-10 sm:py-16 ${kbOpen ? 'pb-64 sm:pb-64' : ''}`}>
         {/* header */}
         <header className="text-center mb-10">
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/5 border border-white/10 text-xs text-slate-300 mb-5">
@@ -675,6 +728,50 @@ function App() {
           {DICTIONARIES.find((d) => d.id === dictionaryId)?.label.toLowerCase()} dictionary).
         </footer>
       </div>
+
+      {/* on-screen keyboard */}
+      {kbOpen ? (
+        <div className="fixed bottom-0 inset-x-0 z-50 bg-slate-900/95 backdrop-blur border-t border-white/10 px-2 pt-3 pb-4">
+          <button
+            onClick={() => setKbOpen(false)}
+            aria-label="Hide keyboard"
+            className="absolute -top-11 right-3 w-9 h-9 flex items-center justify-center rounded-full bg-slate-800 border border-white/15 text-slate-400 hover:text-white hover:bg-slate-700 hover:border-white/30 shadow-lg transition-colors"
+          >
+            <X className="w-4 h-4" />
+          </button>
+          <div className="max-w-xl mx-auto flex flex-col items-center gap-1.5">
+            {[
+              [...'qwertyuiop'.split(''), 'backspace'],
+              'asdfghjkl'.split(''),
+              [...'zxcvbnm'.split(''), ...(mode === 'descramble' ? ['?'] : [])],
+            ].map((row, r) => (
+              <div key={r} className="flex gap-1.5">
+                {row.map((k) => (
+                  <button
+                    key={k}
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={() => pressKey(k)}
+                    aria-label={k === 'backspace' ? 'Backspace' : `Key ${k}`}
+                    className={`h-11 rounded-md bg-white/10 hover:bg-white/20 active:bg-white/30 text-sm font-semibold uppercase text-white transition-colors flex items-center justify-center
+                      ${k === 'backspace' ? 'px-3 sm:px-4' : 'w-8 sm:w-9'}`}
+                  >
+                    {k === 'backspace' ? <Delete className="w-4 h-4" /> : k}
+                  </button>
+                ))}
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : (
+        <button
+          onClick={() => setKbOpen(true)}
+          aria-label="Show keyboard"
+          title="Show on-screen keyboard"
+          className="fixed bottom-4 right-4 z-50 w-12 h-12 flex items-center justify-center rounded-full bg-slate-800 border border-white/15 text-slate-300 hover:text-white hover:bg-slate-700 hover:border-white/30 shadow-lg transition-colors"
+        >
+          <Keyboard className="w-5 h-5" />
+        </button>
+      )}
     </div>
   );
 }
