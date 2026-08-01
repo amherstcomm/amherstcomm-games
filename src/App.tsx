@@ -1035,7 +1035,7 @@ function App() {
                 <p className="text-slate-400">
                   Anagrimoire is an independent project. It is not affiliated with,
                   endorsed by, or sponsored by The New York Times Company (Wordle, Spelling
-                  Bee), Hasbro or Mattel (Scrabble), Tribune Content Agency (Jumble), or any
+                  Bee, Letter Boxed), Hasbro or Mattel (Scrabble), Tribune Content Agency (Jumble), or any
                   other puzzle publisher. All game names and trademarks are the property of
                   their respective owners and are used here only to describe the kinds of
                   puzzles this tool can help with.
