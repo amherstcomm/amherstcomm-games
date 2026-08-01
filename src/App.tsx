@@ -2,11 +2,10 @@ import { useMemo, useState, useEffect, useRef, type ReactNode } from 'react';
 import { Search, Sparkles, Eraser, ArrowDown, X, BookOpen, Grid3x3, Shuffle, Hexagon, Check } from 'lucide-react';
 import { DICTIONARIES, getDictionary, type DictionaryId } from '@/dictionaries';
 import { solvePattern, solveDescramble, solveBee } from '@/solvers';
+import { loadState, saveState, type Mode } from '@/storage';
 
 const MIN_LEN = 3;
 const MAX_LEN = 15;
-
-type Mode = 'pattern' | 'descramble' | 'bee';
 
 const MODES: { id: Mode; label: string; blurb: string; description: string }[] = [
   {
@@ -121,19 +120,36 @@ function WordChip({
   );
 }
 
+const initial = loadState();
+
 function App() {
-  const [mode, setMode] = useState<Mode>('pattern');
-  const [dictionaryId, setDictionaryId] = useState<DictionaryId>('common');
-  const [length, setLength] = useState(5);
-  const [known, setKnown] = useState<string[]>(Array(5).fill(''));
-  const [containsStr, setContainsStr] = useState('');
-  const [excludedStr, setExcludedStr] = useState('');
-  const [rackStr, setRackStr] = useState('');
-  const [useAll, setUseAll] = useState(false);
-  const [minLength, setMinLength] = useState(3);
-  const [beeCenter, setBeeCenter] = useState('');
-  const [beeOuters, setBeeOuters] = useState<string[]>(Array(6).fill(''));
+  const [mode, setMode] = useState<Mode>(initial.mode);
+  const [dictionaries, setDictionaries] = useState(initial.dictionaries);
+  const [length, setLength] = useState(initial.pattern.length);
+  const [known, setKnown] = useState<string[]>(initial.pattern.known);
+  const [containsStr, setContainsStr] = useState(initial.pattern.contains);
+  const [excludedStr, setExcludedStr] = useState(initial.pattern.excluded);
+  const [rackStr, setRackStr] = useState(initial.descramble.rack);
+  const [useAll, setUseAll] = useState(initial.descramble.useAll);
+  const [minLength, setMinLength] = useState(initial.descramble.minLength);
+  const [beeCenter, setBeeCenter] = useState(initial.bee.center);
+  const [beeOuters, setBeeOuters] = useState<string[]>(initial.bee.outers);
   const [showAll, setShowAll] = useState(false);
+
+  const dictionaryId = dictionaries[mode];
+  const setDictionaryId = (id: DictionaryId) =>
+    setDictionaries((prev) => ({ ...prev, [mode]: id }));
+
+  // persist tool, per-tool dictionary, and last inputs
+  useEffect(() => {
+    saveState({
+      mode,
+      dictionaries,
+      pattern: { length, known, contains: containsStr, excluded: excludedStr },
+      descramble: { rack: rackStr, useAll, minLength },
+      bee: { center: beeCenter, outers: beeOuters },
+    });
+  }, [mode, dictionaries, length, known, containsStr, excludedStr, rackStr, useAll, minLength, beeCenter, beeOuters]);
 
   // keep known array sized to length
   useEffect(() => {
