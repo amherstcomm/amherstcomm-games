@@ -1,11 +1,13 @@
-name: Fetch Letter Boxed puzzle
+name: Fetch NYT puzzle data
 
 on:
   schedule:
-    # NYT rolls the puzzle over at 3am ET; fetch shortly after, with a
-    # second attempt later in case the first run races the rollover.
+    # NYT publishes Letter Boxed and Spelling Bee at 3:00 a.m. Eastern. Cron
+    # is UTC-only, so run at both candidate offsets: 07:15 UTC is 3:15 a.m.
+    # EDT and 08:15 UTC is 3:15 a.m. EST — whichever matches the season
+    # fetches the fresh puzzles, and the other run harmlessly re-fetches.
     - cron: '15 7 * * *'
-    - cron: '15 10 * * *'
+    - cron: '15 8 * * *'
   workflow_dispatch:
 
 permissions:
@@ -19,12 +21,12 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-      - run: node scripts/fetch-letterboxed.mjs
+      - run: node scripts/fetch-puzzles.mjs
       - name: Publish to puzzle-data branch
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git checkout -B puzzle-data
-          git add -f data/letterboxed.json
-          git commit -m "Update Letter Boxed puzzle data"
+          git add -f data/letterboxed.json data/spellingbee.json
+          git commit -m "Update NYT puzzle data"
           git push -f origin puzzle-data

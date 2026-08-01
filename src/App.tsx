@@ -135,6 +135,16 @@ type ChainIndex = {
   fullMask: number;
 };
 
+// outer hive cells, clockwise from the top, as [left%, top%] of the container
+const BEE_POSITIONS: [number, number][] = [
+  [50, 14],
+  [81, 32],
+  [81, 68],
+  [50, 86],
+  [19, 68],
+  [19, 32],
+];
+
 const CHAIN_CAP = 500;
 const CHAIN_BUDGET = 2_000_000;
 
@@ -463,6 +473,28 @@ function App() {
     }
     return null;
   }, [boxedIndex, boxedChains, solutionWords, commonSet]);
+
+  async function fillTodaysBee() {
+    setTodayStatus('loading');
+    try {
+      const r = await fetch(
+        'https://raw.githubusercontent.com/rptetzloff/anagrimoire/puzzle-data/data/spellingbee.json',
+        { cache: 'no-store' }
+      );
+      if (!r.ok) throw new Error(String(r.status));
+      const d = await r.json();
+      const center = String(d.center).toLowerCase();
+      const outers = (d.outers as string[]).map((c) => String(c).toLowerCase());
+      if (!/^[a-z]$/.test(center) || outers.length !== 6 || !outers.every((c) => /^[a-z]$/.test(c))) {
+        throw new Error('bad payload');
+      }
+      setBeeCenter(center);
+      setBeeOuters(outers);
+      setTodayStatus('idle');
+    } catch {
+      setTodayStatus('error');
+    }
+  }
 
   async function fillTodaysPuzzle() {
     setTodayStatus('loading');
@@ -793,46 +825,60 @@ function App() {
 
         {mode === 'bee' && (
         <div className="mb-8 text-center">
-          <div className="flex flex-wrap justify-center items-end gap-5">
-            <div>
-              <label className="block text-xs font-medium text-amber-400/80 uppercase tracking-wider mb-2.5">
-                Center
-              </label>
+          <label className="block text-xs font-medium text-slate-400 uppercase tracking-wider mb-3">
+            The hive
+          </label>
+          <div className="relative w-56 h-56 mx-auto">
+            <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2">
               <Tile
                 index={0}
                 group="bee"
                 osk={kbOpen}
                 value={beeCenter}
                 state="center"
-                size="md"
+                size="sm"
                 onChange={(c) => setBeeCenter(c)}
               />
             </div>
-            <div>
-              <label className="block text-xs font-medium text-slate-400 uppercase tracking-wider mb-2.5">
-                Outer letters
-              </label>
-              <div className="flex flex-wrap gap-2 justify-center">
-                {beeOuters.map((v, i) => (
-                  <Tile
-                    key={i}
-                    index={i + 1}
-                    group="bee"
-                    osk={kbOpen}
-                    value={v}
-                    state={v ? 'known' : 'empty'}
-                    size="md"
-                    onChange={(c) =>
-                      setBeeOuters((prev) => prev.map((x, j) => (j === i ? c : x)))
-                    }
-                  />
-                ))}
+            {BEE_POSITIONS.map(([x, y], i) => (
+              <div
+                key={i}
+                className="absolute -translate-x-1/2 -translate-y-1/2"
+                style={{ left: `${x}%`, top: `${y}%` }}
+              >
+                <Tile
+                  index={i + 1}
+                  group="bee"
+                  osk={kbOpen}
+                  value={beeOuters[i]}
+                  state={beeOuters[i] ? 'known' : 'empty'}
+                  size="sm"
+                  onChange={(c) =>
+                    setBeeOuters((prev) => prev.map((x2, j) => (j === i ? c : x2)))
+                  }
+                />
               </div>
-            </div>
+            ))}
           </div>
+          <div className="mt-4 flex flex-wrap items-center justify-center gap-3">
+            <button
+              onClick={fillTodaysBee}
+              disabled={todayStatus === 'loading'}
+              className="inline-flex items-center gap-1.5 px-4 h-10 rounded-lg text-sm font-semibold bg-white/5 border border-white/10 text-slate-300 hover:bg-white/10 hover:text-white transition-colors disabled:opacity-50"
+            >
+              <CalendarDays className="w-4 h-4" />
+              {todayStatus === 'loading' ? 'Fetching…' : "Today's puzzle"}
+            </button>
+          </div>
+          {todayStatus === 'error' && (
+            <p className="mt-2 text-xs text-rose-400">
+              Couldn&apos;t fetch today&apos;s puzzle — try again in a minute.
+            </p>
+          )}
           <p className="mt-3 text-xs text-slate-500">
-            Words are 4+ letters, must use the center letter, and may repeat letters.
-            Words using all seven letters are pangrams.
+            Words are 4+ letters, must use the amber center letter, and may repeat letters.
+            Words using all seven letters are pangrams. Today&apos;s puzzle becomes available
+            here about 15 minutes after the NYT publishes it (3:00&nbsp;a.m. Eastern).
           </p>
         </div>
         )}
@@ -910,7 +956,8 @@ function App() {
               )}
               <p className="mt-3 text-xs text-slate-500">
                 Words are 3+ letters and may reuse letters, but consecutive letters can&apos;t
-                come from the same side.
+                come from the same side. Today&apos;s puzzle becomes available here about
+                15 minutes after the NYT publishes it (3:00&nbsp;a.m. Eastern).
               </p>
             </div>
           );
