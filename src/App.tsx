@@ -153,7 +153,7 @@ function LetterChipInput({
   return (
     <div
       onClick={() => inputRef.current?.focus()}
-      className={`w-full min-h-[3rem] px-2.5 py-2 rounded-xl bg-white/5 border-2 border-white/10 flex flex-wrap items-center gap-x-2 gap-y-2.5 cursor-text transition-all ${tones.container}`}
+      className={`w-full min-h-[3rem] px-2.5 py-2 rounded-xl bg-white/5 border-2 border-white/10 flex flex-wrap items-center justify-center gap-x-2 gap-y-2.5 cursor-text transition-all ${tones.container}`}
     >
       {value.split('').map((c, i) => (
         <span
@@ -190,7 +190,7 @@ function LetterChipInput({
         inputMode={osk ? 'none' : undefined}
         aria-label={ariaLabel}
         placeholder={value ? '' : placeholder}
-        className="flex-1 min-w-[4rem] h-8 px-1 bg-transparent outline-none text-white placeholder-slate-600 text-base"
+        className={`h-8 bg-transparent outline-none text-white placeholder-slate-600 text-base text-center ${value ? 'w-2 p-0' : 'flex-1 min-w-[4rem] px-1'}`}
       />
     </div>
   );
