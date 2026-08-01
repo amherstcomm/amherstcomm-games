@@ -1,6 +1,6 @@
 import { useMemo, useState, useEffect, useRef } from 'react';
-import words from 'an-array-of-english-words';
-import { Search, Sparkles, Eraser, ArrowDown, X } from 'lucide-react';
+import { Search, Sparkles, Eraser, ArrowDown, X, BookOpen } from 'lucide-react';
+import { DICTIONARIES, getDictionary, type DictionaryId } from '@/dictionaries';
 
 const MIN_LEN = 3;
 const MAX_LEN = 15;
@@ -95,6 +95,7 @@ function Tile({
 }
 
 function App() {
+  const [dictionaryId, setDictionaryId] = useState<DictionaryId>('common');
   const [length, setLength] = useState(5);
   const [known, setKnown] = useState<string[]>(Array(5).fill(''));
   const [containsStr, setContainsStr] = useState('');
@@ -113,13 +114,23 @@ function App() {
   const contains = useMemo(() => normalizeLetters(containsStr), [containsStr]);
   const excluded = useMemo(() => normalizeLetters(excludedStr), [excludedStr]);
 
+  const [words, setWords] = useState<string[]>([]);
+  useEffect(() => {
+    let alive = true;
+    getDictionary(dictionaryId).then((w) => {
+      if (alive) setWords(w);
+    });
+    return () => {
+      alive = false;
+    };
+  }, [dictionaryId]);
+
   const results = useMemo(() => {
     return solve(words, { length, known, contains, excluded });
-  }, [length, known, contains, excluded]);
+  }, [words, length, known, contains, excluded]);
 
   const visible = showAll ? results : results.slice(0, 200);
 
-  const knownSet = new Set(known.filter(Boolean));
   const containsSet = new Set(contains);
 
   function highlight(word: string) {
@@ -170,6 +181,32 @@ function App() {
             We'll surface every dictionary word that fits.
           </p>
         </header>
+
+        {/* dictionary selector */}
+        <section className="mb-7 text-center">
+          <label className="block text-xs font-medium text-slate-400 uppercase tracking-wider mb-2.5">
+            Dictionary
+          </label>
+          <div className="inline-flex rounded-xl bg-white/5 border border-white/10 p-1 gap-1">
+            {DICTIONARIES.map((d) => (
+              <button
+                key={d.id}
+                onClick={() => setDictionaryId(d.id)}
+                title={d.blurb}
+                className={`inline-flex items-center gap-1.5 px-4 h-9 rounded-lg text-sm font-semibold transition-all duration-150
+                  ${dictionaryId === d.id
+                    ? 'bg-amber-400 text-slate-950 shadow-lg shadow-amber-500/30'
+                    : 'text-slate-300 hover:bg-white/10'}`}
+              >
+                {d.id === 'common' && <BookOpen className="w-3.5 h-3.5" />}
+                {d.label}
+              </button>
+            ))}
+          </div>
+          <p className="mt-2 text-xs text-slate-500">
+            {DICTIONARIES.find((d) => d.id === dictionaryId)?.blurb}
+          </p>
+        </section>
 
         {/* length selector */}
         <section className="mb-7 text-center">
@@ -303,7 +340,8 @@ function App() {
         )}
 
         <footer className="mt-14 text-center text-xs text-slate-600">
-          Searches a dictionary of {words.length.toLocaleString()} English words.
+          Searching {words.length.toLocaleString()} English words (
+          {DICTIONARIES.find((d) => d.id === dictionaryId)?.label.toLowerCase()} dictionary).
         </footer>
       </div>
     </div>

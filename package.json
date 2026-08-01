@@ -1,7 +1,12 @@
 {
-  "name": "vite-react-typescript-starter",
+  "name": "anagrimoire",
   "private": true,
   "version": "0.0.0",
+  "license": "MIT",
+  "author": "Ray Tetzloff <ray@raytetzloff.com>",
+  "engines": {
+    "node": ">=20"
+  },
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -11,11 +16,11 @@
     "typecheck": "tsc --noEmit -p tsconfig.app.json"
   },
   "dependencies": {
-    "@supabase/supabase-js": "^2.57.4",
     "an-array-of-english-words": "^2.0.0",
     "lucide-react": "^0.344.0",
     "react": "^18.3.1",
-    "react-dom": "^18.3.1"
+    "react-dom": "^18.3.1",
+    "wordlist-english": "^1.2.1"
   },
   "devDependencies": {
     "@eslint/js": "^9.9.1",
