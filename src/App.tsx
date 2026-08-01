@@ -48,6 +48,7 @@ function Tile({
   index,
   size,
   group,
+  osk,
 }: {
   value: string;
   onChange: (v: string) => void;
@@ -55,6 +56,7 @@ function Tile({
   index: number;
   size: 'sm' | 'md';
   group: string;
+  osk?: boolean; // on-screen keyboard active: suppress the device keyboard
 }) {
   const ref = useRef<HTMLInputElement>(null);
   const dims =
@@ -89,6 +91,7 @@ function Tile({
           else if (e.key === 'ArrowRight') focusTile(index + 1);
         }}
         maxLength={1}
+        inputMode={osk ? 'none' : undefined}
         aria-label={`Letter at position ${index + 1}`}
         placeholder="·"
         className={`${dims} text-center font-bold uppercase rounded-xl border-2 transition-all duration-150 outline-none
@@ -112,6 +115,83 @@ function Tile({
           <X className="w-3 h-3" />
         </button>
       )}
+    </div>
+  );
+}
+
+function LetterChipInput({
+  value,
+  onChange,
+  ariaLabel,
+  placeholder,
+  maxLen,
+  allowWildcard = false,
+  tone,
+  osk,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  ariaLabel: string;
+  placeholder: string;
+  maxLen: number;
+  allowWildcard?: boolean;
+  tone: 'amber' | 'rose';
+  osk?: boolean;
+}) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const tones = {
+    amber: {
+      container: 'focus-within:border-amber-400 focus-within:bg-amber-400/5',
+      pill: 'bg-amber-400/15 border-amber-400/30 text-amber-200',
+    },
+    rose: {
+      container: 'focus-within:border-rose-400 focus-within:bg-rose-400/5',
+      pill: 'bg-rose-400/15 border-rose-400/30 text-rose-300',
+    },
+  }[tone];
+
+  return (
+    <div
+      onClick={() => inputRef.current?.focus()}
+      className={`w-full min-h-[3rem] px-2.5 py-2 rounded-xl bg-white/5 border-2 border-white/10 flex flex-wrap items-center justify-center gap-x-2 gap-y-2.5 cursor-text transition-all ${tones.container}`}
+    >
+      {value.split('').map((c, i) => (
+        <span
+          key={i}
+          className={`relative inline-flex items-center justify-center w-8 h-8 rounded-lg border text-base font-bold uppercase ${tones.pill}`}
+        >
+          {c}
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onChange(value.slice(0, i) + value.slice(i + 1));
+              inputRef.current?.focus();
+            }}
+            tabIndex={-1}
+            aria-label={`Remove ${c === '?' ? 'wildcard' : c}`}
+            className="absolute -top-1.5 -right-1.5 w-4 h-4 flex items-center justify-center rounded-full bg-slate-800 border border-white/25 text-slate-300 hover:text-white hover:bg-slate-700 hover:border-white/50 transition-colors"
+          >
+            <X className="w-2.5 h-2.5" />
+          </button>
+        </span>
+      ))}
+      <input
+        ref={inputRef}
+        value=""
+        onChange={(e) => {
+          const add = e.target.value
+            .toLowerCase()
+            .replace(allowWildcard ? /[^a-z?]/g : /[^a-z]/g, '');
+          if (add) onChange((value + add).slice(0, maxLen));
+        }}
+        onKeyDown={(e) => {
+          if (e.key === 'Backspace' && value) onChange(value.slice(0, -1));
+        }}
+        inputMode={osk ? 'none' : undefined}
+        aria-label={ariaLabel}
+        placeholder={value ? '' : placeholder}
+        className={`h-8 bg-transparent outline-none text-white placeholder-slate-600 text-base text-center ${value ? 'w-2 p-0' : 'flex-1 min-w-[4rem] px-1'}`}
+      />
     </div>
   );
 }
@@ -316,19 +396,25 @@ function App() {
     const isTile = target.hasAttribute('data-tile-group');
 
     if (k === 'backspace') {
-      if (target.value) {
-        setValue.call(target, isTile ? '' : target.value.slice(0, -1));
-        target.dispatchEvent(new Event('input', { bubbles: true }));
-      } else if (isTile) {
-        const g = target.getAttribute('data-tile-group');
-        const i = Number(target.getAttribute('data-tile-index'));
-        const prev = document.querySelector<HTMLInputElement>(
-          `input[data-tile-group="${g}"][data-tile-index="${i - 1}"]`
-        );
-        if (prev) {
-          prev.focus();
-          prev.select();
+      if (isTile) {
+        if (target.value) {
+          setValue.call(target, '');
+          target.dispatchEvent(new Event('input', { bubbles: true }));
+        } else {
+          const g = target.getAttribute('data-tile-group');
+          const i = Number(target.getAttribute('data-tile-index'));
+          const prev = document.querySelector<HTMLInputElement>(
+            `input[data-tile-group="${g}"][data-tile-index="${i - 1}"]`
+          );
+          if (prev) {
+            prev.focus();
+            prev.select();
+          }
         }
+      } else {
+        // chip inputs keep their inner input empty; their own Backspace
+        // handler removes the last pill
+        target.dispatchEvent(new KeyboardEvent('keydown', { key: 'Backspace', bubbles: true }));
       }
       return;
     }
@@ -446,6 +532,7 @@ function App() {
                 key={i}
                 index={i}
                 group="known"
+                osk={kbOpen}
                 value={v}
                 state={v ? 'known' : 'empty'}
                 size={length > 10 ? 'sm' : 'md'}
@@ -466,22 +553,28 @@ function App() {
             <label className="block text-xs font-medium text-slate-400 uppercase tracking-wider mb-2.5">
               Must contain <span className="text-amber-400/70 normal-case">(position unknown)</span>
             </label>
-            <input
+            <LetterChipInput
               value={containsStr}
-              onChange={(e) => setContainsStr(e.target.value)}
+              onChange={setContainsStr}
+              ariaLabel="Letters the word must contain"
               placeholder="e.g. d"
-              className="w-full h-12 px-4 rounded-xl bg-white/5 border-2 border-white/10 text-lg font-semibold uppercase tracking-wider text-amber-200 placeholder-slate-600 placeholder-normal-case focus:border-amber-400 focus:bg-amber-400/5 outline-none transition-all"
+              maxLen={15}
+              tone="amber"
+              osk={kbOpen}
             />
           </section>
           <section>
             <label className="block text-xs font-medium text-slate-400 uppercase tracking-wider mb-2.5">
               Excluded letters
             </label>
-            <input
+            <LetterChipInput
               value={excludedStr}
-              onChange={(e) => setExcludedStr(e.target.value)}
+              onChange={setExcludedStr}
+              ariaLabel="Excluded letters"
               placeholder="letters not in the word"
-              className="w-full h-12 px-4 rounded-xl bg-white/5 border-2 border-white/10 text-lg font-semibold uppercase tracking-wider text-rose-300 placeholder-slate-600 placeholder-normal-case focus:border-rose-400 focus:bg-rose-400/5 outline-none transition-all"
+              maxLen={26}
+              tone="rose"
+              osk={kbOpen}
             />
           </section>
         </div>
@@ -494,12 +587,15 @@ function App() {
             <label className="block text-xs font-medium text-slate-400 uppercase tracking-wider mb-2.5 text-center">
               Your letters <span className="text-amber-400/70 normal-case">(use ? for a blank tile)</span>
             </label>
-            <input
+            <LetterChipInput
               value={rackStr}
-              onChange={(e) => setRackStr(e.target.value.toLowerCase().replace(/[^a-z?]/g, '').slice(0, MAX_LEN))}
+              onChange={setRackStr}
+              ariaLabel="Letters to descramble"
               placeholder="e.g. aetrsn?"
-              aria-label="Letters to descramble"
-              className="w-full h-14 px-4 rounded-xl bg-white/5 border-2 border-white/10 text-2xl text-center font-bold uppercase tracking-[0.3em] text-amber-200 placeholder-slate-600 placeholder-normal-case focus:border-amber-400 focus:bg-amber-400/5 outline-none transition-all"
+              maxLen={MAX_LEN}
+              allowWildcard
+              tone="amber"
+              osk={kbOpen}
             />
           </section>
           <div className="flex flex-wrap items-center justify-center gap-3">
@@ -542,6 +638,7 @@ function App() {
               <Tile
                 index={0}
                 group="bee"
+                osk={kbOpen}
                 value={beeCenter}
                 state="center"
                 size="md"
@@ -558,6 +655,7 @@ function App() {
                     key={i}
                     index={i + 1}
                     group="bee"
+                    osk={kbOpen}
                     value={v}
                     state={v ? 'known' : 'empty'}
                     size="md"
@@ -577,7 +675,7 @@ function App() {
         )}
 
         {/* results header */}
-        <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center justify-between mb-4 flex-wrap gap-y-3">
           <div className="flex items-center gap-2.5">
             <div className="flex items-center justify-center w-9 h-9 rounded-lg bg-white/5 border border-white/10">
               <Search className="w-4 h-4 text-slate-300" />
@@ -598,7 +696,7 @@ function App() {
                   <button
                     key={k}
                     onClick={() => setSort({ key: k })}
-                    className={`px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors
+                    className={`px-2.5 py-1.5 rounded-md text-xs font-medium whitespace-nowrap transition-colors
                       ${sort.key === k
                         ? 'bg-white/15 text-white'
                         : 'text-slate-400 hover:text-white'}`}
@@ -898,21 +996,21 @@ function App() {
           >
             <X className="w-4 h-4" />
           </button>
-          <div className="max-w-xl mx-auto flex flex-col items-center gap-1.5">
+          <div className="w-full max-w-md mx-auto flex flex-col gap-1.5">
             {[
-              [...'qwertyuiop'.split(''), 'backspace'],
+              'qwertyuiop'.split(''),
               'asdfghjkl'.split(''),
-              [...'zxcvbnm'.split(''), ...(mode === 'descramble' ? ['?'] : [])],
+              [...(mode === 'descramble' ? ['?'] : []), ...'zxcvbnm'.split(''), 'backspace'],
             ].map((row, r) => (
-              <div key={r} className="flex gap-1.5">
+              <div key={r} className={`flex w-full gap-1 sm:gap-1.5 ${r === 1 ? 'px-[4.5%]' : ''}`}>
                 {row.map((k) => (
                   <button
                     key={k}
                     onMouseDown={(e) => e.preventDefault()}
                     onClick={() => pressKey(k)}
                     aria-label={k === 'backspace' ? 'Backspace' : `Key ${k}`}
-                    className={`h-11 rounded-md bg-white/10 hover:bg-white/20 active:bg-white/30 text-sm font-semibold uppercase text-white transition-colors flex items-center justify-center
-                      ${k === 'backspace' ? 'px-3 sm:px-4' : 'w-8 sm:w-9'}`}
+                    className={`h-11 min-w-0 rounded-md bg-white/10 hover:bg-white/20 active:bg-white/30 text-sm font-semibold uppercase text-white transition-colors flex items-center justify-center
+                      ${k === 'backspace' ? 'flex-[1.5]' : 'flex-1'}`}
                   >
                     {k === 'backspace' ? <Delete className="w-4 h-4" /> : k}
                   </button>
