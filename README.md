@@ -13,7 +13,7 @@ A word-game solver for puzzles like Wordle, crosswords, hangman, Scrabble, Jumbl
 - **Pattern** (Wordle, crosswords, hangman) — word lengths from 3 to 15; tile inputs for known positions, must-contain letters (position unknown, duplicates respected), and excluded letters, with per-letter highlighting in the results
 - **Descramble** (Scrabble, Jumble) — find every word a rack of letters can spell, with `?` wildcards for blank tiles, an exact-anagram "use every letter" option, and a minimum-length filter
 - **Spelling Bee** — seven letters, 4+ letter words, center letter required, letters reusable; pangrams surface in their own highlighted group
-- **Letter Boxed** — twelve letters entered around a square, 3+ letter words, letters reusable, but consecutive letters can't share a side. Pick a solution length (1–5 words) to see chains covering all twelve letters, get a starred recommendation (fewest words, everyday vocabulary, fewest letters), or autofill today's NYT puzzle with one click (a daily GitHub Action publishes the puzzle data to the `puzzle-data` branch)
+- **Letter Boxed** — twelve letters entered around a square, 3+ letter words, letters reusable, but consecutive letters can't share a side. Pick a solution length (1–5 words) to see chains covering all twelve letters, get a starred recommendation (fewest words, everyday vocabulary, fewest letters), or autofill today's NYT puzzle with one click (a daily GitHub Action publishes the puzzle data to the `puzzle-data` branch about 15 minutes after the NYT publishes at 3:00 a.m. Eastern)
 
 ### Dictionaries
 

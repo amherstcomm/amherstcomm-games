@@ -910,7 +910,8 @@ function App() {
               )}
               <p className="mt-3 text-xs text-slate-500">
                 Words are 3+ letters and may reuse letters, but consecutive letters can&apos;t
-                come from the same side.
+                come from the same side. Today&apos;s puzzle becomes available here about
+                15 minutes after the NYT publishes it (3:00&nbsp;a.m. Eastern).
               </p>
             </div>
           );
