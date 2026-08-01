@@ -1,8 +1,8 @@
 import { useMemo, useState, useEffect, useRef, type ReactNode } from 'react';
-import { Search, Sparkles, Eraser, ArrowDown, X, BookOpen, Grid3x3, Shuffle, Hexagon, Check } from 'lucide-react';
+import { Search, Sparkles, Eraser, ArrowDown, ArrowUp, X, BookOpen, Grid3x3, Shuffle, Hexagon, Check } from 'lucide-react';
 import { DICTIONARIES, getDictionary, type DictionaryId } from '@/dictionaries';
 import { solvePattern, solveDescramble, solveBee } from '@/solvers';
-import { loadState, saveState, type Mode } from '@/storage';
+import { loadState, saveState, type Mode, type SortPref } from '@/storage';
 
 const MIN_LEN = 3;
 const MAX_LEN = 15;
@@ -164,21 +164,27 @@ function App() {
   const [beeCenter, setBeeCenter] = useState(initial.bee.center);
   const [beeOuters, setBeeOuters] = useState<string[]>(initial.bee.outers);
   const [showAll, setShowAll] = useState(false);
+  const [sorts, setSorts] = useState(initial.sort);
 
   const dictionaryId = dictionaries[mode];
   const setDictionaryId = (id: DictionaryId) =>
     setDictionaries((prev) => ({ ...prev, [mode]: id }));
+
+  const sort = sorts[mode];
+  const setSort = (s: Partial<SortPref>) =>
+    setSorts((prev) => ({ ...prev, [mode]: { ...prev[mode], ...s } }));
 
   // persist tool, per-tool dictionary, and last inputs
   useEffect(() => {
     saveState({
       mode,
       dictionaries,
+      sort: sorts,
       pattern: { length, known, contains: containsStr, excluded: excludedStr },
       descramble: { rack: rackStr, useAll, minLength },
       bee: { center: beeCenter, outers: beeOuters },
     });
-  }, [mode, dictionaries, length, known, containsStr, excludedStr, rackStr, useAll, minLength, beeCenter, beeOuters]);
+  }, [mode, dictionaries, sorts, length, known, containsStr, excludedStr, rackStr, useAll, minLength, beeCenter, beeOuters]);
 
   // keep known array sized to length
   useEffect(() => {
@@ -224,7 +230,19 @@ function App() {
     return solvePattern(words, { length, known, contains, excluded });
   }, [mode, words, length, known, contains, excluded, rackLetters, wildcards, useAll, minLength, beeCenter, beeOuters]);
 
-  const visible = showAll ? results : results.slice(0, 200);
+  const sorted = useMemo(() => {
+    const arr = [...results];
+    const dir = sort.dir === 'asc' ? 1 : -1;
+    if (sort.key === 'alpha') {
+      arr.sort((a, b) => (a < b ? -1 : a > b ? 1 : 0) * dir);
+    } else {
+      // direction applies to length; ties stay alphabetical
+      arr.sort((a, b) => (a.length - b.length) * dir || (a < b ? -1 : a > b ? 1 : 0));
+    }
+    return arr;
+  }, [results, sort]);
+
+  const visible = showAll ? sorted : sorted.slice(0, 200);
 
   const pangrams =
     mode === 'bee' && beeAllowed.size === 7
@@ -510,13 +528,46 @@ function App() {
               </p>
             </div>
           </div>
-          <button
-            onClick={resetAll}
-            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium text-slate-400 hover:text-white bg-white/5 border border-white/10 hover:bg-white/10 transition-colors"
-          >
-            <Eraser className="w-3.5 h-3.5" />
-            Clear
-          </button>
+          <div className="flex items-center gap-2">
+            {mode !== 'pattern' && (
+              <div className="inline-flex rounded-lg bg-white/5 border border-white/10 p-0.5 gap-0.5">
+                {(['length', 'alpha'] as const).map((k) => (
+                  <button
+                    key={k}
+                    onClick={() => setSort({ key: k })}
+                    className={`px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors
+                      ${sort.key === k
+                        ? 'bg-white/15 text-white'
+                        : 'text-slate-400 hover:text-white'}`}
+                  >
+                    {k === 'length' ? 'Length' : 'A–Z'}
+                  </button>
+                ))}
+              </div>
+            )}
+            <button
+              onClick={() => setSort({ dir: sort.dir === 'asc' ? 'desc' : 'asc' })}
+              title={
+                sort.key === 'alpha'
+                  ? sort.dir === 'asc'
+                    ? 'A to Z — click for Z to A'
+                    : 'Z to A — click for A to Z'
+                  : sort.dir === 'asc'
+                    ? 'Shortest first — click for longest first'
+                    : 'Longest first — click for shortest first'
+              }
+              className="inline-flex items-center justify-center w-8 h-8 rounded-lg text-slate-400 hover:text-white bg-white/5 border border-white/10 hover:bg-white/10 transition-colors"
+            >
+              {sort.dir === 'asc' ? <ArrowUp className="w-3.5 h-3.5" /> : <ArrowDown className="w-3.5 h-3.5" />}
+            </button>
+            <button
+              onClick={resetAll}
+              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium text-slate-400 hover:text-white bg-white/5 border border-white/10 hover:bg-white/10 transition-colors"
+            >
+              <Eraser className="w-3.5 h-3.5" />
+              Clear
+            </button>
+          </div>
         </div>
 
         {/* results */}
@@ -566,26 +617,38 @@ function App() {
                   </div>
                 </div>
               )}
-              {[...groupSource.reduce((m, w) => {
-                const g = m.get(w.length) ?? [];
-                g.push(w);
-                return m.set(w.length, g);
-              }, new Map<number, string[]>())].map(([len, ws]) => (
-                <div key={len} className="mb-6">
-                  <p className="mb-2.5 text-xs font-medium text-slate-400 uppercase tracking-wider">
-                    {len} letters <span className="text-slate-600">· {ws.length}</span>
-                  </p>
-                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2.5">
-                    {ws.map((w) => (
-                      <WordChip
-                        key={w}
-                        word={w}
-                        className="bg-white/[0.04] border border-white/10 text-slate-300 hover:bg-white/[0.08] hover:border-white/20"
-                      />
-                    ))}
+              {sort.key === 'length' ? (
+                [...groupSource.reduce((m, w) => {
+                  const g = m.get(w.length) ?? [];
+                  g.push(w);
+                  return m.set(w.length, g);
+                }, new Map<number, string[]>())].map(([len, ws]) => (
+                  <div key={len} className="mb-6">
+                    <p className="mb-2.5 text-xs font-medium text-slate-400 uppercase tracking-wider">
+                      {len} letters <span className="text-slate-600">· {ws.length}</span>
+                    </p>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2.5">
+                      {ws.map((w) => (
+                        <WordChip
+                          key={w}
+                          word={w}
+                          className="bg-white/[0.04] border border-white/10 text-slate-300 hover:bg-white/[0.08] hover:border-white/20"
+                        />
+                      ))}
+                    </div>
                   </div>
+                ))
+              ) : (
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2.5">
+                  {groupSource.map((w) => (
+                    <WordChip
+                      key={w}
+                      word={w}
+                      className="bg-white/[0.04] border border-white/10 text-slate-300 hover:bg-white/[0.08] hover:border-white/20"
+                    />
+                  ))}
                 </div>
-              ))}
+              )}
               </>
             )}
             {results.length > 200 && (

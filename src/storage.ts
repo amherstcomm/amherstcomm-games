@@ -7,9 +7,14 @@ const KEY = 'anagrimoire:v1';
 const ALL_MODES: Mode[] = ['pattern', 'descramble', 'bee'];
 const ALL_DICTS: DictionaryId[] = ['common', 'standard', 'full'];
 
+export type SortKey = 'alpha' | 'length';
+export type SortDir = 'asc' | 'desc';
+export type SortPref = { key: SortKey; dir: SortDir };
+
 export type PersistedState = {
   mode: Mode;
   dictionaries: Record<Mode, DictionaryId>;
+  sort: Record<Mode, SortPref>;
   pattern: { length: number; known: string[]; contains: string; excluded: string };
   descramble: { rack: string; useAll: boolean; minLength: number };
   bee: { center: string; outers: string[] };
@@ -18,6 +23,11 @@ export type PersistedState = {
 export const DEFAULT_STATE: PersistedState = {
   mode: 'pattern',
   dictionaries: { pattern: 'common', descramble: 'common', bee: 'common' },
+  sort: {
+    pattern: { key: 'alpha', dir: 'asc' },
+    descramble: { key: 'length', dir: 'desc' },
+    bee: { key: 'length', dir: 'desc' },
+  },
   pattern: { length: 5, known: Array(5).fill(''), contains: '', excluded: '' },
   descramble: { rack: '', useAll: false, minLength: 3 },
   bee: { center: '', outers: Array(6).fill('') },
@@ -52,6 +62,19 @@ export function loadState(): PersistedState {
       if (ALL_DICTS.includes(d)) dictionaries[m] = d;
     }
 
+    const sort: Record<Mode, SortPref> = {
+      pattern: { ...DEFAULT_STATE.sort.pattern },
+      descramble: { ...DEFAULT_STATE.sort.descramble },
+      bee: { ...DEFAULT_STATE.sort.bee },
+    };
+    for (const m of ALL_MODES) {
+      const s = p?.sort?.[m];
+      if (s?.key === 'alpha' || s?.key === 'length') sort[m].key = s.key;
+      if (s?.dir === 'asc' || s?.dir === 'desc') sort[m].dir = s.dir;
+    }
+    // pattern results are all one length; only alphabetical makes sense
+    sort.pattern.key = 'alpha';
+
     const length = clampInt(p?.pattern?.length, 3, 15, DEFAULT_STATE.pattern.length);
     const known = Array(length).fill('');
     if (Array.isArray(p?.pattern?.known)) {
@@ -66,6 +89,7 @@ export function loadState(): PersistedState {
     return {
       mode: ALL_MODES.includes(p?.mode) ? p.mode : DEFAULT_STATE.mode,
       dictionaries,
+      sort,
       pattern: {
         length,
         known,
