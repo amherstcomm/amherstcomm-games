@@ -8,10 +8,28 @@ const MAX_LEN = 15;
 
 type Mode = 'pattern' | 'descramble' | 'bee';
 
-const MODES: { id: Mode; label: string; blurb: string }[] = [
-  { id: 'pattern', label: 'Pattern', blurb: 'Wordle, crosswords, hangman — clues about positions' },
-  { id: 'descramble', label: 'Descramble', blurb: 'Scrabble, Jumble — what can these letters spell?' },
-  { id: 'bee', label: 'Spelling Bee', blurb: 'Seven letters, 4+ letter words, center letter required' },
+const MODES: { id: Mode; label: string; blurb: string; description: string }[] = [
+  {
+    id: 'pattern',
+    label: 'Pattern',
+    blurb: 'Wordle, crosswords, hangman — clues about positions',
+    description:
+      "Lock in the letters you know, list the ones you've seen, and exclude the rest. We'll surface every dictionary word that fits.",
+  },
+  {
+    id: 'descramble',
+    label: 'Descramble',
+    blurb: 'Scrabble, Jumble — what can these letters spell?',
+    description:
+      "Type the letters you're holding — with ? for blank tiles — and we'll show every word they can spell.",
+  },
+  {
+    id: 'bee',
+    label: 'Spelling Bee',
+    blurb: 'Seven letters, 4+ letter words, center letter required',
+    description:
+      "Enter the hive's seven letters and we'll find every word that uses the center — pangrams first.",
+  },
 ];
 
 const MODE_ICONS: Record<Mode, typeof Grid3x3> = {
@@ -215,18 +233,10 @@ function App() {
             <Sparkles className="w-3.5 h-3.5 text-amber-400" />
             Word Game Solver
           </div>
-          <h1 className="text-4xl sm:text-5xl font-bold tracking-tight bg-gradient-to-br from-white via-white to-slate-400 bg-clip-text text-transparent">
-            Find the word
+          <h1 className="pb-2 text-4xl sm:text-5xl font-bold tracking-tight bg-gradient-to-br from-white via-white to-slate-400 bg-clip-text text-transparent">
+            Anagrimoire
           </h1>
-          <p className="mt-3 text-slate-400 max-w-md mx-auto text-sm sm:text-base">
-            Lock in the letters you know, list the ones you've seen, and exclude the rest.
-            We'll surface every dictionary word that fits.
-          </p>
-        </header>
-
-        {/* mode selector */}
-        <section className="mb-7 text-center">
-          <div className="inline-flex rounded-xl bg-white/5 border border-white/10 p-1 gap-1">
+          <div className="mt-6 inline-flex rounded-xl bg-white/5 border border-white/10 p-1 gap-1">
             {MODES.map((m) => {
               const Icon = MODE_ICONS[m.id];
               return (
@@ -245,10 +255,10 @@ function App() {
               );
             })}
           </div>
-          <p className="mt-2 text-xs text-slate-500">
-            {MODES.find((m) => m.id === mode)?.blurb}
+          <p className="mt-4 text-slate-400 max-w-md mx-auto text-sm sm:text-base">
+            {MODES.find((m) => m.id === mode)?.description}
           </p>
-        </section>
+        </header>
 
         {/* dictionary selector */}
         <section className="mb-7 text-center">
