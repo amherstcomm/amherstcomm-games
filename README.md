@@ -1,6 +1,6 @@
 # Anagrimoire
 
-A word-game solver for puzzles like Wordle, crosswords, and hangman. Lock in the letters you know by position, list the letters that must appear somewhere, exclude the rest — Anagrimoire surfaces every dictionary word that fits.
+A word-game solver for puzzles like Wordle, crosswords, hangman, Scrabble, Jumble, and Spelling Bee. Solve by pattern — lock in the letters you know by position, list the letters that must appear somewhere, exclude the rest — descramble a rack of letters to see every word it can spell, or crack a Spelling Bee hive.
 
 *Vibe-coded with [Claude](https://claude.com/claude-code).*
 
@@ -8,12 +8,24 @@ A word-game solver for puzzles like Wordle, crosswords, and hangman. Lock in the
 
 ## Features
 
-- **Three dictionaries** — Common (everyday words, ideal for Wordle-style puzzles), Standard (adds less frequent words), and Full (~275,000 words, obscurities included); larger dictionaries load on demand
-- **Word lengths from 3 to 15 letters** — works for more than just 5-letter puzzles
-- **Known positions** — tile inputs for letters you've confirmed in place
-- **Must-contain letters** — letters known to be in the word, position unknown (duplicates respected)
-- **Excluded letters** — letters ruled out entirely
-- **Live results** with per-letter highlighting, computed entirely in the browser
+### Solver modes
+
+- **Pattern** (Wordle, crosswords, hangman) — word lengths from 3 to 15; tile inputs for known positions, must-contain letters (position unknown, duplicates respected), and excluded letters, with per-letter highlighting in the results
+- **Descramble** (Scrabble, Jumble) — find every word a rack of letters can spell, with `?` wildcards for blank tiles, an exact-anagram "use every letter" option, and a minimum-length filter
+- **Spelling Bee** — seven letters, 4+ letter words, center letter required, letters reusable; pangrams surface in their own highlighted group
+
+### Dictionaries
+
+Three tiers, selectable per mode: **Common** (everyday words, ideal for Wordle-style puzzles), **Standard** (adds less frequent words), and **Full** (~275,000 words, obscurities included). The larger dictionaries load on demand to keep the initial page light.
+
+### Quality of life
+
+- **Live results** computed entirely in the browser — nothing leaves your device
+- **Sorting** — alphabetical asc/desc everywhere; Descramble and Spelling Bee also sort by word length with results grouped per length
+- **Click any result to copy it** to the clipboard
+- **Smart letter tiles** — typing auto-advances to the next box, Backspace steps back, arrow keys navigate, and filled tiles get a small × pill to clear them
+- **Toggleable on-screen keyboard** with a `?` key for blank tiles in Descramble
+- **Everything is remembered** — active mode, per-mode dictionary and sort preferences, your last letters in each mode, and the keyboard state persist in localStorage
 
 ## Getting started
 
@@ -52,6 +64,10 @@ Two environments are deployed on Render:
 | Dev | [dev.anagrimoire.com](https://dev.anagrimoire.com) | `dev` |
 
 Pushes to each branch auto-deploy to the matching environment.
+
+## Disclaimer
+
+Anagrimoire is an independent project. It is not affiliated with, endorsed by, or sponsored by The New York Times Company (Wordle, Spelling Bee), Hasbro or Mattel (Scrabble), Tribune Content Agency (Jumble), or any other puzzle publisher. All game names and trademarks are the property of their respective owners and are used only to describe the kinds of puzzles this tool can help with. No word list is guaranteed to match any game's official dictionary.
 
 ## License
 

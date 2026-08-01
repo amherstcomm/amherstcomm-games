@@ -1,50 +1,41 @@
-import { useMemo, useState, useEffect, useRef } from 'react';
-import { Search, Sparkles, Eraser, ArrowDown, X, BookOpen } from 'lucide-react';
+import { useMemo, useState, useEffect, useRef, type ReactNode } from 'react';
+import { Search, Sparkles, Eraser, ArrowDown, ArrowUp, X, BookOpen, Grid3x3, Shuffle, Hexagon, Check, Keyboard, Delete, Github, Info } from 'lucide-react';
 import { DICTIONARIES, getDictionary, type DictionaryId } from '@/dictionaries';
+import { solvePattern, solveDescramble, solveBee } from '@/solvers';
+import { loadState, saveState, type Mode, type SortPref } from '@/storage';
 
 const MIN_LEN = 3;
 const MAX_LEN = 15;
 
-type SolverInput = {
-  length: number;
-  known: string[]; // known letters by position, '' for unknown
-  contains: string[]; // letters that must appear (multiset)
-  excluded: string[]; // letters that must not appear
+const MODES: { id: Mode; label: string; blurb: string; description: string }[] = [
+  {
+    id: 'pattern',
+    label: 'Pattern',
+    blurb: 'Wordle, crosswords, hangman — clues about positions',
+    description:
+      "Lock in the letters you know, list the ones you've seen, and exclude the rest. We'll surface every dictionary word that fits.",
+  },
+  {
+    id: 'descramble',
+    label: 'Descramble',
+    blurb: 'Scrabble, Jumble — what can these letters spell?',
+    description:
+      "Type the letters you're holding — with ? for blank tiles — and we'll show every word they can spell.",
+  },
+  {
+    id: 'bee',
+    label: 'Spelling Bee',
+    blurb: 'Seven letters, 4+ letter words, center letter required',
+    description:
+      "Enter the hive's seven letters and we'll find every word that uses the center — pangrams first.",
+  },
+];
+
+const MODE_ICONS: Record<Mode, typeof Grid3x3> = {
+  pattern: Grid3x3,
+  descramble: Shuffle,
+  bee: Hexagon,
 };
-
-function solve(list: string[], input: SolverInput): string[] {
-  const { length, known, contains, excluded } = input;
-
-  const excludedSet = new Set(excluded.filter(Boolean));
-  const containsCounts = new Map<string, number>();
-  for (const c of contains) {
-    if (c) containsCounts.set(c, (containsCounts.get(c) ?? 0) + 1);
-  }
-
-  return list.filter((w) => {
-    if (w.length !== length) return false;
-
-    // excluded letters
-    for (let i = 0; i < w.length; i++) {
-      if (excludedSet.has(w[i])) return false;
-    }
-
-    // known positions
-    for (let i = 0; i < known.length; i++) {
-      const k = known[i];
-      if (k && w[i] !== k) return false;
-    }
-
-    // must-contain multiset
-    for (const [ch, need] of containsCounts) {
-      let count = 0;
-      for (let i = 0; i < w.length; i++) if (w[i] === ch) count++;
-      if (count < need) return false;
-    }
-
-    return true;
-  });
-}
 
 function normalizeLetters(s: string): string[] {
   return s.toLowerCase().replace(/[^a-z]/g, '').split('');
@@ -56,12 +47,14 @@ function Tile({
   state,
   index,
   size,
+  group,
 }: {
   value: string;
   onChange: (v: string) => void;
-  state: 'known' | 'empty';
+  state: 'known' | 'empty' | 'center';
   index: number;
   size: 'sm' | 'md';
+  group: string;
 }) {
   const ref = useRef<HTMLInputElement>(null);
   const dims =
@@ -69,38 +62,151 @@ function Tile({
       ? 'w-9 h-11 sm:w-10 sm:h-12 text-xl sm:text-2xl'
       : 'w-12 h-14 sm:w-14 sm:h-16 text-2xl sm:text-3xl';
 
+  const focusTile = (i: number) => {
+    const el = document.querySelector<HTMLInputElement>(
+      `input[data-tile-group="${group}"][data-tile-index="${i}"]`
+    );
+    el?.focus();
+    el?.select();
+  };
+
   return (
-    <input
-      ref={ref}
-      value={value}
-      onChange={(e) => {
-        const raw = e.target.value.toLowerCase().replace(/[^a-z]/g, '');
-        onChange(raw.slice(-1));
-      }}
-      onKeyDown={(e) => {
-        if (e.key === 'Backspace' && !value && ref.current) {
-          // move focus handled by parent via data attribute; keep simple
-        }
-      }}
-      maxLength={1}
-      aria-label={`Letter at position ${index + 1}`}
-      placeholder="·"
-      className={`${dims} text-center font-bold uppercase rounded-xl border-2 transition-all duration-150 outline-none
-        ${state === 'known'
-          ? 'bg-emerald-500/15 border-emerald-400 text-emerald-200 shadow-[0_0_20px_-6px] shadow-emerald-500/40'
-          : 'bg-white/5 border-white/10 text-white placeholder-white/25 hover:border-white/20'}
-        focus:border-amber-400 focus:bg-amber-400/10 focus:shadow-[0_0_24px_-6px] focus:shadow-amber-400/50`}
-    />
+    <div className="relative">
+      <input
+        ref={ref}
+        data-tile-group={group}
+        data-tile-index={index}
+        value={value}
+        onChange={(e) => {
+          const raw = e.target.value.toLowerCase().replace(/[^a-z]/g, '');
+          const c = raw.slice(-1);
+          onChange(c);
+          if (c) focusTile(index + 1);
+        }}
+        onKeyDown={(e) => {
+          if (e.key === 'Backspace' && !value) focusTile(index - 1);
+          else if (e.key === 'ArrowLeft') focusTile(index - 1);
+          else if (e.key === 'ArrowRight') focusTile(index + 1);
+        }}
+        maxLength={1}
+        aria-label={`Letter at position ${index + 1}`}
+        placeholder="·"
+        className={`${dims} text-center font-bold uppercase rounded-xl border-2 transition-all duration-150 outline-none
+          ${state === 'known'
+            ? 'bg-emerald-500/15 border-emerald-400 text-emerald-200 shadow-[0_0_20px_-6px] shadow-emerald-500/40'
+            : state === 'center'
+              ? 'bg-amber-400/15 border-amber-400 text-amber-200 shadow-[0_0_20px_-6px] shadow-amber-400/50 placeholder-amber-200/30'
+              : 'bg-white/5 border-white/10 text-white placeholder-white/25 hover:border-white/20'}
+          focus:border-amber-400 focus:bg-amber-400/10 focus:shadow-[0_0_24px_-6px] focus:shadow-amber-400/50`}
+      />
+      {value && (
+        <button
+          onClick={() => {
+            onChange('');
+            ref.current?.focus();
+          }}
+          tabIndex={-1}
+          aria-label={`Clear letter at position ${index + 1}`}
+          className="absolute -top-1.5 -right-1.5 w-5 h-5 flex items-center justify-center rounded-full bg-slate-800 border border-white/25 text-slate-300 hover:text-white hover:bg-slate-700 hover:border-white/50 transition-colors shadow-md"
+        >
+          <X className="w-3 h-3" />
+        </button>
+      )}
+    </div>
   );
 }
 
+function WordChip({
+  word,
+  className,
+  children,
+}: {
+  word: string;
+  className: string;
+  children?: ReactNode;
+}) {
+  const [copied, setCopied] = useState(false);
+
+  return (
+    <button
+      onClick={() => {
+        navigator.clipboard.writeText(word).then(() => {
+          setCopied(true);
+          setTimeout(() => setCopied(false), 1000);
+        });
+      }}
+      title="Click to copy"
+      className={`px-3 py-2.5 rounded-lg text-center text-lg tracking-wide transition-colors ${className}`}
+    >
+      {copied ? (
+        <span className="inline-flex items-center gap-1.5 text-emerald-300 text-base font-medium">
+          <Check className="w-4 h-4" /> Copied
+        </span>
+      ) : (
+        children ?? word
+      )}
+    </button>
+  );
+}
+
+const initial = loadState();
+
 function App() {
-  const [dictionaryId, setDictionaryId] = useState<DictionaryId>('common');
-  const [length, setLength] = useState(5);
-  const [known, setKnown] = useState<string[]>(Array(5).fill(''));
-  const [containsStr, setContainsStr] = useState('');
-  const [excludedStr, setExcludedStr] = useState('');
+  const [mode, setMode] = useState<Mode>(initial.mode);
+  const [dictionaries, setDictionaries] = useState(initial.dictionaries);
+  const [length, setLength] = useState(initial.pattern.length);
+  const [known, setKnown] = useState<string[]>(initial.pattern.known);
+  const [containsStr, setContainsStr] = useState(initial.pattern.contains);
+  const [excludedStr, setExcludedStr] = useState(initial.pattern.excluded);
+  const [rackStr, setRackStr] = useState(initial.descramble.rack);
+  const [useAll, setUseAll] = useState(initial.descramble.useAll);
+  const [minLength, setMinLength] = useState(initial.descramble.minLength);
+  const [beeCenter, setBeeCenter] = useState(initial.bee.center);
+  const [beeOuters, setBeeOuters] = useState<string[]>(initial.bee.outers);
   const [showAll, setShowAll] = useState(false);
+  const [sorts, setSorts] = useState(initial.sort);
+  const [kbOpen, setKbOpen] = useState(initial.keyboard);
+  const [aboutOpen, setAboutOpen] = useState(false);
+
+  useEffect(() => {
+    if (!aboutOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setAboutOpen(false);
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [aboutOpen]);
+
+  // the input the on-screen keyboard types into
+  const lastFocused = useRef<HTMLInputElement | null>(null);
+  useEffect(() => {
+    const onFocusIn = (e: FocusEvent) => {
+      if (e.target instanceof HTMLInputElement) lastFocused.current = e.target;
+    };
+    document.addEventListener('focusin', onFocusIn);
+    return () => document.removeEventListener('focusin', onFocusIn);
+  }, []);
+
+  const dictionaryId = dictionaries[mode];
+  const setDictionaryId = (id: DictionaryId) =>
+    setDictionaries((prev) => ({ ...prev, [mode]: id }));
+
+  const sort = sorts[mode];
+  const setSort = (s: Partial<SortPref>) =>
+    setSorts((prev) => ({ ...prev, [mode]: { ...prev[mode], ...s } }));
+
+  // persist tool, per-tool dictionary, and last inputs
+  useEffect(() => {
+    saveState({
+      mode,
+      dictionaries,
+      sort: sorts,
+      keyboard: kbOpen,
+      pattern: { length, known, contains: containsStr, excluded: excludedStr },
+      descramble: { rack: rackStr, useAll, minLength },
+      bee: { center: beeCenter, outers: beeOuters },
+    });
+  }, [mode, dictionaries, sorts, kbOpen, length, known, containsStr, excludedStr, rackStr, useAll, minLength, beeCenter, beeOuters]);
 
   // keep known array sized to length
   useEffect(() => {
@@ -125,11 +231,47 @@ function App() {
     };
   }, [dictionaryId]);
 
-  const results = useMemo(() => {
-    return solve(words, { length, known, contains, excluded });
-  }, [words, length, known, contains, excluded]);
+  const rackLetters = useMemo(
+    () => rackStr.toLowerCase().replace(/[^a-z]/g, '').split('').filter(Boolean),
+    [rackStr]
+  );
+  const wildcards = useMemo(() => (rackStr.match(/\?/g) ?? []).length, [rackStr]);
 
-  const visible = showAll ? results : results.slice(0, 200);
+  const beeAllowed = useMemo(
+    () => new Set([beeCenter, ...beeOuters].filter(Boolean)),
+    [beeCenter, beeOuters]
+  );
+
+  const results = useMemo(() => {
+    if (mode === 'descramble') {
+      return solveDescramble(words, { letters: rackLetters, wildcards, useAll, minLength });
+    }
+    if (mode === 'bee') {
+      return solveBee(words, { center: beeCenter, outers: beeOuters });
+    }
+    return solvePattern(words, { length, known, contains, excluded });
+  }, [mode, words, length, known, contains, excluded, rackLetters, wildcards, useAll, minLength, beeCenter, beeOuters]);
+
+  const sorted = useMemo(() => {
+    const arr = [...results];
+    const dir = sort.dir === 'asc' ? 1 : -1;
+    if (sort.key === 'alpha') {
+      arr.sort((a, b) => (a < b ? -1 : a > b ? 1 : 0) * dir);
+    } else {
+      // direction applies to length; ties stay alphabetical
+      arr.sort((a, b) => (a.length - b.length) * dir || (a < b ? -1 : a > b ? 1 : 0));
+    }
+    return arr;
+  }, [results, sort]);
+
+  const visible = showAll ? sorted : sorted.slice(0, 200);
+
+  const pangrams =
+    mode === 'bee' && beeAllowed.size === 7
+      ? visible.filter((w) => new Set(w).size === 7)
+      : [];
+  const pangramSet = new Set(pangrams);
+  const groupSource = mode === 'bee' ? visible.filter((w) => !pangramSet.has(w)) : visible;
 
   const containsSet = new Set(contains);
 
@@ -154,10 +296,54 @@ function App() {
     });
   }
 
+  function pickDefaultTarget(): HTMLInputElement | null {
+    if (mode === 'descramble') {
+      return document.querySelector<HTMLInputElement>('input[aria-label="Letters to descramble"]');
+    }
+    const group = mode === 'bee' ? 'bee' : 'known';
+    const tiles = [...document.querySelectorAll<HTMLInputElement>(`input[data-tile-group="${group}"]`)];
+    return tiles.find((t) => !t.value) ?? tiles[0] ?? null;
+  }
+
+  function pressKey(k: string) {
+    const remembered =
+      lastFocused.current && document.contains(lastFocused.current) ? lastFocused.current : null;
+    const target = remembered ?? pickDefaultTarget();
+    if (!target) return;
+    target.focus();
+
+    const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!;
+    const isTile = target.hasAttribute('data-tile-group');
+
+    if (k === 'backspace') {
+      if (target.value) {
+        setValue.call(target, isTile ? '' : target.value.slice(0, -1));
+        target.dispatchEvent(new Event('input', { bubbles: true }));
+      } else if (isTile) {
+        const g = target.getAttribute('data-tile-group');
+        const i = Number(target.getAttribute('data-tile-index'));
+        const prev = document.querySelector<HTMLInputElement>(
+          `input[data-tile-group="${g}"][data-tile-index="${i - 1}"]`
+        );
+        if (prev) {
+          prev.focus();
+          prev.select();
+        }
+      }
+      return;
+    }
+
+    setValue.call(target, isTile ? k : target.value + k);
+    target.dispatchEvent(new Event('input', { bubbles: true }));
+  }
+
   function resetAll() {
     setKnown(Array(length).fill(''));
     setContainsStr('');
     setExcludedStr('');
+    setRackStr('');
+    setBeeCenter('');
+    setBeeOuters(Array(6).fill(''));
   }
 
   return (
@@ -166,19 +352,37 @@ function App() {
       <div className="pointer-events-none absolute -top-40 -left-40 w-[500px] h-[500px] bg-amber-500/10 rounded-full blur-[120px]" />
       <div className="pointer-events-none absolute top-1/3 -right-40 w-[500px] h-[500px] bg-emerald-500/10 rounded-full blur-[120px]" />
 
-      <div className="relative max-w-3xl mx-auto px-5 py-10 sm:py-16">
+      <div className={`relative max-w-3xl mx-auto px-5 py-10 sm:py-16 ${kbOpen ? 'pb-64 sm:pb-64' : ''}`}>
         {/* header */}
         <header className="text-center mb-10">
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/5 border border-white/10 text-xs text-slate-300 mb-5">
             <Sparkles className="w-3.5 h-3.5 text-amber-400" />
             Word Game Solver
           </div>
-          <h1 className="text-4xl sm:text-5xl font-bold tracking-tight bg-gradient-to-br from-white via-white to-slate-400 bg-clip-text text-transparent">
-            Find the word
+          <h1 className="pb-2 text-4xl sm:text-5xl font-bold tracking-tight bg-gradient-to-br from-white via-white to-slate-400 bg-clip-text text-transparent">
+            Anagrimoire
           </h1>
-          <p className="mt-3 text-slate-400 max-w-md mx-auto text-sm sm:text-base">
-            Lock in the letters you know, list the ones you've seen, and exclude the rest.
-            We'll surface every dictionary word that fits.
+          <div className="mt-6 inline-flex rounded-xl bg-white/5 border border-white/10 p-1 gap-1">
+            {MODES.map((m) => {
+              const Icon = MODE_ICONS[m.id];
+              return (
+                <button
+                  key={m.id}
+                  onClick={() => setMode(m.id)}
+                  title={m.blurb}
+                  className={`inline-flex items-center gap-1.5 px-4 h-10 rounded-lg text-sm font-semibold transition-all duration-150
+                    ${mode === m.id
+                      ? 'bg-emerald-400 text-slate-950 shadow-lg shadow-emerald-500/30'
+                      : 'text-slate-300 hover:bg-white/10'}`}
+                >
+                  <Icon className="w-4 h-4" />
+                  {m.label}
+                </button>
+              );
+            })}
+          </div>
+          <p className="mt-4 text-slate-400 max-w-md mx-auto text-sm sm:text-base">
+            {MODES.find((m) => m.id === mode)?.description}
           </p>
         </header>
 
@@ -208,6 +412,8 @@ function App() {
           </p>
         </section>
 
+        {mode === 'pattern' && (
+        <>
         {/* length selector */}
         <section className="mb-7 text-center">
           <label className="block text-xs font-medium text-slate-400 uppercase tracking-wider mb-2.5">
@@ -239,6 +445,7 @@ function App() {
               <Tile
                 key={i}
                 index={i}
+                group="known"
                 value={v}
                 state={v ? 'known' : 'empty'}
                 size={length > 10 ? 'sm' : 'md'}
@@ -278,6 +485,96 @@ function App() {
             />
           </section>
         </div>
+        </>
+        )}
+
+        {mode === 'descramble' && (
+        <div className="mb-8">
+          <section className="mb-5">
+            <label className="block text-xs font-medium text-slate-400 uppercase tracking-wider mb-2.5 text-center">
+              Your letters <span className="text-amber-400/70 normal-case">(use ? for a blank tile)</span>
+            </label>
+            <input
+              value={rackStr}
+              onChange={(e) => setRackStr(e.target.value.toLowerCase().replace(/[^a-z?]/g, '').slice(0, MAX_LEN))}
+              placeholder="e.g. aetrsn?"
+              aria-label="Letters to descramble"
+              className="w-full h-14 px-4 rounded-xl bg-white/5 border-2 border-white/10 text-2xl text-center font-bold uppercase tracking-[0.3em] text-amber-200 placeholder-slate-600 placeholder-normal-case focus:border-amber-400 focus:bg-amber-400/5 outline-none transition-all"
+            />
+          </section>
+          <div className="flex flex-wrap items-center justify-center gap-3">
+            <button
+              onClick={() => setUseAll((v) => !v)}
+              className={`inline-flex items-center gap-1.5 px-4 h-10 rounded-lg text-sm font-semibold transition-all duration-150 border
+                ${useAll
+                  ? 'bg-amber-400 text-slate-950 border-amber-400 shadow-lg shadow-amber-500/30'
+                  : 'bg-white/5 border-white/10 text-slate-300 hover:bg-white/10'}`}
+            >
+              Use every letter
+            </button>
+            {!useAll && (
+              <label className="inline-flex items-center gap-2 text-sm text-slate-300">
+                Min length
+                <select
+                  value={minLength}
+                  onChange={(e) => setMinLength(Number(e.target.value))}
+                  className="h-10 px-3 rounded-lg bg-white/5 border border-white/10 text-sm font-semibold text-white outline-none focus:border-amber-400 [&>option]:bg-slate-900"
+                >
+                  {[2, 3, 4, 5, 6, 7].map((n) => (
+                    <option key={n} value={n}>
+                      {n}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
+          </div>
+        </div>
+        )}
+
+        {mode === 'bee' && (
+        <div className="mb-8 text-center">
+          <div className="flex flex-wrap justify-center items-end gap-5">
+            <div>
+              <label className="block text-xs font-medium text-amber-400/80 uppercase tracking-wider mb-2.5">
+                Center
+              </label>
+              <Tile
+                index={0}
+                group="bee"
+                value={beeCenter}
+                state="center"
+                size="md"
+                onChange={(c) => setBeeCenter(c)}
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-400 uppercase tracking-wider mb-2.5">
+                Outer letters
+              </label>
+              <div className="flex flex-wrap gap-2 justify-center">
+                {beeOuters.map((v, i) => (
+                  <Tile
+                    key={i}
+                    index={i + 1}
+                    group="bee"
+                    value={v}
+                    state={v ? 'known' : 'empty'}
+                    size="md"
+                    onChange={(c) =>
+                      setBeeOuters((prev) => prev.map((x, j) => (j === i ? c : x)))
+                    }
+                  />
+                ))}
+              </div>
+            </div>
+          </div>
+          <p className="mt-3 text-xs text-slate-500">
+            Words are 4+ letters, must use the center letter, and may repeat letters.
+            Words using all seven letters are pangrams.
+          </p>
+        </div>
+        )}
 
         {/* results header */}
         <div className="flex items-center justify-between mb-4">
@@ -294,32 +591,129 @@ function App() {
               </p>
             </div>
           </div>
-          <button
-            onClick={resetAll}
-            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium text-slate-400 hover:text-white bg-white/5 border border-white/10 hover:bg-white/10 transition-colors"
-          >
-            <Eraser className="w-3.5 h-3.5" />
-            Clear
-          </button>
+          <div className="flex items-center gap-2">
+            {mode !== 'pattern' && (
+              <div className="inline-flex rounded-lg bg-white/5 border border-white/10 p-0.5 gap-0.5">
+                {(['length', 'alpha'] as const).map((k) => (
+                  <button
+                    key={k}
+                    onClick={() => setSort({ key: k })}
+                    className={`px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors
+                      ${sort.key === k
+                        ? 'bg-white/15 text-white'
+                        : 'text-slate-400 hover:text-white'}`}
+                  >
+                    {k === 'length' ? 'Length' : 'A–Z'}
+                  </button>
+                ))}
+              </div>
+            )}
+            <button
+              onClick={() => setSort({ dir: sort.dir === 'asc' ? 'desc' : 'asc' })}
+              title={
+                sort.key === 'alpha'
+                  ? sort.dir === 'asc'
+                    ? 'A to Z — click for Z to A'
+                    : 'Z to A — click for A to Z'
+                  : sort.dir === 'asc'
+                    ? 'Shortest first — click for longest first'
+                    : 'Longest first — click for shortest first'
+              }
+              className="inline-flex items-center justify-center w-8 h-8 rounded-lg text-slate-400 hover:text-white bg-white/5 border border-white/10 hover:bg-white/10 transition-colors"
+            >
+              {sort.dir === 'asc' ? <ArrowUp className="w-3.5 h-3.5" /> : <ArrowDown className="w-3.5 h-3.5" />}
+            </button>
+            <button
+              onClick={resetAll}
+              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium text-slate-400 hover:text-white bg-white/5 border border-white/10 hover:bg-white/10 transition-colors"
+            >
+              <Eraser className="w-3.5 h-3.5" />
+              Clear
+            </button>
+          </div>
         </div>
 
         {/* results */}
         {results.length === 0 ? (
           <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-10 text-center">
-            <p className="text-slate-400">No words fit those clues. Try loosening a constraint.</p>
+            <p className="text-slate-400">
+              {mode === 'descramble'
+                ? rackLetters.length + wildcards === 0
+                  ? 'Type your letters above to see what they can spell.'
+                  : 'Nothing spells from those letters. Try adding a wildcard (?) or lowering the minimum length.'
+                : mode === 'bee'
+                  ? beeCenter === ''
+                    ? 'Enter the center letter and the six outer letters to find words.'
+                    : 'No words found from those letters. Double-check the puzzle.'
+                  : 'No words fit those clues. Try loosening a constraint.'}
+            </p>
           </div>
         ) : (
           <>
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2.5">
-              {visible.map((w) => (
-                <div
-                  key={w}
-                  className="px-3 py-2.5 rounded-lg bg-white/[0.04] border border-white/10 text-center text-lg tracking-wide hover:bg-white/[0.08] hover:border-white/20 transition-colors cursor-default"
-                >
-                  {highlight(w)}
+            {mode === 'pattern' ? (
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2.5">
+                {visible.map((w) => (
+                  <WordChip
+                    key={w}
+                    word={w}
+                    className="bg-white/[0.04] border border-white/10 hover:bg-white/[0.08] hover:border-white/20"
+                  >
+                    {highlight(w)}
+                  </WordChip>
+                ))}
+              </div>
+            ) : (
+              <>
+              {pangrams.length > 0 && (
+                <div className="mb-6">
+                  <p className="mb-2.5 text-xs font-medium text-amber-400/80 uppercase tracking-wider">
+                    Pangrams <span className="text-amber-400/50">· {pangrams.length}</span>
+                  </p>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2.5">
+                    {pangrams.map((w) => (
+                      <WordChip
+                        key={w}
+                        word={w}
+                        className="bg-amber-400/10 border border-amber-400/30 text-amber-200 font-semibold hover:bg-amber-400/20"
+                      />
+                    ))}
+                  </div>
                 </div>
-              ))}
-            </div>
+              )}
+              {sort.key === 'length' ? (
+                [...groupSource.reduce((m, w) => {
+                  const g = m.get(w.length) ?? [];
+                  g.push(w);
+                  return m.set(w.length, g);
+                }, new Map<number, string[]>())].map(([len, ws]) => (
+                  <div key={len} className="mb-6">
+                    <p className="mb-2.5 text-xs font-medium text-slate-400 uppercase tracking-wider">
+                      {len} letters <span className="text-slate-600">· {ws.length}</span>
+                    </p>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2.5">
+                      {ws.map((w) => (
+                        <WordChip
+                          key={w}
+                          word={w}
+                          className="bg-white/[0.04] border border-white/10 text-slate-300 hover:bg-white/[0.08] hover:border-white/20"
+                        />
+                      ))}
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2.5">
+                  {groupSource.map((w) => (
+                    <WordChip
+                      key={w}
+                      word={w}
+                      className="bg-white/[0.04] border border-white/10 text-slate-300 hover:bg-white/[0.08] hover:border-white/20"
+                    />
+                  ))}
+                </div>
+              )}
+              </>
+            )}
             {results.length > 200 && (
               <button
                 onClick={() => setShowAll((s) => !s)}
@@ -340,10 +734,203 @@ function App() {
         )}
 
         <footer className="mt-14 text-center text-xs text-slate-600">
-          Searching {words.length.toLocaleString()} English words (
-          {DICTIONARIES.find((d) => d.id === dictionaryId)?.label.toLowerCase()} dictionary).
+          <p>
+            Searching {words.length.toLocaleString()} English words (
+            {DICTIONARIES.find((d) => d.id === dictionaryId)?.label.toLowerCase()} dictionary).
+          </p>
+          <div className="mt-3 flex items-center justify-center gap-5">
+            <a
+              href="https://github.com/rptetzloff/anagrimoire"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 hover:text-slate-300 transition-colors"
+            >
+              <Github className="w-3.5 h-3.5" />
+              GitHub
+            </a>
+            <button
+              onClick={() => setAboutOpen(true)}
+              className="inline-flex items-center gap-1.5 hover:text-slate-300 transition-colors"
+            >
+              <Info className="w-3.5 h-3.5" />
+              About &amp; licenses
+            </button>
+          </div>
         </footer>
       </div>
+
+      {/* about & licenses modal */}
+      {aboutOpen && (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
+          onClick={() => setAboutOpen(false)}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label="About and licenses"
+            onClick={(e) => e.stopPropagation()}
+            className="relative w-full max-w-lg max-h-[80vh] overflow-y-auto rounded-2xl bg-slate-900 border border-white/10 p-6 sm:p-8 text-left shadow-2xl"
+          >
+            <button
+              onClick={() => setAboutOpen(false)}
+              aria-label="Close"
+              className="absolute top-4 right-4 w-8 h-8 flex items-center justify-center rounded-lg text-slate-400 hover:text-white hover:bg-white/10 transition-colors"
+            >
+              <X className="w-4 h-4" />
+            </button>
+
+            <h2 className="text-xl font-bold mb-5">About Anagrimoire</h2>
+
+            <div className="space-y-5 text-sm text-slate-300">
+              <p>
+                Anagrimoire is a free, open-source word-game solver. The code is released
+                under the{' '}
+                <a
+                  href="https://github.com/rptetzloff/anagrimoire/blob/main/LICENSE"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-amber-300 hover:text-amber-200 underline underline-offset-2"
+                >
+                  MIT License
+                </a>{' '}
+                and lives on{' '}
+                <a
+                  href="https://github.com/rptetzloff/anagrimoire"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-amber-300 hover:text-amber-200 underline underline-offset-2"
+                >
+                  GitHub
+                </a>
+                .
+              </p>
+
+              <div>
+                <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">
+                  Disclaimer
+                </h3>
+                <p className="text-slate-400">
+                  Anagrimoire is an independent project. It is not affiliated with,
+                  endorsed by, or sponsored by The New York Times Company (Wordle, Spelling
+                  Bee), Hasbro or Mattel (Scrabble), Tribune Content Agency (Jumble), or any
+                  other puzzle publisher. All game names and trademarks are the property of
+                  their respective owners and are used here only to describe the kinds of
+                  puzzles this tool can help with.
+                </p>
+              </div>
+
+              <div>
+                <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">
+                  Word lists
+                </h3>
+                <ul className="space-y-1.5 text-slate-400 list-disc list-inside">
+                  <li>
+                    Common &amp; Standard dictionaries:{' '}
+                    <a
+                      href="https://github.com/jacksonrayhamilton/wordlist-english"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-amber-300/90 hover:text-amber-200 underline underline-offset-2"
+                    >
+                      wordlist-english
+                    </a>{' '}
+                    (MIT), built from{' '}
+                    <a
+                      href="http://wordlist.aspell.net/"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-amber-300/90 hover:text-amber-200 underline underline-offset-2"
+                    >
+                      SCOWL
+                    </a>{' '}
+                    © Kevin Atkinson.
+                  </li>
+                  <li>
+                    Full dictionary:{' '}
+                    <a
+                      href="https://github.com/words/an-array-of-english-words"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-amber-300/90 hover:text-amber-200 underline underline-offset-2"
+                    >
+                      an-array-of-english-words
+                    </a>{' '}
+                    (MIT), derived from the{' '}
+                    <a
+                      href="https://github.com/lorenbrichter/Words"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-amber-300/90 hover:text-amber-200 underline underline-offset-2"
+                    >
+                      Letterpress word list
+                    </a>{' '}
+                    (CC0, public domain).
+                  </li>
+                </ul>
+              </div>
+
+              <p className="text-slate-500 text-xs">
+                No word list is guaranteed to match any game&apos;s official dictionary.
+                Vibe-coded with{' '}
+                <a
+                  href="https://claude.com/claude-code"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="hover:text-slate-300 underline underline-offset-2"
+                >
+                  Claude
+                </a>
+                .
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* on-screen keyboard */}
+      {kbOpen ? (
+        <div className="fixed bottom-0 inset-x-0 z-50 bg-slate-900/95 backdrop-blur border-t border-white/10 px-2 pt-3 pb-4">
+          <button
+            onClick={() => setKbOpen(false)}
+            aria-label="Hide keyboard"
+            className="absolute -top-11 right-3 w-9 h-9 flex items-center justify-center rounded-full bg-slate-800 border border-white/15 text-slate-400 hover:text-white hover:bg-slate-700 hover:border-white/30 shadow-lg transition-colors"
+          >
+            <X className="w-4 h-4" />
+          </button>
+          <div className="max-w-xl mx-auto flex flex-col items-center gap-1.5">
+            {[
+              [...'qwertyuiop'.split(''), 'backspace'],
+              'asdfghjkl'.split(''),
+              [...'zxcvbnm'.split(''), ...(mode === 'descramble' ? ['?'] : [])],
+            ].map((row, r) => (
+              <div key={r} className="flex gap-1.5">
+                {row.map((k) => (
+                  <button
+                    key={k}
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={() => pressKey(k)}
+                    aria-label={k === 'backspace' ? 'Backspace' : `Key ${k}`}
+                    className={`h-11 rounded-md bg-white/10 hover:bg-white/20 active:bg-white/30 text-sm font-semibold uppercase text-white transition-colors flex items-center justify-center
+                      ${k === 'backspace' ? 'px-3 sm:px-4' : 'w-8 sm:w-9'}`}
+                  >
+                    {k === 'backspace' ? <Delete className="w-4 h-4" /> : k}
+                  </button>
+                ))}
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : (
+        <button
+          onClick={() => setKbOpen(true)}
+          aria-label="Show keyboard"
+          title="Show on-screen keyboard"
+          className="fixed bottom-4 right-4 z-50 w-12 h-12 flex items-center justify-center rounded-full bg-slate-800 border border-white/15 text-slate-300 hover:text-white hover:bg-slate-700 hover:border-white/30 shadow-lg transition-colors"
+        >
+          <Keyboard className="w-5 h-5" />
+        </button>
+      )}
     </div>
   );
 }
