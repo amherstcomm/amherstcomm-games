@@ -39,6 +39,32 @@ export function solvePattern(list: string[], input: PatternInput): string[] {
   });
 }
 
+export type BeeInput = {
+  center: string; // required letter
+  outers: string[]; // the other letters, '' entries ignored
+};
+
+export function solveBee(list: string[], input: BeeInput): string[] {
+  const { center, outers } = input;
+  if (!center) return [];
+
+  const allowed = new Set([center, ...outers.filter(Boolean)]);
+
+  const matches = list.filter((w) => {
+    if (w.length < 4) return false; // Spelling Bee minimum
+    let hasCenter = false;
+    for (let i = 0; i < w.length; i++) {
+      const ch = w[i];
+      if (!allowed.has(ch)) return false;
+      if (ch === center) hasCenter = true;
+    }
+    return hasCenter;
+  });
+
+  // longest words first, then alphabetical
+  return matches.sort((a, b) => b.length - a.length || (a < b ? -1 : 1));
+}
+
 export type DescrambleInput = {
   letters: string[]; // the rack, a-z only
   wildcards: number; // blank tiles that can stand in for any letter

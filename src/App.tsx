@@ -1,17 +1,24 @@
 import { useMemo, useState, useEffect, useRef } from 'react';
-import { Search, Sparkles, Eraser, ArrowDown, X, BookOpen, Grid3x3, Shuffle } from 'lucide-react';
+import { Search, Sparkles, Eraser, ArrowDown, X, BookOpen, Grid3x3, Shuffle, Hexagon } from 'lucide-react';
 import { DICTIONARIES, getDictionary, type DictionaryId } from '@/dictionaries';
-import { solvePattern, solveDescramble } from '@/solvers';
+import { solvePattern, solveDescramble, solveBee } from '@/solvers';
 
 const MIN_LEN = 3;
 const MAX_LEN = 15;
 
-type Mode = 'pattern' | 'descramble';
+type Mode = 'pattern' | 'descramble' | 'bee';
 
 const MODES: { id: Mode; label: string; blurb: string }[] = [
   { id: 'pattern', label: 'Pattern', blurb: 'Wordle, crosswords, hangman — clues about positions' },
   { id: 'descramble', label: 'Descramble', blurb: 'Scrabble, Jumble — what can these letters spell?' },
+  { id: 'bee', label: 'Spelling Bee', blurb: 'Seven letters, 4+ letter words, center letter required' },
 ];
+
+const MODE_ICONS: Record<Mode, typeof Grid3x3> = {
+  pattern: Grid3x3,
+  descramble: Shuffle,
+  bee: Hexagon,
+};
 
 function normalizeLetters(s: string): string[] {
   return s.toLowerCase().replace(/[^a-z]/g, '').split('');
@@ -26,7 +33,7 @@ function Tile({
 }: {
   value: string;
   onChange: (v: string) => void;
-  state: 'known' | 'empty';
+  state: 'known' | 'empty' | 'center';
   index: number;
   size: 'sm' | 'md';
 }) {
@@ -55,7 +62,9 @@ function Tile({
       className={`${dims} text-center font-bold uppercase rounded-xl border-2 transition-all duration-150 outline-none
         ${state === 'known'
           ? 'bg-emerald-500/15 border-emerald-400 text-emerald-200 shadow-[0_0_20px_-6px] shadow-emerald-500/40'
-          : 'bg-white/5 border-white/10 text-white placeholder-white/25 hover:border-white/20'}
+          : state === 'center'
+            ? 'bg-amber-400/15 border-amber-400 text-amber-200 shadow-[0_0_20px_-6px] shadow-amber-400/50 placeholder-amber-200/30'
+            : 'bg-white/5 border-white/10 text-white placeholder-white/25 hover:border-white/20'}
         focus:border-amber-400 focus:bg-amber-400/10 focus:shadow-[0_0_24px_-6px] focus:shadow-amber-400/50`}
     />
   );
@@ -71,6 +80,8 @@ function App() {
   const [rackStr, setRackStr] = useState('');
   const [useAll, setUseAll] = useState(false);
   const [minLength, setMinLength] = useState(3);
+  const [beeCenter, setBeeCenter] = useState('');
+  const [beeOuters, setBeeOuters] = useState<string[]>(Array(6).fill(''));
   const [showAll, setShowAll] = useState(false);
 
   // keep known array sized to length
@@ -102,14 +113,29 @@ function App() {
   );
   const wildcards = useMemo(() => (rackStr.match(/\?/g) ?? []).length, [rackStr]);
 
+  const beeAllowed = useMemo(
+    () => new Set([beeCenter, ...beeOuters].filter(Boolean)),
+    [beeCenter, beeOuters]
+  );
+
   const results = useMemo(() => {
     if (mode === 'descramble') {
       return solveDescramble(words, { letters: rackLetters, wildcards, useAll, minLength });
     }
+    if (mode === 'bee') {
+      return solveBee(words, { center: beeCenter, outers: beeOuters });
+    }
     return solvePattern(words, { length, known, contains, excluded });
-  }, [mode, words, length, known, contains, excluded, rackLetters, wildcards, useAll, minLength]);
+  }, [mode, words, length, known, contains, excluded, rackLetters, wildcards, useAll, minLength, beeCenter, beeOuters]);
 
   const visible = showAll ? results : results.slice(0, 200);
+
+  const pangrams =
+    mode === 'bee' && beeAllowed.size === 7
+      ? visible.filter((w) => new Set(w).size === 7)
+      : [];
+  const pangramSet = new Set(pangrams);
+  const groupSource = mode === 'bee' ? visible.filter((w) => !pangramSet.has(w)) : visible;
 
   const containsSet = new Set(contains);
 
@@ -139,6 +165,8 @@ function App() {
     setContainsStr('');
     setExcludedStr('');
     setRackStr('');
+    setBeeCenter('');
+    setBeeOuters(Array(6).fill(''));
   }
 
   return (
@@ -166,20 +194,23 @@ function App() {
         {/* mode selector */}
         <section className="mb-7 text-center">
           <div className="inline-flex rounded-xl bg-white/5 border border-white/10 p-1 gap-1">
-            {MODES.map((m) => (
-              <button
-                key={m.id}
-                onClick={() => setMode(m.id)}
-                title={m.blurb}
-                className={`inline-flex items-center gap-1.5 px-4 h-10 rounded-lg text-sm font-semibold transition-all duration-150
-                  ${mode === m.id
-                    ? 'bg-emerald-400 text-slate-950 shadow-lg shadow-emerald-500/30'
-                    : 'text-slate-300 hover:bg-white/10'}`}
-              >
-                {m.id === 'pattern' ? <Grid3x3 className="w-4 h-4" /> : <Shuffle className="w-4 h-4" />}
-                {m.label}
-              </button>
-            ))}
+            {MODES.map((m) => {
+              const Icon = MODE_ICONS[m.id];
+              return (
+                <button
+                  key={m.id}
+                  onClick={() => setMode(m.id)}
+                  title={m.blurb}
+                  className={`inline-flex items-center gap-1.5 px-4 h-10 rounded-lg text-sm font-semibold transition-all duration-150
+                    ${mode === m.id
+                      ? 'bg-emerald-400 text-slate-950 shadow-lg shadow-emerald-500/30'
+                      : 'text-slate-300 hover:bg-white/10'}`}
+                >
+                  <Icon className="w-4 h-4" />
+                  {m.label}
+                </button>
+              );
+            })}
           </div>
           <p className="mt-2 text-xs text-slate-500">
             {MODES.find((m) => m.id === mode)?.blurb}
@@ -331,6 +362,48 @@ function App() {
         </div>
         )}
 
+        {mode === 'bee' && (
+        <div className="mb-8 text-center">
+          <div className="flex flex-wrap justify-center items-end gap-5">
+            <div>
+              <label className="block text-xs font-medium text-amber-400/80 uppercase tracking-wider mb-2.5">
+                Center
+              </label>
+              <Tile
+                index={0}
+                value={beeCenter}
+                state="center"
+                size="md"
+                onChange={(c) => setBeeCenter(c)}
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-400 uppercase tracking-wider mb-2.5">
+                Outer letters
+              </label>
+              <div className="flex flex-wrap gap-2 justify-center">
+                {beeOuters.map((v, i) => (
+                  <Tile
+                    key={i}
+                    index={i + 1}
+                    value={v}
+                    state={v ? 'known' : 'empty'}
+                    size="md"
+                    onChange={(c) =>
+                      setBeeOuters((prev) => prev.map((x, j) => (j === i ? c : x)))
+                    }
+                  />
+                ))}
+              </div>
+            </div>
+          </div>
+          <p className="mt-3 text-xs text-slate-500">
+            Words are 4+ letters, must use the center letter, and may repeat letters.
+            Words using all seven letters are pangrams.
+          </p>
+        </div>
+        )}
+
         {/* results header */}
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2.5">
@@ -363,7 +436,11 @@ function App() {
                 ? rackLetters.length + wildcards === 0
                   ? 'Type your letters above to see what they can spell.'
                   : 'Nothing spells from those letters. Try adding a wildcard (?) or lowering the minimum length.'
-                : 'No words fit those clues. Try loosening a constraint.'}
+                : mode === 'bee'
+                  ? beeCenter === ''
+                    ? 'Enter the center letter and the six outer letters to find words.'
+                    : 'No words found from those letters. Double-check the puzzle.'
+                  : 'No words fit those clues. Try loosening a constraint.'}
             </p>
           </div>
         ) : (
@@ -380,7 +457,25 @@ function App() {
                 ))}
               </div>
             ) : (
-              [...visible.reduce((m, w) => {
+              <>
+              {pangrams.length > 0 && (
+                <div className="mb-6">
+                  <p className="mb-2.5 text-xs font-medium text-amber-400/80 uppercase tracking-wider">
+                    Pangrams <span className="text-amber-400/50">· {pangrams.length}</span>
+                  </p>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2.5">
+                    {pangrams.map((w) => (
+                      <div
+                        key={w}
+                        className="px-3 py-2.5 rounded-lg bg-amber-400/10 border border-amber-400/30 text-center text-lg tracking-wide text-amber-200 font-semibold hover:bg-amber-400/20 transition-colors cursor-default"
+                      >
+                        {w}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {[...groupSource.reduce((m, w) => {
                 const g = m.get(w.length) ?? [];
                 g.push(w);
                 return m.set(w.length, g);
@@ -400,7 +495,8 @@ function App() {
                     ))}
                   </div>
                 </div>
-              ))
+              ))}
+              </>
             )}
             {results.length > 200 && (
               <button
