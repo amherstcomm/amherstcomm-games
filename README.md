@@ -4,6 +4,8 @@ A word-game solver for puzzles like Wordle, crosswords, and hangman. Lock in the
 
 *Vibe-coded with [Claude](https://claude.com/claude-code).*
 
+**Live site:** [www.anagrimoire.com](https://www.anagrimoire.com) · **Dev preview:** [dev.anagrimoire.com](https://dev.anagrimoire.com)
+
 ## Features
 
 - **Three dictionaries** — Common (everyday words, ideal for Wordle-style puzzles), Standard (adds less frequent words), and Full (~275,000 words, obscurities included); larger dictionaries load on demand
@@ -42,7 +44,14 @@ Other scripts:
 
 The repo includes a [Render](https://render.com/) blueprint ([render.yaml](render.yaml)) that provisions a static site: it builds with `npm ci && npm run build`, publishes `dist/`, rewrites all routes to `index.html`, and sets long-lived cache headers on hashed assets.
 
-To deploy: in the Render dashboard choose **New → Blueprint**, point it at this repository, and Render will pick up `render.yaml` automatically. Pushes to the connected branch auto-deploy.
+Two environments are deployed on Render:
+
+| Environment | URL | Branch |
+|---|---|---|
+| Production | [www.anagrimoire.com](https://www.anagrimoire.com) | `main` |
+| Dev | [dev.anagrimoire.com](https://dev.anagrimoire.com) | `dev` |
+
+Pushes to each branch auto-deploy to the matching environment.
 
 ## License
 
