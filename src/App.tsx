@@ -726,46 +726,52 @@ function App() {
         </div>
         )}
 
-        {mode === 'boxed' && (
-        <div className="mb-8 text-center">
-          <label className="block text-xs font-medium text-slate-400 uppercase tracking-wider mb-3">
-            Sides of the box
-          </label>
-          <div className="flex flex-col items-center gap-2.5">
-            {['Top', 'Right', 'Bottom', 'Left'].map((side, s) => (
-              <div key={side} className="flex items-center gap-3">
-                <span className="w-14 text-right text-xs text-slate-500 uppercase tracking-wider">
-                  {side}
-                </span>
-                <div className="flex gap-2">
-                  {[0, 1, 2].map((j) => {
-                    const i = s * 3 + j;
-                    return (
-                      <Tile
-                        key={i}
-                        index={i}
-                        group="boxed"
-                        osk={kbOpen}
-                        value={boxedLetters[i]}
-                        state={boxedLetters[i] ? 'known' : 'empty'}
-                        size="md"
-                        onChange={(c) =>
-                          setBoxedLetters((prev) => prev.map((x, k) => (k === i ? c : x)))
-                        }
-                      />
-                    );
-                  })}
+        {mode === 'boxed' && (() => {
+          const boxTile = (i: number) => (
+            <Tile
+              key={i}
+              index={i}
+              group="boxed"
+              osk={kbOpen}
+              value={boxedLetters[i]}
+              state={boxedLetters[i] ? 'known' : 'empty'}
+              size="sm"
+              onChange={(c) =>
+                setBoxedLetters((prev) => prev.map((x, k) => (k === i ? c : x)))
+              }
+            />
+          );
+          return (
+            <div className="mb-8 text-center">
+              <label className="block text-xs font-medium text-slate-400 uppercase tracking-wider mb-3">
+                Sides of the box
+              </label>
+              <div className="relative w-72 h-72 mx-auto">
+                <div className="absolute inset-14 rounded-xl border-2 border-white/15 bg-white/[0.02]" />
+                {/* top */}
+                <div className="absolute top-0 left-14 right-14 flex justify-around">
+                  {[0, 1, 2].map(boxTile)}
                 </div>
-                <span className="w-14" aria-hidden="true" />
+                {/* right */}
+                <div className="absolute right-0 top-14 bottom-14 flex flex-col justify-around items-end">
+                  {[3, 4, 5].map(boxTile)}
+                </div>
+                {/* bottom */}
+                <div className="absolute bottom-0 left-14 right-14 flex justify-around">
+                  {[6, 7, 8].map(boxTile)}
+                </div>
+                {/* left */}
+                <div className="absolute left-0 top-14 bottom-14 flex flex-col justify-around items-start">
+                  {[9, 10, 11].map(boxTile)}
+                </div>
               </div>
-            ))}
-          </div>
-          <p className="mt-3 text-xs text-slate-500">
-            Words are 3+ letters and may reuse letters, but consecutive letters can&apos;t
-            come from the same side.
-          </p>
-        </div>
-        )}
+              <p className="mt-3 text-xs text-slate-500">
+                Words are 3+ letters and may reuse letters, but consecutive letters can&apos;t
+                come from the same side.
+              </p>
+            </div>
+          );
+        })()}
 
         {/* results header */}
         <div className="flex items-center justify-between mb-4 flex-wrap gap-y-3">
