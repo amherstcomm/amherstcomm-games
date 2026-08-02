@@ -21,7 +21,7 @@ const MODES: { id: Mode; label: string; blurb: string; description: string }[] =
   },
   {
     id: 'descramble',
-    label: 'Descramble',
+    label: 'Scramble',
     blurb: 'Scrabble, Jumble — what can these letters spell?',
     description:
       "Type the letters you're holding — with ? for blank tiles — and we'll show every word they can spell.",
