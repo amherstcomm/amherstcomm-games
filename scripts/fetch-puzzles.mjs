@@ -4,8 +4,13 @@
 // Run by .github/workflows/daily-puzzle-data.yml on a daily schedule.
 import { mkdir, writeFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
+import { generateWeave } from './weave.mjs';
+import { THEMES } from './themes.mjs';
 
 const require = createRequire(import.meta.url);
+
+const encodeAnswers = (p) =>
+  Buffer.from(JSON.stringify({ spangram: p.spangram, words: p.words })).toString('base64');
 
 const HEADERS = {
   'User-Agent':
@@ -180,6 +185,7 @@ const GRID_DICE = [
 // Two independent daily sets: production, and a dev-salted set for
 // dev.anagrimoire.com/localhost so testing never spoils the production
 // puzzles. Everything stays deterministic per Eastern date.
+const dailyWeaveClues = new Set();
 for (const variant of ['', 'dev']) {
   const salt = variant ? `-${variant}` : '';
   const prefix = variant ? 'dev-' : '';
@@ -261,4 +267,45 @@ for (const variant of ['', 'dev']) {
     JSON.stringify({ date: etDate, cells: gridCells, fetchedAt: stamp }, null, 2) + '\n'
   );
   console.log(`Wrote data/${prefix}daily-grid.json: ${gridCells.join('')}`);
+
+  // weave: themed 6x8 tiling puzzle (Strands-style); answers ship base64d
+  // to avoid casual spoilers
+  const weaveRng = mulberry32(xmur3(`anagrimoire-weave-${etDate}${salt}`)());
+  const weave = generateWeave(weaveRng, 6, 8, THEMES);
+  if (!weave) throw new Error('Could not generate a daily weave');
+  dailyWeaveClues.add(weave.clue);
+  await writeFile(
+    `data/${prefix}daily-weave.json`,
+    JSON.stringify(
+      { date: etDate, clue: weave.clue, cols: 6, board: weave.board, answers: encodeAnswers(weave), fetchedAt: stamp },
+      null,
+      2
+    ) + '\n'
+  );
+  console.log(`Wrote data/${prefix}daily-weave.json: ${weave.clue} (${weave.spangram.w})`);
 }
+
+// shared practice pool for weave: pre-generated boards in both sizes,
+// refreshed daily, used by both sites. Both variants' daily themes are
+// held out so practice never spoils a daily puzzle.
+const poolRng = mulberry32(xmur3(`anagrimoire-weave-pool-${etDate}`)());
+const poolThemes = THEMES.filter((t) => !dailyWeaveClues.has(t.clue));
+const pool = { '6x8': [], '8x10': [] };
+for (const [key, cols, rows, count] of [['6x8', 6, 8, 20], ['8x10', 8, 10, 20]]) {
+  const used = new Set();
+  for (let i = 0; i < count; i++) {
+    // prefer themes not yet in this size's pool for variety
+    const fresh = poolThemes.filter((t) => !used.has(t.clue));
+    const p =
+      (fresh.length && generateWeave(poolRng, cols, rows, fresh)) ||
+      generateWeave(poolRng, cols, rows, poolThemes);
+    if (!p) throw new Error(`Could not generate pool weave ${key} #${i}`);
+    used.add(p.clue);
+    pool[key].push({ clue: p.clue, cols, board: p.board, answers: encodeAnswers(p) });
+  }
+}
+await writeFile(
+  'data/weave-pool.json',
+  JSON.stringify({ date: etDate, pool, fetchedAt: new Date().toISOString() }, null, 2) + '\n'
+);
+console.log(`Wrote data/weave-pool.json (${pool['6x8'].length} + ${pool['8x10'].length} puzzles)`);
