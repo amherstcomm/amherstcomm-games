@@ -4,7 +4,10 @@
 // it's the same real puzzle either way.
 const IS_DEV_SITE =
   typeof location !== 'undefined' &&
-  (location.hostname.startsWith('dev.') || location.hostname === 'localhost');
+  (location.hostname.startsWith('dev.') ||
+    location.hostname === 'localhost' ||
+    // the dev service's Render-assigned hostname (production is anagrimoire-6ado)
+    location.hostname === 'anagrimoire.onrender.com');
 
 const BASE = 'https://raw.githubusercontent.com/rptetzloff/anagrimoire/puzzle-data/data';
 
