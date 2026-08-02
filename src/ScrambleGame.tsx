@@ -6,7 +6,7 @@ import {
   useRef,
   useState,
 } from 'react';
-import { CalendarDays, CornerDownLeft, Delete, Play, RefreshCw, Search, Shuffle, Timer } from 'lucide-react';
+import { CalendarDays, CornerDownLeft, Delete, Flag, Play, RefreshCw, Search, Shuffle, Timer } from 'lucide-react';
 import { solveDescramble } from '@/solvers';
 import type { LetterState } from '@/GuessGame';
 
@@ -447,6 +447,17 @@ const ScrambleGame = forwardRef<
                   <CornerDownLeft className="w-4 h-4" />
                   Enter
                 </button>
+                {!store.dailyMode && (
+                  <button
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={newPracticeRack}
+                    title="Give up — new rack, fresh clock"
+                    className="inline-flex items-center gap-1.5 px-4 h-10 rounded-lg text-sm font-semibold bg-white/5 border border-white/10 text-slate-300 hover:bg-white/10 hover:text-white transition-colors"
+                  >
+                    <Flag className="w-4 h-4" />
+                    Quit
+                  </button>
+                )}
               </>
             )}
             {record.finished && (
