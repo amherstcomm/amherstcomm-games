@@ -6,6 +6,7 @@
 // synced view replays that log through the same applyEvent logic, so the
 // two can never drift.
 
+import { DAILY_ENV } from '@/dailyData';
 import { supabase } from '@/supabase';
 
 const STATS_KEY = 'anagrimoire:stats:v1';
@@ -47,7 +48,7 @@ export type StatsStore = { daily: LifetimeStats; practice: LifetimeStats };
 
 // one completed-game event; payload shapes match what record* helpers send
 export type GameEvent =
-  | { game: 'guess'; payload: { won: boolean; guesses: number; timeMs: number } }
+  | { game: 'guess'; payload: { won: boolean; guesses: number; timeMs: number; length?: number } }
   | {
       game: 'hive';
       payload: { pangram: boolean; score: number; genius: boolean; queenBee: boolean };
@@ -250,7 +251,9 @@ function syncEvent(e: GameEvent, daily: boolean, puzzleDate: string | null): voi
         game: e.game,
         daily,
         puzzle_date: daily && puzzleDate ? puzzleDate : null,
-        payload: e.payload,
+        // env tags which daily set (dev/prod) this result belongs to, so
+        // global daily stats never mix the two sites' different puzzles
+        payload: { ...e.payload, env: DAILY_ENV },
       });
     })
     .then((res) => {
@@ -277,9 +280,10 @@ export function recordGuessFinish(
   won: boolean,
   guesses: number,
   timeMs: number,
-  puzzleDate: string | null = null
+  puzzleDate: string | null = null,
+  length?: number
 ): void {
-  record(daily, { game: 'guess', payload: { won, guesses, timeMs } }, puzzleDate);
+  record(daily, { game: 'guess', payload: { won, guesses, timeMs, length } }, puzzleDate);
 }
 
 export function recordHiveWord(

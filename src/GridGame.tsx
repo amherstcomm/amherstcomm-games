@@ -11,6 +11,7 @@ import { CalendarDays, ChevronDown, CornerDownLeft, Delete, Flag, Play, RefreshC
 import { findGridPath, gridNeighbors, solveGrid } from '@/solvers';
 import type { LetterState } from '@/GuessGame';
 import { dailyDataUrl } from '@/dailyData';
+import DailyStats from '@/DailyStats';
 import { recordSprint } from '@/stats';
 
 export type GridGameHandle = { pressKey: (k: string) => void };
@@ -736,6 +737,12 @@ const GridGame = forwardRef<
                     ))}
                 </div>
               )}
+            </div>
+          )}
+
+          {store.dailyMode && record.finished && store.dailyDate && (
+            <div>
+              <DailyStats game="grid" date={store.dailyDate} />
             </div>
           )}
 

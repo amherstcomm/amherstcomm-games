@@ -8,6 +8,7 @@ import {
 } from 'react';
 import { CalendarDays, RefreshCw, Search, Timer, Trophy } from 'lucide-react';
 import { dailyDataUrl } from '@/dailyData';
+import DailyStats from '@/DailyStats';
 import { recordGuessFinish } from '@/stats';
 import { formatElapsed, useUpTimer } from '@/useUpTimer';
 
@@ -285,7 +286,8 @@ const GuessGame = forwardRef<
         didWin,
         next.length,
         record?.elapsedMs ?? 0,
-        dailyMode ? dailyData?.date ?? null : null
+        dailyMode ? dailyData?.date ?? null : null,
+        length
       );
       finishDaily(didWin);
     }
@@ -498,6 +500,10 @@ const GuessGame = forwardRef<
               </p>
             )}
           </div>
+
+          {dailyMode && (won || lost) && dailyData && (
+            <DailyStats game="guess" date={dailyData.date} />
+          )}
         </>
       )}
     </div>

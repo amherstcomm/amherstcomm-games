@@ -10,6 +10,7 @@ import { CalendarDays, CornerDownLeft, Delete, RefreshCw, Search, Shuffle, Timer
 import { formatElapsed, useUpTimer } from '@/useUpTimer';
 import type { LetterState } from '@/GuessGame';
 import { dailyDataUrl } from '@/dailyData';
+import DailyStats from '@/DailyStats';
 import { recordHiveWord } from '@/stats';
 
 export type HiveGameHandle = { pressKey: (k: string) => void };
@@ -510,6 +511,12 @@ const HiveGame = forwardRef<
                   </span>
                 ))}
               </div>
+            </div>
+          )}
+
+          {store.dailyMode && store.dailyDate && (
+            <div>
+              <DailyStats game="hive" date={store.dailyDate} />
             </div>
           )}
 

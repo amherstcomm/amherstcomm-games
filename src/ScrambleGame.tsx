@@ -10,6 +10,7 @@ import { CalendarDays, CornerDownLeft, Delete, Flag, Play, RefreshCw, Search, Sh
 import { solveDescramble } from '@/solvers';
 import type { LetterState } from '@/GuessGame';
 import { dailyDataUrl } from '@/dailyData';
+import DailyStats from '@/DailyStats';
 import { recordSprint } from '@/stats';
 
 export type ScrambleGameHandle = { pressKey: (k: string) => void };
@@ -550,6 +551,12 @@ const ScrambleGame = forwardRef<
                   </span>
                 ))}
               </div>
+            </div>
+          )}
+
+          {store.dailyMode && record.finished && store.dailyDate && (
+            <div>
+              <DailyStats game="scramble" date={store.dailyDate} />
             </div>
           )}
 

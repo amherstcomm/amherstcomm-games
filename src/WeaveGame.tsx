@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { CalendarDays, Eye, Lightbulb, RefreshCw, Timer } from 'lucide-react';
 import { gridNeighbors } from '@/solvers';
 import { dailyDataUrl, WEAVE_POOL_URL } from '@/dailyData';
+import DailyStats from '@/DailyStats';
 import { recordWeaveReveal, recordWeaveSolve } from '@/stats';
 import { formatElapsed, useUpTimer } from '@/useUpTimer';
 
@@ -592,6 +593,12 @@ export default function WeaveGame({ standardWords }: { standardWords: string[] |
                   {w}
                 </span>
               ))}
+            </div>
+          )}
+
+          {store.dailyMode && complete && store.dailyDate && (
+            <div>
+              <DailyStats game="weave" date={store.dailyDate} />
             </div>
           )}
 

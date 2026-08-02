@@ -75,6 +75,105 @@ create policy "read own results"
   using ((select auth.uid()) = user_id);
 
 -- ---------------------------------------------------------------------------
+-- daily_stats: cross-player aggregates for one day's daily puzzle. Security
+-- definer so it can read past RLS, but it exposes ONLY aggregates — never
+-- rows. Callable by everyone: signed-out visitors can see the numbers,
+-- while only signed-in players contribute to them. p_env separates the two
+-- sites' independently generated daily sets ('prod' / 'dev'), which share
+-- dates but not puzzles.
+-- ---------------------------------------------------------------------------
+drop function if exists public.daily_stats(text, date);
+
+create or replace function public.daily_stats(p_game text, p_date date, p_env text default 'prod')
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+stable
+as $$
+declare
+  result jsonb;
+begin
+  if p_game = 'guess' then
+    select jsonb_build_object(
+      'players', count(distinct user_id),
+      'boards', count(*),
+      'winRate', round(100.0 * count(*) filter (where (payload->>'won')::boolean) / greatest(count(*), 1)),
+      'avgGuesses', round(avg((payload->>'guesses')::numeric) filter (where (payload->>'won')::boolean), 1)
+    ) into result
+    from public.game_results
+    where game = 'guess' and daily and puzzle_date = p_date
+      and coalesce(payload->>'env', 'prod') = p_env;
+
+  elsif p_game = 'hive' then
+    with per_user as (
+      select user_id,
+        max((payload->>'score')::numeric) as best,
+        bool_or((payload->>'genius')::boolean) as genius,
+        bool_or((payload->>'queenBee')::boolean) as queen
+      from public.game_results
+      where game = 'hive' and daily and puzzle_date = p_date
+        and coalesce(payload->>'env', 'prod') = p_env
+      group by user_id
+    )
+    select jsonb_build_object(
+      'players', count(*),
+      'avgScore', round(avg(best)),
+      'genius', count(*) filter (where genius),
+      'queenBee', count(*) filter (where queen)
+    ) into result
+    from per_user;
+
+  elsif p_game in ('scramble', 'grid') then
+    select jsonb_build_object(
+      'players', count(distinct user_id),
+      'avgScore', round(avg((payload->>'score')::numeric)),
+      'topScore', max((payload->>'score')::numeric)
+    ) into result
+    from public.game_results
+    where game = p_game and daily and puzzle_date = p_date
+      and coalesce(payload->>'env', 'prod') = p_env;
+
+  elsif p_game = 'box' then
+    select jsonb_build_object(
+      'players', count(distinct user_id),
+      'avgWords', round(avg((payload->>'words')::numeric), 1),
+      'fewestWords', min((payload->>'words')::int)
+    ) into result
+    from public.game_results
+    where game = 'box' and daily and puzzle_date = p_date
+      and coalesce(payload->>'env', 'prod') = p_env;
+
+  elsif p_game = 'weave' then
+    with per_user as (
+      select user_id,
+        bool_or((payload->>'solved')::boolean) as solved,
+        min((payload->>'timeMs')::numeric) filter (where (payload->>'solved')::boolean) as best_time,
+        max((payload->>'hints')::numeric) as hints
+      from public.game_results
+      where game = 'weave' and daily and puzzle_date = p_date
+        and coalesce(payload->>'env', 'prod') = p_env
+      group by user_id
+    )
+    select jsonb_build_object(
+      'players', count(*),
+      'solvedPct', round(100.0 * count(*) filter (where solved) / greatest(count(*), 1)),
+      'avgTimeMs', round(avg(best_time)),
+      'avgHints', round(avg(hints), 1)
+    ) into result
+    from per_user;
+
+  else
+    return null;
+  end if;
+
+  return coalesce(result, '{}'::jsonb);
+end;
+$$;
+
+grant execute on function public.daily_stats(text, date, text) to anon, authenticated;
+
+-- ---------------------------------------------------------------------------
 -- stats_baselines: one-time import of the lifetime stats a browser
 -- accumulated before the account existed. Insert-only, one row per
 -- (user, device) — every browser contributes its own history exactly once,

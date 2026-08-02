@@ -10,6 +10,7 @@ import { CalendarDays, CornerDownLeft, Delete, RefreshCw, RotateCcw, Search, Tim
 import { formatElapsed, useUpTimer } from '@/useUpTimer';
 import type { LetterState } from '@/GuessGame';
 import { dailyDataUrl } from '@/dailyData';
+import DailyStats from '@/DailyStats';
 import { recordBoxSolve } from '@/stats';
 
 export type BoxGameHandle = { pressKey: (k: string) => void };
@@ -561,6 +562,12 @@ const BoxGame = forwardRef<
                   </span>
                 ))}
               </div>
+            </div>
+          )}
+
+          {store.dailyMode && solved && store.dailyDate && (
+            <div>
+              <DailyStats game="box" date={store.dailyDate} />
             </div>
           )}
 
