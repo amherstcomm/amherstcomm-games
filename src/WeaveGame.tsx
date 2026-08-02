@@ -80,6 +80,14 @@ function loadStore(): WeaveStore {
   }
 }
 
+// same set of cells, in any order — a theme word only counts on its own tiles
+function sameCells(a: number[], b: number[]): boolean {
+  if (a.length !== b.length) return false;
+  const sa = [...a].sort((x, y) => x - y);
+  const sb = [...b].sort((x, y) => x - y);
+  return sa.every((v, i) => v === sb[i]);
+}
+
 function decodeAnswers(b64: string): Answers | null {
   try {
     const a = JSON.parse(atob(b64));
@@ -308,8 +316,10 @@ export default function WeaveGame({ standardWords }: { standardWords: string[] |
       showFlash('Already found');
       return;
     }
-    const isSpan = word === answers.spangram.w;
-    const isTheme = answers.words.some((x) => x.w === word);
+    // a theme word must be traced on its own cells — the same word spelled
+    // elsewhere on the board is just a regular word
+    const isSpan = word === answers.spangram.w && sameCells(path, answers.spangram.path);
+    const isTheme = answers.words.some((x) => x.w === word && sameCells(path, x.path));
     if (isSpan || isTheme) {
       updateRecord((r) => ({
         ...r,
@@ -319,7 +329,11 @@ export default function WeaveGame({ standardWords }: { standardWords: string[] |
       showFlash(isSpan ? 'Spangram! 🎉' : 'Theme word!', true);
       return;
     }
-    if (word.length >= 4 && standardSet?.has(word) && !record.hintWords.includes(word)) {
+    if (word.length >= 4 && standardSet?.has(word)) {
+      if (record.hintWords.includes(word)) {
+        showFlash('Already found');
+        return;
+      }
       updateRecord((r) => ({ ...r, hintWords: [...r.hintWords, word] }));
       const bank = record.hintWords.length + 1 - record.hintsUsed * HINT_COST;
       showFlash(`Nice word — hint progress ${Math.min(bank, HINT_COST)}/${HINT_COST}`, true);
