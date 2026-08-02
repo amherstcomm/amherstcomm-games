@@ -7,7 +7,7 @@ import {
   useState,
 } from 'react';
 import { CalendarDays, CornerDownLeft, Delete, Flag, Play, RefreshCw, Search, Timer } from 'lucide-react';
-import { solveGrid } from '@/solvers';
+import { gridNeighbors, solveGrid } from '@/solvers';
 import type { LetterState } from '@/GuessGame';
 
 export type GridGameHandle = { pressKey: (k: string) => void };
@@ -116,6 +116,14 @@ const GridGame = forwardRef<
   const [dailyError, setDailyError] = useState(false);
   const [now, setNow] = useState(() => Date.now());
   const flashTimer = useRef<number | undefined>(undefined);
+
+  // drag-to-trace path (cell indices); ref mirrors state for event handlers
+  const [dragPath, setDragPath] = useState<number[]>([]);
+  const dragPathRef = useRef<number[]>([]);
+  const setPath = (p: number[]) => {
+    dragPathRef.current = p;
+    setDragPath(p);
+  };
 
   useEffect(() => {
     try {
@@ -233,14 +241,12 @@ const GridGame = forwardRef<
     updateRecord((r) => ({ ...r, endsAt: Date.now() + DURATION_MS }));
   }
 
-  function submit() {
+  function submitWord(word: string) {
     if (!record || !running) return;
     if (!answersSet) {
       showFlash('Dictionary still loading…');
       return;
     }
-    const word = current;
-    setCurrent('');
     if (word.length < 3) {
       showFlash('Too short');
       return;
@@ -256,6 +262,57 @@ const GridGame = forwardRef<
     }
     updateRecord((r) => ({ ...r, found: [word, ...r.found] }));
     showFlash(`+${wordScore(word)}`, true);
+  }
+
+  function submit() {
+    const word = current;
+    setCurrent('');
+    submitWord(word);
+  }
+
+  // drag-to-trace handlers (mouse and touch via pointer events)
+  function cellAt(x: number, y: number): number | null {
+    const el = document.elementFromPoint(x, y)?.closest('[data-cell]');
+    return el ? Number(el.getAttribute('data-cell')) : null;
+  }
+
+  function onBoardPointerDown(e: React.PointerEvent) {
+    if (!running) return;
+    const i = cellAt(e.clientX, e.clientY);
+    if (i === null) return;
+    e.preventDefault();
+    setCurrent('');
+    setPath([i]);
+  }
+
+  function onBoardPointerMove(e: React.PointerEvent) {
+    const prev = dragPathRef.current;
+    if (!prev.length || !record) return;
+    const i = cellAt(e.clientX, e.clientY);
+    if (i === null) return;
+    const last = prev[prev.length - 1];
+    if (i === last) return;
+    // retracing onto the previous cell backtracks
+    if (prev.length >= 2 && i === prev[prev.length - 2]) {
+      setPath(prev.slice(0, -1));
+      return;
+    }
+    if (prev.includes(i)) return;
+    const size = Math.round(Math.sqrt(record.cells.length));
+    if (!gridNeighbors(size, size)[last].includes(i)) return;
+    setPath([...prev, i]);
+  }
+
+  function endDrag() {
+    const path = dragPathRef.current;
+    if (!path.length || !record) return;
+    setPath([]);
+    if (path.length === 1) {
+      // a plain tap types the letter
+      pressKey(record.cells[path[0]]);
+      return;
+    }
+    submitWord(path.map((i) => record.cells[i]).join(''));
   }
 
   function pressKey(k: string) {
@@ -287,6 +344,17 @@ const GridGame = forwardRef<
     };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
+  });
+
+  // finish the drag even when the pointer is released off the board
+  useEffect(() => {
+    const up = () => endDrag();
+    window.addEventListener('pointerup', up);
+    window.addEventListener('pointercancel', up);
+    return () => {
+      window.removeEventListener('pointerup', up);
+      window.removeEventListener('pointercancel', up);
+    };
   });
 
   function newPracticeGrid(size?: number) {
@@ -383,7 +451,13 @@ const GridGame = forwardRef<
           {running ? (
             <div className="mb-4 mx-auto max-w-sm h-12 px-4 rounded-xl bg-white/5 border-2 border-white/10 flex items-center justify-center overflow-hidden">
               <span className="text-2xl font-bold tracking-[0.2em] uppercase text-white whitespace-nowrap">
-                {current}
+                {dragPath.length ? (
+                  <span className="text-emerald-300">
+                    {dragPath.map((i) => record.cells[i]).join('')}
+                  </span>
+                ) : (
+                  current
+                )}
                 <span className="text-amber-400 animate-pulse">|</span>
               </span>
             </div>
@@ -401,9 +475,12 @@ const GridGame = forwardRef<
             </div>
           )}
 
-          {/* the grid — face-down until the clock starts */}
+          {/* the grid — face-down until the clock starts; drag across cells to
+              trace a word, release to submit (a plain tap types the letter) */}
           <div
-            className={`grid gap-2 w-fit mx-auto ${
+            onPointerDown={onBoardPointerDown}
+            onPointerMove={onBoardPointerMove}
+            className={`grid gap-2 w-fit mx-auto touch-none select-none ${
               record.cells.length === 9
                 ? 'grid-cols-3'
                 : record.cells.length === 25
@@ -414,13 +491,14 @@ const GridGame = forwardRef<
             {record.cells.map((c, i) => (
               <button
                 key={i}
-                onMouseDown={(e) => e.preventDefault()}
-                onClick={() => pressKey(c)}
+                data-cell={i}
                 disabled={!running}
                 className={`${record.cells.length === 25 ? 'w-9 h-10 sm:w-11 sm:h-12 text-lg sm:text-xl' : 'w-11 h-12 sm:w-12 sm:h-14 text-xl sm:text-2xl'} rounded-xl border-2 font-bold uppercase transition-colors
                   ${!record.endsAt
                     ? 'bg-white/5 border-white/15 text-slate-500'
-                    : 'bg-amber-400/10 border-amber-400/40 text-amber-200 hover:bg-amber-400/20'}`}
+                    : dragPath.includes(i)
+                      ? 'bg-emerald-400/30 border-emerald-300 text-white'
+                      : 'bg-amber-400/10 border-amber-400/40 text-amber-200 hover:bg-amber-400/20'}`}
               >
                 {record.endsAt ? c : '?'}
               </button>
