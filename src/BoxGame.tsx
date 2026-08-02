@@ -6,7 +6,7 @@ import {
   useRef,
   useState,
 } from 'react';
-import { CalendarDays, CornerDownLeft, Delete, RefreshCw, RotateCcw, Search, Timer } from 'lucide-react';
+import { CalendarDays, CornerDownLeft, Delete, Eye, LifeBuoy, RefreshCw, RotateCcw, Timer } from 'lucide-react';
 import { formatElapsed, useUpTimer } from '@/useUpTimer';
 import type { LetterState } from '@/GuessGame';
 import { dailyDataUrl } from '@/dailyData';
@@ -22,6 +22,7 @@ type BoxRecord = {
   sides: string[];
   chain: string[];
   invalid?: string[]; // rejected non-dictionary guesses
+  revealed?: boolean; // gave up — the board is over, incomplete
   elapsedMs?: number;
 };
 type BoxStore = {
@@ -48,6 +49,7 @@ function sanitizeRecord(r: unknown): BoxRecord | null {
     sides: rec.sides,
     chain: rec.chain.filter((w) => typeof w === 'string'),
     invalid: Array.isArray(rec.invalid) ? rec.invalid.filter((w) => typeof w === 'string') : [],
+    revealed: rec.revealed === true,
     elapsedMs: typeof rec.elapsedMs === 'number' && rec.elapsedMs >= 0 ? rec.elapsedMs : 0,
   };
 }
@@ -241,21 +243,48 @@ const BoxGame = forwardRef<
     return s;
   }, [chain]);
   const solved = committedCovered.size === 12;
+  const done = solved || !!record?.revealed;
 
-  // thinking time: counts while the box is visible and unsolved
-  useUpTimer(!!record && !solved, (delta) =>
+  // thinking time: counts while the box is visible and unfinished
+  useUpTimer(!!record && !done, (delta) =>
     updateRecord((r) => ({ ...r, elapsedMs: (r.elapsedMs ?? 0) + delta }))
   );
+
+  // hover / press-hold a committed word to trace its chords on the box;
+  // the current entry draws live as you type
+  const [trace, setTrace] = useState<string | null>(null);
+  useEffect(() => {
+    setTrace(null);
+  }, [record?.sides]);
+  const letterPos = useMemo(() => {
+    const m = new Map<string, [number, number]>();
+    record?.sides.forEach((side, s) => {
+      side.split('').forEach((c, j) => m.set(c, SIDE_POSITIONS[s][j]));
+    });
+    return m;
+  }, [record?.sides]);
+
+  function traceHandlers(word: string) {
+    const show = () => setTrace(word);
+    const hide = () => setTrace(null);
+    return {
+      onMouseEnter: show,
+      onMouseLeave: hide,
+      onPointerDown: show,
+      onPointerUp: hide,
+      onPointerCancel: hide,
+    };
+  }
 
   // the next word must start with the last letter of the previous one
   const lockedLen = chain.length > 0 ? 1 : 0;
 
   // keep the locked first letter in sync with the chain
   useEffect(() => {
-    if (solved) return;
+    if (done) return;
     const lockChar = chain.length ? chain[chain.length - 1].slice(-1) : '';
     setCurrent((c) => (lockChar && !c.startsWith(lockChar) ? lockChar : c));
-  }, [chain, solved]);
+  }, [chain, done]);
 
   // dim non-box letters on the on-screen keyboard
   useEffect(() => {
@@ -286,7 +315,7 @@ const BoxGame = forwardRef<
   }
 
   function submit() {
-    if (!record || solved) return;
+    if (!record || done) return;
     if (!standardSet) {
       showFlash('Dictionary still loading…');
       return;
@@ -326,7 +355,7 @@ const BoxGame = forwardRef<
   }
 
   function pressKey(k: string) {
-    if (!record || solved) return;
+    if (!record || done) return;
     if (k === 'enter') {
       submit();
       return;
@@ -434,17 +463,23 @@ const BoxGame = forwardRef<
           </div>
 
           {/* committed chain — extra clearance when the entry box between it
-              and the board is gone (solved) */}
-          <div className={`${solved ? 'mb-7' : 'mb-2'} flex flex-wrap items-center justify-center gap-1.5 text-sm`}>
+              and the board is gone (finished) */}
+          <div className={`${done ? 'mb-7' : 'mb-2'} flex flex-wrap items-center justify-center gap-1.5 text-sm`}>
             {chain.map((w, i) => (
               <span key={i} className="text-emerald-300">
-                {w}
-                {(!solved || i < chain.length - 1) && <span className="text-slate-600"> →</span>}
+                <span
+                  {...traceHandlers(w)}
+                  title="Hover to trace on the box"
+                  className="cursor-pointer select-none hover:text-emerald-200 underline decoration-dotted decoration-emerald-500/40 underline-offset-2"
+                >
+                  {w}
+                </span>
+                {(!done || i < chain.length - 1) && <span className="text-slate-600"> →</span>}
               </span>
             ))}
           </div>
           {/* current entry */}
-          {!solved && (
+          {!done && (
             <div className="mb-6 mx-auto max-w-sm h-12 px-4 rounded-xl bg-white/5 border-2 border-white/10 flex items-center justify-center overflow-hidden">
               <span className="text-xl font-bold tracking-[0.15em] uppercase text-white whitespace-nowrap">
                 {current}
@@ -456,19 +491,49 @@ const BoxGame = forwardRef<
           {/* the box */}
           <div className="relative w-72 h-72 mx-auto">
             <div className="absolute inset-12 rounded-xl border-2 border-white/15 bg-white/[0.02]" />
+            {(() => {
+              // hovered word takes priority; otherwise the live entry draws
+              const word = trace ?? (current.length >= 2 ? current : null);
+              if (!word) return null;
+              const pts = word
+                .split('')
+                .map((c) => letterPos.get(c))
+                .filter((p): p is [number, number] => !!p);
+              if (pts.length < 2) return null;
+              const live = !trace;
+              return (
+                <svg
+                  viewBox="0 0 100 100"
+                  preserveAspectRatio="none"
+                  className="absolute inset-0 w-full h-full pointer-events-none"
+                >
+                  <polyline
+                    points={pts.map(([x, y]) => `${x},${y}`).join(' ')}
+                    fill="none"
+                    stroke={live ? 'rgb(251 191 36 / 0.65)' : 'rgb(125 211 252 / 0.9)'}
+                    strokeWidth="3"
+                    vectorEffect="non-scaling-stroke"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeDasharray={live ? '6 5' : undefined}
+                  />
+                  <circle cx={pts[0][0]} cy={pts[0][1]} r="1.6" fill={live ? 'rgb(251 191 36)' : 'rgb(125 211 252)'} />
+                </svg>
+              );
+            })()}
             {record.sides.map((side, s) =>
               side.split('').map((c, j) => {
                 const [x, y] = SIDE_POSITIONS[s][j];
                 const used = committedCovered.has(c);
                 const inCurrent = current.includes(c);
                 const isLast = c === lastChar;
-                const sameSide = !solved && lastChar !== '' && sideOf.get(lastChar) === s;
+                const sameSide = !done && lastChar !== '' && sideOf.get(lastChar) === s;
                 return (
                   <button
                     key={c}
                     onMouseDown={(e) => e.preventDefault()}
                     onClick={() => pressKey(c)}
-                    disabled={solved}
+                    disabled={done}
                     className={`absolute -translate-x-1/2 -translate-y-1/2 w-10 h-12 rounded-lg border-2 text-xl font-bold uppercase transition-colors
                       ${isLast
                         ? `${SIDE_TONES[s].used} ring-2 ring-white/90`
@@ -526,12 +591,36 @@ const BoxGame = forwardRef<
             <button
               onMouseDown={(e) => e.preventDefault()}
               onClick={() => onReveal(record.sides)}
-              title="Give up and see the solutions in the solver"
+              title="Peek at the solver — your board keeps going"
               className="inline-flex items-center gap-1.5 px-4 h-10 rounded-lg text-sm font-semibold bg-white/5 border border-white/10 text-slate-300 hover:bg-white/10 hover:text-white transition-colors"
             >
-              <Search className="w-4 h-4" />
-              Reveal
+              <LifeBuoy className="w-4 h-4" />
+              Help
             </button>
+            {!done && (
+              <button
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => {
+                  // persist synchronously — onReveal unmounts this component
+                  // before a state-driven save could run
+                  const next = store.dailyMode
+                    ? { ...store, daily: { ...record, revealed: true } }
+                    : { ...store, practice: { ...record, revealed: true } };
+                  try {
+                    localStorage.setItem(BOX_KEY, JSON.stringify(next));
+                  } catch {
+                    // best-effort persistence
+                  }
+                  setStore(next);
+                  onReveal(record.sides);
+                }}
+                title="Give up — ends this board unfinished and shows the solutions"
+                className="inline-flex items-center gap-1.5 px-4 h-10 rounded-lg text-sm font-semibold bg-white/5 border border-white/10 text-slate-300 hover:bg-white/10 hover:text-white transition-colors"
+              >
+                <Eye className="w-4 h-4" />
+                Reveal
+              </button>
+            )}
           </div>
 
           <div className="h-6 mt-3">
@@ -540,9 +629,11 @@ const BoxGame = forwardRef<
                 {flash.text}
               </p>
             )}
-            {!flash && solved && (
-              <p className="text-sm text-emerald-300 font-semibold">
-                Solved in {chain.length} word{chain.length === 1 ? '' : 's'} 🎉
+            {!flash && done && (
+              <p className={`text-sm font-semibold ${solved ? 'text-emerald-300' : 'text-slate-400'}`}>
+                {solved
+                  ? `Solved in ${chain.length} word${chain.length === 1 ? '' : 's'} 🎉`
+                  : 'Revealed 🔍'}
               </p>
             )}
           </div>
@@ -565,7 +656,7 @@ const BoxGame = forwardRef<
             </div>
           )}
 
-          {store.dailyMode && solved && store.dailyDate && (
+          {store.dailyMode && done && store.dailyDate && (
             <div>
               <DailyStats game="box" date={store.dailyDate} />
             </div>

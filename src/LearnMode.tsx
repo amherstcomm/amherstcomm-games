@@ -998,7 +998,7 @@ function LearnBoxed({ dict, register }: { dict: Set<string> | null; register: Re
             </span>
           </div>
         )}
-        <div className="relative w-64 h-64 mx-auto">
+        <div className="relative w-64 h-64 mx-auto my-5">
           <div className="absolute inset-10 rounded-xl border-2 border-white/15 bg-white/[0.02]" />
           {trace && (
             <svg
@@ -1044,7 +1044,7 @@ function LearnBoxed({ dict, register }: { dict: Set<string> | null; register: Re
             })
           )}
         </div>
-        <div className="mt-3 flex items-center justify-center gap-2.5">
+        <div className="mt-5 flex items-center justify-center gap-2.5">
           <DemoButton onClick={backspace} ariaLabel="Delete letter">
             <Delete className="w-4 h-4" />
           </DemoButton>
