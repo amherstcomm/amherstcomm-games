@@ -6,7 +6,8 @@ import {
   useRef,
   useState,
 } from 'react';
-import { CalendarDays, CornerDownLeft, Delete, RefreshCw, Search, Shuffle } from 'lucide-react';
+import { CalendarDays, CornerDownLeft, Delete, RefreshCw, Search, Shuffle, Timer } from 'lucide-react';
+import { formatElapsed, useUpTimer } from '@/useUpTimer';
 import type { LetterState } from '@/GuessGame';
 import { dailyDataUrl } from '@/dailyData';
 
@@ -39,7 +40,13 @@ const RANKS: [string, number][] = [
   ['Queen Bee', 1],
 ];
 
-type HiveRecord = { center: string; outers: string[]; found: string[] };
+type HiveRecord = {
+  center: string;
+  outers: string[];
+  found: string[];
+  invalid?: string[]; // rejected non-dictionary guesses
+  elapsedMs?: number;
+};
 type HiveStore = {
   dailyMode: boolean;
   dailyDate: string;
@@ -62,7 +69,13 @@ function sanitizeRecord(r: unknown): HiveRecord | null {
   ) {
     return null;
   }
-  return { center: rec.center, outers: rec.outers, found: rec.found.filter((w) => typeof w === 'string') };
+  return {
+    center: rec.center,
+    outers: rec.outers,
+    found: rec.found.filter((w) => typeof w === 'string'),
+    invalid: Array.isArray(rec.invalid) ? rec.invalid.filter((w) => typeof w === 'string') : [],
+    elapsedMs: typeof rec.elapsedMs === 'number' && rec.elapsedMs >= 0 ? rec.elapsedMs : 0,
+  };
 }
 
 function loadStore(): HiveStore {
@@ -203,6 +216,12 @@ const HiveGame = forwardRef<
   }, [score, maxScore]);
 
   const geniusAt = Math.ceil(maxScore * 0.7);
+  const queenBee = maxScore > 0 && score >= maxScore;
+
+  // thinking time: counts while the hive is visible, until Queen Bee
+  useUpTimer(!!record && !queenBee, (delta) =>
+    updateRecord((r) => ({ ...r, elapsedMs: (r.elapsedMs ?? 0) + delta }))
+  );
 
   // dim non-hive letters on the on-screen keyboard; center reads amber
   useEffect(() => {
@@ -250,6 +269,9 @@ const HiveGame = forwardRef<
       return;
     }
     if (!answers.has(word)) {
+      updateRecord((r) =>
+        r.invalid?.includes(word) ? r : { ...r, invalid: [...(r.invalid ?? []), word] }
+      );
       showFlash('Not in word list');
       return;
     }
@@ -338,6 +360,10 @@ const HiveGame = forwardRef<
           {/* score + rank */}
           <div className="mb-4 flex items-center justify-center gap-4 text-xs text-slate-400">
             <span className="text-amber-300 font-semibold text-sm">{rank}</span>
+            <span className="inline-flex items-center gap-1.5 tabular-nums">
+              <Timer className="w-3.5 h-3.5 text-slate-500" />
+              {formatElapsed(record.elapsedMs ?? 0)}
+            </span>
             <span>
               {score} / {maxScore} pts
             </span>
@@ -449,8 +475,26 @@ const HiveGame = forwardRef<
                     key={w}
                     className={`px-2.5 py-1 rounded-lg border text-sm tracking-wide
                       ${isPangram(w)
-                        ? 'bg-amber-400/10 border-amber-400/30 text-amber-200 font-semibold'
-                        : 'bg-white/[0.04] border-white/10 text-slate-300'}`}
+                        ? 'bg-emerald-400/25 border-emerald-300 text-emerald-100 font-semibold'
+                        : 'bg-emerald-400/10 border-emerald-400/30 text-emerald-200'}`}
+                  >
+                    {w}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {(record.invalid?.length ?? 0) > 0 && (
+            <div className="mt-4 max-w-md mx-auto">
+              <p className="mb-2 text-xs font-medium text-slate-500 uppercase tracking-wider">
+                Not in dictionary <span className="text-slate-600">· {record.invalid!.length}</span>
+              </p>
+              <div className="flex flex-wrap justify-center gap-1.5">
+                {[...record.invalid!].sort().map((w) => (
+                  <span
+                    key={w}
+                    className="px-2.5 py-1 rounded-lg border text-sm tracking-wide bg-amber-400/10 border-amber-400/30 text-amber-300"
                   >
                     {w}
                   </span>

@@ -6,7 +6,8 @@ import {
   useRef,
   useState,
 } from 'react';
-import { CalendarDays, CornerDownLeft, Delete, RefreshCw, RotateCcw, Search } from 'lucide-react';
+import { CalendarDays, CornerDownLeft, Delete, RefreshCw, RotateCcw, Search, Timer } from 'lucide-react';
+import { formatElapsed, useUpTimer } from '@/useUpTimer';
 import type { LetterState } from '@/GuessGame';
 import { dailyDataUrl } from '@/dailyData';
 
@@ -15,7 +16,12 @@ export type BoxGameHandle = { pressKey: (k: string) => void };
 const BOX_KEY = 'anagrimoire:box:v1';
 const DAILY_BOX_URL = dailyDataUrl('daily-box');
 
-type BoxRecord = { sides: string[]; chain: string[] };
+type BoxRecord = {
+  sides: string[];
+  chain: string[];
+  invalid?: string[]; // rejected non-dictionary guesses
+  elapsedMs?: number;
+};
 type BoxStore = {
   dailyMode: boolean;
   dailyDate: string;
@@ -36,7 +42,12 @@ function sanitizeRecord(r: unknown): BoxRecord | null {
   ) {
     return null;
   }
-  return { sides: rec.sides, chain: rec.chain.filter((w) => typeof w === 'string') };
+  return {
+    sides: rec.sides,
+    chain: rec.chain.filter((w) => typeof w === 'string'),
+    invalid: Array.isArray(rec.invalid) ? rec.invalid.filter((w) => typeof w === 'string') : [],
+    elapsedMs: typeof rec.elapsedMs === 'number' && rec.elapsedMs >= 0 ? rec.elapsedMs : 0,
+  };
 }
 
 function loadStore(): BoxStore {
@@ -229,6 +240,11 @@ const BoxGame = forwardRef<
   }, [chain]);
   const solved = committedCovered.size === 12;
 
+  // thinking time: counts while the box is visible and unsolved
+  useUpTimer(!!record && !solved, (delta) =>
+    updateRecord((r) => ({ ...r, elapsedMs: (r.elapsedMs ?? 0) + delta }))
+  );
+
   // the next word must start with the last letter of the previous one
   const lockedLen = chain.length > 0 ? 1 : 0;
 
@@ -283,6 +299,9 @@ const BoxGame = forwardRef<
       return;
     }
     if (!standardSet.has(word)) {
+      updateRecord((r) =>
+        r.invalid?.includes(word) ? r : { ...r, invalid: [...(r.invalid ?? []), word] }
+      );
       showFlash('Not in dictionary');
       return;
     }
@@ -393,6 +412,10 @@ const BoxGame = forwardRef<
       {record && (
         <>
           <div className="mb-3 flex items-center justify-center gap-4 text-xs text-slate-400">
+            <span className="inline-flex items-center gap-1.5 tabular-nums">
+              <Timer className="w-3.5 h-3.5 text-slate-500" />
+              {formatElapsed(record.elapsedMs ?? 0)}
+            </span>
             <span>
               {committedCovered.size} / 12 letters
             </span>
@@ -406,7 +429,7 @@ const BoxGame = forwardRef<
               and the board is gone (solved) */}
           <div className={`${solved ? 'mb-7' : 'mb-2'} flex flex-wrap items-center justify-center gap-1.5 text-sm`}>
             {chain.map((w, i) => (
-              <span key={i} className="text-slate-300">
+              <span key={i} className="text-emerald-300">
                 {w}
                 {(!solved || i < chain.length - 1) && <span className="text-slate-600"> →</span>}
               </span>
@@ -515,6 +538,24 @@ const BoxGame = forwardRef<
               </p>
             )}
           </div>
+
+          {(record.invalid?.length ?? 0) > 0 && (
+            <div className="mt-3 max-w-md mx-auto">
+              <p className="mb-2 text-xs font-medium text-slate-500 uppercase tracking-wider">
+                Not in dictionary <span className="text-slate-600">· {record.invalid!.length}</span>
+              </p>
+              <div className="flex flex-wrap justify-center gap-1.5">
+                {[...record.invalid!].sort().map((w) => (
+                  <span
+                    key={w}
+                    className="px-2.5 py-1 rounded-lg border text-sm tracking-wide bg-amber-400/10 border-amber-400/30 text-amber-300"
+                  >
+                    {w}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
 
           <p className="mt-4 text-xs text-slate-500">
             Chain words to use all twelve letters — each word starts with the previous

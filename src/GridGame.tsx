@@ -47,6 +47,7 @@ function diceFor(size: number): string[] {
 type GridRecord = {
   cells: string[];
   found: string[];
+  invalid?: string[]; // rejected non-dictionary guesses
   endsAt: number | null; // null until the player presses Start
   finished: boolean;
 };
@@ -73,6 +74,7 @@ function sanitizeRecord(r: unknown): GridRecord | null {
   return {
     cells: rec.cells,
     found: rec.found.filter((w) => typeof w === 'string'),
+    invalid: Array.isArray(rec.invalid) ? rec.invalid.filter((w) => typeof w === 'string') : [],
     endsAt: typeof rec.endsAt === 'number' ? rec.endsAt : null,
     finished: rec.finished === true,
   };
@@ -224,6 +226,10 @@ const GridGame = forwardRef<
     });
   }, [standardWords, record]);
   const answersSet = useMemo(() => (answers ? new Set(answers) : null), [answers]);
+  const standardSet = useMemo(
+    () => (standardWords ? new Set(standardWords) : null),
+    [standardWords]
+  );
   const maxScore = useMemo(
     () => (answers ? answers.reduce((n, w) => n + wordScore(w), 0) : 0),
     [answers]
@@ -282,9 +288,16 @@ const GridGame = forwardRef<
       showFlash('Already found');
       return;
     }
-    // answers are path-checked and dictionary-checked in one
     if (!answersSet.has(word)) {
-      showFlash('No path for that word');
+      // distinguish a non-word from a real word with no path on this grid
+      if (standardSet && !standardSet.has(word)) {
+        updateRecord((r) =>
+          r.invalid?.includes(word) ? r : { ...r, invalid: [...(r.invalid ?? []), word] }
+        );
+        showFlash('Not in dictionary');
+      } else {
+        showFlash('No path for that word');
+      }
       return;
     }
     updateRecord((r) => ({ ...r, found: [word, ...r.found] }));
@@ -656,8 +669,27 @@ const GridGame = forwardRef<
                     title="Hover to trace on the board"
                     className={`px-2.5 py-1 rounded-lg border text-sm tracking-wide cursor-pointer select-none
                       ${w.length >= 7
-                        ? 'bg-amber-400/10 border-amber-400/30 text-amber-200 font-semibold'
-                        : 'bg-white/[0.04] border-white/10 text-slate-300'}`}
+                        ? 'bg-emerald-400/25 border-emerald-300 text-emerald-100 font-semibold'
+                        : 'bg-emerald-400/10 border-emerald-400/30 text-emerald-200'}`}
+                  >
+                    {w}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* rejected non-words */}
+          {(record.invalid?.length ?? 0) > 0 && (
+            <div className="mt-4 max-w-md mx-auto">
+              <p className="mb-2 text-xs font-medium text-slate-500 uppercase tracking-wider text-center">
+                Not in dictionary <span className="text-slate-600">· {record.invalid!.length}</span>
+              </p>
+              <div className="flex flex-wrap justify-center gap-1.5">
+                {[...record.invalid!].sort().map((w) => (
+                  <span
+                    key={w}
+                    className="px-2.5 py-1 rounded-lg border text-sm tracking-wide bg-amber-400/10 border-amber-400/30 text-amber-300"
                   >
                     {w}
                   </span>
