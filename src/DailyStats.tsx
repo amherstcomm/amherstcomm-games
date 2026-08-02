@@ -80,7 +80,7 @@ export default function DailyStats({ game, date }: { game: Game; date: string })
   return (
     <p className="mt-4 inline-flex items-center gap-1.5 text-xs text-slate-500">
       <Users className="w-3.5 h-3.5 text-slate-600" />
-      Today across all players: {parts(game, stats).join(' · ')}
+      Today across all registered players: {parts(game, stats).join(' · ')}
     </p>
   );
 }
