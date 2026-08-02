@@ -12,8 +12,8 @@ import type { LetterState } from '@/GuessGame';
 export type HiveGameHandle = { pressKey: (k: string) => void };
 
 const HIVE_KEY = 'anagrimoire:hive:v1';
-const BEE_URL =
-  'https://raw.githubusercontent.com/rptetzloff/anagrimoire/puzzle-data/data/spellingbee.json';
+const DAILY_HIVE_URL =
+  'https://raw.githubusercontent.com/rptetzloff/anagrimoire/puzzle-data/data/daily-hive.json';
 
 // outer hive cells, clockwise from the top, as [left%, top%] of the container
 const POSITIONS: [number, number][] = [
@@ -107,10 +107,10 @@ const HiveGame = forwardRef<
     }
   }, [store]);
 
-  // fetch today's NYT letters once
+  // fetch today's generated hive once
   useEffect(() => {
     let alive = true;
-    fetch(BEE_URL, { cache: 'no-store' })
+    fetch(DAILY_HIVE_URL, { cache: 'no-store' })
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
       .then((d) => {
         if (!alive) return;
@@ -434,8 +434,8 @@ const HiveGame = forwardRef<
           )}
 
           <p className="mt-5 text-xs text-slate-500">
-            Scored against our Standard dictionary — ranks may differ from the NYT&apos;s.
-            {store.dailyMode && ' Fresh letters arrive about 15 minutes after 3:00 a.m. Eastern.'}
+            Scored against our Standard dictionary — nothing is checked against any publisher&apos;s list.
+            {store.dailyMode && ' A fresh daily hive arrives about 15 minutes after 3:00 a.m. Eastern.'}
           </p>
         </>
       )}

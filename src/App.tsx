@@ -26,8 +26,8 @@ const MODES: { id: Mode; label: string; blurb: string; description: string }[] =
   },
   {
     id: 'bee',
-    label: 'Spelling Bee',
-    blurb: 'Seven letters, 4+ letter words, center letter required',
+    label: 'Hive',
+    blurb: 'Seven letters, 4+ letter words, center letter required — Spelling Bee style',
     description:
       "Enter the hive's seven letters and we'll find every word that uses the center — pangrams first.",
   },
