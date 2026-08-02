@@ -10,6 +10,7 @@ import { CalendarDays, CornerDownLeft, Delete, RefreshCw, RotateCcw, Search, Tim
 import { formatElapsed, useUpTimer } from '@/useUpTimer';
 import type { LetterState } from '@/GuessGame';
 import { dailyDataUrl } from '@/dailyData';
+import { recordBoxSolve } from '@/stats';
 
 export type BoxGameHandle = { pressKey: (k: string) => void };
 
@@ -311,6 +312,7 @@ const BoxGame = forwardRef<
     setCurrent(word.slice(-1));
     if (nextCovered.size === 12) {
       setCurrent('');
+      recordBoxSolve(nextChain.length, record.elapsedMs ?? 0);
       showFlash(`Solved in ${nextChain.length} word${nextChain.length === 1 ? '' : 's'}! 🎉`, true);
     } else {
       showFlash(`+${new Set(word).size} letters`, true);

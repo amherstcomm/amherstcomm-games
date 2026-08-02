@@ -8,6 +8,7 @@ import {
 } from 'react';
 import { CalendarDays, RefreshCw, Search, Timer, Trophy } from 'lucide-react';
 import { dailyDataUrl } from '@/dailyData';
+import { recordGuessFinish } from '@/stats';
 import { formatElapsed, useUpTimer } from '@/useUpTimer';
 
 export type LetterState = 'correct' | 'present' | 'absent';
@@ -278,7 +279,10 @@ const GuessGame = forwardRef<
       return dailyMode ? { ...prev, daily: updated } : { ...prev, practice: updated };
     });
     setCurrent('');
-    if (done) finishDaily(didWin);
+    if (done) {
+      recordGuessFinish(didWin, next.length, record?.elapsedMs ?? 0);
+      finishDaily(didWin);
+    }
   }
 
   // translate the board's knowledge into solver clues

@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { CalendarDays, Eye, Lightbulb, RefreshCw, Timer } from 'lucide-react';
 import { gridNeighbors } from '@/solvers';
 import { dailyDataUrl, WEAVE_POOL_URL } from '@/dailyData';
+import { recordWeaveReveal, recordWeaveSolve } from '@/stats';
 import { formatElapsed, useUpTimer } from '@/useUpTimer';
 
 const WEAVE_KEY = 'anagrimoire:weave:v1';
@@ -321,6 +322,9 @@ export default function WeaveGame({ standardWords }: { standardWords: string[] |
     const isSpan = word === answers.spangram.w && sameCells(path, answers.spangram.path);
     const isTheme = answers.words.some((x) => x.w === word && sameCells(path, x.path));
     if (isSpan || isTheme) {
+      if (record.found.length + 1 >= answers.words.length + 1) {
+        recordWeaveSolve(record.elapsedMs ?? 0, record.hintsUsed);
+      }
       updateRecord((r) => ({
         ...r,
         found: [...r.found, word],
@@ -367,6 +371,7 @@ export default function WeaveGame({ standardWords }: { standardWords: string[] |
 
   function reveal() {
     if (!record || complete) return;
+    recordWeaveReveal(record.hintsUsed);
     updateRecord((r) => ({ ...r, revealed: true, hintTarget: null }));
   }
 

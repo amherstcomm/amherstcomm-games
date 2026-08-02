@@ -11,6 +11,7 @@ import { CalendarDays, ChevronDown, CornerDownLeft, Delete, Flag, Play, RefreshC
 import { findGridPath, gridNeighbors, solveGrid } from '@/solvers';
 import type { LetterState } from '@/GuessGame';
 import { dailyDataUrl } from '@/dailyData';
+import { recordSprint } from '@/stats';
 
 export type GridGameHandle = { pressKey: (k: string) => void };
 
@@ -213,8 +214,10 @@ const GridGame = forwardRef<
   useEffect(() => {
     if (running && remaining === 0) {
       setCurrent('');
+      recordSprint('grid', score, record?.found.length ?? 0);
       updateRecord((r) => ({ ...r, finished: true }));
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [running, remaining]);
 
   // every path-reachable dictionary word; also serves as submit validation
