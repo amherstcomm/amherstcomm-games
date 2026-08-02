@@ -185,6 +185,7 @@ const GRID_DICE = [
 // Two independent daily sets: production, and a dev-salted set for
 // dev.anagrimoire.com/localhost so testing never spoils the production
 // puzzles. Everything stays deterministic per Eastern date.
+const dailyWeaveClues = new Set();
 for (const variant of ['', 'dev']) {
   const salt = variant ? `-${variant}` : '';
   const prefix = variant ? 'dev-' : '';
@@ -272,6 +273,7 @@ for (const variant of ['', 'dev']) {
   const weaveRng = mulberry32(xmur3(`anagrimoire-weave-${etDate}${salt}`)());
   const weave = generateWeave(weaveRng, 6, 8, THEMES);
   if (!weave) throw new Error('Could not generate a daily weave');
+  dailyWeaveClues.add(weave.clue);
   await writeFile(
     `data/${prefix}daily-weave.json`,
     JSON.stringify(
@@ -284,17 +286,19 @@ for (const variant of ['', 'dev']) {
 }
 
 // shared practice pool for weave: pre-generated boards in both sizes,
-// refreshed daily, used by both sites
+// refreshed daily, used by both sites. Both variants' daily themes are
+// held out so practice never spoils a daily puzzle.
 const poolRng = mulberry32(xmur3(`anagrimoire-weave-pool-${etDate}`)());
+const poolThemes = THEMES.filter((t) => !dailyWeaveClues.has(t.clue));
 const pool = { '6x8': [], '8x10': [] };
 for (const [key, cols, rows, count] of [['6x8', 6, 8, 20], ['8x10', 8, 10, 20]]) {
   const used = new Set();
   for (let i = 0; i < count; i++) {
     // prefer themes not yet in this size's pool for variety
-    const fresh = THEMES.filter((t) => !used.has(t.clue));
+    const fresh = poolThemes.filter((t) => !used.has(t.clue));
     const p =
       (fresh.length && generateWeave(poolRng, cols, rows, fresh)) ||
-      generateWeave(poolRng, cols, rows, THEMES);
+      generateWeave(poolRng, cols, rows, poolThemes);
     if (!p) throw new Error(`Could not generate pool weave ${key} #${i}`);
     used.add(p.clue);
     pool[key].push({ clue: p.clue, cols, board: p.board, answers: encodeAnswers(p) });
