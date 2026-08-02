@@ -8,7 +8,7 @@ import GridGame, { type GridGameHandle } from '@/GridGame';
 import WeaveGame from '@/WeaveGame';
 import { DICTIONARIES, getDictionary, type DictionaryId } from '@/dictionaries';
 import { solvePattern, solveDescramble, solveBee, solveBoxed, solveGrid, findGridPath } from '@/solvers';
-import { loadState, saveState, GRID_PRESET_DIMS, type GridPreset, type Mode, type SortPref } from '@/storage';
+import { loadState, saveState, GRID_PRESET_DIMS, WEAVE_DIMS, type GridPreset, type Mode, type SortPref, type WeaveSize } from '@/storage';
 
 const MIN_LEN = 3;
 const MAX_LEN = 15;
@@ -38,9 +38,9 @@ const MODES: { id: Mode; label: string; blurb: string; description: string }[] =
   {
     id: 'grid',
     label: 'Grid',
-    blurb: 'Boggle & Strands style — chain adjacent letters, each cell once',
+    blurb: 'Boggle style — chain adjacent letters, each cell once',
     description:
-      "Enter the grid letters — square boards or the 6×8 Strands shape — and we'll find every word traceable through adjacent cells.",
+      "Enter the grid letters and we'll find every word traceable through adjacent cells.",
   },
   {
     id: 'boxed',
@@ -54,7 +54,7 @@ const MODES: { id: Mode; label: string; blurb: string; description: string }[] =
     label: 'Weave',
     blurb: 'Themed words tile the whole board — Strands style',
     description:
-      'Find the themed words hiding in the board — every letter is used exactly once, and one spangram spans the board.',
+      'Play the themed tiling puzzle, or use Solve to list every traceable word on a Strands-style board.',
   },
 ];
 
@@ -369,6 +369,22 @@ function App() {
   const [gridLetters, setGridLetters] = useState<string[]>(initial.grid.letters);
   const [gridPreset, setGridPreset] = useState<GridPreset>(initial.grid.preset);
   const [gridPlay, setGridPlay] = useState(initial.gridPlay);
+  const [weaveLetters, setWeaveLetters] = useState<string[]>(initial.weave.letters);
+  const [weaveSize, setWeaveSize] = useState<WeaveSize>(initial.weave.size);
+  const [weavePlay, setWeavePlay] = useState(initial.weavePlay);
+
+  const weaveDims = WEAVE_DIMS[weaveSize];
+
+  function changeWeaveSize(size: WeaveSize) {
+    setWeaveSize(size);
+    setStrandsClue(null);
+    const dims = WEAVE_DIMS[size];
+    setWeaveLetters((prev) => {
+      const next = Array(dims.rows * dims.cols).fill('');
+      for (let i = 0; i < Math.min(prev.length, next.length); i++) next[i] = prev[i];
+      return next;
+    });
+  }
 
   const gridDims = GRID_PRESET_DIMS[gridPreset];
 
@@ -387,8 +403,8 @@ function App() {
       if (!Array.isArray(board) || board.length !== 8 || !board.every((row) => /^[a-z]{6}$/.test(row))) {
         throw new Error('bad payload');
       }
-      setGridPreset('6x8');
-      setGridLetters(board.join('').split(''));
+      setWeaveSize('6x8');
+      setWeaveLetters(board.join('').split(''));
       setStrandsClue(typeof d.clue === 'string' ? d.clue : null);
       setTodayStatus('idle');
     } catch {
@@ -419,10 +435,10 @@ function App() {
 
   useEffect(() => {
     setGridTrace(null);
-  }, [gridLetters, gridPreset, mode]);
+  }, [gridLetters, gridPreset, weaveLetters, weaveSize, mode]);
 
-  function gridTraceHandlers(word: string): ButtonHTMLAttributes<HTMLButtonElement> {
-    const show = () => setGridTrace(findGridPath(gridLetters, gridDims.cols, word));
+  function traceHandlersFor(word: string, letters: string[], cols: number): ButtonHTMLAttributes<HTMLButtonElement> {
+    const show = () => setGridTrace(findGridPath(letters, cols, word));
     const hide = () => setGridTrace(null);
     return {
       onMouseEnter: show,
@@ -433,9 +449,11 @@ function App() {
     };
   }
 
+  const gridTraceHandlers = (word: string) => traceHandlersFor(word, gridLetters, gridDims.cols);
+  const weaveTraceHandlers = (word: string) => traceHandlersFor(word, weaveLetters, weaveDims.cols);
+
   function changeGridPreset(preset: GridPreset) {
     setGridPreset(preset);
-    setStrandsClue(null);
     const dims = GRID_PRESET_DIMS[preset];
     setGridLetters((prev) => {
       const next = Array(dims.rows * dims.cols).fill('');
@@ -475,9 +493,9 @@ function App() {
   const boxedPlayActive = mode === 'boxed' && boxedPlay;
   const descramblePlayActive = mode === 'descramble' && descramblePlay;
   const gridPlayActive = mode === 'grid' && gridPlay;
-  const weaveActive = mode === 'weave'; // play-only mode
+  const weavePlayActive = mode === 'weave' && weavePlay;
   const playActive =
-    patternPlayActive || beePlayActive || boxedPlayActive || descramblePlayActive || gridPlayActive || weaveActive;
+    patternPlayActive || beePlayActive || boxedPlayActive || descramblePlayActive || gridPlayActive || weavePlayActive;
 
   // the guess game validates against the full dictionary and picks practice
   // words from the common one; hive, box, scramble, and grid play use standard
@@ -485,10 +503,10 @@ function App() {
     if (!playActive) return;
     if (!commonWordsArr) getDictionary('common').then(setCommonWordsArr);
     if (patternPlayActive && !fullWordsArr) getDictionary('full').then(setFullWordsArr);
-    if ((beePlayActive || boxedPlayActive || descramblePlayActive || gridPlayActive || weaveActive) && !standardWordsArr) {
+    if ((beePlayActive || boxedPlayActive || descramblePlayActive || gridPlayActive || weavePlayActive) && !standardWordsArr) {
       getDictionary('standard').then(setStandardWordsArr);
     }
-  }, [playActive, patternPlayActive, beePlayActive, boxedPlayActive, descramblePlayActive, gridPlayActive, weaveActive, commonWordsArr, fullWordsArr, standardWordsArr]);
+  }, [playActive, patternPlayActive, beePlayActive, boxedPlayActive, descramblePlayActive, gridPlayActive, weavePlayActive, commonWordsArr, fullWordsArr, standardWordsArr]);
 
   useEffect(() => {
     if (!aboutOpen) return;
@@ -534,8 +552,10 @@ function App() {
       bee: { center: beeCenter, outers: beeOuters },
       boxed: { letters: boxedLetters, solutionWords },
       grid: { letters: gridLetters, preset: gridPreset },
+      weave: { letters: weaveLetters, size: weaveSize },
+      weavePlay,
     });
-  }, [mode, dictionaries, sorts, kbOpen, patternPlay, beePlay, boxedPlay, descramblePlay, gridPlay, length, known, containsStr, excludedStr, rackStr, useAll, minLength, beeCenter, beeOuters, boxedLetters, solutionWords, gridLetters, gridPreset]);
+  }, [mode, dictionaries, sorts, kbOpen, patternPlay, beePlay, boxedPlay, descramblePlay, gridPlay, length, known, containsStr, excludedStr, rackStr, useAll, minLength, beeCenter, beeOuters, boxedLetters, solutionWords, gridLetters, gridPreset, weaveLetters, weaveSize, weavePlay]);
 
   // keep known array sized to length
   useEffect(() => {
@@ -589,8 +609,11 @@ function App() {
     if (mode === 'grid') {
       return solveGrid(words, { cells: gridLetters, cols: gridDims.cols });
     }
+    if (mode === 'weave') {
+      return weavePlay ? [] : solveGrid(words, { cells: weaveLetters, cols: weaveDims.cols });
+    }
     return solvePattern(words, { length, known, contains, excluded });
-  }, [mode, words, length, known, contains, excluded, rackLetters, wildcards, useAll, minLength, beeCenter, beeOuters, boxedSides, gridLetters, gridDims]);
+  }, [mode, words, length, known, contains, excluded, rackLetters, wildcards, useAll, minLength, beeCenter, beeOuters, boxedSides, gridLetters, gridDims, weavePlay, weaveLetters, weaveDims]);
 
   // shared index for Letter Boxed chain searches; null until all 12 letters are in
   const boxedIndex = useMemo<ChainIndex | null>(() => {
@@ -737,13 +760,21 @@ function App() {
       return document.querySelector<HTMLInputElement>('input[aria-label="Letters to descramble"]');
     }
     const group =
-      mode === 'bee' ? 'bee' : mode === 'boxed' ? 'boxed' : mode === 'grid' ? 'grid' : 'known';
+      mode === 'bee'
+        ? 'bee'
+        : mode === 'boxed'
+          ? 'boxed'
+          : mode === 'grid'
+            ? 'grid'
+            : mode === 'weave'
+              ? 'weave'
+              : 'known';
     const tiles = [...document.querySelectorAll<HTMLInputElement>(`input[data-tile-group="${group}"]`)];
     return tiles.find((t) => !t.value) ?? tiles[0] ?? null;
   }
 
   function pressKey(k: string) {
-    if (weaveActive) return; // weave is trace-only
+    if (weavePlayActive) return; // weave play is trace-only
     if (patternPlayActive) {
       gameRef.current?.pressKey(k);
       return;
@@ -810,6 +841,7 @@ function App() {
     setBeeOuters(Array(6).fill(''));
     setBoxedLetters(Array(12).fill(''));
     setGridLetters(Array(gridDims.rows * gridDims.cols).fill(''));
+    setWeaveLetters(Array(weaveDims.rows * weaveDims.cols).fill(''));
     setStrandsClue(null);
   }
 
@@ -863,8 +895,7 @@ function App() {
           </p>
         </header>
 
-        {/* solve / play toggle (weave is play-only) */}
-        {mode !== 'weave' && (
+        {/* solve / play toggle */}
         <section className="mb-7 text-center">
           <div className="inline-flex rounded-xl bg-white/5 border border-white/10 p-1 gap-1">
               {(
@@ -879,7 +910,7 @@ function App() {
                   bee: [beePlay, setBeePlay],
                   boxed: [boxedPlay, setBoxedPlay],
                   grid: [gridPlay, setGridPlay],
-                  weave: [true, () => {}], // play-only; toggle never renders
+                  weave: [weavePlay, setWeavePlay],
                 };
                 const [flag, setFlag] = flags[mode];
                 const active = flag === play;
@@ -899,11 +930,95 @@ function App() {
               })}
           </div>
         </section>
-        )}
 
-        {weaveActive && (
+        {weavePlayActive && (
         <div className="mb-8">
           <WeaveGame standardWords={standardWordsArr} />
+        </div>
+        )}
+
+        {mode === 'weave' && !weavePlay && (
+        <div className="mb-8 text-center">
+          <label className="block text-xs font-medium text-slate-400 uppercase tracking-wider mb-2.5">
+            Board size
+          </label>
+          <div className="mb-5 inline-flex rounded-lg bg-white/5 border border-white/10 p-0.5 gap-0.5">
+            {(
+              [
+                { id: '6x8', label: '6×8 Strands' },
+                { id: '8x10', label: '8×10' },
+              ] as const
+            ).map(({ id, label }) => (
+              <button
+                key={id}
+                onClick={() => changeWeaveSize(id)}
+                className={`px-3 py-1.5 rounded-md text-sm font-semibold whitespace-nowrap transition-colors
+                  ${weaveSize === id ? 'bg-white/15 text-white' : 'text-slate-400 hover:text-white'}`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          <label className="block text-xs font-medium text-slate-400 uppercase tracking-wider mb-3">
+            The board
+          </label>
+          <div ref={gridBoardRef} className="relative w-fit mx-auto">
+            <div className={`grid gap-1.5 ${weaveDims.cols === 8 ? 'grid-cols-8' : 'grid-cols-6'}`}>
+              {weaveLetters.map((v, i) => (
+                <Tile
+                  key={i}
+                  index={i}
+                  group="weave"
+                  osk={kbOpen}
+                  value={v}
+                  state={v ? 'known' : 'empty'}
+                  size="sm"
+                  tone={gridTrace?.includes(i) ? GRID_TRACE_TONE : undefined}
+                  onChange={(c) =>
+                    setWeaveLetters((prev) => prev.map((x, j) => (j === i ? c : x)))
+                  }
+                />
+              ))}
+            </div>
+            {gridTracePts.length > 1 && (
+              <svg className="absolute inset-0 w-full h-full pointer-events-none">
+                <polyline
+                  points={gridTracePts.map((p) => `${p.x},${p.y}`).join(' ')}
+                  fill="none"
+                  stroke="rgb(125 211 252 / 0.9)"
+                  strokeWidth="4"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+                <circle cx={gridTracePts[0].x} cy={gridTracePts[0].y} r="6" fill="rgb(125 211 252)" />
+              </svg>
+            )}
+          </div>
+          <div className="mt-4 flex flex-wrap items-center justify-center gap-3">
+            <button
+              onClick={fillTodaysStrands}
+              disabled={todayStatus === 'loading'}
+              className="inline-flex items-center gap-1.5 px-4 h-10 rounded-lg text-sm font-semibold bg-white/5 border border-white/10 text-slate-300 hover:bg-white/10 hover:text-white transition-colors disabled:opacity-50"
+            >
+              <CalendarDays className="w-4 h-4" />
+              {todayStatus === 'loading' ? 'Fetching…' : "Today's Strands"}
+            </button>
+          </div>
+          {todayStatus === 'error' && (
+            <p className="mt-2 text-xs text-rose-400">
+              Couldn&apos;t fetch today&apos;s puzzle — try again in a minute.
+            </p>
+          )}
+          {strandsClue && (
+            <p className="mt-2 text-sm text-amber-300">
+              Theme: <span className="font-semibold">{strandsClue}</span>
+            </p>
+          )}
+          <p className="mt-3 text-xs text-slate-500">
+            Words are 3+ letters traced through adjacent cells (diagonals count), using each
+            cell once. Hover a result to trace it on the board. Today&apos;s Strands becomes
+            available here about 15 minutes after the NYT publishes it (3:00&nbsp;a.m. Eastern).
+          </p>
         </div>
         )}
 
@@ -1205,7 +1320,6 @@ function App() {
                 { id: '3x3', label: '3×3' },
                 { id: '4x4', label: '4×4' },
                 { id: '5x5', label: '5×5' },
-                { id: '6x8', label: '6×8 Strands' },
               ] as const
             ).map(({ id, label }) => (
               <button
@@ -1224,13 +1338,7 @@ function App() {
           <div ref={gridBoardRef} className="relative w-fit mx-auto">
             <div
               className={`grid gap-2 ${
-                gridDims.cols === 3
-                  ? 'grid-cols-3'
-                  : gridDims.cols === 5
-                    ? 'grid-cols-5'
-                    : gridDims.cols === 6
-                      ? 'grid-cols-6'
-                      : 'grid-cols-4'
+                gridDims.cols === 3 ? 'grid-cols-3' : gridDims.cols === 5 ? 'grid-cols-5' : 'grid-cols-4'
               }`}
             >
               {gridLetters.map((v, i) => (
@@ -1263,30 +1371,9 @@ function App() {
               </svg>
             )}
           </div>
-          <div className="mt-4 flex flex-wrap items-center justify-center gap-3">
-            <button
-              onClick={fillTodaysStrands}
-              disabled={todayStatus === 'loading'}
-              className="inline-flex items-center gap-1.5 px-4 h-10 rounded-lg text-sm font-semibold bg-white/5 border border-white/10 text-slate-300 hover:bg-white/10 hover:text-white transition-colors disabled:opacity-50"
-            >
-              <CalendarDays className="w-4 h-4" />
-              {todayStatus === 'loading' ? 'Fetching…' : "Today's Strands"}
-            </button>
-          </div>
-          {todayStatus === 'error' && (
-            <p className="mt-2 text-xs text-rose-400">
-              Couldn&apos;t fetch today&apos;s puzzle — try again in a minute.
-            </p>
-          )}
-          {strandsClue && (
-            <p className="mt-2 text-sm text-amber-300">
-              Theme: <span className="font-semibold">{strandsClue}</span>
-            </p>
-          )}
           <p className="mt-3 text-xs text-slate-500">
             Words are 3+ letters traced through adjacent cells (diagonals count), using each
-            cell once. Hover a result to trace it on the board. Today&apos;s Strands becomes
-            available here about 15 minutes after the NYT publishes it (3:00&nbsp;a.m. Eastern).
+            cell once. Hover a result to trace it on the board.
           </p>
         </div>
         )}
@@ -1466,7 +1553,11 @@ function App() {
                       ? gridLetters.filter(Boolean).length < gridLetters.length
                         ? `Fill in all ${gridLetters.length} grid letters to find words.`
                         : 'No words can be traced on this grid.'
-                      : 'No words fit those clues. Try loosening a constraint.'}
+                      : mode === 'weave'
+                        ? weaveLetters.filter(Boolean).length < weaveLetters.length
+                          ? `Fill in all ${weaveLetters.length} board letters to find words.`
+                          : 'No words can be traced on this board.'
+                        : 'No words fit those clues. Try loosening a constraint.'}
             </p>
           </div>
         ) : (
@@ -1585,7 +1676,7 @@ function App() {
                         <WordChip
                           key={w}
                           word={w}
-                          hoverProps={mode === 'grid' ? gridTraceHandlers(w) : undefined}
+                          hoverProps={mode === 'grid' ? gridTraceHandlers(w) : mode === 'weave' ? weaveTraceHandlers(w) : undefined}
                           className="bg-white/[0.04] border border-white/10 text-slate-300 hover:bg-white/[0.08] hover:border-white/20"
                         />
                       ))}
@@ -1598,7 +1689,7 @@ function App() {
                     <WordChip
                       key={w}
                       word={w}
-                      hoverProps={mode === 'grid' ? gridTraceHandlers(w) : undefined}
+                      hoverProps={mode === 'grid' ? gridTraceHandlers(w) : mode === 'weave' ? weaveTraceHandlers(w) : undefined}
                       className="bg-white/[0.04] border border-white/10 text-slate-300 hover:bg-white/[0.08] hover:border-white/20"
                     />
                   ))}

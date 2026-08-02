@@ -26,14 +26,21 @@ export type PersistedState = {
   bee: { center: string; outers: string[] };
   boxed: { letters: string[]; solutionWords: number };
   grid: { letters: string[]; preset: GridPreset };
+  weave: { letters: string[]; size: WeaveSize };
+  weavePlay: boolean;
 };
 
-export type GridPreset = '3x3' | '4x4' | '5x5' | '6x8';
+export type GridPreset = '3x3' | '4x4' | '5x5';
 export const GRID_PRESET_DIMS: Record<GridPreset, { rows: number; cols: number }> = {
   '3x3': { rows: 3, cols: 3 },
   '4x4': { rows: 4, cols: 4 },
   '5x5': { rows: 5, cols: 5 },
+};
+
+export type WeaveSize = '6x8' | '8x10';
+export const WEAVE_DIMS: Record<WeaveSize, { rows: number; cols: number }> = {
   '6x8': { rows: 8, cols: 6 }, // Strands-shaped board: 6 wide, 8 tall
+  '8x10': { rows: 10, cols: 8 },
 };
 
 export const DEFAULT_STATE: PersistedState = {
@@ -58,6 +65,8 @@ export const DEFAULT_STATE: PersistedState = {
   bee: { center: '', outers: Array(6).fill('') },
   boxed: { letters: Array(12).fill(''), solutionWords: 2 },
   grid: { letters: Array(16).fill(''), preset: '4x4' },
+  weave: { letters: Array(48).fill(''), size: '6x8' },
+  weavePlay: true,
 };
 
 function singleLetter(v: unknown): string {
@@ -130,6 +139,15 @@ export function loadState(): PersistedState {
       for (let i = 0; i < gridLetters.length; i++) gridLetters[i] = singleLetter(p.grid.letters[i]);
     }
 
+    const weaveSize: WeaveSize = Object.keys(WEAVE_DIMS).includes(p?.weave?.size)
+      ? p.weave.size
+      : '6x8';
+    const wDims = WEAVE_DIMS[weaveSize];
+    const weaveLetters = Array(wDims.rows * wDims.cols).fill('');
+    if (Array.isArray(p?.weave?.letters)) {
+      for (let i = 0; i < weaveLetters.length; i++) weaveLetters[i] = singleLetter(p.weave.letters[i]);
+    }
+
     return {
       mode: ALL_MODES.includes(p?.mode) ? p.mode : DEFAULT_STATE.mode,
       dictionaries,
@@ -160,6 +178,8 @@ export function loadState(): PersistedState {
         solutionWords: clampInt(p?.boxed?.solutionWords, 1, 5, DEFAULT_STATE.boxed.solutionWords),
       },
       grid: { letters: gridLetters, preset: gridPreset },
+      weave: { letters: weaveLetters, size: weaveSize },
+      weavePlay: p?.weavePlay !== false,
     };
   } catch {
     return DEFAULT_STATE;
