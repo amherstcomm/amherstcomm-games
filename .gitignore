@@ -24,3 +24,6 @@ dist-ssr
 
 # Local Claude Code tooling
 .claude/
+
+# Vite cache
+.vite/
