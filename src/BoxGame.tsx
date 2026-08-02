@@ -6,7 +6,7 @@ import {
   useRef,
   useState,
 } from 'react';
-import { CalendarDays, CornerDownLeft, Delete, RefreshCw, RotateCcw } from 'lucide-react';
+import { CalendarDays, CornerDownLeft, Delete, RefreshCw, RotateCcw, Search } from 'lucide-react';
 import type { LetterState } from '@/GuessGame';
 
 export type BoxGameHandle = { pressKey: (k: string) => void };
@@ -100,6 +100,31 @@ function generateBox(commonWords: string[]): BoxRecord | null {
   return null;
 }
 
+// each side gets its own hue so the four zones read at a glance; letter
+// states (idle / in current word / used) are shades within the side's hue
+const SIDE_TONES = [
+  {
+    idle: 'bg-sky-400/10 border-sky-400/40 text-sky-200 hover:bg-sky-400/20',
+    current: 'bg-sky-400/20 border-sky-400/70 text-sky-100',
+    used: 'bg-sky-400/40 border-sky-300 text-white',
+  },
+  {
+    idle: 'bg-violet-400/10 border-violet-400/40 text-violet-200 hover:bg-violet-400/20',
+    current: 'bg-violet-400/20 border-violet-400/70 text-violet-100',
+    used: 'bg-violet-400/40 border-violet-300 text-white',
+  },
+  {
+    idle: 'bg-rose-400/10 border-rose-400/40 text-rose-200 hover:bg-rose-400/20',
+    current: 'bg-rose-400/20 border-rose-400/70 text-rose-100',
+    used: 'bg-rose-400/40 border-rose-300 text-white',
+  },
+  {
+    idle: 'bg-amber-400/10 border-amber-400/40 text-amber-200 hover:bg-amber-400/20',
+    current: 'bg-amber-400/20 border-amber-400/70 text-amber-100',
+    used: 'bg-amber-400/40 border-amber-300 text-white',
+  },
+];
+
 // letter positions around the drawn square, per side (top, right, bottom, left)
 const SIDE_POSITIONS: [number, number][][] = [
   [
@@ -130,8 +155,9 @@ const BoxGame = forwardRef<
     standardWords: string[] | null;
     commonWords: string[] | null;
     onLetterStates: (states: Record<string, LetterState>) => void;
+    onReveal: (sides: string[]) => void;
   }
->(function BoxGame({ standardWords, commonWords, onLetterStates }, ref) {
+>(function BoxGame({ standardWords, commonWords, onLetterStates, onReveal }, ref) {
   const [store, setStore] = useState<BoxStore>(loadStore);
   const [current, setCurrent] = useState('');
   const [flash, setFlash] = useState<{ text: string; good: boolean } | null>(null);
@@ -372,21 +398,25 @@ const BoxGame = forwardRef<
             )}
           </div>
 
-          {/* chain + current entry */}
-          <div className="mb-3 min-h-[2rem] flex flex-wrap items-center justify-center gap-1.5 text-sm">
+          {/* committed chain — extra clearance when the entry box between it
+              and the board is gone (solved) */}
+          <div className={`${solved ? 'mb-7' : 'mb-2'} flex flex-wrap items-center justify-center gap-1.5 text-sm`}>
             {chain.map((w, i) => (
               <span key={i} className="text-slate-300">
                 {w}
-                <span className="text-slate-600"> →</span>
+                {(!solved || i < chain.length - 1) && <span className="text-slate-600"> →</span>}
               </span>
             ))}
-            {!solved && (
-              <span className="text-lg font-bold tracking-[0.15em] uppercase text-white">
-                {current || ' '}
+          </div>
+          {/* current entry */}
+          {!solved && (
+            <div className="mb-6 mx-auto max-w-sm h-12 px-4 rounded-xl bg-white/5 border-2 border-white/10 flex items-center justify-center overflow-hidden">
+              <span className="text-xl font-bold tracking-[0.15em] uppercase text-white whitespace-nowrap">
+                {current}
                 <span className="text-amber-400 animate-pulse">|</span>
               </span>
-            )}
-          </div>
+            </div>
+          )}
 
           {/* the box */}
           <div className="relative w-72 h-72 mx-auto">
@@ -406,12 +436,12 @@ const BoxGame = forwardRef<
                     disabled={solved}
                     className={`absolute -translate-x-1/2 -translate-y-1/2 w-10 h-12 rounded-lg border-2 text-xl font-bold uppercase transition-colors
                       ${isLast
-                        ? 'bg-amber-400/20 border-amber-400 text-amber-200'
+                        ? `${SIDE_TONES[s].used} ring-2 ring-white/90`
                         : used
-                          ? 'bg-emerald-500/15 border-emerald-400/60 text-emerald-200'
+                          ? SIDE_TONES[s].used
                           : inCurrent
-                            ? 'bg-white/10 border-white/40 text-white'
-                            : 'bg-white/5 border-white/15 text-white hover:bg-white/10'}
+                            ? SIDE_TONES[s].current
+                            : SIDE_TONES[s].idle}
                       ${sameSide && !isLast ? 'opacity-40' : ''}`}
                     style={{ left: `${x}%`, top: `${y}%` }}
                   >
@@ -423,7 +453,7 @@ const BoxGame = forwardRef<
           </div>
 
           {/* controls */}
-          <div className="mt-4 flex items-center justify-center gap-2.5">
+          <div className="mt-8 flex items-center justify-center gap-2.5">
             <button
               onMouseDown={(e) => e.preventDefault()}
               onClick={() => pressKey('backspace')}
@@ -458,6 +488,15 @@ const BoxGame = forwardRef<
                 New box
               </button>
             )}
+            <button
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => onReveal(record.sides)}
+              title="Give up and see the solutions in the solver"
+              className="inline-flex items-center gap-1.5 px-4 h-10 rounded-lg text-sm font-semibold bg-white/5 border border-white/10 text-slate-300 hover:bg-white/10 hover:text-white transition-colors"
+            >
+              <Search className="w-4 h-4" />
+              Reveal
+            </button>
           </div>
 
           <div className="h-6 mt-3">
