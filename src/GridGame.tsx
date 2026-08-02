@@ -2,11 +2,12 @@ import {
   forwardRef,
   useEffect,
   useImperativeHandle,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
 } from 'react';
-import { CalendarDays, CornerDownLeft, Delete, Flag, Play, RefreshCw, Search, Timer } from 'lucide-react';
+import { CalendarDays, ChevronDown, CornerDownLeft, Delete, Flag, Play, RefreshCw, Search, Timer } from 'lucide-react';
 import { gridNeighbors, solveGrid } from '@/solvers';
 import type { LetterState } from '@/GuessGame';
 
@@ -93,6 +94,37 @@ function loadStore(): GridStore {
   }
 }
 
+// first adjacency path spelling the word, as cell indices, or null
+function findGridPath(cells: string[], word: string): number[] | null {
+  const size = Math.round(Math.sqrt(cells.length));
+  const NB = gridNeighbors(size, size);
+  const visited = new Array<boolean>(cells.length).fill(false);
+  const path: number[] = [];
+  const dfs = (pos: number, idx: number): boolean => {
+    if (idx === word.length) return true;
+    for (const nb of NB[pos]) {
+      if (!visited[nb] && cells[nb] === word[idx]) {
+        visited[nb] = true;
+        path.push(nb);
+        if (dfs(nb, idx + 1)) return true;
+        visited[nb] = false;
+        path.pop();
+      }
+    }
+    return false;
+  };
+  for (let i = 0; i < cells.length; i++) {
+    if (cells[i] === word[0]) {
+      visited[i] = true;
+      path.push(i);
+      if (dfs(i, 1)) return path;
+      visited[i] = false;
+      path.pop();
+    }
+  }
+  return null;
+}
+
 // classic Boggle scoring
 function wordScore(word: string): number {
   if (word.length <= 4) return 1;
@@ -124,6 +156,28 @@ const GridGame = forwardRef<
     dragPathRef.current = p;
     setDragPath(p);
   };
+
+  // word-trace preview (hover / press-hold on a word chip)
+  const [trace, setTrace] = useState<number[] | null>(null);
+  const [tracePts, setTracePts] = useState<{ x: number; y: number }[]>([]);
+  const [showMissed, setShowMissed] = useState(false);
+  const boardRef = useRef<HTMLDivElement>(null);
+
+  useLayoutEffect(() => {
+    if (!trace || !boardRef.current) {
+      setTracePts([]);
+      return;
+    }
+    const wrap = boardRef.current.getBoundingClientRect();
+    setTracePts(
+      trace.map((i) => {
+        const r = boardRef.current!
+          .querySelector(`[data-cell="${i}"]`)!
+          .getBoundingClientRect();
+        return { x: r.left + r.width / 2 - wrap.left, y: r.top + r.height / 2 - wrap.top };
+      })
+    );
+  }, [trace]);
 
   useEffect(() => {
     try {
@@ -357,6 +411,27 @@ const GridGame = forwardRef<
     };
   });
 
+  // reset trace preview and accordion when the board changes
+  useEffect(() => {
+    setTrace(null);
+    setShowMissed(false);
+  }, [record?.cells]);
+
+  function traceHandlers(word: string) {
+    const show = () => {
+      if (!record) return;
+      setTrace(findGridPath(record.cells, word));
+    };
+    const hide = () => setTrace(null);
+    return {
+      onMouseEnter: show,
+      onMouseLeave: hide,
+      onPointerDown: show, // press-hold on touch
+      onPointerUp: hide,
+      onPointerCancel: hide,
+    };
+  }
+
   function newPracticeGrid(size?: number) {
     setCurrent('');
     const n = size ?? Math.round(Math.sqrt(store.practice?.cells.length ?? 16));
@@ -477,32 +552,49 @@ const GridGame = forwardRef<
 
           {/* the grid — face-down until the clock starts; drag across cells to
               trace a word, release to submit (a plain tap types the letter) */}
-          <div
-            onPointerDown={onBoardPointerDown}
-            onPointerMove={onBoardPointerMove}
-            className={`grid gap-2 w-fit mx-auto touch-none select-none ${
-              record.cells.length === 9
-                ? 'grid-cols-3'
-                : record.cells.length === 25
-                  ? 'grid-cols-5'
-                  : 'grid-cols-4'
-            }`}
-          >
-            {record.cells.map((c, i) => (
-              <button
-                key={i}
-                data-cell={i}
-                disabled={!running}
-                className={`${record.cells.length === 25 ? 'w-9 h-10 sm:w-11 sm:h-12 text-lg sm:text-xl' : 'w-11 h-12 sm:w-12 sm:h-14 text-xl sm:text-2xl'} rounded-xl border-2 font-bold uppercase transition-colors
-                  ${!record.endsAt
-                    ? 'bg-white/5 border-white/15 text-slate-500'
-                    : dragPath.includes(i)
-                      ? 'bg-emerald-400/30 border-emerald-300 text-white'
-                      : 'bg-amber-400/10 border-amber-400/40 text-amber-200 hover:bg-amber-400/20'}`}
-              >
-                {record.endsAt ? c : '?'}
-              </button>
-            ))}
+          <div ref={boardRef} className="relative w-fit mx-auto">
+            <div
+              onPointerDown={onBoardPointerDown}
+              onPointerMove={onBoardPointerMove}
+              className={`grid gap-2 touch-none select-none ${
+                record.cells.length === 9
+                  ? 'grid-cols-3'
+                  : record.cells.length === 25
+                    ? 'grid-cols-5'
+                    : 'grid-cols-4'
+              }`}
+            >
+              {record.cells.map((c, i) => (
+                <button
+                  key={i}
+                  data-cell={i}
+                  disabled={!running}
+                  className={`${record.cells.length === 25 ? 'w-9 h-10 sm:w-11 sm:h-12 text-lg sm:text-xl' : 'w-11 h-12 sm:w-12 sm:h-14 text-xl sm:text-2xl'} rounded-xl border-2 font-bold uppercase transition-colors
+                    ${!record.endsAt
+                      ? 'bg-white/5 border-white/15 text-slate-500'
+                      : trace?.includes(i)
+                        ? 'bg-sky-400/30 border-sky-300 text-white'
+                        : dragPath.includes(i)
+                          ? 'bg-emerald-400/30 border-emerald-300 text-white'
+                          : 'bg-amber-400/10 border-amber-400/40 text-amber-200 hover:bg-amber-400/20'}`}
+                >
+                  {record.endsAt ? c : '?'}
+                </button>
+              ))}
+            </div>
+            {tracePts.length > 1 && (
+              <svg className="absolute inset-0 w-full h-full pointer-events-none">
+                <polyline
+                  points={tracePts.map((p) => `${p.x},${p.y}`).join(' ')}
+                  fill="none"
+                  stroke="rgb(125 211 252 / 0.9)"
+                  strokeWidth="4"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+                <circle cx={tracePts[0].x} cy={tracePts[0].y} r="6" fill="rgb(125 211 252)" />
+              </svg>
+            )}
           </div>
 
           {/* controls */}
@@ -587,7 +679,9 @@ const GridGame = forwardRef<
                 {[...record.found].sort().map((w) => (
                   <span
                     key={w}
-                    className={`px-2.5 py-1 rounded-lg border text-sm tracking-wide
+                    {...traceHandlers(w)}
+                    title="Hover to trace on the board"
+                    className={`px-2.5 py-1 rounded-lg border text-sm tracking-wide cursor-pointer select-none
                       ${w.length >= 7
                         ? 'bg-amber-400/10 border-amber-400/30 text-amber-200 font-semibold'
                         : 'bg-white/[0.04] border-white/10 text-slate-300'}`}
@@ -596,6 +690,38 @@ const GridGame = forwardRef<
                   </span>
                 ))}
               </div>
+            </div>
+          )}
+
+          {/* missed words, revealed after time is up */}
+          {record.finished && answers && answers.length > record.found.length && (
+            <div className="mt-4 max-w-md mx-auto">
+              <button
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => setShowMissed((v) => !v)}
+                className="inline-flex items-center gap-1.5 text-xs font-medium text-rose-300/90 uppercase tracking-wider hover:text-rose-200 transition-colors"
+              >
+                <ChevronDown
+                  className={`w-3.5 h-3.5 transition-transform ${showMissed ? 'rotate-180' : ''}`}
+                />
+                Missed words · {answers.length - record.found.length}
+              </button>
+              {showMissed && (
+                <div className="mt-2.5 flex flex-wrap justify-center gap-1.5 max-h-64 overflow-y-auto">
+                  {answers
+                    .filter((w) => !record.found.includes(w))
+                    .map((w) => (
+                      <span
+                        key={w}
+                        {...traceHandlers(w)}
+                        title="Hover to trace on the board"
+                        className="px-2.5 py-1 rounded-lg border text-sm tracking-wide cursor-pointer select-none bg-rose-400/10 border-rose-400/30 text-rose-300"
+                      >
+                        {w}
+                      </span>
+                    ))}
+                </div>
+              )}
             </div>
           )}
 
