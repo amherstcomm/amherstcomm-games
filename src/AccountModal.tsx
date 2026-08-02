@@ -36,7 +36,7 @@ export default function AccountModal({
     });
     if (err) {
       setStatus('error');
-      setError(err.message);
+      setError(err.message || 'Something went wrong sending the email — please try again.');
     } else {
       setStatus('sent');
     }
@@ -52,7 +52,7 @@ export default function AccountModal({
     });
     if (err) {
       setStatus('error');
-      setError(err.message);
+      setError(err.message || 'Something went wrong starting the sign-in — please try again.');
     }
   }
 
@@ -69,7 +69,7 @@ export default function AccountModal({
       type: 'email',
     });
     setVerifying(false);
-    if (err) setCodeError(err.message);
+    if (err) setCodeError(err.message || 'That code didn’t verify — request a fresh email and try again.');
     else onClose();
   }
 
@@ -157,8 +157,8 @@ export default function AccountModal({
                     inputMode="numeric"
                     autoComplete="one-time-code"
                     value={code}
-                    onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                    placeholder="6-digit code"
+                    onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 10))}
+                    placeholder="one-time code"
                     className="w-full h-11 px-4 rounded-lg bg-white/5 border border-white/15 text-white tracking-[0.3em] placeholder:tracking-normal placeholder:text-slate-600 focus:outline-none focus:border-amber-400/60 transition-colors"
                   />
                   <button
