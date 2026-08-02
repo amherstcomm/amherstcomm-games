@@ -8,12 +8,12 @@ import {
 } from 'react';
 import { CalendarDays, CornerDownLeft, Delete, RefreshCw, Search, Shuffle } from 'lucide-react';
 import type { LetterState } from '@/GuessGame';
+import { dailyDataUrl } from '@/dailyData';
 
 export type HiveGameHandle = { pressKey: (k: string) => void };
 
 const HIVE_KEY = 'anagrimoire:hive:v1';
-const DAILY_HIVE_URL =
-  'https://raw.githubusercontent.com/rptetzloff/anagrimoire/puzzle-data/data/daily-hive.json';
+const DAILY_HIVE_URL = dailyDataUrl('daily-hive');
 
 // outer hive cells, clockwise from the top, as [left%, top%] of the container
 const POSITIONS: [number, number][] = [
@@ -118,11 +118,17 @@ const HiveGame = forwardRef<
         const center = String(d.center).toLowerCase();
         const outers = (d.outers as string[]).map((c) => String(c).toLowerCase());
         if (!/^[a-z]$/.test(center) || outers.length !== 6) throw new Error('bad payload');
-        setStore((prev) =>
-          prev.dailyDate === d.date && prev.daily
-            ? prev
-            : { ...prev, dailyDate: d.date, daily: { center, outers, found: [] } }
-        );
+        // reset when the date changes OR the letters differ (e.g. the daily
+        // source changed mid-day); outers compare as sets since shuffling
+        // reorders the stored copy
+        setStore((prev) => {
+          const same =
+            prev.dailyDate === d.date &&
+            prev.daily &&
+            prev.daily.center === center &&
+            [...prev.daily.outers].sort().join('') === [...outers].sort().join('');
+          return same ? prev : { ...prev, dailyDate: d.date, daily: { center, outers, found: [] } };
+        });
       })
       .catch(() => {
         if (alive) setDailyError(true);

@@ -8,12 +8,12 @@ import {
 } from 'react';
 import { CalendarDays, CornerDownLeft, Delete, RefreshCw, RotateCcw, Search } from 'lucide-react';
 import type { LetterState } from '@/GuessGame';
+import { dailyDataUrl } from '@/dailyData';
 
 export type BoxGameHandle = { pressKey: (k: string) => void };
 
 const BOX_KEY = 'anagrimoire:box:v1';
-const DAILY_BOX_URL =
-  'https://raw.githubusercontent.com/rptetzloff/anagrimoire/puzzle-data/data/daily-box.json';
+const DAILY_BOX_URL = dailyDataUrl('daily-box');
 
 type BoxRecord = { sides: string[]; chain: string[] };
 type BoxStore = {
@@ -181,11 +181,15 @@ const BoxGame = forwardRef<
         if (!alive) return;
         const rec = sanitizeRecord({ sides: d.sides, chain: [] });
         if (!rec || typeof d.date !== 'string') throw new Error('bad payload');
-        setStore((prev) =>
-          prev.dailyDate === d.date && prev.daily
-            ? prev
-            : { ...prev, dailyDate: d.date, daily: rec }
-        );
+        // reset when the date changes OR the sides differ (e.g. the daily
+        // source changed mid-day)
+        setStore((prev) => {
+          const same =
+            prev.dailyDate === d.date &&
+            prev.daily &&
+            prev.daily.sides.join('') === rec.sides.join('');
+          return same ? prev : { ...prev, dailyDate: d.date, daily: rec };
+        });
       })
       .catch(() => {
         if (alive) setDailyError(true);

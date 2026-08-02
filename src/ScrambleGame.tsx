@@ -9,12 +9,12 @@ import {
 import { CalendarDays, CornerDownLeft, Delete, Flag, Play, RefreshCw, Search, Shuffle, Timer } from 'lucide-react';
 import { solveDescramble } from '@/solvers';
 import type { LetterState } from '@/GuessGame';
+import { dailyDataUrl } from '@/dailyData';
 
 export type ScrambleGameHandle = { pressKey: (k: string) => void };
 
 const SCRAMBLE_KEY = 'anagrimoire:scramble:v1';
-const DAILY_SCRAMBLE_URL =
-  'https://raw.githubusercontent.com/rptetzloff/anagrimoire/puzzle-data/data/daily-scramble.json';
+const DAILY_SCRAMBLE_URL = dailyDataUrl('daily-scramble');
 const DURATION_MS = 3 * 60 * 1000;
 
 type ScrambleRecord = {
@@ -109,11 +109,16 @@ const ScrambleGame = forwardRef<
         if (!alive) return;
         const rec = sanitizeRecord({ rack: d.letters, found: [], endsAt: null, finished: false });
         if (!rec || typeof d.date !== 'string') throw new Error('bad payload');
-        setStore((prev) =>
-          prev.dailyDate === d.date && prev.daily
-            ? prev
-            : { ...prev, dailyDate: d.date, daily: rec }
-        );
+        // reset when the date changes OR the rack differs (e.g. the daily
+        // source changed mid-day); racks compare as multisets since shuffling
+        // reorders the stored copy
+        setStore((prev) => {
+          const same =
+            prev.dailyDate === d.date &&
+            prev.daily &&
+            [...prev.daily.rack].sort().join('') === [...rec.rack].sort().join('');
+          return same ? prev : { ...prev, dailyDate: d.date, daily: rec };
+        });
       })
       .catch(() => {
         if (alive) setDailyError(true);

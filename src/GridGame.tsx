@@ -10,12 +10,12 @@ import {
 import { CalendarDays, ChevronDown, CornerDownLeft, Delete, Flag, Play, RefreshCw, Search, Timer } from 'lucide-react';
 import { findGridPath, gridNeighbors, solveGrid } from '@/solvers';
 import type { LetterState } from '@/GuessGame';
+import { dailyDataUrl } from '@/dailyData';
 
 export type GridGameHandle = { pressKey: (k: string) => void };
 
 const GRID_KEY = 'anagrimoire:grid:v1';
-const DAILY_GRID_URL =
-  'https://raw.githubusercontent.com/rptetzloff/anagrimoire/puzzle-data/data/daily-grid.json';
+const DAILY_GRID_URL = dailyDataUrl('daily-grid');
 const DURATION_MS = 3 * 60 * 1000;
 
 // classic sixteen-dice letter distributions (q treated as a plain letter)
@@ -165,11 +165,15 @@ const GridGame = forwardRef<
         if (!alive) return;
         const rec = sanitizeRecord({ cells: d.cells, found: [], endsAt: null, finished: false });
         if (!rec || typeof d.date !== 'string') throw new Error('bad payload');
-        setStore((prev) =>
-          prev.dailyDate === d.date && prev.daily
-            ? prev
-            : { ...prev, dailyDate: d.date, daily: rec }
-        );
+        // reset when the date changes OR the cells differ (e.g. the daily
+        // source changed mid-day)
+        setStore((prev) => {
+          const same =
+            prev.dailyDate === d.date &&
+            prev.daily &&
+            prev.daily.cells.join('') === rec.cells.join('');
+          return same ? prev : { ...prev, dailyDate: d.date, daily: rec };
+        });
       })
       .catch(() => {
         if (alive) setDailyError(true);
