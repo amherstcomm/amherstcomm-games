@@ -965,7 +965,7 @@ function App() {
           <div className="mb-5 inline-flex rounded-lg bg-white/5 border border-white/10 p-0.5 gap-0.5">
             {(
               [
-                { id: '6x8', label: '6×8 Strands' },
+                { id: '6x8', label: '6×8' },
                 { id: '8x10', label: '8×10' },
               ] as const
             ).map(({ id, label }) => (
