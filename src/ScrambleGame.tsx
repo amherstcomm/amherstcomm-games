@@ -515,8 +515,8 @@ const ScrambleGame = forwardRef<
                     key={w}
                     className={`px-2.5 py-1 rounded-lg border text-sm tracking-wide
                       ${w.length === record.rack.length
-                        ? 'bg-amber-400/10 border-amber-400/30 text-amber-200 font-semibold'
-                        : 'bg-white/[0.04] border-white/10 text-slate-300'}`}
+                        ? 'bg-emerald-400/25 border-emerald-300 text-emerald-100 font-semibold'
+                        : 'bg-emerald-400/10 border-emerald-400/30 text-emerald-200'}`}
                   >
                     {w}
                   </span>
@@ -535,7 +535,7 @@ const ScrambleGame = forwardRef<
                 {[...record.invalid!].sort().map((w) => (
                   <span
                     key={w}
-                    className="px-2.5 py-1 rounded-lg border text-sm tracking-wide bg-white/[0.02] border-white/10 text-slate-500 line-through"
+                    className="px-2.5 py-1 rounded-lg border text-sm tracking-wide bg-amber-400/10 border-amber-400/30 text-amber-300"
                   >
                     {w}
                   </span>

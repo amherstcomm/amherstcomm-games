@@ -429,7 +429,7 @@ const BoxGame = forwardRef<
               and the board is gone (solved) */}
           <div className={`${solved ? 'mb-7' : 'mb-2'} flex flex-wrap items-center justify-center gap-1.5 text-sm`}>
             {chain.map((w, i) => (
-              <span key={i} className="text-slate-300">
+              <span key={i} className="text-emerald-300">
                 {w}
                 {(!solved || i < chain.length - 1) && <span className="text-slate-600"> →</span>}
               </span>
@@ -548,7 +548,7 @@ const BoxGame = forwardRef<
                 {[...record.invalid!].sort().map((w) => (
                   <span
                     key={w}
-                    className="px-2.5 py-1 rounded-lg border text-sm tracking-wide bg-white/[0.02] border-white/10 text-slate-500 line-through"
+                    className="px-2.5 py-1 rounded-lg border text-sm tracking-wide bg-amber-400/10 border-amber-400/30 text-amber-300"
                   >
                     {w}
                   </span>
