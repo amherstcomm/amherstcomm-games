@@ -18,6 +18,7 @@ export type PersistedState = {
   keyboard: boolean;
   patternPlay: boolean;
   beePlay: boolean;
+  boxedPlay: boolean;
   pattern: { length: number; known: string[]; contains: string; excluded: string };
   descramble: { rack: string; useAll: boolean; minLength: number };
   bee: { center: string; outers: string[] };
@@ -36,6 +37,7 @@ export const DEFAULT_STATE: PersistedState = {
   keyboard: false,
   patternPlay: false,
   beePlay: false,
+  boxedPlay: false,
   pattern: { length: 5, known: Array(5).fill(''), contains: '', excluded: '' },
   descramble: { rack: '', useAll: false, minLength: 3 },
   bee: { center: '', outers: Array(6).fill('') },
@@ -108,6 +110,7 @@ export function loadState(): PersistedState {
       keyboard: p?.keyboard === true,
       patternPlay: p?.patternPlay === true,
       beePlay: p?.beePlay === true,
+      boxedPlay: p?.boxedPlay === true,
       pattern: {
         length,
         known,

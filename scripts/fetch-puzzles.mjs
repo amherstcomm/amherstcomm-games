@@ -138,3 +138,60 @@ const outers = hiveLetters.filter((c) => c !== center).sort(() => hiveRng() - 0.
 const hiveOut = { date: etDate, center, outers, fetchedAt: new Date().toISOString() };
 await writeFile('data/daily-hive.json', JSON.stringify(hiveOut, null, 2) + '\n');
 console.log('Wrote data/daily-hive.json:', JSON.stringify(hiveOut));
+
+// Daily box for play mode: our own generated Letter Boxed-style puzzle.
+// Built from two chainable words covering exactly 12 distinct letters, with
+// sides assigned so no consecutive pair shares a side — which guarantees a
+// two-word solution exists. Deterministic per Eastern date.
+function assignSides(w1, w2, rng) {
+  const letters = [...new Set(w1 + w2)];
+  const adjacent = new Set();
+  for (const w of [w1, w2]) {
+    for (let i = 1; i < w.length; i++) {
+      adjacent.add(w[i - 1] + w[i]);
+      adjacent.add(w[i] + w[i - 1]);
+    }
+  }
+  // most-constrained letters first
+  const degree = (c) => letters.filter((x) => adjacent.has(c + x)).length;
+  letters.sort((a, b) => degree(b) - degree(a));
+  const sides = [[], [], [], []];
+  const bt = (i) => {
+    if (i === letters.length) return true;
+    const c = letters[i];
+    const order = [0, 1, 2, 3].sort(() => rng() - 0.5);
+    for (const s of order) {
+      if (sides[s].length >= 3) continue;
+      if (sides[s].some((x) => adjacent.has(x + c))) continue;
+      sides[s].push(c);
+      if (bt(i + 1)) return true;
+      sides[s].pop();
+    }
+    return false;
+  };
+  return bt(0) ? sides.map((s) => s.join('')) : null;
+}
+
+const boxRng = mulberry32(xmur3(`anagrimoire-box-${etDate}`)());
+const boxWords = [...commonSet].filter((w) => w.length >= 4 && !/(.)\1/.test(w)).sort();
+const boxByFirst = new Map();
+for (const w of boxWords) {
+  const g = boxByFirst.get(w[0]) ?? [];
+  g.push(w);
+  boxByFirst.set(w[0], g);
+}
+let boxSides = null;
+for (let attempt = 0; attempt < 2000 && !boxSides; attempt++) {
+  const w1 = boxWords[Math.floor(boxRng() * boxWords.length)];
+  const cands = (boxByFirst.get(w1[w1.length - 1]) ?? []).filter(
+    (w2) => w2 !== w1 && new Set(w1 + w2).size === 12
+  );
+  if (!cands.length) continue;
+  const w2 = cands[Math.floor(boxRng() * cands.length)];
+  boxSides = assignSides(w1, w2, boxRng);
+}
+if (!boxSides) throw new Error('Could not generate a daily box');
+
+const boxOut = { date: etDate, sides: boxSides, par: 2, fetchedAt: new Date().toISOString() };
+await writeFile('data/daily-box.json', JSON.stringify(boxOut, null, 2) + '\n');
+console.log('Wrote data/daily-box.json:', JSON.stringify(boxOut));
