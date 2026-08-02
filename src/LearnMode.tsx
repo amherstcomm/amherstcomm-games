@@ -179,8 +179,8 @@ const GUESS_STEPS = [
     note: 'A is green — right letter, right spot. P, E, and R are amber: they’re in the word, but somewhere else. L is dark — not in the word at all.',
   },
   {
-    w: 'gripe',
-    note: 'Every amber gets reused: P settles into the fourth spot and turns green, and E finds its home at the end. G and R land green too — only the middle letter is left, and I is ruled out.',
+    w: 'drape',
+    note: 'Every clue gets used: A stays planted in its green spot, and the ambers find new homes — R, P, and E all turn green. Only the first letter is still wrong, and now D is out too.',
   },
   {
     w: 'grape',
