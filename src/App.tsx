@@ -1,6 +1,6 @@
 import { useMemo, useState, useEffect, useLayoutEffect, useRef, type ButtonHTMLAttributes, type ReactNode } from 'react';
 import { Search, Sparkles, Eraser, ArrowDown, ArrowUp, X, BookOpen, Grid3x3, Shuffle, Hexagon, Check, Keyboard, Delete, Github, Info, Square, CalendarDays, Star, Gamepad2, CornerDownLeft, LayoutGrid, Puzzle, BarChart3, UserRound } from 'lucide-react';
-import LearnMode from '@/LearnMode';
+import LearnMode, { type LearnModeHandle } from '@/LearnMode';
 import type { Session } from '@supabase/supabase-js';
 import StatsModal from '@/StatsModal';
 import AccountModal from '@/AccountModal';
@@ -543,6 +543,7 @@ function App() {
   const boxRef = useRef<BoxGameHandle>(null);
   const scrambleRef = useRef<ScrambleGameHandle>(null);
   const gridRef = useRef<GridGameHandle>(null);
+  const learnRef = useRef<LearnModeHandle>(null);
 
   const patternPlayActive = mode === 'pattern' && patternPlay && !learnMode;
   const beePlayActive = mode === 'bee' && beePlay && !learnMode;
@@ -834,6 +835,10 @@ function App() {
   }
 
   function pressKey(k: string) {
+    if (learnMode) {
+      learnRef.current?.pressKey(k);
+      return;
+    }
     if (weavePlayActive) return; // weave play is trace-only
     if (patternPlayActive) {
       gameRef.current?.pressKey(k);
@@ -1001,7 +1006,7 @@ function App() {
 
         {learnMode && (
           <div className="mb-8">
-            <LearnMode mode={mode} standardWords={standardWordsArr} />
+            <LearnMode ref={learnRef} mode={mode} standardWords={standardWordsArr} />
           </div>
         )}
 
@@ -2025,7 +2030,7 @@ function App() {
               'qwertyuiop'.split(''),
               'asdfghjkl'.split(''),
               [
-                ...(playActive ? ['enter'] : []),
+                ...(playActive || learnMode ? ['enter'] : []),
                 ...(mode === 'descramble' ? ['?'] : []),
                 ...'zxcvbnm'.split(''),
                 'backspace',

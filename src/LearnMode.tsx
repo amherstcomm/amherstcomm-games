@@ -1,7 +1,39 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import {
+  forwardRef,
+  useEffect,
+  useImperativeHandle,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import { CornerDownLeft, Delete, RefreshCw, RotateCcw } from 'lucide-react';
 import { solveGrid, gridNeighbors } from '@/solvers';
 import type { Mode } from '@/storage';
+
+export type LearnModeHandle = { pressKey: (k: string) => void };
+
+// demos register a key handler so both the physical keyboard and the
+// on-screen keyboard can drive them
+type RegisterKeys = (fn: ((k: string) => void) | null) => void;
+
+function useDemoKeys(register: RegisterKeys, handle: (k: string) => void) {
+  useEffect(() => {
+    register(handle);
+  });
+  useEffect(() => () => register(null), [register]);
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+      if (e.key === 'Enter') handle('enter');
+      else if (e.key === 'Backspace') handle('backspace');
+      else if (/^[a-zA-Z]$/.test(e.key)) handle(e.key.toLowerCase());
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  });
+}
 
 // ---------------------------------------------------------------------------
 // shared bits
@@ -147,8 +179,8 @@ const GUESS_STEPS = [
     note: 'A is green — right letter, right spot. P, E, and R are amber: they’re in the word, but somewhere else. L is dark — not in the word at all.',
   },
   {
-    w: 'grace',
-    note: 'Moving the amber letters around pays off: G, R, A, and E lock in green. Only the fourth letter is still a mystery — and C is now ruled out.',
+    w: 'gripe',
+    note: 'Every amber gets reused: P settles into the fourth spot and turns green, and E finds its home at the end. G and R land green too — only the middle letter is left, and I is ruled out.',
   },
   {
     w: 'grape',
@@ -238,12 +270,22 @@ function scrambleScore(word: string): number {
   return (word.length === 3 ? 1 : word.length) + (word.length === SCRAMBLE_RACK.length ? 7 : 0);
 }
 
-function LearnScramble({ dict }: { dict: Set<string> | null }) {
+function LearnScramble({ dict, register }: { dict: Set<string> | null; register: RegisterKeys }) {
   const [current, setCurrent] = useState('');
   const [found, setFound] = useState<string[]>([]);
   const [flash, show] = useFlash();
 
   const score = found.reduce((n, w) => n + scrambleScore(w), 0);
+
+  useDemoKeys(register, (k) => {
+    if (k === 'enter') return submit();
+    if (k === 'backspace') return setCurrent((c) => c.slice(0, -1));
+    const inRack = SCRAMBLE_RACK.filter((c) => c === k).length;
+    const inCurrent = current.split('').filter((c) => c === k).length;
+    if (inRack === 0) return show('Not on the rack');
+    if (inCurrent >= inRack) return show('No more of that letter');
+    setCurrent((c) => c + k);
+  });
 
   // rack letters not yet used by the current entry
   const remaining = useMemo(() => {
@@ -307,8 +349,8 @@ function LearnScramble({ dict }: { dict: Set<string> | null }) {
 
       <Section title="Try it — no clock, just the rack">
         <p className="text-sm text-slate-400 mb-4">
-          Tap letters to build a word, then press Enter. (Psst: this rack hides more than one
-          7-letter word.)
+          Tap letters or type to build a word, then press Enter. (Psst: this rack hides more
+          than one 7-letter word.)
         </p>
         <div className="mb-4 mx-auto max-w-sm h-12 px-4 rounded-xl bg-white/5 border-2 border-white/10 flex items-center justify-center overflow-hidden">
           <span className="text-2xl font-bold tracking-[0.2em] uppercase text-white whitespace-nowrap">
@@ -391,11 +433,17 @@ function hiveScore(word: string): number {
   return (word.length === 4 ? 1 : word.length) + (pangram ? 7 : 0);
 }
 
-function LearnHive({ dict }: { dict: Set<string> | null }) {
+function LearnHive({ dict, register }: { dict: Set<string> | null; register: RegisterKeys }) {
   const [current, setCurrent] = useState('');
   const [found, setFound] = useState<string[]>([]);
   const [flash, show] = useFlash();
   const allowed = useMemo(() => new Set([HIVE_CENTER, ...HIVE_OUTERS]), []);
+
+  useDemoKeys(register, (k) => {
+    if (k === 'enter') return submit();
+    if (k === 'backspace') return setCurrent((c) => c.slice(0, -1));
+    if (allowed.has(k)) setCurrent((c) => c + k);
+  });
 
   function submit() {
     const word = current;
@@ -445,9 +493,10 @@ function LearnHive({ dict }: { dict: Set<string> | null }) {
 
       <Section title="Try it — a mini hive">
         <p className="text-sm text-slate-400 mb-2">
-          Tap letters, then Enter. Every word needs the{' '}
-          <span className="text-amber-300 font-bold uppercase">{HIVE_CENTER}</span>. One word
-          here uses all seven letters…
+          Tap letters or type, then Enter. Every word needs the{' '}
+          <span className="text-amber-300 font-bold uppercase">{HIVE_CENTER}</span>. One{' '}
+          <span className="italic text-slate-300">notable</span> word here uses all seven
+          letters…
         </p>
         <div className="mb-3 mx-auto max-w-sm h-12 px-4 rounded-xl bg-white/5 border-2 border-white/10 flex items-center justify-center overflow-hidden">
           <span className="text-2xl font-bold tracking-[0.2em] uppercase whitespace-nowrap">
@@ -682,9 +731,9 @@ function LearnGrid({ standardWords }: { standardWords: string[] | null }) {
 // Boxed
 // ---------------------------------------------------------------------------
 
-// twelve distinct letters from the chain PLUMBING -> GOTHIC, sides assigned
-// so no consecutive pair in either word shares one
-const BOX_SIDES = ['pub', 'lmi', 'noh', 'gtc'];
+// twelve distinct letters from the chain MAGNET -> TROPICAL (both Standard-
+// dictionary words), sides assigned so no consecutive pair shares one
+const BOX_SIDES = ['ant', 'ger', 'oim', 'pcl'];
 const BOX_TONES = [
   'bg-sky-400/10 border-sky-400/40 text-sky-200 hover:bg-sky-400/20',
   'bg-violet-400/10 border-violet-400/40 text-violet-200 hover:bg-violet-400/20',
@@ -704,9 +753,16 @@ const BOX_POSITIONS: [number, number][][] = [
   [[6, 24], [6, 50], [6, 76]],
 ];
 
-function LearnBoxed({ dict }: { dict: Set<string> | null }) {
+// letter -> [x, y] position around the square, for the hover chord trace
+const BOX_LETTER_POS = new Map<string, [number, number]>();
+BOX_SIDES.forEach((side, s) => {
+  side.split('').forEach((c, j) => BOX_LETTER_POS.set(c, BOX_POSITIONS[s][j]));
+});
+
+function LearnBoxed({ dict, register }: { dict: Set<string> | null; register: RegisterKeys }) {
   const [chain, setChain] = useState<string[]>([]);
   const [current, setCurrent] = useState('');
+  const [trace, setTrace] = useState<string | null>(null);
   const [flash, show] = useFlash();
 
   const sideOf = useMemo(() => {
@@ -719,6 +775,24 @@ function LearnBoxed({ dict }: { dict: Set<string> | null }) {
 
   const covered = useMemo(() => new Set(chain.join('')), [chain]);
   const solved = covered.size === 12;
+
+  useDemoKeys(register, (k) => {
+    if (k === 'enter') return submit();
+    if (k === 'backspace') return backspace();
+    if (sideOf.has(k)) tap(k);
+  });
+
+  function traceHandlers(word: string) {
+    const showTrace = () => setTrace(word);
+    const hide = () => setTrace(null);
+    return {
+      onMouseEnter: showTrace,
+      onMouseLeave: hide,
+      onPointerDown: showTrace,
+      onPointerUp: hide,
+      onPointerCancel: hide,
+    };
+  }
 
   function tap(c: string) {
     if (solved) return;
@@ -793,13 +867,19 @@ function LearnBoxed({ dict }: { dict: Set<string> | null }) {
 
       <Section title="Try it — a mini box">
         <p className="text-sm text-slate-400 mb-2">
-          Tap letters to build words; notice how same-side letters refuse to connect. Cover
-          all twelve. (Stuck? PLUMBING → GOTHIC does it in two.)
+          Tap letters or type; notice how same-side letters refuse to connect. Cover all
+          twelve. (Stuck? MAGNET → TROPICAL does it in two.)
         </p>
         <div className="mb-2 flex flex-wrap items-center justify-center gap-1.5 text-sm min-h-5">
           {chain.map((w, i) => (
             <span key={i} className="text-emerald-300">
-              {w}
+              <span
+                {...traceHandlers(w)}
+                title="Hover to trace on the box"
+                className="cursor-pointer select-none hover:text-emerald-200 underline decoration-dotted decoration-emerald-500/40 underline-offset-2"
+              >
+                {w}
+              </span>
               {(!solved || i < chain.length - 1) && <span className="text-slate-600"> →</span>}
             </span>
           ))}
@@ -814,6 +894,31 @@ function LearnBoxed({ dict }: { dict: Set<string> | null }) {
         )}
         <div className="relative w-64 h-64 mx-auto">
           <div className="absolute inset-10 rounded-xl border-2 border-white/15 bg-white/[0.02]" />
+          {trace && (
+            <svg
+              viewBox="0 0 100 100"
+              preserveAspectRatio="none"
+              className="absolute inset-0 w-full h-full pointer-events-none"
+            >
+              <polyline
+                points={trace
+                  .split('')
+                  .map((c) => BOX_LETTER_POS.get(c)!)
+                  .map(([x, y]) => `${x},${y}`)
+                  .join(' ')}
+                fill="none"
+                stroke="rgb(125 211 252 / 0.9)"
+                strokeWidth="3"
+                vectorEffect="non-scaling-stroke"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+              {(() => {
+                const [x, y] = BOX_LETTER_POS.get(trace[0])!;
+                return <circle cx={x} cy={y} r="2" fill="rgb(125 211 252)" />;
+              })()}
+            </svg>
+          )}
           {BOX_SIDES.map((side, s) =>
             side.split('').map((c, j) => {
               const [x, y] = BOX_POSITIONS[s][j];
@@ -841,6 +946,7 @@ function LearnBoxed({ dict }: { dict: Set<string> | null }) {
             onClick={() => {
               setChain([]);
               setCurrent('');
+              setTrace(null);
             }}
             ariaLabel="Restart"
           >
@@ -919,6 +1025,25 @@ function LearnWeave({ dict }: { dict: Set<string> | null }) {
     return m;
   }, [found]);
   const complete = found.length === WEAVE_ANSWERS.length;
+
+  // on completion, draw every word's path — just like the real game
+  const boardRef = useRef<HTMLDivElement>(null);
+  const [lines, setLines] = useState<{ pts: { x: number; y: number }[]; span: boolean }[]>([]);
+  useLayoutEffect(() => {
+    if (!complete || !boardRef.current) {
+      setLines([]);
+      return;
+    }
+    const wrap = boardRef.current.getBoundingClientRect();
+    const measure = (path: number[]) =>
+      path.map((i) => {
+        const r = boardRef.current!
+          .querySelector(`[data-learn-wcell="${i}"]`)!
+          .getBoundingClientRect();
+        return { x: r.left + r.width / 2 - wrap.left, y: r.top + r.height / 2 - wrap.top };
+      });
+    setLines(WEAVE_ANSWERS.map((a) => ({ pts: measure(a.path), span: a.span })));
+  }, [complete]);
 
   function cellAt(x: number, y: number): number | null {
     const el = document.elementFromPoint(x, y)?.closest('[data-learn-wcell]');
@@ -1012,31 +1137,48 @@ function LearnWeave({ dict }: { dict: Set<string> | null }) {
         <p className="text-xs text-slate-500 mb-4">
           {found.length} / {WEAVE_ANSWERS.length} found
         </p>
-        <div
-          onPointerDown={onDown}
-          onPointerMove={onMove}
-          className="grid grid-cols-4 gap-1.5 w-fit mx-auto touch-none select-none"
-        >
-          {WEAVE_CELLS.map((c, i) => {
-            const lock = locked.get(i);
-            return (
-              <button
-                key={i}
-                data-learn-wcell={i}
-                disabled={complete}
-                className={`w-11 h-12 rounded-lg border-2 text-xl font-bold uppercase transition-colors
-                  ${lock === 'span'
-                    ? 'bg-amber-400/50 border-amber-300 text-white'
-                    : lock === 'theme'
-                      ? 'bg-sky-400/40 border-sky-300 text-white'
-                      : dragPath.includes(i)
-                        ? 'bg-emerald-400/30 border-emerald-300 text-white'
-                        : 'bg-white/5 border-white/15 text-white hover:bg-white/10'}`}
-              >
-                {c}
-              </button>
-            );
-          })}
+        <div ref={boardRef} className="relative w-fit mx-auto">
+          <div
+            onPointerDown={onDown}
+            onPointerMove={onMove}
+            className="grid grid-cols-4 gap-1.5 touch-none select-none"
+          >
+            {WEAVE_CELLS.map((c, i) => {
+              const lock = locked.get(i);
+              return (
+                <button
+                  key={i}
+                  data-learn-wcell={i}
+                  disabled={complete}
+                  className={`w-11 h-12 rounded-lg border-2 text-xl font-bold uppercase transition-colors
+                    ${lock === 'span'
+                      ? 'bg-amber-400/50 border-amber-300 text-white'
+                      : lock === 'theme'
+                        ? 'bg-sky-400/40 border-sky-300 text-white'
+                        : dragPath.includes(i)
+                          ? 'bg-emerald-400/30 border-emerald-300 text-white'
+                          : 'bg-white/5 border-white/15 text-white hover:bg-white/10'}`}
+                >
+                  {c}
+                </button>
+              );
+            })}
+          </div>
+          {lines.length > 0 && (
+            <svg className="absolute inset-0 w-full h-full pointer-events-none">
+              {lines.map((line, i) => (
+                <polyline
+                  key={i}
+                  points={line.pts.map((p) => `${p.x},${p.y}`).join(' ')}
+                  fill="none"
+                  stroke={line.span ? 'rgb(251 191 36 / 0.85)' : 'rgb(125 211 252 / 0.7)'}
+                  strokeWidth="3.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              ))}
+            </svg>
+          )}
         </div>
         <FlashLine flash={flash} />
         {complete && (
@@ -1091,14 +1233,17 @@ const TITLES: Record<Mode, string> = {
   weave: 'Weave',
 };
 
-export default function LearnMode({
-  mode,
-  standardWords,
-}: {
-  mode: Mode;
-  standardWords: string[] | null;
-}) {
+const LearnMode = forwardRef<LearnModeHandle, { mode: Mode; standardWords: string[] | null }>(
+  function LearnMode({ mode, standardWords }, ref) {
   const dict = useMemo(() => (standardWords ? new Set(standardWords) : null), [standardWords]);
+
+  // the active demo registers its key handler here; the on-screen keyboard
+  // reaches it through the imperative handle
+  const keyHandler = useRef<((k: string) => void) | null>(null);
+  const register = useRef<RegisterKeys>((fn) => {
+    keyHandler.current = fn;
+  }).current;
+  useImperativeHandle(ref, () => ({ pressKey: (k) => keyHandler.current?.(k) }));
 
   return (
     <div className="text-center">
@@ -1108,10 +1253,10 @@ export default function LearnMode({
       </p>
 
       {mode === 'pattern' && <LearnGuess />}
-      {mode === 'descramble' && <LearnScramble dict={dict} />}
-      {mode === 'bee' && <LearnHive dict={dict} />}
+      {mode === 'descramble' && <LearnScramble dict={dict} register={register} />}
+      {mode === 'bee' && <LearnHive dict={dict} register={register} />}
       {mode === 'grid' && <LearnGrid standardWords={standardWords} />}
-      {mode === 'boxed' && <LearnBoxed dict={dict} />}
+      {mode === 'boxed' && <LearnBoxed dict={dict} register={register} />}
       {mode === 'weave' && <LearnWeave dict={dict} />}
 
       <p className="mt-2 text-xs text-slate-500 border-t border-white/10 pt-5 max-w-lg mx-auto">
@@ -1121,4 +1266,6 @@ export default function LearnMode({
       </p>
     </div>
   );
-}
+});
+
+export default LearnMode;
