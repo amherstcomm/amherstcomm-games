@@ -92,6 +92,86 @@ export function solveBoxed(list: string[], input: BoxedInput): string[] {
   return matches.sort((a, b) => b.length - a.length || (a < b ? -1 : 1));
 }
 
+export type GridInput = {
+  cells: string[]; // row-major rectangular grid
+  cols: number; // board width; rows = cells.length / cols
+};
+
+// neighbor indices (including diagonals) for each cell of a rows x cols grid
+const neighborCache = new Map<string, number[][]>();
+export function gridNeighbors(rows: number, cols: number): number[][] {
+  const key = `${rows}x${cols}`;
+  const cached = neighborCache.get(key);
+  if (cached) return cached;
+  const out: number[][] = [];
+  for (let i = 0; i < rows * cols; i++) {
+    const r = Math.floor(i / cols);
+    const c = i % cols;
+    const adj: number[] = [];
+    for (let dr = -1; dr <= 1; dr++) {
+      for (let dc = -1; dc <= 1; dc++) {
+        if (!dr && !dc) continue;
+        const rr = r + dr;
+        const cc = c + dc;
+        if (rr >= 0 && rr < rows && cc >= 0 && cc < cols) adj.push(rr * cols + cc);
+      }
+    }
+    out.push(adj);
+  }
+  neighborCache.set(key, out);
+  return out;
+}
+
+export function solveGrid(list: string[], input: GridInput): string[] {
+  const { cells, cols } = input;
+  const rows = cols > 0 ? cells.length / cols : 0;
+  if (
+    !Number.isInteger(rows) ||
+    rows < 3 ||
+    cols < 3 ||
+    rows > 8 ||
+    cols > 8 ||
+    cells.some((c) => !c)
+  ) {
+    return [];
+  }
+  const GRID_NEIGHBORS = gridNeighbors(rows, cols);
+
+  // narrow to words spellable from the grid's alphabet, then prefix-prune the DFS
+  const present = new Set(cells);
+  const candidates = list.filter((w) => {
+    if (w.length < 3 || w.length > cells.length) return false;
+    for (let i = 0; i < w.length; i++) if (!present.has(w[i])) return false;
+    return true;
+  });
+  const wordSet = new Set(candidates);
+  const prefixes = new Set<string>();
+  for (const w of candidates) for (let i = 1; i <= w.length; i++) prefixes.add(w.slice(0, i));
+
+  // visited array rather than a bitmask — boards can exceed 32 cells
+  const found = new Set<string>();
+  const visited = new Array<boolean>(cells.length).fill(false);
+  const dfs = (pos: number, cur: string) => {
+    if (!prefixes.has(cur)) return;
+    if (cur.length >= 3 && wordSet.has(cur)) found.add(cur);
+    for (const nb of GRID_NEIGHBORS[pos]) {
+      if (!visited[nb]) {
+        visited[nb] = true;
+        dfs(nb, cur + cells[nb]);
+        visited[nb] = false;
+      }
+    }
+  };
+  for (let i = 0; i < cells.length; i++) {
+    visited[i] = true;
+    dfs(i, cells[i]);
+    visited[i] = false;
+  }
+
+  // longest words first, then alphabetical
+  return [...found].sort((a, b) => b.length - a.length || (a < b ? -1 : 1));
+}
+
 export type DescrambleInput = {
   letters: string[]; // the rack, a-z only
   wildcards: number; // blank tiles that can stand in for any letter
