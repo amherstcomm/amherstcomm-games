@@ -19,3 +19,7 @@ export function dailyDataUrl(
 
 // practice puzzles are pre-generated server-side and shared by both sites
 export const WEAVE_POOL_URL = `${BASE}/weave-pool.json`;
+
+// which daily set this site plays — synced results are tagged with it so
+// dev-site testing never pollutes production's global daily stats
+export const DAILY_ENV: 'dev' | 'prod' = IS_DEV_SITE ? 'dev' : 'prod';

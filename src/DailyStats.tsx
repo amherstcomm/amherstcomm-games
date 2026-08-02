@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Users } from 'lucide-react';
+import { DAILY_ENV } from '@/dailyData';
 import { supabase } from '@/supabase';
 import { formatElapsed } from '@/useUpTimer';
 
@@ -64,7 +65,7 @@ export default function DailyStats({ game, date }: { game: Game; date: string })
       return;
     }
     let alive = true;
-    supabase.rpc('daily_stats', { p_game: game, p_date: date }).then(({ data, error }) => {
+    supabase.rpc('daily_stats', { p_game: game, p_date: date, p_env: DAILY_ENV }).then(({ data, error }) => {
       if (!alive || error || !data) return;
       cache.set(key, data);
       setStats(data);

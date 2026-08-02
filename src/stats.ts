@@ -6,6 +6,7 @@
 // synced view replays that log through the same applyEvent logic, so the
 // two can never drift.
 
+import { DAILY_ENV } from '@/dailyData';
 import { supabase } from '@/supabase';
 
 const STATS_KEY = 'anagrimoire:stats:v1';
@@ -250,7 +251,9 @@ function syncEvent(e: GameEvent, daily: boolean, puzzleDate: string | null): voi
         game: e.game,
         daily,
         puzzle_date: daily && puzzleDate ? puzzleDate : null,
-        payload: e.payload,
+        // env tags which daily set (dev/prod) this result belongs to, so
+        // global daily stats never mix the two sites' different puzzles
+        payload: { ...e.payload, env: DAILY_ENV },
       });
     })
     .then((res) => {
