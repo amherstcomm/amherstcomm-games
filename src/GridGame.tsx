@@ -165,11 +165,15 @@ const GridGame = forwardRef<
         if (!alive) return;
         const rec = sanitizeRecord({ cells: d.cells, found: [], endsAt: null, finished: false });
         if (!rec || typeof d.date !== 'string') throw new Error('bad payload');
-        setStore((prev) =>
-          prev.dailyDate === d.date && prev.daily
-            ? prev
-            : { ...prev, dailyDate: d.date, daily: rec }
-        );
+        // reset when the date changes OR the cells differ (e.g. the daily
+        // source changed mid-day)
+        setStore((prev) => {
+          const same =
+            prev.dailyDate === d.date &&
+            prev.daily &&
+            prev.daily.cells.join('') === rec.cells.join('');
+          return same ? prev : { ...prev, dailyDate: d.date, daily: rec };
+        });
       })
       .catch(() => {
         if (alive) setDailyError(true);

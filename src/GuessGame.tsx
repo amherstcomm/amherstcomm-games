@@ -113,10 +113,20 @@ const GuessGame = forwardRef<
         if (!alive) return;
         if (typeof d?.date !== 'string' || typeof d?.words !== 'object') throw new Error('bad payload');
         setDailyData({ date: d.date, words: d.words });
-        // a new day resets all daily boards
-        setStore((prev) =>
-          prev.dailyDate === d.date ? prev : { ...prev, dailyDate: d.date, daily: {} }
-        );
+        // a new day resets all daily boards; same-day boards whose secret no
+        // longer matches the feed (e.g. the daily source changed) reset too
+        setStore((prev) => {
+          if (prev.dailyDate !== d.date) return { ...prev, dailyDate: d.date, daily: {} };
+          const daily = { ...prev.daily };
+          let changed = false;
+          for (const [len, rec] of Object.entries(daily)) {
+            if (d.words[len] !== rec.secret) {
+              delete daily[len];
+              changed = true;
+            }
+          }
+          return changed ? { ...prev, daily } : prev;
+        });
       })
       .catch(() => {
         if (alive) setDailyError(true);

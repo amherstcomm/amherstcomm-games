@@ -109,11 +109,16 @@ const ScrambleGame = forwardRef<
         if (!alive) return;
         const rec = sanitizeRecord({ rack: d.letters, found: [], endsAt: null, finished: false });
         if (!rec || typeof d.date !== 'string') throw new Error('bad payload');
-        setStore((prev) =>
-          prev.dailyDate === d.date && prev.daily
-            ? prev
-            : { ...prev, dailyDate: d.date, daily: rec }
-        );
+        // reset when the date changes OR the rack differs (e.g. the daily
+        // source changed mid-day); racks compare as multisets since shuffling
+        // reorders the stored copy
+        setStore((prev) => {
+          const same =
+            prev.dailyDate === d.date &&
+            prev.daily &&
+            [...prev.daily.rack].sort().join('') === [...rec.rack].sort().join('');
+          return same ? prev : { ...prev, dailyDate: d.date, daily: rec };
+        });
       })
       .catch(() => {
         if (alive) setDailyError(true);
