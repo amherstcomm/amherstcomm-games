@@ -10,6 +10,7 @@ import { CalendarDays, CornerDownLeft, Delete, Flag, Play, RefreshCw, Search, Sh
 import { solveDescramble } from '@/solvers';
 import type { LetterState } from '@/GuessGame';
 import { dailyDataUrl } from '@/dailyData';
+import { recordSprint } from '@/stats';
 
 export type ScrambleGameHandle = { pressKey: (k: string) => void };
 
@@ -166,8 +167,10 @@ const ScrambleGame = forwardRef<
   useEffect(() => {
     if (running && remaining === 0) {
       setCurrent('');
+      recordSprint(store.dailyMode, 'scramble', score, record?.found.length ?? 0);
       updateRecord((r) => ({ ...r, finished: true }));
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [running, remaining]);
 
   const answers = useMemo(() => {

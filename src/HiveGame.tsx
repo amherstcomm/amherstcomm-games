@@ -10,6 +10,7 @@ import { CalendarDays, CornerDownLeft, Delete, RefreshCw, Search, Shuffle, Timer
 import { formatElapsed, useUpTimer } from '@/useUpTimer';
 import type { LetterState } from '@/GuessGame';
 import { dailyDataUrl } from '@/dailyData';
+import { recordHiveWord } from '@/stats';
 
 export type HiveGameHandle = { pressKey: (k: string) => void };
 
@@ -276,6 +277,14 @@ const HiveGame = forwardRef<
       return;
     }
     const pangram = isPangram(word);
+    const newScore = score + wordScore(word, pangram);
+    recordHiveWord(
+      store.dailyMode,
+      pangram,
+      newScore,
+      maxScore > 0 && score < geniusAt && newScore >= geniusAt,
+      maxScore > 0 && newScore >= maxScore
+    );
     updateRecord((r) => ({ ...r, found: [word, ...r.found] }));
     showFlash(pangram ? `Pangram! +${wordScore(word, true)}` : `+${wordScore(word, false)}`, true);
   }

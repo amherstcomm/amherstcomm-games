@@ -1,5 +1,6 @@
 import { useMemo, useState, useEffect, useLayoutEffect, useRef, type ButtonHTMLAttributes, type ReactNode } from 'react';
-import { Search, Sparkles, Eraser, ArrowDown, ArrowUp, X, BookOpen, Grid3x3, Shuffle, Hexagon, Check, Keyboard, Delete, Github, Info, Square, CalendarDays, Star, Gamepad2, CornerDownLeft, LayoutGrid, Puzzle } from 'lucide-react';
+import { Search, Sparkles, Eraser, ArrowDown, ArrowUp, X, BookOpen, Grid3x3, Shuffle, Hexagon, Check, Keyboard, Delete, Github, Info, Square, CalendarDays, Star, Gamepad2, CornerDownLeft, LayoutGrid, Puzzle, BarChart3 } from 'lucide-react';
+import StatsModal from '@/StatsModal';
 import GuessGame, { type GuessGameHandle, type LetterState } from '@/GuessGame';
 import HiveGame, { type HiveGameHandle } from '@/HiveGame';
 import BoxGame, { type BoxGameHandle } from '@/BoxGame';
@@ -494,6 +495,7 @@ function App() {
   const [sorts, setSorts] = useState(initial.sort);
   const [kbOpen, setKbOpen] = useState(initial.keyboard);
   const [aboutOpen, setAboutOpen] = useState(false);
+  const [statsOpen, setStatsOpen] = useState(false);
   const [patternPlay, setPatternPlay] = useState(initial.patternPlay);
   const [beePlay, setBeePlay] = useState(initial.beePlay);
   const [boxedPlay, setBoxedPlay] = useState(initial.boxedPlay);
@@ -1764,6 +1766,13 @@ function App() {
               GitHub
             </a>
             <button
+              onClick={() => setStatsOpen(true)}
+              className="inline-flex items-center gap-1.5 hover:text-slate-300 transition-colors"
+            >
+              <BarChart3 className="w-3.5 h-3.5" />
+              Stats
+            </button>
+            <button
               onClick={() => setAboutOpen(true)}
               className="inline-flex items-center gap-1.5 hover:text-slate-300 transition-colors"
             >
@@ -1773,6 +1782,8 @@ function App() {
           </div>
         </footer>
       </div>
+
+      {statsOpen && <StatsModal onClose={() => setStatsOpen(false)} />}
 
       {/* about & licenses modal */}
       {aboutOpen && (
