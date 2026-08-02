@@ -6,8 +6,9 @@ import {
   useRef,
   useState,
 } from 'react';
-import { CalendarDays, RefreshCw, Search, Trophy } from 'lucide-react';
+import { CalendarDays, RefreshCw, Search, Timer, Trophy } from 'lucide-react';
 import { dailyDataUrl } from '@/dailyData';
+import { formatElapsed, useUpTimer } from '@/useUpTimer';
 
 export type LetterState = 'correct' | 'present' | 'absent';
 export type GuessGameHandle = { pressKey: (k: string) => void };
@@ -16,7 +17,7 @@ const MAX_GUESSES = 6;
 const PLAY_KEY = 'anagrimoire:play:v1';
 const DAILY_URL = dailyDataUrl('daily-words');
 
-type GameRecord = { secret: string; guesses: string[] }; // secret is base64
+type GameRecord = { secret: string; guesses: string[]; elapsedMs?: number }; // secret is base64
 type Stats = { played: number; won: number; streak: number; lastWinDate: string };
 type PlayStore = {
   dailyMode: boolean;
@@ -192,6 +193,20 @@ const GuessGame = forwardRef<
   const won = secret !== null && guesses.includes(secret);
   const lost = !won && guesses.length >= MAX_GUESSES;
   const playing = secret !== null && !won && !lost;
+
+  // thinking time: counts while the board is visible and unfinished
+  useUpTimer(playing, (delta) => {
+    setStore((prev) => {
+      const bucket = prev.dailyMode ? prev.daily : prev.practice;
+      const rec = bucket[lenKey];
+      if (!rec) return prev;
+      const updated = {
+        ...bucket,
+        [lenKey]: { ...rec, elapsedMs: (rec.elapsedMs ?? 0) + delta },
+      };
+      return prev.dailyMode ? { ...prev, daily: updated } : { ...prev, practice: updated };
+    });
+  });
 
   // aggregate keyboard letter states, correct > present > absent
   useEffect(() => {
@@ -378,17 +393,25 @@ const GuessGame = forwardRef<
         ))}
       </div>
 
-      {dailyMode && (
-        <div className="mb-4 flex items-center justify-center gap-4 text-xs text-slate-400">
-          <span className="inline-flex items-center gap-1.5">
-            <Trophy className="w-3.5 h-3.5 text-amber-400" />
-            Streak {store.stats.streak}
+      <div className="mb-4 flex items-center justify-center gap-4 text-xs text-slate-400">
+        {record && (
+          <span className="inline-flex items-center gap-1.5 tabular-nums">
+            <Timer className="w-3.5 h-3.5 text-slate-500" />
+            {formatElapsed(record.elapsedMs ?? 0)}
           </span>
-          <span>Played {store.stats.played}</span>
-          <span>Won {store.stats.won}</span>
-          {dailyData && <span className="text-slate-500">{dailyData.date}</span>}
-        </div>
-      )}
+        )}
+        {dailyMode && (
+          <>
+            <span className="inline-flex items-center gap-1.5">
+              <Trophy className="w-3.5 h-3.5 text-amber-400" />
+              Streak {store.stats.streak}
+            </span>
+            <span>Played {store.stats.played}</span>
+            <span>Won {store.stats.won}</span>
+            {dailyData && <span className="text-slate-500">{dailyData.date}</span>}
+          </>
+        )}
+      </div>
 
       {loading && <p className="text-sm text-slate-400 py-8">Loading…</p>}
       {dailyMode && dailyError && (

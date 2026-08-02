@@ -6,7 +6,8 @@ import {
   useRef,
   useState,
 } from 'react';
-import { CalendarDays, CornerDownLeft, Delete, RefreshCw, Search, Shuffle } from 'lucide-react';
+import { CalendarDays, CornerDownLeft, Delete, RefreshCw, Search, Shuffle, Timer } from 'lucide-react';
+import { formatElapsed, useUpTimer } from '@/useUpTimer';
 import type { LetterState } from '@/GuessGame';
 import { dailyDataUrl } from '@/dailyData';
 
@@ -39,7 +40,7 @@ const RANKS: [string, number][] = [
   ['Queen Bee', 1],
 ];
 
-type HiveRecord = { center: string; outers: string[]; found: string[] };
+type HiveRecord = { center: string; outers: string[]; found: string[]; elapsedMs?: number };
 type HiveStore = {
   dailyMode: boolean;
   dailyDate: string;
@@ -62,7 +63,12 @@ function sanitizeRecord(r: unknown): HiveRecord | null {
   ) {
     return null;
   }
-  return { center: rec.center, outers: rec.outers, found: rec.found.filter((w) => typeof w === 'string') };
+  return {
+    center: rec.center,
+    outers: rec.outers,
+    found: rec.found.filter((w) => typeof w === 'string'),
+    elapsedMs: typeof rec.elapsedMs === 'number' && rec.elapsedMs >= 0 ? rec.elapsedMs : 0,
+  };
 }
 
 function loadStore(): HiveStore {
@@ -203,6 +209,12 @@ const HiveGame = forwardRef<
   }, [score, maxScore]);
 
   const geniusAt = Math.ceil(maxScore * 0.7);
+  const queenBee = maxScore > 0 && score >= maxScore;
+
+  // thinking time: counts while the hive is visible, until Queen Bee
+  useUpTimer(!!record && !queenBee, (delta) =>
+    updateRecord((r) => ({ ...r, elapsedMs: (r.elapsedMs ?? 0) + delta }))
+  );
 
   // dim non-hive letters on the on-screen keyboard; center reads amber
   useEffect(() => {
@@ -338,6 +350,10 @@ const HiveGame = forwardRef<
           {/* score + rank */}
           <div className="mb-4 flex items-center justify-center gap-4 text-xs text-slate-400">
             <span className="text-amber-300 font-semibold text-sm">{rank}</span>
+            <span className="inline-flex items-center gap-1.5 tabular-nums">
+              <Timer className="w-3.5 h-3.5 text-slate-500" />
+              {formatElapsed(record.elapsedMs ?? 0)}
+            </span>
             <span>
               {score} / {maxScore} pts
             </span>
