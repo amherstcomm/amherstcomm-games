@@ -61,6 +61,7 @@ function Tile({
   size,
   group,
   osk,
+  tone,
 }: {
   value: string;
   onChange: (v: string) => void;
@@ -69,6 +70,7 @@ function Tile({
   size: 'sm' | 'md';
   group: string;
   osk?: boolean; // on-screen keyboard active: suppress the device keyboard
+  tone?: { empty: string; filled: string }; // color override, e.g. boxed side hues
 }) {
   const ref = useRef<HTMLInputElement>(null);
   const dims =
@@ -108,10 +110,10 @@ function Tile({
         placeholder="·"
         className={`${dims} text-center font-bold uppercase rounded-xl border-2 transition-all duration-150 outline-none
           ${state === 'known'
-            ? 'bg-emerald-500/15 border-emerald-400 text-emerald-200 shadow-[0_0_20px_-6px] shadow-emerald-500/40'
+            ? tone?.filled ?? 'bg-emerald-500/15 border-emerald-400 text-emerald-200 shadow-[0_0_20px_-6px] shadow-emerald-500/40'
             : state === 'center'
               ? 'bg-amber-400/15 border-amber-400 text-amber-200 shadow-[0_0_20px_-6px] shadow-amber-400/50 placeholder-amber-200/30'
-              : 'bg-white/5 border-white/10 text-white placeholder-white/25 hover:border-white/20'}
+              : tone?.empty ?? 'bg-white/5 border-white/10 text-white placeholder-white/25 hover:border-white/20'}
           focus:border-amber-400 focus:bg-amber-400/10 focus:shadow-[0_0_24px_-6px] focus:shadow-amber-400/50`}
       />
       {value && (
@@ -147,6 +149,26 @@ const BEE_POSITIONS: [number, number][] = [
   [50, 86],
   [19, 68],
   [19, 32],
+];
+
+// boxed solver tiles share the play board's side hues (top, right, bottom, left)
+const BOX_SIDE_TONES = [
+  {
+    empty: 'bg-sky-400/5 border-sky-400/30 text-sky-100 placeholder-sky-200/25 hover:border-sky-400/60',
+    filled: 'bg-sky-400/20 border-sky-400 text-sky-100 shadow-[0_0_20px_-6px] shadow-sky-400/40',
+  },
+  {
+    empty: 'bg-violet-400/5 border-violet-400/30 text-violet-100 placeholder-violet-200/25 hover:border-violet-400/60',
+    filled: 'bg-violet-400/20 border-violet-400 text-violet-100 shadow-[0_0_20px_-6px] shadow-violet-400/40',
+  },
+  {
+    empty: 'bg-rose-400/5 border-rose-400/30 text-rose-100 placeholder-rose-200/25 hover:border-rose-400/60',
+    filled: 'bg-rose-400/20 border-rose-400 text-rose-100 shadow-[0_0_20px_-6px] shadow-rose-400/40',
+  },
+  {
+    empty: 'bg-amber-400/5 border-amber-400/30 text-amber-100 placeholder-amber-200/25 hover:border-amber-400/60',
+    filled: 'bg-amber-400/20 border-amber-400 text-amber-100 shadow-[0_0_20px_-6px] shadow-amber-400/40',
+  },
 ];
 
 const CHAIN_CAP = 500;
@@ -1035,6 +1057,7 @@ function App() {
               value={boxedLetters[i]}
               state={boxedLetters[i] ? 'known' : 'empty'}
               size="sm"
+              tone={BOX_SIDE_TONES[Math.floor(i / 3)]}
               onChange={(c) =>
                 setBoxedLetters((prev) => prev.map((x, k) => (k === i ? c : x)))
               }
