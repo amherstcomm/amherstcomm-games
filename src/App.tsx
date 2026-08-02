@@ -1,6 +1,9 @@
 import { useMemo, useState, useEffect, useLayoutEffect, useRef, type ButtonHTMLAttributes, type ReactNode } from 'react';
-import { Search, Sparkles, Eraser, ArrowDown, ArrowUp, X, BookOpen, Grid3x3, Shuffle, Hexagon, Check, Keyboard, Delete, Github, Info, Square, CalendarDays, Star, Gamepad2, CornerDownLeft, LayoutGrid, Puzzle, BarChart3 } from 'lucide-react';
+import { Search, Sparkles, Eraser, ArrowDown, ArrowUp, X, BookOpen, Grid3x3, Shuffle, Hexagon, Check, Keyboard, Delete, Github, Info, Square, CalendarDays, Star, Gamepad2, CornerDownLeft, LayoutGrid, Puzzle, BarChart3, UserRound } from 'lucide-react';
+import type { Session } from '@supabase/supabase-js';
 import StatsModal from '@/StatsModal';
+import AccountModal from '@/AccountModal';
+import { supabase } from '@/supabase';
 import GuessGame, { type GuessGameHandle, type LetterState } from '@/GuessGame';
 import HiveGame, { type HiveGameHandle } from '@/HiveGame';
 import BoxGame, { type BoxGameHandle } from '@/BoxGame';
@@ -496,6 +499,16 @@ function App() {
   const [kbOpen, setKbOpen] = useState(initial.keyboard);
   const [aboutOpen, setAboutOpen] = useState(false);
   const [statsOpen, setStatsOpen] = useState(false);
+  const [accountOpen, setAccountOpen] = useState(false);
+  const [session, setSession] = useState<Session | null>(null);
+
+  // track the auth session when Supabase is configured
+  useEffect(() => {
+    if (!supabase) return;
+    supabase.auth.getSession().then(({ data }) => setSession(data.session));
+    const { data: sub } = supabase.auth.onAuthStateChange((_event, s) => setSession(s));
+    return () => sub.subscription.unsubscribe();
+  }, []);
   const [patternPlay, setPatternPlay] = useState(initial.patternPlay);
   const [beePlay, setBeePlay] = useState(initial.beePlay);
   const [boxedPlay, setBoxedPlay] = useState(initial.boxedPlay);
@@ -1772,6 +1785,15 @@ function App() {
               <BarChart3 className="w-3.5 h-3.5" />
               Stats
             </button>
+            {supabase && (
+              <button
+                onClick={() => setAccountOpen(true)}
+                className="inline-flex items-center gap-1.5 hover:text-slate-300 transition-colors"
+              >
+                <UserRound className="w-3.5 h-3.5" />
+                {session ? 'Account' : 'Sign in'}
+              </button>
+            )}
             <button
               onClick={() => setAboutOpen(true)}
               className="inline-flex items-center gap-1.5 hover:text-slate-300 transition-colors"
@@ -1784,6 +1806,8 @@ function App() {
       </div>
 
       {statsOpen && <StatsModal onClose={() => setStatsOpen(false)} />}
+
+      {accountOpen && <AccountModal session={session} onClose={() => setAccountOpen(false)} />}
 
       {/* about & licenses modal */}
       {aboutOpen && (

@@ -70,6 +70,19 @@ Other scripts:
 - [wordlist-english](https://github.com/jacksonrayhamilton/wordlist-english) (MIT) for the Common and Standard dictionaries, built from [SCOWL](http://wordlist.aspell.net/) by Kevin Atkinson (permissive license)
 - [an-array-of-english-words](https://github.com/words/an-array-of-english-words) (MIT) for the Full dictionary, derived from the [Letterpress word list](https://github.com/lorenbrichter/Words) (CC0/public domain)
 
+## Accounts & sync (optional)
+
+The site is fully functional with no backend — solving and playing stay in the browser. Optionally, a [Supabase](https://supabase.com/) project adds sign-in (passwordless magic links) as the foundation for cross-device stat sync. Without the env vars below, every auth surface hides and nothing changes.
+
+Setup:
+
+1. Create a free Supabase project.
+2. Run [supabase/schema.sql](supabase/schema.sql) in the SQL Editor (safe to re-run).
+3. In **Authentication → URL Configuration**, set the Site URL to `https://www.anagrimoire.com` and add `https://dev.anagrimoire.com` and `http://localhost:5173` as additional redirect URLs.
+4. Copy the Project URL and anon/publishable key (**Settings → API**) into env vars — `.env.local` for local dev (see [.env.example](.env.example)), and environment variables on each Render static site. The anon key is public by design; row-level security protects the data.
+
+Note: Supabase's built-in email service is rate-limited (a few magic links per hour) — fine for testing, but configure custom SMTP or OAuth providers before promoting sign-in broadly.
+
 ## Deployment
 
 The repo includes a [Render](https://render.com/) blueprint ([render.yaml](render.yaml)) that provisions a static site: it builds with `npm ci && npm run build`, publishes `dist/`, rewrites all routes to `index.html`, and sets long-lived cache headers on hashed assets.
