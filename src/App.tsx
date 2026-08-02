@@ -1087,7 +1087,7 @@ function App() {
                   {[9, 10, 11].map(boxTile)}
                 </div>
               </div>
-              <div className="mt-4 flex flex-wrap items-center justify-center gap-3">
+              <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
                 <button
                   onClick={fillTodaysPuzzle}
                   disabled={todayStatus === 'loading'}

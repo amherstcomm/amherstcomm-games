@@ -397,12 +397,13 @@ const BoxGame = forwardRef<
             )}
           </div>
 
-          {/* committed chain */}
-          <div className="mb-2 flex flex-wrap items-center justify-center gap-1.5 text-sm">
+          {/* committed chain — extra clearance when the entry box between it
+              and the board is gone (solved) */}
+          <div className={`${solved ? 'mb-7' : 'mb-2'} flex flex-wrap items-center justify-center gap-1.5 text-sm`}>
             {chain.map((w, i) => (
               <span key={i} className="text-slate-300">
                 {w}
-                <span className="text-slate-600"> →</span>
+                {(!solved || i < chain.length - 1) && <span className="text-slate-600"> →</span>}
               </span>
             ))}
           </div>
@@ -451,7 +452,7 @@ const BoxGame = forwardRef<
           </div>
 
           {/* controls */}
-          <div className="mt-4 flex items-center justify-center gap-2.5">
+          <div className="mt-8 flex items-center justify-center gap-2.5">
             <button
               onMouseDown={(e) => e.preventDefault()}
               onClick={() => pressKey('backspace')}
