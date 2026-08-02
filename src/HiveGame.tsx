@@ -279,6 +279,7 @@ const HiveGame = forwardRef<
     const pangram = isPangram(word);
     const newScore = score + wordScore(word, pangram);
     recordHiveWord(
+      store.dailyMode,
       pangram,
       newScore,
       maxScore > 0 && score < geniusAt && newScore >= geniusAt,

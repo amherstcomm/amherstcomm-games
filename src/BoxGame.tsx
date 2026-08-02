@@ -312,7 +312,7 @@ const BoxGame = forwardRef<
     setCurrent(word.slice(-1));
     if (nextCovered.size === 12) {
       setCurrent('');
-      recordBoxSolve(nextChain.length, record.elapsedMs ?? 0);
+      recordBoxSolve(store.dailyMode, nextChain.length, record.elapsedMs ?? 0);
       showFlash(`Solved in ${nextChain.length} word${nextChain.length === 1 ? '' : 's'}! 🎉`, true);
     } else {
       showFlash(`+${new Set(word).size} letters`, true);

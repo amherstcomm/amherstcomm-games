@@ -1,12 +1,13 @@
-// Lifetime play statistics across all game modes. Each game calls a
-// record* helper at its completion transition; the Stats modal reads the
-// aggregate. Storage is best-effort localStorage, sanitized on load.
+// Lifetime play statistics across all game modes, kept in separate daily
+// and practice buckets so the Stats modal can show either or a combined
+// overall view. Each game calls a record* helper at its completion
+// transition. Storage is best-effort localStorage, sanitized on load.
 
 const STATS_KEY = 'anagrimoire:stats:v1';
 
 export type LifetimeStats = {
   guess: {
-    played: number; // boards finished, daily and practice alike
+    played: number; // boards finished
     won: number;
     dist: number[]; // wins by guess count, index 0 = won in 1
     totalTimeMs: number;
@@ -37,6 +38,8 @@ export type LifetimeStats = {
   };
 };
 
+export type StatsStore = { daily: LifetimeStats; practice: LifetimeStats };
+
 export const EMPTY_STATS: LifetimeStats = {
   guess: { played: 0, won: 0, dist: [0, 0, 0, 0, 0, 0], totalTimeMs: 0, bestTimeMs: null },
   hive: { words: 0, pangrams: 0, genius: 0, queenBee: 0, bestScore: 0 },
@@ -54,71 +57,132 @@ function numOrNull(v: unknown): number | null {
   return typeof v === 'number' && Number.isFinite(v) && v >= 0 ? v : null;
 }
 
-export function loadStats(): LifetimeStats {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function sanitizeBucket(p: any): LifetimeStats {
+  return {
+    guess: {
+      played: num(p?.guess?.played),
+      won: num(p?.guess?.won),
+      dist: Array.from({ length: 6 }, (_, i) => num(p?.guess?.dist?.[i])),
+      totalTimeMs: num(p?.guess?.totalTimeMs),
+      bestTimeMs: numOrNull(p?.guess?.bestTimeMs),
+    },
+    hive: {
+      words: num(p?.hive?.words),
+      pangrams: num(p?.hive?.pangrams),
+      genius: num(p?.hive?.genius),
+      queenBee: num(p?.hive?.queenBee),
+      bestScore: num(p?.hive?.bestScore),
+    },
+    scramble: {
+      sprints: num(p?.scramble?.sprints),
+      words: num(p?.scramble?.words),
+      bestScore: num(p?.scramble?.bestScore),
+      totalScore: num(p?.scramble?.totalScore),
+    },
+    grid: {
+      sprints: num(p?.grid?.sprints),
+      words: num(p?.grid?.words),
+      bestScore: num(p?.grid?.bestScore),
+      totalScore: num(p?.grid?.totalScore),
+    },
+    box: {
+      solved: num(p?.box?.solved),
+      fewestWords: numOrNull(p?.box?.fewestWords),
+      bestTimeMs: numOrNull(p?.box?.bestTimeMs),
+      totalWords: num(p?.box?.totalWords),
+      totalTimeMs: num(p?.box?.totalTimeMs),
+    },
+    weave: {
+      solved: num(p?.weave?.solved),
+      revealed: num(p?.weave?.revealed),
+      hintsUsed: num(p?.weave?.hintsUsed),
+      bestTimeMs: numOrNull(p?.weave?.bestTimeMs),
+      totalTimeMs: num(p?.weave?.totalTimeMs),
+    },
+  };
+}
+
+export function loadStats(): StatsStore {
   try {
     const raw = localStorage.getItem(STATS_KEY);
-    if (!raw) return structuredClone(EMPTY_STATS);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const p: any = JSON.parse(raw);
-    return {
-      guess: {
-        played: num(p?.guess?.played),
-        won: num(p?.guess?.won),
-        dist: Array.from({ length: 6 }, (_, i) => num(p?.guess?.dist?.[i])),
-        totalTimeMs: num(p?.guess?.totalTimeMs),
-        bestTimeMs: numOrNull(p?.guess?.bestTimeMs),
-      },
-      hive: {
-        words: num(p?.hive?.words),
-        pangrams: num(p?.hive?.pangrams),
-        genius: num(p?.hive?.genius),
-        queenBee: num(p?.hive?.queenBee),
-        bestScore: num(p?.hive?.bestScore),
-      },
-      scramble: {
-        sprints: num(p?.scramble?.sprints),
-        words: num(p?.scramble?.words),
-        bestScore: num(p?.scramble?.bestScore),
-        totalScore: num(p?.scramble?.totalScore),
-      },
-      grid: {
-        sprints: num(p?.grid?.sprints),
-        words: num(p?.grid?.words),
-        bestScore: num(p?.grid?.bestScore),
-        totalScore: num(p?.grid?.totalScore),
-      },
-      box: {
-        solved: num(p?.box?.solved),
-        fewestWords: numOrNull(p?.box?.fewestWords),
-        bestTimeMs: numOrNull(p?.box?.bestTimeMs),
-        totalWords: num(p?.box?.totalWords),
-        totalTimeMs: num(p?.box?.totalTimeMs),
-      },
-      weave: {
-        solved: num(p?.weave?.solved),
-        revealed: num(p?.weave?.revealed),
-        hintsUsed: num(p?.weave?.hintsUsed),
-        bestTimeMs: numOrNull(p?.weave?.bestTimeMs),
-        totalTimeMs: num(p?.weave?.totalTimeMs),
-      },
-    };
+    if (!raw) return { daily: sanitizeBucket(null), practice: sanitizeBucket(null) };
+    const p = JSON.parse(raw);
+    return { daily: sanitizeBucket(p?.daily), practice: sanitizeBucket(p?.practice) };
   } catch {
-    return structuredClone(EMPTY_STATS);
+    return { daily: sanitizeBucket(null), practice: sanitizeBucket(null) };
   }
 }
 
-function update(fn: (s: LifetimeStats) => void): void {
+function minNullable(a: number | null, b: number | null): number | null {
+  if (a === null) return b;
+  if (b === null) return a;
+  return Math.min(a, b);
+}
+
+// overall view: sums for counters, best-of for records
+export function combineStats(a: LifetimeStats, b: LifetimeStats): LifetimeStats {
+  return {
+    guess: {
+      played: a.guess.played + b.guess.played,
+      won: a.guess.won + b.guess.won,
+      dist: a.guess.dist.map((n, i) => n + b.guess.dist[i]),
+      totalTimeMs: a.guess.totalTimeMs + b.guess.totalTimeMs,
+      bestTimeMs: minNullable(a.guess.bestTimeMs, b.guess.bestTimeMs),
+    },
+    hive: {
+      words: a.hive.words + b.hive.words,
+      pangrams: a.hive.pangrams + b.hive.pangrams,
+      genius: a.hive.genius + b.hive.genius,
+      queenBee: a.hive.queenBee + b.hive.queenBee,
+      bestScore: Math.max(a.hive.bestScore, b.hive.bestScore),
+    },
+    scramble: {
+      sprints: a.scramble.sprints + b.scramble.sprints,
+      words: a.scramble.words + b.scramble.words,
+      bestScore: Math.max(a.scramble.bestScore, b.scramble.bestScore),
+      totalScore: a.scramble.totalScore + b.scramble.totalScore,
+    },
+    grid: {
+      sprints: a.grid.sprints + b.grid.sprints,
+      words: a.grid.words + b.grid.words,
+      bestScore: Math.max(a.grid.bestScore, b.grid.bestScore),
+      totalScore: a.grid.totalScore + b.grid.totalScore,
+    },
+    box: {
+      solved: a.box.solved + b.box.solved,
+      fewestWords: minNullable(a.box.fewestWords, b.box.fewestWords),
+      bestTimeMs: minNullable(a.box.bestTimeMs, b.box.bestTimeMs),
+      totalWords: a.box.totalWords + b.box.totalWords,
+      totalTimeMs: a.box.totalTimeMs + b.box.totalTimeMs,
+    },
+    weave: {
+      solved: a.weave.solved + b.weave.solved,
+      revealed: a.weave.revealed + b.weave.revealed,
+      hintsUsed: a.weave.hintsUsed + b.weave.hintsUsed,
+      bestTimeMs: minNullable(a.weave.bestTimeMs, b.weave.bestTimeMs),
+      totalTimeMs: a.weave.totalTimeMs + b.weave.totalTimeMs,
+    },
+  };
+}
+
+function update(daily: boolean, fn: (s: LifetimeStats) => void): void {
   try {
-    const s = loadStats();
-    fn(s);
-    localStorage.setItem(STATS_KEY, JSON.stringify(s));
+    const store = loadStats();
+    fn(daily ? store.daily : store.practice);
+    localStorage.setItem(STATS_KEY, JSON.stringify(store));
   } catch {
     // storage unavailable — stats are best-effort
   }
 }
 
-export function recordGuessFinish(won: boolean, guesses: number, timeMs: number): void {
-  update((s) => {
+export function recordGuessFinish(
+  daily: boolean,
+  won: boolean,
+  guesses: number,
+  timeMs: number
+): void {
+  update(daily, (s) => {
     s.guess.played += 1;
     s.guess.totalTimeMs += timeMs;
     if (won) {
@@ -130,12 +194,13 @@ export function recordGuessFinish(won: boolean, guesses: number, timeMs: number)
 }
 
 export function recordHiveWord(
+  daily: boolean,
   pangram: boolean,
   newScore: number,
   crossedGenius: boolean,
   crossedQueenBee: boolean
 ): void {
-  update((s) => {
+  update(daily, (s) => {
     s.hive.words += 1;
     if (pangram) s.hive.pangrams += 1;
     if (crossedGenius) s.hive.genius += 1;
@@ -144,8 +209,13 @@ export function recordHiveWord(
   });
 }
 
-export function recordSprint(game: 'scramble' | 'grid', score: number, words: number): void {
-  update((s) => {
+export function recordSprint(
+  daily: boolean,
+  game: 'scramble' | 'grid',
+  score: number,
+  words: number
+): void {
+  update(daily, (s) => {
     s[game].sprints += 1;
     s[game].words += words;
     s[game].totalScore += score;
@@ -153,8 +223,8 @@ export function recordSprint(game: 'scramble' | 'grid', score: number, words: nu
   });
 }
 
-export function recordBoxSolve(words: number, timeMs: number): void {
-  update((s) => {
+export function recordBoxSolve(daily: boolean, words: number, timeMs: number): void {
+  update(daily, (s) => {
     s.box.solved += 1;
     s.box.totalWords += words;
     s.box.totalTimeMs += timeMs;
@@ -163,8 +233,8 @@ export function recordBoxSolve(words: number, timeMs: number): void {
   });
 }
 
-export function recordWeaveSolve(timeMs: number, hints: number): void {
-  update((s) => {
+export function recordWeaveSolve(daily: boolean, timeMs: number, hints: number): void {
+  update(daily, (s) => {
     s.weave.solved += 1;
     s.weave.hintsUsed += hints;
     s.weave.totalTimeMs += timeMs;
@@ -172,8 +242,8 @@ export function recordWeaveSolve(timeMs: number, hints: number): void {
   });
 }
 
-export function recordWeaveReveal(hints: number): void {
-  update((s) => {
+export function recordWeaveReveal(daily: boolean, hints: number): void {
+  update(daily, (s) => {
     s.weave.revealed += 1;
     s.weave.hintsUsed += hints;
   });

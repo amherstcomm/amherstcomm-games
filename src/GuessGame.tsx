@@ -280,7 +280,7 @@ const GuessGame = forwardRef<
     });
     setCurrent('');
     if (done) {
-      recordGuessFinish(didWin, next.length, record?.elapsedMs ?? 0);
+      recordGuessFinish(dailyMode, didWin, next.length, record?.elapsedMs ?? 0);
       finishDaily(didWin);
     }
   }

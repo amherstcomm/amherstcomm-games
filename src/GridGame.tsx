@@ -214,7 +214,7 @@ const GridGame = forwardRef<
   useEffect(() => {
     if (running && remaining === 0) {
       setCurrent('');
-      recordSprint('grid', score, record?.found.length ?? 0);
+      recordSprint(store.dailyMode, 'grid', score, record?.found.length ?? 0);
       updateRecord((r) => ({ ...r, finished: true }));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps

@@ -1,7 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Grid3x3, Hexagon, LayoutGrid, Puzzle, Shuffle, Square, X } from 'lucide-react';
-import { loadStats } from '@/stats';
+import { combineStats, loadStats } from '@/stats';
 import { formatElapsed } from '@/useUpTimer';
+
+type StatsView = 'overall' | 'daily' | 'practice';
 
 function Stat({ label, value }: { label: string; value: string | number }) {
   return (
@@ -45,7 +47,12 @@ function time(ms: number | null): string {
 }
 
 export default function StatsModal({ onClose }: { onClose: () => void }) {
-  const [stats] = useState(loadStats);
+  const [store] = useState(loadStats);
+  const [view, setView] = useState<StatsView>('overall');
+  const stats = useMemo(
+    () => (view === 'overall' ? combineStats(store.daily, store.practice) : store[view]),
+    [store, view]
+  );
 
   // Guess's daily streak lives in the play store, maintained by GuessGame
   const [streak] = useState(() => {
@@ -96,13 +103,35 @@ export default function StatsModal({ onClose }: { onClose: () => void }) {
         </button>
 
         <h2 className="text-xl font-bold mb-1">Statistics</h2>
-        <p className="text-xs text-slate-500 mb-5">
-          Lifetime totals across daily and practice games, stored only in this browser.
+        <p className="text-xs text-slate-500 mb-4">
+          Lifetime totals, stored only in this browser.
         </p>
+
+        <div className="mb-5 inline-flex rounded-lg bg-white/5 border border-white/10 p-0.5 gap-0.5">
+          {(
+            [
+              { id: 'overall', label: 'Overall' },
+              { id: 'daily', label: 'Daily' },
+              { id: 'practice', label: 'Practice' },
+            ] as const
+          ).map(({ id, label }) => (
+            <button
+              key={id}
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => setView(id)}
+              className={`px-3 py-1.5 rounded-md text-sm font-semibold transition-colors
+                ${view === id ? 'bg-emerald-400/15 text-emerald-300' : 'text-slate-400 hover:text-white'}`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
 
         {!anyPlay && (
           <p className="text-sm text-slate-400 py-6 text-center">
-            Nothing recorded yet — finish a game in any Play mode and it lands here.
+            {view === 'overall'
+              ? 'Nothing recorded yet — finish a game in any Play mode and it lands here.'
+              : `No ${view} games recorded yet.`}
           </p>
         )}
 
@@ -112,7 +141,11 @@ export default function StatsModal({ onClose }: { onClose: () => void }) {
               <div className="grid grid-cols-4 gap-2">
                 <Stat label="Played" value={stats.guess.played} />
                 <Stat label="Win rate" value={pct(stats.guess.won, stats.guess.played)} />
-                <Stat label="Daily streak" value={streak} />
+                {view === 'practice' ? (
+                  <Stat label="Won" value={stats.guess.won} />
+                ) : (
+                  <Stat label="Daily streak" value={streak} />
+                )}
                 <Stat label="Fastest win" value={time(stats.guess.bestTimeMs)} />
               </div>
               {stats.guess.won > 0 && (
