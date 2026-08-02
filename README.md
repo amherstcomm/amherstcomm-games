@@ -4,7 +4,7 @@ A word-game solver for puzzles like Wordle, crosswords, hangman, Scrabble, Jumbl
 
 *Vibe-coded with [Claude](https://claude.com/claude-code).*
 
-**Live site:** [www.anagrimoire.com](https://www.anagrimoire.com) · **Dev preview:** [dev.anagrimoire.com](https://dev.anagrimoire.com)
+**Live site:** [anagrimoire.com](https://anagrimoire.com) · **Dev preview:** [dev.anagrimoire.com](https://dev.anagrimoire.com)
 
 ## Features
 
@@ -78,7 +78,7 @@ Setup:
 
 1. Create a free Supabase project.
 2. Run [supabase/schema.sql](supabase/schema.sql) in the SQL Editor (safe to re-run).
-3. In **Authentication → URL Configuration**, set the Site URL to `https://www.anagrimoire.com` and add `https://dev.anagrimoire.com` and `http://localhost:5173` as additional redirect URLs.
+3. In **Authentication → URL Configuration**, set the Site URL to `https://anagrimoire.com` and add `https://www.anagrimoire.com` (the alias), `https://dev.anagrimoire.com`, and `http://localhost:5173` as additional redirect URLs — sign-in redirects back to whichever origin the visitor is on, so both spellings of production must be allowed.
 4. Copy the Project URL and anon/publishable key (**Settings → API**) into env vars — `.env.local` for local dev (see [.env.example](.env.example)), and environment variables on each Render static site. The anon key is public by design; row-level security protects the data.
 
 5. Optionally enable OAuth providers (**Authentication → Providers**): create a GitHub/Google OAuth app with the callback URL Supabase shows there, and paste in its client ID and secret. The sign-in modal offers both alongside email.
@@ -93,7 +93,7 @@ Two environments are deployed on Render:
 
 | Environment | URL | Branch |
 |---|---|---|
-| Production | [www.anagrimoire.com](https://www.anagrimoire.com) | `main` |
+| Production | [anagrimoire.com](https://anagrimoire.com) (www is an alias) | `main` |
 | Dev | [dev.anagrimoire.com](https://dev.anagrimoire.com) | `dev` |
 
 Pushes to each branch auto-deploy to the matching environment.
