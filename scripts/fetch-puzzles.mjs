@@ -122,3 +122,19 @@ for (let len = 3; len <= 15; len++) {
 const dwOut = { date: etDate, words: dailyWords, fetchedAt: new Date().toISOString() };
 await writeFile('data/daily-words.json', JSON.stringify(dwOut, null, 2) + '\n');
 console.log('Wrote data/daily-words.json for', etDate, `(${Object.keys(dailyWords).length} lengths)`);
+
+// Daily hive for play mode: our own generated puzzle (not the NYT's letters),
+// seeded from a pangram so it is always completable, deterministic per date.
+const hiveRng = mulberry32(xmur3(`anagrimoire-hive-${etDate}`)());
+// no 's' in the hive (plurals would flood the answer list)
+const hiveBases = [...commonSet]
+  .filter((w) => w.length >= 7 && new Set(w).size === 7 && !w.includes('s'))
+  .sort();
+if (!hiveBases.length) throw new Error('No pangram bases for the daily hive');
+const base = hiveBases[Math.floor(hiveRng() * hiveBases.length)];
+const hiveLetters = [...new Set(base)];
+const center = hiveLetters[Math.floor(hiveRng() * hiveLetters.length)];
+const outers = hiveLetters.filter((c) => c !== center).sort(() => hiveRng() - 0.5);
+const hiveOut = { date: etDate, center, outers, fetchedAt: new Date().toISOString() };
+await writeFile('data/daily-hive.json', JSON.stringify(hiveOut, null, 2) + '\n');
+console.log('Wrote data/daily-hive.json:', JSON.stringify(hiveOut));
