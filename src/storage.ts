@@ -25,7 +25,7 @@ export type PersistedState = {
   descramble: { rack: string; useAll: boolean; minLength: number };
   bee: { center: string; outers: string[] };
   boxed: { letters: string[]; solutionWords: number };
-  grid: { letters: string[] };
+  grid: { letters: string[]; size: number };
 };
 
 export const DEFAULT_STATE: PersistedState = {
@@ -48,7 +48,7 @@ export const DEFAULT_STATE: PersistedState = {
   descramble: { rack: '', useAll: false, minLength: 3 },
   bee: { center: '', outers: Array(6).fill('') },
   boxed: { letters: Array(12).fill(''), solutionWords: 2 },
-  grid: { letters: Array(16).fill('') },
+  grid: { letters: Array(16).fill(''), size: 4 },
 };
 
 function singleLetter(v: unknown): string {
@@ -111,9 +111,10 @@ export function loadState(): PersistedState {
       for (let i = 0; i < 12; i++) boxedLetters[i] = singleLetter(p.boxed.letters[i]);
     }
 
-    const gridLetters = Array(16).fill('');
+    const gridSize = [3, 4, 5].includes(p?.grid?.size) ? p.grid.size : 4;
+    const gridLetters = Array(gridSize * gridSize).fill('');
     if (Array.isArray(p?.grid?.letters)) {
-      for (let i = 0; i < 16; i++) gridLetters[i] = singleLetter(p.grid.letters[i]);
+      for (let i = 0; i < gridLetters.length; i++) gridLetters[i] = singleLetter(p.grid.letters[i]);
     }
 
     return {
@@ -145,7 +146,7 @@ export function loadState(): PersistedState {
         letters: boxedLetters,
         solutionWords: clampInt(p?.boxed?.solutionWords, 1, 5, DEFAULT_STATE.boxed.solutionWords),
       },
-      grid: { letters: gridLetters },
+      grid: { letters: gridLetters, size: gridSize },
     };
   } catch {
     return DEFAULT_STATE;

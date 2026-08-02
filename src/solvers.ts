@@ -93,37 +93,43 @@ export function solveBoxed(list: string[], input: BoxedInput): string[] {
 }
 
 export type GridInput = {
-  cells: string[]; // 16 letters, row-major 4x4
+  cells: string[]; // row-major square grid; 9, 16, or 25 letters
 };
 
-// neighbor indices (including diagonals) for each cell of the 4x4 grid
-const GRID_NEIGHBORS: number[][] = (() => {
+// neighbor indices (including diagonals) for each cell of an n x n grid
+const neighborCache = new Map<number, number[][]>();
+export function gridNeighbors(size: number): number[][] {
+  const cached = neighborCache.get(size);
+  if (cached) return cached;
   const out: number[][] = [];
-  for (let i = 0; i < 16; i++) {
-    const r = Math.floor(i / 4);
-    const c = i % 4;
+  for (let i = 0; i < size * size; i++) {
+    const r = Math.floor(i / size);
+    const c = i % size;
     const adj: number[] = [];
     for (let dr = -1; dr <= 1; dr++) {
       for (let dc = -1; dc <= 1; dc++) {
         if (!dr && !dc) continue;
         const rr = r + dr;
         const cc = c + dc;
-        if (rr >= 0 && rr < 4 && cc >= 0 && cc < 4) adj.push(rr * 4 + cc);
+        if (rr >= 0 && rr < size && cc >= 0 && cc < size) adj.push(rr * size + cc);
       }
     }
     out.push(adj);
   }
+  neighborCache.set(size, out);
   return out;
-})();
+}
 
 export function solveGrid(list: string[], input: GridInput): string[] {
   const { cells } = input;
-  if (cells.length !== 16 || cells.some((c) => !c)) return [];
+  const size = Math.round(Math.sqrt(cells.length));
+  if (size * size !== cells.length || size < 3 || size > 5 || cells.some((c) => !c)) return [];
+  const GRID_NEIGHBORS = gridNeighbors(size);
 
   // narrow to words spellable from the grid's alphabet, then prefix-prune the DFS
   const present = new Set(cells);
   const candidates = list.filter((w) => {
-    if (w.length < 3 || w.length > 16) return false;
+    if (w.length < 3 || w.length > cells.length) return false;
     for (let i = 0; i < w.length; i++) if (!present.has(w[i])) return false;
     return true;
   });
@@ -139,7 +145,7 @@ export function solveGrid(list: string[], input: GridInput): string[] {
       if (!(mask & (1 << nb))) dfs(nb, cur + cells[nb], mask | (1 << nb));
     }
   };
-  for (let i = 0; i < 16; i++) dfs(i, cells[i], 1 << i);
+  for (let i = 0; i < cells.length; i++) dfs(i, cells[i], 1 << i);
 
   // longest words first, then alphabetical
   return [...found].sort((a, b) => b.length - a.length || (a < b ? -1 : 1));

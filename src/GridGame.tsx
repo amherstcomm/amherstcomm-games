@@ -18,12 +18,30 @@ const DAILY_GRID_URL =
 const DURATION_MS = 3 * 60 * 1000;
 
 // classic sixteen-dice letter distributions (q treated as a plain letter)
-const GRID_DICE = [
+const GRID_DICE_4 = [
   'aaeegn', 'abbjoo', 'achops', 'affkps',
   'aoottw', 'cimotu', 'deilrx', 'delrvy',
   'distty', 'eeghnw', 'eeinsu', 'ehrtvw',
   'eiosst', 'elrtty', 'himnuq', 'hlnnrz',
 ];
+
+// Big Boggle's twenty-five dice for 5x5 grids
+const GRID_DICE_5 = [
+  'aaafrs', 'aaeeee', 'aafirs', 'adennn', 'aeeeem',
+  'aeegmu', 'aegmnn', 'afirsy', 'bjkqxz', 'ccnstw',
+  'ceiilt', 'ceilpt', 'ceipst', 'ddlnor', 'dhhlor',
+  'dhhnot', 'dhlnor', 'eiiitt', 'emottt', 'ensssu',
+  'fiprsy', 'gorrvw', 'hiprry', 'nootuw', 'ooottu',
+];
+
+function diceFor(size: number): string[] {
+  if (size === 5) return GRID_DICE_5;
+  if (size === 3) {
+    // sample nine of the classic sixteen dice
+    return [...GRID_DICE_4].sort(() => Math.random() - 0.5).slice(0, 9);
+  }
+  return GRID_DICE_4;
+}
 
 type GridRecord = {
   cells: string[];
@@ -45,7 +63,7 @@ function sanitizeRecord(r: unknown): GridRecord | null {
   if (
     !rec ||
     !Array.isArray(rec.cells) ||
-    rec.cells.length !== 16 ||
+    ![9, 16, 25].includes(rec.cells.length) ||
     !rec.cells.every((c) => typeof c === 'string' && /^[a-z]$/.test(c)) ||
     !Array.isArray(rec.found)
   ) {
@@ -130,10 +148,10 @@ const GridGame = forwardRef<
     };
   }, []);
 
-  function rollPracticeGrid(): GridRecord {
-    const cells = GRID_DICE.map((d) => d[Math.floor(Math.random() * 6)]).sort(
-      () => Math.random() - 0.5
-    );
+  function rollPracticeGrid(size = 4): GridRecord {
+    const cells = diceFor(size)
+      .map((d) => d[Math.floor(Math.random() * 6)])
+      .sort(() => Math.random() - 0.5);
     return { cells, found: [], endsAt: null, finished: false };
   }
 
@@ -249,7 +267,7 @@ const GridGame = forwardRef<
     }
     if (!running) return;
     if (/^[a-z]$/.test(k) && record.cells.includes(k)) {
-      setCurrent((c) => (c.length < 16 ? c + k : c));
+      setCurrent((c) => (c.length < record.cells.length ? c + k : c));
     }
   }
 
@@ -268,9 +286,10 @@ const GridGame = forwardRef<
     return () => document.removeEventListener('keydown', onKey);
   });
 
-  function newPracticeGrid() {
+  function newPracticeGrid(size?: number) {
     setCurrent('');
-    setStore((prev) => ({ ...prev, practice: rollPracticeGrid() }));
+    const n = size ?? Math.round(Math.sqrt(store.practice?.cells.length ?? 16));
+    setStore((prev) => ({ ...prev, practice: rollPracticeGrid(n) }));
   }
 
   const loading = store.dailyMode ? !record && !dailyError : !record;
@@ -303,6 +322,28 @@ const GridGame = forwardRef<
           </button>
         ))}
       </div>
+
+      {/* practice grid size */}
+      {!store.dailyMode && record && (
+        <div className="mb-4">
+          <span className="inline-flex rounded-lg bg-white/5 border border-white/10 p-0.5 gap-0.5">
+            {[3, 4, 5].map((n) => (
+              <button
+                key={n}
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => newPracticeGrid(n)}
+                title={running ? 'Abandons the current grid' : undefined}
+                className={`px-3 py-1.5 rounded-md text-sm font-semibold transition-colors
+                  ${Math.round(Math.sqrt(record.cells.length)) === n
+                    ? 'bg-white/15 text-white'
+                    : 'text-slate-400 hover:text-white'}`}
+              >
+                {n}×{n}
+              </button>
+            ))}
+          </span>
+        </div>
+      )}
 
       {loading && <p className="text-sm text-slate-400 py-8">Loading…</p>}
       {store.dailyMode && dailyError && !record && (
@@ -358,14 +399,22 @@ const GridGame = forwardRef<
           )}
 
           {/* the grid — face-down until the clock starts */}
-          <div className="grid grid-cols-4 gap-2 w-fit mx-auto">
+          <div
+            className={`grid gap-2 w-fit mx-auto ${
+              record.cells.length === 9
+                ? 'grid-cols-3'
+                : record.cells.length === 25
+                  ? 'grid-cols-5'
+                  : 'grid-cols-4'
+            }`}
+          >
             {record.cells.map((c, i) => (
               <button
                 key={i}
                 onMouseDown={(e) => e.preventDefault()}
                 onClick={() => pressKey(c)}
                 disabled={!running}
-                className={`w-11 h-12 sm:w-12 sm:h-14 rounded-xl border-2 text-xl sm:text-2xl font-bold uppercase transition-colors
+                className={`${record.cells.length === 25 ? 'w-9 h-10 sm:w-11 sm:h-12 text-lg sm:text-xl' : 'w-11 h-12 sm:w-12 sm:h-14 text-xl sm:text-2xl'} rounded-xl border-2 font-bold uppercase transition-colors
                   ${!record.endsAt
                     ? 'bg-white/5 border-white/15 text-slate-500'
                     : 'bg-amber-400/10 border-amber-400/40 text-amber-200 hover:bg-amber-400/20'}`}
@@ -408,7 +457,7 @@ const GridGame = forwardRef<
                 {!store.dailyMode && (
                   <button
                     onMouseDown={(e) => e.preventDefault()}
-                    onClick={newPracticeGrid}
+                    onClick={() => newPracticeGrid()}
                     title="Give up — new grid, fresh clock"
                     className="inline-flex items-center gap-1.5 px-4 h-10 rounded-lg text-sm font-semibold bg-white/5 border border-white/10 text-slate-300 hover:bg-white/10 hover:text-white transition-colors"
                   >
@@ -431,7 +480,7 @@ const GridGame = forwardRef<
                 {!store.dailyMode && (
                   <button
                     onMouseDown={(e) => e.preventDefault()}
-                    onClick={newPracticeGrid}
+                    onClick={() => newPracticeGrid()}
                     className="inline-flex items-center gap-1.5 px-4 h-10 rounded-lg text-sm font-semibold bg-white/5 border border-white/10 text-slate-300 hover:bg-white/10 hover:text-white transition-colors"
                   >
                     <RefreshCw className="w-4 h-4" />

@@ -349,7 +349,17 @@ function App() {
   const [boxedLetters, setBoxedLetters] = useState<string[]>(initial.boxed.letters);
   const [solutionWords, setSolutionWords] = useState(initial.boxed.solutionWords);
   const [gridLetters, setGridLetters] = useState<string[]>(initial.grid.letters);
+  const [gridSize, setGridSize] = useState(initial.grid.size);
   const [gridPlay, setGridPlay] = useState(initial.gridPlay);
+
+  function changeGridSize(n: number) {
+    setGridSize(n);
+    setGridLetters((prev) => {
+      const next = Array(n * n).fill('');
+      for (let i = 0; i < Math.min(prev.length, next.length); i++) next[i] = prev[i];
+      return next;
+    });
+  }
   const [todayStatus, setTodayStatus] = useState<'idle' | 'loading' | 'error'>('idle');
   const [commonSet, setCommonSet] = useState<Set<string> | null>(null);
 
@@ -439,9 +449,9 @@ function App() {
       descramble: { rack: rackStr, useAll, minLength },
       bee: { center: beeCenter, outers: beeOuters },
       boxed: { letters: boxedLetters, solutionWords },
-      grid: { letters: gridLetters },
+      grid: { letters: gridLetters, size: gridSize },
     });
-  }, [mode, dictionaries, sorts, kbOpen, patternPlay, beePlay, boxedPlay, descramblePlay, gridPlay, length, known, containsStr, excludedStr, rackStr, useAll, minLength, beeCenter, beeOuters, boxedLetters, solutionWords, gridLetters]);
+  }, [mode, dictionaries, sorts, kbOpen, patternPlay, beePlay, boxedPlay, descramblePlay, gridPlay, length, known, containsStr, excludedStr, rackStr, useAll, minLength, beeCenter, beeOuters, boxedLetters, solutionWords, gridLetters, gridSize]);
 
   // keep known array sized to length
   useEffect(() => {
@@ -1080,7 +1090,8 @@ function App() {
             standardWords={standardWordsArr}
             onLetterStates={setLetterStates}
             onReveal={(cells) => {
-              setGridLetters(cells.slice(0, 16));
+              setGridSize(Math.round(Math.sqrt(cells.length)));
+              setGridLetters(cells);
               setGridPlay(false);
             }}
           />
@@ -1089,10 +1100,25 @@ function App() {
 
         {mode === 'grid' && !gridPlay && (
         <div className="mb-8 text-center">
+          <label className="block text-xs font-medium text-slate-400 uppercase tracking-wider mb-2.5">
+            Grid size
+          </label>
+          <div className="mb-5 inline-flex rounded-lg bg-white/5 border border-white/10 p-0.5 gap-0.5">
+            {[3, 4, 5].map((n) => (
+              <button
+                key={n}
+                onClick={() => changeGridSize(n)}
+                className={`px-3 py-1.5 rounded-md text-sm font-semibold transition-colors
+                  ${gridSize === n ? 'bg-white/15 text-white' : 'text-slate-400 hover:text-white'}`}
+              >
+                {n}×{n}
+              </button>
+            ))}
+          </div>
           <label className="block text-xs font-medium text-slate-400 uppercase tracking-wider mb-3">
             The grid
           </label>
-          <div className="grid grid-cols-4 gap-2 w-fit mx-auto">
+          <div className={`grid ${gridSize === 3 ? 'grid-cols-3' : gridSize === 5 ? 'grid-cols-5' : 'grid-cols-4'} gap-2 w-fit mx-auto`}>
             {gridLetters.map((v, i) => (
               <Tile
                 key={i}
@@ -1287,8 +1313,8 @@ function App() {
                       ? 'Enter the twelve letters, three per side, to find words.'
                       : 'No words fit this box. Double-check the puzzle.'
                     : mode === 'grid'
-                      ? gridLetters.filter(Boolean).length < 16
-                        ? 'Fill in all sixteen grid letters to find words.'
+                      ? gridLetters.filter(Boolean).length < gridLetters.length
+                        ? `Fill in all ${gridLetters.length} grid letters to find words.`
                         : 'No words can be traced on this grid.'
                       : 'No words fit those clues. Try loosening a constraint.'}
             </p>
