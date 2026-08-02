@@ -1,0 +1,424 @@
+import {
+  forwardRef,
+  useEffect,
+  useImperativeHandle,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
+import { CalendarDays, RefreshCw, Trophy } from 'lucide-react';
+
+export type LetterState = 'correct' | 'present' | 'absent';
+export type GuessGameHandle = { pressKey: (k: string) => void };
+
+const MAX_GUESSES = 6;
+const PLAY_KEY = 'anagrimoire:play:v1';
+const DAILY_URL =
+  'https://raw.githubusercontent.com/rptetzloff/anagrimoire/puzzle-data/data/daily-words.json';
+
+type GameRecord = { secret: string; guesses: string[] }; // secret is base64
+type Stats = { played: number; won: number; streak: number; lastWinDate: string };
+type PlayStore = {
+  dailyMode: boolean;
+  dailyDate: string;
+  daily: Record<string, GameRecord>;
+  practice: Record<string, GameRecord>;
+  stats: Stats;
+};
+
+const DEFAULT_STORE: PlayStore = {
+  dailyMode: true,
+  dailyDate: '',
+  daily: {},
+  practice: {},
+  stats: { played: 0, won: 0, streak: 0, lastWinDate: '' },
+};
+
+function loadStore(): PlayStore {
+  try {
+    const raw = localStorage.getItem(PLAY_KEY);
+    if (!raw) return DEFAULT_STORE;
+    const p = JSON.parse(raw);
+    return {
+      dailyMode: p?.dailyMode !== false,
+      dailyDate: typeof p?.dailyDate === 'string' ? p.dailyDate : '',
+      daily: typeof p?.daily === 'object' && p.daily ? p.daily : {},
+      practice: typeof p?.practice === 'object' && p.practice ? p.practice : {},
+      stats: {
+        played: Number(p?.stats?.played) || 0,
+        won: Number(p?.stats?.won) || 0,
+        streak: Number(p?.stats?.streak) || 0,
+        lastWinDate: typeof p?.stats?.lastWinDate === 'string' ? p.stats.lastWinDate : '',
+      },
+    };
+  } catch {
+    return DEFAULT_STORE;
+  }
+}
+
+function scoreGuess(secret: string, guess: string): LetterState[] {
+  const n = secret.length;
+  const result: LetterState[] = Array(n).fill('absent');
+  const counts: Record<string, number> = {};
+  for (let i = 0; i < n; i++) {
+    if (guess[i] === secret[i]) result[i] = 'correct';
+    else counts[secret[i]] = (counts[secret[i]] ?? 0) + 1;
+  }
+  for (let i = 0; i < n; i++) {
+    if (result[i] !== 'correct' && (counts[guess[i]] ?? 0) > 0) {
+      result[i] = 'present';
+      counts[guess[i]]--;
+    }
+  }
+  return result;
+}
+
+function previousEtDate(date: string): string {
+  const d = new Date(`${date}T12:00:00Z`);
+  d.setUTCDate(d.getUTCDate() - 1);
+  return d.toISOString().slice(0, 10);
+}
+
+const GuessGame = forwardRef<
+  GuessGameHandle,
+  {
+    length: number;
+    commonWords: string[] | null;
+    fullWords: string[] | null;
+    onLetterStates: (states: Record<string, LetterState>) => void;
+  }
+>(function GuessGame({ length, commonWords, fullWords, onLetterStates }, ref) {
+  const [store, setStore] = useState<PlayStore>(loadStore);
+  const [dailyData, setDailyData] = useState<{ date: string; words: Record<string, string> } | null>(null);
+  const [dailyError, setDailyError] = useState(false);
+  const [current, setCurrent] = useState('');
+  const [flash, setFlash] = useState('');
+  const flashTimer = useRef<number | undefined>(undefined);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(PLAY_KEY, JSON.stringify(store));
+    } catch {
+      // best-effort persistence
+    }
+  }, [store]);
+
+  // fetch today's daily words once
+  useEffect(() => {
+    let alive = true;
+    fetch(DAILY_URL, { cache: 'no-store' })
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
+      .then((d) => {
+        if (!alive) return;
+        if (typeof d?.date !== 'string' || typeof d?.words !== 'object') throw new Error('bad payload');
+        setDailyData({ date: d.date, words: d.words });
+        // a new day resets all daily boards
+        setStore((prev) =>
+          prev.dailyDate === d.date ? prev : { ...prev, dailyDate: d.date, daily: {} }
+        );
+      })
+      .catch(() => {
+        if (alive) setDailyError(true);
+      });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  const commonSet = useMemo(() => (commonWords ? new Set(commonWords) : null), [commonWords]);
+  const fullSetForLen = useMemo(
+    () => (fullWords ? new Set(fullWords.filter((w) => w.length === length)) : null),
+    [fullWords, length]
+  );
+
+  const dailyMode = store.dailyMode;
+  const lenKey = String(length);
+
+  function pickPracticeWord(): string | null {
+    if (!commonWords || !commonSet) return null;
+    const pool = commonWords.filter(
+      (w) => w.length === length && !(w.endsWith('s') && commonSet.has(w.slice(0, -1)))
+    );
+    if (!pool.length) return null;
+    return pool[Math.floor(Math.random() * pool.length)];
+  }
+
+  // ensure a game record exists for the active board
+  useEffect(() => {
+    if (dailyMode) {
+      if (!dailyData || store.daily[lenKey]) return;
+      const encoded = dailyData.words[lenKey];
+      if (!encoded) return;
+      setStore((prev) =>
+        prev.daily[lenKey]
+          ? prev
+          : { ...prev, daily: { ...prev.daily, [lenKey]: { secret: encoded, guesses: [] } } }
+      );
+    } else {
+      if (store.practice[lenKey] || !commonWords) return;
+      const word = pickPracticeWord();
+      if (!word) return;
+      setStore((prev) =>
+        prev.practice[lenKey]
+          ? prev
+          : { ...prev, practice: { ...prev.practice, [lenKey]: { secret: btoa(word), guesses: [] } } }
+      );
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dailyMode, dailyData, commonWords, lenKey, store.daily, store.practice]);
+
+  const record = dailyMode ? store.daily[lenKey] : store.practice[lenKey];
+  const secret = useMemo(() => {
+    if (!record) return null;
+    try {
+      return atob(record.secret).toLowerCase();
+    } catch {
+      return null;
+    }
+  }, [record]);
+
+  const guesses = useMemo(() => record?.guesses ?? [], [record]);
+  const won = secret !== null && guesses.includes(secret);
+  const lost = !won && guesses.length >= MAX_GUESSES;
+  const playing = secret !== null && !won && !lost;
+
+  // aggregate keyboard letter states, correct > present > absent
+  useEffect(() => {
+    if (!secret) {
+      onLetterStates({});
+      return;
+    }
+    const states: Record<string, LetterState> = {};
+    const rank = { absent: 0, present: 1, correct: 2 };
+    for (const g of guesses) {
+      const score = scoreGuess(secret, g);
+      for (let i = 0; i < g.length; i++) {
+        const prev = states[g[i]];
+        if (!prev || rank[score[i]] > rank[prev]) states[g[i]] = score[i];
+      }
+    }
+    onLetterStates(states);
+  }, [secret, guesses, onLetterStates]);
+
+  function showFlash(msg: string) {
+    setFlash(msg);
+    window.clearTimeout(flashTimer.current);
+    flashTimer.current = window.setTimeout(() => setFlash(''), 1600);
+  }
+
+  function finishDaily(didWin: boolean) {
+    if (!dailyMode || !dailyData) return;
+    setStore((prev) => {
+      const s = prev.stats;
+      const streak = didWin
+        ? s.lastWinDate === previousEtDate(dailyData.date) || s.lastWinDate === dailyData.date
+          ? s.streak + (s.lastWinDate === dailyData.date ? 0 : 1)
+          : 1
+        : 0;
+      return {
+        ...prev,
+        stats: {
+          played: s.played + 1,
+          won: s.won + (didWin ? 1 : 0),
+          streak,
+          lastWinDate: didWin ? dailyData.date : s.lastWinDate,
+        },
+      };
+    });
+  }
+
+  function submit() {
+    if (!playing || !secret) return;
+    if (current.length !== length) {
+      showFlash('Not enough letters');
+      return;
+    }
+    if (!fullSetForLen) {
+      showFlash('Dictionary still loading…');
+      return;
+    }
+    if (current !== secret && !fullSetForLen.has(current)) {
+      showFlash('Not in dictionary');
+      return;
+    }
+    const next = [...guesses, current];
+    const didWin = current === secret;
+    const done = didWin || next.length >= MAX_GUESSES;
+    setStore((prev) => {
+      const bucket = dailyMode ? prev.daily : prev.practice;
+      const rec = bucket[lenKey];
+      if (!rec) return prev;
+      const updated = { ...bucket, [lenKey]: { ...rec, guesses: next } };
+      return dailyMode ? { ...prev, daily: updated } : { ...prev, practice: updated };
+    });
+    setCurrent('');
+    if (done) finishDaily(didWin);
+  }
+
+  function newPracticeWord() {
+    const word = pickPracticeWord();
+    if (!word) return;
+    setCurrent('');
+    setStore((prev) => ({
+      ...prev,
+      practice: { ...prev.practice, [lenKey]: { secret: btoa(word), guesses: [] } },
+    }));
+  }
+
+  function pressKey(k: string) {
+    if (k === 'enter') {
+      submit();
+      return;
+    }
+    if (k === 'backspace') {
+      setCurrent((c) => c.slice(0, -1));
+      return;
+    }
+    if (/^[a-z]$/.test(k) && playing) {
+      setCurrent((c) => (c.length < length ? c + k : c));
+    }
+  }
+
+  useImperativeHandle(ref, () => ({ pressKey }));
+
+  // physical keyboard
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+      if (e.key === 'Enter') pressKey('enter');
+      else if (e.key === 'Backspace') pressKey('backspace');
+      else if (/^[a-zA-Z]$/.test(e.key)) pressKey(e.key.toLowerCase());
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  });
+
+  const tileSize =
+    length > 10
+      ? 'w-6 h-8 text-sm sm:w-7 sm:h-9 sm:text-base'
+      : length > 7
+        ? 'w-8 h-10 text-lg sm:w-9 sm:h-11'
+        : 'w-10 h-12 text-xl sm:w-12 sm:h-14 sm:text-2xl';
+
+  const cellClass = (state: LetterState | 'pending' | 'empty') => {
+    switch (state) {
+      case 'correct':
+        return 'bg-emerald-500/80 border-emerald-400 text-white';
+      case 'present':
+        return 'bg-amber-400/80 border-amber-300 text-slate-950';
+      case 'absent':
+        return 'bg-white/[0.04] border-white/10 text-slate-500';
+      case 'pending':
+        return 'bg-white/5 border-white/30 text-white';
+      default:
+        return 'bg-white/[0.02] border-white/10 text-transparent';
+    }
+  };
+
+  const loading = dailyMode ? !dailyData && !dailyError : !commonWords;
+
+  return (
+    <div className="text-center">
+      {/* daily / practice toggle */}
+      <div className="mb-5 inline-flex rounded-xl bg-white/5 border border-white/10 p-1 gap-1">
+        {(
+          [
+            { id: true, label: 'Daily', Icon: CalendarDays },
+            { id: false, label: 'Practice', Icon: RefreshCw },
+          ] as const
+        ).map(({ id, label, Icon }) => (
+          <button
+            key={label}
+            onClick={() => setStore((prev) => ({ ...prev, dailyMode: id }))}
+            className={`inline-flex items-center gap-1.5 px-4 h-9 rounded-lg text-sm font-semibold transition-colors
+              ${dailyMode === id ? 'bg-emerald-400/15 text-emerald-300' : 'text-slate-400 hover:text-white'}`}
+          >
+            <Icon className="w-4 h-4" />
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {dailyMode && (
+        <div className="mb-4 flex items-center justify-center gap-4 text-xs text-slate-400">
+          <span className="inline-flex items-center gap-1.5">
+            <Trophy className="w-3.5 h-3.5 text-amber-400" />
+            Streak {store.stats.streak}
+          </span>
+          <span>Played {store.stats.played}</span>
+          <span>Won {store.stats.won}</span>
+          {dailyData && <span className="text-slate-500">{dailyData.date}</span>}
+        </div>
+      )}
+
+      {loading && <p className="text-sm text-slate-400 py-8">Loading…</p>}
+      {dailyMode && dailyError && (
+        <p className="text-sm text-rose-400 py-8">
+          Couldn&apos;t fetch today&apos;s words — try Practice instead.
+        </p>
+      )}
+
+      {secret && (
+        <>
+          <div className="flex flex-col items-center gap-1.5">
+            {Array.from({ length: MAX_GUESSES }, (_, row) => {
+              const guess = guesses[row];
+              const isCurrent = row === guesses.length && playing;
+              const score = guess && secret ? scoreGuess(secret, guess) : null;
+              return (
+                <div key={row} className="flex gap-1.5">
+                  {Array.from({ length }, (_, col) => {
+                    const ch = guess ? guess[col] : isCurrent ? current[col] ?? '' : '';
+                    const state = score ? score[col] : ch ? 'pending' : 'empty';
+                    return (
+                      <div
+                        key={col}
+                        className={`${tileSize} flex items-center justify-center font-bold uppercase rounded-lg border-2 transition-colors ${cellClass(state)}`}
+                      >
+                        {ch || '·'}
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            })}
+          </div>
+
+          <div className="h-6 mt-3">
+            {flash && <p className="text-sm text-amber-300">{flash}</p>}
+            {won && (
+              <p className="text-sm text-emerald-300 font-semibold">
+                Solved in {guesses.length}/{MAX_GUESSES} 🎉
+              </p>
+            )}
+            {lost && (
+              <p className="text-sm text-rose-300">
+                The word was <span className="font-bold uppercase">{secret}</span>
+              </p>
+            )}
+          </div>
+
+          <div className="mt-2 flex items-center justify-center gap-3">
+            {!dailyMode && (
+              <button
+                onClick={newPracticeWord}
+                className="inline-flex items-center gap-1.5 px-4 h-10 rounded-lg text-sm font-semibold bg-white/5 border border-white/10 text-slate-300 hover:bg-white/10 hover:text-white transition-colors"
+              >
+                <RefreshCw className="w-4 h-4" />
+                New word
+              </button>
+            )}
+            {dailyMode && (won || lost) && (
+              <p className="text-xs text-slate-500">
+                Fresh words arrive about 15 minutes after 3:00&nbsp;a.m. Eastern.
+              </p>
+            )}
+          </div>
+        </>
+      )}
+    </div>
+  );
+});
+
+export default GuessGame;
