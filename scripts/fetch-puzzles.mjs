@@ -126,7 +126,10 @@ console.log('Wrote data/daily-words.json for', etDate, `(${Object.keys(dailyWord
 // Daily hive for play mode: our own generated puzzle (not the NYT's letters),
 // seeded from a pangram so it is always completable, deterministic per date.
 const hiveRng = mulberry32(xmur3(`anagrimoire-hive-${etDate}`)());
-const hiveBases = [...commonSet].filter((w) => w.length >= 7 && new Set(w).size === 7).sort();
+// no 's' in the hive (plurals would flood the answer list)
+const hiveBases = [...commonSet]
+  .filter((w) => w.length >= 7 && new Set(w).size === 7 && !w.includes('s'))
+  .sort();
 if (!hiveBases.length) throw new Error('No pangram bases for the daily hive');
 const base = hiveBases[Math.floor(hiveRng() * hiveBases.length)];
 const hiveLetters = [...new Set(base)];

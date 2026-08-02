@@ -135,7 +135,10 @@ const HiveGame = forwardRef<
 
   function makePracticeHive(): HiveRecord | null {
     if (!commonWords || !commonSet) return null;
-    const bases = commonWords.filter((w) => w.length >= 7 && new Set(w).size === 7);
+    // no 's' in the hive (plurals would flood the answer list)
+    const bases = commonWords.filter(
+      (w) => w.length >= 7 && new Set(w).size === 7 && !w.includes('s')
+    );
     if (!bases.length) return null;
     const base = bases[Math.floor(Math.random() * bases.length)];
     const letters = [...new Set(base)];
