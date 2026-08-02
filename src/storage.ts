@@ -19,6 +19,7 @@ export type PersistedState = {
   patternPlay: boolean;
   beePlay: boolean;
   boxedPlay: boolean;
+  descramblePlay: boolean;
   pattern: { length: number; known: string[]; contains: string; excluded: string };
   descramble: { rack: string; useAll: boolean; minLength: number };
   bee: { center: string; outers: string[] };
@@ -38,6 +39,7 @@ export const DEFAULT_STATE: PersistedState = {
   patternPlay: false,
   beePlay: false,
   boxedPlay: false,
+  descramblePlay: false,
   pattern: { length: 5, known: Array(5).fill(''), contains: '', excluded: '' },
   descramble: { rack: '', useAll: false, minLength: 3 },
   bee: { center: '', outers: Array(6).fill('') },
@@ -111,6 +113,7 @@ export function loadState(): PersistedState {
       patternPlay: p?.patternPlay === true,
       beePlay: p?.beePlay === true,
       boxedPlay: p?.boxedPlay === true,
+      descramblePlay: p?.descramblePlay === true,
       pattern: {
         length,
         known,

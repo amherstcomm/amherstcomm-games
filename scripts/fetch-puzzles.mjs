@@ -195,3 +195,14 @@ if (!boxSides) throw new Error('Could not generate a daily box');
 const boxOut = { date: etDate, sides: boxSides, par: 2, fetchedAt: new Date().toISOString() };
 await writeFile('data/daily-box.json', JSON.stringify(boxOut, null, 2) + '\n');
 console.log('Wrote data/daily-box.json:', JSON.stringify(boxOut));
+
+// Daily scramble rack: seven letters shuffled from a common seven-letter
+// word, so a full-rack word always exists. Deterministic per Eastern date.
+const scrambleRng = mulberry32(xmur3(`anagrimoire-scramble-${etDate}`)());
+const rackBases = [...commonSet].filter((w) => w.length === 7).sort();
+if (!rackBases.length) throw new Error('No seven-letter rack bases');
+const rackBase = rackBases[Math.floor(scrambleRng() * rackBases.length)];
+const rack = rackBase.split('').sort(() => scrambleRng() - 0.5);
+const scrambleOut = { date: etDate, letters: rack, fetchedAt: new Date().toISOString() };
+await writeFile('data/daily-scramble.json', JSON.stringify(scrambleOut, null, 2) + '\n');
+console.log('Wrote data/daily-scramble.json:', JSON.stringify(scrambleOut));
