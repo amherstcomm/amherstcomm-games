@@ -183,9 +183,10 @@ const ScrambleGame = forwardRef<
     return record.found.reduce((n, w) => n + wordScore(w, record.rack.length), 0);
   }, [record]);
 
-  // dim letters not on the rack
+  // dim letters not on the rack — but only once the game has started, so the
+  // on-screen keyboard doesn't leak the letters before the clock runs
   useEffect(() => {
-    if (!record) {
+    if (!record || !record.endsAt) {
       onLetterStates({});
       return;
     }
@@ -388,7 +389,7 @@ const ScrambleGame = forwardRef<
             )}
           </div>
 
-          {/* the rack */}
+          {/* the rack — letters stay face-down until the clock starts */}
           <div className="flex justify-center gap-2">
             {remainingRack.map(({ c, spent }, i) => (
               <button
@@ -397,11 +398,13 @@ const ScrambleGame = forwardRef<
                 onClick={() => pressKey(c)}
                 disabled={!running}
                 className={`w-10 h-12 sm:w-12 sm:h-14 rounded-xl border-2 text-xl sm:text-2xl font-bold uppercase transition-colors
-                  ${spent
-                    ? 'bg-white/[0.02] border-white/5 text-slate-600'
-                    : 'bg-amber-400/10 border-amber-400/40 text-amber-200 hover:bg-amber-400/20'}`}
+                  ${!record.endsAt
+                    ? 'bg-white/5 border-white/15 text-slate-500'
+                    : spent
+                      ? 'bg-white/[0.02] border-white/5 text-slate-600'
+                      : 'bg-amber-400/10 border-amber-400/40 text-amber-200 hover:bg-amber-400/20'}`}
               >
-                {c}
+                {record.endsAt ? c : '?'}
               </button>
             ))}
           </div>
