@@ -8,7 +8,7 @@ import {
   useState,
 } from 'react';
 import { CornerDownLeft, Delete, RefreshCw, RotateCcw } from 'lucide-react';
-import { solveGrid, gridNeighbors } from '@/solvers';
+import { findGridPath, solveGrid, gridNeighbors } from '@/solvers';
 import type { Mode } from '@/storage';
 
 export type LearnModeHandle = { pressKey: (k: string) => void };
@@ -579,8 +579,15 @@ function gridScore(word: string): number {
   return 11;
 }
 
-function LearnGrid({ standardWords }: { standardWords: string[] | null }) {
+function LearnGrid({
+  standardWords,
+  register,
+}: {
+  standardWords: string[] | null;
+  register: RegisterKeys;
+}) {
   const [found, setFound] = useState<string[]>([]);
+  const [current, setCurrent] = useState('');
   const [flash, show] = useFlash();
   const [dragPath, setDragPath] = useState<number[]>([]);
   const dragRef = useRef<number[]>([]);
@@ -593,6 +600,53 @@ function LearnGrid({ standardWords }: { standardWords: string[] | null }) {
     () => (standardWords ? new Set(solveGrid(standardWords, { cells: GRID_CELLS, cols: GRID_COLS })) : null),
     [standardWords]
   );
+  const standardSet = useMemo(
+    () => (standardWords ? new Set(standardWords) : null),
+    [standardWords]
+  );
+
+  useDemoKeys(register, (k) => {
+    if (k === 'enter') {
+      const word = current;
+      setCurrent('');
+      submitWord(word);
+      return;
+    }
+    if (k === 'backspace') return setCurrent((c) => c.slice(0, -1));
+    if (GRID_CELLS.includes(k)) setCurrent((c) => c + k);
+  });
+
+  // hover / press-hold a found word to trace its path on the board
+  const boardRef = useRef<HTMLDivElement>(null);
+  const [trace, setTrace] = useState<number[] | null>(null);
+  const [tracePts, setTracePts] = useState<{ x: number; y: number }[]>([]);
+  useLayoutEffect(() => {
+    if (!trace || !boardRef.current) {
+      setTracePts([]);
+      return;
+    }
+    const wrap = boardRef.current.getBoundingClientRect();
+    setTracePts(
+      trace.map((i) => {
+        const r = boardRef.current!
+          .querySelector(`[data-learn-cell="${i}"]`)!
+          .getBoundingClientRect();
+        return { x: r.left + r.width / 2 - wrap.left, y: r.top + r.height / 2 - wrap.top };
+      })
+    );
+  }, [trace]);
+
+  function traceHandlers(word: string) {
+    const showTrace = () => setTrace(findGridPath(GRID_CELLS, GRID_COLS, word));
+    const hide = () => setTrace(null);
+    return {
+      onMouseEnter: showTrace,
+      onMouseLeave: hide,
+      onPointerDown: showTrace,
+      onPointerUp: hide,
+      onPointerCancel: hide,
+    };
+  }
 
   function cellAt(x: number, y: number): number | null {
     const el = document.elementFromPoint(x, y)?.closest('[data-learn-cell]');
@@ -622,15 +676,11 @@ function LearnGrid({ standardWords }: { standardWords: string[] | null }) {
     setPath([...prev, i]);
   }
 
-  function endDrag() {
-    const path = dragRef.current;
-    if (!path.length) return;
-    setPath([]);
-    if (path.length < 3) {
-      if (path.length === 2) show('Too short — words need 3+ letters');
+  function submitWord(word: string) {
+    if (word.length < 3) {
+      if (word.length > 0) show('Too short — words need 3+ letters');
       return;
     }
-    const word = path.map((i) => GRID_CELLS[i]).join('');
     if (found.includes(word)) {
       show('Already found');
       return;
@@ -640,11 +690,21 @@ function LearnGrid({ standardWords }: { standardWords: string[] | null }) {
       return;
     }
     if (!answers.has(word)) {
-      show('Not in dictionary');
+      // a real word that can't be traced is different from a non-word
+      if (standardSet?.has(word)) show('No path for that word on this grid');
+      else show('Not in dictionary');
       return;
     }
     setFound((f) => [word, ...f]);
     show(`+${gridScore(word)}`, true);
+  }
+
+  function endDrag() {
+    const path = dragRef.current;
+    if (!path.length) return;
+    setPath([]);
+    if (path.length === 1) return; // a stray tap
+    submitWord(path.map((i) => GRID_CELLS[i]).join(''));
   }
 
   useEffect(() => {
@@ -677,31 +737,77 @@ function LearnGrid({ standardWords }: { standardWords: string[] | null }) {
 
       <Section title="Try it — a mini grid">
         <p className="text-sm text-slate-400 mb-4">
-          Drag across the cells to trace a word, release to submit. Diagonals count! Try{' '}
+          Drag across the cells to trace a word (release to submit), or just type and press
+          Enter. Diagonals count! Try{' '}
           <span className="uppercase font-semibold text-slate-300">cat</span>,{' '}
           <span className="uppercase font-semibold text-slate-300">dog</span>… then hunt for
           longer paths.
         </p>
-        <div
-          onPointerDown={onDown}
-          onPointerMove={onMove}
-          className="grid grid-cols-3 gap-2 w-fit mx-auto touch-none select-none"
-        >
-          {GRID_CELLS.map((c, i) => (
-            <button
-              key={i}
-              data-learn-cell={i}
-              className={`w-12 h-14 rounded-xl border-2 text-2xl font-bold uppercase transition-colors
-                ${dragPath.includes(i)
-                  ? 'bg-emerald-400/30 border-emerald-300 text-white'
-                  : 'bg-amber-400/10 border-amber-400/40 text-amber-200 hover:bg-amber-400/20'}`}
-            >
-              {c}
-            </button>
-          ))}
+        <div className="mb-4 mx-auto max-w-sm h-12 px-4 rounded-xl bg-white/5 border-2 border-white/10 flex items-center justify-center overflow-hidden">
+          <span className="text-2xl font-bold tracking-[0.2em] uppercase whitespace-nowrap">
+            {dragPath.length ? (
+              <span className="text-emerald-300">
+                {dragPath.map((i) => GRID_CELLS[i]).join('')}
+              </span>
+            ) : (
+              <span className="text-white">{current}</span>
+            )}
+            <span className="text-amber-400 animate-pulse">|</span>
+          </span>
+        </div>
+        <div ref={boardRef} className="relative w-fit mx-auto">
+          <div
+            onPointerDown={onDown}
+            onPointerMove={onMove}
+            className="grid grid-cols-3 gap-2 touch-none select-none"
+          >
+            {GRID_CELLS.map((c, i) => (
+              <button
+                key={i}
+                data-learn-cell={i}
+                className={`w-12 h-14 rounded-xl border-2 text-2xl font-bold uppercase transition-colors
+                  ${trace?.includes(i)
+                    ? 'bg-sky-400/30 border-sky-300 text-white'
+                    : dragPath.includes(i)
+                      ? 'bg-emerald-400/30 border-emerald-300 text-white'
+                      : 'bg-amber-400/10 border-amber-400/40 text-amber-200 hover:bg-amber-400/20'}`}
+              >
+                {c}
+              </button>
+            ))}
+          </div>
+          {tracePts.length > 1 && (
+            <svg className="absolute inset-0 w-full h-full pointer-events-none">
+              <polyline
+                points={tracePts.map((p) => `${p.x},${p.y}`).join(' ')}
+                fill="none"
+                stroke="rgb(125 211 252 / 0.9)"
+                strokeWidth="4"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+              <circle cx={tracePts[0].x} cy={tracePts[0].y} r="6" fill="rgb(125 211 252)" />
+            </svg>
+          )}
         </div>
         <FlashLine flash={flash} />
-        <FoundChips words={found} strong={(w) => w.length >= 5} />
+        {found.length > 0 && (
+          <div className="mt-3 flex flex-wrap justify-center gap-1.5 max-w-md mx-auto">
+            {found.map((w) => (
+              <span
+                key={w}
+                {...traceHandlers(w)}
+                title="Hover to trace on the board"
+                className={`px-2.5 py-1 rounded-lg border text-sm tracking-wide cursor-pointer select-none
+                  ${w.length >= 5
+                    ? 'bg-emerald-400/25 border-emerald-300 text-emerald-100 font-semibold'
+                    : 'bg-emerald-400/10 border-emerald-400/30 text-emerald-200'}`}
+              >
+                {w}
+              </span>
+            ))}
+          </div>
+        )}
       </Section>
 
       <Section title="Daily & practice">
@@ -1255,7 +1361,7 @@ const LearnMode = forwardRef<LearnModeHandle, { mode: Mode; standardWords: strin
       {mode === 'pattern' && <LearnGuess />}
       {mode === 'descramble' && <LearnScramble dict={dict} register={register} />}
       {mode === 'bee' && <LearnHive dict={dict} register={register} />}
-      {mode === 'grid' && <LearnGrid standardWords={standardWords} />}
+      {mode === 'grid' && <LearnGrid standardWords={standardWords} register={register} />}
       {mode === 'boxed' && <LearnBoxed dict={dict} register={register} />}
       {mode === 'weave' && <LearnWeave dict={dict} />}
 
