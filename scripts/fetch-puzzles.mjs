@@ -1,7 +1,7 @@
 // Fetches today's NYT Letter Boxed and Spelling Bee puzzles and generates
 // daily guess-game words, writing data/letterboxed.json, data/spellingbee.json,
 // and data/daily-words.json.
-// Run by .github/workflows/letterboxed-data.yml on a daily schedule.
+// Run by .github/workflows/daily-puzzle-data.yml on a daily schedule.
 import { mkdir, writeFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 

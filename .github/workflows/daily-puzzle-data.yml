@@ -1,4 +1,7 @@
-name: Fetch NYT puzzle data
+# Fetches the NYT puzzles for the solver autofill buttons and generates our
+# own daily game content (guess words per length, daily hive), publishing
+# everything to the puzzle-data branch.
+name: Daily puzzle data
 
 on:
   schedule:

@@ -305,6 +305,7 @@ const HiveGame = forwardRef<
         ).map(({ id, label, Icon }) => (
           <button
             key={label}
+            onMouseDown={(e) => e.preventDefault()}
             onClick={() => {
               setCurrent('');
               setStore((prev) => ({ ...prev, dailyMode: id }));
@@ -354,6 +355,7 @@ const HiveGame = forwardRef<
           {/* the hive */}
           <div className="relative w-56 h-56 mx-auto">
             <button
+              onMouseDown={(e) => e.preventDefault()}
               onClick={() => pressKey(record.center)}
               className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-12 h-14 rounded-xl border-2 bg-amber-400/20 border-amber-400 text-amber-200 text-2xl font-bold uppercase hover:bg-amber-400/30 transition-colors"
             >
@@ -362,6 +364,7 @@ const HiveGame = forwardRef<
             {POSITIONS.map(([x, y], i) => (
               <button
                 key={i}
+                onMouseDown={(e) => e.preventDefault()}
                 onClick={() => pressKey(record.outers[i])}
                 className="absolute -translate-x-1/2 -translate-y-1/2 w-12 h-14 rounded-xl border-2 bg-white/5 border-white/15 text-white text-2xl font-bold uppercase hover:bg-white/10 hover:border-white/30 transition-colors"
                 style={{ left: `${x}%`, top: `${y}%` }}
@@ -374,6 +377,7 @@ const HiveGame = forwardRef<
           {/* controls */}
           <div className="mt-4 flex items-center justify-center gap-2.5">
             <button
+              onMouseDown={(e) => e.preventDefault()}
               onClick={() => pressKey('backspace')}
               aria-label="Delete letter"
               className="inline-flex items-center justify-center w-11 h-10 rounded-lg bg-white/5 border border-white/10 text-slate-300 hover:bg-white/10 hover:text-white transition-colors"
@@ -381,6 +385,7 @@ const HiveGame = forwardRef<
               <Delete className="w-4 h-4" />
             </button>
             <button
+              onMouseDown={(e) => e.preventDefault()}
               onClick={shuffleOuters}
               aria-label="Shuffle letters"
               className="inline-flex items-center justify-center w-11 h-10 rounded-lg bg-white/5 border border-white/10 text-slate-300 hover:bg-white/10 hover:text-white transition-colors"
@@ -388,6 +393,7 @@ const HiveGame = forwardRef<
               <Shuffle className="w-4 h-4" />
             </button>
             <button
+              onMouseDown={(e) => e.preventDefault()}
               onClick={submit}
               className="inline-flex items-center gap-1.5 px-4 h-10 rounded-lg text-sm font-semibold bg-amber-400/15 border border-amber-400/30 text-amber-200 hover:bg-amber-400/25 transition-colors"
             >
@@ -396,6 +402,7 @@ const HiveGame = forwardRef<
             </button>
             {!store.dailyMode && (
               <button
+                onMouseDown={(e) => e.preventDefault()}
                 onClick={newPracticeHive}
                 className="inline-flex items-center gap-1.5 px-4 h-10 rounded-lg text-sm font-semibold bg-white/5 border border-white/10 text-slate-300 hover:bg-white/10 hover:text-white transition-colors"
               >
