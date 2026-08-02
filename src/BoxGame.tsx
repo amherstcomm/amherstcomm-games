@@ -100,6 +100,31 @@ function generateBox(commonWords: string[]): BoxRecord | null {
   return null;
 }
 
+// each side gets its own hue so the four zones read at a glance; letter
+// states (idle / in current word / used) are shades within the side's hue
+const SIDE_TONES = [
+  {
+    idle: 'bg-sky-400/10 border-sky-400/40 text-sky-200 hover:bg-sky-400/20',
+    current: 'bg-sky-400/20 border-sky-400/70 text-sky-100',
+    used: 'bg-sky-400/40 border-sky-300 text-white',
+  },
+  {
+    idle: 'bg-violet-400/10 border-violet-400/40 text-violet-200 hover:bg-violet-400/20',
+    current: 'bg-violet-400/20 border-violet-400/70 text-violet-100',
+    used: 'bg-violet-400/40 border-violet-300 text-white',
+  },
+  {
+    idle: 'bg-rose-400/10 border-rose-400/40 text-rose-200 hover:bg-rose-400/20',
+    current: 'bg-rose-400/20 border-rose-400/70 text-rose-100',
+    used: 'bg-rose-400/40 border-rose-300 text-white',
+  },
+  {
+    idle: 'bg-amber-400/10 border-amber-400/40 text-amber-200 hover:bg-amber-400/20',
+    current: 'bg-amber-400/20 border-amber-400/70 text-amber-100',
+    used: 'bg-amber-400/40 border-amber-300 text-white',
+  },
+];
+
 // letter positions around the drawn square, per side (top, right, bottom, left)
 const SIDE_POSITIONS: [number, number][][] = [
   [
@@ -409,12 +434,12 @@ const BoxGame = forwardRef<
                     disabled={solved}
                     className={`absolute -translate-x-1/2 -translate-y-1/2 w-10 h-12 rounded-lg border-2 text-xl font-bold uppercase transition-colors
                       ${isLast
-                        ? 'bg-amber-400/20 border-amber-400 text-amber-200'
+                        ? `${SIDE_TONES[s].used} ring-2 ring-white/90`
                         : used
-                          ? 'bg-emerald-500/15 border-emerald-400/60 text-emerald-200'
+                          ? SIDE_TONES[s].used
                           : inCurrent
-                            ? 'bg-white/10 border-white/40 text-white'
-                            : 'bg-white/5 border-white/15 text-white hover:bg-white/10'}
+                            ? SIDE_TONES[s].current
+                            : SIDE_TONES[s].idle}
                       ${sameSide && !isLast ? 'opacity-40' : ''}`}
                     style={{ left: `${x}%`, top: `${y}%` }}
                   >
