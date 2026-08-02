@@ -30,6 +30,8 @@ Every mode has a **Solve / Play** toggle.
 
 Daily content refreshes about 15 minutes after 3:00 a.m. Eastern. The dev site (and local development) gets its own independently generated daily set, so testing there never spoils the production puzzles.
 
+When accounts are configured, each daily also shows a one-line **global summary** once you finish (player count, solve rate, averages — e.g. "12 players · 75% solved · avg 2 hints"). The numbers are anonymous aggregates over signed-in players' synced results, computed by a security-definer SQL function that exposes only totals, and they're visible to everyone — signing in is how you contribute, not how you see them.
+
 ### Dictionaries
 
 Three tiers, selectable per mode: **Common** (everyday words, ideal for Wordle-style puzzles), **Standard** (adds less frequent words), and **Full** (~275,000 words, obscurities included). The larger dictionaries load on demand to keep the initial page light.
