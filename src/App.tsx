@@ -4,6 +4,7 @@ import type { Session } from '@supabase/supabase-js';
 import StatsModal from '@/StatsModal';
 import AccountModal from '@/AccountModal';
 import { supabase } from '@/supabase';
+import { GA_ID } from '@/analytics';
 import { importBaselineOnce } from '@/stats';
 import GuessGame, { type GuessGameHandle, type LetterState } from '@/GuessGame';
 import HiveGame, { type HiveGameHandle } from '@/HiveGame';
@@ -1903,6 +1904,19 @@ function App() {
                   puzzles this tool can help with.
                 </p>
               </div>
+
+              {GA_ID && (
+                <div>
+                  <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">
+                    Privacy
+                  </h3>
+                  <p className="text-slate-400">
+                    Solving happens entirely in your browser — the letters you enter never
+                    leave your device. This site uses Google Analytics for anonymous visit
+                    statistics, and optional accounts sync only your play results.
+                  </p>
+                </div>
+              )}
 
               <div>
                 <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">

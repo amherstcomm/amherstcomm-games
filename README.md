@@ -85,6 +85,10 @@ Setup:
 
 Note: Supabase's built-in email service is rate-limited (a few magic links per hour) and its templates can't be edited without custom SMTP. Magic links are single-use, and corporate email scanners sometimes pre-click them — the modal accepts the emailed one-time code as a fallback, but the code only appears in the email once custom SMTP is configured with `{{ .Token }}` in the Magic Link template. Until then, OAuth is the frictionless path.
 
+## Analytics (optional)
+
+Set `VITE_GA_ID` to a Google Analytics 4 measurement ID (`G-…`) and the site loads gtag and reports pageviews; leave it unset and nothing is injected. Use one GA4 property with a separate web data stream (and measurement ID) for each environment, set on the matching Render site, so prod and dev numbers stay separable. When enabled, the About modal discloses it under a Privacy heading.
+
 ## Deployment
 
 The repo includes a [Render](https://render.com/) blueprint ([render.yaml](render.yaml)) that provisions a static site: it builds with `npm ci && npm run build`, publishes `dist/`, rewrites all routes to `index.html`, and sets long-lived cache headers on hashed assets.
