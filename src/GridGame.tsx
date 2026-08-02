@@ -8,7 +8,7 @@ import {
   useState,
 } from 'react';
 import { CalendarDays, ChevronDown, CornerDownLeft, Delete, Flag, Play, RefreshCw, Search, Timer } from 'lucide-react';
-import { gridNeighbors, solveGrid } from '@/solvers';
+import { findGridPath, gridNeighbors, solveGrid } from '@/solvers';
 import type { LetterState } from '@/GuessGame';
 
 export type GridGameHandle = { pressKey: (k: string) => void };
@@ -92,37 +92,6 @@ function loadStore(): GridStore {
   } catch {
     return DEFAULT_STORE;
   }
-}
-
-// first adjacency path spelling the word, as cell indices, or null
-function findGridPath(cells: string[], word: string): number[] | null {
-  const size = Math.round(Math.sqrt(cells.length));
-  const NB = gridNeighbors(size, size);
-  const visited = new Array<boolean>(cells.length).fill(false);
-  const path: number[] = [];
-  const dfs = (pos: number, idx: number): boolean => {
-    if (idx === word.length) return true;
-    for (const nb of NB[pos]) {
-      if (!visited[nb] && cells[nb] === word[idx]) {
-        visited[nb] = true;
-        path.push(nb);
-        if (dfs(nb, idx + 1)) return true;
-        visited[nb] = false;
-        path.pop();
-      }
-    }
-    return false;
-  };
-  for (let i = 0; i < cells.length; i++) {
-    if (cells[i] === word[0]) {
-      visited[i] = true;
-      path.push(i);
-      if (dfs(i, 1)) return path;
-      visited[i] = false;
-      path.pop();
-    }
-  }
-  return null;
 }
 
 // classic Boggle scoring
@@ -420,7 +389,7 @@ const GridGame = forwardRef<
   function traceHandlers(word: string) {
     const show = () => {
       if (!record) return;
-      setTrace(findGridPath(record.cells, word));
+      setTrace(findGridPath(record.cells, Math.round(Math.sqrt(record.cells.length)), word));
     };
     const hide = () => setTrace(null);
     return {
