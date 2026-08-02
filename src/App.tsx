@@ -515,6 +515,18 @@ function App() {
   useEffect(() => {
     if (session) void importBaselineOnce();
   }, [session]);
+
+  // surface auth errors that come back in the redirect URL (expired or
+  // already-used magic links land here with no other visible sign)
+  const [authNotice, setAuthNotice] = useState<string | null>(null);
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.hash.slice(1));
+    const desc = params.get('error_description') || params.get('error');
+    if (desc) {
+      setAuthNotice(desc);
+      history.replaceState(null, '', window.location.pathname + window.location.search);
+    }
+  }, []);
   const [patternPlay, setPatternPlay] = useState(initial.patternPlay);
   const [beePlay, setBeePlay] = useState(initial.beePlay);
   const [boxedPlay, setBoxedPlay] = useState(initial.boxedPlay);
@@ -1810,6 +1822,22 @@ function App() {
           </div>
         </footer>
       </div>
+
+      {authNotice && (
+        <div className="fixed top-3 left-1/2 -translate-x-1/2 z-[70] max-w-md w-[calc(100%-2rem)] rounded-xl bg-rose-950/95 border border-rose-500/40 px-4 py-3 shadow-2xl flex items-start gap-3">
+          <p className="text-sm text-rose-200 flex-1">
+            Sign-in didn&apos;t complete: {authNotice}. Request a fresh link, or use the
+            emailed code instead.
+          </p>
+          <button
+            onClick={() => setAuthNotice(null)}
+            aria-label="Dismiss"
+            className="text-rose-300 hover:text-white transition-colors"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
 
       {statsOpen && <StatsModal signedIn={!!session} onClose={() => setStatsOpen(false)} />}
 

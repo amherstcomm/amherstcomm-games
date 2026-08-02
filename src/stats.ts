@@ -253,6 +253,9 @@ function syncEvent(e: GameEvent, daily: boolean, puzzleDate: string | null): voi
         payload: e.payload,
       });
     })
+    .then((res) => {
+      if (res?.error) console.warn('Anagrimoire stats sync failed:', res.error.message);
+    })
     .catch(() => {
       // offline or transient failure — the local record still stands
     });
@@ -337,33 +340,58 @@ export function recordWeaveReveal(
 // Synced view
 // ---------------------------------------------------------------------------
 
-// one-time import: snapshot this browser's pre-account stats as the
-// account's baseline. First device to import wins; others no-op.
+// stable per-browser identity, so every device can contribute its own
+// pre-account history exactly once
+function deviceId(): string {
+  const KEY = 'anagrimoire:device:v1';
+  let id = localStorage.getItem(KEY);
+  if (!id) {
+    id = crypto.randomUUID();
+    localStorage.setItem(KEY, id);
+  }
+  return id;
+}
+
+// one-time per (user, device): snapshot this browser's pre-account stats
+// as one of the account's baselines
 export async function importBaselineOnce(): Promise<void> {
   if (!supabase) return;
   try {
-    const { data } = await supabase.from('stats_baselines').select('user_id').maybeSingle();
-    if (data) return; // already imported (this or another device)
     const { data: sess } = await supabase.auth.getSession();
     const userId = sess.session?.user.id;
     if (!userId) return;
-    await supabase.from('stats_baselines').insert({ user_id: userId, baseline: loadStats() });
+    const flagKey = `anagrimoire:baseline-imported:${userId}`;
+    if (localStorage.getItem(flagKey)) return;
+    const { error } = await supabase
+      .from('stats_baselines')
+      .insert({ user_id: userId, device_id: deviceId(), baseline: loadStats() });
+    // 23505 = already imported (row exists from a previous visit)
+    if (!error || error.code === '23505') localStorage.setItem(flagKey, '1');
+    else console.warn('Anagrimoire baseline import failed:', error.message);
   } catch {
-    // best-effort; retried on next sign-in
+    // best-effort; retried on next load
   }
 }
 
 const KNOWN_GAMES = new Set(['guess', 'hive', 'scramble', 'grid', 'box', 'weave']);
 
-// baseline + full event-log replay -> the account's synced stats
+// sum of all device baselines + full event-log replay -> the account's
+// synced stats
 export async function fetchSyncedStats(): Promise<StatsStore | null> {
   if (!supabase) return null;
   try {
-    const { data: baselineRow } = await supabase
+    const { data: baselineRows, error: baselineError } = await supabase
       .from('stats_baselines')
-      .select('baseline')
-      .maybeSingle();
-    const store = sanitizeStore(baselineRow?.baseline);
+      .select('baseline');
+    if (baselineError) throw baselineError;
+    let store = sanitizeStore(null);
+    for (const row of baselineRows ?? []) {
+      const b = sanitizeStore(row.baseline);
+      store = {
+        daily: combineStats(store.daily, b.daily),
+        practice: combineStats(store.practice, b.practice),
+      };
+    }
 
     const PAGE = 1000;
     for (let from = 0; ; from += PAGE) {

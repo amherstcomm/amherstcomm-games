@@ -76,12 +76,16 @@ create policy "read own results"
 
 -- ---------------------------------------------------------------------------
 -- stats_baselines: one-time import of the lifetime stats a browser
--- accumulated before the account existed. Insert-only, one per user.
+-- accumulated before the account existed. Insert-only, one row per
+-- (user, device) — every browser contributes its own history exactly once,
+-- and the synced view sums all baselines plus the event log.
 -- ---------------------------------------------------------------------------
 create table if not exists public.stats_baselines (
-  user_id uuid primary key references auth.users (id) on delete cascade,
+  user_id uuid not null references auth.users (id) on delete cascade,
+  device_id text not null,
   baseline jsonb not null,
-  created_at timestamptz not null default now()
+  created_at timestamptz not null default now(),
+  primary key (user_id, device_id)
 );
 
 alter table public.stats_baselines enable row level security;

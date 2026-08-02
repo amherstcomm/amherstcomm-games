@@ -13,6 +13,9 @@ export default function AccountModal({
   const [email, setEmail] = useState('');
   const [status, setStatus] = useState<'idle' | 'sending' | 'sent' | 'error'>('idle');
   const [error, setError] = useState('');
+  const [code, setCode] = useState('');
+  const [verifying, setVerifying] = useState(false);
+  const [codeError, setCodeError] = useState('');
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -37,6 +40,23 @@ export default function AccountModal({
     } else {
       setStatus('sent');
     }
+  }
+
+  // fallback for when the magic link can't complete (e.g. an email scanner
+  // pre-clicked it): verify with the code from the same email
+  async function verifyCode(e: React.FormEvent) {
+    e.preventDefault();
+    if (!supabase || !code.trim() || verifying) return;
+    setVerifying(true);
+    setCodeError('');
+    const { error: err } = await supabase.auth.verifyOtp({
+      email: email.trim(),
+      token: code.trim(),
+      type: 'email',
+    });
+    setVerifying(false);
+    if (err) setCodeError(err.message);
+    else onClose();
   }
 
   async function signOut() {
@@ -86,9 +106,31 @@ export default function AccountModal({
               they sync your stats across devices.
             </p>
             {status === 'sent' ? (
-              <p className="text-sm text-emerald-300">
-                Check your email — the sign-in link is on its way. You can close this window.
-              </p>
+              <div className="space-y-4">
+                <p className="text-sm text-emerald-300">
+                  Check your email — click the sign-in link, or enter the code from the
+                  email below.
+                </p>
+                <form onSubmit={verifyCode} className="space-y-3">
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    autoComplete="one-time-code"
+                    value={code}
+                    onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                    placeholder="6-digit code"
+                    className="w-full h-11 px-4 rounded-lg bg-white/5 border border-white/15 text-white tracking-[0.3em] placeholder:tracking-normal placeholder:text-slate-600 focus:outline-none focus:border-amber-400/60 transition-colors"
+                  />
+                  <button
+                    type="submit"
+                    disabled={verifying || code.length < 6}
+                    className="w-full inline-flex items-center justify-center gap-1.5 h-11 rounded-lg text-sm font-semibold bg-emerald-400 text-slate-950 shadow-lg shadow-emerald-500/30 hover:bg-emerald-300 transition-colors disabled:opacity-50"
+                  >
+                    {verifying ? 'Verifying…' : 'Verify code'}
+                  </button>
+                  {codeError && <p className="text-sm text-rose-400">{codeError}</p>}
+                </form>
+              </div>
             ) : (
               <form onSubmit={sendMagicLink} className="space-y-3">
                 <input

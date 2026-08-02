@@ -81,6 +81,8 @@ Setup:
 3. In **Authentication → URL Configuration**, set the Site URL to `https://www.anagrimoire.com` and add `https://dev.anagrimoire.com` and `http://localhost:5173` as additional redirect URLs.
 4. Copy the Project URL and anon/publishable key (**Settings → API**) into env vars — `.env.local` for local dev (see [.env.example](.env.example)), and environment variables on each Render static site. The anon key is public by design; row-level security protects the data.
 
+5. In **Authentication → Emails → Magic Link**, add the one-time code to the template (e.g. a line with `{{ .Token }}`). Magic links are single-use, and corporate email scanners sometimes pre-click them — the sign-in modal accepts the 6-digit code as a fallback that survives that.
+
 Note: Supabase's built-in email service is rate-limited (a few magic links per hour) — fine for testing, but configure custom SMTP or OAuth providers before promoting sign-in broadly.
 
 ## Deployment
