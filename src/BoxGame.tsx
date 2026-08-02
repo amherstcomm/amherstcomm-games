@@ -16,7 +16,12 @@ export type BoxGameHandle = { pressKey: (k: string) => void };
 const BOX_KEY = 'anagrimoire:box:v1';
 const DAILY_BOX_URL = dailyDataUrl('daily-box');
 
-type BoxRecord = { sides: string[]; chain: string[]; elapsedMs?: number };
+type BoxRecord = {
+  sides: string[];
+  chain: string[];
+  invalid?: string[]; // rejected non-dictionary guesses
+  elapsedMs?: number;
+};
 type BoxStore = {
   dailyMode: boolean;
   dailyDate: string;
@@ -40,6 +45,7 @@ function sanitizeRecord(r: unknown): BoxRecord | null {
   return {
     sides: rec.sides,
     chain: rec.chain.filter((w) => typeof w === 'string'),
+    invalid: Array.isArray(rec.invalid) ? rec.invalid.filter((w) => typeof w === 'string') : [],
     elapsedMs: typeof rec.elapsedMs === 'number' && rec.elapsedMs >= 0 ? rec.elapsedMs : 0,
   };
 }
@@ -293,6 +299,9 @@ const BoxGame = forwardRef<
       return;
     }
     if (!standardSet.has(word)) {
+      updateRecord((r) =>
+        r.invalid?.includes(word) ? r : { ...r, invalid: [...(r.invalid ?? []), word] }
+      );
       showFlash('Not in dictionary');
       return;
     }
@@ -529,6 +538,24 @@ const BoxGame = forwardRef<
               </p>
             )}
           </div>
+
+          {(record.invalid?.length ?? 0) > 0 && (
+            <div className="mt-3 max-w-md mx-auto">
+              <p className="mb-2 text-xs font-medium text-slate-500 uppercase tracking-wider">
+                Not in dictionary <span className="text-slate-600">· {record.invalid!.length}</span>
+              </p>
+              <div className="flex flex-wrap justify-center gap-1.5">
+                {[...record.invalid!].sort().map((w) => (
+                  <span
+                    key={w}
+                    className="px-2.5 py-1 rounded-lg border text-sm tracking-wide bg-white/[0.02] border-white/10 text-slate-500 line-through"
+                  >
+                    {w}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
 
           <p className="mt-4 text-xs text-slate-500">
             Chain words to use all twelve letters — each word starts with the previous

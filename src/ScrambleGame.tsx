@@ -20,6 +20,7 @@ const DURATION_MS = 3 * 60 * 1000;
 type ScrambleRecord = {
   rack: string[];
   found: string[];
+  invalid?: string[]; // rejected non-dictionary guesses
   endsAt: number | null; // null until the player presses Start
   finished: boolean;
 };
@@ -51,6 +52,7 @@ function sanitizeRecord(r: unknown): ScrambleRecord | null {
   return {
     rack: rec.rack,
     found: rec.found.filter((w) => typeof w === 'string'),
+    invalid: Array.isArray(rec.invalid) ? rec.invalid.filter((w) => typeof w === 'string') : [],
     endsAt: typeof rec.endsAt === 'number' ? rec.endsAt : null,
     finished: rec.finished === true,
   };
@@ -240,6 +242,9 @@ const ScrambleGame = forwardRef<
       return;
     }
     if (!answersSet.has(word)) {
+      updateRecord((r) =>
+        r.invalid?.includes(word) ? r : { ...r, invalid: [...(r.invalid ?? []), word] }
+      );
       showFlash('Not in dictionary');
       return;
     }
@@ -512,6 +517,25 @@ const ScrambleGame = forwardRef<
                       ${w.length === record.rack.length
                         ? 'bg-amber-400/10 border-amber-400/30 text-amber-200 font-semibold'
                         : 'bg-white/[0.04] border-white/10 text-slate-300'}`}
+                  >
+                    {w}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* rejected non-words */}
+          {(record.invalid?.length ?? 0) > 0 && (
+            <div className="mt-4 max-w-md mx-auto">
+              <p className="mb-2 text-xs font-medium text-slate-500 uppercase tracking-wider">
+                Not in dictionary <span className="text-slate-600">· {record.invalid!.length}</span>
+              </p>
+              <div className="flex flex-wrap justify-center gap-1.5">
+                {[...record.invalid!].sort().map((w) => (
+                  <span
+                    key={w}
+                    className="px-2.5 py-1 rounded-lg border text-sm tracking-wide bg-white/[0.02] border-white/10 text-slate-500 line-through"
                   >
                     {w}
                   </span>
