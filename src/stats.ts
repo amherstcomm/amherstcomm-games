@@ -1,7 +1,12 @@
 // Lifetime play statistics across all game modes, kept in separate daily
 // and practice buckets so the Stats modal can show either or a combined
 // overall view. Each game calls a record* helper at its completion
-// transition. Storage is best-effort localStorage, sanitized on load.
+// transition; the helper applies the event to local storage and, when
+// signed in, also appends it to the game_results log in Supabase. The
+// synced view replays that log through the same applyEvent logic, so the
+// two can never drift.
+
+import { supabase } from '@/supabase';
 
 const STATS_KEY = 'anagrimoire:stats:v1';
 
@@ -40,14 +45,16 @@ export type LifetimeStats = {
 
 export type StatsStore = { daily: LifetimeStats; practice: LifetimeStats };
 
-export const EMPTY_STATS: LifetimeStats = {
-  guess: { played: 0, won: 0, dist: [0, 0, 0, 0, 0, 0], totalTimeMs: 0, bestTimeMs: null },
-  hive: { words: 0, pangrams: 0, genius: 0, queenBee: 0, bestScore: 0 },
-  scramble: { sprints: 0, words: 0, bestScore: 0, totalScore: 0 },
-  grid: { sprints: 0, words: 0, bestScore: 0, totalScore: 0 },
-  box: { solved: 0, fewestWords: null, bestTimeMs: null, totalWords: 0, totalTimeMs: 0 },
-  weave: { solved: 0, revealed: 0, hintsUsed: 0, bestTimeMs: null, totalTimeMs: 0 },
-};
+// one completed-game event; payload shapes match what record* helpers send
+export type GameEvent =
+  | { game: 'guess'; payload: { won: boolean; guesses: number; timeMs: number } }
+  | {
+      game: 'hive';
+      payload: { pangram: boolean; score: number; genius: boolean; queenBee: boolean };
+    }
+  | { game: 'scramble' | 'grid'; payload: { score: number; words: number } }
+  | { game: 'box'; payload: { words: number; timeMs: number } }
+  | { game: 'weave'; payload: { solved: boolean; timeMs: number; hints: number } };
 
 function num(v: unknown): number {
   return typeof v === 'number' && Number.isFinite(v) && v >= 0 ? v : 0;
@@ -103,14 +110,78 @@ function sanitizeBucket(p: any): LifetimeStats {
   };
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function sanitizeStore(p: any): StatsStore {
+  return { daily: sanitizeBucket(p?.daily), practice: sanitizeBucket(p?.practice) };
+}
+
 export function loadStats(): StatsStore {
   try {
     const raw = localStorage.getItem(STATS_KEY);
-    if (!raw) return { daily: sanitizeBucket(null), practice: sanitizeBucket(null) };
-    const p = JSON.parse(raw);
-    return { daily: sanitizeBucket(p?.daily), practice: sanitizeBucket(p?.practice) };
+    return sanitizeStore(raw ? JSON.parse(raw) : null);
   } catch {
-    return { daily: sanitizeBucket(null), practice: sanitizeBucket(null) };
+    return sanitizeStore(null);
+  }
+}
+
+// the single source of truth for how an event changes a stats bucket —
+// used for live local updates and for replaying the synced event log
+export function applyEvent(s: LifetimeStats, e: GameEvent): void {
+  switch (e.game) {
+    case 'guess': {
+      const { won, guesses, timeMs } = e.payload;
+      s.guess.played += 1;
+      s.guess.totalTimeMs += num(timeMs);
+      if (won) {
+        s.guess.won += 1;
+        if (guesses >= 1 && guesses <= 6) s.guess.dist[guesses - 1] += 1;
+        if (s.guess.bestTimeMs === null || timeMs < s.guess.bestTimeMs) {
+          s.guess.bestTimeMs = num(timeMs);
+        }
+      }
+      break;
+    }
+    case 'hive': {
+      const { pangram, score, genius, queenBee } = e.payload;
+      s.hive.words += 1;
+      if (pangram) s.hive.pangrams += 1;
+      if (genius) s.hive.genius += 1;
+      if (queenBee) s.hive.queenBee += 1;
+      if (num(score) > s.hive.bestScore) s.hive.bestScore = num(score);
+      break;
+    }
+    case 'scramble':
+    case 'grid': {
+      const { score, words } = e.payload;
+      s[e.game].sprints += 1;
+      s[e.game].words += num(words);
+      s[e.game].totalScore += num(score);
+      if (num(score) > s[e.game].bestScore) s[e.game].bestScore = num(score);
+      break;
+    }
+    case 'box': {
+      const { words, timeMs } = e.payload;
+      s.box.solved += 1;
+      s.box.totalWords += num(words);
+      s.box.totalTimeMs += num(timeMs);
+      if (s.box.fewestWords === null || words < s.box.fewestWords) s.box.fewestWords = num(words);
+      if (s.box.bestTimeMs === null || timeMs < s.box.bestTimeMs) s.box.bestTimeMs = num(timeMs);
+      break;
+    }
+    case 'weave': {
+      const { solved, timeMs, hints } = e.payload;
+      s.weave.hintsUsed += num(hints);
+      if (solved) {
+        s.weave.solved += 1;
+        s.weave.totalTimeMs += num(timeMs);
+        if (s.weave.bestTimeMs === null || timeMs < s.weave.bestTimeMs) {
+          s.weave.bestTimeMs = num(timeMs);
+        }
+      } else {
+        s.weave.revealed += 1;
+      }
+      break;
+    }
   }
 }
 
@@ -166,31 +237,46 @@ export function combineStats(a: LifetimeStats, b: LifetimeStats): LifetimeStats 
   };
 }
 
-function update(daily: boolean, fn: (s: LifetimeStats) => void): void {
+// fire-and-forget append to the synced event log; no-op when signed out
+function syncEvent(e: GameEvent, daily: boolean, puzzleDate: string | null): void {
+  if (!supabase) return;
+  supabase.auth
+    .getSession()
+    .then(({ data }) => {
+      const userId = data.session?.user.id;
+      if (!userId) return;
+      return supabase!.from('game_results').insert({
+        user_id: userId,
+        game: e.game,
+        daily,
+        puzzle_date: daily && puzzleDate ? puzzleDate : null,
+        payload: e.payload,
+      });
+    })
+    .catch(() => {
+      // offline or transient failure — the local record still stands
+    });
+}
+
+function record(daily: boolean, e: GameEvent, puzzleDate: string | null = null): void {
   try {
     const store = loadStats();
-    fn(daily ? store.daily : store.practice);
+    applyEvent(daily ? store.daily : store.practice, e);
     localStorage.setItem(STATS_KEY, JSON.stringify(store));
   } catch {
     // storage unavailable — stats are best-effort
   }
+  syncEvent(e, daily, puzzleDate);
 }
 
 export function recordGuessFinish(
   daily: boolean,
   won: boolean,
   guesses: number,
-  timeMs: number
+  timeMs: number,
+  puzzleDate: string | null = null
 ): void {
-  update(daily, (s) => {
-    s.guess.played += 1;
-    s.guess.totalTimeMs += timeMs;
-    if (won) {
-      s.guess.won += 1;
-      if (guesses >= 1 && guesses <= 6) s.guess.dist[guesses - 1] += 1;
-      if (s.guess.bestTimeMs === null || timeMs < s.guess.bestTimeMs) s.guess.bestTimeMs = timeMs;
-    }
-  });
+  record(daily, { game: 'guess', payload: { won, guesses, timeMs } }, puzzleDate);
 }
 
 export function recordHiveWord(
@@ -198,53 +284,106 @@ export function recordHiveWord(
   pangram: boolean,
   newScore: number,
   crossedGenius: boolean,
-  crossedQueenBee: boolean
+  crossedQueenBee: boolean,
+  puzzleDate: string | null = null
 ): void {
-  update(daily, (s) => {
-    s.hive.words += 1;
-    if (pangram) s.hive.pangrams += 1;
-    if (crossedGenius) s.hive.genius += 1;
-    if (crossedQueenBee) s.hive.queenBee += 1;
-    if (newScore > s.hive.bestScore) s.hive.bestScore = newScore;
-  });
+  record(
+    daily,
+    {
+      game: 'hive',
+      payload: { pangram, score: newScore, genius: crossedGenius, queenBee: crossedQueenBee },
+    },
+    puzzleDate
+  );
 }
 
 export function recordSprint(
   daily: boolean,
   game: 'scramble' | 'grid',
   score: number,
-  words: number
+  words: number,
+  puzzleDate: string | null = null
 ): void {
-  update(daily, (s) => {
-    s[game].sprints += 1;
-    s[game].words += words;
-    s[game].totalScore += score;
-    if (score > s[game].bestScore) s[game].bestScore = score;
-  });
+  record(daily, { game, payload: { score, words } }, puzzleDate);
 }
 
-export function recordBoxSolve(daily: boolean, words: number, timeMs: number): void {
-  update(daily, (s) => {
-    s.box.solved += 1;
-    s.box.totalWords += words;
-    s.box.totalTimeMs += timeMs;
-    if (s.box.fewestWords === null || words < s.box.fewestWords) s.box.fewestWords = words;
-    if (s.box.bestTimeMs === null || timeMs < s.box.bestTimeMs) s.box.bestTimeMs = timeMs;
-  });
+export function recordBoxSolve(
+  daily: boolean,
+  words: number,
+  timeMs: number,
+  puzzleDate: string | null = null
+): void {
+  record(daily, { game: 'box', payload: { words, timeMs } }, puzzleDate);
 }
 
-export function recordWeaveSolve(daily: boolean, timeMs: number, hints: number): void {
-  update(daily, (s) => {
-    s.weave.solved += 1;
-    s.weave.hintsUsed += hints;
-    s.weave.totalTimeMs += timeMs;
-    if (s.weave.bestTimeMs === null || timeMs < s.weave.bestTimeMs) s.weave.bestTimeMs = timeMs;
-  });
+export function recordWeaveSolve(
+  daily: boolean,
+  timeMs: number,
+  hints: number,
+  puzzleDate: string | null = null
+): void {
+  record(daily, { game: 'weave', payload: { solved: true, timeMs, hints } }, puzzleDate);
 }
 
-export function recordWeaveReveal(daily: boolean, hints: number): void {
-  update(daily, (s) => {
-    s.weave.revealed += 1;
-    s.weave.hintsUsed += hints;
-  });
+export function recordWeaveReveal(
+  daily: boolean,
+  hints: number,
+  puzzleDate: string | null = null
+): void {
+  record(daily, { game: 'weave', payload: { solved: false, timeMs: 0, hints } }, puzzleDate);
+}
+
+// ---------------------------------------------------------------------------
+// Synced view
+// ---------------------------------------------------------------------------
+
+// one-time import: snapshot this browser's pre-account stats as the
+// account's baseline. First device to import wins; others no-op.
+export async function importBaselineOnce(): Promise<void> {
+  if (!supabase) return;
+  try {
+    const { data } = await supabase.from('stats_baselines').select('user_id').maybeSingle();
+    if (data) return; // already imported (this or another device)
+    const { data: sess } = await supabase.auth.getSession();
+    const userId = sess.session?.user.id;
+    if (!userId) return;
+    await supabase.from('stats_baselines').insert({ user_id: userId, baseline: loadStats() });
+  } catch {
+    // best-effort; retried on next sign-in
+  }
+}
+
+const KNOWN_GAMES = new Set(['guess', 'hive', 'scramble', 'grid', 'box', 'weave']);
+
+// baseline + full event-log replay -> the account's synced stats
+export async function fetchSyncedStats(): Promise<StatsStore | null> {
+  if (!supabase) return null;
+  try {
+    const { data: baselineRow } = await supabase
+      .from('stats_baselines')
+      .select('baseline')
+      .maybeSingle();
+    const store = sanitizeStore(baselineRow?.baseline);
+
+    const PAGE = 1000;
+    for (let from = 0; ; from += PAGE) {
+      const { data, error } = await supabase
+        .from('game_results')
+        .select('game, daily, payload')
+        .order('id', { ascending: true })
+        .range(from, from + PAGE - 1);
+      if (error) throw error;
+      for (const row of data ?? []) {
+        if (!KNOWN_GAMES.has(row.game)) continue;
+        applyEvent(row.daily ? store.daily : store.practice, {
+          game: row.game,
+          payload: row.payload ?? {},
+        } as GameEvent);
+      }
+      if (!data || data.length < PAGE) break;
+    }
+    return store;
+  } catch {
+    return null;
+  }
 }

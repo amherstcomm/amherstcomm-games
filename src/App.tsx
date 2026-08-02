@@ -4,6 +4,7 @@ import type { Session } from '@supabase/supabase-js';
 import StatsModal from '@/StatsModal';
 import AccountModal from '@/AccountModal';
 import { supabase } from '@/supabase';
+import { importBaselineOnce } from '@/stats';
 import GuessGame, { type GuessGameHandle, type LetterState } from '@/GuessGame';
 import HiveGame, { type HiveGameHandle } from '@/HiveGame';
 import BoxGame, { type BoxGameHandle } from '@/BoxGame';
@@ -509,6 +510,11 @@ function App() {
     const { data: sub } = supabase.auth.onAuthStateChange((_event, s) => setSession(s));
     return () => sub.subscription.unsubscribe();
   }, []);
+
+  // on sign-in, snapshot this browser's pre-account stats once as the baseline
+  useEffect(() => {
+    if (session) void importBaselineOnce();
+  }, [session]);
   const [patternPlay, setPatternPlay] = useState(initial.patternPlay);
   const [beePlay, setBeePlay] = useState(initial.beePlay);
   const [boxedPlay, setBoxedPlay] = useState(initial.boxedPlay);
@@ -1805,7 +1811,7 @@ function App() {
         </footer>
       </div>
 
-      {statsOpen && <StatsModal onClose={() => setStatsOpen(false)} />}
+      {statsOpen && <StatsModal signedIn={!!session} onClose={() => setStatsOpen(false)} />}
 
       {accountOpen && <AccountModal session={session} onClose={() => setAccountOpen(false)} />}
 

@@ -167,7 +167,13 @@ const ScrambleGame = forwardRef<
   useEffect(() => {
     if (running && remaining === 0) {
       setCurrent('');
-      recordSprint(store.dailyMode, 'scramble', score, record?.found.length ?? 0);
+      recordSprint(
+        store.dailyMode,
+        'scramble',
+        score,
+        record?.found.length ?? 0,
+        store.dailyMode ? store.dailyDate || null : null
+      );
       updateRecord((r) => ({ ...r, finished: true }));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps

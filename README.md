@@ -72,7 +72,7 @@ Other scripts:
 
 ## Accounts & sync (optional)
 
-The site is fully functional with no backend — solving and playing stay in the browser. Optionally, a [Supabase](https://supabase.com/) project adds sign-in (passwordless magic links) as the foundation for cross-device stat sync. Without the env vars below, every auth surface hides and nothing changes.
+The site is fully functional with no backend — solving and playing stay in the browser. Optionally, a [Supabase](https://supabase.com/) project adds sign-in (passwordless magic links) and cross-device stat sync: while signed in, every completed game is appended to a per-user event log, the browser's pre-account stats are imported once as a baseline, and the Stats panel shows the account's synced totals (baseline + event replay) instead of the local ones. Signed out — or without the env vars below — every auth surface hides and stats stay purely local.
 
 Setup:
 
