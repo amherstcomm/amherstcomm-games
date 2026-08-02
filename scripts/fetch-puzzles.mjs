@@ -1,7 +1,11 @@
-// Fetches today's NYT Letter Boxed and Spelling Bee puzzles and writes
-// data/letterboxed.json + data/spellingbee.json.
+// Fetches today's NYT Letter Boxed and Spelling Bee puzzles and generates
+// daily guess-game words, writing data/letterboxed.json, data/spellingbee.json,
+// and data/daily-words.json.
 // Run by .github/workflows/letterboxed-data.yml on a daily schedule.
 import { mkdir, writeFile } from 'node:fs/promises';
+import { createRequire } from 'node:module';
+
+const require = createRequire(import.meta.url);
 
 const HEADERS = {
   'User-Agent':
@@ -48,3 +52,73 @@ const sbOut = {
 };
 await writeFile('data/spellingbee.json', JSON.stringify(sbOut, null, 2) + '\n');
 console.log('Wrote data/spellingbee.json:', JSON.stringify(sbOut));
+
+// Daily guess-game words: one per length 3-15, deterministic for the Eastern
+// date so both scheduled runs pick identical words. Words are base64-encoded
+// purely to avoid accidental spoilers in the raw file.
+function xmur3(str) {
+  let h = 1779033703 ^ str.length;
+  for (let i = 0; i < str.length; i++) {
+    h = Math.imul(h ^ str.charCodeAt(i), 3432918353);
+    h = (h << 13) | (h >>> 19);
+  }
+  return () => {
+    h = Math.imul(h ^ (h >>> 16), 2246822507);
+    h = Math.imul(h ^ (h >>> 13), 3266489909);
+    return (h ^= h >>> 16) >>> 0;
+  };
+}
+function mulberry32(a) {
+  return () => {
+    a |= 0;
+    a = (a + 0x6d2b79f5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+function loadTierSet(files) {
+  const set = new Set();
+  for (const f of files) {
+    for (const raw of require(`wordlist-english/${f}.json`)) {
+      const w = String(raw).toLowerCase();
+      if (/^[a-z]+$/.test(w)) set.add(w);
+    }
+  }
+  return set;
+}
+
+const COMMON_FILES = ['english-words-10', 'english-words-20', 'english-words-35', 'american-words-10', 'american-words-20', 'american-words-35'];
+const STANDARD_FILES = [...COMMON_FILES, 'english-words-40', 'english-words-50', 'english-words-55', 'american-words-40', 'american-words-50', 'american-words-55'];
+
+const etDate = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York' }).format(new Date());
+const rng = mulberry32(xmur3(`anagrimoire-guess-${etDate}`)());
+
+const commonSet = loadTierSet(COMMON_FILES);
+let standardSet = null; // loaded lazily; long lengths are sparse in the common tiers
+let fullList = null;
+
+const dailyWords = {};
+for (let len = 3; len <= 15; len++) {
+  // skip simple plurals whose stem is also a word
+  const pickable = (set) =>
+    [...set].filter((w) => w.length === len && !(w.endsWith('s') && set.has(w.slice(0, -1))));
+  let pool = pickable(commonSet);
+  if (pool.length === 0) {
+    standardSet ??= loadTierSet(STANDARD_FILES);
+    pool = pickable(standardSet);
+  }
+  if (pool.length === 0) {
+    fullList ??= require('an-array-of-english-words');
+    pool = fullList.filter((w) => w.length === len);
+  }
+  if (pool.length === 0) throw new Error(`No candidate words of length ${len}`);
+  pool.sort(); // Set iteration order is insertion order — sort for determinism
+  const word = pool[Math.floor(rng() * pool.length)];
+  dailyWords[len] = Buffer.from(word).toString('base64');
+}
+
+const dwOut = { date: etDate, words: dailyWords, fetchedAt: new Date().toISOString() };
+await writeFile('data/daily-words.json', JSON.stringify(dwOut, null, 2) + '\n');
+console.log('Wrote data/daily-words.json for', etDate, `(${Object.keys(dailyWords).length} lengths)`);

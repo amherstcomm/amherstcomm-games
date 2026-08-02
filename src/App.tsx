@@ -1,5 +1,6 @@
 import { useMemo, useState, useEffect, useRef, type ReactNode } from 'react';
-import { Search, Sparkles, Eraser, ArrowDown, ArrowUp, X, BookOpen, Grid3x3, Shuffle, Hexagon, Check, Keyboard, Delete, Github, Info, Square, CalendarDays, Star } from 'lucide-react';
+import { Search, Sparkles, Eraser, ArrowDown, ArrowUp, X, BookOpen, Grid3x3, Shuffle, Hexagon, Check, Keyboard, Delete, Github, Info, Square, CalendarDays, Star, Gamepad2, CornerDownLeft } from 'lucide-react';
+import GuessGame, { type GuessGameHandle, type LetterState } from '@/GuessGame';
 import { DICTIONARIES, getDictionary, type DictionaryId } from '@/dictionaries';
 import { solvePattern, solveDescramble, solveBee, solveBoxed } from '@/solvers';
 import { loadState, saveState, type Mode, type SortPref } from '@/storage';
@@ -326,6 +327,21 @@ function App() {
   const [sorts, setSorts] = useState(initial.sort);
   const [kbOpen, setKbOpen] = useState(initial.keyboard);
   const [aboutOpen, setAboutOpen] = useState(false);
+  const [patternPlay, setPatternPlay] = useState(initial.patternPlay);
+  const [letterStates, setLetterStates] = useState<Record<string, LetterState>>({});
+  const [commonWordsArr, setCommonWordsArr] = useState<string[] | null>(null);
+  const [fullWordsArr, setFullWordsArr] = useState<string[] | null>(null);
+  const gameRef = useRef<GuessGameHandle>(null);
+
+  const playActive = mode === 'pattern' && patternPlay;
+
+  // the guess game validates against the full dictionary and picks practice
+  // words from the common one
+  useEffect(() => {
+    if (!playActive) return;
+    if (!commonWordsArr) getDictionary('common').then(setCommonWordsArr);
+    if (!fullWordsArr) getDictionary('full').then(setFullWordsArr);
+  }, [playActive, commonWordsArr, fullWordsArr]);
 
   useEffect(() => {
     if (!aboutOpen) return;
@@ -361,12 +377,13 @@ function App() {
       dictionaries,
       sort: sorts,
       keyboard: kbOpen,
+      patternPlay,
       pattern: { length, known, contains: containsStr, excluded: excludedStr },
       descramble: { rack: rackStr, useAll, minLength },
       bee: { center: beeCenter, outers: beeOuters },
       boxed: { letters: boxedLetters, solutionWords },
     });
-  }, [mode, dictionaries, sorts, kbOpen, length, known, containsStr, excludedStr, rackStr, useAll, minLength, beeCenter, beeOuters, boxedLetters, solutionWords]);
+  }, [mode, dictionaries, sorts, kbOpen, patternPlay, length, known, containsStr, excludedStr, rackStr, useAll, minLength, beeCenter, beeOuters, boxedLetters, solutionWords]);
 
   // keep known array sized to length
   useEffect(() => {
@@ -570,6 +587,10 @@ function App() {
   }
 
   function pressKey(k: string) {
+    if (playActive) {
+      gameRef.current?.pressKey(k);
+      return;
+    }
     const remembered =
       lastFocused.current && document.contains(lastFocused.current) ? lastFocused.current : null;
     const target = remembered ?? pickDefaultTarget();
@@ -667,7 +688,34 @@ function App() {
           </p>
         </header>
 
+        {/* solve / play toggle */}
+        {mode === 'pattern' && (
+          <section className="mb-7 text-center">
+            <div className="inline-flex rounded-xl bg-white/5 border border-white/10 p-1 gap-1">
+              {(
+                [
+                  { play: false, label: 'Solve', Icon: Search },
+                  { play: true, label: 'Play', Icon: Gamepad2 },
+                ] as const
+              ).map(({ play, label, Icon }) => (
+                <button
+                  key={label}
+                  onClick={() => setPatternPlay(play)}
+                  className={`inline-flex items-center gap-1.5 px-5 h-10 rounded-lg text-sm font-semibold transition-all duration-150
+                    ${patternPlay === play
+                      ? 'bg-emerald-400 text-slate-950 shadow-lg shadow-emerald-500/30'
+                      : 'text-slate-300 hover:bg-white/10'}`}
+                >
+                  <Icon className="w-4 h-4" />
+                  {label}
+                </button>
+              ))}
+            </div>
+          </section>
+        )}
+
         {/* dictionary selector */}
+        {!playActive && (
         <section className="mb-7 text-center">
           <label className="block text-xs font-medium text-slate-400 uppercase tracking-wider mb-2.5">
             Dictionary
@@ -692,6 +740,7 @@ function App() {
             {DICTIONARIES.find((d) => d.id === dictionaryId)?.blurb}
           </p>
         </section>
+        )}
 
         {mode === 'pattern' && (
         <>
@@ -716,6 +765,18 @@ function App() {
           </div>
         </section>
 
+        {patternPlay ? (
+        <div className="mb-8">
+          <GuessGame
+            ref={gameRef}
+            length={length}
+            commonWords={commonWordsArr}
+            fullWords={fullWordsArr}
+            onLetterStates={setLetterStates}
+          />
+        </div>
+        ) : (
+        <>
         {/* known positions */}
         <section className="mb-7 text-center">
           <label className="block text-xs font-medium text-slate-400 uppercase tracking-wider mb-2.5">
@@ -773,6 +834,8 @@ function App() {
             />
           </section>
         </div>
+        </>
+        )}
         </>
         )}
 
@@ -963,6 +1026,8 @@ function App() {
           );
         })()}
 
+        {!playActive && (
+        <>
         {/* results header */}
         <div className="flex items-center justify-between mb-4 flex-wrap gap-y-3">
           <div className="flex items-center gap-2.5">
@@ -1192,12 +1257,16 @@ function App() {
             )}
           </>
         )}
+        </>
+        )}
 
         <footer className="mt-14 text-center text-xs text-slate-600">
-          <p>
-            Searching {words.length.toLocaleString()} English words (
-            {DICTIONARIES.find((d) => d.id === dictionaryId)?.label.toLowerCase()} dictionary).
-          </p>
+          {!playActive && (
+            <p>
+              Searching {words.length.toLocaleString()} English words (
+              {DICTIONARIES.find((d) => d.id === dictionaryId)?.label.toLowerCase()} dictionary).
+            </p>
+          )}
           <div className="mt-3 flex items-center justify-center gap-5">
             <a
               href="https://github.com/rptetzloff/anagrimoire"
@@ -1362,21 +1431,43 @@ function App() {
             {[
               'qwertyuiop'.split(''),
               'asdfghjkl'.split(''),
-              [...(mode === 'descramble' ? ['?'] : []), ...'zxcvbnm'.split(''), 'backspace'],
+              [
+                ...(playActive ? ['enter'] : []),
+                ...(mode === 'descramble' ? ['?'] : []),
+                ...'zxcvbnm'.split(''),
+                'backspace',
+              ],
             ].map((row, r) => (
               <div key={r} className={`flex w-full gap-1 sm:gap-1.5 ${r === 1 ? 'px-[4.5%]' : ''}`}>
-                {row.map((k) => (
-                  <button
-                    key={k}
-                    onMouseDown={(e) => e.preventDefault()}
-                    onClick={() => pressKey(k)}
-                    aria-label={k === 'backspace' ? 'Backspace' : `Key ${k}`}
-                    className={`h-11 min-w-0 rounded-md bg-white/10 hover:bg-white/20 active:bg-white/30 text-sm font-semibold uppercase text-white transition-colors flex items-center justify-center
-                      ${k === 'backspace' ? 'flex-[1.5]' : 'flex-1'}`}
-                  >
-                    {k === 'backspace' ? <Delete className="w-4 h-4" /> : k}
-                  </button>
-                ))}
+                {row.map((k) => {
+                  const state = playActive && /^[a-z]$/.test(k) ? letterStates[k] : undefined;
+                  const tone =
+                    state === 'correct'
+                      ? 'bg-emerald-500/80 hover:bg-emerald-500 text-white'
+                      : state === 'present'
+                        ? 'bg-amber-400/80 hover:bg-amber-400 text-slate-950'
+                        : state === 'absent'
+                          ? 'bg-white/[0.04] hover:bg-white/10 text-slate-600'
+                          : 'bg-white/10 hover:bg-white/20 active:bg-white/30 text-white';
+                  return (
+                    <button
+                      key={k}
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={() => pressKey(k)}
+                      aria-label={k === 'backspace' ? 'Backspace' : k === 'enter' ? 'Enter' : `Key ${k}`}
+                      className={`h-11 min-w-0 rounded-md text-sm font-semibold uppercase transition-colors flex items-center justify-center ${tone}
+                        ${k === 'backspace' || k === 'enter' ? 'flex-[1.5]' : 'flex-1'}`}
+                    >
+                      {k === 'backspace' ? (
+                        <Delete className="w-4 h-4" />
+                      ) : k === 'enter' ? (
+                        <CornerDownLeft className="w-4 h-4" />
+                      ) : (
+                        k
+                      )}
+                    </button>
+                  );
+                })}
               </div>
             ))}
           </div>
