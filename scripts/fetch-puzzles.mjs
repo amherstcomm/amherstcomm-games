@@ -206,3 +206,17 @@ const rack = rackBase.split('').sort(() => scrambleRng() - 0.5);
 const scrambleOut = { date: etDate, letters: rack, fetchedAt: new Date().toISOString() };
 await writeFile('data/daily-scramble.json', JSON.stringify(scrambleOut, null, 2) + '\n');
 console.log('Wrote data/daily-scramble.json:', JSON.stringify(scrambleOut));
+
+// Daily 4x4 grid: rolled from the classic sixteen-dice letter distributions
+// (with q treated as a plain letter), deterministic per Eastern date.
+const GRID_DICE = [
+  'aaeegn', 'abbjoo', 'achops', 'affkps',
+  'aoottw', 'cimotu', 'deilrx', 'delrvy',
+  'distty', 'eeghnw', 'eeinsu', 'ehrtvw',
+  'eiosst', 'elrtty', 'himnuq', 'hlnnrz',
+];
+const gridRng = mulberry32(xmur3(`anagrimoire-grid-${etDate}`)());
+const gridCells = GRID_DICE.map((d) => d[Math.floor(gridRng() * 6)]).sort(() => gridRng() - 0.5);
+const gridOut = { date: etDate, cells: gridCells, fetchedAt: new Date().toISOString() };
+await writeFile('data/daily-grid.json', JSON.stringify(gridOut, null, 2) + '\n');
+console.log('Wrote data/daily-grid.json:', JSON.stringify(gridOut));

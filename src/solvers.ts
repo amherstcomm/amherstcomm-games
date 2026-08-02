@@ -92,6 +92,59 @@ export function solveBoxed(list: string[], input: BoxedInput): string[] {
   return matches.sort((a, b) => b.length - a.length || (a < b ? -1 : 1));
 }
 
+export type GridInput = {
+  cells: string[]; // 16 letters, row-major 4x4
+};
+
+// neighbor indices (including diagonals) for each cell of the 4x4 grid
+const GRID_NEIGHBORS: number[][] = (() => {
+  const out: number[][] = [];
+  for (let i = 0; i < 16; i++) {
+    const r = Math.floor(i / 4);
+    const c = i % 4;
+    const adj: number[] = [];
+    for (let dr = -1; dr <= 1; dr++) {
+      for (let dc = -1; dc <= 1; dc++) {
+        if (!dr && !dc) continue;
+        const rr = r + dr;
+        const cc = c + dc;
+        if (rr >= 0 && rr < 4 && cc >= 0 && cc < 4) adj.push(rr * 4 + cc);
+      }
+    }
+    out.push(adj);
+  }
+  return out;
+})();
+
+export function solveGrid(list: string[], input: GridInput): string[] {
+  const { cells } = input;
+  if (cells.length !== 16 || cells.some((c) => !c)) return [];
+
+  // narrow to words spellable from the grid's alphabet, then prefix-prune the DFS
+  const present = new Set(cells);
+  const candidates = list.filter((w) => {
+    if (w.length < 3 || w.length > 16) return false;
+    for (let i = 0; i < w.length; i++) if (!present.has(w[i])) return false;
+    return true;
+  });
+  const wordSet = new Set(candidates);
+  const prefixes = new Set<string>();
+  for (const w of candidates) for (let i = 1; i <= w.length; i++) prefixes.add(w.slice(0, i));
+
+  const found = new Set<string>();
+  const dfs = (pos: number, cur: string, mask: number) => {
+    if (!prefixes.has(cur)) return;
+    if (cur.length >= 3 && wordSet.has(cur)) found.add(cur);
+    for (const nb of GRID_NEIGHBORS[pos]) {
+      if (!(mask & (1 << nb))) dfs(nb, cur + cells[nb], mask | (1 << nb));
+    }
+  };
+  for (let i = 0; i < 16; i++) dfs(i, cells[i], 1 << i);
+
+  // longest words first, then alphabetical
+  return [...found].sort((a, b) => b.length - a.length || (a < b ? -1 : 1));
+}
+
 export type DescrambleInput = {
   letters: string[]; // the rack, a-z only
   wildcards: number; // blank tiles that can stand in for any letter

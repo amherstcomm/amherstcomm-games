@@ -1,11 +1,12 @@
 import { useMemo, useState, useEffect, useRef, type ReactNode } from 'react';
-import { Search, Sparkles, Eraser, ArrowDown, ArrowUp, X, BookOpen, Grid3x3, Shuffle, Hexagon, Check, Keyboard, Delete, Github, Info, Square, CalendarDays, Star, Gamepad2, CornerDownLeft } from 'lucide-react';
+import { Search, Sparkles, Eraser, ArrowDown, ArrowUp, X, BookOpen, Grid3x3, Shuffle, Hexagon, Check, Keyboard, Delete, Github, Info, Square, CalendarDays, Star, Gamepad2, CornerDownLeft, LayoutGrid } from 'lucide-react';
 import GuessGame, { type GuessGameHandle, type LetterState } from '@/GuessGame';
 import HiveGame, { type HiveGameHandle } from '@/HiveGame';
 import BoxGame, { type BoxGameHandle } from '@/BoxGame';
 import ScrambleGame, { type ScrambleGameHandle } from '@/ScrambleGame';
+import GridGame, { type GridGameHandle } from '@/GridGame';
 import { DICTIONARIES, getDictionary, type DictionaryId } from '@/dictionaries';
-import { solvePattern, solveDescramble, solveBee, solveBoxed } from '@/solvers';
+import { solvePattern, solveDescramble, solveBee, solveBoxed, solveGrid } from '@/solvers';
 import { loadState, saveState, type Mode, type SortPref } from '@/storage';
 
 const MIN_LEN = 3;
@@ -34,6 +35,13 @@ const MODES: { id: Mode; label: string; blurb: string; description: string }[] =
       "Enter the hive's seven letters and we'll find every word that uses the center — pangrams first.",
   },
   {
+    id: 'grid',
+    label: 'Grid',
+    blurb: 'Boggle style — chain adjacent letters, each cell once',
+    description:
+      "Enter the sixteen grid letters and we'll find every word that can be traced through adjacent cells.",
+  },
+  {
     id: 'boxed',
     label: 'Boxed',
     blurb: "Twelve letters on four sides, no two in a row from the same side — Letter Boxed style",
@@ -46,6 +54,7 @@ const MODE_ICONS: Record<Mode, typeof Grid3x3> = {
   pattern: Grid3x3,
   descramble: Shuffle,
   bee: Hexagon,
+  grid: LayoutGrid,
   boxed: Square,
 };
 
@@ -339,6 +348,8 @@ function App() {
   const [beeOuters, setBeeOuters] = useState<string[]>(initial.bee.outers);
   const [boxedLetters, setBoxedLetters] = useState<string[]>(initial.boxed.letters);
   const [solutionWords, setSolutionWords] = useState(initial.boxed.solutionWords);
+  const [gridLetters, setGridLetters] = useState<string[]>(initial.grid.letters);
+  const [gridPlay, setGridPlay] = useState(initial.gridPlay);
   const [todayStatus, setTodayStatus] = useState<'idle' | 'loading' | 'error'>('idle');
   const [commonSet, setCommonSet] = useState<Set<string> | null>(null);
 
@@ -364,23 +375,26 @@ function App() {
   const hiveRef = useRef<HiveGameHandle>(null);
   const boxRef = useRef<BoxGameHandle>(null);
   const scrambleRef = useRef<ScrambleGameHandle>(null);
+  const gridRef = useRef<GridGameHandle>(null);
 
   const patternPlayActive = mode === 'pattern' && patternPlay;
   const beePlayActive = mode === 'bee' && beePlay;
   const boxedPlayActive = mode === 'boxed' && boxedPlay;
   const descramblePlayActive = mode === 'descramble' && descramblePlay;
-  const playActive = patternPlayActive || beePlayActive || boxedPlayActive || descramblePlayActive;
+  const gridPlayActive = mode === 'grid' && gridPlay;
+  const playActive =
+    patternPlayActive || beePlayActive || boxedPlayActive || descramblePlayActive || gridPlayActive;
 
   // the guess game validates against the full dictionary and picks practice
-  // words from the common one; hive, box, and scramble play use standard
+  // words from the common one; hive, box, scramble, and grid play use standard
   useEffect(() => {
     if (!playActive) return;
     if (!commonWordsArr) getDictionary('common').then(setCommonWordsArr);
     if (patternPlayActive && !fullWordsArr) getDictionary('full').then(setFullWordsArr);
-    if ((beePlayActive || boxedPlayActive || descramblePlayActive) && !standardWordsArr) {
+    if ((beePlayActive || boxedPlayActive || descramblePlayActive || gridPlayActive) && !standardWordsArr) {
       getDictionary('standard').then(setStandardWordsArr);
     }
-  }, [playActive, patternPlayActive, beePlayActive, boxedPlayActive, descramblePlayActive, commonWordsArr, fullWordsArr, standardWordsArr]);
+  }, [playActive, patternPlayActive, beePlayActive, boxedPlayActive, descramblePlayActive, gridPlayActive, commonWordsArr, fullWordsArr, standardWordsArr]);
 
   useEffect(() => {
     if (!aboutOpen) return;
@@ -420,12 +434,14 @@ function App() {
       beePlay,
       boxedPlay,
       descramblePlay,
+      gridPlay,
       pattern: { length, known, contains: containsStr, excluded: excludedStr },
       descramble: { rack: rackStr, useAll, minLength },
       bee: { center: beeCenter, outers: beeOuters },
       boxed: { letters: boxedLetters, solutionWords },
+      grid: { letters: gridLetters },
     });
-  }, [mode, dictionaries, sorts, kbOpen, patternPlay, beePlay, boxedPlay, descramblePlay, length, known, containsStr, excludedStr, rackStr, useAll, minLength, beeCenter, beeOuters, boxedLetters, solutionWords]);
+  }, [mode, dictionaries, sorts, kbOpen, patternPlay, beePlay, boxedPlay, descramblePlay, gridPlay, length, known, containsStr, excludedStr, rackStr, useAll, minLength, beeCenter, beeOuters, boxedLetters, solutionWords, gridLetters]);
 
   // keep known array sized to length
   useEffect(() => {
@@ -476,8 +492,11 @@ function App() {
     if (mode === 'boxed') {
       return solveBoxed(words, { sides: boxedSides });
     }
+    if (mode === 'grid') {
+      return solveGrid(words, { cells: gridLetters });
+    }
     return solvePattern(words, { length, known, contains, excluded });
-  }, [mode, words, length, known, contains, excluded, rackLetters, wildcards, useAll, minLength, beeCenter, beeOuters, boxedSides]);
+  }, [mode, words, length, known, contains, excluded, rackLetters, wildcards, useAll, minLength, beeCenter, beeOuters, boxedSides, gridLetters]);
 
   // shared index for Letter Boxed chain searches; null until all 12 letters are in
   const boxedIndex = useMemo<ChainIndex | null>(() => {
@@ -623,7 +642,8 @@ function App() {
     if (mode === 'descramble') {
       return document.querySelector<HTMLInputElement>('input[aria-label="Letters to descramble"]');
     }
-    const group = mode === 'bee' ? 'bee' : mode === 'boxed' ? 'boxed' : 'known';
+    const group =
+      mode === 'bee' ? 'bee' : mode === 'boxed' ? 'boxed' : mode === 'grid' ? 'grid' : 'known';
     const tiles = [...document.querySelectorAll<HTMLInputElement>(`input[data-tile-group="${group}"]`)];
     return tiles.find((t) => !t.value) ?? tiles[0] ?? null;
   }
@@ -643,6 +663,10 @@ function App() {
     }
     if (descramblePlayActive) {
       scrambleRef.current?.pressKey(k);
+      return;
+    }
+    if (gridPlayActive) {
+      gridRef.current?.pressKey(k);
       return;
     }
     const remembered =
@@ -756,6 +780,7 @@ function App() {
                   descramble: [descramblePlay, setDescramblePlay],
                   bee: [beePlay, setBeePlay],
                   boxed: [boxedPlay, setBoxedPlay],
+                  grid: [gridPlay, setGridPlay],
                 };
                 const [flag, setFlag] = flags[mode];
                 const active = flag === play;
@@ -1048,6 +1073,48 @@ function App() {
         </div>
         )}
 
+        {gridPlayActive && (
+        <div className="mb-8">
+          <GridGame
+            ref={gridRef}
+            standardWords={standardWordsArr}
+            onLetterStates={setLetterStates}
+            onReveal={(cells) => {
+              setGridLetters(cells.slice(0, 16));
+              setGridPlay(false);
+            }}
+          />
+        </div>
+        )}
+
+        {mode === 'grid' && !gridPlay && (
+        <div className="mb-8 text-center">
+          <label className="block text-xs font-medium text-slate-400 uppercase tracking-wider mb-3">
+            The grid
+          </label>
+          <div className="grid grid-cols-4 gap-2 w-fit mx-auto">
+            {gridLetters.map((v, i) => (
+              <Tile
+                key={i}
+                index={i}
+                group="grid"
+                osk={kbOpen}
+                value={v}
+                state={v ? 'known' : 'empty'}
+                size="sm"
+                onChange={(c) =>
+                  setGridLetters((prev) => prev.map((x, j) => (j === i ? c : x)))
+                }
+              />
+            ))}
+          </div>
+          <p className="mt-3 text-xs text-slate-500">
+            Words are 3+ letters traced through adjacent cells (diagonals count), using each
+            cell once.
+          </p>
+        </div>
+        )}
+
         {boxedPlayActive && (
         <div className="mb-8">
           <BoxGame
@@ -1219,7 +1286,11 @@ function App() {
                     ? boxedLetters.filter(Boolean).length < 12
                       ? 'Enter the twelve letters, three per side, to find words.'
                       : 'No words fit this box. Double-check the puzzle.'
-                    : 'No words fit those clues. Try loosening a constraint.'}
+                    : mode === 'grid'
+                      ? gridLetters.filter(Boolean).length < 16
+                        ? 'Fill in all sixteen grid letters to find words.'
+                        : 'No words can be traced on this grid.'
+                      : 'No words fit those clues. Try loosening a constraint.'}
             </p>
           </div>
         ) : (

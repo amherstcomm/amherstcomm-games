@@ -1,10 +1,10 @@
 import type { DictionaryId } from '@/dictionaries';
 
-export type Mode = 'pattern' | 'descramble' | 'bee' | 'boxed';
+export type Mode = 'pattern' | 'descramble' | 'bee' | 'boxed' | 'grid';
 
 const KEY = 'anagrimoire:v1';
 
-const ALL_MODES: Mode[] = ['pattern', 'descramble', 'bee', 'boxed'];
+const ALL_MODES: Mode[] = ['pattern', 'descramble', 'bee', 'boxed', 'grid'];
 const ALL_DICTS: DictionaryId[] = ['common', 'standard', 'full'];
 
 export type SortKey = 'alpha' | 'length';
@@ -20,30 +20,35 @@ export type PersistedState = {
   beePlay: boolean;
   boxedPlay: boolean;
   descramblePlay: boolean;
+  gridPlay: boolean;
   pattern: { length: number; known: string[]; contains: string; excluded: string };
   descramble: { rack: string; useAll: boolean; minLength: number };
   bee: { center: string; outers: string[] };
   boxed: { letters: string[]; solutionWords: number };
+  grid: { letters: string[] };
 };
 
 export const DEFAULT_STATE: PersistedState = {
   mode: 'pattern',
-  dictionaries: { pattern: 'common', descramble: 'common', bee: 'common', boxed: 'common' },
+  dictionaries: { pattern: 'common', descramble: 'common', bee: 'common', boxed: 'common', grid: 'common' },
   sort: {
     pattern: { key: 'alpha', dir: 'asc' },
     descramble: { key: 'length', dir: 'desc' },
     bee: { key: 'length', dir: 'desc' },
     boxed: { key: 'length', dir: 'desc' },
+    grid: { key: 'length', dir: 'desc' },
   },
   keyboard: false,
   patternPlay: false,
   beePlay: false,
   boxedPlay: false,
   descramblePlay: false,
+  gridPlay: false,
   pattern: { length: 5, known: Array(5).fill(''), contains: '', excluded: '' },
   descramble: { rack: '', useAll: false, minLength: 3 },
   bee: { center: '', outers: Array(6).fill('') },
   boxed: { letters: Array(12).fill(''), solutionWords: 2 },
+  grid: { letters: Array(16).fill('') },
 };
 
 function singleLetter(v: unknown): string {
@@ -80,6 +85,7 @@ export function loadState(): PersistedState {
       descramble: { ...DEFAULT_STATE.sort.descramble },
       bee: { ...DEFAULT_STATE.sort.bee },
       boxed: { ...DEFAULT_STATE.sort.boxed },
+      grid: { ...DEFAULT_STATE.sort.grid },
     };
     for (const m of ALL_MODES) {
       const s = p?.sort?.[m];
@@ -105,6 +111,11 @@ export function loadState(): PersistedState {
       for (let i = 0; i < 12; i++) boxedLetters[i] = singleLetter(p.boxed.letters[i]);
     }
 
+    const gridLetters = Array(16).fill('');
+    if (Array.isArray(p?.grid?.letters)) {
+      for (let i = 0; i < 16; i++) gridLetters[i] = singleLetter(p.grid.letters[i]);
+    }
+
     return {
       mode: ALL_MODES.includes(p?.mode) ? p.mode : DEFAULT_STATE.mode,
       dictionaries,
@@ -114,6 +125,7 @@ export function loadState(): PersistedState {
       beePlay: p?.beePlay === true,
       boxedPlay: p?.boxedPlay === true,
       descramblePlay: p?.descramblePlay === true,
+      gridPlay: p?.gridPlay === true,
       pattern: {
         length,
         known,
@@ -133,6 +145,7 @@ export function loadState(): PersistedState {
         letters: boxedLetters,
         solutionWords: clampInt(p?.boxed?.solutionWords, 1, 5, DEFAULT_STATE.boxed.solutionWords),
       },
+      grid: { letters: gridLetters },
     };
   } catch {
     return DEFAULT_STATE;
