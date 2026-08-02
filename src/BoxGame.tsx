@@ -1,0 +1,487 @@
+import {
+  forwardRef,
+  useEffect,
+  useImperativeHandle,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
+import { CalendarDays, CornerDownLeft, Delete, RefreshCw, RotateCcw } from 'lucide-react';
+import type { LetterState } from '@/GuessGame';
+
+export type BoxGameHandle = { pressKey: (k: string) => void };
+
+const BOX_KEY = 'anagrimoire:box:v1';
+const DAILY_BOX_URL =
+  'https://raw.githubusercontent.com/rptetzloff/anagrimoire/puzzle-data/data/daily-box.json';
+
+type BoxRecord = { sides: string[]; chain: string[] };
+type BoxStore = {
+  dailyMode: boolean;
+  dailyDate: string;
+  daily: BoxRecord | null;
+  practice: BoxRecord | null;
+};
+
+const DEFAULT_STORE: BoxStore = { dailyMode: true, dailyDate: '', daily: null, practice: null };
+
+function sanitizeRecord(r: unknown): BoxRecord | null {
+  const rec = r as BoxRecord | null;
+  if (
+    !rec ||
+    !Array.isArray(rec.sides) ||
+    rec.sides.length !== 4 ||
+    !rec.sides.every((s) => typeof s === 'string' && /^[a-z]{3}$/.test(s)) ||
+    !Array.isArray(rec.chain)
+  ) {
+    return null;
+  }
+  return { sides: rec.sides, chain: rec.chain.filter((w) => typeof w === 'string') };
+}
+
+function loadStore(): BoxStore {
+  try {
+    const raw = localStorage.getItem(BOX_KEY);
+    if (!raw) return DEFAULT_STORE;
+    const p = JSON.parse(raw);
+    return {
+      dailyMode: p?.dailyMode !== false,
+      dailyDate: typeof p?.dailyDate === 'string' ? p.dailyDate : '',
+      daily: sanitizeRecord(p?.daily),
+      practice: sanitizeRecord(p?.practice),
+    };
+  } catch {
+    return DEFAULT_STORE;
+  }
+}
+
+// generate a practice box from two chainable words covering 12 distinct
+// letters; sides assigned so no consecutive pair shares one
+function generateBox(commonWords: string[]): BoxRecord | null {
+  const words = commonWords.filter((w) => w.length >= 4 && !/(.)\1/.test(w));
+  const byFirst = new Map<string, string[]>();
+  for (const w of words) {
+    const g = byFirst.get(w[0]) ?? [];
+    g.push(w);
+    byFirst.set(w[0], g);
+  }
+  for (let attempt = 0; attempt < 500; attempt++) {
+    const w1 = words[Math.floor(Math.random() * words.length)];
+    const cands = (byFirst.get(w1[w1.length - 1]) ?? []).filter(
+      (w2) => w2 !== w1 && new Set(w1 + w2).size === 12
+    );
+    if (!cands.length) continue;
+    const w2 = cands[Math.floor(Math.random() * cands.length)];
+    const letters = [...new Set(w1 + w2)];
+    const adjacent = new Set<string>();
+    for (const w of [w1, w2]) {
+      for (let i = 1; i < w.length; i++) {
+        adjacent.add(w[i - 1] + w[i]);
+        adjacent.add(w[i] + w[i - 1]);
+      }
+    }
+    const degree = (c: string) => letters.filter((x) => adjacent.has(c + x)).length;
+    letters.sort((a, b) => degree(b) - degree(a));
+    const sides: string[][] = [[], [], [], []];
+    const bt = (i: number): boolean => {
+      if (i === letters.length) return true;
+      const c = letters[i];
+      for (const s of [0, 1, 2, 3].sort(() => Math.random() - 0.5)) {
+        if (sides[s].length >= 3) continue;
+        if (sides[s].some((x) => adjacent.has(x + c))) continue;
+        sides[s].push(c);
+        if (bt(i + 1)) return true;
+        sides[s].pop();
+      }
+      return false;
+    };
+    if (bt(0)) return { sides: sides.map((s) => s.join('')), chain: [] };
+  }
+  return null;
+}
+
+// letter positions around the drawn square, per side (top, right, bottom, left)
+const SIDE_POSITIONS: [number, number][][] = [
+  [
+    [24, 5],
+    [50, 5],
+    [76, 5],
+  ],
+  [
+    [95, 24],
+    [95, 50],
+    [95, 76],
+  ],
+  [
+    [24, 95],
+    [50, 95],
+    [76, 95],
+  ],
+  [
+    [5, 24],
+    [5, 50],
+    [5, 76],
+  ],
+];
+
+const BoxGame = forwardRef<
+  BoxGameHandle,
+  {
+    standardWords: string[] | null;
+    commonWords: string[] | null;
+    onLetterStates: (states: Record<string, LetterState>) => void;
+  }
+>(function BoxGame({ standardWords, commonWords, onLetterStates }, ref) {
+  const [store, setStore] = useState<BoxStore>(loadStore);
+  const [current, setCurrent] = useState('');
+  const [flash, setFlash] = useState<{ text: string; good: boolean } | null>(null);
+  const [dailyError, setDailyError] = useState(false);
+  const flashTimer = useRef<number | undefined>(undefined);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(BOX_KEY, JSON.stringify(store));
+    } catch {
+      // best-effort persistence
+    }
+  }, [store]);
+
+  // fetch today's generated box once
+  useEffect(() => {
+    let alive = true;
+    fetch(DAILY_BOX_URL, { cache: 'no-store' })
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
+      .then((d) => {
+        if (!alive) return;
+        const rec = sanitizeRecord({ sides: d.sides, chain: [] });
+        if (!rec || typeof d.date !== 'string') throw new Error('bad payload');
+        setStore((prev) =>
+          prev.dailyDate === d.date && prev.daily
+            ? prev
+            : { ...prev, dailyDate: d.date, daily: rec }
+        );
+      })
+      .catch(() => {
+        if (alive) setDailyError(true);
+      });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  // ensure a practice box exists once the dictionary is ready
+  useEffect(() => {
+    if (store.dailyMode || store.practice || !commonWords) return;
+    const box = generateBox(commonWords);
+    if (box) setStore((prev) => (prev.practice ? prev : { ...prev, practice: box }));
+  }, [store.dailyMode, store.practice, commonWords]);
+
+  const record = store.dailyMode ? store.daily : store.practice;
+
+  const sideOf = useMemo(() => {
+    const m = new Map<string, number>();
+    record?.sides.forEach((side, i) => {
+      for (const c of side) m.set(c, i);
+    });
+    return m;
+  }, [record]);
+
+  const standardSet = useMemo(
+    () => (standardWords ? new Set(standardWords) : null),
+    [standardWords]
+  );
+
+  const chain = useMemo(() => record?.chain ?? [], [record]);
+  const committedCovered = useMemo(() => {
+    const s = new Set<string>();
+    for (const w of chain) for (const c of w) s.add(c);
+    return s;
+  }, [chain]);
+  const solved = committedCovered.size === 12;
+
+  // the next word must start with the last letter of the previous one
+  const lockedLen = chain.length > 0 ? 1 : 0;
+
+  // keep the locked first letter in sync with the chain
+  useEffect(() => {
+    if (solved) return;
+    const lockChar = chain.length ? chain[chain.length - 1].slice(-1) : '';
+    setCurrent((c) => (lockChar && !c.startsWith(lockChar) ? lockChar : c));
+  }, [chain, solved]);
+
+  // dim non-box letters on the on-screen keyboard
+  useEffect(() => {
+    if (!record) {
+      onLetterStates({});
+      return;
+    }
+    const states: Record<string, LetterState> = {};
+    for (const c of 'abcdefghijklmnopqrstuvwxyz') {
+      if (!sideOf.has(c)) states[c] = 'absent';
+    }
+    onLetterStates(states);
+  }, [record, sideOf, onLetterStates]);
+
+  function showFlash(text: string, good = false) {
+    setFlash({ text, good });
+    window.clearTimeout(flashTimer.current);
+    flashTimer.current = window.setTimeout(() => setFlash(null), 1600);
+  }
+
+  function updateRecord(fn: (r: BoxRecord) => BoxRecord) {
+    setStore((prev) => {
+      const rec = prev.dailyMode ? prev.daily : prev.practice;
+      if (!rec) return prev;
+      const next = fn(rec);
+      return prev.dailyMode ? { ...prev, daily: next } : { ...prev, practice: next };
+    });
+  }
+
+  function submit() {
+    if (!record || solved) return;
+    if (!standardSet) {
+      showFlash('Dictionary still loading…');
+      return;
+    }
+    const word = current;
+    if (word.length < 3) {
+      showFlash('Too short');
+      return;
+    }
+    if (chain.includes(word)) {
+      showFlash('Already played');
+      return;
+    }
+    if (!standardSet.has(word)) {
+      showFlash('Not in dictionary');
+      return;
+    }
+    const nextChain = [...chain, word];
+    const nextCovered = new Set(nextChain.join(''));
+    updateRecord((r) => ({ ...r, chain: nextChain }));
+    setCurrent(word.slice(-1));
+    if (nextCovered.size === 12) {
+      setCurrent('');
+      showFlash(`Solved in ${nextChain.length} word${nextChain.length === 1 ? '' : 's'}! 🎉`, true);
+    } else {
+      showFlash(`+${new Set(word).size} letters`, true);
+    }
+  }
+
+  function pressKey(k: string) {
+    if (!record || solved) return;
+    if (k === 'enter') {
+      submit();
+      return;
+    }
+    if (k === 'backspace') {
+      if (current.length > lockedLen) {
+        setCurrent((c) => c.slice(0, -1));
+      } else if (chain.length) {
+        // un-commit the previous word for editing
+        const prev = chain[chain.length - 1];
+        updateRecord((r) => ({ ...r, chain: r.chain.slice(0, -1) }));
+        setCurrent(prev);
+      }
+      return;
+    }
+    if (!/^[a-z]$/.test(k)) return;
+    const side = sideOf.get(k);
+    if (side === undefined) return;
+    const last = current.slice(-1);
+    if (last && sideOf.get(last) === side) {
+      showFlash('Same side');
+      return;
+    }
+    setCurrent((c) => (c.length < 24 ? c + k : c));
+  }
+
+  useImperativeHandle(ref, () => ({ pressKey }));
+
+  // physical keyboard
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+      if (e.key === 'Enter') pressKey('enter');
+      else if (e.key === 'Backspace') pressKey('backspace');
+      else if (/^[a-zA-Z]$/.test(e.key)) pressKey(e.key.toLowerCase());
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  });
+
+  function restart() {
+    setCurrent('');
+    updateRecord((r) => ({ ...r, chain: [] }));
+  }
+
+  function newPracticeBox() {
+    if (!commonWords) return;
+    const box = generateBox(commonWords);
+    if (!box) return;
+    setCurrent('');
+    setStore((prev) => ({ ...prev, practice: box }));
+  }
+
+  const loading = store.dailyMode ? !record && !dailyError : !record || !commonWords;
+  const lastChar = current.slice(-1);
+
+  return (
+    <div className="text-center">
+      {/* daily / practice toggle */}
+      <div className="mb-5 inline-flex rounded-xl bg-white/5 border border-white/10 p-1 gap-1">
+        {(
+          [
+            { id: true, label: 'Daily', Icon: CalendarDays },
+            { id: false, label: 'Practice', Icon: RefreshCw },
+          ] as const
+        ).map(({ id, label, Icon }) => (
+          <button
+            key={label}
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={() => {
+              setCurrent('');
+              setStore((prev) => ({ ...prev, dailyMode: id }));
+            }}
+            className={`inline-flex items-center gap-1.5 px-4 h-9 rounded-lg text-sm font-semibold transition-colors
+              ${store.dailyMode === id ? 'bg-emerald-400/15 text-emerald-300' : 'text-slate-400 hover:text-white'}`}
+          >
+            <Icon className="w-4 h-4" />
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {loading && <p className="text-sm text-slate-400 py-8">Loading…</p>}
+      {store.dailyMode && dailyError && !record && (
+        <p className="text-sm text-rose-400 py-8">
+          Couldn&apos;t fetch today&apos;s box — try Practice instead.
+        </p>
+      )}
+
+      {record && (
+        <>
+          <div className="mb-3 flex items-center justify-center gap-4 text-xs text-slate-400">
+            <span>
+              {committedCovered.size} / 12 letters
+            </span>
+            <span className="text-slate-500">Solvable in 2</span>
+            {store.dailyMode && store.dailyDate && (
+              <span className="text-slate-500">{store.dailyDate}</span>
+            )}
+          </div>
+
+          {/* chain + current entry */}
+          <div className="mb-3 min-h-[2rem] flex flex-wrap items-center justify-center gap-1.5 text-sm">
+            {chain.map((w, i) => (
+              <span key={i} className="text-slate-300">
+                {w}
+                <span className="text-slate-600"> →</span>
+              </span>
+            ))}
+            {!solved && (
+              <span className="text-lg font-bold tracking-[0.15em] uppercase text-white">
+                {current || ' '}
+                <span className="text-amber-400 animate-pulse">|</span>
+              </span>
+            )}
+          </div>
+
+          {/* the box */}
+          <div className="relative w-72 h-72 mx-auto">
+            <div className="absolute inset-12 rounded-xl border-2 border-white/15 bg-white/[0.02]" />
+            {record.sides.map((side, s) =>
+              side.split('').map((c, j) => {
+                const [x, y] = SIDE_POSITIONS[s][j];
+                const used = committedCovered.has(c);
+                const inCurrent = current.includes(c);
+                const isLast = c === lastChar;
+                const sameSide = !solved && lastChar !== '' && sideOf.get(lastChar) === s;
+                return (
+                  <button
+                    key={c}
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={() => pressKey(c)}
+                    disabled={solved}
+                    className={`absolute -translate-x-1/2 -translate-y-1/2 w-10 h-12 rounded-lg border-2 text-xl font-bold uppercase transition-colors
+                      ${isLast
+                        ? 'bg-amber-400/20 border-amber-400 text-amber-200'
+                        : used
+                          ? 'bg-emerald-500/15 border-emerald-400/60 text-emerald-200'
+                          : inCurrent
+                            ? 'bg-white/10 border-white/40 text-white'
+                            : 'bg-white/5 border-white/15 text-white hover:bg-white/10'}
+                      ${sameSide && !isLast ? 'opacity-40' : ''}`}
+                    style={{ left: `${x}%`, top: `${y}%` }}
+                  >
+                    {c}
+                  </button>
+                );
+              })
+            )}
+          </div>
+
+          {/* controls */}
+          <div className="mt-4 flex items-center justify-center gap-2.5">
+            <button
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => pressKey('backspace')}
+              aria-label="Delete letter"
+              className="inline-flex items-center justify-center w-11 h-10 rounded-lg bg-white/5 border border-white/10 text-slate-300 hover:bg-white/10 hover:text-white transition-colors"
+            >
+              <Delete className="w-4 h-4" />
+            </button>
+            <button
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={restart}
+              aria-label="Restart"
+              className="inline-flex items-center justify-center w-11 h-10 rounded-lg bg-white/5 border border-white/10 text-slate-300 hover:bg-white/10 hover:text-white transition-colors"
+            >
+              <RotateCcw className="w-4 h-4" />
+            </button>
+            <button
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={submit}
+              className="inline-flex items-center gap-1.5 px-4 h-10 rounded-lg text-sm font-semibold bg-amber-400/15 border border-amber-400/30 text-amber-200 hover:bg-amber-400/25 transition-colors"
+            >
+              <CornerDownLeft className="w-4 h-4" />
+              Enter
+            </button>
+            {!store.dailyMode && (
+              <button
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={newPracticeBox}
+                className="inline-flex items-center gap-1.5 px-4 h-10 rounded-lg text-sm font-semibold bg-white/5 border border-white/10 text-slate-300 hover:bg-white/10 hover:text-white transition-colors"
+              >
+                <RefreshCw className="w-4 h-4" />
+                New box
+              </button>
+            )}
+          </div>
+
+          <div className="h-6 mt-3">
+            {flash && (
+              <p className={`text-sm font-medium ${flash.good ? 'text-emerald-300' : 'text-amber-300'}`}>
+                {flash.text}
+              </p>
+            )}
+            {!flash && solved && (
+              <p className="text-sm text-emerald-300 font-semibold">
+                Solved in {chain.length} word{chain.length === 1 ? '' : 's'} 🎉
+              </p>
+            )}
+          </div>
+
+          <p className="mt-4 text-xs text-slate-500">
+            Chain words to use all twelve letters — each word starts with the previous
+            word&apos;s last letter, and consecutive letters can&apos;t share a side.
+            {store.dailyMode && ' A fresh daily box arrives about 15 minutes after 3:00 a.m. Eastern.'}
+          </p>
+        </>
+      )}
+    </div>
+  );
+});
+
+export default BoxGame;
