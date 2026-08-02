@@ -727,6 +727,7 @@ function App() {
     setBeeCenter('');
     setBeeOuters(Array(6).fill(''));
     setBoxedLetters(Array(12).fill(''));
+    setGridLetters(Array(gridDims.rows * gridDims.cols).fill(''));
   }
 
   return (
