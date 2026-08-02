@@ -26,7 +26,7 @@ Every mode has a **Solve / Play** toggle.
 - **Box** (Letter Boxed-style): chain words around the square to use all twelve letters — each word starts with the previous word's last letter, consecutive letters can't share a side. Boxes are our own, built from two chainable words so a two-word solution always exists; **Daily** is the same generated box for everyone, **Practice** deals unlimited boxes. Backspace un-commits words for editing.
 - **Hive**: find words from seven letters — 4-letter words score 1, longer words score their length, pangrams +7 — with a rank ladder up to Queen Bee, scored against the Standard dictionary. **Daily** plays our own generated hive (the same one for everyone, seeded from a pangram so it's always completable — not the NYT's puzzle); **Practice** deals unlimited fresh hives. Tap the hive or type; shuffle, delete, and found-word history included.
 
-Daily content refreshes about 15 minutes after 3:00 a.m. Eastern.
+Daily content refreshes about 15 minutes after 3:00 a.m. Eastern. The dev site (and local development) gets its own independently generated daily set, so testing there never spoils the production puzzles.
 
 ### Dictionaries
 
