@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { Session } from '@supabase/supabase-js';
-import { LogOut, Mail, X } from 'lucide-react';
+import { Github, LogOut, Mail, X } from 'lucide-react';
 import { supabase } from '@/supabase';
 
 export default function AccountModal({
@@ -39,6 +39,20 @@ export default function AccountModal({
       setError(err.message);
     } else {
       setStatus('sent');
+    }
+  }
+
+  // OAuth needs no email at all — the whole page redirects to the provider
+  async function oauth(provider: 'github' | 'google') {
+    if (!supabase) return;
+    setError('');
+    const { error: err } = await supabase.auth.signInWithOAuth({
+      provider,
+      options: { redirectTo: window.location.origin },
+    });
+    if (err) {
+      setStatus('error');
+      setError(err.message);
     }
   }
 
@@ -102,9 +116,35 @@ export default function AccountModal({
           <>
             <h2 className="text-xl font-bold mb-1">Sign in</h2>
             <p className="text-sm text-slate-400 mb-5">
-              We&apos;ll email you a magic link — no password needed. Accounts are optional;
-              they sync your stats across devices.
+              No password needed. Accounts are optional; they sync your stats across
+              devices.
             </p>
+            <div className="space-y-2 mb-5">
+              <button
+                onClick={() => oauth('github')}
+                className="w-full inline-flex items-center justify-center gap-2 h-11 rounded-lg text-sm font-semibold bg-white/10 border border-white/15 text-white hover:bg-white/15 transition-colors"
+              >
+                <Github className="w-4 h-4" />
+                Continue with GitHub
+              </button>
+              <button
+                onClick={() => oauth('google')}
+                className="w-full inline-flex items-center justify-center gap-2 h-11 rounded-lg text-sm font-semibold bg-white/10 border border-white/15 text-white hover:bg-white/15 transition-colors"
+              >
+                <svg className="w-4 h-4" viewBox="0 0 24 24" aria-hidden="true">
+                  <path
+                    fill="currentColor"
+                    d="M21.35 11.1h-9.17v2.73h6.51c-.33 3.81-3.5 5.44-6.5 5.44C8.36 19.27 5 16.25 5 12c0-4.1 3.2-7.27 7.2-7.27 3.09 0 4.9 1.97 4.9 1.97L19 4.72S16.56 2 12.1 2C6.42 2 2.03 6.8 2.03 12c0 5.05 4.13 10 10.22 10 5.35 0 9.25-3.67 9.25-9.09 0-1.15-.15-1.81-.15-1.81Z"
+                  />
+                </svg>
+                Continue with Google
+              </button>
+            </div>
+            <div className="flex items-center gap-3 mb-5">
+              <div className="flex-1 h-px bg-white/10" />
+              <span className="text-[11px] text-slate-500 uppercase tracking-wider">or by email</span>
+              <div className="flex-1 h-px bg-white/10" />
+            </div>
             {status === 'sent' ? (
               <div className="space-y-4">
                 <p className="text-sm text-emerald-300">
