@@ -1,6 +1,6 @@
 import { useMemo, useState, useEffect, useLayoutEffect, useRef, type ButtonHTMLAttributes, type ReactNode } from 'react';
-import { Search, Sparkles, Eraser, ArrowDown, ArrowUp, X, BookOpen, Grid3x3, Shuffle, Hexagon, Check, Keyboard, Delete, Github, Info, Square, CalendarDays, Star, Gamepad2, CornerDownLeft, LayoutGrid, Puzzle, BarChart3, UserRound, HelpCircle } from 'lucide-react';
-import HowToPlay from '@/HowToPlay';
+import { Search, Sparkles, Eraser, ArrowDown, ArrowUp, X, BookOpen, Grid3x3, Shuffle, Hexagon, Check, Keyboard, Delete, Github, Info, Square, CalendarDays, Star, Gamepad2, CornerDownLeft, LayoutGrid, Puzzle, BarChart3, UserRound } from 'lucide-react';
+import LearnMode from '@/LearnMode';
 import type { Session } from '@supabase/supabase-js';
 import StatsModal from '@/StatsModal';
 import AccountModal from '@/AccountModal';
@@ -502,7 +502,7 @@ function App() {
   const [kbOpen, setKbOpen] = useState(initial.keyboard);
   const [aboutOpen, setAboutOpen] = useState(false);
   const [statsOpen, setStatsOpen] = useState(false);
-  const [howToOpen, setHowToOpen] = useState(false);
+  const [learnMode, setLearnMode] = useState(false);
   const [accountOpen, setAccountOpen] = useState(false);
   const [session, setSession] = useState<Session | null>(null);
 
@@ -544,25 +544,29 @@ function App() {
   const scrambleRef = useRef<ScrambleGameHandle>(null);
   const gridRef = useRef<GridGameHandle>(null);
 
-  const patternPlayActive = mode === 'pattern' && patternPlay;
-  const beePlayActive = mode === 'bee' && beePlay;
-  const boxedPlayActive = mode === 'boxed' && boxedPlay;
-  const descramblePlayActive = mode === 'descramble' && descramblePlay;
-  const gridPlayActive = mode === 'grid' && gridPlay;
-  const weavePlayActive = mode === 'weave' && weavePlay;
+  const patternPlayActive = mode === 'pattern' && patternPlay && !learnMode;
+  const beePlayActive = mode === 'bee' && beePlay && !learnMode;
+  const boxedPlayActive = mode === 'boxed' && boxedPlay && !learnMode;
+  const descramblePlayActive = mode === 'descramble' && descramblePlay && !learnMode;
+  const gridPlayActive = mode === 'grid' && gridPlay && !learnMode;
+  const weavePlayActive = mode === 'weave' && weavePlay && !learnMode;
   const playActive =
     patternPlayActive || beePlayActive || boxedPlayActive || descramblePlayActive || gridPlayActive || weavePlayActive;
 
   // the guess game validates against the full dictionary and picks practice
-  // words from the common one; hive, box, scramble, and grid play use standard
+  // words from the common one; hive, box, scramble, grid play — and the
+  // Learn demos — use standard
   useEffect(() => {
-    if (!playActive) return;
+    if (!playActive && !learnMode) return;
     if (!commonWordsArr) getDictionary('common').then(setCommonWordsArr);
     if (patternPlayActive && !fullWordsArr) getDictionary('full').then(setFullWordsArr);
-    if ((beePlayActive || boxedPlayActive || descramblePlayActive || gridPlayActive || weavePlayActive) && !standardWordsArr) {
+    if (
+      (learnMode || beePlayActive || boxedPlayActive || descramblePlayActive || gridPlayActive || weavePlayActive) &&
+      !standardWordsArr
+    ) {
       getDictionary('standard').then(setStandardWordsArr);
     }
-  }, [playActive, patternPlayActive, beePlayActive, boxedPlayActive, descramblePlayActive, gridPlayActive, weavePlayActive, commonWordsArr, fullWordsArr, standardWordsArr]);
+  }, [playActive, learnMode, patternPlayActive, beePlayActive, boxedPlayActive, descramblePlayActive, gridPlayActive, weavePlayActive, commonWordsArr, fullWordsArr, standardWordsArr]);
 
   useEffect(() => {
     if (!aboutOpen) return;
@@ -951,15 +955,16 @@ function App() {
           </p>
         </header>
 
-        {/* solve / play toggle */}
+        {/* solve / play / learn toggle */}
         <section className="mb-7 text-center">
           <div className="inline-flex rounded-xl bg-white/5 border border-white/10 p-1 gap-1">
               {(
                 [
-                  { play: false, label: 'Solve', Icon: Search },
-                  { play: true, label: 'Play', Icon: Gamepad2 },
+                  { view: 'solve', label: 'Solve', Icon: Search },
+                  { view: 'play', label: 'Play', Icon: Gamepad2 },
+                  { view: 'learn', label: 'Learn', Icon: BookOpen },
                 ] as const
-              ).map(({ play, label, Icon }) => {
+              ).map(({ view, label, Icon }) => {
                 const flags: Record<Mode, [boolean, (v: boolean) => void]> = {
                   pattern: [patternPlay, setPatternPlay],
                   descramble: [descramblePlay, setDescramblePlay],
@@ -969,12 +974,19 @@ function App() {
                   weave: [weavePlay, setWeavePlay],
                 };
                 const [flag, setFlag] = flags[mode];
-                const active = flag === play;
+                const active = view === 'learn' ? learnMode : !learnMode && flag === (view === 'play');
                 return (
                   <button
                     key={label}
-                    onClick={() => setFlag(play)}
-                    className={`inline-flex items-center gap-1.5 px-5 h-10 rounded-lg text-sm font-semibold transition-all duration-150
+                    onClick={() => {
+                      if (view === 'learn') {
+                        setLearnMode(true);
+                      } else {
+                        setLearnMode(false);
+                        setFlag(view === 'play');
+                      }
+                    }}
+                    className={`inline-flex items-center gap-1.5 px-4 sm:px-5 h-10 rounded-lg text-sm font-semibold transition-all duration-150
                       ${active
                         ? 'bg-emerald-400 text-slate-950 shadow-lg shadow-emerald-500/30'
                         : 'text-slate-300 hover:bg-white/10'}`}
@@ -985,16 +997,16 @@ function App() {
                 );
               })}
           </div>
-          <button
-            onClick={() => setHowToOpen(true)}
-            aria-label="How to play"
-            title="How to play"
-            className="ml-2 inline-flex items-center justify-center w-10 h-12 align-middle text-slate-500 hover:text-white transition-colors"
-          >
-            <HelpCircle className="w-5 h-5" />
-          </button>
         </section>
 
+        {learnMode && (
+          <div className="mb-8">
+            <LearnMode mode={mode} standardWords={standardWordsArr} />
+          </div>
+        )}
+
+        {!learnMode && (
+        <>
         {weavePlayActive && (
         <div className="mb-8">
           <WeaveGame standardWords={standardWordsArr} />
@@ -1789,9 +1801,11 @@ function App() {
         )}
         </>
         )}
+        </>
+        )}
 
         <footer className="mt-14 text-center text-xs text-slate-600">
-          {!playActive && (
+          {!playActive && !learnMode && (
             <p>
               Searching {words.length.toLocaleString()} English words (
               {DICTIONARIES.find((d) => d.id === dictionaryId)?.label.toLowerCase()} dictionary).
@@ -1851,8 +1865,6 @@ function App() {
       )}
 
       {statsOpen && <StatsModal signedIn={!!session} onClose={() => setStatsOpen(false)} />}
-
-      {howToOpen && <HowToPlay mode={mode} onClose={() => setHowToOpen(false)} />}
 
       {accountOpen && <AccountModal session={session} onClose={() => setAccountOpen(false)} />}
 

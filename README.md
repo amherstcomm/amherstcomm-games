@@ -44,7 +44,7 @@ Three tiers, selectable per mode: **Common** (everyday words, ideal for Wordle-s
 - **Smart letter tiles** — typing auto-advances to the next box, Backspace steps back, arrow keys navigate, and filled tiles get a small × pill to clear them
 - **Letter-pill inputs** — multi-letter fields (must contain, excluded, rack) show each letter as a removable pill with a corner ×
 - **Toggleable on-screen keyboard** — fluid-width QWERTY panel that fits any screen, with a `?` key for blank tiles in Descramble; while open, the device's native keyboard stays suppressed
-- **How to play** — a ? button beside the Solve/Play toggle opens a per-game guide: rules, controls, scoring, daily/practice differences, and tips
+- **Learn mode** — every game has a third Solve / Play / **Learn** tab: rules, scoring, daily/practice differences, tips, and a hands-on interactive demo (step through a worked Guess solve, tap out words on a mini rack/hive/box, drag-trace a mini grid or Weave board) validated against the real dictionary
 - **Everything is remembered** — active mode, per-mode dictionary and sort preferences, your last letters in each mode, and the keyboard state persist in localStorage
 - **Lifetime statistics** — a Stats panel (in the footer) tracks every finished game, viewable overall or split into daily and practice: Guess win rate, streak, and guess distribution; Hive words, pangrams, Genius and Queen Bee counts; Scramble and Grid sprint scores; Boxed solves with fewest words and best time; Weave solves, reveals, and hints. Stored only in your browser.
 
