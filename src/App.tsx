@@ -34,8 +34,8 @@ const MODES: { id: Mode; label: string; blurb: string; description: string }[] =
   },
   {
     id: 'boxed',
-    label: 'Letter Boxed',
-    blurb: "Twelve letters on four sides — consecutive letters can't share a side",
+    label: 'Boxed',
+    blurb: "Twelve letters on four sides, no two in a row from the same side — Letter Boxed style",
     description:
       "Enter the twelve letters, three per side. We'll find every legal word and the two-word solutions that use all twelve.",
   },
