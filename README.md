@@ -13,7 +13,7 @@ A word-game solver for puzzles like Wordle, crosswords, hangman, Scrabble, Jumbl
 - **Pattern** (Wordle, crosswords, hangman) — word lengths from 3 to 15; tile inputs for known positions, must-contain letters (position unknown, duplicates respected), and excluded letters, with per-letter highlighting in the results
 - **Scramble** (Scrabble, Jumble) — find every word a rack of letters can spell, with `?` wildcards for blank tiles, an exact-anagram "use every letter" option, and a minimum-length filter
 - **Hive** (Spelling Bee-style) — seven letters entered on a hive (amber center, six around), 4+ letter words, center letter required, letters reusable; pangrams surface in their own highlighted group, and today's NYT puzzle autofills with one click for solving
-- **Grid** (Boggle-style) — enter the letters of a 3×3, 4×4, or 5×5 grid and find every word traceable through adjacent cells (diagonals count), each cell used once per word
+- **Grid** (Boggle- and Strands-style) — enter the letters of a 3×3, 4×4, or 5×5 square, or the 6×8 Strands board, and find every word traceable through adjacent cells (diagonals count), each cell used once per word — the full candidate list for hunting Strands theme words
 - **Boxed** (Letter Boxed-style) — twelve letters entered around a square, 3+ letter words, letters reusable, but consecutive letters can't share a side. Pick a solution length (1–5 words) to see chains covering all twelve letters, get a starred recommendation (fewest words, everyday vocabulary, fewest letters), or autofill today's NYT puzzle with one click (a daily GitHub Action publishes Letter Boxed and Spelling Bee data to the `puzzle-data` branch about 15 minutes after the NYT publishes at 3:00 a.m. Eastern)
 
 ### Play mode
@@ -82,7 +82,7 @@ Pushes to each branch auto-deploy to the matching environment.
 
 ## Disclaimer
 
-Anagrimoire is an independent project. It is not affiliated with, endorsed by, or sponsored by The New York Times Company (Wordle, Spelling Bee, Letter Boxed), Hasbro or Mattel (Scrabble), Tribune Content Agency (Jumble), or any other puzzle publisher. All game names and trademarks are the property of their respective owners and are used only to describe the kinds of puzzles this tool can help with. No word list is guaranteed to match any game's official dictionary.
+Anagrimoire is an independent project. It is not affiliated with, endorsed by, or sponsored by The New York Times Company (Wordle, Spelling Bee, Letter Boxed, Strands), Hasbro or Mattel (Scrabble, Boggle), Tribune Content Agency (Jumble), or any other puzzle publisher. All game names and trademarks are the property of their respective owners and are used only to describe the kinds of puzzles this tool can help with. No word list is guaranteed to match any game's official dictionary.
 
 ## License
 

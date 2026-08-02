@@ -7,7 +7,7 @@ import ScrambleGame, { type ScrambleGameHandle } from '@/ScrambleGame';
 import GridGame, { type GridGameHandle } from '@/GridGame';
 import { DICTIONARIES, getDictionary, type DictionaryId } from '@/dictionaries';
 import { solvePattern, solveDescramble, solveBee, solveBoxed, solveGrid } from '@/solvers';
-import { loadState, saveState, type Mode, type SortPref } from '@/storage';
+import { loadState, saveState, GRID_PRESET_DIMS, type GridPreset, type Mode, type SortPref } from '@/storage';
 
 const MIN_LEN = 3;
 const MAX_LEN = 15;
@@ -37,9 +37,9 @@ const MODES: { id: Mode; label: string; blurb: string; description: string }[] =
   {
     id: 'grid',
     label: 'Grid',
-    blurb: 'Boggle style — chain adjacent letters, each cell once',
+    blurb: 'Boggle & Strands style — chain adjacent letters, each cell once',
     description:
-      "Enter the sixteen grid letters and we'll find every word that can be traced through adjacent cells.",
+      "Enter the grid letters — square boards or the 6×8 Strands shape — and we'll find every word traceable through adjacent cells.",
   },
   {
     id: 'boxed',
@@ -349,13 +349,16 @@ function App() {
   const [boxedLetters, setBoxedLetters] = useState<string[]>(initial.boxed.letters);
   const [solutionWords, setSolutionWords] = useState(initial.boxed.solutionWords);
   const [gridLetters, setGridLetters] = useState<string[]>(initial.grid.letters);
-  const [gridSize, setGridSize] = useState(initial.grid.size);
+  const [gridPreset, setGridPreset] = useState<GridPreset>(initial.grid.preset);
   const [gridPlay, setGridPlay] = useState(initial.gridPlay);
 
-  function changeGridSize(n: number) {
-    setGridSize(n);
+  const gridDims = GRID_PRESET_DIMS[gridPreset];
+
+  function changeGridPreset(preset: GridPreset) {
+    setGridPreset(preset);
+    const dims = GRID_PRESET_DIMS[preset];
     setGridLetters((prev) => {
-      const next = Array(n * n).fill('');
+      const next = Array(dims.rows * dims.cols).fill('');
       for (let i = 0; i < Math.min(prev.length, next.length); i++) next[i] = prev[i];
       return next;
     });
@@ -449,9 +452,9 @@ function App() {
       descramble: { rack: rackStr, useAll, minLength },
       bee: { center: beeCenter, outers: beeOuters },
       boxed: { letters: boxedLetters, solutionWords },
-      grid: { letters: gridLetters, size: gridSize },
+      grid: { letters: gridLetters, preset: gridPreset },
     });
-  }, [mode, dictionaries, sorts, kbOpen, patternPlay, beePlay, boxedPlay, descramblePlay, gridPlay, length, known, containsStr, excludedStr, rackStr, useAll, minLength, beeCenter, beeOuters, boxedLetters, solutionWords, gridLetters, gridSize]);
+  }, [mode, dictionaries, sorts, kbOpen, patternPlay, beePlay, boxedPlay, descramblePlay, gridPlay, length, known, containsStr, excludedStr, rackStr, useAll, minLength, beeCenter, beeOuters, boxedLetters, solutionWords, gridLetters, gridPreset]);
 
   // keep known array sized to length
   useEffect(() => {
@@ -503,10 +506,10 @@ function App() {
       return solveBoxed(words, { sides: boxedSides });
     }
     if (mode === 'grid') {
-      return solveGrid(words, { cells: gridLetters });
+      return solveGrid(words, { cells: gridLetters, cols: gridDims.cols });
     }
     return solvePattern(words, { length, known, contains, excluded });
-  }, [mode, words, length, known, contains, excluded, rackLetters, wildcards, useAll, minLength, beeCenter, beeOuters, boxedSides, gridLetters]);
+  }, [mode, words, length, known, contains, excluded, rackLetters, wildcards, useAll, minLength, beeCenter, beeOuters, boxedSides, gridLetters, gridDims]);
 
   // shared index for Letter Boxed chain searches; null until all 12 letters are in
   const boxedIndex = useMemo<ChainIndex | null>(() => {
@@ -1090,7 +1093,7 @@ function App() {
             standardWords={standardWordsArr}
             onLetterStates={setLetterStates}
             onReveal={(cells) => {
-              setGridSize(Math.round(Math.sqrt(cells.length)));
+              setGridPreset(cells.length === 9 ? '3x3' : cells.length === 25 ? '5x5' : '4x4');
               setGridLetters(cells);
               setGridPlay(false);
             }}
@@ -1104,21 +1107,38 @@ function App() {
             Grid size
           </label>
           <div className="mb-5 inline-flex rounded-lg bg-white/5 border border-white/10 p-0.5 gap-0.5">
-            {[3, 4, 5].map((n) => (
+            {(
+              [
+                { id: '3x3', label: '3×3' },
+                { id: '4x4', label: '4×4' },
+                { id: '5x5', label: '5×5' },
+                { id: '6x8', label: '6×8 Strands' },
+              ] as const
+            ).map(({ id, label }) => (
               <button
-                key={n}
-                onClick={() => changeGridSize(n)}
-                className={`px-3 py-1.5 rounded-md text-sm font-semibold transition-colors
-                  ${gridSize === n ? 'bg-white/15 text-white' : 'text-slate-400 hover:text-white'}`}
+                key={id}
+                onClick={() => changeGridPreset(id)}
+                className={`px-3 py-1.5 rounded-md text-sm font-semibold whitespace-nowrap transition-colors
+                  ${gridPreset === id ? 'bg-white/15 text-white' : 'text-slate-400 hover:text-white'}`}
               >
-                {n}×{n}
+                {label}
               </button>
             ))}
           </div>
           <label className="block text-xs font-medium text-slate-400 uppercase tracking-wider mb-3">
             The grid
           </label>
-          <div className={`grid ${gridSize === 3 ? 'grid-cols-3' : gridSize === 5 ? 'grid-cols-5' : 'grid-cols-4'} gap-2 w-fit mx-auto`}>
+          <div
+            className={`grid gap-2 w-fit mx-auto ${
+              gridDims.cols === 3
+                ? 'grid-cols-3'
+                : gridDims.cols === 5
+                  ? 'grid-cols-5'
+                  : gridDims.cols === 6
+                    ? 'grid-cols-6'
+                    : 'grid-cols-4'
+            }`}
+          >
             {gridLetters.map((v, i) => (
               <Tile
                 key={i}
@@ -1557,7 +1577,7 @@ function App() {
                 <p className="text-slate-400">
                   Anagrimoire is an independent project. It is not affiliated with,
                   endorsed by, or sponsored by The New York Times Company (Wordle, Spelling
-                  Bee, Letter Boxed), Hasbro or Mattel (Scrabble), Tribune Content Agency (Jumble), or any
+                  Bee, Letter Boxed, Strands), Hasbro or Mattel (Scrabble, Boggle), Tribune Content Agency (Jumble), or any
                   other puzzle publisher. All game names and trademarks are the property of
                   their respective owners and are used here only to describe the kinds of
                   puzzles this tool can help with.

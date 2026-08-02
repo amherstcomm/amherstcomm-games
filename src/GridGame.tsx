@@ -183,7 +183,10 @@ const GridGame = forwardRef<
   // every path-reachable dictionary word; also serves as submit validation
   const answers = useMemo(() => {
     if (!standardWords || !record) return null;
-    return solveGrid(standardWords, { cells: record.cells });
+    return solveGrid(standardWords, {
+      cells: record.cells,
+      cols: Math.round(Math.sqrt(record.cells.length)),
+    });
   }, [standardWords, record]);
   const answersSet = useMemo(() => (answers ? new Set(answers) : null), [answers]);
   const maxScore = useMemo(

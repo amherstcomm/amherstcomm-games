@@ -25,7 +25,15 @@ export type PersistedState = {
   descramble: { rack: string; useAll: boolean; minLength: number };
   bee: { center: string; outers: string[] };
   boxed: { letters: string[]; solutionWords: number };
-  grid: { letters: string[]; size: number };
+  grid: { letters: string[]; preset: GridPreset };
+};
+
+export type GridPreset = '3x3' | '4x4' | '5x5' | '6x8';
+export const GRID_PRESET_DIMS: Record<GridPreset, { rows: number; cols: number }> = {
+  '3x3': { rows: 3, cols: 3 },
+  '4x4': { rows: 4, cols: 4 },
+  '5x5': { rows: 5, cols: 5 },
+  '6x8': { rows: 8, cols: 6 }, // Strands-shaped board: 6 wide, 8 tall
 };
 
 export const DEFAULT_STATE: PersistedState = {
@@ -48,7 +56,7 @@ export const DEFAULT_STATE: PersistedState = {
   descramble: { rack: '', useAll: false, minLength: 3 },
   bee: { center: '', outers: Array(6).fill('') },
   boxed: { letters: Array(12).fill(''), solutionWords: 2 },
-  grid: { letters: Array(16).fill(''), size: 4 },
+  grid: { letters: Array(16).fill(''), preset: '4x4' },
 };
 
 function singleLetter(v: unknown): string {
@@ -111,8 +119,11 @@ export function loadState(): PersistedState {
       for (let i = 0; i < 12; i++) boxedLetters[i] = singleLetter(p.boxed.letters[i]);
     }
 
-    const gridSize = [3, 4, 5].includes(p?.grid?.size) ? p.grid.size : 4;
-    const gridLetters = Array(gridSize * gridSize).fill('');
+    const gridPreset: GridPreset = Object.keys(GRID_PRESET_DIMS).includes(p?.grid?.preset)
+      ? p.grid.preset
+      : '4x4';
+    const dims = GRID_PRESET_DIMS[gridPreset];
+    const gridLetters = Array(dims.rows * dims.cols).fill('');
     if (Array.isArray(p?.grid?.letters)) {
       for (let i = 0; i < gridLetters.length; i++) gridLetters[i] = singleLetter(p.grid.letters[i]);
     }
@@ -146,7 +157,7 @@ export function loadState(): PersistedState {
         letters: boxedLetters,
         solutionWords: clampInt(p?.boxed?.solutionWords, 1, 5, DEFAULT_STATE.boxed.solutionWords),
       },
-      grid: { letters: gridLetters, size: gridSize },
+      grid: { letters: gridLetters, preset: gridPreset },
     };
   } catch {
     return DEFAULT_STATE;

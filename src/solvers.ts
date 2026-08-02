@@ -93,38 +93,49 @@ export function solveBoxed(list: string[], input: BoxedInput): string[] {
 }
 
 export type GridInput = {
-  cells: string[]; // row-major square grid; 9, 16, or 25 letters
+  cells: string[]; // row-major rectangular grid
+  cols: number; // board width; rows = cells.length / cols
 };
 
-// neighbor indices (including diagonals) for each cell of an n x n grid
-const neighborCache = new Map<number, number[][]>();
-export function gridNeighbors(size: number): number[][] {
-  const cached = neighborCache.get(size);
+// neighbor indices (including diagonals) for each cell of a rows x cols grid
+const neighborCache = new Map<string, number[][]>();
+export function gridNeighbors(rows: number, cols: number): number[][] {
+  const key = `${rows}x${cols}`;
+  const cached = neighborCache.get(key);
   if (cached) return cached;
   const out: number[][] = [];
-  for (let i = 0; i < size * size; i++) {
-    const r = Math.floor(i / size);
-    const c = i % size;
+  for (let i = 0; i < rows * cols; i++) {
+    const r = Math.floor(i / cols);
+    const c = i % cols;
     const adj: number[] = [];
     for (let dr = -1; dr <= 1; dr++) {
       for (let dc = -1; dc <= 1; dc++) {
         if (!dr && !dc) continue;
         const rr = r + dr;
         const cc = c + dc;
-        if (rr >= 0 && rr < size && cc >= 0 && cc < size) adj.push(rr * size + cc);
+        if (rr >= 0 && rr < rows && cc >= 0 && cc < cols) adj.push(rr * cols + cc);
       }
     }
     out.push(adj);
   }
-  neighborCache.set(size, out);
+  neighborCache.set(key, out);
   return out;
 }
 
 export function solveGrid(list: string[], input: GridInput): string[] {
-  const { cells } = input;
-  const size = Math.round(Math.sqrt(cells.length));
-  if (size * size !== cells.length || size < 3 || size > 5 || cells.some((c) => !c)) return [];
-  const GRID_NEIGHBORS = gridNeighbors(size);
+  const { cells, cols } = input;
+  const rows = cols > 0 ? cells.length / cols : 0;
+  if (
+    !Number.isInteger(rows) ||
+    rows < 3 ||
+    cols < 3 ||
+    rows > 8 ||
+    cols > 8 ||
+    cells.some((c) => !c)
+  ) {
+    return [];
+  }
+  const GRID_NEIGHBORS = gridNeighbors(rows, cols);
 
   // narrow to words spellable from the grid's alphabet, then prefix-prune the DFS
   const present = new Set(cells);
@@ -137,15 +148,25 @@ export function solveGrid(list: string[], input: GridInput): string[] {
   const prefixes = new Set<string>();
   for (const w of candidates) for (let i = 1; i <= w.length; i++) prefixes.add(w.slice(0, i));
 
+  // visited array rather than a bitmask — boards can exceed 32 cells
   const found = new Set<string>();
-  const dfs = (pos: number, cur: string, mask: number) => {
+  const visited = new Array<boolean>(cells.length).fill(false);
+  const dfs = (pos: number, cur: string) => {
     if (!prefixes.has(cur)) return;
     if (cur.length >= 3 && wordSet.has(cur)) found.add(cur);
     for (const nb of GRID_NEIGHBORS[pos]) {
-      if (!(mask & (1 << nb))) dfs(nb, cur + cells[nb], mask | (1 << nb));
+      if (!visited[nb]) {
+        visited[nb] = true;
+        dfs(nb, cur + cells[nb]);
+        visited[nb] = false;
+      }
     }
   };
-  for (let i = 0; i < cells.length; i++) dfs(i, cells[i], 1 << i);
+  for (let i = 0; i < cells.length; i++) {
+    visited[i] = true;
+    dfs(i, cells[i]);
+    visited[i] = false;
+  }
 
   // longest words first, then alphabetical
   return [...found].sort((a, b) => b.length - a.length || (a < b ? -1 : 1));
