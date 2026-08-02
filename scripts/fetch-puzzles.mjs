@@ -287,10 +287,16 @@ for (const variant of ['', 'dev']) {
 // refreshed daily, used by both sites
 const poolRng = mulberry32(xmur3(`anagrimoire-weave-pool-${etDate}`)());
 const pool = { '6x8': [], '8x10': [] };
-for (const [key, cols, rows, count] of [['6x8', 6, 8, 8], ['8x10', 8, 10, 8]]) {
+for (const [key, cols, rows, count] of [['6x8', 6, 8, 20], ['8x10', 8, 10, 20]]) {
+  const used = new Set();
   for (let i = 0; i < count; i++) {
-    const p = generateWeave(poolRng, cols, rows, THEMES);
+    // prefer themes not yet in this size's pool for variety
+    const fresh = THEMES.filter((t) => !used.has(t.clue));
+    const p =
+      (fresh.length && generateWeave(poolRng, cols, rows, fresh)) ||
+      generateWeave(poolRng, cols, rows, THEMES);
     if (!p) throw new Error(`Could not generate pool weave ${key} #${i}`);
+    used.add(p.clue);
     pool[key].push({ clue: p.clue, cols, board: p.board, answers: encodeAnswers(p) });
   }
 }

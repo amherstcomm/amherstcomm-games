@@ -439,6 +439,12 @@ export default function WeaveGame({ standardWords }: { standardWords: string[] |
             <span>
               {record.found.length} / {answers.words.length + 1} found
             </span>
+            {record.hintsUsed > 0 && (
+              <span className="inline-flex items-center gap-1.5">
+                <Lightbulb className="w-3.5 h-3.5 text-slate-500" />
+                {record.hintsUsed} hint{record.hintsUsed === 1 ? '' : 's'}
+              </span>
+            )}
             {store.dailyMode && store.dailyDate && (
               <span className="text-slate-500">{store.dailyDate}</span>
             )}
@@ -533,7 +539,13 @@ export default function WeaveGame({ standardWords }: { standardWords: string[] |
             )}
             {!flash && complete && (
               <p className={`text-sm font-semibold ${solvedAll ? 'text-emerald-300' : 'text-slate-400'}`}>
-                {solvedAll ? `Solved in ${formatElapsed(record.elapsedMs ?? 0)} 🎉` : 'Revealed 🔍'}
+                {solvedAll
+                  ? `Solved in ${formatElapsed(record.elapsedMs ?? 0)} · ${
+                      record.hintsUsed === 0
+                        ? 'no hints'
+                        : `${record.hintsUsed} hint${record.hintsUsed === 1 ? '' : 's'}`
+                    } 🎉`
+                  : 'Revealed 🔍'}
               </p>
             )}
           </div>
