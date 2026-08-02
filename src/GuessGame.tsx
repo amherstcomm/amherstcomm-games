@@ -6,7 +6,7 @@ import {
   useRef,
   useState,
 } from 'react';
-import { CalendarDays, RefreshCw, Trophy } from 'lucide-react';
+import { CalendarDays, RefreshCw, Search, Trophy } from 'lucide-react';
 
 export type LetterState = 'correct' | 'present' | 'absent';
 export type GuessGameHandle = { pressKey: (k: string) => void };
@@ -86,8 +86,9 @@ const GuessGame = forwardRef<
     commonWords: string[] | null;
     fullWords: string[] | null;
     onLetterStates: (states: Record<string, LetterState>) => void;
+    onReveal: (clues: { length: number; known: string[]; contains: string; excluded: string }) => void;
   }
->(function GuessGame({ length, commonWords, fullWords, onLetterStates }, ref) {
+>(function GuessGame({ length, commonWords, fullWords, onLetterStates, onReveal }, ref) {
   const [store, setStore] = useState<PlayStore>(loadStore);
   const [dailyData, setDailyData] = useState<{ date: string; words: Record<string, string> } | null>(null);
   const [dailyError, setDailyError] = useState(false);
@@ -255,6 +256,32 @@ const GuessGame = forwardRef<
     if (done) finishDaily(didWin);
   }
 
+  // translate the board's knowledge into solver clues
+  function reveal() {
+    if (!secret) return;
+    const known = Array<string>(length).fill('');
+    const present = new Set<string>();
+    const absent = new Set<string>();
+    for (const g of guesses) {
+      const score = scoreGuess(secret, g);
+      for (let i = 0; i < g.length; i++) {
+        if (score[i] === 'correct') known[i] = g[i];
+        else if (score[i] === 'present') present.add(g[i]);
+        else absent.add(g[i]);
+      }
+    }
+    // grays from duplicate letters aren't truly excluded
+    for (const c of [...absent]) if (present.has(c) || known.includes(c)) absent.delete(c);
+    // presents already locked into a green slot don't need a contains clue
+    for (const c of [...present]) if (known.includes(c)) present.delete(c);
+    onReveal({
+      length,
+      known,
+      contains: [...present].sort().join(''),
+      excluded: [...absent].sort().join(''),
+    });
+  }
+
   function newPracticeWord() {
     const word = pickPracticeWord();
     if (!word) return;
@@ -409,6 +436,17 @@ const GuessGame = forwardRef<
               >
                 <RefreshCw className="w-4 h-4" />
                 New word
+              </button>
+            )}
+            {guesses.length > 0 && (
+              <button
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={reveal}
+                title="Hand your clues to the solver"
+                className="inline-flex items-center gap-1.5 px-4 h-10 rounded-lg text-sm font-semibold bg-white/5 border border-white/10 text-slate-300 hover:bg-white/10 hover:text-white transition-colors"
+              >
+                <Search className="w-4 h-4" />
+                Reveal
               </button>
             )}
             {dailyMode && (won || lost) && (

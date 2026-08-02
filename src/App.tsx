@@ -835,6 +835,13 @@ function App() {
             commonWords={commonWordsArr}
             fullWords={fullWordsArr}
             onLetterStates={setLetterStates}
+            onReveal={({ length: len, known: k, contains, excluded }) => {
+              setLength(len);
+              setKnown(k);
+              setContainsStr(contains);
+              setExcludedStr(excluded);
+              setPatternPlay(false);
+            }}
           />
         </div>
         ) : (
@@ -972,6 +979,11 @@ function App() {
             standardWords={standardWordsArr}
             commonWords={commonWordsArr}
             onLetterStates={setLetterStates}
+            onReveal={(center, outers) => {
+              setBeeCenter(center);
+              setBeeOuters(outers);
+              setBeePlay(false);
+            }}
           />
         </div>
         )}
@@ -1043,6 +1055,10 @@ function App() {
             standardWords={standardWordsArr}
             commonWords={commonWordsArr}
             onLetterStates={setLetterStates}
+            onReveal={(sides) => {
+              setBoxedLetters(sides.flatMap((s) => s.split('')).slice(0, 12));
+              setBoxedPlay(false);
+            }}
           />
         </div>
         )}

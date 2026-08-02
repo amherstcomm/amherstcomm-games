@@ -6,7 +6,7 @@ import {
   useRef,
   useState,
 } from 'react';
-import { CalendarDays, CornerDownLeft, Delete, RefreshCw, RotateCcw } from 'lucide-react';
+import { CalendarDays, CornerDownLeft, Delete, RefreshCw, RotateCcw, Search } from 'lucide-react';
 import type { LetterState } from '@/GuessGame';
 
 export type BoxGameHandle = { pressKey: (k: string) => void };
@@ -155,8 +155,9 @@ const BoxGame = forwardRef<
     standardWords: string[] | null;
     commonWords: string[] | null;
     onLetterStates: (states: Record<string, LetterState>) => void;
+    onReveal: (sides: string[]) => void;
   }
->(function BoxGame({ standardWords, commonWords, onLetterStates }, ref) {
+>(function BoxGame({ standardWords, commonWords, onLetterStates, onReveal }, ref) {
   const [store, setStore] = useState<BoxStore>(loadStore);
   const [current, setCurrent] = useState('');
   const [flash, setFlash] = useState<{ text: string; good: boolean } | null>(null);
@@ -487,6 +488,15 @@ const BoxGame = forwardRef<
                 New box
               </button>
             )}
+            <button
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => onReveal(record.sides)}
+              title="Give up and see the solutions in the solver"
+              className="inline-flex items-center gap-1.5 px-4 h-10 rounded-lg text-sm font-semibold bg-white/5 border border-white/10 text-slate-300 hover:bg-white/10 hover:text-white transition-colors"
+            >
+              <Search className="w-4 h-4" />
+              Reveal
+            </button>
           </div>
 
           <div className="h-6 mt-3">

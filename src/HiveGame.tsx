@@ -6,7 +6,7 @@ import {
   useRef,
   useState,
 } from 'react';
-import { CalendarDays, CornerDownLeft, Delete, RefreshCw, Shuffle } from 'lucide-react';
+import { CalendarDays, CornerDownLeft, Delete, RefreshCw, Search, Shuffle } from 'lucide-react';
 import type { LetterState } from '@/GuessGame';
 
 export type HiveGameHandle = { pressKey: (k: string) => void };
@@ -91,8 +91,9 @@ const HiveGame = forwardRef<
     standardWords: string[] | null;
     commonWords: string[] | null;
     onLetterStates: (states: Record<string, LetterState>) => void;
+    onReveal: (center: string, outers: string[]) => void;
   }
->(function HiveGame({ standardWords, commonWords, onLetterStates }, ref) {
+>(function HiveGame({ standardWords, commonWords, onLetterStates, onReveal }, ref) {
   const [store, setStore] = useState<HiveStore>(loadStore);
   const [current, setCurrent] = useState('');
   const [flash, setFlash] = useState<{ text: string; good: boolean } | null>(null);
@@ -410,6 +411,15 @@ const HiveGame = forwardRef<
                 New hive
               </button>
             )}
+            <button
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => onReveal(record.center, record.outers)}
+              title="Give up and see every word in the solver"
+              className="inline-flex items-center gap-1.5 px-4 h-10 rounded-lg text-sm font-semibold bg-white/5 border border-white/10 text-slate-300 hover:bg-white/10 hover:text-white transition-colors"
+            >
+              <Search className="w-4 h-4" />
+              Reveal
+            </button>
           </div>
 
           <div className="h-6 mt-3">
