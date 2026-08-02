@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { CalendarDays, Lightbulb, RefreshCw, Timer } from 'lucide-react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { CalendarDays, Eye, Lightbulb, RefreshCw, Timer } from 'lucide-react';
 import { gridNeighbors } from '@/solvers';
 import { dailyDataUrl, WEAVE_POOL_URL } from '@/dailyData';
 import { formatElapsed, useUpTimer } from '@/useUpTimer';
@@ -18,6 +18,7 @@ type WeaveRecord = {
   hintWords: string[]; // banked non-theme dictionary words
   hintsUsed: number;
   hintTarget: string | null;
+  revealed?: boolean;
   elapsedMs?: number;
 };
 type WeaveStore = {
@@ -57,6 +58,7 @@ function sanitizeRecord(r: unknown): WeaveRecord | null {
     hintWords: Array.isArray(rec.hintWords) ? rec.hintWords.filter((w) => typeof w === 'string') : [],
     hintsUsed: typeof rec.hintsUsed === 'number' && rec.hintsUsed >= 0 ? rec.hintsUsed : 0,
     hintTarget: typeof rec.hintTarget === 'string' ? rec.hintTarget : null,
+    revealed: rec.revealed === true,
     elapsedMs: typeof rec.elapsedMs === 'number' && rec.elapsedMs >= 0 ? rec.elapsedMs : 0,
   };
 }
@@ -100,6 +102,7 @@ function toRecord(p: PuzzlePayload): WeaveRecord | null {
     hintWords: [],
     hintsUsed: 0,
     hintTarget: null,
+    revealed: false,
     elapsedMs: 0,
   });
 }
@@ -194,9 +197,9 @@ export default function WeaveGame({ standardWords }: { standardWords: string[] |
     const m = new Map<number, 'theme' | 'span'>();
     if (!answers || !record) return m;
     for (const { w, path } of answers.words) {
-      if (record.found.includes(w)) for (const i of path) m.set(i, 'theme');
+      if (record.revealed || record.found.includes(w)) for (const i of path) m.set(i, 'theme');
     }
-    if (record.found.includes(answers.spangram.w)) {
+    if (record.revealed || record.found.includes(answers.spangram.w)) {
       for (const i of answers.spangram.path) m.set(i, 'span');
     }
     return m;
@@ -210,8 +213,31 @@ export default function WeaveGame({ standardWords }: { standardWords: string[] |
     return new Set(target?.path ?? []);
   }, [answers, record]);
 
-  const complete =
+  const solvedAll =
     !!answers && !!record && record.found.length >= answers.words.length + 1;
+  const complete = solvedAll || !!record?.revealed;
+
+  // after completion, draw every word's path as a line overlay
+  const boardWrapRef = useRef<HTMLDivElement>(null);
+  const [solutionLines, setSolutionLines] = useState<{ pts: { x: number; y: number }[]; span: boolean }[]>([]);
+  useLayoutEffect(() => {
+    if (!complete || !answers || !boardWrapRef.current) {
+      setSolutionLines([]);
+      return;
+    }
+    const wrap = boardWrapRef.current.getBoundingClientRect();
+    const measure = (path: number[]) =>
+      path.map((i) => {
+        const r = boardWrapRef.current!
+          .querySelector(`[data-wcell="${i}"]`)!
+          .getBoundingClientRect();
+        return { x: r.left + r.width / 2 - wrap.left, y: r.top + r.height / 2 - wrap.top };
+      });
+    setSolutionLines([
+      ...answers.words.map((w) => ({ pts: measure(w.path), span: false })),
+      { pts: measure(answers.spangram.path), span: true },
+    ]);
+  }, [complete, answers]);
 
   useUpTimer(!!record && !complete, (delta) =>
     updateRecord((r) => ({ ...r, elapsedMs: (r.elapsedMs ?? 0) + delta }))
@@ -325,6 +351,11 @@ export default function WeaveGame({ standardWords }: { standardWords: string[] |
     updateRecord((r) => ({ ...r, hintsUsed: r.hintsUsed + 1, hintTarget: target }));
   }
 
+  function reveal() {
+    if (!record || complete) return;
+    updateRecord((r) => ({ ...r, revealed: true, hintTarget: null }));
+  }
+
   function newPractice() {
     const rec = pickPractice(store.practiceSize, record?.board.join(''));
     if (rec) setStore((prev) => ({ ...prev, practice: rec }));
@@ -414,10 +445,11 @@ export default function WeaveGame({ standardWords }: { standardWords: string[] |
           </div>
 
           {/* the board */}
+          <div ref={boardWrapRef} className="relative w-fit mx-auto">
           <div
             onPointerDown={onBoardPointerDown}
             onPointerMove={onBoardPointerMove}
-            className={`grid gap-1.5 w-fit mx-auto touch-none select-none ${cols === 8 ? 'grid-cols-8' : 'grid-cols-6'}`}
+            className={`grid gap-1.5 touch-none select-none ${cols === 8 ? 'grid-cols-8' : 'grid-cols-6'}`}
           >
             {cells.map((c, i) => {
               const lock = locked.get(i);
@@ -441,6 +473,22 @@ export default function WeaveGame({ standardWords }: { standardWords: string[] |
               );
             })}
           </div>
+          {solutionLines.length > 0 && (
+            <svg className="absolute inset-0 w-full h-full pointer-events-none">
+              {solutionLines.map((line, i) => (
+                <polyline
+                  key={i}
+                  points={line.pts.map((p) => `${p.x},${p.y}`).join(' ')}
+                  fill="none"
+                  stroke={line.span ? 'rgb(251 191 36 / 0.85)' : 'rgb(125 211 252 / 0.7)'}
+                  strokeWidth="3.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              ))}
+            </svg>
+          )}
+          </div>
 
           {/* controls */}
           <div className="mt-4 flex flex-wrap items-center justify-center gap-2.5">
@@ -454,6 +502,17 @@ export default function WeaveGame({ standardWords }: { standardWords: string[] |
               <Lightbulb className="w-4 h-4" />
               Hint {Math.min(Math.max(hintBank, 0), HINT_COST)}/{HINT_COST}
             </button>
+            {!complete && (
+              <button
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={reveal}
+                title="Give up and show the full solution"
+                className="inline-flex items-center gap-1.5 px-4 h-10 rounded-lg text-sm font-semibold bg-white/5 border border-white/10 text-slate-300 hover:bg-white/10 hover:text-white transition-colors"
+              >
+                <Eye className="w-4 h-4" />
+                Reveal
+              </button>
+            )}
             {!store.dailyMode && (
               <button
                 onMouseDown={(e) => e.preventDefault()}
@@ -473,8 +532,8 @@ export default function WeaveGame({ standardWords }: { standardWords: string[] |
               </p>
             )}
             {!flash && complete && (
-              <p className="text-sm text-emerald-300 font-semibold">
-                Solved in {formatElapsed(record.elapsedMs ?? 0)} 🎉
+              <p className={`text-sm font-semibold ${solvedAll ? 'text-emerald-300' : 'text-slate-400'}`}>
+                {solvedAll ? `Solved in ${formatElapsed(record.elapsedMs ?? 0)} 🎉` : 'Revealed 🔍'}
               </p>
             )}
           </div>

@@ -6,6 +6,7 @@ import BoxGame, { type BoxGameHandle } from '@/BoxGame';
 import ScrambleGame, { type ScrambleGameHandle } from '@/ScrambleGame';
 import GridGame, { type GridGameHandle } from '@/GridGame';
 import WeaveGame from '@/WeaveGame';
+import { dailyDataUrl } from '@/dailyData';
 import { DICTIONARIES, getDictionary, type DictionaryId } from '@/dictionaries';
 import { solvePattern, solveDescramble, solveBee, solveBoxed, solveGrid, findGridPath } from '@/solvers';
 import { loadState, saveState, GRID_PRESET_DIMS, WEAVE_DIMS, type GridPreset, type Mode, type SortPref, type WeaveSize } from '@/storage';
@@ -397,6 +398,25 @@ function App() {
         'https://raw.githubusercontent.com/rptetzloff/anagrimoire/puzzle-data/data/strands.json',
         { cache: 'no-store' }
       );
+      if (!r.ok) throw new Error(String(r.status));
+      const d = await r.json();
+      const board = d.board as string[];
+      if (!Array.isArray(board) || board.length !== 8 || !board.every((row) => /^[a-z]{6}$/.test(row))) {
+        throw new Error('bad payload');
+      }
+      setWeaveSize('6x8');
+      setWeaveLetters(board.join('').split(''));
+      setStrandsClue(typeof d.clue === 'string' ? d.clue : null);
+      setTodayStatus('idle');
+    } catch {
+      setTodayStatus('error');
+    }
+  }
+
+  async function fillTodaysWeave() {
+    setTodayStatus('loading');
+    try {
+      const r = await fetch(dailyDataUrl('daily-weave'), { cache: 'no-store' });
       if (!r.ok) throw new Error(String(r.status));
       const d = await r.json();
       const board = d.board as string[];
@@ -1002,6 +1022,14 @@ function App() {
             >
               <CalendarDays className="w-4 h-4" />
               {todayStatus === 'loading' ? 'Fetching…' : "Today's Strands"}
+            </button>
+            <button
+              onClick={fillTodaysWeave}
+              disabled={todayStatus === 'loading'}
+              className="inline-flex items-center gap-1.5 px-4 h-10 rounded-lg text-sm font-semibold bg-white/5 border border-white/10 text-slate-300 hover:bg-white/10 hover:text-white transition-colors disabled:opacity-50"
+            >
+              <CalendarDays className="w-4 h-4" />
+              {todayStatus === 'loading' ? 'Fetching…' : "Today's Weave"}
             </button>
           </div>
           {todayStatus === 'error' && (
