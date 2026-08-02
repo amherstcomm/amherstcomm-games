@@ -3,6 +3,7 @@ import { Search, Sparkles, Eraser, ArrowDown, ArrowUp, X, BookOpen, Grid3x3, Shu
 import GuessGame, { type GuessGameHandle, type LetterState } from '@/GuessGame';
 import HiveGame, { type HiveGameHandle } from '@/HiveGame';
 import BoxGame, { type BoxGameHandle } from '@/BoxGame';
+import ScrambleGame, { type ScrambleGameHandle } from '@/ScrambleGame';
 import { DICTIONARIES, getDictionary, type DictionaryId } from '@/dictionaries';
 import { solvePattern, solveDescramble, solveBee, solveBoxed } from '@/solvers';
 import { loadState, saveState, type Mode, type SortPref } from '@/storage';
@@ -332,6 +333,7 @@ function App() {
   const [patternPlay, setPatternPlay] = useState(initial.patternPlay);
   const [beePlay, setBeePlay] = useState(initial.beePlay);
   const [boxedPlay, setBoxedPlay] = useState(initial.boxedPlay);
+  const [descramblePlay, setDescramblePlay] = useState(initial.descramblePlay);
   const [letterStates, setLetterStates] = useState<Record<string, LetterState>>({});
   const [commonWordsArr, setCommonWordsArr] = useState<string[] | null>(null);
   const [fullWordsArr, setFullWordsArr] = useState<string[] | null>(null);
@@ -339,22 +341,24 @@ function App() {
   const gameRef = useRef<GuessGameHandle>(null);
   const hiveRef = useRef<HiveGameHandle>(null);
   const boxRef = useRef<BoxGameHandle>(null);
+  const scrambleRef = useRef<ScrambleGameHandle>(null);
 
   const patternPlayActive = mode === 'pattern' && patternPlay;
   const beePlayActive = mode === 'bee' && beePlay;
   const boxedPlayActive = mode === 'boxed' && boxedPlay;
-  const playActive = patternPlayActive || beePlayActive || boxedPlayActive;
+  const descramblePlayActive = mode === 'descramble' && descramblePlay;
+  const playActive = patternPlayActive || beePlayActive || boxedPlayActive || descramblePlayActive;
 
   // the guess game validates against the full dictionary and picks practice
-  // words from the common one; hive and box play validate against standard
+  // words from the common one; hive, box, and scramble play use standard
   useEffect(() => {
     if (!playActive) return;
     if (!commonWordsArr) getDictionary('common').then(setCommonWordsArr);
     if (patternPlayActive && !fullWordsArr) getDictionary('full').then(setFullWordsArr);
-    if ((beePlayActive || boxedPlayActive) && !standardWordsArr) {
+    if ((beePlayActive || boxedPlayActive || descramblePlayActive) && !standardWordsArr) {
       getDictionary('standard').then(setStandardWordsArr);
     }
-  }, [playActive, patternPlayActive, beePlayActive, boxedPlayActive, commonWordsArr, fullWordsArr, standardWordsArr]);
+  }, [playActive, patternPlayActive, beePlayActive, boxedPlayActive, descramblePlayActive, commonWordsArr, fullWordsArr, standardWordsArr]);
 
   useEffect(() => {
     if (!aboutOpen) return;
@@ -393,12 +397,13 @@ function App() {
       patternPlay,
       beePlay,
       boxedPlay,
+      descramblePlay,
       pattern: { length, known, contains: containsStr, excluded: excludedStr },
       descramble: { rack: rackStr, useAll, minLength },
       bee: { center: beeCenter, outers: beeOuters },
       boxed: { letters: boxedLetters, solutionWords },
     });
-  }, [mode, dictionaries, sorts, kbOpen, patternPlay, beePlay, boxedPlay, length, known, containsStr, excludedStr, rackStr, useAll, minLength, beeCenter, beeOuters, boxedLetters, solutionWords]);
+  }, [mode, dictionaries, sorts, kbOpen, patternPlay, beePlay, boxedPlay, descramblePlay, length, known, containsStr, excludedStr, rackStr, useAll, minLength, beeCenter, beeOuters, boxedLetters, solutionWords]);
 
   // keep known array sized to length
   useEffect(() => {
@@ -614,6 +619,10 @@ function App() {
       boxRef.current?.pressKey(k);
       return;
     }
+    if (descramblePlayActive) {
+      scrambleRef.current?.pressKey(k);
+      return;
+    }
     const remembered =
       lastFocused.current && document.contains(lastFocused.current) ? lastFocused.current : null;
     const target = remembered ?? pickDefaultTarget();
@@ -712,20 +721,22 @@ function App() {
         </header>
 
         {/* solve / play toggle */}
-        {(mode === 'pattern' || mode === 'bee' || mode === 'boxed') && (
-          <section className="mb-7 text-center">
-            <div className="inline-flex rounded-xl bg-white/5 border border-white/10 p-1 gap-1">
+        <section className="mb-7 text-center">
+          <div className="inline-flex rounded-xl bg-white/5 border border-white/10 p-1 gap-1">
               {(
                 [
                   { play: false, label: 'Solve', Icon: Search },
                   { play: true, label: 'Play', Icon: Gamepad2 },
                 ] as const
               ).map(({ play, label, Icon }) => {
-                const flag =
-                  mode === 'pattern' ? patternPlay : mode === 'bee' ? beePlay : boxedPlay;
+                const flags: Record<Mode, [boolean, (v: boolean) => void]> = {
+                  pattern: [patternPlay, setPatternPlay],
+                  descramble: [descramblePlay, setDescramblePlay],
+                  bee: [beePlay, setBeePlay],
+                  boxed: [boxedPlay, setBoxedPlay],
+                };
+                const [flag, setFlag] = flags[mode];
                 const active = flag === play;
-                const setFlag =
-                  mode === 'pattern' ? setPatternPlay : mode === 'bee' ? setBeePlay : setBoxedPlay;
                 return (
                   <button
                     key={label}
@@ -740,9 +751,8 @@ function App() {
                   </button>
                 );
               })}
-            </div>
-          </section>
-        )}
+          </div>
+        </section>
 
         {/* dictionary selector */}
         {!playActive && (
@@ -869,7 +879,24 @@ function App() {
         </>
         )}
 
-        {mode === 'descramble' && (
+        {descramblePlayActive && (
+        <div className="mb-8">
+          <ScrambleGame
+            ref={scrambleRef}
+            standardWords={standardWordsArr}
+            commonWords={commonWordsArr}
+            onLetterStates={setLetterStates}
+            onReveal={(letters) => {
+              setRackStr(letters);
+              setUseAll(false);
+              setMinLength(3);
+              setDescramblePlay(false);
+            }}
+          />
+        </div>
+        )}
+
+        {mode === 'descramble' && !descramblePlay && (
         <div className="mb-8">
           <section className="mb-5">
             <label className="block text-xs font-medium text-slate-400 uppercase tracking-wider mb-2.5 text-center">
