@@ -330,6 +330,7 @@ const GuessGame = forwardRef<
         ).map(({ id, label, Icon }) => (
           <button
             key={label}
+            onMouseDown={(e) => e.preventDefault()}
             onClick={() => setStore((prev) => ({ ...prev, dailyMode: id }))}
             className={`inline-flex items-center gap-1.5 px-4 h-9 rounded-lg text-sm font-semibold transition-colors
               ${dailyMode === id ? 'bg-emerald-400/15 text-emerald-300' : 'text-slate-400 hover:text-white'}`}
@@ -402,6 +403,7 @@ const GuessGame = forwardRef<
           <div className="mt-2 flex items-center justify-center gap-3">
             {!dailyMode && (
               <button
+                onMouseDown={(e) => e.preventDefault()}
                 onClick={newPracticeWord}
                 className="inline-flex items-center gap-1.5 px-4 h-10 rounded-lg text-sm font-semibold bg-white/5 border border-white/10 text-slate-300 hover:bg-white/10 hover:text-white transition-colors"
               >
