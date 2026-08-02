@@ -8,12 +8,12 @@ import {
 } from 'react';
 import { CalendarDays, CornerDownLeft, Delete, RefreshCw, Search, Shuffle } from 'lucide-react';
 import type { LetterState } from '@/GuessGame';
+import { dailyDataUrl } from '@/dailyData';
 
 export type HiveGameHandle = { pressKey: (k: string) => void };
 
 const HIVE_KEY = 'anagrimoire:hive:v1';
-const DAILY_HIVE_URL =
-  'https://raw.githubusercontent.com/rptetzloff/anagrimoire/puzzle-data/data/daily-hive.json';
+const DAILY_HIVE_URL = dailyDataUrl('daily-hive');
 
 // outer hive cells, clockwise from the top, as [left%, top%] of the container
 const POSITIONS: [number, number][] = [

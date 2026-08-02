@@ -9,12 +9,12 @@ import {
 import { CalendarDays, CornerDownLeft, Delete, Flag, Play, RefreshCw, Search, Shuffle, Timer } from 'lucide-react';
 import { solveDescramble } from '@/solvers';
 import type { LetterState } from '@/GuessGame';
+import { dailyDataUrl } from '@/dailyData';
 
 export type ScrambleGameHandle = { pressKey: (k: string) => void };
 
 const SCRAMBLE_KEY = 'anagrimoire:scramble:v1';
-const DAILY_SCRAMBLE_URL =
-  'https://raw.githubusercontent.com/rptetzloff/anagrimoire/puzzle-data/data/daily-scramble.json';
+const DAILY_SCRAMBLE_URL = dailyDataUrl('daily-scramble');
 const DURATION_MS = 3 * 60 * 1000;
 
 type ScrambleRecord = {

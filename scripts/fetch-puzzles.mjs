@@ -115,51 +115,19 @@ const COMMON_FILES = ['english-words-10', 'english-words-20', 'english-words-35'
 const STANDARD_FILES = [...COMMON_FILES, 'english-words-40', 'english-words-50', 'english-words-55', 'american-words-40', 'american-words-50', 'american-words-55'];
 
 const etDate = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York' }).format(new Date());
-const rng = mulberry32(xmur3(`anagrimoire-guess-${etDate}`)());
 
 const commonSet = loadTierSet(COMMON_FILES);
 let standardSet = null; // loaded lazily; long lengths are sparse in the common tiers
 let fullList = null;
 
-const dailyWords = {};
-for (let len = 3; len <= 15; len++) {
-  // skip simple plurals whose stem is also a word
-  const pickable = (set) =>
-    [...set].filter((w) => w.length === len && !(w.endsWith('s') && set.has(w.slice(0, -1))));
-  let pool = pickable(commonSet);
-  if (pool.length === 0) {
-    standardSet ??= loadTierSet(STANDARD_FILES);
-    pool = pickable(standardSet);
-  }
-  if (pool.length === 0) {
-    fullList ??= require('an-array-of-english-words');
-    pool = fullList.filter((w) => w.length === len);
-  }
-  if (pool.length === 0) throw new Error(`No candidate words of length ${len}`);
-  pool.sort(); // Set iteration order is insertion order — sort for determinism
-  const word = pool[Math.floor(rng() * pool.length)];
-  dailyWords[len] = Buffer.from(word).toString('base64');
-}
-
-const dwOut = { date: etDate, words: dailyWords, fetchedAt: new Date().toISOString() };
-await writeFile('data/daily-words.json', JSON.stringify(dwOut, null, 2) + '\n');
-console.log('Wrote data/daily-words.json for', etDate, `(${Object.keys(dailyWords).length} lengths)`);
-
-// Daily hive for play mode: our own generated puzzle (not the NYT's letters),
-// seeded from a pangram so it is always completable, deterministic per date.
-const hiveRng = mulberry32(xmur3(`anagrimoire-hive-${etDate}`)());
+// shared candidate pools, computed once and drawn from per variant
 // no 's' in the hive (plurals would flood the answer list)
 const hiveBases = [...commonSet]
   .filter((w) => w.length >= 7 && new Set(w).size === 7 && !w.includes('s'))
   .sort();
 if (!hiveBases.length) throw new Error('No pangram bases for the daily hive');
-const base = hiveBases[Math.floor(hiveRng() * hiveBases.length)];
-const hiveLetters = [...new Set(base)];
-const center = hiveLetters[Math.floor(hiveRng() * hiveLetters.length)];
-const outers = hiveLetters.filter((c) => c !== center).sort(() => hiveRng() - 0.5);
-const hiveOut = { date: etDate, center, outers, fetchedAt: new Date().toISOString() };
-await writeFile('data/daily-hive.json', JSON.stringify(hiveOut, null, 2) + '\n');
-console.log('Wrote data/daily-hive.json:', JSON.stringify(hiveOut));
+const rackBases = [...commonSet].filter((w) => w.length === 7).sort();
+if (!rackBases.length) throw new Error('No seven-letter rack bases');
 
 // Daily box for play mode: our own generated Letter Boxed-style puzzle.
 // Built from two chainable words covering exactly 12 distinct letters, with
@@ -194,7 +162,6 @@ function assignSides(w1, w2, rng) {
   return bt(0) ? sides.map((s) => s.join('')) : null;
 }
 
-const boxRng = mulberry32(xmur3(`anagrimoire-box-${etDate}`)());
 const boxWords = [...commonSet].filter((w) => w.length >= 4 && !/(.)\1/.test(w)).sort();
 const boxByFirst = new Map();
 for (const w of boxWords) {
@@ -202,43 +169,96 @@ for (const w of boxWords) {
   g.push(w);
   boxByFirst.set(w[0], g);
 }
-let boxSides = null;
-for (let attempt = 0; attempt < 2000 && !boxSides; attempt++) {
-  const w1 = boxWords[Math.floor(boxRng() * boxWords.length)];
-  const cands = (boxByFirst.get(w1[w1.length - 1]) ?? []).filter(
-    (w2) => w2 !== w1 && new Set(w1 + w2).size === 12
-  );
-  if (!cands.length) continue;
-  const w2 = cands[Math.floor(boxRng() * cands.length)];
-  boxSides = assignSides(w1, w2, boxRng);
-}
-if (!boxSides) throw new Error('Could not generate a daily box');
 
-const boxOut = { date: etDate, sides: boxSides, par: 2, fetchedAt: new Date().toISOString() };
-await writeFile('data/daily-box.json', JSON.stringify(boxOut, null, 2) + '\n');
-console.log('Wrote data/daily-box.json:', JSON.stringify(boxOut));
-
-// Daily scramble rack: seven letters shuffled from a common seven-letter
-// word, so a full-rack word always exists. Deterministic per Eastern date.
-const scrambleRng = mulberry32(xmur3(`anagrimoire-scramble-${etDate}`)());
-const rackBases = [...commonSet].filter((w) => w.length === 7).sort();
-if (!rackBases.length) throw new Error('No seven-letter rack bases');
-const rackBase = rackBases[Math.floor(scrambleRng() * rackBases.length)];
-const rack = rackBase.split('').sort(() => scrambleRng() - 0.5);
-const scrambleOut = { date: etDate, letters: rack, fetchedAt: new Date().toISOString() };
-await writeFile('data/daily-scramble.json', JSON.stringify(scrambleOut, null, 2) + '\n');
-console.log('Wrote data/daily-scramble.json:', JSON.stringify(scrambleOut));
-
-// Daily 4x4 grid: rolled from the classic sixteen-dice letter distributions
-// (with q treated as a plain letter), deterministic per Eastern date.
 const GRID_DICE = [
   'aaeegn', 'abbjoo', 'achops', 'affkps',
   'aoottw', 'cimotu', 'deilrx', 'delrvy',
   'distty', 'eeghnw', 'eeinsu', 'ehrtvw',
   'eiosst', 'elrtty', 'himnuq', 'hlnnrz',
 ];
-const gridRng = mulberry32(xmur3(`anagrimoire-grid-${etDate}`)());
-const gridCells = GRID_DICE.map((d) => d[Math.floor(gridRng() * 6)]).sort(() => gridRng() - 0.5);
-const gridOut = { date: etDate, cells: gridCells, fetchedAt: new Date().toISOString() };
-await writeFile('data/daily-grid.json', JSON.stringify(gridOut, null, 2) + '\n');
-console.log('Wrote data/daily-grid.json:', JSON.stringify(gridOut));
+
+// Two independent daily sets: production, and a dev-salted set for
+// dev.anagrimoire.com/localhost so testing never spoils the production
+// puzzles. Everything stays deterministic per Eastern date.
+for (const variant of ['', 'dev']) {
+  const salt = variant ? `-${variant}` : '';
+  const prefix = variant ? 'dev-' : '';
+  const stamp = new Date().toISOString();
+
+  // guess words: one per length 3-15
+  const rng = mulberry32(xmur3(`anagrimoire-guess-${etDate}${salt}`)());
+  const dailyWords = {};
+  for (let len = 3; len <= 15; len++) {
+    // skip simple plurals whose stem is also a word
+    const pickable = (set) =>
+      [...set].filter((w) => w.length === len && !(w.endsWith('s') && set.has(w.slice(0, -1))));
+    let pool = pickable(commonSet);
+    if (pool.length === 0) {
+      standardSet ??= loadTierSet(STANDARD_FILES);
+      pool = pickable(standardSet);
+    }
+    if (pool.length === 0) {
+      fullList ??= require('an-array-of-english-words');
+      pool = fullList.filter((w) => w.length === len);
+    }
+    if (pool.length === 0) throw new Error(`No candidate words of length ${len}`);
+    pool.sort(); // Set iteration order is insertion order — sort for determinism
+    const word = pool[Math.floor(rng() * pool.length)];
+    dailyWords[len] = Buffer.from(word).toString('base64');
+  }
+  await writeFile(
+    `data/${prefix}daily-words.json`,
+    JSON.stringify({ date: etDate, words: dailyWords, fetchedAt: stamp }, null, 2) + '\n'
+  );
+  console.log(`Wrote data/${prefix}daily-words.json for ${etDate}`);
+
+  // hive: seeded from a pangram so it is always completable
+  const hiveRng = mulberry32(xmur3(`anagrimoire-hive-${etDate}${salt}`)());
+  const base = hiveBases[Math.floor(hiveRng() * hiveBases.length)];
+  const hiveLetters = [...new Set(base)];
+  const center = hiveLetters[Math.floor(hiveRng() * hiveLetters.length)];
+  const outers = hiveLetters.filter((c) => c !== center).sort(() => hiveRng() - 0.5);
+  await writeFile(
+    `data/${prefix}daily-hive.json`,
+    JSON.stringify({ date: etDate, center, outers, fetchedAt: stamp }, null, 2) + '\n'
+  );
+  console.log(`Wrote data/${prefix}daily-hive.json: ${center}/${outers.join('')}`);
+
+  // box: two chainable words covering exactly 12 distinct letters
+  const boxRng = mulberry32(xmur3(`anagrimoire-box-${etDate}${salt}`)());
+  let boxSides = null;
+  for (let attempt = 0; attempt < 2000 && !boxSides; attempt++) {
+    const w1 = boxWords[Math.floor(boxRng() * boxWords.length)];
+    const cands = (boxByFirst.get(w1[w1.length - 1]) ?? []).filter(
+      (w2) => w2 !== w1 && new Set(w1 + w2).size === 12
+    );
+    if (!cands.length) continue;
+    const w2 = cands[Math.floor(boxRng() * cands.length)];
+    boxSides = assignSides(w1, w2, boxRng);
+  }
+  if (!boxSides) throw new Error('Could not generate a daily box');
+  await writeFile(
+    `data/${prefix}daily-box.json`,
+    JSON.stringify({ date: etDate, sides: boxSides, par: 2, fetchedAt: stamp }, null, 2) + '\n'
+  );
+  console.log(`Wrote data/${prefix}daily-box.json: ${boxSides.join('/')}`);
+
+  // scramble rack: shuffled seven-letter word, full-rack bonus guaranteed
+  const scrambleRng = mulberry32(xmur3(`anagrimoire-scramble-${etDate}${salt}`)());
+  const rackBase = rackBases[Math.floor(scrambleRng() * rackBases.length)];
+  const rack = rackBase.split('').sort(() => scrambleRng() - 0.5);
+  await writeFile(
+    `data/${prefix}daily-scramble.json`,
+    JSON.stringify({ date: etDate, letters: rack, fetchedAt: stamp }, null, 2) + '\n'
+  );
+  console.log(`Wrote data/${prefix}daily-scramble.json: ${rack.join('')}`);
+
+  // 4x4 grid from the classic dice (q treated as a plain letter)
+  const gridRng = mulberry32(xmur3(`anagrimoire-grid-${etDate}${salt}`)());
+  const gridCells = GRID_DICE.map((d) => d[Math.floor(gridRng() * 6)]).sort(() => gridRng() - 0.5);
+  await writeFile(
+    `data/${prefix}daily-grid.json`,
+    JSON.stringify({ date: etDate, cells: gridCells, fetchedAt: stamp }, null, 2) + '\n'
+  );
+  console.log(`Wrote data/${prefix}daily-grid.json: ${gridCells.join('')}`);
+}

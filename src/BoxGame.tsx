@@ -8,12 +8,12 @@ import {
 } from 'react';
 import { CalendarDays, CornerDownLeft, Delete, RefreshCw, RotateCcw, Search } from 'lucide-react';
 import type { LetterState } from '@/GuessGame';
+import { dailyDataUrl } from '@/dailyData';
 
 export type BoxGameHandle = { pressKey: (k: string) => void };
 
 const BOX_KEY = 'anagrimoire:box:v1';
-const DAILY_BOX_URL =
-  'https://raw.githubusercontent.com/rptetzloff/anagrimoire/puzzle-data/data/daily-box.json';
+const DAILY_BOX_URL = dailyDataUrl('daily-box');
 
 type BoxRecord = { sides: string[]; chain: string[] };
 type BoxStore = {

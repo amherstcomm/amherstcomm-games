@@ -7,14 +7,14 @@ import {
   useState,
 } from 'react';
 import { CalendarDays, RefreshCw, Search, Trophy } from 'lucide-react';
+import { dailyDataUrl } from '@/dailyData';
 
 export type LetterState = 'correct' | 'present' | 'absent';
 export type GuessGameHandle = { pressKey: (k: string) => void };
 
 const MAX_GUESSES = 6;
 const PLAY_KEY = 'anagrimoire:play:v1';
-const DAILY_URL =
-  'https://raw.githubusercontent.com/rptetzloff/anagrimoire/puzzle-data/data/daily-words.json';
+const DAILY_URL = dailyDataUrl('daily-words');
 
 type GameRecord = { secret: string; guesses: string[] }; // secret is base64
 type Stats = { played: number; won: number; streak: number; lastWinDate: string };

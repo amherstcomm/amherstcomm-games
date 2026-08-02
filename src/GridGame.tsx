@@ -10,12 +10,12 @@ import {
 import { CalendarDays, ChevronDown, CornerDownLeft, Delete, Flag, Play, RefreshCw, Search, Timer } from 'lucide-react';
 import { findGridPath, gridNeighbors, solveGrid } from '@/solvers';
 import type { LetterState } from '@/GuessGame';
+import { dailyDataUrl } from '@/dailyData';
 
 export type GridGameHandle = { pressKey: (k: string) => void };
 
 const GRID_KEY = 'anagrimoire:grid:v1';
-const DAILY_GRID_URL =
-  'https://raw.githubusercontent.com/rptetzloff/anagrimoire/puzzle-data/data/daily-grid.json';
+const DAILY_GRID_URL = dailyDataUrl('daily-grid');
 const DURATION_MS = 3 * 60 * 1000;
 
 // classic sixteen-dice letter distributions (q treated as a plain letter)
