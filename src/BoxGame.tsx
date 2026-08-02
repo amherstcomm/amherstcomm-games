@@ -372,21 +372,24 @@ const BoxGame = forwardRef<
             )}
           </div>
 
-          {/* chain + current entry */}
-          <div className="mb-3 min-h-[2rem] flex flex-wrap items-center justify-center gap-1.5 text-sm">
+          {/* committed chain */}
+          <div className="mb-2 flex flex-wrap items-center justify-center gap-1.5 text-sm">
             {chain.map((w, i) => (
               <span key={i} className="text-slate-300">
                 {w}
                 <span className="text-slate-600"> →</span>
               </span>
             ))}
-            {!solved && (
-              <span className="text-lg font-bold tracking-[0.15em] uppercase text-white">
-                {current || ' '}
+          </div>
+          {/* current entry */}
+          {!solved && (
+            <div className="mb-6 mx-auto max-w-sm h-12 px-4 rounded-xl bg-white/5 border-2 border-white/10 flex items-center justify-center overflow-hidden">
+              <span className="text-xl font-bold tracking-[0.15em] uppercase text-white whitespace-nowrap">
+                {current}
                 <span className="text-amber-400 animate-pulse">|</span>
               </span>
-            )}
-          </div>
+            </div>
+          )}
 
           {/* the box */}
           <div className="relative w-72 h-72 mx-auto">

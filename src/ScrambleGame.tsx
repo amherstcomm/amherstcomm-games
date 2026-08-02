@@ -371,23 +371,27 @@ const ScrambleGame = forwardRef<
             )}
           </div>
 
-          {/* entry line */}
-          <div className="mb-4 h-10 flex items-center justify-center">
-            {running ? (
-              <span className="text-2xl font-bold tracking-[0.2em] uppercase text-white">
+          {/* entry */}
+          {running ? (
+            <div className="mb-4 mx-auto max-w-sm h-12 px-4 rounded-xl bg-white/5 border-2 border-white/10 flex items-center justify-center overflow-hidden">
+              <span className="text-2xl font-bold tracking-[0.2em] uppercase text-white whitespace-nowrap">
                 {current}
                 <span className="text-amber-400 animate-pulse">|</span>
               </span>
-            ) : record.finished ? (
-              <span className="text-sm font-semibold text-emerald-300">
-                Time! You found {record.found.length} of {answers?.length ?? '?'} words.
-              </span>
-            ) : (
-              <span className="text-sm text-slate-400">
-                Three minutes on the clock — find every word you can.
-              </span>
-            )}
-          </div>
+            </div>
+          ) : (
+            <div className="mb-4 h-12 flex items-center justify-center">
+              {record.finished ? (
+                <span className="text-sm font-semibold text-emerald-300">
+                  Time! You found {record.found.length} of {answers?.length ?? '?'} words.
+                </span>
+              ) : (
+                <span className="text-sm text-slate-400">
+                  Three minutes on the clock — find every word you can.
+                </span>
+              )}
+            </div>
+          )}
 
           {/* the rack — letters stay face-down until the clock starts */}
           <div className="flex justify-center gap-2">
