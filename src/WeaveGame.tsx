@@ -323,7 +323,12 @@ export default function WeaveGame({ standardWords }: { standardWords: string[] |
     const isTheme = answers.words.some((x) => x.w === word && sameCells(path, x.path));
     if (isSpan || isTheme) {
       if (record.found.length + 1 >= answers.words.length + 1) {
-        recordWeaveSolve(store.dailyMode, record.elapsedMs ?? 0, record.hintsUsed);
+        recordWeaveSolve(
+          store.dailyMode,
+          record.elapsedMs ?? 0,
+          record.hintsUsed,
+          store.dailyMode ? store.dailyDate || null : null
+        );
       }
       updateRecord((r) => ({
         ...r,
@@ -371,7 +376,11 @@ export default function WeaveGame({ standardWords }: { standardWords: string[] |
 
   function reveal() {
     if (!record || complete) return;
-    recordWeaveReveal(store.dailyMode, record.hintsUsed);
+    recordWeaveReveal(
+      store.dailyMode,
+      record.hintsUsed,
+      store.dailyMode ? store.dailyDate || null : null
+    );
     updateRecord((r) => ({ ...r, revealed: true, hintTarget: null }));
   }
 

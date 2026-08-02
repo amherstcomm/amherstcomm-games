@@ -283,7 +283,8 @@ const HiveGame = forwardRef<
       pangram,
       newScore,
       maxScore > 0 && score < geniusAt && newScore >= geniusAt,
-      maxScore > 0 && newScore >= maxScore
+      maxScore > 0 && newScore >= maxScore,
+      store.dailyMode ? store.dailyDate || null : null
     );
     updateRecord((r) => ({ ...r, found: [word, ...r.found] }));
     showFlash(pangram ? `Pangram! +${wordScore(word, true)}` : `+${wordScore(word, false)}`, true);

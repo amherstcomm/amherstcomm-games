@@ -1,6 +1,10 @@
 import { useMemo, useState, useEffect, useLayoutEffect, useRef, type ButtonHTMLAttributes, type ReactNode } from 'react';
-import { Search, Sparkles, Eraser, ArrowDown, ArrowUp, X, BookOpen, Grid3x3, Shuffle, Hexagon, Check, Keyboard, Delete, Github, Info, Square, CalendarDays, Star, Gamepad2, CornerDownLeft, LayoutGrid, Puzzle, BarChart3 } from 'lucide-react';
+import { Search, Sparkles, Eraser, ArrowDown, ArrowUp, X, BookOpen, Grid3x3, Shuffle, Hexagon, Check, Keyboard, Delete, Github, Info, Square, CalendarDays, Star, Gamepad2, CornerDownLeft, LayoutGrid, Puzzle, BarChart3, UserRound } from 'lucide-react';
+import type { Session } from '@supabase/supabase-js';
 import StatsModal from '@/StatsModal';
+import AccountModal from '@/AccountModal';
+import { supabase } from '@/supabase';
+import { importBaselineOnce } from '@/stats';
 import GuessGame, { type GuessGameHandle, type LetterState } from '@/GuessGame';
 import HiveGame, { type HiveGameHandle } from '@/HiveGame';
 import BoxGame, { type BoxGameHandle } from '@/BoxGame';
@@ -496,6 +500,33 @@ function App() {
   const [kbOpen, setKbOpen] = useState(initial.keyboard);
   const [aboutOpen, setAboutOpen] = useState(false);
   const [statsOpen, setStatsOpen] = useState(false);
+  const [accountOpen, setAccountOpen] = useState(false);
+  const [session, setSession] = useState<Session | null>(null);
+
+  // track the auth session when Supabase is configured
+  useEffect(() => {
+    if (!supabase) return;
+    supabase.auth.getSession().then(({ data }) => setSession(data.session));
+    const { data: sub } = supabase.auth.onAuthStateChange((_event, s) => setSession(s));
+    return () => sub.subscription.unsubscribe();
+  }, []);
+
+  // on sign-in, snapshot this browser's pre-account stats once as the baseline
+  useEffect(() => {
+    if (session) void importBaselineOnce();
+  }, [session]);
+
+  // surface auth errors that come back in the redirect URL (expired or
+  // already-used magic links land here with no other visible sign)
+  const [authNotice, setAuthNotice] = useState<string | null>(null);
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.hash.slice(1));
+    const desc = params.get('error_description') || params.get('error');
+    if (desc) {
+      setAuthNotice(desc);
+      history.replaceState(null, '', window.location.pathname + window.location.search);
+    }
+  }, []);
   const [patternPlay, setPatternPlay] = useState(initial.patternPlay);
   const [beePlay, setBeePlay] = useState(initial.beePlay);
   const [boxedPlay, setBoxedPlay] = useState(initial.boxedPlay);
@@ -1772,6 +1803,15 @@ function App() {
               <BarChart3 className="w-3.5 h-3.5" />
               Stats
             </button>
+            {supabase && (
+              <button
+                onClick={() => setAccountOpen(true)}
+                className="inline-flex items-center gap-1.5 hover:text-slate-300 transition-colors"
+              >
+                <UserRound className="w-3.5 h-3.5" />
+                {session ? 'Account' : 'Sign in'}
+              </button>
+            )}
             <button
               onClick={() => setAboutOpen(true)}
               className="inline-flex items-center gap-1.5 hover:text-slate-300 transition-colors"
@@ -1783,7 +1823,25 @@ function App() {
         </footer>
       </div>
 
-      {statsOpen && <StatsModal onClose={() => setStatsOpen(false)} />}
+      {authNotice && (
+        <div className="fixed top-3 left-1/2 -translate-x-1/2 z-[70] max-w-md w-[calc(100%-2rem)] rounded-xl bg-rose-950/95 border border-rose-500/40 px-4 py-3 shadow-2xl flex items-start gap-3">
+          <p className="text-sm text-rose-200 flex-1">
+            Sign-in didn&apos;t complete: {authNotice}. Request a fresh link, or use the
+            emailed code instead.
+          </p>
+          <button
+            onClick={() => setAuthNotice(null)}
+            aria-label="Dismiss"
+            className="text-rose-300 hover:text-white transition-colors"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
+      {statsOpen && <StatsModal signedIn={!!session} onClose={() => setStatsOpen(false)} />}
+
+      {accountOpen && <AccountModal session={session} onClose={() => setAccountOpen(false)} />}
 
       {/* about & licenses modal */}
       {aboutOpen && (

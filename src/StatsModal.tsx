@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Grid3x3, Hexagon, LayoutGrid, Puzzle, Shuffle, Square, X } from 'lucide-react';
-import { combineStats, loadStats } from '@/stats';
+import { combineStats, fetchSyncedStats, loadStats, type StatsStore } from '@/stats';
 import { formatElapsed } from '@/useUpTimer';
 
 type StatsView = 'overall' | 'daily' | 'practice';
@@ -46,9 +46,39 @@ function time(ms: number | null): string {
   return ms === null ? '—' : formatElapsed(ms);
 }
 
-export default function StatsModal({ onClose }: { onClose: () => void }) {
-  const [store] = useState(loadStats);
+export default function StatsModal({
+  signedIn,
+  onClose,
+}: {
+  signedIn: boolean;
+  onClose: () => void;
+}) {
+  const [localStore] = useState(loadStats);
+  const [synced, setSynced] = useState<StatsStore | null>(null);
+  const [syncState, setSyncState] = useState<'local' | 'loading' | 'synced' | 'error'>(
+    signedIn ? 'loading' : 'local'
+  );
   const [view, setView] = useState<StatsView>('overall');
+
+  // signed in: replace the local view with baseline + event-log replay
+  useEffect(() => {
+    if (!signedIn) return;
+    let alive = true;
+    fetchSyncedStats().then((s) => {
+      if (!alive) return;
+      if (s) {
+        setSynced(s);
+        setSyncState('synced');
+      } else {
+        setSyncState('error');
+      }
+    });
+    return () => {
+      alive = false;
+    };
+  }, [signedIn]);
+
+  const store = synced ?? localStore;
   const stats = useMemo(
     () => (view === 'overall' ? combineStats(store.daily, store.practice) : store[view]),
     [store, view]
@@ -104,7 +134,11 @@ export default function StatsModal({ onClose }: { onClose: () => void }) {
 
         <h2 className="text-xl font-bold mb-1">Statistics</h2>
         <p className="text-xs text-slate-500 mb-4">
-          Lifetime totals, stored only in this browser.
+          {syncState === 'local' && 'Lifetime totals, stored only in this browser.'}
+          {syncState === 'loading' && 'Lifetime totals — syncing from your account…'}
+          {syncState === 'synced' && 'Lifetime totals, synced to your account.'}
+          {syncState === 'error' &&
+            "Couldn't reach your account — showing this browser's totals."}
         </p>
 
         <div className="mb-5 inline-flex rounded-lg bg-white/5 border border-white/10 p-0.5 gap-0.5">

@@ -4,7 +4,7 @@ A word-game solver for puzzles like Wordle, crosswords, hangman, Scrabble, Jumbl
 
 *Vibe-coded with [Claude](https://claude.com/claude-code).*
 
-**Live site:** [www.anagrimoire.com](https://www.anagrimoire.com) · **Dev preview:** [dev.anagrimoire.com](https://dev.anagrimoire.com)
+**Live site:** [anagrimoire.com](https://anagrimoire.com) · **Dev preview:** [dev.anagrimoire.com](https://dev.anagrimoire.com)
 
 ## Features
 
@@ -70,6 +70,21 @@ Other scripts:
 - [wordlist-english](https://github.com/jacksonrayhamilton/wordlist-english) (MIT) for the Common and Standard dictionaries, built from [SCOWL](http://wordlist.aspell.net/) by Kevin Atkinson (permissive license)
 - [an-array-of-english-words](https://github.com/words/an-array-of-english-words) (MIT) for the Full dictionary, derived from the [Letterpress word list](https://github.com/lorenbrichter/Words) (CC0/public domain)
 
+## Accounts & sync (optional)
+
+The site is fully functional with no backend — solving and playing stay in the browser. Optionally, a [Supabase](https://supabase.com/) project adds sign-in (passwordless magic links) and cross-device stat sync: while signed in, every completed game is appended to a per-user event log, the browser's pre-account stats are imported once as a baseline, and the Stats panel shows the account's synced totals (baseline + event replay) instead of the local ones. Signed out — or without the env vars below — every auth surface hides and stats stay purely local.
+
+Setup:
+
+1. Create a free Supabase project.
+2. Run [supabase/schema.sql](supabase/schema.sql) in the SQL Editor (safe to re-run).
+3. In **Authentication → URL Configuration**, set the Site URL to `https://anagrimoire.com` and add `https://www.anagrimoire.com` (the alias), `https://dev.anagrimoire.com`, and `http://localhost:5173` as additional redirect URLs — sign-in redirects back to whichever origin the visitor is on, so both spellings of production must be allowed.
+4. Copy the Project URL and anon/publishable key (**Settings → API**) into env vars — `.env.local` for local dev (see [.env.example](.env.example)), and environment variables on each Render static site. The anon key is public by design; row-level security protects the data.
+
+5. Optionally enable OAuth providers (**Authentication → Providers**): create a GitHub/Google OAuth app with the callback URL Supabase shows there, and paste in its client ID and secret. The sign-in modal offers both alongside email.
+
+Note: Supabase's built-in email service is rate-limited (a few magic links per hour) and its templates can't be edited without custom SMTP. Magic links are single-use, and corporate email scanners sometimes pre-click them — the modal accepts the emailed one-time code as a fallback, but the code only appears in the email once custom SMTP is configured with `{{ .Token }}` in the Magic Link template. Until then, OAuth is the frictionless path.
+
 ## Deployment
 
 The repo includes a [Render](https://render.com/) blueprint ([render.yaml](render.yaml)) that provisions a static site: it builds with `npm ci && npm run build`, publishes `dist/`, rewrites all routes to `index.html`, and sets long-lived cache headers on hashed assets.
@@ -78,7 +93,7 @@ Two environments are deployed on Render:
 
 | Environment | URL | Branch |
 |---|---|---|
-| Production | [www.anagrimoire.com](https://www.anagrimoire.com) | `main` |
+| Production | [anagrimoire.com](https://anagrimoire.com) (www is an alias) | `main` |
 | Dev | [dev.anagrimoire.com](https://dev.anagrimoire.com) | `dev` |
 
 Pushes to each branch auto-deploy to the matching environment.
