@@ -1,5 +1,6 @@
 import { useMemo, useState, useEffect, useLayoutEffect, useRef, type ButtonHTMLAttributes, type ReactNode } from 'react';
-import { Search, Sparkles, Eraser, ArrowDown, ArrowUp, X, BookOpen, Grid3x3, Shuffle, Hexagon, Check, Keyboard, Delete, Github, Info, Square, CalendarDays, Star, Gamepad2, CornerDownLeft, LayoutGrid, Puzzle, BarChart3, UserRound } from 'lucide-react';
+import { Search, Sparkles, Eraser, ArrowDown, ArrowUp, X, BookOpen, Grid3x3, Shuffle, Hexagon, Check, Keyboard, Delete, Github, Info, Square, CalendarDays, Star, Gamepad2, CornerDownLeft, LayoutGrid, Puzzle, BarChart3, UserRound, HelpCircle } from 'lucide-react';
+import HowToPlay from '@/HowToPlay';
 import type { Session } from '@supabase/supabase-js';
 import StatsModal from '@/StatsModal';
 import AccountModal from '@/AccountModal';
@@ -501,6 +502,7 @@ function App() {
   const [kbOpen, setKbOpen] = useState(initial.keyboard);
   const [aboutOpen, setAboutOpen] = useState(false);
   const [statsOpen, setStatsOpen] = useState(false);
+  const [howToOpen, setHowToOpen] = useState(false);
   const [accountOpen, setAccountOpen] = useState(false);
   const [session, setSession] = useState<Session | null>(null);
 
@@ -983,6 +985,14 @@ function App() {
                 );
               })}
           </div>
+          <button
+            onClick={() => setHowToOpen(true)}
+            aria-label="How to play"
+            title="How to play"
+            className="ml-2 inline-flex items-center justify-center w-10 h-12 align-middle text-slate-500 hover:text-white transition-colors"
+          >
+            <HelpCircle className="w-5 h-5" />
+          </button>
         </section>
 
         {weavePlayActive && (
@@ -1841,6 +1851,8 @@ function App() {
       )}
 
       {statsOpen && <StatsModal signedIn={!!session} onClose={() => setStatsOpen(false)} />}
+
+      {howToOpen && <HowToPlay mode={mode} onClose={() => setHowToOpen(false)} />}
 
       {accountOpen && <AccountModal session={session} onClose={() => setAccountOpen(false)} />}
 
