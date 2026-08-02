@@ -53,6 +53,28 @@ const sbOut = {
 await writeFile('data/spellingbee.json', JSON.stringify(sbOut, null, 2) + '\n');
 console.log('Wrote data/spellingbee.json:', JSON.stringify(sbOut));
 
+// NYT Strands (board letters and theme clue only — no answers)
+const strandsRes = await fetch(`https://www.nytimes.com/svc/strands/v2/${
+  new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York' }).format(new Date())
+}.json`, { headers: HEADERS });
+if (!strandsRes.ok) throw new Error(`Strands responded ${strandsRes.status}`);
+const strands = await strandsRes.json();
+if (
+  !Array.isArray(strands.startingBoard) ||
+  strands.startingBoard.length !== 8 ||
+  !strands.startingBoard.every((r) => /^[a-z]{6}$/i.test(String(r)))
+) {
+  throw new Error(`Unexpected Strands board: ${JSON.stringify(strands.startingBoard)}`);
+}
+const strandsOut = {
+  date: strands.printDate ?? null,
+  clue: typeof strands.clue === 'string' ? strands.clue : null,
+  board: strands.startingBoard.map((r) => String(r).toLowerCase()),
+  fetchedAt: new Date().toISOString(),
+};
+await writeFile('data/strands.json', JSON.stringify(strandsOut, null, 2) + '\n');
+console.log('Wrote data/strands.json:', JSON.stringify(strandsOut));
+
 // Daily guess-game words: one per length 3-15, deterministic for the Eastern
 // date so both scheduled runs pick identical words. Words are base64-encoded
 // purely to avoid accidental spoilers in the raw file.

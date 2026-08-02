@@ -363,6 +363,30 @@ function App() {
 
   const gridDims = GRID_PRESET_DIMS[gridPreset];
 
+  const [strandsClue, setStrandsClue] = useState<string | null>(null);
+
+  async function fillTodaysStrands() {
+    setTodayStatus('loading');
+    try {
+      const r = await fetch(
+        'https://raw.githubusercontent.com/rptetzloff/anagrimoire/puzzle-data/data/strands.json',
+        { cache: 'no-store' }
+      );
+      if (!r.ok) throw new Error(String(r.status));
+      const d = await r.json();
+      const board = d.board as string[];
+      if (!Array.isArray(board) || board.length !== 8 || !board.every((row) => /^[a-z]{6}$/.test(row))) {
+        throw new Error('bad payload');
+      }
+      setGridPreset('6x8');
+      setGridLetters(board.join('').split(''));
+      setStrandsClue(typeof d.clue === 'string' ? d.clue : null);
+      setTodayStatus('idle');
+    } catch {
+      setTodayStatus('error');
+    }
+  }
+
   // hover-trace preview for grid solver results
   const [gridTrace, setGridTrace] = useState<number[] | null>(null);
   const [gridTracePts, setGridTracePts] = useState<{ x: number; y: number }[]>([]);
@@ -402,6 +426,7 @@ function App() {
 
   function changeGridPreset(preset: GridPreset) {
     setGridPreset(preset);
+    setStrandsClue(null);
     const dims = GRID_PRESET_DIMS[preset];
     setGridLetters((prev) => {
       const next = Array(dims.rows * dims.cols).fill('');
@@ -774,6 +799,7 @@ function App() {
     setBeeOuters(Array(6).fill(''));
     setBoxedLetters(Array(12).fill(''));
     setGridLetters(Array(gridDims.rows * gridDims.cols).fill(''));
+    setStrandsClue(null);
   }
 
   return (
@@ -1217,9 +1243,30 @@ function App() {
               </svg>
             )}
           </div>
+          <div className="mt-4 flex flex-wrap items-center justify-center gap-3">
+            <button
+              onClick={fillTodaysStrands}
+              disabled={todayStatus === 'loading'}
+              className="inline-flex items-center gap-1.5 px-4 h-10 rounded-lg text-sm font-semibold bg-white/5 border border-white/10 text-slate-300 hover:bg-white/10 hover:text-white transition-colors disabled:opacity-50"
+            >
+              <CalendarDays className="w-4 h-4" />
+              {todayStatus === 'loading' ? 'Fetching…' : "Today's Strands"}
+            </button>
+          </div>
+          {todayStatus === 'error' && (
+            <p className="mt-2 text-xs text-rose-400">
+              Couldn&apos;t fetch today&apos;s puzzle — try again in a minute.
+            </p>
+          )}
+          {strandsClue && (
+            <p className="mt-2 text-sm text-amber-300">
+              Theme: <span className="font-semibold">{strandsClue}</span>
+            </p>
+          )}
           <p className="mt-3 text-xs text-slate-500">
             Words are 3+ letters traced through adjacent cells (diagonals count), using each
-            cell once.
+            cell once. Hover a result to trace it on the board. Today&apos;s Strands becomes
+            available here about 15 minutes after the NYT publishes it (3:00&nbsp;a.m. Eastern).
           </p>
         </div>
         )}
