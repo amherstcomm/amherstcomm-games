@@ -1,6 +1,7 @@
 import { useMemo, useState, useEffect, useRef, type ReactNode } from 'react';
 import { Search, Sparkles, Eraser, ArrowDown, ArrowUp, X, BookOpen, Grid3x3, Shuffle, Hexagon, Check, Keyboard, Delete, Github, Info, Square, CalendarDays, Star, Gamepad2, CornerDownLeft } from 'lucide-react';
 import GuessGame, { type GuessGameHandle, type LetterState } from '@/GuessGame';
+import HiveGame, { type HiveGameHandle } from '@/HiveGame';
 import { DICTIONARIES, getDictionary, type DictionaryId } from '@/dictionaries';
 import { solvePattern, solveDescramble, solveBee, solveBoxed } from '@/solvers';
 import { loadState, saveState, type Mode, type SortPref } from '@/storage';
@@ -328,20 +329,26 @@ function App() {
   const [kbOpen, setKbOpen] = useState(initial.keyboard);
   const [aboutOpen, setAboutOpen] = useState(false);
   const [patternPlay, setPatternPlay] = useState(initial.patternPlay);
+  const [beePlay, setBeePlay] = useState(initial.beePlay);
   const [letterStates, setLetterStates] = useState<Record<string, LetterState>>({});
   const [commonWordsArr, setCommonWordsArr] = useState<string[] | null>(null);
   const [fullWordsArr, setFullWordsArr] = useState<string[] | null>(null);
+  const [standardWordsArr, setStandardWordsArr] = useState<string[] | null>(null);
   const gameRef = useRef<GuessGameHandle>(null);
+  const hiveRef = useRef<HiveGameHandle>(null);
 
-  const playActive = mode === 'pattern' && patternPlay;
+  const patternPlayActive = mode === 'pattern' && patternPlay;
+  const beePlayActive = mode === 'bee' && beePlay;
+  const playActive = patternPlayActive || beePlayActive;
 
   // the guess game validates against the full dictionary and picks practice
-  // words from the common one
+  // words from the common one; hive play scores against standard
   useEffect(() => {
     if (!playActive) return;
     if (!commonWordsArr) getDictionary('common').then(setCommonWordsArr);
-    if (!fullWordsArr) getDictionary('full').then(setFullWordsArr);
-  }, [playActive, commonWordsArr, fullWordsArr]);
+    if (patternPlayActive && !fullWordsArr) getDictionary('full').then(setFullWordsArr);
+    if (beePlayActive && !standardWordsArr) getDictionary('standard').then(setStandardWordsArr);
+  }, [playActive, patternPlayActive, beePlayActive, commonWordsArr, fullWordsArr, standardWordsArr]);
 
   useEffect(() => {
     if (!aboutOpen) return;
@@ -378,12 +385,13 @@ function App() {
       sort: sorts,
       keyboard: kbOpen,
       patternPlay,
+      beePlay,
       pattern: { length, known, contains: containsStr, excluded: excludedStr },
       descramble: { rack: rackStr, useAll, minLength },
       bee: { center: beeCenter, outers: beeOuters },
       boxed: { letters: boxedLetters, solutionWords },
     });
-  }, [mode, dictionaries, sorts, kbOpen, patternPlay, length, known, containsStr, excludedStr, rackStr, useAll, minLength, beeCenter, beeOuters, boxedLetters, solutionWords]);
+  }, [mode, dictionaries, sorts, kbOpen, patternPlay, beePlay, length, known, containsStr, excludedStr, rackStr, useAll, minLength, beeCenter, beeOuters, boxedLetters, solutionWords]);
 
   // keep known array sized to length
   useEffect(() => {
@@ -587,8 +595,12 @@ function App() {
   }
 
   function pressKey(k: string) {
-    if (playActive) {
+    if (patternPlayActive) {
       gameRef.current?.pressKey(k);
+      return;
+    }
+    if (beePlayActive) {
+      hiveRef.current?.pressKey(k);
       return;
     }
     const remembered =
@@ -689,7 +701,7 @@ function App() {
         </header>
 
         {/* solve / play toggle */}
-        {mode === 'pattern' && (
+        {(mode === 'pattern' || mode === 'bee') && (
           <section className="mb-7 text-center">
             <div className="inline-flex rounded-xl bg-white/5 border border-white/10 p-1 gap-1">
               {(
@@ -697,19 +709,23 @@ function App() {
                   { play: false, label: 'Solve', Icon: Search },
                   { play: true, label: 'Play', Icon: Gamepad2 },
                 ] as const
-              ).map(({ play, label, Icon }) => (
-                <button
-                  key={label}
-                  onClick={() => setPatternPlay(play)}
-                  className={`inline-flex items-center gap-1.5 px-5 h-10 rounded-lg text-sm font-semibold transition-all duration-150
-                    ${patternPlay === play
-                      ? 'bg-emerald-400 text-slate-950 shadow-lg shadow-emerald-500/30'
-                      : 'text-slate-300 hover:bg-white/10'}`}
-                >
-                  <Icon className="w-4 h-4" />
-                  {label}
-                </button>
-              ))}
+              ).map(({ play, label, Icon }) => {
+                const active = (mode === 'pattern' ? patternPlay : beePlay) === play;
+                const setFlag = mode === 'pattern' ? setPatternPlay : setBeePlay;
+                return (
+                  <button
+                    key={label}
+                    onClick={() => setFlag(play)}
+                    className={`inline-flex items-center gap-1.5 px-5 h-10 rounded-lg text-sm font-semibold transition-all duration-150
+                      ${active
+                        ? 'bg-emerald-400 text-slate-950 shadow-lg shadow-emerald-500/30'
+                        : 'text-slate-300 hover:bg-white/10'}`}
+                  >
+                    <Icon className="w-4 h-4" />
+                    {label}
+                  </button>
+                );
+              })}
             </div>
           </section>
         )}
@@ -886,7 +902,18 @@ function App() {
         </div>
         )}
 
-        {mode === 'bee' && (
+        {beePlayActive && (
+        <div className="mb-8">
+          <HiveGame
+            ref={hiveRef}
+            standardWords={standardWordsArr}
+            commonWords={commonWordsArr}
+            onLetterStates={setLetterStates}
+          />
+        </div>
+        )}
+
+        {mode === 'bee' && !beePlay && (
         <div className="mb-8 text-center">
           <label className="block text-xs font-medium text-slate-400 uppercase tracking-wider mb-3">
             The hive

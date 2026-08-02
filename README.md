@@ -17,7 +17,12 @@ A word-game solver for puzzles like Wordle, crosswords, hangman, Scrabble, Jumbl
 
 ### Play mode
 
-Pattern mode has a **Solve / Play** toggle. Play is a guess-the-word game at any length from 3 to 15 letters: six tries, duplicate-aware coloring, physical and on-screen keyboard support (with letter coloring), and persistent boards and stats. **Daily** serves the same word to everyone per length — generated deterministically by the daily GitHub Action and refreshed about 15 minutes after 3:00 a.m. Eastern — with a win streak; **Practice** deals unlimited random words. Answers come from the Common dictionary so they're always fair; guesses are validated against the Full one.
+Pattern and Spelling Bee modes have a **Solve / Play** toggle.
+
+- **Guess the word** (Pattern): six tries at any length from 3 to 15 letters, duplicate-aware coloring, physical and on-screen keyboard support (with letter coloring), and persistent boards and stats. **Daily** serves the same word to everyone per length — generated deterministically by the daily GitHub Action — with a win streak; **Practice** deals unlimited random words. Answers come from the Common dictionary so they're always fair; guesses are validated against the Full one.
+- **Hive** (Spelling Bee): find words from seven letters with NYT-style scoring — 4-letter words score 1, longer words score their length, pangrams +7 — and the classic rank ladder up to Queen Bee, scored against the Standard dictionary. **Daily** plays today's real NYT letters; **Practice** generates fresh hives that always contain at least one pangram. Tap the hive or type; shuffle, delete, and found-word history included.
+
+Daily content refreshes about 15 minutes after 3:00 a.m. Eastern.
 
 ### Dictionaries
 
