@@ -4,8 +4,13 @@
 // Run by .github/workflows/daily-puzzle-data.yml on a daily schedule.
 import { mkdir, writeFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
+import { generateWeave } from './weave.mjs';
+import { THEMES } from './themes.mjs';
 
 const require = createRequire(import.meta.url);
+
+const encodeAnswers = (p) =>
+  Buffer.from(JSON.stringify({ spangram: p.spangram, words: p.words })).toString('base64');
 
 const HEADERS = {
   'User-Agent':
@@ -261,4 +266,36 @@ for (const variant of ['', 'dev']) {
     JSON.stringify({ date: etDate, cells: gridCells, fetchedAt: stamp }, null, 2) + '\n'
   );
   console.log(`Wrote data/${prefix}daily-grid.json: ${gridCells.join('')}`);
+
+  // weave: themed 6x8 tiling puzzle (Strands-style); answers ship base64d
+  // to avoid casual spoilers
+  const weaveRng = mulberry32(xmur3(`anagrimoire-weave-${etDate}${salt}`)());
+  const weave = generateWeave(weaveRng, 6, 8, THEMES);
+  if (!weave) throw new Error('Could not generate a daily weave');
+  await writeFile(
+    `data/${prefix}daily-weave.json`,
+    JSON.stringify(
+      { date: etDate, clue: weave.clue, cols: 6, board: weave.board, answers: encodeAnswers(weave), fetchedAt: stamp },
+      null,
+      2
+    ) + '\n'
+  );
+  console.log(`Wrote data/${prefix}daily-weave.json: ${weave.clue} (${weave.spangram.w})`);
 }
+
+// shared practice pool for weave: pre-generated boards in both sizes,
+// refreshed daily, used by both sites
+const poolRng = mulberry32(xmur3(`anagrimoire-weave-pool-${etDate}`)());
+const pool = { '6x8': [], '8x10': [] };
+for (const [key, cols, rows, count] of [['6x8', 6, 8, 8], ['8x10', 8, 10, 8]]) {
+  for (let i = 0; i < count; i++) {
+    const p = generateWeave(poolRng, cols, rows, THEMES);
+    if (!p) throw new Error(`Could not generate pool weave ${key} #${i}`);
+    pool[key].push({ clue: p.clue, cols, board: p.board, answers: encodeAnswers(p) });
+  }
+}
+await writeFile(
+  'data/weave-pool.json',
+  JSON.stringify({ date: etDate, pool, fetchedAt: new Date().toISOString() }, null, 2) + '\n'
+);
+console.log(`Wrote data/weave-pool.json (${pool['6x8'].length} + ${pool['8x10'].length} puzzles)`);

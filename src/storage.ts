@@ -1,10 +1,10 @@
 import type { DictionaryId } from '@/dictionaries';
 
-export type Mode = 'pattern' | 'descramble' | 'bee' | 'boxed' | 'grid';
+export type Mode = 'pattern' | 'descramble' | 'bee' | 'boxed' | 'grid' | 'weave';
 
 const KEY = 'anagrimoire:v1';
 
-const ALL_MODES: Mode[] = ['pattern', 'descramble', 'bee', 'boxed', 'grid'];
+const ALL_MODES: Mode[] = ['pattern', 'descramble', 'bee', 'boxed', 'grid', 'weave'];
 const ALL_DICTS: DictionaryId[] = ['common', 'standard', 'full'];
 
 export type SortKey = 'alpha' | 'length';
@@ -38,13 +38,14 @@ export const GRID_PRESET_DIMS: Record<GridPreset, { rows: number; cols: number }
 
 export const DEFAULT_STATE: PersistedState = {
   mode: 'pattern',
-  dictionaries: { pattern: 'common', descramble: 'common', bee: 'common', boxed: 'common', grid: 'common' },
+  dictionaries: { pattern: 'common', descramble: 'common', bee: 'common', boxed: 'common', grid: 'common', weave: 'standard' },
   sort: {
     pattern: { key: 'alpha', dir: 'asc' },
     descramble: { key: 'length', dir: 'desc' },
     bee: { key: 'length', dir: 'desc' },
     boxed: { key: 'length', dir: 'desc' },
     grid: { key: 'length', dir: 'desc' },
+    weave: { key: 'length', dir: 'desc' },
   },
   keyboard: false,
   patternPlay: false,
@@ -94,6 +95,7 @@ export function loadState(): PersistedState {
       bee: { ...DEFAULT_STATE.sort.bee },
       boxed: { ...DEFAULT_STATE.sort.boxed },
       grid: { ...DEFAULT_STATE.sort.grid },
+      weave: { ...DEFAULT_STATE.sort.weave },
     };
     for (const m of ALL_MODES) {
       const s = p?.sort?.[m];

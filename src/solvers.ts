@@ -161,8 +161,8 @@ export function solveGrid(list: string[], input: GridInput): string[] {
     !Number.isInteger(rows) ||
     rows < 3 ||
     cols < 3 ||
-    rows > 8 ||
-    cols > 8 ||
+    rows > 10 ||
+    cols > 10 ||
     cells.some((c) => !c)
   ) {
     return [];

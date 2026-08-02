@@ -1,10 +1,11 @@
 import { useMemo, useState, useEffect, useLayoutEffect, useRef, type ButtonHTMLAttributes, type ReactNode } from 'react';
-import { Search, Sparkles, Eraser, ArrowDown, ArrowUp, X, BookOpen, Grid3x3, Shuffle, Hexagon, Check, Keyboard, Delete, Github, Info, Square, CalendarDays, Star, Gamepad2, CornerDownLeft, LayoutGrid } from 'lucide-react';
+import { Search, Sparkles, Eraser, ArrowDown, ArrowUp, X, BookOpen, Grid3x3, Shuffle, Hexagon, Check, Keyboard, Delete, Github, Info, Square, CalendarDays, Star, Gamepad2, CornerDownLeft, LayoutGrid, Puzzle } from 'lucide-react';
 import GuessGame, { type GuessGameHandle, type LetterState } from '@/GuessGame';
 import HiveGame, { type HiveGameHandle } from '@/HiveGame';
 import BoxGame, { type BoxGameHandle } from '@/BoxGame';
 import ScrambleGame, { type ScrambleGameHandle } from '@/ScrambleGame';
 import GridGame, { type GridGameHandle } from '@/GridGame';
+import WeaveGame from '@/WeaveGame';
 import { DICTIONARIES, getDictionary, type DictionaryId } from '@/dictionaries';
 import { solvePattern, solveDescramble, solveBee, solveBoxed, solveGrid, findGridPath } from '@/solvers';
 import { loadState, saveState, GRID_PRESET_DIMS, type GridPreset, type Mode, type SortPref } from '@/storage';
@@ -48,6 +49,13 @@ const MODES: { id: Mode; label: string; blurb: string; description: string }[] =
     description:
       "Enter the twelve letters, three per side. We'll find every legal word and the two-word solutions that use all twelve.",
   },
+  {
+    id: 'weave',
+    label: 'Weave',
+    blurb: 'Themed words tile the whole board — Strands style',
+    description:
+      'Find the themed words hiding in the board — every letter is used exactly once, and one spangram spans the board.',
+  },
 ];
 
 const MODE_ICONS: Record<Mode, typeof Grid3x3> = {
@@ -56,6 +64,7 @@ const MODE_ICONS: Record<Mode, typeof Grid3x3> = {
   bee: Hexagon,
   grid: LayoutGrid,
   boxed: Square,
+  weave: Puzzle,
 };
 
 function normalizeLetters(s: string): string[] {
@@ -466,8 +475,9 @@ function App() {
   const boxedPlayActive = mode === 'boxed' && boxedPlay;
   const descramblePlayActive = mode === 'descramble' && descramblePlay;
   const gridPlayActive = mode === 'grid' && gridPlay;
+  const weaveActive = mode === 'weave'; // play-only mode
   const playActive =
-    patternPlayActive || beePlayActive || boxedPlayActive || descramblePlayActive || gridPlayActive;
+    patternPlayActive || beePlayActive || boxedPlayActive || descramblePlayActive || gridPlayActive || weaveActive;
 
   // the guess game validates against the full dictionary and picks practice
   // words from the common one; hive, box, scramble, and grid play use standard
@@ -475,10 +485,10 @@ function App() {
     if (!playActive) return;
     if (!commonWordsArr) getDictionary('common').then(setCommonWordsArr);
     if (patternPlayActive && !fullWordsArr) getDictionary('full').then(setFullWordsArr);
-    if ((beePlayActive || boxedPlayActive || descramblePlayActive || gridPlayActive) && !standardWordsArr) {
+    if ((beePlayActive || boxedPlayActive || descramblePlayActive || gridPlayActive || weaveActive) && !standardWordsArr) {
       getDictionary('standard').then(setStandardWordsArr);
     }
-  }, [playActive, patternPlayActive, beePlayActive, boxedPlayActive, descramblePlayActive, gridPlayActive, commonWordsArr, fullWordsArr, standardWordsArr]);
+  }, [playActive, patternPlayActive, beePlayActive, boxedPlayActive, descramblePlayActive, gridPlayActive, weaveActive, commonWordsArr, fullWordsArr, standardWordsArr]);
 
   useEffect(() => {
     if (!aboutOpen) return;
@@ -733,6 +743,7 @@ function App() {
   }
 
   function pressKey(k: string) {
+    if (weaveActive) return; // weave is trace-only
     if (patternPlayActive) {
       gameRef.current?.pressKey(k);
       return;
@@ -815,7 +826,7 @@ function App() {
             <Sparkles className="w-4 h-4 text-amber-400" />
             Anagrimoire
           </span>
-          <div className="flex-1 md:flex-none grid grid-cols-4 md:flex gap-0.5 sm:gap-1 py-1.5">
+          <div className="flex-1 md:flex-none grid grid-cols-6 md:flex gap-0.5 sm:gap-1 py-1.5">
             {MODES.map((m) => {
               const Icon = MODE_ICONS[m.id];
               return (
@@ -852,7 +863,8 @@ function App() {
           </p>
         </header>
 
-        {/* solve / play toggle */}
+        {/* solve / play toggle (weave is play-only) */}
+        {mode !== 'weave' && (
         <section className="mb-7 text-center">
           <div className="inline-flex rounded-xl bg-white/5 border border-white/10 p-1 gap-1">
               {(
@@ -867,6 +879,7 @@ function App() {
                   bee: [beePlay, setBeePlay],
                   boxed: [boxedPlay, setBoxedPlay],
                   grid: [gridPlay, setGridPlay],
+                  weave: [true, () => {}], // play-only; toggle never renders
                 };
                 const [flag, setFlag] = flags[mode];
                 const active = flag === play;
@@ -886,6 +899,13 @@ function App() {
               })}
           </div>
         </section>
+        )}
+
+        {weaveActive && (
+        <div className="mb-8">
+          <WeaveGame standardWords={standardWordsArr} />
+        </div>
+        )}
 
         {/* dictionary selector */}
         {!playActive && (
