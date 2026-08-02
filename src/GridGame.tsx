@@ -2,12 +2,13 @@ import {
   forwardRef,
   useEffect,
   useImperativeHandle,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
 } from 'react';
-import { CalendarDays, CornerDownLeft, Delete, Flag, Play, RefreshCw, Search, Timer } from 'lucide-react';
-import { solveGrid } from '@/solvers';
+import { CalendarDays, ChevronDown, CornerDownLeft, Delete, Flag, Play, RefreshCw, Search, Timer } from 'lucide-react';
+import { findGridPath, gridNeighbors, solveGrid } from '@/solvers';
 import type { LetterState } from '@/GuessGame';
 
 export type GridGameHandle = { pressKey: (k: string) => void };
@@ -116,6 +117,36 @@ const GridGame = forwardRef<
   const [dailyError, setDailyError] = useState(false);
   const [now, setNow] = useState(() => Date.now());
   const flashTimer = useRef<number | undefined>(undefined);
+
+  // drag-to-trace path (cell indices); ref mirrors state for event handlers
+  const [dragPath, setDragPath] = useState<number[]>([]);
+  const dragPathRef = useRef<number[]>([]);
+  const setPath = (p: number[]) => {
+    dragPathRef.current = p;
+    setDragPath(p);
+  };
+
+  // word-trace preview (hover / press-hold on a word chip)
+  const [trace, setTrace] = useState<number[] | null>(null);
+  const [tracePts, setTracePts] = useState<{ x: number; y: number }[]>([]);
+  const [showMissed, setShowMissed] = useState(false);
+  const boardRef = useRef<HTMLDivElement>(null);
+
+  useLayoutEffect(() => {
+    if (!trace || !boardRef.current) {
+      setTracePts([]);
+      return;
+    }
+    const wrap = boardRef.current.getBoundingClientRect();
+    setTracePts(
+      trace.map((i) => {
+        const r = boardRef.current!
+          .querySelector(`[data-cell="${i}"]`)!
+          .getBoundingClientRect();
+        return { x: r.left + r.width / 2 - wrap.left, y: r.top + r.height / 2 - wrap.top };
+      })
+    );
+  }, [trace]);
 
   useEffect(() => {
     try {
@@ -233,14 +264,12 @@ const GridGame = forwardRef<
     updateRecord((r) => ({ ...r, endsAt: Date.now() + DURATION_MS }));
   }
 
-  function submit() {
+  function submitWord(word: string) {
     if (!record || !running) return;
     if (!answersSet) {
       showFlash('Dictionary still loading…');
       return;
     }
-    const word = current;
-    setCurrent('');
     if (word.length < 3) {
       showFlash('Too short');
       return;
@@ -256,6 +285,57 @@ const GridGame = forwardRef<
     }
     updateRecord((r) => ({ ...r, found: [word, ...r.found] }));
     showFlash(`+${wordScore(word)}`, true);
+  }
+
+  function submit() {
+    const word = current;
+    setCurrent('');
+    submitWord(word);
+  }
+
+  // drag-to-trace handlers (mouse and touch via pointer events)
+  function cellAt(x: number, y: number): number | null {
+    const el = document.elementFromPoint(x, y)?.closest('[data-cell]');
+    return el ? Number(el.getAttribute('data-cell')) : null;
+  }
+
+  function onBoardPointerDown(e: React.PointerEvent) {
+    if (!running) return;
+    const i = cellAt(e.clientX, e.clientY);
+    if (i === null) return;
+    e.preventDefault();
+    setCurrent('');
+    setPath([i]);
+  }
+
+  function onBoardPointerMove(e: React.PointerEvent) {
+    const prev = dragPathRef.current;
+    if (!prev.length || !record) return;
+    const i = cellAt(e.clientX, e.clientY);
+    if (i === null) return;
+    const last = prev[prev.length - 1];
+    if (i === last) return;
+    // retracing onto the previous cell backtracks
+    if (prev.length >= 2 && i === prev[prev.length - 2]) {
+      setPath(prev.slice(0, -1));
+      return;
+    }
+    if (prev.includes(i)) return;
+    const size = Math.round(Math.sqrt(record.cells.length));
+    if (!gridNeighbors(size, size)[last].includes(i)) return;
+    setPath([...prev, i]);
+  }
+
+  function endDrag() {
+    const path = dragPathRef.current;
+    if (!path.length || !record) return;
+    setPath([]);
+    if (path.length === 1) {
+      // a plain tap types the letter
+      pressKey(record.cells[path[0]]);
+      return;
+    }
+    submitWord(path.map((i) => record.cells[i]).join(''));
   }
 
   function pressKey(k: string) {
@@ -288,6 +368,38 @@ const GridGame = forwardRef<
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
   });
+
+  // finish the drag even when the pointer is released off the board
+  useEffect(() => {
+    const up = () => endDrag();
+    window.addEventListener('pointerup', up);
+    window.addEventListener('pointercancel', up);
+    return () => {
+      window.removeEventListener('pointerup', up);
+      window.removeEventListener('pointercancel', up);
+    };
+  });
+
+  // reset trace preview and accordion when the board changes
+  useEffect(() => {
+    setTrace(null);
+    setShowMissed(false);
+  }, [record?.cells]);
+
+  function traceHandlers(word: string) {
+    const show = () => {
+      if (!record) return;
+      setTrace(findGridPath(record.cells, Math.round(Math.sqrt(record.cells.length)), word));
+    };
+    const hide = () => setTrace(null);
+    return {
+      onMouseEnter: show,
+      onMouseLeave: hide,
+      onPointerDown: show, // press-hold on touch
+      onPointerUp: hide,
+      onPointerCancel: hide,
+    };
+  }
 
   function newPracticeGrid(size?: number) {
     setCurrent('');
@@ -383,7 +495,13 @@ const GridGame = forwardRef<
           {running ? (
             <div className="mb-4 mx-auto max-w-sm h-12 px-4 rounded-xl bg-white/5 border-2 border-white/10 flex items-center justify-center overflow-hidden">
               <span className="text-2xl font-bold tracking-[0.2em] uppercase text-white whitespace-nowrap">
-                {current}
+                {dragPath.length ? (
+                  <span className="text-emerald-300">
+                    {dragPath.map((i) => record.cells[i]).join('')}
+                  </span>
+                ) : (
+                  current
+                )}
                 <span className="text-amber-400 animate-pulse">|</span>
               </span>
             </div>
@@ -401,30 +519,51 @@ const GridGame = forwardRef<
             </div>
           )}
 
-          {/* the grid — face-down until the clock starts */}
-          <div
-            className={`grid gap-2 w-fit mx-auto ${
-              record.cells.length === 9
-                ? 'grid-cols-3'
-                : record.cells.length === 25
-                  ? 'grid-cols-5'
-                  : 'grid-cols-4'
-            }`}
-          >
-            {record.cells.map((c, i) => (
-              <button
-                key={i}
-                onMouseDown={(e) => e.preventDefault()}
-                onClick={() => pressKey(c)}
-                disabled={!running}
-                className={`${record.cells.length === 25 ? 'w-9 h-10 sm:w-11 sm:h-12 text-lg sm:text-xl' : 'w-11 h-12 sm:w-12 sm:h-14 text-xl sm:text-2xl'} rounded-xl border-2 font-bold uppercase transition-colors
-                  ${!record.endsAt
-                    ? 'bg-white/5 border-white/15 text-slate-500'
-                    : 'bg-amber-400/10 border-amber-400/40 text-amber-200 hover:bg-amber-400/20'}`}
-              >
-                {record.endsAt ? c : '?'}
-              </button>
-            ))}
+          {/* the grid — face-down until the clock starts; drag across cells to
+              trace a word, release to submit (a plain tap types the letter) */}
+          <div ref={boardRef} className="relative w-fit mx-auto">
+            <div
+              onPointerDown={onBoardPointerDown}
+              onPointerMove={onBoardPointerMove}
+              className={`grid gap-2 touch-none select-none ${
+                record.cells.length === 9
+                  ? 'grid-cols-3'
+                  : record.cells.length === 25
+                    ? 'grid-cols-5'
+                    : 'grid-cols-4'
+              }`}
+            >
+              {record.cells.map((c, i) => (
+                <button
+                  key={i}
+                  data-cell={i}
+                  disabled={!running}
+                  className={`${record.cells.length === 25 ? 'w-9 h-10 sm:w-11 sm:h-12 text-lg sm:text-xl' : 'w-11 h-12 sm:w-12 sm:h-14 text-xl sm:text-2xl'} rounded-xl border-2 font-bold uppercase transition-colors
+                    ${!record.endsAt
+                      ? 'bg-white/5 border-white/15 text-slate-500'
+                      : trace?.includes(i)
+                        ? 'bg-sky-400/30 border-sky-300 text-white'
+                        : dragPath.includes(i)
+                          ? 'bg-emerald-400/30 border-emerald-300 text-white'
+                          : 'bg-amber-400/10 border-amber-400/40 text-amber-200 hover:bg-amber-400/20'}`}
+                >
+                  {record.endsAt ? c : '?'}
+                </button>
+              ))}
+            </div>
+            {tracePts.length > 1 && (
+              <svg className="absolute inset-0 w-full h-full pointer-events-none">
+                <polyline
+                  points={tracePts.map((p) => `${p.x},${p.y}`).join(' ')}
+                  fill="none"
+                  stroke="rgb(125 211 252 / 0.9)"
+                  strokeWidth="4"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+                <circle cx={tracePts[0].x} cy={tracePts[0].y} r="6" fill="rgb(125 211 252)" />
+              </svg>
+            )}
           </div>
 
           {/* controls */}
@@ -509,7 +648,9 @@ const GridGame = forwardRef<
                 {[...record.found].sort().map((w) => (
                   <span
                     key={w}
-                    className={`px-2.5 py-1 rounded-lg border text-sm tracking-wide
+                    {...traceHandlers(w)}
+                    title="Hover to trace on the board"
+                    className={`px-2.5 py-1 rounded-lg border text-sm tracking-wide cursor-pointer select-none
                       ${w.length >= 7
                         ? 'bg-amber-400/10 border-amber-400/30 text-amber-200 font-semibold'
                         : 'bg-white/[0.04] border-white/10 text-slate-300'}`}
@@ -518,6 +659,38 @@ const GridGame = forwardRef<
                   </span>
                 ))}
               </div>
+            </div>
+          )}
+
+          {/* missed words, revealed after time is up */}
+          {record.finished && answers && answers.length > record.found.length && (
+            <div className="mt-4 max-w-md mx-auto">
+              <button
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => setShowMissed((v) => !v)}
+                className="inline-flex items-center gap-1.5 text-xs font-medium text-rose-300/90 uppercase tracking-wider hover:text-rose-200 transition-colors"
+              >
+                <ChevronDown
+                  className={`w-3.5 h-3.5 transition-transform ${showMissed ? 'rotate-180' : ''}`}
+                />
+                Missed words · {answers.length - record.found.length}
+              </button>
+              {showMissed && (
+                <div className="mt-2.5 flex flex-wrap justify-center gap-1.5 max-h-64 overflow-y-auto">
+                  {answers
+                    .filter((w) => !record.found.includes(w))
+                    .map((w) => (
+                      <span
+                        key={w}
+                        {...traceHandlers(w)}
+                        title="Hover to trace on the board"
+                        className="px-2.5 py-1 rounded-lg border text-sm tracking-wide cursor-pointer select-none bg-rose-400/10 border-rose-400/30 text-rose-300"
+                      >
+                        {w}
+                      </span>
+                    ))}
+                </div>
+              )}
             </div>
           )}
 

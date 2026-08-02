@@ -122,6 +122,38 @@ export function gridNeighbors(rows: number, cols: number): number[][] {
   return out;
 }
 
+// first adjacency path spelling the word, as cell indices, or null
+export function findGridPath(cells: string[], cols: number, word: string): number[] | null {
+  const rows = cols > 0 ? cells.length / cols : 0;
+  if (!Number.isInteger(rows) || rows < 1) return null;
+  const NB = gridNeighbors(rows, cols);
+  const visited = new Array<boolean>(cells.length).fill(false);
+  const path: number[] = [];
+  const dfs = (pos: number, idx: number): boolean => {
+    if (idx === word.length) return true;
+    for (const nb of NB[pos]) {
+      if (!visited[nb] && cells[nb] === word[idx]) {
+        visited[nb] = true;
+        path.push(nb);
+        if (dfs(nb, idx + 1)) return true;
+        visited[nb] = false;
+        path.pop();
+      }
+    }
+    return false;
+  };
+  for (let i = 0; i < cells.length; i++) {
+    if (cells[i] === word[0]) {
+      visited[i] = true;
+      path.push(i);
+      if (dfs(i, 1)) return path;
+      visited[i] = false;
+      path.pop();
+    }
+  }
+  return null;
+}
+
 export function solveGrid(list: string[], input: GridInput): string[] {
   const { cells, cols } = input;
   const rows = cols > 0 ? cells.length / cols : 0;

@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect, useRef, type ReactNode } from 'react';
+import { useMemo, useState, useEffect, useLayoutEffect, useRef, type ButtonHTMLAttributes, type ReactNode } from 'react';
 import { Search, Sparkles, Eraser, ArrowDown, ArrowUp, X, BookOpen, Grid3x3, Shuffle, Hexagon, Check, Keyboard, Delete, Github, Info, Square, CalendarDays, Star, Gamepad2, CornerDownLeft, LayoutGrid } from 'lucide-react';
 import GuessGame, { type GuessGameHandle, type LetterState } from '@/GuessGame';
 import HiveGame, { type HiveGameHandle } from '@/HiveGame';
@@ -6,7 +6,7 @@ import BoxGame, { type BoxGameHandle } from '@/BoxGame';
 import ScrambleGame, { type ScrambleGameHandle } from '@/ScrambleGame';
 import GridGame, { type GridGameHandle } from '@/GridGame';
 import { DICTIONARIES, getDictionary, type DictionaryId } from '@/dictionaries';
-import { solvePattern, solveDescramble, solveBee, solveBoxed, solveGrid } from '@/solvers';
+import { solvePattern, solveDescramble, solveBee, solveBoxed, solveGrid, findGridPath } from '@/solvers';
 import { loadState, saveState, GRID_PRESET_DIMS, type GridPreset, type Mode, type SortPref } from '@/storage';
 
 const MIN_LEN = 3;
@@ -180,6 +180,12 @@ const BOX_SIDE_TONES = [
   },
 ];
 
+// highlight for grid solver tiles while a result word's path is previewed
+const GRID_TRACE_TONE = {
+  empty: 'bg-sky-400/25 border-sky-300 text-white',
+  filled: 'bg-sky-400/30 border-sky-300 text-white shadow-[0_0_20px_-6px] shadow-sky-400/50',
+};
+
 const CHAIN_CAP = 500;
 const CHAIN_BUDGET = 2_000_000;
 
@@ -303,15 +309,18 @@ function WordChip({
   word,
   className,
   children,
+  hoverProps,
 }: {
   word: string;
   className: string;
   children?: ReactNode;
+  hoverProps?: ButtonHTMLAttributes<HTMLButtonElement>;
 }) {
   const [copied, setCopied] = useState(false);
 
   return (
     <button
+      {...hoverProps}
       onClick={() => {
         navigator.clipboard.writeText(word).then(() => {
           setCopied(true);
@@ -353,6 +362,43 @@ function App() {
   const [gridPlay, setGridPlay] = useState(initial.gridPlay);
 
   const gridDims = GRID_PRESET_DIMS[gridPreset];
+
+  // hover-trace preview for grid solver results
+  const [gridTrace, setGridTrace] = useState<number[] | null>(null);
+  const [gridTracePts, setGridTracePts] = useState<{ x: number; y: number }[]>([]);
+  const gridBoardRef = useRef<HTMLDivElement>(null);
+
+  useLayoutEffect(() => {
+    if (!gridTrace || !gridBoardRef.current) {
+      setGridTracePts([]);
+      return;
+    }
+    const wrap = gridBoardRef.current.getBoundingClientRect();
+    setGridTracePts(
+      gridTrace.map((i) => {
+        const r = gridBoardRef.current!
+          .querySelector(`[data-tile-index="${i}"]`)!
+          .getBoundingClientRect();
+        return { x: r.left + r.width / 2 - wrap.left, y: r.top + r.height / 2 - wrap.top };
+      })
+    );
+  }, [gridTrace]);
+
+  useEffect(() => {
+    setGridTrace(null);
+  }, [gridLetters, gridPreset, mode]);
+
+  function gridTraceHandlers(word: string): ButtonHTMLAttributes<HTMLButtonElement> {
+    const show = () => setGridTrace(findGridPath(gridLetters, gridDims.cols, word));
+    const hide = () => setGridTrace(null);
+    return {
+      onMouseEnter: show,
+      onMouseLeave: hide,
+      onPointerDown: show, // press-hold on touch
+      onPointerUp: hide,
+      onPointerCancel: hide,
+    };
+  }
 
   function changeGridPreset(preset: GridPreset) {
     setGridPreset(preset);
@@ -1129,31 +1175,47 @@ function App() {
           <label className="block text-xs font-medium text-slate-400 uppercase tracking-wider mb-3">
             The grid
           </label>
-          <div
-            className={`grid gap-2 w-fit mx-auto ${
-              gridDims.cols === 3
-                ? 'grid-cols-3'
-                : gridDims.cols === 5
-                  ? 'grid-cols-5'
-                  : gridDims.cols === 6
-                    ? 'grid-cols-6'
-                    : 'grid-cols-4'
-            }`}
-          >
-            {gridLetters.map((v, i) => (
-              <Tile
-                key={i}
-                index={i}
-                group="grid"
-                osk={kbOpen}
-                value={v}
-                state={v ? 'known' : 'empty'}
-                size="sm"
-                onChange={(c) =>
-                  setGridLetters((prev) => prev.map((x, j) => (j === i ? c : x)))
-                }
-              />
-            ))}
+          <div ref={gridBoardRef} className="relative w-fit mx-auto">
+            <div
+              className={`grid gap-2 ${
+                gridDims.cols === 3
+                  ? 'grid-cols-3'
+                  : gridDims.cols === 5
+                    ? 'grid-cols-5'
+                    : gridDims.cols === 6
+                      ? 'grid-cols-6'
+                      : 'grid-cols-4'
+              }`}
+            >
+              {gridLetters.map((v, i) => (
+                <Tile
+                  key={i}
+                  index={i}
+                  group="grid"
+                  osk={kbOpen}
+                  value={v}
+                  state={v ? 'known' : 'empty'}
+                  size="sm"
+                  tone={gridTrace?.includes(i) ? GRID_TRACE_TONE : undefined}
+                  onChange={(c) =>
+                    setGridLetters((prev) => prev.map((x, j) => (j === i ? c : x)))
+                  }
+                />
+              ))}
+            </div>
+            {gridTracePts.length > 1 && (
+              <svg className="absolute inset-0 w-full h-full pointer-events-none">
+                <polyline
+                  points={gridTracePts.map((p) => `${p.x},${p.y}`).join(' ')}
+                  fill="none"
+                  stroke="rgb(125 211 252 / 0.9)"
+                  strokeWidth="4"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+                <circle cx={gridTracePts[0].x} cy={gridTracePts[0].y} r="6" fill="rgb(125 211 252)" />
+              </svg>
+            )}
           </div>
           <p className="mt-3 text-xs text-slate-500">
             Words are 3+ letters traced through adjacent cells (diagonals count), using each
@@ -1456,6 +1518,7 @@ function App() {
                         <WordChip
                           key={w}
                           word={w}
+                          hoverProps={mode === 'grid' ? gridTraceHandlers(w) : undefined}
                           className="bg-white/[0.04] border border-white/10 text-slate-300 hover:bg-white/[0.08] hover:border-white/20"
                         />
                       ))}
@@ -1468,6 +1531,7 @@ function App() {
                     <WordChip
                       key={w}
                       word={w}
+                      hoverProps={mode === 'grid' ? gridTraceHandlers(w) : undefined}
                       className="bg-white/[0.04] border border-white/10 text-slate-300 hover:bg-white/[0.08] hover:border-white/20"
                     />
                   ))}
