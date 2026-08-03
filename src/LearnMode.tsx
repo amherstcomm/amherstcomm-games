@@ -8,6 +8,7 @@ import {
   useState,
 } from 'react';
 import { CornerDownLeft, Delete, RefreshCw, RotateCcw } from 'lucide-react';
+import MobileKeyInput from '@/MobileKeyInput';
 import { findGridPath, solveGrid, gridNeighbors } from '@/solvers';
 import type { Mode } from '@/storage';
 
@@ -144,26 +145,39 @@ function scoreGuess(secret: string, guess: string): LetterState[] {
   return result;
 }
 
-const TILE_TONES: Record<LetterState | 'empty', string> = {
+const TILE_TONES: Record<LetterState | 'empty' | 'pending', string> = {
   correct: 'bg-emerald-500/80 border-emerald-400 text-white',
   present: 'bg-amber-400/80 border-amber-300 text-slate-950',
   absent: 'bg-white/[0.04] border-white/10 text-slate-500',
+  pending: 'bg-white/5 border-white/30 text-white',
   empty: 'bg-white/[0.02] border-white/10 text-transparent',
 };
 
-function GuessRow({ word, secret }: { word?: string; secret: string }) {
-  const score = word ? scoreGuess(secret, word) : null;
+// pending rows show what's being typed, uncolored until it's submitted
+function GuessRow({
+  word,
+  secret,
+  pending,
+}: {
+  word?: string;
+  secret: string;
+  pending?: boolean;
+}) {
+  const score = word && !pending ? scoreGuess(secret, word) : null;
   return (
     <div className="flex gap-1.5 justify-center">
-      {Array.from({ length: secret.length }, (_, i) => (
-        <div
-          key={i}
-          className={`w-10 h-12 flex items-center justify-center font-bold uppercase rounded-lg border-2 transition-colors text-xl
-            ${score ? TILE_TONES[score[i]] : TILE_TONES.empty}`}
-        >
-          {word?.[i] ?? '·'}
-        </div>
-      ))}
+      {Array.from({ length: secret.length }, (_, i) => {
+        const ch = word?.[i];
+        return (
+          <div
+            key={i}
+            className={`w-10 h-12 flex items-center justify-center font-bold uppercase rounded-lg border-2 transition-colors text-xl
+              ${score ? TILE_TONES[score[i]] : ch ? TILE_TONES.pending : TILE_TONES.empty}`}
+          >
+            {ch ?? '·'}
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -188,8 +202,49 @@ const GUESS_STEPS = [
   },
 ];
 
-function LearnGuess() {
-  const [step, setStep] = useState(0);
+const GUESS_ROWS = 6;
+
+function LearnGuess({ dict, register }: { dict: Set<string> | null; register: RegisterKeys }) {
+  const [guesses, setGuesses] = useState<string[]>([]);
+  const [current, setCurrent] = useState('');
+  const [flash, show] = useFlash();
+
+  const won = guesses.includes(GUESS_SECRET);
+  const done = won || guesses.length >= GUESS_ROWS;
+  // the scripted commentary appears whenever the latest guess is one of the
+  // example words — whether you typed it or clicked the example button
+  const note = GUESS_STEPS.find((s) => s.w === guesses[guesses.length - 1])?.note ?? null;
+  const nextExample = GUESS_STEPS.find((s) => !guesses.includes(s.w));
+
+  function submit() {
+    if (done) return;
+    if (current.length !== GUESS_SECRET.length) {
+      show(`Guesses are ${GUESS_SECRET.length} letters`);
+      return;
+    }
+    if (!dict) {
+      show(LOADING_NOTE);
+      return;
+    }
+    if (current !== GUESS_SECRET && !dict.has(current)) {
+      show('Not in dictionary');
+      return;
+    }
+    setGuesses((g) => [...g, current]);
+    setCurrent('');
+    if (current === GUESS_SECRET) show('That’s it — solved! 🎉', true);
+  }
+
+  function handleKey(k: string) {
+    if (done) return;
+    if (k === 'enter') return submit();
+    if (k === 'backspace') return setCurrent((c) => c.slice(0, -1));
+    if (/^[a-z]$/.test(k)) {
+      setCurrent((c) => (c.length < GUESS_SECRET.length ? c + k : c));
+    }
+  }
+  useDemoKeys(register, handleKey);
+
   return (
     <>
       <Section title="The goal">
@@ -210,26 +265,44 @@ function LearnGuess() {
         />
       </Section>
 
-      <Section title="Try it — watch a game unfold">
+      <Section title="Try it — the answer is GRAPE">
         <p className="text-sm text-slate-400 mb-4">
-          The secret word is <span className="font-bold uppercase text-slate-200">grape</span>.
-          Step through a real solve:
+          We&apos;ve given away this one so you can watch the colors work. Type any
+          five-letter word and press Enter — or let the example play itself out.
         </p>
-        <div className="space-y-1.5">
-          {GUESS_STEPS.map((s, i) => (
-            <GuessRow key={i} word={i < step ? s.w : undefined} secret={GUESS_SECRET} />
+        <div className="relative space-y-1.5 w-fit mx-auto">
+          {!done && <MobileKeyInput onKey={handleKey} label="Type a five-letter guess" />}
+          {Array.from({ length: GUESS_ROWS }, (_, row) => (
+            <GuessRow
+              key={row}
+              word={guesses[row] ?? (row === guesses.length ? current : undefined)}
+              pending={row === guesses.length}
+              secret={GUESS_SECRET}
+            />
           ))}
         </div>
-        <div className="h-12 mt-3 max-w-md mx-auto">
-          {step > 0 && <p className="text-sm text-slate-400">{GUESS_STEPS[step - 1].note}</p>}
+        <FlashLine flash={flash} />
+        <div className="min-h-12 mb-3 max-w-md mx-auto">
+          {!flash && note && <p className="text-sm text-slate-400">{note}</p>}
         </div>
-        <div className="mt-1 flex justify-center gap-2.5">
-          {step < GUESS_STEPS.length ? (
-            <DemoButton onClick={() => setStep((s) => s + 1)}>
-              {step === 0 ? 'Make the first guess' : 'Next guess'}
+        <div className="flex flex-wrap justify-center gap-2.5">
+          {!done && nextExample && (
+            <DemoButton
+              onClick={() => {
+                setCurrent('');
+                setGuesses((g) => [...g, nextExample.w]);
+              }}
+            >
+              {guesses.length === 0 ? 'Show me a first guess' : 'Show me the next guess'}
             </DemoButton>
-          ) : (
-            <DemoButton onClick={() => setStep(0)}>
+          )}
+          {(done || guesses.length > 0) && (
+            <DemoButton
+              onClick={() => {
+                setGuesses([]);
+                setCurrent('');
+              }}
+            >
               <RotateCcw className="w-4 h-4" />
               Start over
             </DemoButton>
@@ -277,7 +350,7 @@ function LearnScramble({ dict, register }: { dict: Set<string> | null; register:
 
   const score = found.reduce((n, w) => n + scrambleScore(w), 0);
 
-  useDemoKeys(register, (k) => {
+  function handleKey(k: string) {
     if (k === 'enter') return submit();
     if (k === 'backspace') return setCurrent((c) => c.slice(0, -1));
     const inRack = SCRAMBLE_RACK.filter((c) => c === k).length;
@@ -285,7 +358,8 @@ function LearnScramble({ dict, register }: { dict: Set<string> | null; register:
     if (inRack === 0) return show('Not on the rack');
     if (inCurrent >= inRack) return show('No more of that letter');
     setCurrent((c) => c + k);
-  });
+  }
+  useDemoKeys(register, handleKey);
 
   // rack letters not yet used by the current entry
   const remaining = useMemo(() => {
@@ -352,11 +426,12 @@ function LearnScramble({ dict, register }: { dict: Set<string> | null; register:
           Tap letters or type to build a word, then press Enter. (Psst: this rack hides more
           than one 7-letter word.)
         </p>
-        <div className="mb-4 mx-auto max-w-sm h-12 px-4 rounded-xl bg-white/5 border-2 border-white/10 flex items-center justify-center overflow-hidden">
+        <div className="relative mb-4 mx-auto max-w-sm h-12 px-4 rounded-xl bg-white/5 border-2 border-white/10 flex items-center justify-center overflow-hidden">
           <span className="text-2xl font-bold tracking-[0.2em] uppercase text-white whitespace-nowrap">
             {current}
             <span className="text-amber-400 animate-pulse">|</span>
           </span>
+          <MobileKeyInput onKey={handleKey} />
         </div>
         <div className="flex justify-center gap-2">
           {remaining.map(({ c, spent }, i) => (
@@ -439,11 +514,12 @@ function LearnHive({ dict, register }: { dict: Set<string> | null; register: Reg
   const [flash, show] = useFlash();
   const allowed = useMemo(() => new Set([HIVE_CENTER, ...HIVE_OUTERS]), []);
 
-  useDemoKeys(register, (k) => {
+  function handleKey(k: string) {
     if (k === 'enter') return submit();
     if (k === 'backspace') return setCurrent((c) => c.slice(0, -1));
     if (allowed.has(k)) setCurrent((c) => c + k);
-  });
+  }
+  useDemoKeys(register, handleKey);
 
   function submit() {
     const word = current;
@@ -498,7 +574,8 @@ function LearnHive({ dict, register }: { dict: Set<string> | null; register: Reg
           <span className="italic text-slate-300">notable</span> word here uses all seven
           letters…
         </p>
-        <div className="mb-3 mx-auto max-w-sm h-12 px-4 rounded-xl bg-white/5 border-2 border-white/10 flex items-center justify-center overflow-hidden">
+        <div className="relative mb-3 mx-auto max-w-sm h-12 px-4 rounded-xl bg-white/5 border-2 border-white/10 flex items-center justify-center overflow-hidden">
+          <MobileKeyInput onKey={handleKey} />
           <span className="text-2xl font-bold tracking-[0.2em] uppercase whitespace-nowrap">
             {current.split('').map((c, i) => (
               <span key={i} className={c === HIVE_CENTER ? 'text-amber-300' : 'text-white'}>
@@ -605,7 +682,7 @@ function LearnGrid({
     [standardWords]
   );
 
-  useDemoKeys(register, (k) => {
+  function handleKey(k: string) {
     if (k === 'enter') {
       const word = current;
       setCurrent('');
@@ -614,7 +691,8 @@ function LearnGrid({
     }
     if (k === 'backspace') return setCurrent((c) => c.slice(0, -1));
     if (GRID_CELLS.includes(k)) setCurrent((c) => c + k);
-  });
+  }
+  useDemoKeys(register, handleKey);
 
   // hover / press-hold a found word to trace its path on the board
   const boardRef = useRef<HTMLDivElement>(null);
@@ -743,7 +821,8 @@ function LearnGrid({
           <span className="uppercase font-semibold text-slate-300">dog</span>… then hunt for
           longer paths.
         </p>
-        <div className="mb-4 mx-auto max-w-sm h-12 px-4 rounded-xl bg-white/5 border-2 border-white/10 flex items-center justify-center overflow-hidden">
+        <div className="relative mb-4 mx-auto max-w-sm h-12 px-4 rounded-xl bg-white/5 border-2 border-white/10 flex items-center justify-center overflow-hidden">
+          <MobileKeyInput onKey={handleKey} />
           <span className="text-2xl font-bold tracking-[0.2em] uppercase whitespace-nowrap">
             {dragPath.length ? (
               <span className="text-emerald-300">
@@ -882,11 +961,12 @@ function LearnBoxed({ dict, register }: { dict: Set<string> | null; register: Re
   const covered = useMemo(() => new Set(chain.join('')), [chain]);
   const solved = covered.size === 12;
 
-  useDemoKeys(register, (k) => {
+  function handleKey(k: string) {
     if (k === 'enter') return submit();
     if (k === 'backspace') return backspace();
     if (sideOf.has(k)) tap(k);
-  });
+  }
+  useDemoKeys(register, handleKey);
 
   function traceHandlers(word: string) {
     const showTrace = () => setTrace(word);
@@ -991,11 +1071,12 @@ function LearnBoxed({ dict, register }: { dict: Set<string> | null; register: Re
           ))}
         </div>
         {!solved && (
-          <div className="mb-4 mx-auto max-w-sm h-11 px-4 rounded-xl bg-white/5 border-2 border-white/10 flex items-center justify-center overflow-hidden">
+          <div className="relative mb-4 mx-auto max-w-sm h-11 px-4 rounded-xl bg-white/5 border-2 border-white/10 flex items-center justify-center overflow-hidden">
             <span className="text-lg font-bold tracking-[0.15em] uppercase text-white whitespace-nowrap">
               {current}
               <span className="text-amber-400 animate-pulse">|</span>
             </span>
+            <MobileKeyInput onKey={handleKey} />
           </div>
         )}
         <div className="relative w-64 h-64 mx-auto my-5">
@@ -1368,7 +1449,7 @@ const LearnMode = forwardRef<LearnModeHandle, { mode: Mode; standardWords: strin
         The rules, the scoring, and a hands-on demo — no clock, no stakes.
       </p>
 
-      {mode === 'pattern' && <LearnGuess />}
+      {mode === 'pattern' && <LearnGuess dict={dict} register={register} />}
       {mode === 'descramble' && <LearnScramble dict={dict} register={register} />}
       {mode === 'bee' && <LearnHive dict={dict} register={register} />}
       {mode === 'grid' && <LearnGrid standardWords={standardWords} register={register} />}

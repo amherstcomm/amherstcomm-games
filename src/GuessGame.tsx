@@ -9,6 +9,7 @@ import {
 import { CalendarDays, RefreshCw, Search, Timer, Trophy } from 'lucide-react';
 import { dailyDataUrl } from '@/dailyData';
 import DailyStats from '@/DailyStats';
+import MobileKeyInput from '@/MobileKeyInput';
 import { recordGuessFinish } from '@/stats';
 import { formatElapsed, useUpTimer } from '@/useUpTimer';
 
@@ -434,7 +435,8 @@ const GuessGame = forwardRef<
 
       {secret && (
         <>
-          <div className="flex flex-col items-center gap-1.5">
+          <div className="relative flex flex-col items-center gap-1.5">
+            {playing && <MobileKeyInput onKey={pressKey} label="Tap the board and type your guess" />}
             {Array.from({ length: MAX_GUESSES }, (_, row) => {
               const guess = guesses[row];
               const isCurrent = row === guesses.length && playing;

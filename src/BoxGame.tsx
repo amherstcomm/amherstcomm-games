@@ -11,6 +11,7 @@ import { formatElapsed, useUpTimer } from '@/useUpTimer';
 import type { LetterState } from '@/GuessGame';
 import { dailyDataUrl } from '@/dailyData';
 import DailyStats from '@/DailyStats';
+import MobileKeyInput from '@/MobileKeyInput';
 import { recordBoxSolve } from '@/stats';
 
 export type BoxGameHandle = { pressKey: (k: string) => void };
@@ -480,11 +481,12 @@ const BoxGame = forwardRef<
           </div>
           {/* current entry */}
           {!done && (
-            <div className="mb-6 mx-auto max-w-sm h-12 px-4 rounded-xl bg-white/5 border-2 border-white/10 flex items-center justify-center overflow-hidden">
+            <div className="relative mb-6 mx-auto max-w-sm h-12 px-4 rounded-xl bg-white/5 border-2 border-white/10 flex items-center justify-center overflow-hidden">
               <span className="text-xl font-bold tracking-[0.15em] uppercase text-white whitespace-nowrap">
                 {current}
                 <span className="text-amber-400 animate-pulse">|</span>
               </span>
+              <MobileKeyInput onKey={pressKey} />
             </div>
           )}
 

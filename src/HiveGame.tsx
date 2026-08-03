@@ -11,6 +11,7 @@ import { formatElapsed, useUpTimer } from '@/useUpTimer';
 import type { LetterState } from '@/GuessGame';
 import { dailyDataUrl } from '@/dailyData';
 import DailyStats from '@/DailyStats';
+import MobileKeyInput from '@/MobileKeyInput';
 import { recordHiveWord } from '@/stats';
 
 export type HiveGameHandle = { pressKey: (k: string) => void };
@@ -389,7 +390,8 @@ const HiveGame = forwardRef<
           </div>
 
           {/* current entry */}
-          <div className="mb-4 mx-auto max-w-sm h-12 px-4 rounded-xl bg-white/5 border-2 border-white/10 flex items-center justify-center overflow-hidden">
+          <div className="relative mb-4 mx-auto max-w-sm h-12 px-4 rounded-xl bg-white/5 border-2 border-white/10 flex items-center justify-center overflow-hidden">
+            <MobileKeyInput onKey={pressKey} />
             <span className="text-2xl font-bold tracking-[0.2em] uppercase whitespace-nowrap">
               {current.split('').map((c, i) => (
                 <span key={i} className={c === record.center ? 'text-amber-300' : 'text-white'}>

@@ -1,9 +1,10 @@
 import { useMemo, useState, useEffect, useLayoutEffect, useRef, type ButtonHTMLAttributes, type ReactNode } from 'react';
-import { Search, Sparkles, Eraser, ArrowDown, ArrowUp, X, BookOpen, Grid3x3, Shuffle, Hexagon, Check, Keyboard, Delete, Github, Info, Square, CalendarDays, Star, Gamepad2, CornerDownLeft, LayoutGrid, Puzzle, BarChart3, UserRound } from 'lucide-react';
+import { Search, Sparkles, Eraser, ArrowDown, ArrowUp, X, BookOpen, Grid3x3, Shuffle, Hexagon, Check, Keyboard, Delete, Github, Info, Square, CalendarDays, Star, Gamepad2, CornerDownLeft, LayoutGrid, Puzzle, BarChart3, UserRound, Scale } from 'lucide-react';
 import LearnMode, { type LearnModeHandle } from '@/LearnMode';
 import type { Session } from '@supabase/supabase-js';
 import StatsModal from '@/StatsModal';
 import AccountModal from '@/AccountModal';
+import { OskContext } from '@/MobileKeyInput';
 import { supabase } from '@/supabase';
 import { GA_ID } from '@/analytics';
 import { importBaselineOnce } from '@/stats';
@@ -557,6 +558,7 @@ function App() {
   const [sorts, setSorts] = useState(initial.sort);
   const [kbOpen, setKbOpen] = useState(initial.keyboard);
   const [aboutOpen, setAboutOpen] = useState(false);
+  const [legalOpen, setLegalOpen] = useState(false);
   const [statsOpen, setStatsOpen] = useState(false);
   const [learnMode, setLearnMode] = useState(false);
   const [accountOpen, setAccountOpen] = useState(false);
@@ -626,13 +628,16 @@ function App() {
   }, [playActive, learnMode, patternPlayActive, beePlayActive, boxedPlayActive, descramblePlayActive, gridPlayActive, weavePlayActive, commonWordsArr, fullWordsArr, standardWordsArr]);
 
   useEffect(() => {
-    if (!aboutOpen) return;
+    if (!aboutOpen && !legalOpen) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setAboutOpen(false);
+      if (e.key === 'Escape') {
+        setAboutOpen(false);
+        setLegalOpen(false);
+      }
     };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
-  }, [aboutOpen]);
+  }, [aboutOpen, legalOpen]);
 
   // the input the on-screen keyboard types into
   const lastFocused = useRef<HTMLInputElement | null>(null);
@@ -828,6 +833,79 @@ function App() {
     }
   }
 
+  // our own generated dailies, loadable into every solver
+  async function fillDailyHive() {
+    setTodayStatus('loading');
+    try {
+      const r = await fetch(dailyDataUrl('daily-hive'), { cache: 'no-store' });
+      if (!r.ok) throw new Error(String(r.status));
+      const d = await r.json();
+      const center = String(d.center).toLowerCase();
+      const outers = (d.outers as string[]).map((c) => String(c).toLowerCase());
+      if (!/^[a-z]$/.test(center) || outers.length !== 6 || !outers.every((c) => /^[a-z]$/.test(c))) {
+        throw new Error('bad payload');
+      }
+      setBeeCenter(center);
+      setBeeOuters(outers);
+      setTodayStatus('idle');
+    } catch {
+      setTodayStatus('error');
+    }
+  }
+
+  async function fillDailyBox() {
+    setTodayStatus('loading');
+    try {
+      const r = await fetch(dailyDataUrl('daily-box'), { cache: 'no-store' });
+      if (!r.ok) throw new Error(String(r.status));
+      const d = await r.json();
+      const letters = (d.sides as string[])
+        .flatMap((s) => String(s).toLowerCase().replace(/[^a-z]/g, '').split(''))
+        .slice(0, 12);
+      if (letters.length !== 12) throw new Error('bad payload');
+      setBoxedLetters(letters);
+      setTodayStatus('idle');
+    } catch {
+      setTodayStatus('error');
+    }
+  }
+
+  async function fillDailyGrid() {
+    setTodayStatus('loading');
+    try {
+      const r = await fetch(dailyDataUrl('daily-grid'), { cache: 'no-store' });
+      if (!r.ok) throw new Error(String(r.status));
+      const d = await r.json();
+      const cells = (d.cells as string[]).map((c) => String(c).toLowerCase());
+      if (cells.length !== 16 || !cells.every((c) => /^[a-z]$/.test(c))) {
+        throw new Error('bad payload');
+      }
+      setGridPreset('4x4');
+      setGridLetters(cells);
+      setTodayStatus('idle');
+    } catch {
+      setTodayStatus('error');
+    }
+  }
+
+  async function fillDailyRack() {
+    setTodayStatus('loading');
+    try {
+      const r = await fetch(dailyDataUrl('daily-scramble'), { cache: 'no-store' });
+      if (!r.ok) throw new Error(String(r.status));
+      const d = await r.json();
+      const letters = (d.letters as string[]).map((c) => String(c).toLowerCase());
+      if (letters.length !== 7 || !letters.every((c) => /^[a-z]$/.test(c))) {
+        throw new Error('bad payload');
+      }
+      setRackStr(letters.join(''));
+      setUseAll(false);
+      setTodayStatus('idle');
+    } catch {
+      setTodayStatus('error');
+    }
+  }
+
   const sorted = useMemo(() => {
     const arr = [...results];
     const dir = sort.dir === 'asc' ? 1 : -1;
@@ -967,6 +1045,7 @@ function App() {
   }
 
   return (
+    <OskContext.Provider value={kbOpen}>
     <div className="min-h-screen bg-slate-950 text-white relative overflow-x-clip">
       {/* ambient glow */}
       <div className="pointer-events-none absolute -top-40 -left-40 w-[500px] h-[500px] bg-amber-500/10 rounded-full blur-[120px]" />
@@ -1003,15 +1082,13 @@ function App() {
 
       <div className={`relative max-w-3xl mx-auto px-5 py-10 sm:py-16 ${kbOpen ? 'pb-64 sm:pb-64' : ''}`}>
         {/* header */}
-        <header className="text-center mb-10">
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/5 border border-white/10 text-xs text-slate-300 mb-5">
-            <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-            Word Game Solver
-          </div>
-          <h1 className="pb-2 text-4xl sm:text-5xl font-bold tracking-tight bg-gradient-to-br from-white via-white to-slate-400 bg-clip-text text-transparent">
+        <header className="text-center mb-8">
+          {/* pb + relaxed leading so the g's descender isn't clipped by the
+              gradient's text box or crowded into the line below */}
+          <h1 className="pb-3 leading-[1.2] text-4xl sm:text-5xl font-bold tracking-tight bg-gradient-to-br from-white via-white to-slate-400 bg-clip-text text-transparent">
             Anagrimoire
           </h1>
-          <p className="mt-3 text-slate-400 max-w-md mx-auto text-sm sm:text-base">
+          <p className="text-slate-400 max-w-md mx-auto text-sm sm:text-base">
             {MODES.find((m) => m.id === mode)?.description}
           </p>
         </header>
@@ -1138,7 +1215,7 @@ function App() {
               className="inline-flex items-center gap-1.5 px-4 h-10 rounded-lg text-sm font-semibold bg-white/5 border border-white/10 text-slate-300 hover:bg-white/10 hover:text-white transition-colors disabled:opacity-50"
             >
               <CalendarDays className="w-4 h-4" />
-              {todayStatus === 'loading' ? 'Fetching…' : "Today's Strands"}
+              {todayStatus === 'loading' ? 'Fetching…' : "Today's NYT Strands"}
             </button>
             <button
               onClick={fillTodaysWeave}
@@ -1146,7 +1223,7 @@ function App() {
               className="inline-flex items-center gap-1.5 px-4 h-10 rounded-lg text-sm font-semibold bg-white/5 border border-white/10 text-slate-300 hover:bg-white/10 hover:text-white transition-colors disabled:opacity-50"
             >
               <CalendarDays className="w-4 h-4" />
-              {todayStatus === 'loading' ? 'Fetching…' : "Today's Weave"}
+              {todayStatus === 'loading' ? 'Fetching…' : "Today's daily weave"}
             </button>
           </div>
           {todayStatus === 'error' && (
@@ -1335,6 +1412,14 @@ function App() {
           </section>
           <div className="flex flex-wrap items-center justify-center gap-3">
             <button
+              onClick={fillDailyRack}
+              disabled={todayStatus === 'loading'}
+              className="inline-flex items-center gap-1.5 px-4 h-10 rounded-lg text-sm font-semibold bg-white/5 border border-white/10 text-slate-300 hover:bg-white/10 hover:text-white transition-colors disabled:opacity-50"
+            >
+              <CalendarDays className="w-4 h-4" />
+              {todayStatus === 'loading' ? 'Fetching…' : "Today's daily rack"}
+            </button>
+            <button
               onClick={() => setUseAll((v) => !v)}
               className={`inline-flex items-center gap-1.5 px-4 h-10 rounded-lg text-sm font-semibold transition-all duration-150 border
                 ${useAll
@@ -1360,6 +1445,11 @@ function App() {
               </label>
             )}
           </div>
+          {todayStatus === 'error' && (
+            <p className="mt-2 text-xs text-rose-400 text-center">
+              Couldn&apos;t fetch today&apos;s rack — try again in a minute.
+            </p>
+          )}
         </div>
         )}
 
@@ -1418,12 +1508,20 @@ function App() {
           </div>
           <div className="mt-4 flex flex-wrap items-center justify-center gap-3">
             <button
+              onClick={fillDailyHive}
+              disabled={todayStatus === 'loading'}
+              className="inline-flex items-center gap-1.5 px-4 h-10 rounded-lg text-sm font-semibold bg-white/5 border border-white/10 text-slate-300 hover:bg-white/10 hover:text-white transition-colors disabled:opacity-50"
+            >
+              <CalendarDays className="w-4 h-4" />
+              {todayStatus === 'loading' ? 'Fetching…' : "Today's daily hive"}
+            </button>
+            <button
               onClick={fillTodaysBee}
               disabled={todayStatus === 'loading'}
               className="inline-flex items-center gap-1.5 px-4 h-10 rounded-lg text-sm font-semibold bg-white/5 border border-white/10 text-slate-300 hover:bg-white/10 hover:text-white transition-colors disabled:opacity-50"
             >
               <CalendarDays className="w-4 h-4" />
-              {todayStatus === 'loading' ? 'Fetching…' : "Today's puzzle"}
+              {todayStatus === 'loading' ? 'Fetching…' : "Today's NYT bee"}
             </button>
           </div>
           {todayStatus === 'error' && (
@@ -1433,8 +1531,8 @@ function App() {
           )}
           <p className="mt-3 text-xs text-slate-500">
             Words are 4+ letters, must use the amber center letter, and may repeat letters.
-            Words using all seven letters are pangrams. Today&apos;s puzzle becomes available
-            here about 15 minutes after the NYT publishes it (3:00&nbsp;a.m. Eastern).
+            Words using all seven letters are pangrams. Both today&apos;s puzzles become
+            available about 15 minutes after 3:00&nbsp;a.m. Eastern.
           </p>
         </div>
         )}
@@ -1516,6 +1614,21 @@ function App() {
               </svg>
             )}
           </div>
+          <div className="mt-4 flex flex-wrap items-center justify-center gap-3">
+            <button
+              onClick={fillDailyGrid}
+              disabled={todayStatus === 'loading'}
+              className="inline-flex items-center gap-1.5 px-4 h-10 rounded-lg text-sm font-semibold bg-white/5 border border-white/10 text-slate-300 hover:bg-white/10 hover:text-white transition-colors disabled:opacity-50"
+            >
+              <CalendarDays className="w-4 h-4" />
+              {todayStatus === 'loading' ? 'Fetching…' : "Today's daily grid"}
+            </button>
+          </div>
+          {todayStatus === 'error' && (
+            <p className="mt-2 text-xs text-rose-400">
+              Couldn&apos;t fetch today&apos;s grid — try again in a minute.
+            </p>
+          )}
           <p className="mt-3 text-xs text-slate-500">
             Words are 3+ letters traced through adjacent cells (diagonals count), using each
             cell once. Hover a result to trace it on the board.
@@ -1604,12 +1717,20 @@ function App() {
               </div>
               <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
                 <button
+                  onClick={fillDailyBox}
+                  disabled={todayStatus === 'loading'}
+                  className="inline-flex items-center gap-1.5 px-4 h-10 rounded-lg text-sm font-semibold bg-white/5 border border-white/10 text-slate-300 hover:bg-white/10 hover:text-white transition-colors disabled:opacity-50"
+                >
+                  <CalendarDays className="w-4 h-4" />
+                  {todayStatus === 'loading' ? 'Fetching…' : "Today's daily box"}
+                </button>
+                <button
                   onClick={fillTodaysPuzzle}
                   disabled={todayStatus === 'loading'}
                   className="inline-flex items-center gap-1.5 px-4 h-10 rounded-lg text-sm font-semibold bg-white/5 border border-white/10 text-slate-300 hover:bg-white/10 hover:text-white transition-colors disabled:opacity-50"
                 >
                   <CalendarDays className="w-4 h-4" />
-                  {todayStatus === 'loading' ? 'Fetching…' : "Today's puzzle"}
+                  {todayStatus === 'loading' ? 'Fetching…' : "Today's NYT box"}
                 </button>
                 <label className="inline-flex items-center gap-2 text-sm text-slate-300">
                   Solution words
@@ -1636,7 +1757,7 @@ function App() {
               )}
               <p className="mt-3 text-xs text-slate-500">
                 Words are 3+ letters and may reuse letters, but consecutive letters can&apos;t
-                come from the same side. Today&apos;s puzzle becomes available here about
+                come from the same side. Both today&apos;s puzzles become available about
                 15 minutes after the NYT publishes it (3:00&nbsp;a.m. Eastern).
               </p>
             </div>
@@ -1929,7 +2050,14 @@ function App() {
               className="inline-flex items-center gap-1.5 hover:text-slate-300 transition-colors"
             >
               <Info className="w-3.5 h-3.5" />
-              About &amp; licenses
+              About &amp; FAQ
+            </button>
+            <button
+              onClick={() => setLegalOpen(true)}
+              className="inline-flex items-center gap-1.5 hover:text-slate-300 transition-colors"
+            >
+              <Scale className="w-3.5 h-3.5" />
+              Legal
             </button>
           </div>
         </footer>
@@ -1955,7 +2083,7 @@ function App() {
 
       {accountOpen && <AccountModal session={session} onClose={() => setAccountOpen(false)} />}
 
-      {/* about & licenses modal */}
+      {/* about & FAQ modal */}
       {aboutOpen && (
         <div
           className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
@@ -1964,7 +2092,7 @@ function App() {
           <div
             role="dialog"
             aria-modal="true"
-            aria-label="About and licenses"
+            aria-label="About and FAQ"
             onClick={(e) => e.stopPropagation()}
             className="relative w-full max-w-lg max-h-[80vh] overflow-y-auto rounded-2xl bg-slate-900 border border-white/10 p-6 sm:p-8 text-left shadow-2xl"
           >
@@ -1980,8 +2108,72 @@ function App() {
 
             <div className="space-y-5 text-sm text-slate-300">
               <p>
-                Anagrimoire is a free, open-source word-game solver. The code is released
-                under the{' '}
+                Anagrimoire is a free companion for word games: solvers for six kinds of
+                puzzles, our own daily and practice versions of each to play, and
+                interactive guides to learn them.
+              </p>
+              <p className="text-slate-400">
+                The name is a portmanteau of <em>anagram</em> and <em>grimoire</em> — a
+                grimoire being an old book of spells. A spellbook for words, more or less.
+              </p>
+
+              <div>
+                <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">
+                  FAQ
+                </h3>
+                <div className="space-y-3 text-slate-400">
+                  <div>
+                    <p className="text-slate-300 font-medium">
+                      Are the daily puzzles the same as the NYT&apos;s?
+                    </p>
+                    <p>
+                      No — every daily here is our own, generated fresh each morning, so
+                      playing never spoils (or copies) anyone else&apos;s puzzle. The solvers
+                      can load today&apos;s NYT Spelling Bee, Letter Boxed, and Strands where
+                      noted.
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-slate-300 font-medium">Do I need an account?</p>
+                    <p>
+                      No. Everything works without one — signing in adds cross-device
+                      syncing of your play statistics, and the site-wide daily numbers
+                      (&quot;across all registered players&quot;) accumulate only from
+                      signed-in accounts.
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-slate-300 font-medium">Where does my data live?</p>
+                    <p>
+                      In your browser. Solving never leaves your device; if you sign in,
+                      your completed games sync to your account.
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-slate-300 font-medium">When do new dailies arrive?</p>
+                    <p>About 15 minutes after 3:00&nbsp;a.m. Eastern, every day.</p>
+                  </div>
+                  <div>
+                    <p className="text-slate-300 font-medium">
+                      Found a bug, or have an idea?
+                    </p>
+                    <p>
+                      <a
+                        href="https://github.com/rptetzloff/anagrimoire/issues"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-amber-300 hover:text-amber-200 underline underline-offset-2"
+                      >
+                        Open an issue on GitHub
+                      </a>{' '}
+                      — reports and suggestions are both welcome.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <p>
+                The code is free and open-source, released under the{' '}
                 <a
                   href="https://github.com/rptetzloff/anagrimoire/blob/main/LICENSE"
                   target="_blank"
@@ -2002,6 +2194,47 @@ function App() {
                 .
               </p>
 
+              <p className="text-slate-500 text-xs">
+                Vibe-coded with{' '}
+                <a
+                  href="https://claude.com/claude-code"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="hover:text-slate-300 underline underline-offset-2"
+                >
+                  Claude
+                </a>
+                .
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* legal, privacy & licenses modal */}
+      {legalOpen && (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
+          onClick={() => setLegalOpen(false)}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label="Legal and licenses"
+            onClick={(e) => e.stopPropagation()}
+            className="relative w-full max-w-lg max-h-[80vh] overflow-y-auto rounded-2xl bg-slate-900 border border-white/10 p-6 sm:p-8 text-left shadow-2xl"
+          >
+            <button
+              onClick={() => setLegalOpen(false)}
+              aria-label="Close"
+              className="absolute top-4 right-4 w-8 h-8 flex items-center justify-center rounded-lg text-slate-400 hover:text-white hover:bg-white/10 transition-colors"
+            >
+              <X className="w-4 h-4" />
+            </button>
+
+            <h2 className="text-xl font-bold mb-5">Legal &amp; licenses</h2>
+
+            <div className="space-y-5 text-sm text-slate-300">
               <div>
                 <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">
                   Disclaimer
@@ -2077,21 +2310,28 @@ function App() {
                     (CC0, public domain).
                   </li>
                 </ul>
+                <p className="mt-2 text-xs text-slate-500">
+                  No word list is guaranteed to match any game&apos;s official dictionary.
+                </p>
               </div>
 
-              <p className="text-slate-500 text-xs">
-                No word list is guaranteed to match any game&apos;s official dictionary.
-                Vibe-coded with{' '}
-                <a
-                  href="https://claude.com/claude-code"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="hover:text-slate-300 underline underline-offset-2"
-                >
-                  Claude
-                </a>
-                .
-              </p>
+              <div>
+                <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">
+                  License
+                </h3>
+                <p className="text-slate-400">
+                  The site&apos;s code is released under the{' '}
+                  <a
+                    href="https://github.com/rptetzloff/anagrimoire/blob/main/LICENSE"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-amber-300 hover:text-amber-200 underline underline-offset-2"
+                  >
+                    MIT License
+                  </a>
+                  .
+                </p>
+              </div>
             </div>
           </div>
         </div>
@@ -2163,6 +2403,7 @@ function App() {
         </button>
       )}
     </div>
+    </OskContext.Provider>
   );
 }
 

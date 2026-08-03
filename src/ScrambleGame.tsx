@@ -11,6 +11,7 @@ import { solveDescramble } from '@/solvers';
 import type { LetterState } from '@/GuessGame';
 import { dailyDataUrl } from '@/dailyData';
 import DailyStats from '@/DailyStats';
+import MobileKeyInput from '@/MobileKeyInput';
 import { recordSprint } from '@/stats';
 
 export type ScrambleGameHandle = { pressKey: (k: string) => void };
@@ -393,11 +394,12 @@ const ScrambleGame = forwardRef<
 
           {/* entry */}
           {running ? (
-            <div className="mb-4 mx-auto max-w-sm h-12 px-4 rounded-xl bg-white/5 border-2 border-white/10 flex items-center justify-center overflow-hidden">
+            <div className="relative mb-4 mx-auto max-w-sm h-12 px-4 rounded-xl bg-white/5 border-2 border-white/10 flex items-center justify-center overflow-hidden">
               <span className="text-2xl font-bold tracking-[0.2em] uppercase text-white whitespace-nowrap">
                 {current}
                 <span className="text-amber-400 animate-pulse">|</span>
               </span>
+              <MobileKeyInput onKey={pressKey} />
             </div>
           ) : (
             <div className="mb-4 h-12 flex items-center justify-center">
