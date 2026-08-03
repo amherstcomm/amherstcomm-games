@@ -18,10 +18,33 @@ Results carry a deep link (`?daily=hive`, `?play=weave`, `?solve=boxed`,
 pasted link renders as something rather than a naked URL. Each deployment
 stamps its own origin from `VITE_SITE_ORIGIN`.
 
-### Personal history
-Score and solve-time trends per game, guess distribution over time. Every
-completed game is already in `game_results` with a timestamp, so this is
-purely front-end: no schema change, no new policies, nothing to moderate.
+### ~~Personal history~~ — done
+A card per game under Stats → History: Guess as a distribution plus a table
+per word length, the rest as sparklines, all with streaks counted off puzzle
+dates rather than kept in a counter. Reads `daily_progress`, which is the only
+place a day-by-day series exists — the event log has timestamps but no puzzle
+identity, and hive wrote a row per word.
+
+### Realtime instead of polling
+A visible board re-reads `daily_progress` every five seconds so two windows
+stay in step. That mostly serves side-by-side testing; the real case is a
+phone in the morning and a laptop at lunch, which the pull on open already
+covers. Two ways to spend less:
+
+- **Longer interval.** One line. Thirty seconds would be invisible to the
+  actual use case.
+- **Realtime.** `alter publication supabase_realtime add table
+  public.daily_progress`, then one shared channel filtered to `user_id`. Use
+  it as a doorbell — an event triggers the same authenticated read and merge
+  rather than trusting the payload, so there's one set of rules, not two. RLS
+  still applies, so a subscription can only ever carry your own rows. Your own
+  writes echo back, which is harmless: the row's `updated_at` matches the base
+  we recorded, so it reads as ours and changes nothing. Keep polling as a slow
+  fallback for when the socket drops.
+
+Deliberately parked until the merge rules had been proven in use — adding a
+second delivery path while they were still being validated would have made it
+impossible to tell a bad rule from a bad transport.
 
 ### Hide games and features
 Let people hide modes they don't play, and hide the Solve or Learn views if
