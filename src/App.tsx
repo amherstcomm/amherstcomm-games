@@ -479,10 +479,25 @@ function App() {
   const gridTraceHandlers = (word: string) => traceHandlersFor(word, gridLetters, gridDims.cols);
   const weaveTraceHandlers = (word: string) => traceHandlersFor(word, weaveLetters, weaveDims.cols);
 
-  // boxed solver: hover a word (or chain) to draw its criss-cross chords on
-  // the box; chains trace end to end with the bridge letters collapsed
-  const [boxedTrace, setBoxedTrace] = useState<string | null>(null);
-  const [boxedTracePts, setBoxedTracePts] = useState<{ x: number; y: number }[]>([]);
+  // boxed solver: hover a word (or a solution chain) to draw its criss-cross
+  // chords on the box — each word in a chain gets its own color
+  const BOX_TRACE_COLORS = [
+    'rgb(125 211 252 / 0.9)', // sky
+    'rgb(251 113 133 / 0.9)', // rose
+    'rgb(167 139 250 / 0.9)', // violet
+    'rgb(52 211 153 / 0.9)', // emerald
+    'rgb(251 191 36 / 0.9)', // amber
+  ];
+  // text classes matching BOX_TRACE_COLORS, so chain chips double as a legend
+  const BOX_TRACE_TEXT = [
+    'text-sky-300',
+    'text-rose-300',
+    'text-violet-300',
+    'text-emerald-300',
+    'text-amber-300',
+  ];
+  const [boxedTrace, setBoxedTrace] = useState<string[] | null>(null);
+  const [boxedTracePts, setBoxedTracePts] = useState<{ x: number; y: number }[][]>([]);
   const boxedBoardRef = useRef<HTMLDivElement>(null);
   useLayoutEffect(() => {
     if (!boxedTrace || !boxedBoardRef.current) {
@@ -490,25 +505,26 @@ function App() {
       return;
     }
     const wrap = boxedBoardRef.current.getBoundingClientRect();
-    const pts: { x: number; y: number }[] = [];
-    for (const c of boxedTrace) {
-      const idx = boxedLetters.findIndex((l) => l === c);
-      if (idx === -1) continue;
-      const el = boxedBoardRef.current.querySelector(
-        `input[data-tile-group="boxed"][data-tile-index="${idx}"]`
-      );
-      if (!el) continue;
-      const r = el.getBoundingClientRect();
-      pts.push({ x: r.left + r.width / 2 - wrap.left, y: r.top + r.height / 2 - wrap.top });
-    }
-    setBoxedTracePts(pts);
+    const measure = (word: string) => {
+      const pts: { x: number; y: number }[] = [];
+      for (const c of word) {
+        const idx = boxedLetters.findIndex((l) => l === c);
+        if (idx === -1) continue;
+        const el = boxedBoardRef.current!.querySelector(
+          `input[data-tile-group="boxed"][data-tile-index="${idx}"]`
+        );
+        if (!el) continue;
+        const r = el.getBoundingClientRect();
+        pts.push({ x: r.left + r.width / 2 - wrap.left, y: r.top + r.height / 2 - wrap.top });
+      }
+      return pts;
+    };
+    setBoxedTracePts(boxedTrace.map(measure));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [boxedTrace]);
 
-  function boxedTraceHandlers(chain: string): ButtonHTMLAttributes<HTMLButtonElement> {
-    // strip spaces and collapse the doubled bridge letters between words
-    const letters = chain.replace(/[^a-z]/g, '').replace(/(.)\1+/g, '$1');
-    const show = () => setBoxedTrace(letters);
+  function boxedTraceHandlers(words: string[]): ButtonHTMLAttributes<HTMLButtonElement> {
+    const show = () => setBoxedTrace(words);
     const hide = () => setBoxedTrace(null);
     return {
       onMouseEnter: show,
@@ -1561,22 +1577,28 @@ function App() {
                 <div className="absolute left-0 top-14 bottom-14 flex flex-col justify-around items-start">
                   {[9, 10, 11].map(boxTile)}
                 </div>
-                {boxedTracePts.length > 1 && (
+                {boxedTracePts.some((pts) => pts.length > 1) && (
                   <svg className="absolute inset-0 w-full h-full pointer-events-none">
-                    <polyline
-                      points={boxedTracePts.map((p) => `${p.x},${p.y}`).join(' ')}
-                      fill="none"
-                      stroke="rgb(125 211 252 / 0.9)"
-                      strokeWidth="3"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    />
-                    <circle
-                      cx={boxedTracePts[0].x}
-                      cy={boxedTracePts[0].y}
-                      r="5"
-                      fill="rgb(125 211 252)"
-                    />
+                    {boxedTracePts.map((pts, wi) =>
+                      pts.length > 1 ? (
+                        <g key={wi}>
+                          <polyline
+                            points={pts.map((p) => `${p.x},${p.y}`).join(' ')}
+                            fill="none"
+                            stroke={BOX_TRACE_COLORS[wi % BOX_TRACE_COLORS.length]}
+                            strokeWidth="3"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          />
+                          <circle
+                            cx={pts[0].x}
+                            cy={pts[0].y}
+                            r="5"
+                            fill={BOX_TRACE_COLORS[wi % BOX_TRACE_COLORS.length]}
+                          />
+                        </g>
+                      ) : null
+                    )}
                   </svg>
                 )}
               </div>
@@ -1737,13 +1759,13 @@ function App() {
                   <div className="grid grid-cols-1 gap-2.5">
                     <WordChip
                       word={boxedRecommended.words.join(' ')}
-                      hoverProps={boxedTraceHandlers(boxedRecommended.words.join(''))}
+                      hoverProps={boxedTraceHandlers(boxedRecommended.words)}
                       className="bg-amber-400/10 border border-amber-400/30 text-amber-200 font-semibold hover:bg-amber-400/20"
                     >
                       {boxedRecommended.words.map((w, i) => (
                         <span key={i}>
-                          {i > 0 && <span className="text-amber-400/60"> → </span>}
-                          {w}
+                          {i > 0 && <span className="text-slate-500"> → </span>}
+                          <span className={BOX_TRACE_TEXT[i % BOX_TRACE_TEXT.length]}>{w}</span>
                         </span>
                       ))}
                     </WordChip>
@@ -1769,13 +1791,13 @@ function App() {
                           <WordChip
                             key={s.join(' ')}
                             word={s.join(' ')}
-                            hoverProps={boxedTraceHandlers(s.join(''))}
+                            hoverProps={boxedTraceHandlers(s)}
                             className="bg-emerald-400/10 border border-emerald-400/30 text-emerald-200 font-semibold hover:bg-emerald-400/20"
                           >
                             {s.map((w, i) => (
                               <span key={i}>
-                                {i > 0 && <span className="text-emerald-400/60"> → </span>}
-                                {w}
+                                {i > 0 && <span className="text-slate-500"> → </span>}
+                                <span className={BOX_TRACE_TEXT[i % BOX_TRACE_TEXT.length]}>{w}</span>
                               </span>
                             ))}
                           </WordChip>
@@ -1825,7 +1847,7 @@ function App() {
                         <WordChip
                           key={w}
                           word={w}
-                          hoverProps={mode === 'grid' ? gridTraceHandlers(w) : mode === 'weave' ? weaveTraceHandlers(w) : mode === 'boxed' ? boxedTraceHandlers(w) : undefined}
+                          hoverProps={mode === 'grid' ? gridTraceHandlers(w) : mode === 'weave' ? weaveTraceHandlers(w) : mode === 'boxed' ? boxedTraceHandlers([w]) : undefined}
                           className="bg-white/[0.04] border border-white/10 text-slate-300 hover:bg-white/[0.08] hover:border-white/20"
                         />
                       ))}
@@ -1838,7 +1860,7 @@ function App() {
                     <WordChip
                       key={w}
                       word={w}
-                      hoverProps={mode === 'grid' ? gridTraceHandlers(w) : mode === 'weave' ? weaveTraceHandlers(w) : mode === 'boxed' ? boxedTraceHandlers(w) : undefined}
+                      hoverProps={mode === 'grid' ? gridTraceHandlers(w) : mode === 'weave' ? weaveTraceHandlers(w) : mode === 'boxed' ? boxedTraceHandlers([w]) : undefined}
                       className="bg-white/[0.04] border border-white/10 text-slate-300 hover:bg-white/[0.08] hover:border-white/20"
                     />
                   ))}
