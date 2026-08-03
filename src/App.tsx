@@ -84,6 +84,16 @@ function normalizeLetters(s: string): string[] {
   return s.toLowerCase().replace(/[^a-z]/g, '').split('');
 }
 
+// iOS Safari ignores inputmode="none" and raises its keyboard on focus
+// anyway, stacking it on top of ours. These fields have to stay focusable so
+// the on-screen keyboard knows where to type, and read-only is the one state
+// that keeps focus while reliably suppressing the device keyboard — writes
+// still land, since the on-screen keyboard sets the value programmatically.
+// Only on touch pointers, so a desktop user with the panel open can still
+// type on a real keyboard.
+const COARSE_POINTER =
+  typeof window !== 'undefined' && !!window.matchMedia?.('(pointer: coarse)').matches;
+
 function Tile({
   value,
   onChange,
@@ -137,6 +147,7 @@ function Tile({
         }}
         maxLength={1}
         inputMode={osk ? 'none' : undefined}
+        readOnly={osk && COARSE_POINTER}
         aria-label={`Letter at position ${index + 1}`}
         placeholder="·"
         className={`${dims} text-center font-bold uppercase rounded-xl border-2 transition-all duration-150 outline-none
@@ -319,6 +330,7 @@ function LetterChipInput({
           if (e.key === 'Backspace' && value) onChange(value.slice(0, -1));
         }}
         inputMode={osk ? 'none' : undefined}
+        readOnly={osk && COARSE_POINTER}
         aria-label={ariaLabel}
         placeholder={value ? '' : placeholder}
         className={`h-8 bg-transparent outline-none text-white placeholder-slate-600 text-base text-center ${value ? 'w-2 p-0' : 'flex-1 min-w-[4rem] px-1'}`}

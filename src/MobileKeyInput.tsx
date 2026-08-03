@@ -18,10 +18,15 @@ export default function MobileKeyInput({
   label?: string;
 }) {
   const osk = useContext(OskContext);
+  // While the site's keyboard is open it already supplies every keystroke, so
+  // this overlay has no job — and leaving it mounted is actively harmful:
+  // iOS Safari ignores inputmode="none" and raises the device keyboard on
+  // focus anyway, stacking it on top of ours.
+  if (osk) return null;
+
   return (
     <input
       data-key-overlay=""
-      inputMode={osk ? 'none' : undefined}
       value={SENTINEL}
       onChange={(e) => {
         const v = e.target.value;
