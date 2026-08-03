@@ -194,6 +194,27 @@ function loadBases(): Map<string, Base> {
 
 const syncBase = loadBases();
 
+// "Has this device got unsaved work?" is a question about what the player did,
+// not about every byte of the record. The boards run a clock — elapsedMs is
+// rewritten every second a puzzle sits open — so comparing whole records marks
+// an idle browser dirty forever, and a device that is never clean can never
+// accept a deletion. Compare the fields a player actually changes.
+const PROGRESS_FIELDS: Record<DailyGame, string[]> = {
+  guess: ['guesses'],
+  hive: ['found', 'invalid', 'revealed'],
+  box: ['chain', 'invalid', 'revealed'],
+  scramble: ['found', 'invalid', 'endsAt', 'finished'],
+  grid: ['found', 'invalid', 'endsAt', 'finished'],
+  weave: ['found', 'hintWords', 'hintsUsed', 'revealed'],
+};
+
+function progressOf(game: DailyGame, state: Rec | null): Rec {
+  const out: Rec = {};
+  if (!state) return out;
+  for (const key of PROGRESS_FIELDS[game]) if (state[key] !== undefined) out[key] = state[key];
+  return out;
+}
+
 // Key order is not content: jsonb hands a state back rearranged, so comparing
 // raw JSON would call every round trip a change.
 function canon(value: unknown): string {
@@ -243,15 +264,20 @@ export function mergeFromServer(
   const key = baseKey(game, variant, puzzleDate);
   const base = syncBase.get(key);
   const serverMoved = base === undefined || base.stamp !== row.updatedAt;
-  const localDirty = base === undefined || canon(local) !== base.state;
+  const localDirty = base === undefined || canon(progressOf(game, local)) !== base.state;
 
   let merged: Rec | null;
   if (!serverMoved) {
     merged = mergeDaily(game, local, row.state, 'push');
   } else if (!localDirty && row.state) {
     // nothing of ours is unsaved, so there is nothing to defend — take the row
-    // as it stands, which is the only way a deletion reaches this device
+    // as it stands, which is the only way a deletion reaches this device. The
+    // clock is the exception: it isn't progress, and this device's is the one
+    // that has actually been running.
     merged = { ...(local ?? {}), ...row.state };
+    if (local?.elapsedMs !== undefined || row.state.elapsedMs !== undefined) {
+      merged.elapsedMs = maxNum(local?.elapsedMs, row.state.elapsedMs);
+    }
   } else {
     merged = mergeDaily(game, local, row.state, 'pull');
   }
@@ -261,7 +287,7 @@ export function mergeFromServer(
   // `revealed` and the like — so comparing against the raw row would call an
   // untouched board dirty forever, and a device that is never clean can never
   // accept a deletion.
-  syncBase.set(key, { stamp: row.updatedAt, state: canon(merged) });
+  syncBase.set(key, { stamp: row.updatedAt, state: canon(progressOf(game, merged)) });
   saveBases();
   return merged;
 }
@@ -273,7 +299,10 @@ export function noteWritten(
   updatedAt: string,
   state: Rec
 ): void {
-  syncBase.set(baseKey(game, variant, puzzleDate), { stamp: updatedAt, state: canon(state) });
+  syncBase.set(baseKey(game, variant, puzzleDate), {
+    stamp: updatedAt,
+    state: canon(progressOf(game, state)),
+  });
   saveBases();
 }
 
