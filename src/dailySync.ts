@@ -52,9 +52,28 @@ function minDefined(a?: number | null, b?: number | null): number | null {
   return Math.min(a, b);
 }
 
+// Most of a board only ever grows: words found, hints spent, time elapsed.
+// Those can be unioned from either side safely, because nothing is ever taken
+// away. Boxed's chain is the exception — backspace un-commits a word and
+// restart clears the lot — and that changes what a merge means depending on
+// which way it is running.
+//
+//   'pull'  opening a board: prefer whichever side has more of the puzzle done
+//   'push'  saving a local edit: the player is looking at the local copy, so a
+//           write must never resurrect what they just deleted
+//
+// Getting this wrong made undo impossible: restart cleared the chain, the save
+// read the server's longer copy back, and the words reappeared.
+export type MergeMode = 'pull' | 'push';
+
 // Merge a remote board into the local one. `local` shape is whatever the game
 // keeps in its own store, so each case knows only its own record.
-export function mergeDaily(game: DailyGame, local: Rec | null, remote: Rec | null): Rec | null {
+export function mergeDaily(
+  game: DailyGame,
+  local: Rec | null,
+  remote: Rec | null,
+  mode: MergeMode = 'pull'
+): Rec | null {
   if (!remote) return local;
   if (!local) return remote;
 
@@ -79,12 +98,21 @@ export function mergeDaily(game: DailyGame, local: Rec | null, remote: Rec | nul
         elapsedMs: maxNum(local.elapsedMs, remote.elapsedMs),
       };
     case 'box': {
-      // A finished chain beats an unfinished one; otherwise the longer.
       const mine = local.chain ?? [];
       const theirs = remote.chain ?? [];
       const localDone = !!local.revealed || (local.solved ?? false);
       const remoteDone = !!remote.revealed || (remote.solved ?? false);
-      const chain = remoteDone && !localDone ? theirs : theirs.length > mine.length ? theirs : mine;
+      // Saving a local edit: the chain is whatever the player is looking at,
+      // shorter or not. Opening a board: a finished chain beats an unfinished
+      // one, otherwise the longer.
+      const chain =
+        mode === 'push'
+          ? mine
+          : remoteDone && !localDone
+            ? theirs
+            : theirs.length > mine.length
+              ? theirs
+              : mine;
       return {
         ...local,
         chain,
@@ -190,7 +218,7 @@ async function push(
     // device did. Whoever writes last must fold in what's already there.
     const current = await loadDaily(game, variant, puzzleDate);
     const merged = (current?.state && Object.keys(current.state).length
-      ? mergeDaily(game, state, current.state)
+      ? mergeDaily(game, state, current.state, 'push')
       : state) as Rec;
     const doneNow = completed || !!current?.completed;
     // the finished board's numbers win over a half-played one's absence
