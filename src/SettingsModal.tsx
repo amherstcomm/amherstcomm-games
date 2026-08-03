@@ -8,19 +8,42 @@ const THEME_OPTIONS: { id: ThemeMode; label: string; Icon: typeof Sun }[] = [
   { id: 'dark', label: 'Dark', Icon: Moon },
 ];
 
+const PALETTE_OPTIONS: { id: Palette; label: string; blurb: string; tones: string[] }[] = [
+  {
+    id: 'default',
+    label: 'Default',
+    blurb: 'Green, amber, and rose',
+    tones: ['52 211 153', '251 191 36', '251 113 133', '125 211 252'],
+  },
+  {
+    id: 'deuter',
+    label: 'Red–green friendly',
+    blurb: 'Deuteranopia and protanopia — blue and orange replace green and amber',
+    tones: ['59 130 246', '230 159 0', '236 72 153', '86 180 233'],
+  },
+  {
+    id: 'tritan',
+    label: 'Blue–yellow friendly',
+    blurb: 'Tritanopia — green against vermilion, the axis those eyes keep',
+    tones: ['45 190 125', '232 106 58', '236 88 150', '165 228 240'],
+  },
+  {
+    id: 'mono',
+    label: 'Monochrome',
+    blurb: 'No hue at all — states are separated by lightness',
+    tones: ['235 235 235', '180 180 180', '130 130 130', '90 90 90'],
+  },
+];
+
 // small live swatches so the palette choice is visible before committing
-function Swatches({ palette }: { palette: Palette }) {
-  const tones =
-    palette === 'cvd'
-      ? ['rgb(59 130 246)', 'rgb(230 159 0)', 'rgb(236 72 153)', 'rgb(86 180 233)']
-      : ['rgb(52 211 153)', 'rgb(251 191 36)', 'rgb(251 113 133)', 'rgb(125 211 252)'];
+function Swatches({ tones }: { tones: string[] }) {
   return (
-    <span className="inline-flex gap-1 align-middle">
+    <span className="inline-flex gap-1 align-middle shrink-0">
       {tones.map((c) => (
         <span
           key={c}
           className="w-3 h-3 rounded-full border border-white/20"
-          style={{ backgroundColor: c }}
+          style={{ backgroundColor: `rgb(${c})` }}
         />
       ))}
     </span>
@@ -104,20 +127,7 @@ export default function SettingsModal({
               Colors
             </h3>
             <div className="space-y-2">
-              {(
-                [
-                  {
-                    id: 'default' as const,
-                    label: 'Default',
-                    blurb: 'Green, amber, and rose',
-                  },
-                  {
-                    id: 'cvd' as const,
-                    label: 'Color-blind friendly',
-                    blurb: 'Blue and orange instead of green and amber',
-                  },
-                ]
-              ).map(({ id, label, blurb }) => (
+              {PALETTE_OPTIONS.map(({ id, label, blurb, tones }) => (
                 <button
                   key={id}
                   onClick={() => onPalette(id)}
@@ -127,14 +137,14 @@ export default function SettingsModal({
                       ? 'bg-amber-400/10 border-amber-400/40'
                       : 'bg-white/5 border-white/10 hover:bg-white/10'}`}
                 >
-                  <span className="flex-1">
+                  <span className="flex-1 min-w-0">
                     <span className="flex items-center gap-2 text-sm font-semibold text-white">
                       {label}
                       {palette === id && <Check className="w-3.5 h-3.5 text-accent" />}
                     </span>
                     <span className="block text-xs text-slate-500">{blurb}</span>
                   </span>
-                  <Swatches palette={id} />
+                  <Swatches tones={tones} />
                 </button>
               ))}
             </div>

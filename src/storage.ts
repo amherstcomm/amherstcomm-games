@@ -159,7 +159,12 @@ export function loadState(): PersistedState {
       sort,
       keyboard: p?.keyboard === true,
       theme: ['system', 'light', 'dark'].includes(p?.theme) ? p.theme : 'system',
-      palette: p?.palette === 'cvd' ? 'cvd' : 'default',
+      // 'cvd' was the original name for the red-green palette
+      palette: p?.palette === 'cvd'
+        ? 'deuter'
+        : ['default', 'deuter', 'tritan', 'mono'].includes(p?.palette)
+          ? p.palette
+          : 'default',
       patternPlay: p?.patternPlay === true,
       beePlay: p?.beePlay === true,
       boxedPlay: p?.boxedPlay === true,

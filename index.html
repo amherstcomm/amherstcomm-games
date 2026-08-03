@@ -21,7 +21,11 @@
             (mode === 'system' && !window.matchMedia('(prefers-color-scheme: light)').matches);
           var root = document.documentElement;
           root.setAttribute('data-theme', dark ? 'dark' : 'light');
-          root.setAttribute('data-palette', s.palette === 'cvd' ? 'cvd' : 'default');
+          var pal = s.palette === 'cvd' ? 'deuter' : s.palette;
+          root.setAttribute(
+            'data-palette',
+            ['deuter', 'tritan', 'mono'].indexOf(pal) >= 0 ? pal : 'default'
+          );
           root.style.colorScheme = dark ? 'dark' : 'light';
         } catch (e) {
           /* first visit, or storage unavailable — the app applies it on mount */

@@ -191,10 +191,12 @@ const GUESS_SECRET = 'grape';
 
 // the tile colors change with the palette, so the copy names them from the
 // active one rather than hardcoding "green" and "amber"
-type ColorWords = { right: string; wrong: string; span: string };
+type ColorWords = { right: string; wrong: string; span: string; theme: string };
 const COLOR_WORDS: Record<Palette, ColorWords> = {
-  default: { right: 'green', wrong: 'amber', span: 'gold' },
-  cvd: { right: 'blue', wrong: 'orange', span: 'orange' },
+  default: { right: 'green', wrong: 'amber', span: 'gold', theme: 'blue' },
+  deuter: { right: 'blue', wrong: 'orange', span: 'orange', theme: 'light blue' },
+  tritan: { right: 'green', wrong: 'vermilion', span: 'vermilion', theme: 'pale cyan' },
+  mono: { right: 'the light tile', wrong: 'the mid-grey tile', span: 'white', theme: 'grey' },
 };
 
 const guessSteps = (c: ColorWords) => [
@@ -1336,7 +1338,7 @@ function LearnWeave({ dict, colors }: { dict: Set<string> | null; colors: ColorW
         <Rules
           items={[
             'Read the theme clue, then drag through adjacent letters — any direction, diagonals included — and release to submit.',
-            `Theme words lock in blue. The spangram — a word that sums up the theme and spans the board edge to edge — locks in ${colors.span}.`,
+            `Theme words lock in ${colors.theme}. The spangram — a word that sums up the theme and spans the board edge to edge — locks in ${colors.span}.`,
             'A theme word only counts on its own cells; the same word traced elsewhere is just a regular word.',
             'Other real words (4+ letters) aren’t wasted: every three you find banks a hint, which outlines an unfound theme word.',
             'Reveal gives up and shows the full solution; either way, completion draws every word’s path.',

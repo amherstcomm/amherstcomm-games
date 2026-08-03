@@ -3,10 +3,13 @@
 import { useEffect } from 'react';
 
 export type ThemeMode = 'system' | 'light' | 'dark';
-export type Palette = 'default' | 'cvd';
+// deuter covers deuteranopia/protanopia (red-green, by far the most common),
+// tritan covers tritanopia (blue-yellow), mono covers achromatopsia and any
+// case where hue can't be relied on at all
+export type Palette = 'default' | 'deuter' | 'tritan' | 'mono';
 
 export const THEME_MODES: ThemeMode[] = ['system', 'light', 'dark'];
-export const PALETTES: Palette[] = ['default', 'cvd'];
+export const PALETTES: Palette[] = ['default', 'deuter', 'tritan', 'mono'];
 
 const LIGHT_QUERY = '(prefers-color-scheme: light)';
 
