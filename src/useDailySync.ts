@@ -6,11 +6,20 @@
 // until the key for this board has been marked as merged.
 
 import { useEffect, useRef, useState } from 'react';
-import { loadDaily, mergeDaily, saveDaily, type DailyGame } from '@/dailySync';
+import {
+  clearSyncBase,
+  loadDaily,
+  mergeFromServer,
+  progressOf,
+  saveDaily,
+  type DailyGame,
+} from '@/dailySync';
 import { supabase } from '@/supabase';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Rec = Record<string, any>;
+
+const POLL_MS = 10_000;
 
 export function useDailySync({
   game,
@@ -52,10 +61,31 @@ export function useDailySync({
     const { data } = supabase.auth.onAuthStateChange(() => {
       syncedKey.current = null;
       lastPush.current = '';
+      clearSyncBase();
       setAuthTick((n) => n + 1);
     });
     return () => data.subscription.unsubscribe();
   }, []);
+
+  // Write on change, read on a timer. Two windows side by side never exchange
+  // focus events — only one of them is focused, and the other just sits there
+  // looking stale — so a board that is visible checks back on its own.
+  //
+  // Ten seconds. The case this exists for — two windows open at once — is
+  // mostly a testing shape; the real one is a phone in the morning and a
+  // laptop at lunch, which the pull on open already covers. Ten still reads as
+  // live if you are watching, at a request per open board per interval for
+  // every signed-in player. Realtime would replace it with a subscription if
+  // it ever needs to be instant.
+  useEffect(() => {
+    if (!supabase || !active || !date) return;
+    const id = window.setInterval(() => {
+      if (document.visibilityState !== 'visible') return;
+      syncedKey.current = null;
+      setAuthTick((n) => n + 1);
+    }, POLL_MS);
+    return () => window.clearInterval(id);
+  }, [active, date]);
 
   // Pulling once on mount only helps a board that was opened after the other
   // device played. Coming back to a tab that has been sitting there is the
@@ -90,8 +120,12 @@ export function useDailySync({
       .then((remote) => {
         if (!alive) return;
         if (remote?.state && Object.keys(remote.state).length) {
-          const merged = mergeDaily(game, record, remote.state);
-          if (merged) setRecordRef.current(merged);
+          const merged = mergeFromServer(game, variant, date, record, remote);
+          if (merged) {
+            setRecordRef.current(merged);
+            // what we just took from the row doesn't need writing straight back
+            lastPush.current = JSON.stringify([progressOf(game, merged), completed, summary]);
+          }
         }
         syncedKey.current = key;
         seenKeys.current.add(key);
@@ -111,7 +145,12 @@ export function useDailySync({
   useEffect(() => {
     if (!supabase || !active || !date || !record) return;
     if (syncedKey.current !== key) return;
-    const stamp = JSON.stringify([record, completed, summary]);
+    // Keyed on progress, not the whole record. The boards commit a second of
+    // elapsed time into the record every second, so keying on the record meant
+    // both devices wrote continuously — and each then saw its own write as the
+    // newest, decided the server hadn't moved, and kept its own copy over the
+    // other's words. Time rides along with the next real change instead.
+    const stamp = JSON.stringify([progressOf(game, record), completed, summary]);
     if (stamp === lastPush.current) return;
     lastPush.current = stamp;
     saveDaily(game, variant, date, record, completed, summary, (merged) => {
