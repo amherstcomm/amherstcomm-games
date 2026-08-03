@@ -479,6 +479,46 @@ function App() {
   const gridTraceHandlers = (word: string) => traceHandlersFor(word, gridLetters, gridDims.cols);
   const weaveTraceHandlers = (word: string) => traceHandlersFor(word, weaveLetters, weaveDims.cols);
 
+  // boxed solver: hover a word (or chain) to draw its criss-cross chords on
+  // the box; chains trace end to end with the bridge letters collapsed
+  const [boxedTrace, setBoxedTrace] = useState<string | null>(null);
+  const [boxedTracePts, setBoxedTracePts] = useState<{ x: number; y: number }[]>([]);
+  const boxedBoardRef = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    if (!boxedTrace || !boxedBoardRef.current) {
+      setBoxedTracePts([]);
+      return;
+    }
+    const wrap = boxedBoardRef.current.getBoundingClientRect();
+    const pts: { x: number; y: number }[] = [];
+    for (const c of boxedTrace) {
+      const idx = boxedLetters.findIndex((l) => l === c);
+      if (idx === -1) continue;
+      const el = boxedBoardRef.current.querySelector(
+        `input[data-tile-group="boxed"][data-tile-index="${idx}"]`
+      );
+      if (!el) continue;
+      const r = el.getBoundingClientRect();
+      pts.push({ x: r.left + r.width / 2 - wrap.left, y: r.top + r.height / 2 - wrap.top });
+    }
+    setBoxedTracePts(pts);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [boxedTrace]);
+
+  function boxedTraceHandlers(chain: string): ButtonHTMLAttributes<HTMLButtonElement> {
+    // strip spaces and collapse the doubled bridge letters between words
+    const letters = chain.replace(/[^a-z]/g, '').replace(/(.)\1+/g, '$1');
+    const show = () => setBoxedTrace(letters);
+    const hide = () => setBoxedTrace(null);
+    return {
+      onMouseEnter: show,
+      onMouseLeave: hide,
+      onPointerDown: show,
+      onPointerUp: hide,
+      onPointerCancel: hide,
+    };
+  }
+
   function changeGridPreset(preset: GridPreset) {
     setGridPreset(preset);
     const dims = GRID_PRESET_DIMS[preset];
@@ -1503,7 +1543,7 @@ function App() {
               <label className="block text-xs font-medium text-slate-400 uppercase tracking-wider mb-3">
                 Sides of the box
               </label>
-              <div className="relative w-72 h-72 mx-auto">
+              <div ref={boxedBoardRef} className="relative w-72 h-72 mx-auto">
                 <div className="absolute inset-14 rounded-xl border-2 border-white/15 bg-white/[0.02]" />
                 {/* top */}
                 <div className="absolute top-0 left-14 right-14 flex justify-around">
@@ -1521,6 +1561,24 @@ function App() {
                 <div className="absolute left-0 top-14 bottom-14 flex flex-col justify-around items-start">
                   {[9, 10, 11].map(boxTile)}
                 </div>
+                {boxedTracePts.length > 1 && (
+                  <svg className="absolute inset-0 w-full h-full pointer-events-none">
+                    <polyline
+                      points={boxedTracePts.map((p) => `${p.x},${p.y}`).join(' ')}
+                      fill="none"
+                      stroke="rgb(125 211 252 / 0.9)"
+                      strokeWidth="3"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                    <circle
+                      cx={boxedTracePts[0].x}
+                      cy={boxedTracePts[0].y}
+                      r="5"
+                      fill="rgb(125 211 252)"
+                    />
+                  </svg>
+                )}
               </div>
               <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
                 <button
@@ -1679,6 +1737,7 @@ function App() {
                   <div className="grid grid-cols-1 gap-2.5">
                     <WordChip
                       word={boxedRecommended.words.join(' ')}
+                      hoverProps={boxedTraceHandlers(boxedRecommended.words.join(''))}
                       className="bg-amber-400/10 border border-amber-400/30 text-amber-200 font-semibold hover:bg-amber-400/20"
                     >
                       {boxedRecommended.words.map((w, i) => (
@@ -1710,6 +1769,7 @@ function App() {
                           <WordChip
                             key={s.join(' ')}
                             word={s.join(' ')}
+                            hoverProps={boxedTraceHandlers(s.join(''))}
                             className="bg-emerald-400/10 border border-emerald-400/30 text-emerald-200 font-semibold hover:bg-emerald-400/20"
                           >
                             {s.map((w, i) => (
@@ -1765,7 +1825,7 @@ function App() {
                         <WordChip
                           key={w}
                           word={w}
-                          hoverProps={mode === 'grid' ? gridTraceHandlers(w) : mode === 'weave' ? weaveTraceHandlers(w) : undefined}
+                          hoverProps={mode === 'grid' ? gridTraceHandlers(w) : mode === 'weave' ? weaveTraceHandlers(w) : mode === 'boxed' ? boxedTraceHandlers(w) : undefined}
                           className="bg-white/[0.04] border border-white/10 text-slate-300 hover:bg-white/[0.08] hover:border-white/20"
                         />
                       ))}
@@ -1778,7 +1838,7 @@ function App() {
                     <WordChip
                       key={w}
                       word={w}
-                      hoverProps={mode === 'grid' ? gridTraceHandlers(w) : mode === 'weave' ? weaveTraceHandlers(w) : undefined}
+                      hoverProps={mode === 'grid' ? gridTraceHandlers(w) : mode === 'weave' ? weaveTraceHandlers(w) : mode === 'boxed' ? boxedTraceHandlers(w) : undefined}
                       className="bg-white/[0.04] border border-white/10 text-slate-300 hover:bg-white/[0.08] hover:border-white/20"
                     />
                   ))}

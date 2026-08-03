@@ -1000,31 +1000,41 @@ function LearnBoxed({ dict, register }: { dict: Set<string> | null; register: Re
         )}
         <div className="relative w-64 h-64 mx-auto my-5">
           <div className="absolute inset-10 rounded-xl border-2 border-white/15 bg-white/[0.02]" />
-          {trace && (
-            <svg
-              viewBox="0 0 100 100"
-              preserveAspectRatio="none"
-              className="absolute inset-0 w-full h-full pointer-events-none"
-            >
-              <polyline
-                points={trace
-                  .split('')
-                  .map((c) => BOX_LETTER_POS.get(c)!)
-                  .map(([x, y]) => `${x},${y}`)
-                  .join(' ')}
-                fill="none"
-                stroke="rgb(125 211 252 / 0.9)"
-                strokeWidth="3"
-                vectorEffect="non-scaling-stroke"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-              {(() => {
-                const [x, y] = BOX_LETTER_POS.get(trace[0])!;
-                return <circle cx={x} cy={y} r="2" fill="rgb(125 211 252)" />;
-              })()}
-            </svg>
-          )}
+          {(() => {
+            // hovered chain word takes priority; the live entry draws dashed
+            const word = trace ?? (current.length >= 2 ? current : null);
+            if (!word) return null;
+            const pts = word
+              .split('')
+              .map((c) => BOX_LETTER_POS.get(c))
+              .filter((p): p is [number, number] => !!p);
+            if (pts.length < 2) return null;
+            const live = !trace;
+            return (
+              <svg
+                viewBox="0 0 100 100"
+                preserveAspectRatio="none"
+                className="absolute inset-0 w-full h-full pointer-events-none"
+              >
+                <polyline
+                  points={pts.map(([x, y]) => `${x},${y}`).join(' ')}
+                  fill="none"
+                  stroke={live ? 'rgb(251 191 36 / 0.65)' : 'rgb(125 211 252 / 0.9)'}
+                  strokeWidth="3"
+                  vectorEffect="non-scaling-stroke"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeDasharray={live ? '6 5' : undefined}
+                />
+                <circle
+                  cx={pts[0][0]}
+                  cy={pts[0][1]}
+                  r="2"
+                  fill={live ? 'rgb(251 191 36)' : 'rgb(125 211 252)'}
+                />
+              </svg>
+            );
+          })()}
           {BOX_SIDES.map((side, s) =>
             side.split('').map((c, j) => {
               const [x, y] = BOX_POSITIONS[s][j];

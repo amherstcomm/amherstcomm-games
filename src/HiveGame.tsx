@@ -6,7 +6,7 @@ import {
   useRef,
   useState,
 } from 'react';
-import { CalendarDays, CornerDownLeft, Delete, RefreshCw, Search, Shuffle, Timer } from 'lucide-react';
+import { CalendarDays, CornerDownLeft, Delete, Eye, LifeBuoy, RefreshCw, Shuffle, Timer } from 'lucide-react';
 import { formatElapsed, useUpTimer } from '@/useUpTimer';
 import type { LetterState } from '@/GuessGame';
 import { dailyDataUrl } from '@/dailyData';
@@ -47,6 +47,7 @@ type HiveRecord = {
   outers: string[];
   found: string[];
   invalid?: string[]; // rejected non-dictionary guesses
+  revealed?: boolean; // gave up — the hive is over, incomplete
   elapsedMs?: number;
 };
 type HiveStore = {
@@ -76,6 +77,7 @@ function sanitizeRecord(r: unknown): HiveRecord | null {
     outers: rec.outers,
     found: rec.found.filter((w) => typeof w === 'string'),
     invalid: Array.isArray(rec.invalid) ? rec.invalid.filter((w) => typeof w === 'string') : [],
+    revealed: rec.revealed === true,
     elapsedMs: typeof rec.elapsedMs === 'number' && rec.elapsedMs >= 0 ? rec.elapsedMs : 0,
   };
 }
@@ -219,9 +221,10 @@ const HiveGame = forwardRef<
 
   const geniusAt = Math.ceil(maxScore * 0.7);
   const queenBee = maxScore > 0 && score >= maxScore;
+  const done = queenBee || !!record?.revealed;
 
-  // thinking time: counts while the hive is visible, until Queen Bee
-  useUpTimer(!!record && !queenBee, (delta) =>
+  // thinking time: counts while the hive is visible and unfinished
+  useUpTimer(!!record && !done, (delta) =>
     updateRecord((r) => ({ ...r, elapsedMs: (r.elapsedMs ?? 0) + delta }))
   );
 
@@ -255,7 +258,7 @@ const HiveGame = forwardRef<
   }
 
   function submit() {
-    if (!record || !answers) return;
+    if (!record || !answers || record.revealed) return;
     const word = current;
     setCurrent('');
     if (word.length < 4) {
@@ -292,6 +295,7 @@ const HiveGame = forwardRef<
   }
 
   function pressKey(k: string) {
+    if (record?.revealed) return;
     if (k === 'enter') {
       submit();
       return;
@@ -457,18 +461,47 @@ const HiveGame = forwardRef<
             <button
               onMouseDown={(e) => e.preventDefault()}
               onClick={() => onReveal(record.center, record.outers)}
-              title="Give up and see every word in the solver"
+              title="Peek at the solver — your hive keeps going"
               className="inline-flex items-center gap-1.5 px-4 h-10 rounded-lg text-sm font-semibold bg-white/5 border border-white/10 text-slate-300 hover:bg-white/10 hover:text-white transition-colors"
             >
-              <Search className="w-4 h-4" />
-              Reveal
+              <LifeBuoy className="w-4 h-4" />
+              Help
             </button>
+            {!done && (
+              <button
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => {
+                  // persist synchronously — onReveal unmounts this component
+                  // before a state-driven save could run
+                  const next = store.dailyMode
+                    ? { ...store, daily: { ...record, revealed: true } }
+                    : { ...store, practice: { ...record, revealed: true } };
+                  try {
+                    localStorage.setItem(HIVE_KEY, JSON.stringify(next));
+                  } catch {
+                    // best-effort persistence
+                  }
+                  setStore(next);
+                  onReveal(record.center, record.outers);
+                }}
+                title="Give up — ends this hive unfinished and shows every word"
+                className="inline-flex items-center gap-1.5 px-4 h-10 rounded-lg text-sm font-semibold bg-white/5 border border-white/10 text-slate-300 hover:bg-white/10 hover:text-white transition-colors"
+              >
+                <Eye className="w-4 h-4" />
+                Reveal
+              </button>
+            )}
           </div>
 
           <div className="h-6 mt-3">
             {flash && (
               <p className={`text-sm font-medium ${flash.good ? 'text-emerald-300' : 'text-amber-300'}`}>
                 {flash.text}
+              </p>
+            )}
+            {!flash && done && (
+              <p className={`text-sm font-semibold ${queenBee ? 'text-emerald-300' : 'text-slate-400'}`}>
+                {queenBee ? 'Queen Bee! 🐝' : 'Revealed 🔍'}
               </p>
             )}
           </div>

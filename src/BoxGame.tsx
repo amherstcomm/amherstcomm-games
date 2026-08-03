@@ -578,6 +578,10 @@ const BoxGame = forwardRef<
               <CornerDownLeft className="w-4 h-4" />
               Enter
             </button>
+          </div>
+
+          {/* second row: board-level actions, so nothing squishes on mobile */}
+          <div className="mt-2.5 flex items-center justify-center gap-2.5">
             {!store.dailyMode && (
               <button
                 onMouseDown={(e) => e.preventDefault()}
