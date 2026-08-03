@@ -1,4 +1,5 @@
 import type { DictionaryId } from '@/dictionaries';
+import type { Palette, ThemeMode } from '@/theme';
 
 export type Mode = 'pattern' | 'descramble' | 'bee' | 'boxed' | 'grid' | 'weave';
 
@@ -16,6 +17,8 @@ export type PersistedState = {
   dictionaries: Record<Mode, DictionaryId>;
   sort: Record<Mode, SortPref>;
   keyboard: boolean;
+  theme: ThemeMode;
+  palette: Palette;
   patternPlay: boolean;
   beePlay: boolean;
   boxedPlay: boolean;
@@ -55,6 +58,8 @@ export const DEFAULT_STATE: PersistedState = {
     weave: { key: 'length', dir: 'desc' },
   },
   keyboard: false,
+  theme: 'system',
+  palette: 'default',
   patternPlay: false,
   beePlay: false,
   boxedPlay: false,
@@ -153,6 +158,8 @@ export function loadState(): PersistedState {
       dictionaries,
       sort,
       keyboard: p?.keyboard === true,
+      theme: ['system', 'light', 'dark'].includes(p?.theme) ? p.theme : 'system',
+      palette: p?.palette === 'cvd' ? 'cvd' : 'default',
       patternPlay: p?.patternPlay === true,
       beePlay: p?.beePlay === true,
       boxedPlay: p?.boxedPlay === true,

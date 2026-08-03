@@ -26,7 +26,7 @@ function Section({
   return (
     <div>
       <h3 className="flex items-center gap-2 text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">
-        <Icon className="w-3.5 h-3.5 text-amber-400/80" />
+        <Icon className="w-3.5 h-3.5 text-accent" />
         {title}
       </h3>
       {children}

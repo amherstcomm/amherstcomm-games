@@ -1,10 +1,12 @@
 import { useMemo, useState, useEffect, useLayoutEffect, useRef, type ButtonHTMLAttributes, type ReactNode } from 'react';
-import { Search, Sparkles, Eraser, ArrowDown, ArrowUp, X, BookOpen, Grid3x3, Shuffle, Hexagon, Check, Keyboard, Delete, Github, Info, Square, CalendarDays, Star, Gamepad2, CornerDownLeft, LayoutGrid, Puzzle, BarChart3, UserRound, Scale } from 'lucide-react';
+import { Search, Sparkles, Eraser, ArrowDown, ArrowUp, X, BookOpen, Grid3x3, Shuffle, Hexagon, Check, Keyboard, Delete, Github, Info, Square, CalendarDays, Star, Gamepad2, CornerDownLeft, LayoutGrid, Puzzle, BarChart3, UserRound, Scale, Settings } from 'lucide-react';
 import LearnMode, { type LearnModeHandle } from '@/LearnMode';
 import type { Session } from '@supabase/supabase-js';
 import StatsModal from '@/StatsModal';
 import AccountModal from '@/AccountModal';
 import { OskContext } from '@/MobileKeyInput';
+import SettingsModal from '@/SettingsModal';
+import { PALETTES, THEME_MODES, useTheme, type Palette, type ThemeMode } from '@/theme';
 import { supabase } from '@/supabase';
 import { GA_ID } from '@/analytics';
 import { importBaselineOnce } from '@/stats';
@@ -483,11 +485,11 @@ function App() {
   // boxed solver: hover a word (or a solution chain) to draw its criss-cross
   // chords on the box — each word in a chain gets its own color
   const BOX_TRACE_COLORS = [
-    'rgb(125 211 252 / 0.9)', // sky
-    'rgb(251 113 133 / 0.9)', // rose
-    'rgb(167 139 250 / 0.9)', // violet
-    'rgb(52 211 153 / 0.9)', // emerald
-    'rgb(251 191 36 / 0.9)', // amber
+    'rgb(var(--chord-1) / 0.9)',
+    'rgb(var(--chord-2) / 0.9)',
+    'rgb(var(--chord-3) / 0.9)',
+    'rgb(var(--chord-4) / 0.9)',
+    'rgb(var(--chord-5) / 0.9)',
   ];
   // text classes matching BOX_TRACE_COLORS, so chain chips double as a legend
   const BOX_TRACE_TEXT = [
@@ -562,7 +564,12 @@ function App() {
   const [statsOpen, setStatsOpen] = useState(false);
   const [learnMode, setLearnMode] = useState(false);
   const [accountOpen, setAccountOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [theme, setTheme] = useState<ThemeMode>(initial.theme);
+  const [palette, setPalette] = useState<Palette>(initial.palette);
   const [session, setSession] = useState<Session | null>(null);
+
+  useTheme(theme, palette);
 
   // track the auth session when Supabase is configured
   useEffect(() => {
@@ -576,6 +583,42 @@ function App() {
   useEffect(() => {
     if (session) void importBaselineOnce();
   }, [session]);
+
+  // appearance settings follow the account: pull on sign-in, then push edits
+  const settingsPulled = useRef(false);
+  useEffect(() => {
+    if (!supabase || !session) {
+      settingsPulled.current = false;
+      return;
+    }
+    let alive = true;
+    supabase
+      .from('profiles')
+      .select('settings')
+      .eq('id', session.user.id)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (!alive) return;
+        const s = data?.settings as { theme?: ThemeMode; palette?: Palette } | null;
+        if (s?.theme && THEME_MODES.includes(s.theme)) setTheme(s.theme);
+        if (s?.palette && PALETTES.includes(s.palette)) setPalette(s.palette);
+        settingsPulled.current = true;
+      });
+    return () => {
+      alive = false;
+    };
+  }, [session]);
+
+  useEffect(() => {
+    if (!supabase || !session || !settingsPulled.current) return;
+    const id = window.setTimeout(() => {
+      void supabase!
+        .from('profiles')
+        .update({ settings: { theme, palette } })
+        .eq('id', session.user.id);
+    }, 500);
+    return () => window.clearTimeout(id);
+  }, [session, theme, palette]);
 
   // surface auth errors that come back in the redirect URL (expired or
   // already-used magic links land here with no other visible sign)
@@ -664,6 +707,8 @@ function App() {
       dictionaries,
       sort: sorts,
       keyboard: kbOpen,
+      theme,
+      palette,
       patternPlay,
       beePlay,
       boxedPlay,
@@ -677,7 +722,7 @@ function App() {
       weave: { letters: weaveLetters, size: weaveSize },
       weavePlay,
     });
-  }, [mode, dictionaries, sorts, kbOpen, patternPlay, beePlay, boxedPlay, descramblePlay, gridPlay, length, known, containsStr, excludedStr, rackStr, useAll, minLength, beeCenter, beeOuters, boxedLetters, solutionWords, gridLetters, gridPreset, weaveLetters, weaveSize, weavePlay]);
+  }, [mode, dictionaries, sorts, kbOpen, theme, palette, patternPlay, beePlay, boxedPlay, descramblePlay, gridPlay, length, known, containsStr, excludedStr, rackStr, useAll, minLength, beeCenter, beeOuters, boxedLetters, solutionWords, gridLetters, gridPreset, weaveLetters, weaveSize, weavePlay]);
 
   // keep known array sized to length
   useEffect(() => {
@@ -1055,7 +1100,7 @@ function App() {
       <nav className="sticky top-0 z-40 bg-slate-950/80 backdrop-blur border-b border-white/10">
         <div className="max-w-3xl mx-auto px-2 sm:px-5 flex items-center justify-between gap-2">
           <span className="hidden md:inline-flex items-center gap-2 text-lg font-bold tracking-tight">
-            <Sparkles className="w-4 h-4 text-amber-400" />
+            <Sparkles className="w-4 h-4 text-accent" />
             Anagrimoire
           </span>
           <div className="flex-1 md:flex-none grid grid-cols-6 md:flex gap-0.5 sm:gap-1 py-1.5">
@@ -1126,7 +1171,7 @@ function App() {
                     }}
                     className={`inline-flex items-center gap-1.5 px-4 sm:px-5 h-10 rounded-lg text-sm font-semibold transition-all duration-150
                       ${active
-                        ? 'bg-emerald-400 text-slate-950 shadow-lg shadow-emerald-500/30'
+                        ? 'bg-emerald-400 text-ink shadow-lg shadow-emerald-500/30'
                         : 'text-slate-300 hover:bg-white/10'}`}
                   >
                     <Icon className="w-4 h-4" />
@@ -1139,7 +1184,12 @@ function App() {
 
         {learnMode && (
           <div className="mb-8">
-            <LearnMode ref={learnRef} mode={mode} standardWords={standardWordsArr} />
+            <LearnMode
+              ref={learnRef}
+              mode={mode}
+              standardWords={standardWordsArr}
+              palette={palette}
+            />
           </div>
         )}
 
@@ -1199,12 +1249,12 @@ function App() {
                 <polyline
                   points={gridTracePts.map((p) => `${p.x},${p.y}`).join(' ')}
                   fill="none"
-                  stroke="rgb(125 211 252 / 0.9)"
+                  stroke="rgb(var(--trace) / 0.9)"
                   strokeWidth="4"
                   strokeLinecap="round"
                   strokeLinejoin="round"
                 />
-                <circle cx={gridTracePts[0].x} cy={gridTracePts[0].y} r="6" fill="rgb(125 211 252)" />
+                <circle cx={gridTracePts[0].x} cy={gridTracePts[0].y} r="6" fill="rgb(var(--trace))" />
               </svg>
             )}
           </div>
@@ -1227,7 +1277,7 @@ function App() {
             </button>
           </div>
           {todayStatus === 'error' && (
-            <p className="mt-2 text-xs text-rose-400">
+            <p className="mt-2 text-xs text-danger">
               Couldn&apos;t fetch today&apos;s puzzle — try again in a minute.
             </p>
           )}
@@ -1258,7 +1308,7 @@ function App() {
                 title={d.blurb}
                 className={`inline-flex items-center gap-1.5 px-4 h-9 rounded-lg text-sm font-semibold transition-all duration-150
                   ${dictionaryId === d.id
-                    ? 'bg-amber-400 text-slate-950 shadow-lg shadow-amber-500/30'
+                    ? 'bg-amber-400 text-ink shadow-lg shadow-amber-500/30'
                     : 'text-slate-300 hover:bg-white/10'}`}
               >
                 {d.id === 'common' && <BookOpen className="w-3.5 h-3.5" />}
@@ -1286,7 +1336,7 @@ function App() {
                 onClick={() => setLength(n)}
                 className={`w-11 h-11 rounded-xl text-sm font-semibold transition-all duration-150
                   ${length === n
-                    ? 'bg-amber-400 text-slate-950 shadow-lg shadow-amber-500/30 scale-105'
+                    ? 'bg-amber-400 text-ink shadow-lg shadow-amber-500/30 scale-105'
                     : 'bg-white/5 border border-white/10 text-slate-300 hover:bg-white/10 hover:border-white/20'}`}
               >
                 {n}
@@ -1344,7 +1394,7 @@ function App() {
         <div className="grid sm:grid-cols-2 gap-5 mb-8">
           <section>
             <label className="block text-xs font-medium text-slate-400 uppercase tracking-wider mb-2.5">
-              Must contain <span className="text-amber-400/70 normal-case">(position unknown)</span>
+              Must contain <span className="text-accent normal-case">(position unknown)</span>
             </label>
             <LetterChipInput
               value={containsStr}
@@ -1397,7 +1447,7 @@ function App() {
         <div className="mb-8">
           <section className="mb-5">
             <label className="block text-xs font-medium text-slate-400 uppercase tracking-wider mb-2.5 text-center">
-              Your letters <span className="text-amber-400/70 normal-case">(use ? for a blank tile)</span>
+              Your letters <span className="text-accent normal-case">(use ? for a blank tile)</span>
             </label>
             <LetterChipInput
               value={rackStr}
@@ -1423,7 +1473,7 @@ function App() {
               onClick={() => setUseAll((v) => !v)}
               className={`inline-flex items-center gap-1.5 px-4 h-10 rounded-lg text-sm font-semibold transition-all duration-150 border
                 ${useAll
-                  ? 'bg-amber-400 text-slate-950 border-amber-400 shadow-lg shadow-amber-500/30'
+                  ? 'bg-amber-400 text-ink border-amber-400 shadow-lg shadow-amber-500/30'
                   : 'bg-white/5 border-white/10 text-slate-300 hover:bg-white/10'}`}
             >
               Use every letter
@@ -1446,7 +1496,7 @@ function App() {
             )}
           </div>
           {todayStatus === 'error' && (
-            <p className="mt-2 text-xs text-rose-400 text-center">
+            <p className="mt-2 text-xs text-danger text-center">
               Couldn&apos;t fetch today&apos;s rack — try again in a minute.
             </p>
           )}
@@ -1525,7 +1575,7 @@ function App() {
             </button>
           </div>
           {todayStatus === 'error' && (
-            <p className="mt-2 text-xs text-rose-400">
+            <p className="mt-2 text-xs text-danger">
               Couldn&apos;t fetch today&apos;s puzzle — try again in a minute.
             </p>
           )}
@@ -1605,12 +1655,12 @@ function App() {
                 <polyline
                   points={gridTracePts.map((p) => `${p.x},${p.y}`).join(' ')}
                   fill="none"
-                  stroke="rgb(125 211 252 / 0.9)"
+                  stroke="rgb(var(--trace) / 0.9)"
                   strokeWidth="4"
                   strokeLinecap="round"
                   strokeLinejoin="round"
                 />
-                <circle cx={gridTracePts[0].x} cy={gridTracePts[0].y} r="6" fill="rgb(125 211 252)" />
+                <circle cx={gridTracePts[0].x} cy={gridTracePts[0].y} r="6" fill="rgb(var(--trace))" />
               </svg>
             )}
           </div>
@@ -1625,7 +1675,7 @@ function App() {
             </button>
           </div>
           {todayStatus === 'error' && (
-            <p className="mt-2 text-xs text-rose-400">
+            <p className="mt-2 text-xs text-danger">
               Couldn&apos;t fetch today&apos;s grid — try again in a minute.
             </p>
           )}
@@ -1751,7 +1801,7 @@ function App() {
                 </label>
               </div>
               {todayStatus === 'error' && (
-                <p className="mt-2 text-xs text-rose-400">
+                <p className="mt-2 text-xs text-danger">
                   Couldn&apos;t fetch today&apos;s puzzle — try again in a minute.
                 </p>
               )}
@@ -1868,10 +1918,10 @@ function App() {
               <>
               {boxedRecommended && (
                 <div className="mb-6">
-                  <p className="mb-2.5 text-xs font-medium text-amber-400/80 uppercase tracking-wider inline-flex items-center gap-1.5">
+                  <p className="mb-2.5 text-xs font-medium text-accent uppercase tracking-wider inline-flex items-center gap-1.5">
                     <Star className="w-3.5 h-3.5" />
                     Recommended
-                    <span className="text-amber-400/50 normal-case tracking-normal">
+                    <span className="text-accent normal-case tracking-normal">
                       · {boxedRecommended.words.length}{' '}
                       {boxedRecommended.words.length === 1 ? 'word' : 'words'}
                       {boxedRecommended.allCommon ? ', everyday vocabulary' : ''}
@@ -1895,9 +1945,9 @@ function App() {
               )}
               {mode === 'boxed' && boxedIndex && (
                 <div className="mb-6">
-                  <p className="mb-2.5 text-xs font-medium text-emerald-400/80 uppercase tracking-wider">
+                  <p className="mb-2.5 text-xs font-medium text-success uppercase tracking-wider">
                     {solutionWords}-word solutions{' '}
-                    <span className="text-emerald-400/50">
+                    <span className="text-success">
                       · {boxedChains.capped ? `${boxedChains.solutions.length}+` : boxedChains.solutions.length}
                     </span>
                   </p>
@@ -1939,8 +1989,8 @@ function App() {
               )}
               {pangrams.length > 0 && (
                 <div className="mb-6">
-                  <p className="mb-2.5 text-xs font-medium text-amber-400/80 uppercase tracking-wider">
-                    Pangrams <span className="text-amber-400/50">· {pangrams.length}</span>
+                  <p className="mb-2.5 text-xs font-medium text-accent uppercase tracking-wider">
+                    Pangrams <span className="text-accent">· {pangrams.length}</span>
                   </p>
                   <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2.5">
                     {pangrams.map((w) => (
@@ -2012,7 +2062,7 @@ function App() {
         </>
         )}
 
-        <footer className="mt-14 text-center text-xs text-slate-600">
+        <footer className="mt-14 text-center text-xs text-slate-500">
           {!playActive && !learnMode && (
             <p>
               Searching {words.length.toLocaleString()} English words (
@@ -2035,6 +2085,13 @@ function App() {
             >
               <BarChart3 className="w-3.5 h-3.5" />
               Stats
+            </button>
+            <button
+              onClick={() => setSettingsOpen(true)}
+              className="inline-flex items-center gap-1.5 hover:text-slate-300 transition-colors"
+            >
+              <Settings className="w-3.5 h-3.5" />
+              Settings
             </button>
             {supabase && (
               <button
@@ -2082,6 +2139,17 @@ function App() {
       {statsOpen && <StatsModal signedIn={!!session} onClose={() => setStatsOpen(false)} />}
 
       {accountOpen && <AccountModal session={session} onClose={() => setAccountOpen(false)} />}
+
+      {settingsOpen && (
+        <SettingsModal
+          theme={theme}
+          palette={palette}
+          signedIn={!!session}
+          onTheme={setTheme}
+          onPalette={setPalette}
+          onClose={() => setSettingsOpen(false)}
+        />
+      )}
 
       {/* about & FAQ modal */}
       {aboutOpen && (
@@ -2365,7 +2433,7 @@ function App() {
                     state === 'correct'
                       ? 'bg-emerald-500/80 hover:bg-emerald-500 text-white'
                       : state === 'present'
-                        ? 'bg-amber-400/80 hover:bg-amber-400 text-slate-950'
+                        ? 'bg-amber-400/80 hover:bg-amber-400 text-ink'
                         : state === 'absent'
                           ? 'bg-white/[0.04] hover:bg-white/10 text-slate-600'
                           : 'bg-white/10 hover:bg-white/20 active:bg-white/30 text-white';

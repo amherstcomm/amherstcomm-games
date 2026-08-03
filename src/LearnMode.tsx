@@ -11,6 +11,7 @@ import { CornerDownLeft, Delete, RefreshCw, RotateCcw } from 'lucide-react';
 import MobileKeyInput from '@/MobileKeyInput';
 import { findGridPath, solveGrid, gridNeighbors } from '@/solvers';
 import type { Mode } from '@/storage';
+import type { Palette } from '@/theme';
 
 export type LearnModeHandle = { pressKey: (k: string) => void };
 
@@ -43,7 +44,7 @@ function useDemoKeys(register: RegisterKeys, handle: (k: string) => void) {
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div className="mb-8">
-      <h3 className="text-xs font-semibold text-amber-400/90 uppercase tracking-wider mb-3">
+      <h3 className="text-xs font-semibold text-accent uppercase tracking-wider mb-3">
         {title}
       </h3>
       {children}
@@ -147,7 +148,7 @@ function scoreGuess(secret: string, guess: string): LetterState[] {
 
 const TILE_TONES: Record<LetterState | 'empty' | 'pending', string> = {
   correct: 'bg-emerald-500/80 border-emerald-400 text-white',
-  present: 'bg-amber-400/80 border-amber-300 text-slate-950',
+  present: 'bg-amber-400/80 border-amber-300 text-ink',
   absent: 'bg-white/[0.04] border-white/10 text-slate-500',
   pending: 'bg-white/5 border-white/30 text-white',
   empty: 'bg-white/[0.02] border-white/10 text-transparent',
@@ -187,14 +188,23 @@ function GuessRow({
 // ---------------------------------------------------------------------------
 
 const GUESS_SECRET = 'grape';
-const GUESS_STEPS = [
+
+// the tile colors change with the palette, so the copy names them from the
+// active one rather than hardcoding "green" and "amber"
+type ColorWords = { right: string; wrong: string; span: string };
+const COLOR_WORDS: Record<Palette, ColorWords> = {
+  default: { right: 'green', wrong: 'amber', span: 'gold' },
+  cvd: { right: 'blue', wrong: 'orange', span: 'orange' },
+};
+
+const guessSteps = (c: ColorWords) => [
   {
     w: 'pearl',
-    note: 'A is green — right letter, right spot. P, E, and R are amber: they’re in the word, but somewhere else. L is dark — not in the word at all.',
+    note: `A is ${c.right} — right letter, right spot. P, E, and R are ${c.wrong}: they’re in the word, but somewhere else. L is dark — not in the word at all.`,
   },
   {
     w: 'drape',
-    note: 'Every clue gets used: A stays planted in its green spot, and the ambers find new homes — R, P, and E all turn green. Only the first letter is still wrong, and now D is out too.',
+    note: `Every clue gets used: A stays planted in its ${c.right} spot, and the ${c.wrong} letters find new homes — R, P, and E all turn ${c.right}. Only the first letter is still wrong, and now D is out too.`,
   },
   {
     w: 'grape',
@@ -204,7 +214,16 @@ const GUESS_STEPS = [
 
 const GUESS_ROWS = 6;
 
-function LearnGuess({ dict, register }: { dict: Set<string> | null; register: RegisterKeys }) {
+function LearnGuess({
+  dict,
+  register,
+  colors,
+}: {
+  dict: Set<string> | null;
+  register: RegisterKeys;
+  colors: ColorWords;
+}) {
+  const GUESS_STEPS = useMemo(() => guessSteps(colors), [colors]);
   const [guesses, setGuesses] = useState<string[]>([]);
   const [current, setCurrent] = useState('');
   const [flash, show] = useFlash();
@@ -258,7 +277,7 @@ function LearnGuess({ dict, register }: { dict: Set<string> | null; register: Re
         <Rules
           items={[
             'Every guess must be a real word of the right length. Type it and press Enter.',
-            'After each guess, the tiles color: green is the right letter in the right spot, amber is a letter that’s in the word but placed wrong, dark means it’s not in the word.',
+            `After each guess, the tiles color: ${colors.right} is the right letter in the right spot, ${colors.wrong} is a letter that’s in the word but placed wrong, dark means it’s not in the word.`,
             'Duplicate letters color precisely — a repeated letter lights up only as many times as it appears in the answer.',
             'The timer counts your thinking time while the board is on screen, and stops when you finish.',
           ]}
@@ -429,7 +448,7 @@ function LearnScramble({ dict, register }: { dict: Set<string> | null; register:
         <div className="relative mb-4 mx-auto max-w-sm h-12 px-4 rounded-xl bg-white/5 border-2 border-white/10 flex items-center justify-center overflow-hidden">
           <span className="text-2xl font-bold tracking-[0.2em] uppercase text-white whitespace-nowrap">
             {current}
-            <span className="text-amber-400 animate-pulse">|</span>
+            <span className="text-accent animate-pulse">|</span>
           </span>
           <MobileKeyInput onKey={handleKey} />
         </div>
@@ -582,7 +601,7 @@ function LearnHive({ dict, register }: { dict: Set<string> | null; register: Reg
                 {c}
               </span>
             ))}
-            <span className="text-amber-400 animate-pulse">|</span>
+            <span className="text-accent animate-pulse">|</span>
           </span>
         </div>
         <div className="relative w-48 h-48 mx-auto">
@@ -831,7 +850,7 @@ function LearnGrid({
             ) : (
               <span className="text-white">{current}</span>
             )}
-            <span className="text-amber-400 animate-pulse">|</span>
+            <span className="text-accent animate-pulse">|</span>
           </span>
         </div>
         <div ref={boardRef} className="relative w-fit mx-auto">
@@ -860,12 +879,12 @@ function LearnGrid({
               <polyline
                 points={tracePts.map((p) => `${p.x},${p.y}`).join(' ')}
                 fill="none"
-                stroke="rgb(125 211 252 / 0.9)"
+                stroke="rgb(var(--trace) / 0.9)"
                 strokeWidth="4"
                 strokeLinecap="round"
                 strokeLinejoin="round"
               />
-              <circle cx={tracePts[0].x} cy={tracePts[0].y} r="6" fill="rgb(125 211 252)" />
+              <circle cx={tracePts[0].x} cy={tracePts[0].y} r="6" fill="rgb(var(--trace))" />
             </svg>
           )}
         </div>
@@ -1074,7 +1093,7 @@ function LearnBoxed({ dict, register }: { dict: Set<string> | null; register: Re
           <div className="relative mb-4 mx-auto max-w-sm h-11 px-4 rounded-xl bg-white/5 border-2 border-white/10 flex items-center justify-center overflow-hidden">
             <span className="text-lg font-bold tracking-[0.15em] uppercase text-white whitespace-nowrap">
               {current}
-              <span className="text-amber-400 animate-pulse">|</span>
+              <span className="text-accent animate-pulse">|</span>
             </span>
             <MobileKeyInput onKey={handleKey} />
           </div>
@@ -1100,7 +1119,7 @@ function LearnBoxed({ dict, register }: { dict: Set<string> | null; register: Re
                 <polyline
                   points={pts.map(([x, y]) => `${x},${y}`).join(' ')}
                   fill="none"
-                  stroke={live ? 'rgb(251 191 36 / 0.65)' : 'rgb(125 211 252 / 0.9)'}
+                  stroke={live ? 'rgb(var(--span) / 0.65)' : 'rgb(var(--trace) / 0.9)'}
                   strokeWidth="3"
                   vectorEffect="non-scaling-stroke"
                   strokeLinecap="round"
@@ -1111,7 +1130,7 @@ function LearnBoxed({ dict, register }: { dict: Set<string> | null; register: Re
                   cx={pts[0][0]}
                   cy={pts[0][1]}
                   r="2"
-                  fill={live ? 'rgb(251 191 36)' : 'rgb(125 211 252)'}
+                  fill={live ? 'rgb(var(--span))' : 'rgb(var(--trace))'}
                 />
               </svg>
             );
@@ -1204,7 +1223,7 @@ function sameCells(a: number[], b: number[]): boolean {
   return sa.every((v, i) => v === sb[i]);
 }
 
-function LearnWeave({ dict }: { dict: Set<string> | null }) {
+function LearnWeave({ dict, colors }: { dict: Set<string> | null; colors: ColorWords }) {
   const [found, setFound] = useState<string[]>([]);
   const [flash, show] = useFlash();
   const [dragPath, setDragPath] = useState<number[]>([]);
@@ -1317,7 +1336,7 @@ function LearnWeave({ dict }: { dict: Set<string> | null }) {
         <Rules
           items={[
             'Read the theme clue, then drag through adjacent letters — any direction, diagonals included — and release to submit.',
-            'Theme words lock in blue. The spangram — a word that sums up the theme and spans the board edge to edge — locks in gold.',
+            `Theme words lock in blue. The spangram — a word that sums up the theme and spans the board edge to edge — locks in ${colors.span}.`,
             'A theme word only counts on its own cells; the same word traced elsewhere is just a regular word.',
             'Other real words (4+ letters) aren’t wasted: every three you find banks a hint, which outlines an unfound theme word.',
             'Reveal gives up and shows the full solution; either way, completion draws every word’s path.',
@@ -1368,7 +1387,7 @@ function LearnWeave({ dict }: { dict: Set<string> | null }) {
                   key={i}
                   points={line.pts.map((p) => `${p.x},${p.y}`).join(' ')}
                   fill="none"
-                  stroke={line.span ? 'rgb(251 191 36 / 0.85)' : 'rgb(125 211 252 / 0.7)'}
+                  stroke={line.span ? 'rgb(var(--span) / 0.85)' : 'rgb(var(--trace) / 0.7)'}
                   strokeWidth="3.5"
                   strokeLinecap="round"
                   strokeLinejoin="round"
@@ -1430,9 +1449,12 @@ const TITLES: Record<Mode, string> = {
   weave: 'Weave',
 };
 
-const LearnMode = forwardRef<LearnModeHandle, { mode: Mode; standardWords: string[] | null }>(
-  function LearnMode({ mode, standardWords }, ref) {
+const LearnMode = forwardRef<
+  LearnModeHandle,
+  { mode: Mode; standardWords: string[] | null; palette: Palette }
+>(function LearnMode({ mode, standardWords, palette }, ref) {
   const dict = useMemo(() => (standardWords ? new Set(standardWords) : null), [standardWords]);
+  const colors = COLOR_WORDS[palette];
 
   // the active demo registers its key handler here; the on-screen keyboard
   // reaches it through the imperative handle
@@ -1449,12 +1471,12 @@ const LearnMode = forwardRef<LearnModeHandle, { mode: Mode; standardWords: strin
         The rules, the scoring, and a hands-on demo — no clock, no stakes.
       </p>
 
-      {mode === 'pattern' && <LearnGuess dict={dict} register={register} />}
+      {mode === 'pattern' && <LearnGuess dict={dict} register={register} colors={colors} />}
       {mode === 'descramble' && <LearnScramble dict={dict} register={register} />}
       {mode === 'bee' && <LearnHive dict={dict} register={register} />}
       {mode === 'grid' && <LearnGrid standardWords={standardWords} register={register} />}
       {mode === 'boxed' && <LearnBoxed dict={dict} register={register} />}
-      {mode === 'weave' && <LearnWeave dict={dict} />}
+      {mode === 'weave' && <LearnWeave dict={dict} colors={colors} />}
 
       <p className="mt-2 text-xs text-slate-500 border-t border-white/10 pt-5 max-w-lg mx-auto">
         Daily puzzles refresh about 15 minutes after 3:00&nbsp;a.m. Eastern. Progress and stats

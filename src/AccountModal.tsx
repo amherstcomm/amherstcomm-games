@@ -164,11 +164,11 @@ export default function AccountModal({
                   <button
                     type="submit"
                     disabled={verifying || code.length < 6}
-                    className="w-full inline-flex items-center justify-center gap-1.5 h-11 rounded-lg text-sm font-semibold bg-emerald-400 text-slate-950 shadow-lg shadow-emerald-500/30 hover:bg-emerald-300 transition-colors disabled:opacity-50"
+                    className="w-full inline-flex items-center justify-center gap-1.5 h-11 rounded-lg text-sm font-semibold bg-emerald-400 text-ink shadow-lg shadow-emerald-500/30 hover:bg-emerald-300 transition-colors disabled:opacity-50"
                   >
                     {verifying ? 'Verifying…' : 'Verify code'}
                   </button>
-                  {codeError && <p className="text-sm text-rose-400">{codeError}</p>}
+                  {codeError && <p className="text-sm text-danger">{codeError}</p>}
                 </form>
               </div>
             ) : (
@@ -184,12 +184,12 @@ export default function AccountModal({
                 <button
                   type="submit"
                   disabled={status === 'sending'}
-                  className="w-full inline-flex items-center justify-center gap-1.5 h-11 rounded-lg text-sm font-semibold bg-emerald-400 text-slate-950 shadow-lg shadow-emerald-500/30 hover:bg-emerald-300 transition-colors disabled:opacity-50"
+                  className="w-full inline-flex items-center justify-center gap-1.5 h-11 rounded-lg text-sm font-semibold bg-emerald-400 text-ink shadow-lg shadow-emerald-500/30 hover:bg-emerald-300 transition-colors disabled:opacity-50"
                 >
                   <Mail className="w-4 h-4" />
                   {status === 'sending' ? 'Sending…' : 'Send magic link'}
                 </button>
-                {status === 'error' && <p className="text-sm text-rose-400">{error}</p>}
+                {status === 'error' && <p className="text-sm text-danger">{error}</p>}
               </form>
             )}
           </>

@@ -11,6 +11,9 @@ create table if not exists public.profiles (
   created_at timestamptz not null default now()
 );
 
+-- appearance settings (theme, palette) so they follow the account
+alter table public.profiles add column if not exists settings jsonb;
+
 alter table public.profiles enable row level security;
 
 drop policy if exists "read own profile" on public.profiles;

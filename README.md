@@ -46,6 +46,7 @@ Three tiers, selectable per mode: **Common** (everyday words, ideal for Wordle-s
 - **Smart letter tiles** — typing auto-advances to the next box, Backspace steps back, arrow keys navigate, and filled tiles get a small × pill to clear them
 - **Letter-pill inputs** — multi-letter fields (must contain, excluded, rack) show each letter as a removable pill with a corner ×
 - **Toggleable on-screen keyboard** — fluid-width QWERTY panel that fits any screen, with a `?` key for blank tiles in Descramble; while open, the device's native keyboard stays suppressed
+- **Themes & accessibility** — a Settings panel (in the footer) offers light, dark, or system appearance and a color-blind-friendly palette that swaps the confusable green/amber and green/red pairs for blue and orange (built on the Okabe-Ito qualitative palette). Every color resolves through CSS variables, and all four theme × palette combinations were audited to meet WCAG AA contrast. Settings persist locally and sync to your account when signed in.
 - **Learn mode** — every game has a third Solve / Play / **Learn** tab: rules, scoring, daily/practice differences, tips, and a hands-on interactive demo (step through a worked Guess solve, tap out words on a mini rack/hive/box, drag-trace a mini grid or Weave board) validated against the real dictionary
 - **Everything is remembered** — active mode, per-mode dictionary and sort preferences, your last letters in each mode, and the keyboard state persist in localStorage
 - **Lifetime statistics** — a Stats panel (in the footer) tracks every finished game, viewable overall or split into daily and practice: Guess win rate, streak, and guess distribution; Hive words, pangrams, Genius and Queen Bee counts; Scramble and Grid sprint scores; Boxed solves with fewest words and best time; Weave solves, reveals, and hints. Stored only in your browser.
@@ -82,7 +83,7 @@ The site is fully functional with no backend — solving and playing stay in the
 Setup:
 
 1. Create a free Supabase project.
-2. Run [supabase/schema.sql](supabase/schema.sql) in the SQL Editor (safe to re-run).
+2. Run [supabase/schema.sql](supabase/schema.sql) in the SQL Editor (safe to re-run — re-run it after pulling changes, since it also adds new columns like `profiles.settings`).
 3. In **Authentication → URL Configuration**, set the Site URL to `https://anagrimoire.com` and add `https://www.anagrimoire.com` (the alias), `https://dev.anagrimoire.com`, and `http://localhost:5173` as additional redirect URLs — sign-in redirects back to whichever origin the visitor is on, so both spellings of production must be allowed.
 4. Copy the Project URL and anon/publishable key (**Settings → API**) into env vars — `.env.local` for local dev (see [.env.example](.env.example)), and environment variables on each Render static site. The anon key is public by design; row-level security protects the data.
 

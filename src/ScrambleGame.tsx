@@ -363,7 +363,7 @@ const ScrambleGame = forwardRef<
 
       {loading && <p className="text-sm text-slate-400 py-8">Loading…</p>}
       {store.dailyMode && dailyError && !record && (
-        <p className="text-sm text-rose-400 py-8">
+        <p className="text-sm text-danger py-8">
           Couldn&apos;t fetch today&apos;s rack — try Practice instead.
         </p>
       )}
@@ -374,7 +374,7 @@ const ScrambleGame = forwardRef<
           <div className="mb-4 flex items-center justify-center gap-5 text-sm">
             <span
               className={`inline-flex items-center gap-1.5 font-bold text-xl tabular-nums
-                ${running && remaining < 30000 ? 'text-rose-400' : 'text-white'}`}
+                ${running && remaining < 30000 ? 'text-danger' : 'text-white'}`}
             >
               <Timer className="w-4 h-4 text-slate-400" />
               {mmss}
@@ -397,7 +397,7 @@ const ScrambleGame = forwardRef<
             <div className="relative mb-4 mx-auto max-w-sm h-12 px-4 rounded-xl bg-white/5 border-2 border-white/10 flex items-center justify-center overflow-hidden">
               <span className="text-2xl font-bold tracking-[0.2em] uppercase text-white whitespace-nowrap">
                 {current}
-                <span className="text-amber-400 animate-pulse">|</span>
+                <span className="text-accent animate-pulse">|</span>
               </span>
               <MobileKeyInput onKey={pressKey} />
             </div>
@@ -441,7 +441,7 @@ const ScrambleGame = forwardRef<
               <button
                 onMouseDown={(e) => e.preventDefault()}
                 onClick={start}
-                className="inline-flex items-center gap-1.5 px-5 h-10 rounded-lg text-sm font-semibold bg-emerald-400 text-slate-950 shadow-lg shadow-emerald-500/30 hover:bg-emerald-300 transition-colors"
+                className="inline-flex items-center gap-1.5 px-5 h-10 rounded-lg text-sm font-semibold bg-emerald-400 text-ink shadow-lg shadow-emerald-500/30 hover:bg-emerald-300 transition-colors"
               >
                 <Play className="w-4 h-4" />
                 Start

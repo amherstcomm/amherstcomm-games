@@ -444,7 +444,7 @@ export default function WeaveGame({ standardWords }: { standardWords: string[] |
 
       {loading && <p className="text-sm text-slate-400 py-8">Loading…</p>}
       {store.dailyMode && dailyError && !record && (
-        <p className="text-sm text-rose-400 py-8">
+        <p className="text-sm text-danger py-8">
           Couldn&apos;t fetch today&apos;s puzzle — try Practice instead.
         </p>
       )}
@@ -453,7 +453,7 @@ export default function WeaveGame({ standardWords }: { standardWords: string[] |
         <>
           {/* clue */}
           <div className="mb-4 mx-auto max-w-sm rounded-xl bg-amber-400/10 border border-amber-400/25 px-4 py-3">
-            <p className="text-[10px] font-semibold text-amber-400/80 uppercase tracking-wider">
+            <p className="text-[10px] font-semibold text-accent uppercase tracking-wider">
               Today&apos;s theme
             </p>
             <p className="text-lg font-semibold text-amber-200">{record.clue}</p>
@@ -515,7 +515,7 @@ export default function WeaveGame({ standardWords }: { standardWords: string[] |
                   key={i}
                   points={line.pts.map((p) => `${p.x},${p.y}`).join(' ')}
                   fill="none"
-                  stroke={line.span ? 'rgb(251 191 36 / 0.85)' : 'rgb(125 211 252 / 0.7)'}
+                  stroke={line.span ? 'rgb(var(--span) / 0.85)' : 'rgb(var(--trace) / 0.7)'}
                   strokeWidth="3.5"
                   strokeLinecap="round"
                   strokeLinejoin="round"
