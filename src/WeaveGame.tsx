@@ -1,10 +1,33 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import {
+  forwardRef,
+  useEffect,
+  useImperativeHandle,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import { CalendarDays, Eye, Lightbulb, RefreshCw, Timer } from 'lucide-react';
 import { gridNeighbors } from '@/solvers';
 import { dailyDataUrl, WEAVE_POOL_URL } from '@/dailyData';
 import DailyStats from '@/DailyStats';
 import { recordWeaveReveal, recordWeaveSolve } from '@/stats';
+import type { NavKeys } from '@/storage';
 import { formatElapsed, useUpTimer } from '@/useUpTimer';
+
+export type WeaveGameHandle = { pressKey: (k: string) => void };
+
+// the eight directions around the cursor, as [row delta, column delta]
+const NUMPAD_DIRS: Record<string, [number, number]> = {
+  '7': [-1, -1], '8': [-1, 0], '9': [-1, 1],
+  '4': [0, -1], '6': [0, 1],
+  '1': [1, -1], '2': [1, 0], '3': [1, 1],
+};
+const WASD_DIRS: Record<string, [number, number]> = {
+  q: [-1, -1], w: [-1, 0], e: [-1, 1],
+  a: [0, -1], d: [0, 1],
+  z: [1, -1], s: [1, 0], x: [1, 1],
+};
 
 const WEAVE_KEY = 'anagrimoire:weave:v1';
 const DAILY_WEAVE_URL = dailyDataUrl('daily-weave');
@@ -117,7 +140,10 @@ function toRecord(p: PuzzlePayload): WeaveRecord | null {
   });
 }
 
-export default function WeaveGame({ standardWords }: { standardWords: string[] | null }) {
+const WeaveGame = forwardRef<
+  WeaveGameHandle,
+  { standardWords: string[] | null; navKeys: NavKeys }
+>(function WeaveGame({ standardWords, navKeys }, ref) {
   const [store, setStore] = useState<WeaveStore>(loadStore);
   const [pool, setPool] = useState<Record<string, PuzzlePayload[]> | null>(null);
   const [dailyError, setDailyError] = useState(false);
@@ -305,14 +331,9 @@ export default function WeaveGame({ standardWords }: { standardWords: string[] |
     setPath([...prev, i]);
   }
 
-  function endDrag() {
-    const path = dragPathRef.current;
-    if (!path.length || !record || !answers) {
-      setPath([]);
-      return;
-    }
-    setPath([]);
-    if (path.length < 3) return;
+  // shared by pointer drags and keyboard traces
+  function submitPath(path: number[]) {
+    if (!record || !answers || path.length < 3) return;
     const word = path.map((i) => cells[i]).join('');
     if (record.found.includes(word)) {
       showFlash('Already found');
@@ -352,6 +373,12 @@ export default function WeaveGame({ standardWords }: { standardWords: string[] |
     showFlash('Not a theme word');
   }
 
+  function endDrag() {
+    const path = dragPathRef.current;
+    setPath([]);
+    if (path.length) submitPath(path);
+  }
+
   useEffect(() => {
     const up = () => endDrag();
     window.addEventListener('pointerup', up);
@@ -361,6 +388,96 @@ export default function WeaveGame({ standardWords }: { standardWords: string[] |
       window.removeEventListener('pointercancel', up);
     };
   });
+
+  // Keyboard tracing: move a cursor with the arrow keys, Enter/Space to
+  // start a word, then keep stepping — arrows for the four straight
+  // directions, or the number pad's ring (7 8 9 / 4 6 / 1 2 3) for all eight
+  // including diagonals. You still have to find the word on the board.
+  const [cursor, setCursor] = useState(0);
+  const [keyPath, setKeyPath] = useState<number[]>([]);
+
+  // a new board starts the cursor over again
+  useEffect(() => {
+    setCursor(0);
+    setKeyPath([]);
+  }, [record?.board]);
+
+  const stepFrom = (from: number, dr: number, dc: number): number | null => {
+    const r = Math.floor(from / cols) + dr;
+    const c = (from % cols) + dc;
+    if (r < 0 || r >= rows || c < 0 || c >= cols) return null;
+    return r * cols + c;
+  };
+
+  function move(dr: number, dc: number) {
+    const from = keyPath.length ? keyPath[keyPath.length - 1] : cursor;
+    const to = stepFrom(from, dr, dc);
+    if (to === null) return;
+    setCursor(to);
+    if (!keyPath.length) return;
+    // stepping back onto the previous cell undoes it
+    if (keyPath.length >= 2 && to === keyPath[keyPath.length - 2]) {
+      setKeyPath((p) => p.slice(0, -1));
+      return;
+    }
+    if (keyPath.includes(to) || locked.has(to)) return;
+    setKeyPath((p) => [...p, to]);
+  }
+
+  function pressKey(k: string) {
+    if (complete || !record) return;
+    if (k === 'enter') {
+      if (keyPath.length >= 3) {
+        submitPath(keyPath);
+        setKeyPath([]);
+      } else if (!keyPath.length && !locked.has(cursor)) {
+        setKeyPath([cursor]);
+      }
+      return;
+    }
+    if (k === 'backspace') {
+      if (keyPath.length <= 1) {
+        setKeyPath([]);
+        return;
+      }
+      setCursor(keyPath[keyPath.length - 2]);
+      setKeyPath(keyPath.slice(0, -1));
+      return;
+    }
+    if (k === 'escape') setKeyPath([]);
+  }
+
+  useImperativeHandle(ref, () => ({ pressKey }));
+
+  // the chosen key ring plus arrows, as [row delta, column delta]
+  const KEY_DIRS: Record<string, [number, number]> = {
+    ...(navKeys === 'wasd' ? WASD_DIRS : NUMPAD_DIRS),
+    ArrowUp: [-1, 0], ArrowDown: [1, 0], ArrowLeft: [0, -1], ArrowRight: [0, 1],
+  };
+
+  function onBoardKeyDown(e: React.KeyboardEvent) {
+    if (e.ctrlKey || e.metaKey || e.altKey || complete) return;
+    const dir = KEY_DIRS[e.key.length === 1 ? e.key.toLowerCase() : e.key];
+    if (dir) {
+      e.preventDefault();
+      move(dir[0], dir[1]);
+      return;
+    }
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      pressKey('enter');
+    } else if (e.key === 'Backspace') {
+      e.preventDefault();
+      pressKey('backspace');
+    } else if (e.key === 'Escape') {
+      pressKey('escape');
+    }
+  }
+
+  // the letters currently under the cursor path, for display and for
+  // screen readers
+  const activePath = dragPath.length ? dragPath : keyPath;
+  const activeWord = activePath.map((i) => cells[i]).join('');
 
   const hintBank = record ? record.hintWords.length - record.hintsUsed * HINT_COST : 0;
   const canHint =
@@ -479,26 +596,46 @@ export default function WeaveGame({ standardWords }: { standardWords: string[] |
             )}
           </div>
 
+          {/* the traced letters are visible on the board itself; this only
+              announces them to screen readers */}
+          <p className="sr-only" aria-live="polite">
+            {activeWord}
+          </p>
+
           {/* the board */}
           <div ref={boardWrapRef} className="relative w-fit mx-auto">
+          {/* one tab stop for the whole board: the cells are driven by the
+              cursor rather than being 48 separate stops */}
           <div
+            role="application"
+            tabIndex={complete ? -1 : 0}
+            aria-label={
+              `Weave board. Arrow keys or ${
+                navKeys === 'wasd' ? 'Q W E A D Z S X' : 'the number pad ring'
+              } move the cursor, Enter starts a word and submits it, Backspace steps back.`
+            }
+            onKeyDown={onBoardKeyDown}
             onPointerDown={onBoardPointerDown}
             onPointerMove={onBoardPointerMove}
-            className={`grid gap-1.5 touch-none select-none ${cols === 8 ? 'grid-cols-8' : 'grid-cols-6'}`}
+            className={`grid gap-1.5 touch-none select-none rounded-xl ${cols === 8 ? 'grid-cols-8' : 'grid-cols-6'}`}
           >
             {cells.map((c, i) => {
               const lock = locked.get(i);
+              const onPath = activePath.includes(i);
               return (
                 <button
                   key={i}
                   data-wcell={i}
+                  // index.css rings this cell while the board holds focus
+                  data-wcursor={i === cursor ? '' : undefined}
+                  tabIndex={-1}
                   disabled={complete}
                   className={`${cellSize} rounded-lg border-2 font-bold uppercase transition-colors
                     ${lock === 'span'
                       ? 'bg-amber-400/50 border-amber-300 text-white'
                       : lock === 'theme'
                         ? 'bg-sky-400/40 border-sky-300 text-white'
-                        : dragPath.includes(i)
+                        : onPath
                           ? 'bg-emerald-400/30 border-emerald-300 text-white'
                           : 'bg-white/5 border-white/15 text-white hover:bg-white/10'}
                     ${hintCells.has(i) && !lock ? 'ring-2 ring-emerald-300/80' : ''}`}
@@ -603,13 +740,18 @@ export default function WeaveGame({ standardWords }: { standardWords: string[] |
           )}
 
           <p className="mt-5 text-xs text-slate-500">
-            Drag to trace the themed words — every letter is used exactly once, and the
-            spangram spans the board. Other dictionary words (4+ letters) build toward
-            hints.
+            Drag to trace the themed words — or tab to the board and steer with the arrow
+            keys, using{' '}
+            {navKeys === 'wasd' ? 'Q W E / A D / Z S X' : '7 8 9 / 4 6 / 1 2 3'} for
+            diagonals; Enter starts a word and submits it. Every letter is used exactly
+            once, and the spangram spans the board. Other dictionary words (4+ letters)
+            build toward hints.
             {store.dailyMode && ' A fresh daily puzzle arrives about 15 minutes after 3:00 a.m. Eastern.'}
           </p>
         </>
       )}
     </div>
   );
-}
+});
+
+export default WeaveGame;

@@ -8,6 +8,11 @@ const KEY = 'anagrimoire:v1';
 const ALL_MODES: Mode[] = ['pattern', 'descramble', 'bee', 'boxed', 'grid', 'weave'];
 const ALL_DICTS: DictionaryId[] = ['common', 'standard', 'full'];
 
+// which keys step the Weave board cursor around, besides the arrow keys:
+// the number pad's ring (7 8 9 / 4 6 / 1 2 3) or the letters around WASD
+// (q w e / a d / z s x)
+export type NavKeys = 'numpad' | 'wasd';
+
 export type SortKey = 'alpha' | 'length';
 export type SortDir = 'asc' | 'desc';
 export type SortPref = { key: SortKey; dir: SortDir };
@@ -19,6 +24,7 @@ export type PersistedState = {
   keyboard: boolean;
   theme: ThemeMode;
   palette: Palette;
+  navKeys: NavKeys;
   patternPlay: boolean;
   beePlay: boolean;
   boxedPlay: boolean;
@@ -60,6 +66,7 @@ export const DEFAULT_STATE: PersistedState = {
   keyboard: false,
   theme: 'system',
   palette: 'default',
+  navKeys: 'numpad',
   patternPlay: false,
   beePlay: false,
   boxedPlay: false,
@@ -165,6 +172,7 @@ export function loadState(): PersistedState {
         : ['default', 'deuter', 'tritan', 'mono'].includes(p?.palette)
           ? p.palette
           : 'default',
+      navKeys: p?.navKeys === 'wasd' ? 'wasd' : 'numpad',
       patternPlay: p?.patternPlay === true,
       beePlay: p?.beePlay === true,
       boxedPlay: p?.boxedPlay === true,

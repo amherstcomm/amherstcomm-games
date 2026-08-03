@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Grid3x3, Hexagon, LayoutGrid, Puzzle, Shuffle, Square, X } from 'lucide-react';
 import { combineStats, fetchSyncedStats, loadStats, type StatsStore } from '@/stats';
 import { formatElapsed } from '@/useUpTimer';
+import { useModalA11y } from '@/useModalA11y';
 
 type StatsView = 'overall' | 'daily' | 'practice';
 
@@ -93,13 +94,8 @@ export default function StatsModal({
     }
   });
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    };
-    document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
-  }, [onClose]);
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useModalA11y(dialogRef, onClose);
 
   const maxDist = Math.max(1, ...stats.guess.dist);
   const anyPlay =
@@ -118,6 +114,8 @@ export default function StatsModal({
       onClick={onClose}
     >
       <div
+        ref={dialogRef}
+        tabIndex={-1}
         role="dialog"
         aria-modal="true"
         aria-label="Play statistics"

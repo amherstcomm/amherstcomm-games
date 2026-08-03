@@ -20,6 +20,7 @@ export default function MobileKeyInput({
   const osk = useContext(OskContext);
   return (
     <input
+      data-key-overlay=""
       inputMode={osk ? 'none' : undefined}
       value={SENTINEL}
       onChange={(e) => {

@@ -1,6 +1,8 @@
-import { useEffect } from 'react';
-import { Check, Contrast, Monitor, Moon, Sun, X } from 'lucide-react';
+import { useRef } from 'react';
+import { Check, Contrast, Keyboard, Monitor, Moon, Sun, X } from 'lucide-react';
+import type { NavKeys } from '@/storage';
 import type { Palette, ThemeMode } from '@/theme';
+import { useModalA11y } from '@/useModalA11y';
 
 const THEME_OPTIONS: { id: ThemeMode; label: string; Icon: typeof Sun }[] = [
   { id: 'system', label: 'System', Icon: Monitor },
@@ -53,25 +55,24 @@ function Swatches({ tones }: { tones: string[] }) {
 export default function SettingsModal({
   theme,
   palette,
+  navKeys,
   signedIn,
   onTheme,
   onPalette,
+  onNavKeys,
   onClose,
 }: {
   theme: ThemeMode;
   palette: Palette;
+  navKeys: NavKeys;
   signedIn: boolean;
   onTheme: (t: ThemeMode) => void;
   onPalette: (p: Palette) => void;
+  onNavKeys: (n: NavKeys) => void;
   onClose: () => void;
 }) {
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    };
-    document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
-  }, [onClose]);
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useModalA11y(dialogRef, onClose);
 
   return (
     <div
@@ -79,6 +80,8 @@ export default function SettingsModal({
       onClick={onClose}
     >
       <div
+        ref={dialogRef}
+        tabIndex={-1}
         role="dialog"
         aria-modal="true"
         aria-label="Settings"
@@ -148,6 +151,40 @@ export default function SettingsModal({
                 </button>
               ))}
             </div>
+          </div>
+
+          <div>
+            <h3 className="flex items-center gap-2 text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2.5">
+              <Keyboard className="w-3.5 h-3.5" />
+              Board navigation
+            </h3>
+            <div className="inline-flex rounded-xl bg-white/5 border border-white/10 p-1 gap-1">
+              {(
+                [
+                  { id: 'numpad' as const, label: 'Number pad' },
+                  { id: 'wasd' as const, label: 'WASD' },
+                ]
+              ).map(({ id, label }) => (
+                <button
+                  key={id}
+                  onClick={() => onNavKeys(id)}
+                  aria-pressed={navKeys === id}
+                  className={`px-3 h-9 rounded-lg text-sm font-semibold transition-colors
+                    ${navKeys === id
+                      ? 'bg-amber-400 text-ink shadow-lg shadow-amber-500/30'
+                      : 'text-slate-300 hover:bg-white/10'}`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            <p className="mt-2 text-xs text-slate-500">
+              Diagonals when steering Weave&apos;s board by keyboard:{' '}
+              <span className="font-mono text-slate-400">
+                {navKeys === 'wasd' ? 'Q W E / A D / Z S X' : '7 8 9 / 4 6 / 1 2 3'}
+              </span>
+              . Arrow keys always work.
+            </p>
           </div>
 
           <p className="text-xs text-slate-500 border-t border-white/10 pt-4">

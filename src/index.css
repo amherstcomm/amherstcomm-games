@@ -5,8 +5,8 @@
 /* ---------------------------------------------------------------------------
    Palettes. Tailwind resolves every color through these variables, so a theme
    is just a different set of values. Two axes: data-theme (dark | light) and
-   data-palette (default | cvd, a color-blind-safe set built on the Okabe-Ito
-   qualitative palette). Contrast targets WCAG AA for text in both themes.
+   data-palette (default | deuter | tritan | mono). Contrast targets WCAG AA
+   for text in every combination.
 
    Shade names carry a *role*, not a literal lightness: 100-300 are text on
    the page (so they darken in light mode), 400-500 are saturated fills that
@@ -66,6 +66,9 @@
   --c-success: 52 211 153;
   --c-danger: 251 113 133;
 
+  /* keyboard focus ring */
+  --c-focus: 251 191 36;
+
   /* board overlays drawn as SVG */
   --trace: 125 211 252;
   --span: 251 191 36;
@@ -122,6 +125,8 @@
   --c-success: 6 95 70;
   --c-danger: 159 18 57;
 
+  --c-focus: 180 83 9;
+
   --trace: 2 132 199;
   --span: 217 119 6;
   --chord-1: 2 132 199;
@@ -167,6 +172,8 @@
   --c-success: 59 130 246;
   --c-danger: 236 72 153;
 
+  --c-focus: 230 159 0;
+
   --trace: 134 200 240;
   --span: 230 159 0;
   --chord-1: 86 180 233;
@@ -204,6 +211,8 @@
   --c-accent: 122 84 0;
   --c-success: 0 82 142;
   --c-danger: 145 30 95;
+
+  --c-focus: 155 107 0;
 
   --trace: 0 114 178;
   --span: 155 107 0;
@@ -253,6 +262,8 @@
   --c-success: 122 226 175;
   --c-danger: 250 155 195;
 
+  --c-focus: 250 152 96;
+
   --trace: 165 228 240;
   --span: 232 106 58;
   --chord-1: 165 228 240;
@@ -291,6 +302,8 @@
   --c-accent: 145 50 18;
   --c-success: 6 90 60;
   --c-danger: 143 22 76;
+
+  --c-focus: 176 62 22;
 
   --trace: 12 84 100;
   --span: 176 62 22;
@@ -338,6 +351,8 @@
   --c-success: 220 220 220;
   --c-danger: 250 250 250;
 
+  --c-focus: 245 245 245;
+
   --trace: 200 200 200;
   --span: 245 245 245;
   --chord-1: 245 245 245;
@@ -381,6 +396,8 @@
   --c-success: 75 75 75;
   --c-danger: 60 60 60;
 
+  --c-focus: 30 30 30;
+
   --trace: 90 90 90;
   --span: 40 40 40;
   --chord-1: 40 40 40;
@@ -393,6 +410,37 @@
 /* keep overscroll and the area behind the app in the active theme */
 body {
   background-color: rgb(var(--c-slate-950));
+}
+
+@layer utilities {
+  /* A visible keyboard focus ring on everything focusable. Element+pseudo
+     specificity beats Tailwind's `outline-none` utility, which several
+     inputs use to suppress the browser default. :focus-visible keeps it off
+     mouse clicks. */
+  a:focus-visible,
+  button:focus-visible,
+  input:focus-visible,
+  select:focus-visible,
+  textarea:focus-visible,
+  [tabindex]:focus-visible {
+    outline: 2px solid rgb(var(--c-focus));
+    outline-offset: 2px;
+    border-radius: 2px;
+  }
+
+  /* the invisible type-here overlay can't show its own ring (opacity: 0),
+     so the entry box around it takes one instead */
+  :has(> input[data-key-overlay]:focus-visible) {
+    outline: 2px solid rgb(var(--c-focus));
+    outline-offset: 2px;
+  }
+
+  /* Weave's keyboard cursor: the board is a single tab stop, so the cell the
+     arrow keys are sitting on marks itself while the board holds focus */
+  [role='application']:focus-within [data-wcursor] {
+    outline: 3px solid rgb(var(--c-white));
+    outline-offset: 1px;
+  }
 }
 
 /* Without this, the browser's scroll anchoring latches onto the footer on a

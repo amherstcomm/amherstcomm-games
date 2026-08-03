@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useRef, useState } from 'react';
 import type { Session } from '@supabase/supabase-js';
 import { Github, LogOut, Mail, X } from 'lucide-react';
 import { supabase } from '@/supabase';
+import { useModalA11y } from '@/useModalA11y';
 
 export default function AccountModal({
   session,
@@ -17,13 +18,8 @@ export default function AccountModal({
   const [verifying, setVerifying] = useState(false);
   const [codeError, setCodeError] = useState('');
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    };
-    document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
-  }, [onClose]);
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useModalA11y(dialogRef, onClose);
 
   async function sendMagicLink(e: React.FormEvent) {
     e.preventDefault();
@@ -84,6 +80,8 @@ export default function AccountModal({
       onClick={onClose}
     >
       <div
+        ref={dialogRef}
+        tabIndex={-1}
         role="dialog"
         aria-modal="true"
         aria-label="Account"
