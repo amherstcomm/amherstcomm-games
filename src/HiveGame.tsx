@@ -427,7 +427,7 @@ const HiveGame = forwardRef<
           </div>
 
           {/* controls */}
-          <div className="mt-4 flex items-center justify-center gap-2.5">
+          <div className="mt-4 flex flex-wrap items-center justify-center gap-2.5">
             <button
               onMouseDown={(e) => e.preventDefault()}
               onClick={() => pressKey('backspace')}

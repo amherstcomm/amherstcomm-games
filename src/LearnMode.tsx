@@ -469,7 +469,7 @@ function LearnScramble({ dict, register }: { dict: Set<string> | null; register:
             </button>
           ))}
         </div>
-        <div className="mt-4 flex items-center justify-center gap-2.5">
+        <div className="mt-4 flex flex-wrap items-center justify-center gap-2.5">
           <DemoButton onClick={() => setCurrent((c) => c.slice(0, -1))} ariaLabel="Delete letter">
             <Delete className="w-4 h-4" />
           </DemoButton>
@@ -626,7 +626,7 @@ function LearnHive({ dict, register }: { dict: Set<string> | null; register: Reg
             </button>
           ))}
         </div>
-        <div className="mt-3 flex items-center justify-center gap-2.5">
+        <div className="mt-3 flex flex-wrap items-center justify-center gap-2.5">
           <DemoButton onClick={() => setCurrent((c) => c.slice(0, -1))} ariaLabel="Delete letter">
             <Delete className="w-4 h-4" />
           </DemoButton>
@@ -1156,7 +1156,7 @@ function LearnBoxed({ dict, register }: { dict: Set<string> | null; register: Re
             })
           )}
         </div>
-        <div className="mt-5 flex items-center justify-center gap-2.5">
+        <div className="mt-5 flex flex-wrap items-center justify-center gap-2.5">
           <DemoButton onClick={backspace} ariaLabel="Delete letter">
             <Delete className="w-4 h-4" />
           </DemoButton>

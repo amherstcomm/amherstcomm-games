@@ -478,7 +478,7 @@ const GuessGame = forwardRef<
             )}
           </div>
 
-          <div className="mt-2 flex items-center justify-center gap-3">
+          <div className="mt-2 flex flex-wrap items-center justify-center gap-3">
             {!dailyMode && (
               <button
                 onMouseDown={(e) => e.preventDefault()}
@@ -516,12 +516,14 @@ const GuessGame = forwardRef<
                 Reveal
               </button>
             )}
-            {dailyMode && (won || lost) && (
-              <p className="text-xs text-slate-500">
-                Fresh words arrive about 15 minutes after 3:00&nbsp;a.m. Eastern.
-              </p>
-            )}
           </div>
+
+          {/* its own line, rather than trailing the buttons */}
+          {dailyMode && (won || lost) && (
+            <p className="mt-4 text-xs text-slate-500">
+              Fresh words arrive about 15 minutes after 3:00&nbsp;a.m. Eastern.
+            </p>
+          )}
 
           {dailyMode && (won || lost) && dailyData && (
             <DailyStats game="guess" date={dailyData.date} />
