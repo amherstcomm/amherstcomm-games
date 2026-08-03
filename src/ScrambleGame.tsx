@@ -14,6 +14,7 @@ import DailyStats from '@/DailyStats';
 import MobileKeyInput from '@/MobileKeyInput';
 import ShareButton from '@/ShareButton';
 import { dailyIntent } from '@/deeplink';
+import { useDailySync } from '@/useDailySync';
 import { buildShare } from '@/share';
 import { recordSprint } from '@/stats';
 
@@ -212,6 +213,15 @@ const ScrambleGame = forwardRef<
     return record.found.reduce((n, w) => n + wordScore(w, record.rack.length), 0);
   }, [record]);
 
+  const syncing = useDailySync({
+    game: 'scramble',
+    date: store.dailyDate,
+    record,
+    setRecord: (merged) => setStore((prev) => ({ ...prev, daily: merged as ScrambleRecord })),
+    summary: record?.finished ? { score, words: record.found.length } : null,
+    active: store.dailyMode,
+  });
+
   // dim letters not on the rack — but only once the game has started, so the
   // on-screen keyboard doesn't leak the letters before the clock runs
   useEffect(() => {
@@ -327,7 +337,8 @@ const ScrambleGame = forwardRef<
     setStore((prev) => ({ ...prev, practice: rack }));
   }
 
-  const loading = store.dailyMode ? !record && !dailyError : !record || !commonWords;
+  const loading =
+    (store.dailyMode ? !record && !dailyError : !record || !commonWords) || syncing;
   const mmss = `${Math.floor(remaining / 60000)}:${String(
     Math.floor((remaining % 60000) / 1000)
   ).padStart(2, '0')}`;

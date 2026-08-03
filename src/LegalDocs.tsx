@@ -70,9 +70,17 @@ export function PrivacyPolicy() {
       <H>What never leaves your device</H>
       <P>
         Every solver and every game runs entirely in your browser. The dictionaries
-        are downloaded to your device and searched there, so the letters you enter,
-        the boards you play and the words you find are never transmitted to us or to
-        anyone else.
+        are downloaded to your device and searched there, so nothing you type is
+        sent anywhere to be answered.
+      </P>
+      <P>
+        <strong className="text-slate-300">
+          What you type into a solver never leaves your device — ever, account or
+          not.
+        </strong>{' '}
+        That is the one we consider absolute: a solver query says what puzzle
+        you&apos;re stuck on, and it is nobody&apos;s business but yours. Signing in
+        does sync your progress on the daily games, which is described below.
       </P>
       <P>These things are kept in your browser&apos;s local storage:</P>
       <List>
@@ -127,10 +135,17 @@ export function PrivacyPolicy() {
           Your display settings, so they follow you between devices
         </li>
         <li>
-          One row per finished game: which game it was, whether it was the daily or
-          practice, the puzzle&apos;s date, and the result — score, time taken,
-          number of guesses, hints used, whether you solved it.{' '}
-          <strong className="text-slate-300">Never the words themselves.</strong>
+          For each practice game you finish: which game it was and the result —
+          score, time taken, number of guesses, hints used, whether you solved it.
+          Numbers only, never the words.
+        </li>
+        <li>
+          For each daily puzzle: the board as you left it, which does include the
+          words you&apos;ve found so far, plus the same result numbers. This is what
+          makes a daily follow you between devices — you can start on a phone and
+          finish on a laptop, and you can&apos;t accidentally play the same day
+          twice. It is one row per puzzle, overwritten as you play, and the words in
+          it are answers to a puzzle we publish openly.
         </li>
         <li>
           A one-time snapshot, per browser, of the statistics you had accumulated

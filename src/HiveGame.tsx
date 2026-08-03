@@ -14,6 +14,7 @@ import DailyStats from '@/DailyStats';
 import MobileKeyInput from '@/MobileKeyInput';
 import ShareButton from '@/ShareButton';
 import { dailyIntent } from '@/deeplink';
+import { useDailySync } from '@/useDailySync';
 import { buildShare } from '@/share';
 import { recordHiveWord } from '@/stats';
 
@@ -235,6 +236,25 @@ const HiveGame = forwardRef<
   const queenBee = maxScore > 0 && score >= maxScore;
   const done = queenBee || !!record?.revealed;
 
+  // A hive has no finish line — every word counts, so its summary is the
+  // running totals rather than something written once at the end.
+  const syncing = useDailySync({
+    game: 'hive',
+    date: store.dailyDate,
+    record,
+    setRecord: (merged) => setStore((prev) => ({ ...prev, daily: merged as HiveRecord })),
+    summary: record?.found.length
+      ? {
+          words: record.found.length,
+          pangrams: record.found.filter(isPangram).length,
+          score,
+          genius: score >= geniusAt && maxScore > 0,
+          queenBee,
+        }
+      : null,
+    active: store.dailyMode,
+  });
+
   // thinking time: counts while the hive is visible and unfinished
   useUpTimer(!!record && !done, (delta) =>
     updateRecord((r) => ({ ...r, elapsedMs: (r.elapsedMs ?? 0) + delta }))
@@ -347,7 +367,8 @@ const HiveGame = forwardRef<
     setStore((prev) => ({ ...prev, practice: hive }));
   }
 
-  const loading = store.dailyMode ? !record && !dailyError : !record || !commonWords;
+  const loading =
+    (store.dailyMode ? !record && !dailyError : !record || !commonWords) || syncing;
 
   return (
     <div className="text-center">

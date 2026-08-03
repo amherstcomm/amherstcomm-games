@@ -14,6 +14,7 @@ import DailyStats from '@/DailyStats';
 import MobileKeyInput from '@/MobileKeyInput';
 import ShareButton from '@/ShareButton';
 import { dailyIntent } from '@/deeplink';
+import { useDailySync } from '@/useDailySync';
 import { buildShare } from '@/share';
 import { recordBoxSolve } from '@/stats';
 
@@ -257,6 +258,17 @@ const BoxGame = forwardRef<
   const solved = committedCovered.size === 12;
   const done = solved || !!record?.revealed;
 
+  const syncing = useDailySync({
+    game: 'box',
+    date: store.dailyDate,
+    record,
+    setRecord: (merged) => setStore((prev) => ({ ...prev, daily: merged as BoxRecord })),
+    // a revealed board still syncs its state, so the other device knows not to
+    // hand you the same puzzle again — it just has no numbers worth averaging
+    summary: solved ? { words: chain.length, timeMs: record?.elapsedMs ?? 0 } : null,
+    active: store.dailyMode,
+  });
+
   // thinking time: counts while the box is visible and unfinished
   useUpTimer(!!record && !done, (delta) =>
     updateRecord((r) => ({ ...r, elapsedMs: (r.elapsedMs ?? 0) + delta }))
@@ -422,7 +434,8 @@ const BoxGame = forwardRef<
     setStore((prev) => ({ ...prev, practice: box }));
   }
 
-  const loading = store.dailyMode ? !record && !dailyError : !record || !commonWords;
+  const loading =
+    (store.dailyMode ? !record && !dailyError : !record || !commonWords) || syncing;
   const lastChar = current.slice(-1);
 
   return (
