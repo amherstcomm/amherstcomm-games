@@ -13,6 +13,11 @@ sharer's palette. Verified that no shared text contains a letter or word from
 any answer — including Weave's clue, which was dropped because working out
 the theme is half the puzzle.
 
+Results carry a deep link (`?daily=hive`, `?play=weave`, `?solve=boxed`,
+`?learn=grid`) that opens the exact board, and a 1200×630 preview card so a
+pasted link renders as something rather than a naked URL. Each deployment
+stamps its own origin from `VITE_SITE_ORIGIN`.
+
 ### Personal history
 Score and solve-time trends per game, guess distribution over time. Every
 completed game is already in `game_results` with a timestamp, so this is
