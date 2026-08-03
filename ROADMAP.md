@@ -6,12 +6,12 @@ don't have to re-derive the reasoning each time.
 
 ## Near term
 
-### Share buttons
-Wordle-style emoji grids, one per mode: Guess is the classic tile grid, Weave
-a blue/gold shape, Grid and Scramble a score-and-rank line. No backend, no
-schema, and it's the only item that brings new people to the site.
-
-**Rule:** a shared result must never leak answers — blocks only, no letters.
+### ~~Share buttons~~ — done
+Guess posts the tile grid, Weave one mark per word in find order (gold
+spangram, bulb per hint), the rest a score-and-rank line. Emoji follow the
+sharer's palette. Verified that no shared text contains a letter or word from
+any answer — including Weave's clue, which was dropped because working out
+the theme is half the puzzle.
 
 ### Personal history
 Score and solve-time trends per game, guess distribution over time. Every

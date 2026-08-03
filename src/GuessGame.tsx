@@ -10,6 +10,9 @@ import { CalendarDays, RefreshCw, Search, Timer, Trophy } from 'lucide-react';
 import { dailyDataUrl } from '@/dailyData';
 import DailyStats from '@/DailyStats';
 import MobileKeyInput from '@/MobileKeyInput';
+import ShareButton from '@/ShareButton';
+import { buildShare, resultTitle, TILE_EMOJI } from '@/share';
+import { usePalette } from '@/theme';
 import { recordGuessFinish } from '@/stats';
 import { formatElapsed, useUpTimer } from '@/useUpTimer';
 
@@ -99,6 +102,7 @@ const GuessGame = forwardRef<
   const [current, setCurrent] = useState('');
   const [flash, setFlash] = useState('');
   const flashTimer = useRef<number | undefined>(undefined);
+  const palette = usePalette();
 
   useEffect(() => {
     try {
@@ -484,6 +488,22 @@ const GuessGame = forwardRef<
                 <RefreshCw className="w-4 h-4" />
                 New word
               </button>
+            )}
+            {(won || lost) && secret && (
+              <ShareButton
+                build={() =>
+                  buildShare(resultTitle(`Guess (${length})`, dailyMode, dailyData?.date), [
+                    won ? `${guesses.length}/${MAX_GUESSES}` : `X/${MAX_GUESSES}`,
+                    '',
+                    // colours only — the letters stay secret
+                    ...guesses.map((g) =>
+                      scoreGuess(secret, g)
+                        .map((s) => TILE_EMOJI[palette][s])
+                        .join('')
+                    ),
+                  ])
+                }
+              />
             )}
             {guesses.length > 0 && (
               <button

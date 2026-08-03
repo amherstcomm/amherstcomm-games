@@ -7,7 +7,7 @@ import AccountModal from '@/AccountModal';
 import { OskContext } from '@/MobileKeyInput';
 import SettingsModal from '@/SettingsModal';
 import KeyboardHelp from '@/KeyboardHelp';
-import { PALETTES, TEXT_SCALES, THEME_MODES, useTheme, type Palette, type TextScale, type ThemeMode } from '@/theme';
+import { PALETTES, PaletteContext, TEXT_SCALES, THEME_MODES, useTheme, type Palette, type TextScale, type ThemeMode } from '@/theme';
 import { useModalA11y } from '@/useModalA11y';
 import { supabase } from '@/supabase';
 import { GA_ID } from '@/analytics';
@@ -1173,6 +1173,7 @@ function App() {
   }
 
   return (
+    <PaletteContext.Provider value={palette}>
     <OskContext.Provider value={kbOpen}>
     <div className="min-h-screen bg-slate-950 text-white relative overflow-x-clip">
       {/* ambient glow */}
@@ -2589,6 +2590,7 @@ function App() {
       )}
     </div>
     </OskContext.Provider>
+    </PaletteContext.Provider>
   );
 }
 

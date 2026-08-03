@@ -13,6 +13,8 @@ import type { LetterState } from '@/GuessGame';
 import { dailyDataUrl } from '@/dailyData';
 import DailyStats from '@/DailyStats';
 import MobileKeyInput from '@/MobileKeyInput';
+import ShareButton from '@/ShareButton';
+import { buildShare, resultTitle } from '@/share';
 import { recordSprint } from '@/stats';
 
 export type GridGameHandle = { pressKey: (k: string) => void };
@@ -640,6 +642,21 @@ const GridGame = forwardRef<
             )}
             {record.finished && (
               <>
+                <ShareButton
+                  build={() =>
+                    buildShare(
+                      resultTitle(
+                        `Grid ${Math.round(Math.sqrt(record.cells.length))}×${Math.round(Math.sqrt(record.cells.length))}`,
+                        store.dailyMode,
+                        store.dailyDate
+                      ),
+                      [
+                        `${score}/${maxScore} pts`,
+                        `${record.found.length}/${answers?.length ?? 0} words`,
+                      ]
+                    )
+                  }
+                />
                 <button
                   onMouseDown={(e) => e.preventDefault()}
                   onClick={() => onReveal(record.cells)}

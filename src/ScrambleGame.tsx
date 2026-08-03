@@ -12,6 +12,8 @@ import type { LetterState } from '@/GuessGame';
 import { dailyDataUrl } from '@/dailyData';
 import DailyStats from '@/DailyStats';
 import MobileKeyInput from '@/MobileKeyInput';
+import ShareButton from '@/ShareButton';
+import { buildShare, resultTitle } from '@/share';
 import { recordSprint } from '@/stats';
 
 export type ScrambleGameHandle = { pressKey: (k: string) => void };
@@ -488,6 +490,14 @@ const ScrambleGame = forwardRef<
             )}
             {record.finished && (
               <>
+                <ShareButton
+                  build={() =>
+                    buildShare(resultTitle('Scramble', store.dailyMode, store.dailyDate), [
+                      `${score}/${maxScore} pts`,
+                      `${record.found.length}/${answers?.length ?? 0} words`,
+                    ])
+                  }
+                />
                 <button
                   onMouseDown={(e) => e.preventDefault()}
                   onClick={() => onReveal(record.rack.join(''))}

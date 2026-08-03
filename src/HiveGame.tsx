@@ -12,6 +12,8 @@ import type { LetterState } from '@/GuessGame';
 import { dailyDataUrl } from '@/dailyData';
 import DailyStats from '@/DailyStats';
 import MobileKeyInput from '@/MobileKeyInput';
+import ShareButton from '@/ShareButton';
+import { buildShare, resultTitle } from '@/share';
 import { recordHiveWord } from '@/stats';
 
 export type HiveGameHandle = { pressKey: (k: string) => void };
@@ -459,6 +461,19 @@ const HiveGame = forwardRef<
                 <RefreshCw className="w-4 h-4" />
                 New hive
               </button>
+            )}
+            {record.found.length > 0 && (
+              <ShareButton
+                build={() =>
+                  buildShare(resultTitle('Hive', store.dailyMode, store.dailyDate), [
+                    rank,
+                    `${score}/${maxScore} pts · ${record.found.length} words`,
+                    ...(record.found.filter(isPangram).length
+                      ? [`${record.found.filter(isPangram).length} pangram${record.found.filter(isPangram).length === 1 ? '' : 's'}`]
+                      : []),
+                  ])
+                }
+              />
             )}
             <button
               onMouseDown={(e) => e.preventDefault()}

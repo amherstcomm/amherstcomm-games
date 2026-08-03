@@ -12,6 +12,8 @@ import type { LetterState } from '@/GuessGame';
 import { dailyDataUrl } from '@/dailyData';
 import DailyStats from '@/DailyStats';
 import MobileKeyInput from '@/MobileKeyInput';
+import ShareButton from '@/ShareButton';
+import { buildShare, resultTitle } from '@/share';
 import { recordBoxSolve } from '@/stats';
 
 export type BoxGameHandle = { pressKey: (k: string) => void };
@@ -593,6 +595,18 @@ const BoxGame = forwardRef<
                 <RefreshCw className="w-4 h-4" />
                 New box
               </button>
+            )}
+            {done && (
+              <ShareButton
+                build={() =>
+                  buildShare(resultTitle('Boxed', store.dailyMode, store.dailyDate), [
+                    // word count and time only; the chain itself is the answer
+                    solved
+                      ? `Solved in ${chain.length} word${chain.length === 1 ? '' : 's'} · ${formatElapsed(record.elapsedMs ?? 0)}`
+                      : 'Revealed',
+                  ])
+                }
+              />
             )}
             <button
               onMouseDown={(e) => e.preventDefault()}
