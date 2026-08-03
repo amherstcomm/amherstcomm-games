@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { BarChart3 } from 'lucide-react';
-import { GA_ID, initAnalytics } from '@/analytics';
+import { GA_ID, disableAnalytics, initAnalytics } from '@/analytics';
 import {
   clearAnalyticsCookies,
   gpcEnabled,
@@ -25,7 +25,10 @@ export default function ConsentBanner({ onReadPolicy }: { onReadPolicy: () => vo
   function answer(value: 'granted' | 'denied') {
     writeConsent(value);
     if (value === 'granted') initAnalytics();
-    else clearAnalyticsCookies();
+    else {
+      disableAnalytics();
+      clearAnalyticsCookies();
+    }
     setAsking(false);
   }
 

@@ -19,11 +19,22 @@ declare global {
   }
 }
 
+// Turning analytics off mid-visit can't unload a script that's already in the
+// page, so use Google's own kill switch. It stops gtag sending anything for
+// the rest of this page view; the reload after that never loads it at all.
+export function disableAnalytics(): void {
+  if (!GA_ID) return;
+  (window as unknown as Record<string, boolean>)[`ga-disable-${GA_ID}`] = true;
+}
+
 // Safe to call more than once — the consent banner calls it again on accept.
 export function initAnalytics(): void {
-  if (loaded) return;
   if (!GA_ID || !/^G-[A-Z0-9]+$/.test(GA_ID)) return;
   if (!analyticsAllowed()) return;
+  // lift an opt-out from earlier in this same visit, before the early return —
+  // turning it back on has to undo the switch, not just skip reloading gtag
+  (window as unknown as Record<string, boolean>)[`ga-disable-${GA_ID}`] = false;
+  if (loaded) return;
   loaded = true;
   const script = document.createElement('script');
   script.async = true;

@@ -182,8 +182,13 @@ export function PrivacyPolicy() {
         until you agree, and declining is a single click that we remember.
         Elsewhere it loads by default. If your browser sends a{' '}
         <Ext href="https://globalprivacycontrol.org/">Global Privacy Control</Ext>{' '}
-        signal we treat that as a no, everywhere, without asking. To change your
-        answer later, clear this site&apos;s data and you&apos;ll be asked again.
+        signal we treat that as a no, everywhere, without asking.
+      </P>
+      <P>
+        Either way you can turn it off at any time under Settings → Analytics, with
+        no account needed. Doing so stops it for the rest of the visit and clears
+        the cookies it had already set. We keep that choice per browser, because
+        that is where the cookies are.
       </P>
 
       <H>What we don&apos;t do</H>
