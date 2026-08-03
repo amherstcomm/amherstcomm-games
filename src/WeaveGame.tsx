@@ -11,6 +11,10 @@ import { CalendarDays, Eye, Lightbulb, RefreshCw, Timer } from 'lucide-react';
 import { gridNeighbors } from '@/solvers';
 import { dailyDataUrl, WEAVE_POOL_URL } from '@/dailyData';
 import DailyStats from '@/DailyStats';
+import ShareButton from '@/ShareButton';
+import { dailyIntent } from '@/deeplink';
+import { buildShare, WEAVE_EMOJI } from '@/share';
+import { usePalette } from '@/theme';
 import { recordWeaveReveal, recordWeaveSolve } from '@/stats';
 import type { NavKeys } from '@/storage';
 import { formatElapsed, useUpTimer } from '@/useUpTimer';
@@ -88,7 +92,15 @@ function sanitizeRecord(r: unknown): WeaveRecord | null {
   };
 }
 
+// An incoming ?daily=/?play= link decides which board is waiting; without one
+// we keep whatever the player last had open.
 function loadStore(): WeaveStore {
+  const store = readStore();
+  const forced = dailyIntent('weave');
+  return forced === null ? store : { ...store, dailyMode: forced };
+}
+
+function readStore(): WeaveStore {
   try {
     const raw = localStorage.getItem(WEAVE_KEY);
     if (!raw) return DEFAULT_STORE;
@@ -149,6 +161,7 @@ const WeaveGame = forwardRef<
   const [dailyError, setDailyError] = useState(false);
   const [flash, setFlash] = useState<{ text: string; good: boolean } | null>(null);
   const flashTimer = useRef<number | undefined>(undefined);
+  const palette = usePalette();
 
   useEffect(() => {
     try {
@@ -706,6 +719,32 @@ const WeaveGame = forwardRef<
               <Lightbulb className="w-4 h-4" />
               Hint {Math.min(Math.max(hintBank, 0), HINT_COST)}/{HINT_COST}
             </button>
+            {complete && (
+              <ShareButton
+                build={() => {
+                  const e = WEAVE_EMOJI[palette];
+                  // one mark per word in the order they were found — never
+                  // the board, which would give the shape away
+                  const marks = record.found
+                    .map((w) => (w === answers.spangram.w ? e.span : e.theme))
+                    .join('');
+                  // deliberately no clue: working out the theme is half the
+                  // puzzle, so posting it would spoil the board
+                  return buildShare({
+                    game: 'Weave',
+                    slug: 'weave',
+                    daily: store.dailyMode,
+                    date: store.dailyDate,
+                    body: [
+                      marks + e.hint.repeat(record.hintsUsed),
+                      solvedAll
+                        ? `Solved in ${formatElapsed(record.elapsedMs ?? 0)}`
+                        : 'Revealed',
+                    ],
+                  });
+                }}
+              />
+            )}
             {!complete && (
               <button
                 onMouseDown={(e) => e.preventDefault()}

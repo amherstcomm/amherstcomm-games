@@ -12,6 +12,9 @@ import type { LetterState } from '@/GuessGame';
 import { dailyDataUrl } from '@/dailyData';
 import DailyStats from '@/DailyStats';
 import MobileKeyInput from '@/MobileKeyInput';
+import ShareButton from '@/ShareButton';
+import { dailyIntent } from '@/deeplink';
+import { buildShare } from '@/share';
 import { recordSprint } from '@/stats';
 
 export type ScrambleGameHandle = { pressKey: (k: string) => void };
@@ -61,7 +64,15 @@ function sanitizeRecord(r: unknown): ScrambleRecord | null {
   };
 }
 
+// An incoming ?daily=/?play= link decides which board is waiting; without one
+// we keep whatever the player last had open.
 function loadStore(): ScrambleStore {
+  const store = readStore();
+  const forced = dailyIntent('descramble');
+  return forced === null ? store : { ...store, dailyMode: forced };
+}
+
+function readStore(): ScrambleStore {
   try {
     const raw = localStorage.getItem(SCRAMBLE_KEY);
     if (!raw) return DEFAULT_STORE;
@@ -436,7 +447,7 @@ const ScrambleGame = forwardRef<
           </div>
 
           {/* controls */}
-          <div className="mt-4 flex items-center justify-center gap-2.5">
+          <div className="mt-4 flex flex-wrap items-center justify-center gap-2.5">
             {!record.endsAt && (
               <button
                 onMouseDown={(e) => e.preventDefault()}
@@ -488,6 +499,20 @@ const ScrambleGame = forwardRef<
             )}
             {record.finished && (
               <>
+                <ShareButton
+                  build={() =>
+                    buildShare({
+                      game: 'Scramble',
+                      slug: 'scramble',
+                      daily: store.dailyMode,
+                      date: store.dailyDate,
+                      body: [
+                        `${score}/${maxScore} pts`,
+                        `${record.found.length}/${answers?.length ?? 0} words`,
+                      ],
+                    })
+                  }
+                />
                 <button
                   onMouseDown={(e) => e.preventDefault()}
                   onClick={() => onReveal(record.rack.join(''))}

@@ -12,6 +12,9 @@ import type { LetterState } from '@/GuessGame';
 import { dailyDataUrl } from '@/dailyData';
 import DailyStats from '@/DailyStats';
 import MobileKeyInput from '@/MobileKeyInput';
+import ShareButton from '@/ShareButton';
+import { dailyIntent } from '@/deeplink';
+import { buildShare } from '@/share';
 import { recordBoxSolve } from '@/stats';
 
 export type BoxGameHandle = { pressKey: (k: string) => void };
@@ -55,7 +58,15 @@ function sanitizeRecord(r: unknown): BoxRecord | null {
   };
 }
 
+// An incoming ?daily=/?play= link decides which board is waiting; without one
+// we keep whatever the player last had open.
 function loadStore(): BoxStore {
+  const store = readStore();
+  const forced = dailyIntent('boxed');
+  return forced === null ? store : { ...store, dailyMode: forced };
+}
+
+function readStore(): BoxStore {
   try {
     const raw = localStorage.getItem(BOX_KEY);
     if (!raw) return DEFAULT_STORE;
@@ -555,7 +566,7 @@ const BoxGame = forwardRef<
           </div>
 
           {/* controls */}
-          <div className="mt-8 flex items-center justify-center gap-2.5">
+          <div className="mt-8 flex flex-wrap items-center justify-center gap-2.5">
             <button
               onMouseDown={(e) => e.preventDefault()}
               onClick={() => pressKey('backspace')}
@@ -583,7 +594,7 @@ const BoxGame = forwardRef<
           </div>
 
           {/* second row: board-level actions, so nothing squishes on mobile */}
-          <div className="mt-2.5 flex items-center justify-center gap-2.5">
+          <div className="mt-2.5 flex flex-wrap items-center justify-center gap-2.5">
             {!store.dailyMode && (
               <button
                 onMouseDown={(e) => e.preventDefault()}
@@ -593,6 +604,24 @@ const BoxGame = forwardRef<
                 <RefreshCw className="w-4 h-4" />
                 New box
               </button>
+            )}
+            {done && (
+              <ShareButton
+                build={() =>
+                  buildShare({
+                    game: 'Boxed',
+                    slug: 'boxed',
+                    daily: store.dailyMode,
+                    date: store.dailyDate,
+                    body: [
+                      // word count and time only; the chain itself is the answer
+                      solved
+                        ? `Solved in ${chain.length} word${chain.length === 1 ? '' : 's'} · ${formatElapsed(record.elapsedMs ?? 0)}`
+                        : 'Revealed',
+                    ],
+                  })
+                }
+              />
             )}
             <button
               onMouseDown={(e) => e.preventDefault()}

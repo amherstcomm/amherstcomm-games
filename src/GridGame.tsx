@@ -13,6 +13,9 @@ import type { LetterState } from '@/GuessGame';
 import { dailyDataUrl } from '@/dailyData';
 import DailyStats from '@/DailyStats';
 import MobileKeyInput from '@/MobileKeyInput';
+import ShareButton from '@/ShareButton';
+import { dailyIntent } from '@/deeplink';
+import { buildShare } from '@/share';
 import { recordSprint } from '@/stats';
 
 export type GridGameHandle = { pressKey: (k: string) => void };
@@ -83,7 +86,15 @@ function sanitizeRecord(r: unknown): GridRecord | null {
   };
 }
 
+// An incoming ?daily=/?play= link decides which board is waiting; without one
+// we keep whatever the player last had open.
 function loadStore(): GridStore {
+  const store = readStore();
+  const forced = dailyIntent('grid');
+  return forced === null ? store : { ...store, dailyMode: forced };
+}
+
+function readStore(): GridStore {
   try {
     const raw = localStorage.getItem(GRID_KEY);
     if (!raw) return DEFAULT_STORE;
@@ -640,6 +651,20 @@ const GridGame = forwardRef<
             )}
             {record.finished && (
               <>
+                <ShareButton
+                  build={() =>
+                    buildShare({
+                      game: `Grid ${Math.round(Math.sqrt(record.cells.length))}×${Math.round(Math.sqrt(record.cells.length))}`,
+                      slug: 'grid',
+                      daily: store.dailyMode,
+                      date: store.dailyDate,
+                      body: [
+                        `${score}/${maxScore} pts`,
+                        `${record.found.length}/${answers?.length ?? 0} words`,
+                      ],
+                    })
+                  }
+                />
                 <button
                   onMouseDown={(e) => e.preventDefault()}
                   onClick={() => onReveal(record.cells)}

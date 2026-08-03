@@ -12,6 +12,9 @@ import type { LetterState } from '@/GuessGame';
 import { dailyDataUrl } from '@/dailyData';
 import DailyStats from '@/DailyStats';
 import MobileKeyInput from '@/MobileKeyInput';
+import ShareButton from '@/ShareButton';
+import { dailyIntent } from '@/deeplink';
+import { buildShare } from '@/share';
 import { recordHiveWord } from '@/stats';
 
 export type HiveGameHandle = { pressKey: (k: string) => void };
@@ -83,7 +86,15 @@ function sanitizeRecord(r: unknown): HiveRecord | null {
   };
 }
 
+// An incoming ?daily=/?play= link decides which board is waiting; without one
+// we keep whatever the player last had open.
 function loadStore(): HiveStore {
+  const store = readStore();
+  const forced = dailyIntent('bee');
+  return forced === null ? store : { ...store, dailyMode: forced };
+}
+
+function readStore(): HiveStore {
   try {
     const raw = localStorage.getItem(HIVE_KEY);
     if (!raw) return DEFAULT_STORE;
@@ -425,7 +436,7 @@ const HiveGame = forwardRef<
           </div>
 
           {/* controls */}
-          <div className="mt-4 flex items-center justify-center gap-2.5">
+          <div className="mt-4 flex flex-wrap items-center justify-center gap-2.5">
             <button
               onMouseDown={(e) => e.preventDefault()}
               onClick={() => pressKey('backspace')}
@@ -459,6 +470,25 @@ const HiveGame = forwardRef<
                 <RefreshCw className="w-4 h-4" />
                 New hive
               </button>
+            )}
+            {record.found.length > 0 && (
+              <ShareButton
+                build={() =>
+                  buildShare({
+                    game: 'Hive',
+                    slug: 'hive',
+                    daily: store.dailyMode,
+                    date: store.dailyDate,
+                    body: [
+                      rank,
+                      `${score}/${maxScore} pts · ${record.found.length} words`,
+                      ...(record.found.filter(isPangram).length
+                        ? [`${record.found.filter(isPangram).length} pangram${record.found.filter(isPangram).length === 1 ? '' : 's'}`]
+                        : []),
+                    ],
+                  })
+                }
+              />
             )}
             <button
               onMouseDown={(e) => e.preventDefault()}
