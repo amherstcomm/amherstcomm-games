@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect, useLayoutEffect, useRef, type ButtonHTMLAttributes, type ReactNode } from 'react';
+import { useCallback, useMemo, useState, useEffect, useLayoutEffect, useRef, type ButtonHTMLAttributes, type ReactNode } from 'react';
 import { Search, Sparkles, Eraser, ArrowDown, ArrowUp, X, BookOpen, Grid3x3, Shuffle, Hexagon, Check, Keyboard, Delete, Github, Info, Square, CalendarDays, Star, Gamepad2, CornerDownLeft, LayoutGrid, Puzzle, BarChart3, UserRound, Scale, Settings } from 'lucide-react';
 import LearnMode, { type LearnModeHandle } from '@/LearnMode';
 import type { Session } from '@supabase/supabase-js';
@@ -584,40 +584,66 @@ function App() {
     if (session) void importBaselineOnce();
   }, [session]);
 
-  // appearance settings follow the account: pull on sign-in, then push edits
+  // appearance settings follow the account: pull on sign-in (and whenever the
+  // tab comes back to the foreground, so a change made on another device
+  // lands here), then push edits
   const settingsPulled = useRef(false);
-  useEffect(() => {
-    if (!supabase || !session) {
-      settingsPulled.current = false;
-      return;
-    }
-    let alive = true;
-    supabase
+  const pushPending = useRef(false);
+
+  const pullSettings = useCallback(async () => {
+    // don't clobber an edit that hasn't been written yet
+    if (!supabase || !session || pushPending.current) return;
+    const { data, error } = await supabase
       .from('profiles')
       .select('settings')
       .eq('id', session.user.id)
-      .maybeSingle()
-      .then(({ data }) => {
-        if (!alive) return;
-        const s = data?.settings as { theme?: ThemeMode; palette?: Palette } | null;
-        if (s?.theme && THEME_MODES.includes(s.theme)) setTheme(s.theme);
-        if (s?.palette && PALETTES.includes(s.palette)) setPalette(s.palette);
-        settingsPulled.current = true;
-      });
-    return () => {
-      alive = false;
-    };
+      .maybeSingle();
+    if (error) {
+      console.warn('Anagrimoire settings pull failed:', error.message);
+      return;
+    }
+    const s = data?.settings as { theme?: ThemeMode; palette?: Palette } | null;
+    if (s?.theme && THEME_MODES.includes(s.theme)) setTheme(s.theme);
+    if (s?.palette && PALETTES.includes(s.palette)) setPalette(s.palette);
+    settingsPulled.current = true;
   }, [session]);
 
   useEffect(() => {
+    if (!session) {
+      settingsPulled.current = false;
+      return;
+    }
+    void pullSettings();
+  }, [session, pullSettings]);
+
+  useEffect(() => {
+    if (!supabase || !session) return;
+    const onWake = () => {
+      if (document.visibilityState === 'visible') void pullSettings();
+    };
+    document.addEventListener('visibilitychange', onWake);
+    window.addEventListener('focus', onWake);
+    return () => {
+      document.removeEventListener('visibilitychange', onWake);
+      window.removeEventListener('focus', onWake);
+    };
+  }, [session, pullSettings]);
+
+  useEffect(() => {
     if (!supabase || !session || !settingsPulled.current) return;
-    const id = window.setTimeout(() => {
-      void supabase!
+    pushPending.current = true;
+    const id = window.setTimeout(async () => {
+      // upsert, not update: a profile row may never have been created
+      const { error } = await supabase!
         .from('profiles')
-        .update({ settings: { theme, palette } })
-        .eq('id', session.user.id);
+        .upsert({ id: session.user.id, settings: { theme, palette } });
+      pushPending.current = false;
+      if (error) console.warn('Anagrimoire settings sync failed:', error.message);
     }, 500);
-    return () => window.clearTimeout(id);
+    return () => {
+      window.clearTimeout(id);
+      pushPending.current = false;
+    };
   }, [session, theme, palette]);
 
   // surface auth errors that come back in the redirect URL (expired or

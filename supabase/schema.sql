@@ -21,6 +21,13 @@ create policy "read own profile"
   on public.profiles for select
   using ((select auth.uid()) = id);
 
+-- lets the client upsert its own profile, so settings still save if the
+-- signup trigger never created the row
+drop policy if exists "insert own profile" on public.profiles;
+create policy "insert own profile"
+  on public.profiles for insert
+  with check ((select auth.uid()) = id);
+
 drop policy if exists "update own profile" on public.profiles;
 create policy "update own profile"
   on public.profiles for update
