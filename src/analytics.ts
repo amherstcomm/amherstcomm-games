@@ -1,8 +1,16 @@
 // Optional Google Analytics (GA4). Loads only when VITE_GA_ID is set at
 // build time — without it nothing is injected and no data leaves the page.
 // Set the env var on the production site only to keep dev traffic out.
+//
+// Where consent is required it also waits for one: nothing is injected until
+// analyticsAllowed() says so, which is the whole point — a script that loads
+// first and asks afterwards has already done the thing it was asking about.
+
+import { analyticsAllowed } from '@/consent';
 
 export const GA_ID = import.meta.env.VITE_GA_ID as string | undefined;
+
+let loaded = false;
 
 declare global {
   interface Window {
@@ -11,8 +19,12 @@ declare global {
   }
 }
 
+// Safe to call more than once — the consent banner calls it again on accept.
 export function initAnalytics(): void {
+  if (loaded) return;
   if (!GA_ID || !/^G-[A-Z0-9]+$/.test(GA_ID)) return;
+  if (!analyticsAllowed()) return;
+  loaded = true;
   const script = document.createElement('script');
   script.async = true;
   script.src = `https://www.googletagmanager.com/gtag/js?id=${GA_ID}`;
