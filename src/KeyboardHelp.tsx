@@ -6,7 +6,7 @@ import { useModalA11y } from '@/useModalA11y';
 
 function Key({ children }: { children: React.ReactNode }) {
   return (
-    <kbd className="inline-flex items-center justify-center min-w-[1.75rem] h-6 px-1.5 rounded-md bg-white/10 border border-white/20 text-[11px] font-mono font-semibold text-slate-200 whitespace-nowrap">
+    <kbd className="inline-flex items-center justify-center min-w-[1.75rem] h-6 px-1.5 rounded-md bg-white/10 border border-white/20 text-[0.6875rem] font-mono font-semibold text-slate-200 whitespace-nowrap">
       {children}
     </kbd>
   );

@@ -7,7 +7,7 @@ import AccountModal from '@/AccountModal';
 import { OskContext } from '@/MobileKeyInput';
 import SettingsModal from '@/SettingsModal';
 import KeyboardHelp from '@/KeyboardHelp';
-import { PALETTES, THEME_MODES, useTheme, type Palette, type ThemeMode } from '@/theme';
+import { PALETTES, TEXT_SCALES, THEME_MODES, useTheme, type Palette, type TextScale, type ThemeMode } from '@/theme';
 import { useModalA11y } from '@/useModalA11y';
 import { supabase } from '@/supabase';
 import { GA_ID } from '@/analytics';
@@ -571,9 +571,10 @@ function App() {
   const [theme, setTheme] = useState<ThemeMode>(initial.theme);
   const [palette, setPalette] = useState<Palette>(initial.palette);
   const [navKeys, setNavKeys] = useState<NavKeys>(initial.navKeys);
+  const [textScale, setTextScale] = useState<TextScale>(initial.textScale);
   const [session, setSession] = useState<Session | null>(null);
 
-  useTheme(theme, palette);
+  useTheme(theme, palette, textScale);
 
   // track the auth session when Supabase is configured
   useEffect(() => {
@@ -607,11 +608,12 @@ function App() {
       return;
     }
     const s = data?.settings as
-      | { theme?: ThemeMode; palette?: Palette; navKeys?: NavKeys }
+      | { theme?: ThemeMode; palette?: Palette; navKeys?: NavKeys; textScale?: TextScale }
       | null;
     if (s?.theme && THEME_MODES.includes(s.theme)) setTheme(s.theme);
     if (s?.palette && PALETTES.includes(s.palette)) setPalette(s.palette);
     if (s?.navKeys === 'numpad' || s?.navKeys === 'wasd') setNavKeys(s.navKeys);
+    if (s?.textScale && TEXT_SCALES.includes(s.textScale)) setTextScale(s.textScale);
     settingsPulled.current = true;
   }, [session]);
 
@@ -640,7 +642,7 @@ function App() {
     if (!supabase || !session || !settingsPulled.current) return;
     pushPending.current = true;
     const id = window.setTimeout(async () => {
-      const settings = { theme, palette, navKeys };
+      const settings = { theme, palette, navKeys, textScale };
       // update first — it needs only the update policy, which every install
       // has. `select` reveals whether a row actually matched.
       const { data, error } = await supabase!
@@ -668,7 +670,7 @@ function App() {
       window.clearTimeout(id);
       pushPending.current = false;
     };
-  }, [session, theme, palette, navKeys]);
+  }, [session, theme, palette, navKeys, textScale]);
 
   // surface auth errors that come back in the redirect URL (expired or
   // already-used magic links land here with no other visible sign)
@@ -755,6 +757,7 @@ function App() {
       keyboard: kbOpen,
       theme,
       palette,
+      textScale,
       navKeys,
       patternPlay,
       beePlay,
@@ -769,7 +772,7 @@ function App() {
       weave: { letters: weaveLetters, size: weaveSize },
       weavePlay,
     });
-  }, [mode, dictionaries, sorts, kbOpen, theme, palette, navKeys, patternPlay, beePlay, boxedPlay, descramblePlay, gridPlay, length, known, containsStr, excludedStr, rackStr, useAll, minLength, beeCenter, beeOuters, boxedLetters, solutionWords, gridLetters, gridPreset, weaveLetters, weaveSize, weavePlay]);
+  }, [mode, dictionaries, sorts, kbOpen, theme, palette, textScale, navKeys, patternPlay, beePlay, boxedPlay, descramblePlay, gridPlay, length, known, containsStr, excludedStr, rackStr, useAll, minLength, beeCenter, beeOuters, boxedLetters, solutionWords, gridLetters, gridPreset, weaveLetters, weaveSize, weavePlay]);
 
   // keep known array sized to length
   useEffect(() => {
@@ -1172,7 +1175,7 @@ function App() {
                   key={m.id}
                   onClick={() => setMode(m.id)}
                   title={m.blurb}
-                  className={`flex flex-col md:flex-row items-center justify-center gap-0.5 md:gap-1.5 px-1 md:px-3 py-1.5 rounded-lg whitespace-nowrap text-[10px] md:text-sm font-medium md:font-semibold transition-colors
+                  className={`flex flex-col md:flex-row items-center justify-center gap-0.5 md:gap-1.5 px-1 md:px-3 py-1.5 rounded-lg whitespace-nowrap text-[0.625rem] md:text-sm font-medium md:font-semibold transition-colors
                     ${mode === m.id
                       ? 'bg-emerald-400/15 text-emerald-300'
                       : 'text-slate-400 hover:text-white hover:bg-white/5'}`}
@@ -2219,10 +2222,12 @@ function App() {
           theme={theme}
           palette={palette}
           navKeys={navKeys}
+          textScale={textScale}
           signedIn={!!session}
           onTheme={setTheme}
           onPalette={setPalette}
           onNavKeys={setNavKeys}
+          onTextScale={setTextScale}
           onClose={() => setSettingsOpen(false)}
         />
       )}

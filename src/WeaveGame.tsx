@@ -592,7 +592,7 @@ const WeaveGame = forwardRef<
         <>
           {/* clue */}
           <div className="mb-4 mx-auto max-w-sm rounded-xl bg-amber-400/10 border border-amber-400/25 px-4 py-3">
-            <p className="text-[10px] font-semibold text-accent uppercase tracking-wider">
+            <p className="text-[0.625rem] font-semibold text-accent uppercase tracking-wider">
               Today&apos;s theme
             </p>
             <p className="text-lg font-semibold text-amber-200">{record.clue}</p>
@@ -668,7 +668,7 @@ const WeaveGame = forwardRef<
                     <span
                       data-navkey=""
                       aria-hidden="true"
-                      className="absolute -top-1.5 -right-1.5 min-w-[1rem] h-4 px-1 flex items-center justify-center rounded-full bg-slate-900 border border-white/40 text-[9px] font-mono font-bold leading-none text-slate-200"
+                      className="absolute -top-1.5 -right-1.5 min-w-[1rem] h-4 px-1 flex items-center justify-center rounded-full bg-slate-900 border border-white/40 text-[0.5625rem] font-mono font-bold leading-none text-slate-200"
                     >
                       {navHints.get(i)}
                     </span>

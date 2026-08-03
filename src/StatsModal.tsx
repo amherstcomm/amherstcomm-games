@@ -10,7 +10,7 @@ function Stat({ label, value }: { label: string; value: string | number }) {
   return (
     <div className="rounded-lg bg-white/5 border border-white/10 px-3 py-2">
       <p className="text-lg font-bold text-white tabular-nums leading-tight">{value}</p>
-      <p className="text-[11px] text-slate-500">{label}</p>
+      <p className="text-[0.6875rem] text-slate-500">{label}</p>
     </div>
   );
 }
@@ -188,7 +188,7 @@ export default function StatsModal({
                       <div className="flex-1 h-4 rounded bg-white/[0.03]">
                         {n > 0 && (
                           <div
-                            className="h-4 rounded bg-emerald-400/40 border border-emerald-400/50 flex items-center justify-end px-1.5 text-[10px] text-emerald-100 min-w-fit"
+                            className="h-4 rounded bg-emerald-400/40 border border-emerald-400/50 flex items-center justify-end px-1.5 text-[0.625rem] text-emerald-100 min-w-fit"
                             style={{ width: `${(100 * n) / maxDist}%` }}
                           >
                             {n}

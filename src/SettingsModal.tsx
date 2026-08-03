@@ -1,8 +1,8 @@
 import { useRef } from 'react';
-import { Check, Contrast, Keyboard, Monitor, Moon, Sun, X } from 'lucide-react';
+import { Check, Contrast, Keyboard, Monitor, Moon, Sun, Type, X } from 'lucide-react';
 import KeyDiagram from '@/KeyDiagram';
 import type { NavKeys } from '@/storage';
-import type { Palette, ThemeMode } from '@/theme';
+import type { Palette, TextScale, ThemeMode } from '@/theme';
 import { useModalA11y } from '@/useModalA11y';
 
 const THEME_OPTIONS: { id: ThemeMode; label: string; Icon: typeof Sun }[] = [
@@ -56,19 +56,23 @@ function Swatches({ tones }: { tones: string[] }) {
 export default function SettingsModal({
   theme,
   palette,
+  textScale,
   navKeys,
   signedIn,
   onTheme,
   onPalette,
+  onTextScale,
   onNavKeys,
   onClose,
 }: {
   theme: ThemeMode;
   palette: Palette;
+  textScale: TextScale;
   navKeys: NavKeys;
   signedIn: boolean;
   onTheme: (t: ThemeMode) => void;
   onPalette: (p: Palette) => void;
+  onTextScale: (t: TextScale) => void;
   onNavKeys: (n: NavKeys) => void;
   onClose: () => void;
 }) {
@@ -152,6 +156,38 @@ export default function SettingsModal({
                 </button>
               ))}
             </div>
+          </div>
+
+          <div>
+            <h3 className="flex items-center gap-2 text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2.5">
+              <Type className="w-3.5 h-3.5" />
+              Text size
+            </h3>
+            <div className="inline-flex rounded-xl bg-white/5 border border-white/10 p-1 gap-1">
+              {(
+                [
+                  { id: 'normal' as const, label: 'Normal', size: 'text-sm' },
+                  { id: 'large' as const, label: 'Large', size: 'text-base' },
+                  { id: 'larger' as const, label: 'Larger', size: 'text-lg' },
+                ]
+              ).map(({ id, label, size }) => (
+                <button
+                  key={id}
+                  onClick={() => onTextScale(id)}
+                  aria-pressed={textScale === id}
+                  className={`px-3 h-9 rounded-lg font-semibold transition-colors ${size}
+                    ${textScale === id
+                      ? 'bg-amber-400 text-ink shadow-lg shadow-amber-500/30'
+                      : 'text-slate-300 hover:bg-white/10'}`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            <p className="mt-2 text-xs text-slate-500">
+              Scales the whole page. Your browser&apos;s own zoom and font-size settings
+              still work on top of this.
+            </p>
           </div>
 
           <div>

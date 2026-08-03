@@ -14,14 +14,14 @@ export default function KeyDiagram({ scheme }: { scheme: NavKeys }) {
         k ? (
           <span
             key={i}
-            className="w-7 h-7 flex items-center justify-center rounded-md bg-white/10 border border-white/15 text-[11px] font-mono font-semibold text-slate-200"
+            className="w-7 h-7 flex items-center justify-center rounded-md bg-white/10 border border-white/15 text-[0.6875rem] font-mono font-semibold text-slate-200"
           >
             {k}
           </span>
         ) : (
           <span
             key={i}
-            className="w-7 h-7 flex items-center justify-center rounded-md border border-dashed border-amber-400/50 text-[10px] text-accent"
+            className="w-7 h-7 flex items-center justify-center rounded-md border border-dashed border-amber-400/50 text-[0.625rem] text-accent"
           >
             ●
           </span>

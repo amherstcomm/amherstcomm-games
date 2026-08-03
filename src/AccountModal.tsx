@@ -140,7 +140,7 @@ export default function AccountModal({
             </div>
             <div className="flex items-center gap-3 mb-5">
               <div className="flex-1 h-px bg-white/10" />
-              <span className="text-[11px] text-slate-500 uppercase tracking-wider">or by email</span>
+              <span className="text-[0.6875rem] text-slate-500 uppercase tracking-wider">or by email</span>
               <div className="flex-1 h-px bg-white/10" />
             </div>
             {status === 'sent' ? (

@@ -1,5 +1,5 @@
 import type { DictionaryId } from '@/dictionaries';
-import type { Palette, ThemeMode } from '@/theme';
+import type { Palette, TextScale, ThemeMode } from '@/theme';
 
 export type Mode = 'pattern' | 'descramble' | 'bee' | 'boxed' | 'grid' | 'weave';
 
@@ -24,6 +24,7 @@ export type PersistedState = {
   keyboard: boolean;
   theme: ThemeMode;
   palette: Palette;
+  textScale: TextScale;
   navKeys: NavKeys;
   patternPlay: boolean;
   beePlay: boolean;
@@ -66,6 +67,7 @@ export const DEFAULT_STATE: PersistedState = {
   keyboard: false,
   theme: 'system',
   palette: 'default',
+  textScale: 'normal',
   navKeys: 'numpad',
   patternPlay: false,
   beePlay: false,
@@ -172,6 +174,7 @@ export function loadState(): PersistedState {
         : ['default', 'deuter', 'tritan', 'mono'].includes(p?.palette)
           ? p.palette
           : 'default',
+      textScale: ['normal', 'large', 'larger'].includes(p?.textScale) ? p.textScale : 'normal',
       navKeys: p?.navKeys === 'wasd' ? 'wasd' : 'numpad',
       patternPlay: p?.patternPlay === true,
       beePlay: p?.beePlay === true,
