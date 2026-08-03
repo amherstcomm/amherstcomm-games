@@ -5,12 +5,14 @@ import { useEffect, useMemo, useState } from 'react';
 import { Grid3x3, Hexagon, LayoutGrid, Puzzle, Shuffle, Square } from 'lucide-react';
 import {
   fetchHistory,
+  guessByLength,
   guessDistribution,
   series,
   streaks,
   STREAK_RULE,
   type History,
   type HistoryGame,
+  type LengthRecord,
   type Series,
 } from '@/history';
 import { formatElapsed } from '@/useUpTimer';
@@ -103,6 +105,45 @@ function Distribution({ dist }: { dist: number[] }) {
   );
 }
 
+// Per-length records for Guess. Deliberately a table rather than a card each:
+// someone who plays several lengths wants to compare them, and thirteen cards
+// would bury the rest of the page.
+function LengthTable({ rows }: { rows: LengthRecord[] }) {
+  if (!rows.length) return null;
+  return (
+    <div className="mt-3 overflow-x-auto">
+      <table className="w-full text-xs tabular-nums">
+        <thead>
+          <tr className="text-slate-500 text-left">
+            <th scope="col" className="font-medium pb-1 pr-2">Letters</th>
+            <th scope="col" className="font-medium pb-1 px-2 text-right">Days</th>
+            <th scope="col" className="font-medium pb-1 px-2 text-right">Won</th>
+            <th scope="col" className="font-medium pb-1 px-2 text-right">Best</th>
+            <th scope="col" className="font-medium pb-1 pl-2 text-right">Fastest</th>
+          </tr>
+        </thead>
+        <tbody className="text-slate-400">
+          {rows.map((r) => (
+            <tr key={r.length} className="border-t border-white/5">
+              <th scope="row" className="py-1 pr-2 font-semibold text-slate-200 text-left">
+                {r.length}
+              </th>
+              <td className="py-1 px-2 text-right">{r.days}</td>
+              <td className="py-1 px-2 text-right">{r.won}</td>
+              <td className="py-1 px-2 text-right text-slate-200">
+                {r.bestGuesses === null ? '—' : `${r.bestGuesses}/6`}
+              </td>
+              <td className="py-1 pl-2 text-right">
+                {r.bestTimeMs === null ? '—' : formatElapsed(r.bestTimeMs)}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 function GameCard({ game, history }: { game: (typeof GAMES)[number]; history: History }) {
   const entries = history[game.id];
   const today = todayEt();
@@ -111,6 +152,7 @@ function GameCard({ game, history }: { game: (typeof GAMES)[number]; history: Hi
     [entries, game.id, today]
   );
   const data = useMemo(() => series(entries, game.id), [entries, game.id]);
+  const dayCount = useMemo(() => new Set(entries.map((e) => e.date)).size, [entries]);
 
   if (!entries.length) return null;
 
@@ -124,8 +166,10 @@ function GameCard({ game, history }: { game: (typeof GAMES)[number]; history: Hi
           <game.Icon className="w-3.5 h-3.5 text-accent" />
           {game.label}
         </h4>
+        {/* distinct dates, not rows: Guess can have several word lengths on
+            one date, and counting boards would claim more days than existed */}
         <span className="text-xs text-slate-500 tabular-nums">
-          {entries.length} {entries.length === 1 ? 'day' : 'days'}
+          {dayCount} {dayCount === 1 ? 'day' : 'days'}
         </span>
       </div>
 
@@ -144,7 +188,10 @@ function GameCard({ game, history }: { game: (typeof GAMES)[number]; history: Hi
       </div>
 
       {game.id === 'guess' ? (
-        <Distribution dist={guessDistribution(entries)} />
+        <>
+          <Distribution dist={guessDistribution(entries)} />
+          <LengthTable rows={guessByLength(entries)} />
+        </>
       ) : (
         <Spark data={data} lowerIsBetter={game.lowerIsBetter} unit={game.unit} />
       )}

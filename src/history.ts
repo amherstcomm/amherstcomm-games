@@ -14,6 +14,8 @@ export type HistoryGame = 'guess' | 'hive' | 'scramble' | 'grid' | 'box' | 'weav
 
 export type HistoryEntry = {
   date: string; // the puzzle's Eastern-time date, not when it was played
+  /** which board on that date — Guess's word length; '' where a game has one */
+  variant: string;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   result: Record<string, any>;
 };
@@ -33,7 +35,7 @@ export async function fetchHistory(): Promise<History | null> {
     if (!sess.session) return null;
     const { data, error } = await supabase
       .from('daily_progress')
-      .select('game, puzzle_date, result')
+      .select('game, variant, puzzle_date, result')
       .eq('completed', true)
       .eq('env', DAILY_ENV)
       .order('puzzle_date', { ascending: true });
@@ -42,7 +44,10 @@ export async function fetchHistory(): Promise<History | null> {
     const out = emptyHistory();
     for (const row of data ?? []) {
       if (!GAMES.includes(row.game) || !row.result || !row.puzzle_date) continue;
-      out[row.game as HistoryGame].push({ date: row.puzzle_date, result: row.result });
+      // Rows written before the summary carried a length have an empty
+      // variant; the result usually still knows, so fall back to it.
+      const variant = row.variant || (row.result.length ? String(row.result.length) : '');
+      out[row.game as HistoryGame].push({ date: row.puzzle_date, variant, result: row.result });
     }
     return out;
   } catch {
@@ -137,6 +142,39 @@ export function series(entries: HistoryEntry[], game: HistoryGame): Series {
     if (v !== null) out.push({ date: e.date, value: v });
   }
   return out;
+}
+
+// Guess is really thirteen games — a 5-letter board and a 12-letter board on
+// the same day are different puzzles of very different difficulty, and pooling
+// them hides exactly the thing worth knowing. The length is already the row's
+// variant, so the split costs nothing.
+export type LengthRecord = {
+  length: number;
+  days: number;
+  won: number;
+  bestGuesses: number | null;
+  bestTimeMs: number | null;
+};
+
+export function guessByLength(entries: HistoryEntry[]): LengthRecord[] {
+  const byLength = new Map<number, LengthRecord>();
+  for (const e of entries) {
+    const length = Number(e.variant);
+    if (!Number.isInteger(length) || length <= 0) continue;
+    let rec = byLength.get(length);
+    if (!rec) {
+      rec = { length, days: 0, won: 0, bestGuesses: null, bestTimeMs: null };
+      byLength.set(length, rec);
+    }
+    rec.days++;
+    if (!e.result.won) continue;
+    rec.won++;
+    const g = Number(e.result.guesses);
+    if (g > 0 && (rec.bestGuesses === null || g < rec.bestGuesses)) rec.bestGuesses = g;
+    const t = Number(e.result.timeMs);
+    if (t > 0 && (rec.bestTimeMs === null || t < rec.bestTimeMs)) rec.bestTimeMs = t;
+  }
+  return [...byLength.values()].sort((a, b) => a.length - b.length);
 }
 
 // Guess is the one game with a distribution worth showing rather than a trend.
