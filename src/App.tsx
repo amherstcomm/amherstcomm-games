@@ -4,6 +4,7 @@ import LearnMode, { type LearnModeHandle } from '@/LearnMode';
 import type { Session } from '@supabase/supabase-js';
 import StatsModal from '@/StatsModal';
 import AccountModal from '@/AccountModal';
+import { OskContext } from '@/MobileKeyInput';
 import { supabase } from '@/supabase';
 import { GA_ID } from '@/analytics';
 import { importBaselineOnce } from '@/stats';
@@ -1044,6 +1045,7 @@ function App() {
   }
 
   return (
+    <OskContext.Provider value={kbOpen}>
     <div className="min-h-screen bg-slate-950 text-white relative overflow-x-clip">
       {/* ambient glow */}
       <div className="pointer-events-none absolute -top-40 -left-40 w-[500px] h-[500px] bg-amber-500/10 rounded-full blur-[120px]" />
@@ -2399,6 +2401,7 @@ function App() {
         </button>
       )}
     </div>
+    </OskContext.Provider>
   );
 }
 

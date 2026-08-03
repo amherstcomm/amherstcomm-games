@@ -1,8 +1,14 @@
+import { createContext, useContext } from 'react';
+
 // Invisible input overlaid on a game's entry box so tapping it summons the
 // phone's native keyboard. Play modes otherwise type via a document keydown
 // listener, which only physical keyboards fire. A one-space sentinel value
 // makes soft-keyboard backspace observable (many fire no usable keydown).
 const SENTINEL = ' ';
+
+// true while the site's on-screen keyboard is open — then the native
+// keyboard stays suppressed, exactly like the solver tiles
+export const OskContext = createContext(false);
 
 export default function MobileKeyInput({
   onKey,
@@ -11,8 +17,10 @@ export default function MobileKeyInput({
   onKey: (k: string) => void;
   label?: string;
 }) {
+  const osk = useContext(OskContext);
   return (
     <input
+      inputMode={osk ? 'none' : undefined}
       value={SENTINEL}
       onChange={(e) => {
         const v = e.target.value;
