@@ -3,8 +3,9 @@ import { Grid3x3, Hexagon, LayoutGrid, Puzzle, Shuffle, Square, X } from 'lucide
 import { combineStats, fetchSyncedStats, loadStats, type StatsStore } from '@/stats';
 import { formatElapsed } from '@/useUpTimer';
 import { useModalA11y } from '@/useModalA11y';
+import HistoryView from '@/HistoryView';
 
-type StatsView = 'overall' | 'daily' | 'practice';
+type StatsView = 'overall' | 'daily' | 'practice' | 'history';
 
 function Stat({ label, value }: { label: string; value: string | number }) {
   return (
@@ -81,7 +82,10 @@ export default function StatsModal({
 
   const store = synced ?? localStore;
   const stats = useMemo(
-    () => (view === 'overall' ? combineStats(store.daily, store.practice) : store[view]),
+    () =>
+      view === 'overall' || view === 'history'
+        ? combineStats(store.daily, store.practice)
+        : store[view],
     [store, view]
   );
 
@@ -132,10 +136,13 @@ export default function StatsModal({
 
         <h2 className="text-xl font-bold mb-1">Statistics</h2>
         <p className="text-xs text-slate-500 mb-4">
-          {syncState === 'local' && 'Lifetime totals, stored only in this browser.'}
-          {syncState === 'loading' && 'Lifetime totals — syncing from your account…'}
-          {syncState === 'synced' && 'Lifetime totals, synced to your account.'}
-          {syncState === 'error' &&
+          {view === 'history' && 'Your dailies, day by day.'}
+          {view !== 'history' &&
+            syncState === 'local' &&
+            'Lifetime totals, stored only in this browser.'}
+          {view !== 'history' && syncState === 'loading' && 'Lifetime totals — syncing from your account…'}
+          {view !== 'history' && syncState === 'synced' && 'Lifetime totals, synced to your account.'}
+          {view !== 'history' && syncState === 'error' &&
             "Couldn't reach your account — showing this browser's totals."}
         </p>
 
@@ -145,6 +152,7 @@ export default function StatsModal({
               { id: 'overall', label: 'Overall' },
               { id: 'daily', label: 'Daily' },
               { id: 'practice', label: 'Practice' },
+              { id: 'history', label: 'History' },
             ] as const
           ).map(({ id, label }) => (
             <button
@@ -159,7 +167,9 @@ export default function StatsModal({
           ))}
         </div>
 
-        {!anyPlay && (
+        {view === 'history' && <HistoryView signedIn={signedIn} />}
+
+        {view !== 'history' && !anyPlay && (
           <p className="text-sm text-slate-400 py-6 text-center">
             {view === 'overall'
               ? 'Nothing recorded yet — finish a game in any Play mode and it lands here.'
@@ -167,7 +177,7 @@ export default function StatsModal({
           </p>
         )}
 
-        {anyPlay && (
+        {view !== 'history' && anyPlay && (
           <div className="space-y-6">
             <Section Icon={Grid3x3} title="Guess the word">
               <div className="grid grid-cols-4 gap-2">
