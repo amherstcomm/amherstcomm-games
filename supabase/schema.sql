@@ -52,6 +52,12 @@ create trigger on_auth_user_created
   after insert on auth.users
   for each row execute function public.handle_new_user();
 
+-- backfill anyone the trigger missed (accounts created before it existed, or
+-- while it was failing), so per-user settings have a row to live in
+insert into public.profiles (id)
+select id from auth.users
+on conflict (id) do nothing;
+
 -- ---------------------------------------------------------------------------
 -- game_results: append-only log of completed games. Aggregates (lifetime
 -- stats, leaderboards, "X% solved today") all derive from this.
