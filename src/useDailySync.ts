@@ -6,7 +6,13 @@
 // until the key for this board has been marked as merged.
 
 import { useEffect, useRef, useState } from 'react';
-import { loadDaily, mergeDaily, saveDaily, type DailyGame } from '@/dailySync';
+import {
+  clearSyncBase,
+  loadDaily,
+  mergeFromServer,
+  saveDaily,
+  type DailyGame,
+} from '@/dailySync';
 import { supabase } from '@/supabase';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -52,6 +58,7 @@ export function useDailySync({
     const { data } = supabase.auth.onAuthStateChange(() => {
       syncedKey.current = null;
       lastPush.current = '';
+      clearSyncBase();
       setAuthTick((n) => n + 1);
     });
     return () => data.subscription.unsubscribe();
@@ -90,7 +97,7 @@ export function useDailySync({
       .then((remote) => {
         if (!alive) return;
         if (remote?.state && Object.keys(remote.state).length) {
-          const merged = mergeDaily(game, record, remote.state);
+          const merged = mergeFromServer(game, variant, date, record, remote.state);
           if (merged) setRecordRef.current(merged);
         }
         syncedKey.current = key;

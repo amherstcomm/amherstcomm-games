@@ -144,6 +144,47 @@ export function mergeDaily(
 }
 
 // ---------------------------------------------------------------------------
+// Knowing whether the server has actually moved
+// ---------------------------------------------------------------------------
+// Two states can't tell you what happened between them. "The server has a
+// longer chain" reads identically whether the other device played more words
+// or simply hasn't heard about the word you just deleted — and guessing wrong
+// in the second case undoes your undo.
+//
+// So keep a third: the server state we last reconciled with. If the row still
+// looks like that, nothing else has happened and our copy is the newer one,
+// deletions included. If it doesn't, another device really did play and the
+// safe thing is to keep whichever side has more of the puzzle done.
+//
+// Deliberately in memory only. After a reload there is no pending local edit
+// to protect, so an unknown base falling back to "prefer more progress" is
+// exactly right.
+const syncBase = new Map<string, string>();
+
+const baseKey = (game: DailyGame, variant: string, date: string) => `${game}:${variant}:${date}`;
+
+export function clearSyncBase(): void {
+  syncBase.clear();
+}
+
+// Merge a freshly-read row into the local board, using the base to decide
+// whether this is a real conflict or just our own change coming back.
+export function mergeFromServer(
+  game: DailyGame,
+  variant: string,
+  puzzleDate: string,
+  local: Rec | null,
+  remote: Rec | null
+): Rec | null {
+  const key = baseKey(game, variant, puzzleDate);
+  const remoteJson = JSON.stringify(remote ?? null);
+  const base = syncBase.get(key);
+  const serverMoved = base === undefined || base !== remoteJson;
+  syncBase.set(key, remoteJson);
+  return mergeDaily(game, local, remote, serverMoved ? 'pull' : 'push');
+}
+
+// ---------------------------------------------------------------------------
 // Transport
 // ---------------------------------------------------------------------------
 
@@ -238,6 +279,9 @@ async function push(
       },
       { onConflict: 'user_id,game,variant,puzzle_date,env' }
     );
+    // what we just wrote is now the server state we have reconciled with, so a
+    // pull that reads it back knows it isn't news
+    if (!error) syncBase.set(baseKey(game, variant, puzzleDate), JSON.stringify(merged));
     if (error) {
       console.warn('Anagrimoire daily sync failed:', error.message);
       return;
