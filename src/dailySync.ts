@@ -154,7 +154,9 @@ export function saveDaily(
   puzzleDate: string,
   state: Rec,
   completed: boolean,
-  result: Rec | null
+  result: Rec | null,
+  /** called when the row already held progress this device hadn't seen */
+  onMerged?: (merged: Rec) => void
 ): void {
   if (!supabase || !puzzleDate) return;
   const key = `${game}:${variant}:${puzzleDate}`;
@@ -163,7 +165,7 @@ export function saveDaily(
     key,
     window.setTimeout(() => {
       pending.delete(key);
-      void push(game, variant, puzzleDate, state, completed, result);
+      void push(game, variant, puzzleDate, state, completed, result, onMerged);
     }, 800)
   );
 }
@@ -174,12 +176,26 @@ async function push(
   puzzleDate: string,
   state: Rec,
   completed: boolean,
-  result: Rec | null
+  result: Rec | null,
+  onMerged?: (merged: Rec) => void
 ): Promise<void> {
   try {
     const { data: sess } = await supabase!.auth.getSession();
     const userId = sess.session?.user.id;
     if (!userId) return;
+
+    // Read before write. Merging only when a board first loads isn't enough:
+    // a tab that has been open since before the other device played holds a
+    // stale copy, and writing that copy wholesale erases whatever the other
+    // device did. Whoever writes last must fold in what's already there.
+    const current = await loadDaily(game, variant, puzzleDate);
+    const merged = (current?.state && Object.keys(current.state).length
+      ? mergeDaily(game, state, current.state)
+      : state) as Rec;
+    const doneNow = completed || !!current?.completed;
+    // the finished board's numbers win over a half-played one's absence
+    const resultNow = completed ? result : (current?.result ?? result);
+
     const { error } = await supabase!.from('daily_progress').upsert(
       {
         user_id: userId,
@@ -187,14 +203,20 @@ async function push(
         variant,
         puzzle_date: puzzleDate,
         env: DAILY_ENV,
-        state,
-        completed,
-        result,
+        state: merged,
+        completed: doneNow,
+        result: resultNow,
         updated_at: new Date().toISOString(),
       },
       { onConflict: 'user_id,game,variant,puzzle_date,env' }
     );
-    if (error) console.warn('Anagrimoire daily sync failed:', error.message);
+    if (error) {
+      console.warn('Anagrimoire daily sync failed:', error.message);
+      return;
+    }
+    // hand anything new back so this device catches up too, rather than
+    // waiting for its next reload
+    if (onMerged && JSON.stringify(merged) !== JSON.stringify(state)) onMerged(merged);
   } catch {
     // the local board still stands; the next change retries
   }
