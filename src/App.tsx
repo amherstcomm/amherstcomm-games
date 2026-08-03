@@ -2343,10 +2343,14 @@ function App() {
                   <div>
                     <p className="text-slate-300 font-medium">Do I need an account?</p>
                     <p>
-                      No. Everything works without one — signing in adds cross-device
-                      syncing of your play statistics, and the site-wide daily numbers
-                      (&quot;across all registered players&quot;) accumulate only from
-                      signed-in accounts.
+                      No. Everything works without one. Signing in carries your
+                      statistics <em>and</em> today&apos;s unfinished puzzles between
+                      devices — start on a phone, finish on a laptop, and a daily you
+                      have already played won&apos;t come back as a fresh board
+                      somewhere else. Without an account each browser keeps its own
+                      separate progress, which can look like syncing until you compare
+                      two of them. The site-wide daily numbers (&quot;across all
+                      registered players&quot;) accumulate only from signed-in accounts.
                     </p>
                   </div>
                   <div>

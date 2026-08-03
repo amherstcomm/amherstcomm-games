@@ -114,8 +114,10 @@ export default function AccountModal({
           <>
             <h2 className="text-xl font-bold mb-1">Sign in</h2>
             <p className="text-sm text-slate-400 mb-5">
-              No password needed. Accounts are optional; they sync your stats across
-              devices.
+              No password needed. Accounts are optional — they carry your statistics
+              and today&apos;s unfinished puzzles between devices, so you can start on
+              a phone and finish on a laptop. Without one, everything still works,
+              but each browser keeps its own separate progress.
             </p>
             <div className="space-y-2 mb-5">
               <button
