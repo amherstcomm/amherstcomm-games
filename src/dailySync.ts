@@ -22,6 +22,8 @@ export type DailyRow = {
   state: Rec | null;
   completed: boolean;
   result: Rec | null;
+  /** the row's own stamp — the only reliable way to tell it apart from itself */
+  updatedAt: string;
 };
 
 // ---------------------------------------------------------------------------
@@ -151,10 +153,16 @@ export function mergeDaily(
 // or simply hasn't heard about the word you just deleted — and guessing wrong
 // in the second case undoes your undo.
 //
-// So keep a third: the server state we last reconciled with. If the row still
-// looks like that, nothing else has happened and our copy is the newer one,
-// deletions included. If it doesn't, another device really did play and the
+// So keep a third: which version of the row we last reconciled with. If the
+// row is still that one, nothing else has happened and our copy is the newer
+// one, deletions included. If it isn't, another device really did play and the
 // safe thing is to keep whichever side has more of the puzzle done.
+//
+// Identified by the row's updated_at rather than by comparing its contents.
+// jsonb doesn't preserve key order, so a state written and read straight back
+// serialises differently than it went in — comparing values meant a save
+// always looked like someone else's edit, while two reads in a row didn't.
+// That is a coin flip, not a rule, and it made syncing look erratic.
 //
 // Deliberately in memory only. After a reload there is no pending local edit
 // to protect, so an unknown base falling back to "prefer more progress" is
@@ -174,14 +182,22 @@ export function mergeFromServer(
   variant: string,
   puzzleDate: string,
   local: Rec | null,
-  remote: Rec | null
+  row: DailyRow
 ): Rec | null {
   const key = baseKey(game, variant, puzzleDate);
-  const remoteJson = JSON.stringify(remote ?? null);
   const base = syncBase.get(key);
-  const serverMoved = base === undefined || base !== remoteJson;
-  syncBase.set(key, remoteJson);
-  return mergeDaily(game, local, remote, serverMoved ? 'pull' : 'push');
+  const serverMoved = base === undefined || base !== row.updatedAt;
+  syncBase.set(key, row.updatedAt);
+  return mergeDaily(game, local, row.state, serverMoved ? 'pull' : 'push');
+}
+
+export function noteWritten(
+  game: DailyGame,
+  variant: string,
+  puzzleDate: string,
+  updatedAt: string
+): void {
+  syncBase.set(baseKey(game, variant, puzzleDate), updatedAt);
 }
 
 // ---------------------------------------------------------------------------
@@ -199,14 +215,19 @@ export async function loadDaily(
     if (!sess.session) return null;
     const { data, error } = await supabase
       .from('daily_progress')
-      .select('state, completed, result')
+      .select('state, completed, result, updated_at')
       .eq('game', game)
       .eq('variant', variant)
       .eq('puzzle_date', puzzleDate)
       .eq('env', DAILY_ENV)
       .maybeSingle();
     if (error || !data) return null;
-    return { state: data.state ?? null, completed: !!data.completed, result: data.result ?? null };
+    return {
+      state: data.state ?? null,
+      completed: !!data.completed,
+      result: data.result ?? null,
+      updatedAt: String(data.updated_at ?? ''),
+    };
   } catch {
     // offline, or the table isn't there yet — play locally
     return null;
@@ -261,6 +282,7 @@ async function push(
     const merged = (current?.state && Object.keys(current.state).length
       ? mergeDaily(game, state, current.state, 'push')
       : state) as Rec;
+    const writtenAt = new Date().toISOString();
     const doneNow = completed || !!current?.completed;
     // the finished board's numbers win over a half-played one's absence
     const resultNow = completed ? result : (current?.result ?? result);
@@ -275,13 +297,13 @@ async function push(
         state: merged,
         completed: doneNow,
         result: resultNow,
-        updated_at: new Date().toISOString(),
+        updated_at: writtenAt,
       },
       { onConflict: 'user_id,game,variant,puzzle_date,env' }
     );
     // what we just wrote is now the server state we have reconciled with, so a
     // pull that reads it back knows it isn't news
-    if (!error) syncBase.set(baseKey(game, variant, puzzleDate), JSON.stringify(merged));
+    if (!error) noteWritten(game, variant, puzzleDate, writtenAt);
     if (error) {
       console.warn('Anagrimoire daily sync failed:', error.message);
       return;

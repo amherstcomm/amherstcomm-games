@@ -97,7 +97,7 @@ export function useDailySync({
       .then((remote) => {
         if (!alive) return;
         if (remote?.state && Object.keys(remote.state).length) {
-          const merged = mergeFromServer(game, variant, date, record, remote.state);
+          const merged = mergeFromServer(game, variant, date, record, remote);
           if (merged) setRecordRef.current(merged);
         }
         syncedKey.current = key;
