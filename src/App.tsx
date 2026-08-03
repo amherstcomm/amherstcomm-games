@@ -144,6 +144,16 @@ function Tile({
           if (e.key === 'Backspace' && !value) focusTile(index - 1);
           else if (e.key === 'ArrowLeft') focusTile(index - 1);
           else if (e.key === 'ArrowRight') focusTile(index + 1);
+          // read-only fields swallow typing, so a physical keyboard on a
+          // touch device (an iPad with a case, say) is served here instead
+          else if (osk && COARSE_POINTER && /^[a-zA-Z]$/.test(e.key)) {
+            e.preventDefault();
+            onChange(e.key.toLowerCase());
+            focusTile(index + 1);
+          } else if (osk && COARSE_POINTER && e.key === 'Backspace' && value) {
+            e.preventDefault();
+            onChange('');
+          }
         }}
         maxLength={1}
         inputMode={osk ? 'none' : undefined}
@@ -328,6 +338,14 @@ function LetterChipInput({
         }}
         onKeyDown={(e) => {
           if (e.key === 'Backspace' && value) onChange(value.slice(0, -1));
+          // as above: read-only swallows typing, so accept it from the key event
+          else if (osk && COARSE_POINTER) {
+            const ok = allowWildcard ? /^[a-zA-Z?]$/ : /^[a-zA-Z]$/;
+            if (ok.test(e.key)) {
+              e.preventDefault();
+              onChange((value + e.key.toLowerCase()).slice(0, maxLen));
+            }
+          }
         }}
         inputMode={osk ? 'none' : undefined}
         readOnly={osk && COARSE_POINTER}
