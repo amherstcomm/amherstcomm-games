@@ -1,6 +1,15 @@
-import { useRef } from 'react';
-import { Check, Contrast, Keyboard, Monitor, Moon, Sun, Type, X } from 'lucide-react';
+import { useRef, useState } from 'react';
+import { BarChart3, Check, Contrast, Keyboard, Monitor, Moon, Sun, Type, X } from 'lucide-react';
 import KeyDiagram from '@/KeyDiagram';
+import { GA_ID, disableAnalytics, initAnalytics } from '@/analytics';
+import {
+  clearAnalyticsCookies,
+  gpcEnabled,
+  needsConsent,
+  readConsent,
+  writeConsent,
+  type Consent,
+} from '@/consent';
 import type { NavKeys } from '@/storage';
 import type { Palette, TextScale, ThemeMode } from '@/theme';
 import { useModalA11y } from '@/useModalA11y';
@@ -78,6 +87,26 @@ export default function SettingsModal({
 }) {
   const dialogRef = useRef<HTMLDivElement>(null);
   useModalA11y(dialogRef, onClose);
+
+  // Somewhere that requires asking, an unanswered visitor is off; everywhere
+  // else analytics runs unless it's been turned off, which is the state this
+  // control exists to make reachable.
+  const gpc = gpcEnabled();
+  const [analytics, setAnalyticsState] = useState<Consent>(
+    () => readConsent() ?? (gpc || needsConsent() ? 'denied' : 'granted')
+  );
+
+  function setAnalytics(value: Consent) {
+    if (gpc) return;
+    writeConsent(value);
+    setAnalyticsState(value);
+    if (value === 'granted') {
+      initAnalytics();
+    } else {
+      disableAnalytics();
+      clearAnalyticsCookies();
+    }
+  }
 
   return (
     <div
@@ -223,6 +252,41 @@ export default function SettingsModal({
               </p>
             </div>
           </div>
+
+          {GA_ID && (
+            <div>
+              <h3 className="flex items-center gap-2 text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2.5">
+                <BarChart3 className="w-3.5 h-3.5" />
+                Analytics
+              </h3>
+              <div className="inline-flex rounded-xl bg-white/5 border border-white/10 p-1 gap-1">
+                {(
+                  [
+                    { id: 'granted' as const, label: 'Allowed' },
+                    { id: 'denied' as const, label: 'Off' },
+                  ]
+                ).map(({ id, label }) => (
+                  <button
+                    key={id}
+                    onClick={() => setAnalytics(id)}
+                    aria-pressed={analytics === id}
+                    disabled={gpc}
+                    className={`px-3 h-9 rounded-lg text-sm font-semibold transition-colors
+                      ${analytics === id
+                        ? 'bg-amber-400 text-ink shadow-lg shadow-amber-500/30'
+                        : 'text-slate-300 hover:bg-white/10'}`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+              <p className="mt-2 text-xs text-slate-500">
+                {gpc
+                  ? 'Your browser sends a Global Privacy Control signal, so analytics is off and stays off.'
+                  : 'Counts visits, never your letters or results. Turning it off also clears the cookies it left behind. Kept per browser, since cookies are.'}
+              </p>
+            </div>
+          )}
 
           <p className="text-xs text-slate-500 border-t border-white/10 pt-4">
             {signedIn

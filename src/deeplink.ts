@@ -74,6 +74,17 @@ function parse(): Intent | null {
 // state, and they must all see the same answer.
 export const intent = parse();
 
+// ?legal=privacy and ?legal=terms open the documents directly. OAuth consent
+// screens and app listings all want a link to a privacy policy, and a link
+// that needs someone to find a modal first isn't one.
+export type LegalDoc = 'privacy' | 'terms';
+
+export const legalIntent: LegalDoc | null = (() => {
+  if (typeof window === 'undefined') return null;
+  const v = new URLSearchParams(window.location.search).get('legal');
+  return v === 'privacy' || v === 'terms' ? v : null;
+})();
+
 // Games persist their own daily/practice toggle; an incoming link overrides it
 // for the one game it names, and leaves the rest alone.
 export function dailyIntent(mode: Mode): boolean | null {
@@ -84,6 +95,6 @@ export function dailyIntent(mode: Mode): boolean | null {
 // place would re-select this game on every later reload, long after the reader
 // has moved on.
 export function clearIntentUrl(): void {
-  if (!intent) return;
+  if (!intent && !legalIntent) return;
   history.replaceState(null, '', window.location.pathname + window.location.hash);
 }

@@ -186,6 +186,59 @@ export function applyEvent(s: LifetimeStats, e: GameEvent): void {
   }
 }
 
+// A daily contributes one summary rather than a stream of events. Hive is the
+// reason this isn't just applyEvent: its log counted one row per word, so a
+// finished hive has to arrive as totals instead.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function applyDailySummary(s: LifetimeStats, game: string, p: any): void {
+  switch (game) {
+    case 'guess': {
+      s.guess.played += 1;
+      s.guess.totalTimeMs += num(p?.timeMs);
+      if (p?.won) {
+        s.guess.won += 1;
+        const g = num(p?.guesses);
+        if (g >= 1 && g <= 6) s.guess.dist[g - 1] += 1;
+        s.guess.bestTimeMs = minNullable(s.guess.bestTimeMs, num(p?.timeMs));
+      }
+      break;
+    }
+    case 'hive':
+      s.hive.words += num(p?.words);
+      s.hive.pangrams += num(p?.pangrams);
+      if (p?.genius) s.hive.genius += 1;
+      if (p?.queenBee) s.hive.queenBee += 1;
+      s.hive.bestScore = Math.max(s.hive.bestScore, num(p?.score));
+      break;
+    case 'scramble':
+    case 'grid': {
+      const b = s[game];
+      b.sprints += 1;
+      b.words += num(p?.words);
+      b.totalScore += num(p?.score);
+      b.bestScore = Math.max(b.bestScore, num(p?.score));
+      break;
+    }
+    case 'box':
+      s.box.solved += 1;
+      s.box.totalWords += num(p?.words);
+      s.box.totalTimeMs += num(p?.timeMs);
+      s.box.fewestWords = minNullable(s.box.fewestWords, num(p?.words));
+      s.box.bestTimeMs = minNullable(s.box.bestTimeMs, num(p?.timeMs));
+      break;
+    case 'weave':
+      s.weave.hintsUsed += num(p?.hints);
+      if (p?.solved) {
+        s.weave.solved += 1;
+        s.weave.totalTimeMs += num(p?.timeMs);
+        s.weave.bestTimeMs = minNullable(s.weave.bestTimeMs, num(p?.timeMs));
+      } else {
+        s.weave.revealed += 1;
+      }
+      break;
+  }
+}
+
 function minNullable(a: number | null, b: number | null): number | null {
   if (a === null) return b;
   if (b === null) return a;
@@ -238,9 +291,13 @@ export function combineStats(a: LifetimeStats, b: LifetimeStats): LifetimeStats 
   };
 }
 
-// fire-and-forget append to the synced event log; no-op when signed out
+// Fire-and-forget append to the synced event log; no-op when signed out.
+//
+// Practice only. Dailies live in daily_progress, keyed on the puzzle, because
+// an append-only log can't say "this is the same board you already played" —
+// which is exactly what two devices need to agree on.
 function syncEvent(e: GameEvent, daily: boolean, puzzleDate: string | null): void {
-  if (!supabase) return;
+  if (!supabase || daily) return;
   supabase.auth
     .getSession()
     .then(({ data }) => {
@@ -397,23 +454,37 @@ export async function fetchSyncedStats(): Promise<StatsStore | null> {
       };
     }
 
+    // practice: the event log, replayed
     const PAGE = 1000;
     for (let from = 0; ; from += PAGE) {
       const { data, error } = await supabase
         .from('game_results')
         .select('game, daily, payload')
+        .eq('daily', false)
         .order('id', { ascending: true })
         .range(from, from + PAGE - 1);
       if (error) throw error;
       for (const row of data ?? []) {
         if (!KNOWN_GAMES.has(row.game)) continue;
-        applyEvent(row.daily ? store.daily : store.practice, {
+        applyEvent(store.practice, {
           game: row.game,
           payload: row.payload ?? {},
         } as GameEvent);
       }
       if (!data || data.length < PAGE) break;
     }
+
+    // dailies: one summary per board, however many devices played it
+    const { data: dailies, error: dailyError } = await supabase
+      .from('daily_progress')
+      .select('game, result')
+      .eq('completed', true);
+    if (dailyError) throw dailyError;
+    for (const row of dailies ?? []) {
+      if (!KNOWN_GAMES.has(row.game) || !row.result) continue;
+      applyDailySummary(store.daily, row.game, row.result);
+    }
+
     return store;
   } catch {
     return null;

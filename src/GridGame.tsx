@@ -15,6 +15,7 @@ import DailyStats from '@/DailyStats';
 import MobileKeyInput from '@/MobileKeyInput';
 import ShareButton from '@/ShareButton';
 import { dailyIntent } from '@/deeplink';
+import { useDailySync } from '@/useDailySync';
 import { buildShare } from '@/share';
 import { recordSprint } from '@/stats';
 
@@ -261,6 +262,15 @@ const GridGame = forwardRef<
     [record]
   );
 
+  const syncing = useDailySync({
+    game: 'grid',
+    date: store.dailyDate,
+    record,
+    setRecord: (merged) => setStore((prev) => ({ ...prev, daily: merged as GridRecord })),
+    summary: record?.finished ? { score, words: record.found.length } : null,
+    active: store.dailyMode,
+  });
+
   // dim letters not on the grid once the game has started (not before — that
   // would leak the letters)
   useEffect(() => {
@@ -446,7 +456,7 @@ const GridGame = forwardRef<
     setStore((prev) => ({ ...prev, practice: rollPracticeGrid(n) }));
   }
 
-  const loading = store.dailyMode ? !record && !dailyError : !record;
+  const loading = (store.dailyMode ? !record && !dailyError : !record) || syncing;
   const mmss = `${Math.floor(remaining / 60000)}:${String(
     Math.floor((remaining % 60000) / 1000)
   ).padStart(2, '0')}`;

@@ -12,6 +12,7 @@ import DailyStats from '@/DailyStats';
 import MobileKeyInput from '@/MobileKeyInput';
 import ShareButton from '@/ShareButton';
 import { dailyIntent } from '@/deeplink';
+import { useDailySync } from '@/useDailySync';
 import { buildShare, TILE_EMOJI } from '@/share';
 import { usePalette } from '@/theme';
 import { recordGuessFinish } from '@/stats';
@@ -210,6 +211,22 @@ const GuessGame = forwardRef<
   const lost = !won && guesses.length >= MAX_GUESSES;
   const playing = secret !== null && !won && !lost;
 
+  // Each word length is its own board on the same date, so the length is the
+  // variant that keeps today's 5- and 6-letter puzzles apart.
+  const syncing = useDailySync({
+    game: 'guess',
+    variant: String(length),
+    date: dailyData?.date ?? '',
+    record: record ?? null,
+    setRecord: (merged) =>
+      setStore((prev) => ({ ...prev, daily: { ...prev.daily, [lenKey]: merged as GameRecord } })),
+    summary:
+      won || lost
+        ? { won, guesses: guesses.length, timeMs: record?.elapsedMs ?? 0, length }
+        : null,
+    active: dailyMode,
+  });
+
   // thinking time: counts while the board is visible and unfinished
   useUpTimer(playing, (delta) => {
     setStore((prev) => {
@@ -394,7 +411,9 @@ const GuessGame = forwardRef<
     }
   };
 
-  const loading = dailyMode ? !dailyData && !dailyError : !commonWords;
+  // hold the board until the synced copy has merged — reconciling after
+  // someone has typed a guess is worse than a moment of waiting
+  const loading = (dailyMode ? !dailyData && !dailyError : !commonWords) || syncing;
 
   return (
     <div className="text-center">

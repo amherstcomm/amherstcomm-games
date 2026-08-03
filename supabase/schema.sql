@@ -91,6 +91,88 @@ create policy "read own results"
   using ((select auth.uid()) = user_id);
 
 -- ---------------------------------------------------------------------------
+-- daily_progress: one row per player per daily puzzle. A daily is one board
+-- with one outcome, so it wants state, not events — an append-only log lets
+-- the same puzzle be played twice on two devices and counted twice, and for
+-- hive (which logs a row per word found) no uniqueness rule could fix that
+-- without storing the word.
+--
+-- The primary key does the work: a second device upserts the same row.
+-- `state` carries the board so a half-finished puzzle can follow you between
+-- devices; `result` carries the summary that statistics are computed from.
+-- `variant` separates boards that share a game and a date — today's 5-letter
+-- and 6-letter Guess are different puzzles.
+-- ---------------------------------------------------------------------------
+create table if not exists public.daily_progress (
+  user_id uuid not null references auth.users (id) on delete cascade,
+  game text not null check (game in ('guess', 'hive', 'scramble', 'grid', 'box', 'weave')),
+  variant text not null default '',
+  puzzle_date date not null,
+  env text not null default 'prod',
+  state jsonb not null default '{}'::jsonb,
+  completed boolean not null default false,
+  result jsonb,
+  updated_at timestamptz not null default now(),
+  primary key (user_id, game, variant, puzzle_date, env)
+);
+
+create index if not exists daily_progress_lookup_idx
+  on public.daily_progress (game, puzzle_date, env)
+  where completed;
+
+alter table public.daily_progress enable row level security;
+
+drop policy if exists "read own progress" on public.daily_progress;
+create policy "read own progress"
+  on public.daily_progress for select
+  using ((select auth.uid()) = user_id);
+
+drop policy if exists "insert own progress" on public.daily_progress;
+create policy "insert own progress"
+  on public.daily_progress for insert
+  with check ((select auth.uid()) = user_id);
+
+drop policy if exists "update own progress" on public.daily_progress;
+create policy "update own progress"
+  on public.daily_progress for update
+  using ((select auth.uid()) = user_id)
+  with check ((select auth.uid()) = user_id);
+
+-- Fold the daily rows already in game_results into the new table, so nobody
+-- loses the days they played before the cutover. Hive is the one that needs
+-- collapsing: its many per-word rows become a single summary. Everything else
+-- already wrote one row per finished board, so its payload is the summary.
+insert into public.daily_progress (user_id, game, variant, puzzle_date, env, state, completed, result, updated_at)
+select
+  user_id,
+  game,
+  case when game = 'guess' then coalesce(payload->>'length', '') else '' end as variant,
+  puzzle_date,
+  coalesce(payload->>'env', 'prod') as env,
+  '{}'::jsonb,
+  true,
+  case
+    when game = 'hive' then jsonb_build_object(
+      'words', count(*),
+      'pangrams', count(*) filter (where (payload->>'pangram')::boolean),
+      'score', coalesce(max((payload->>'score')::numeric), 0),
+      'genius', coalesce(bool_or((payload->>'genius')::boolean), false),
+      'queenBee', coalesce(bool_or((payload->>'queenBee')::boolean), false)
+    )
+    else (array_agg(payload order by id desc))[1] - 'env'
+  end,
+  max(created_at)
+from public.game_results
+where daily and puzzle_date is not null
+group by
+  user_id,
+  game,
+  case when game = 'guess' then coalesce(payload->>'length', '') else '' end,
+  puzzle_date,
+  coalesce(payload->>'env', 'prod')
+on conflict (user_id, game, variant, puzzle_date, env) do nothing;
+
+-- ---------------------------------------------------------------------------
 -- daily_stats: cross-player aggregates for one day's daily puzzle. Security
 -- definer so it can read past RLS, but it exposes ONLY aggregates — never
 -- rows. Callable by everyone: signed-out visitors can see the numbers,
@@ -108,82 +190,64 @@ set search_path = ''
 stable
 as $$
 declare
-  result jsonb;
+  out_json jsonb;
 begin
+  -- One completed row per player per board, so these are plain aggregates —
+  -- no per-user collapsing step, and a player who opened the puzzle on three
+  -- devices still counts once.
   if p_game = 'guess' then
     select jsonb_build_object(
       'players', count(distinct user_id),
       'boards', count(*),
-      'winRate', round(100.0 * count(*) filter (where (payload->>'won')::boolean) / greatest(count(*), 1)),
-      'avgGuesses', round(avg((payload->>'guesses')::numeric) filter (where (payload->>'won')::boolean), 1)
-    ) into result
-    from public.game_results
-    where game = 'guess' and daily and puzzle_date = p_date
-      and coalesce(payload->>'env', 'prod') = p_env;
+      'winRate', round(100.0 * count(*) filter (where (dp.result->>'won')::boolean) / greatest(count(*), 1)),
+      'avgGuesses', round(avg((dp.result->>'guesses')::numeric) filter (where (dp.result->>'won')::boolean), 1)
+    ) into out_json
+    from public.daily_progress dp
+    where game = 'guess' and completed and puzzle_date = p_date and env = p_env;
 
   elsif p_game = 'hive' then
-    with per_user as (
-      select user_id,
-        max((payload->>'score')::numeric) as best,
-        bool_or((payload->>'genius')::boolean) as genius,
-        bool_or((payload->>'queenBee')::boolean) as queen
-      from public.game_results
-      where game = 'hive' and daily and puzzle_date = p_date
-        and coalesce(payload->>'env', 'prod') = p_env
-      group by user_id
-    )
     select jsonb_build_object(
       'players', count(*),
-      'avgScore', round(avg(best)),
-      'genius', count(*) filter (where genius),
-      'queenBee', count(*) filter (where queen)
-    ) into result
-    from per_user;
+      'avgScore', round(avg((dp.result->>'score')::numeric)),
+      'genius', count(*) filter (where (dp.result->>'genius')::boolean),
+      'queenBee', count(*) filter (where (dp.result->>'queenBee')::boolean)
+    ) into out_json
+    from public.daily_progress dp
+    where game = 'hive' and completed and puzzle_date = p_date and env = p_env;
 
   elsif p_game in ('scramble', 'grid') then
     select jsonb_build_object(
       'players', count(distinct user_id),
-      'avgScore', round(avg((payload->>'score')::numeric)),
-      'topScore', max((payload->>'score')::numeric)
-    ) into result
-    from public.game_results
-    where game = p_game and daily and puzzle_date = p_date
-      and coalesce(payload->>'env', 'prod') = p_env;
+      'avgScore', round(avg((dp.result->>'score')::numeric)),
+      'topScore', max((dp.result->>'score')::numeric)
+    ) into out_json
+    from public.daily_progress dp
+    where game = p_game and completed and puzzle_date = p_date and env = p_env;
 
   elsif p_game = 'box' then
     select jsonb_build_object(
       'players', count(distinct user_id),
-      'avgWords', round(avg((payload->>'words')::numeric), 1),
-      'fewestWords', min((payload->>'words')::int)
-    ) into result
-    from public.game_results
-    where game = 'box' and daily and puzzle_date = p_date
-      and coalesce(payload->>'env', 'prod') = p_env;
+      'avgWords', round(avg((dp.result->>'words')::numeric), 1),
+      'fewestWords', min((dp.result->>'words')::int)
+    ) into out_json
+    from public.daily_progress dp
+    where game = 'box' and completed and puzzle_date = p_date and env = p_env;
 
   elsif p_game = 'weave' then
-    with per_user as (
-      select user_id,
-        bool_or((payload->>'solved')::boolean) as solved,
-        min((payload->>'timeMs')::numeric) filter (where (payload->>'solved')::boolean) as best_time,
-        max((payload->>'hints')::numeric) as hints
-      from public.game_results
-      where game = 'weave' and daily and puzzle_date = p_date
-        and coalesce(payload->>'env', 'prod') = p_env
-      group by user_id
-    )
     select jsonb_build_object(
       'players', count(*),
-      'solvedPct', round(100.0 * count(*) filter (where solved) / greatest(count(*), 1)),
-      'avgTimeMs', round(avg(best_time)),
-      'avgHints', round(avg(hints), 1)
-    ) into result
-    from per_user;
+      'solvedPct', round(100.0 * count(*) filter (where (dp.result->>'solved')::boolean) / greatest(count(*), 1)),
+      'avgTimeMs', round(avg((dp.result->>'timeMs')::numeric) filter (where (dp.result->>'solved')::boolean)),
+      'avgHints', round(avg((dp.result->>'hints')::numeric), 1)
+    ) into out_json
+    from public.daily_progress dp
+    where game = 'weave' and completed and puzzle_date = p_date and env = p_env;
 
   else
     return null;
   end if;
 
-  return coalesce(result, '{}'::jsonb);
+  return coalesce(out_json, '{}'::jsonb);
 end;
 $$;
 

@@ -13,6 +13,7 @@ import { dailyDataUrl, WEAVE_POOL_URL } from '@/dailyData';
 import DailyStats from '@/DailyStats';
 import ShareButton from '@/ShareButton';
 import { dailyIntent } from '@/deeplink';
+import { useDailySync } from '@/useDailySync';
 import { buildShare, WEAVE_EMOJI } from '@/share';
 import { usePalette } from '@/theme';
 import { recordWeaveReveal, recordWeaveSolve } from '@/stats';
@@ -265,6 +266,21 @@ const WeaveGame = forwardRef<
   const solvedAll =
     !!answers && !!record && record.found.length >= answers.words.length + 1;
   const complete = solvedAll || !!record?.revealed;
+
+  const syncing = useDailySync({
+    game: 'weave',
+    date: store.dailyDate,
+    record,
+    setRecord: (merged) => setStore((prev) => ({ ...prev, daily: merged as WeaveRecord })),
+    summary: complete
+      ? {
+          solved: solvedAll,
+          timeMs: solvedAll ? record?.elapsedMs ?? 0 : 0,
+          hints: record?.hintsUsed ?? 0,
+        }
+      : null,
+    active: store.dailyMode,
+  });
 
   // after completion, draw every word's path as a line overlay
   const boardWrapRef = useRef<HTMLDivElement>(null);
@@ -548,7 +564,7 @@ const WeaveGame = forwardRef<
     if (rec) setStore((prev) => ({ ...prev, practiceSize: size, practice: rec }));
   }
 
-  const loading = store.dailyMode ? !record && !dailyError : !record;
+  const loading = (store.dailyMode ? !record && !dailyError : !record) || syncing;
   const cellSize =
     cols === 8 ? 'w-8 h-9 sm:w-9 sm:h-10 text-base sm:text-lg' : 'w-9 h-10 sm:w-11 sm:h-12 text-lg sm:text-xl';
 

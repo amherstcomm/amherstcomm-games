@@ -10,7 +10,6 @@ import KeyboardHelp from '@/KeyboardHelp';
 import { PALETTES, PaletteContext, TEXT_SCALES, THEME_MODES, useTheme, type Palette, type TextScale, type ThemeMode } from '@/theme';
 import { useModalA11y } from '@/useModalA11y';
 import { supabase } from '@/supabase';
-import { GA_ID } from '@/analytics';
 import { importBaselineOnce } from '@/stats';
 import GuessGame, { type GuessGameHandle, type LetterState } from '@/GuessGame';
 import HiveGame, { type HiveGameHandle } from '@/HiveGame';
@@ -21,7 +20,9 @@ import WeaveGame, { type WeaveGameHandle } from '@/WeaveGame';
 import { dailyDataUrl } from '@/dailyData';
 import { DICTIONARIES, getDictionary, type DictionaryId } from '@/dictionaries';
 import { solvePattern, solveDescramble, solveBee, solveBoxed, solveGrid, findGridPath } from '@/solvers';
-import { clearIntentUrl, intent } from '@/deeplink';
+import ConsentBanner from '@/ConsentBanner';
+import { PrivacyPolicy, Terms } from '@/LegalDocs';
+import { clearIntentUrl, intent, legalIntent } from '@/deeplink';
 import { loadState, saveState, GRID_PRESET_DIMS, WEAVE_DIMS, type GridPreset, type Mode, type NavKeys, type SortPref, type WeaveSize } from '@/storage';
 
 const MIN_LEN = 3;
@@ -600,7 +601,10 @@ function App() {
   const [sorts, setSorts] = useState(initial.sort);
   const [kbOpen, setKbOpen] = useState(initial.keyboard);
   const [aboutOpen, setAboutOpen] = useState(false);
-  const [legalOpen, setLegalOpen] = useState(false);
+  const [legalOpen, setLegalOpen] = useState(legalIntent !== null);
+  const [legalTab, setLegalTab] = useState<'notices' | 'privacy' | 'terms'>(
+    legalIntent ?? 'notices'
+  );
   const [statsOpen, setStatsOpen] = useState(false);
   const [learnMode, setLearnMode] = useState(intent?.view === 'learn');
   const [accountOpen, setAccountOpen] = useState(false);
@@ -2260,6 +2264,13 @@ function App() {
 
       {accountOpen && <AccountModal session={session} onClose={() => setAccountOpen(false)} />}
 
+      <ConsentBanner
+        onReadPolicy={() => {
+          setLegalTab('privacy');
+          setLegalOpen(true);
+        }}
+      />
+
       {keysOpen && <KeyboardHelp navKeys={navKeys} onClose={() => setKeysOpen(false)} />}
 
       {settingsOpen && (
@@ -2332,10 +2343,14 @@ function App() {
                   <div>
                     <p className="text-slate-300 font-medium">Do I need an account?</p>
                     <p>
-                      No. Everything works without one — signing in adds cross-device
-                      syncing of your play statistics, and the site-wide daily numbers
-                      (&quot;across all registered players&quot;) accumulate only from
-                      signed-in accounts.
+                      No. Everything works without one. Signing in carries your
+                      statistics <em>and</em> today&apos;s unfinished puzzles between
+                      devices — start on a phone, finish on a laptop, and a daily you
+                      have already played won&apos;t come back as a fresh board
+                      somewhere else. Without an account each browser keeps its own
+                      separate progress, which can look like syncing until you compare
+                      two of them. The site-wide daily numbers (&quot;across all
+                      registered players&quot;) accumulate only from signed-in accounts.
                     </p>
                   </div>
                   <div>
@@ -2420,7 +2435,7 @@ function App() {
             ref={legalRef}
             tabIndex={-1}
             onClick={(e) => e.stopPropagation()}
-            className="relative w-full max-w-lg max-h-[80vh] overflow-y-auto rounded-2xl bg-slate-900 border border-white/10 p-6 sm:p-8 text-left shadow-2xl"
+            className="relative w-full max-w-2xl max-h-[85vh] overflow-y-auto rounded-2xl bg-slate-900 border border-white/10 p-6 sm:p-8 text-left shadow-2xl"
           >
             <button
               onClick={() => setLegalOpen(false)}
@@ -2430,9 +2445,34 @@ function App() {
               <X className="w-4 h-4" />
             </button>
 
-            <h2 className="text-xl font-bold mb-5">Legal &amp; licenses</h2>
+            <h2 className="text-xl font-bold mb-4">Legal</h2>
 
-            <div className="space-y-5 text-sm text-slate-300">
+            <div className="inline-flex flex-wrap rounded-xl bg-white/5 border border-white/10 p-1 gap-1 mb-5">
+              {(
+                [
+                  ['notices', 'Notices'],
+                  ['privacy', 'Privacy'],
+                  ['terms', 'Terms'],
+                ] as const
+              ).map(([id, label]) => (
+                <button
+                  key={id}
+                  onClick={() => setLegalTab(id)}
+                  aria-current={legalTab === id ? 'page' : undefined}
+                  className={`px-4 h-9 rounded-lg text-sm font-semibold transition-colors
+                    ${legalTab === id
+                      ? 'bg-emerald-400 text-ink'
+                      : 'text-slate-300 hover:bg-white/10'}`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+
+            {legalTab === 'privacy' && <PrivacyPolicy />}
+            {legalTab === 'terms' && <Terms />}
+
+            <div className={`space-y-5 text-sm text-slate-300 ${legalTab === 'notices' ? '' : 'hidden'}`}>
               <div>
                 <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">
                   Disclaimer
@@ -2446,19 +2486,6 @@ function App() {
                   puzzles this tool can help with.
                 </p>
               </div>
-
-              {GA_ID && (
-                <div>
-                  <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">
-                    Privacy
-                  </h3>
-                  <p className="text-slate-400">
-                    Solving happens entirely in your browser — the letters you enter never
-                    leave your device. This site uses Google Analytics for anonymous visit
-                    statistics, and optional accounts sync only your play results.
-                  </p>
-                </div>
-              )}
 
               <div>
                 <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">
