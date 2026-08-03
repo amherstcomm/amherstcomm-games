@@ -13,7 +13,8 @@ import { dailyDataUrl } from '@/dailyData';
 import DailyStats from '@/DailyStats';
 import MobileKeyInput from '@/MobileKeyInput';
 import ShareButton from '@/ShareButton';
-import { buildShare, resultTitle } from '@/share';
+import { dailyIntent } from '@/deeplink';
+import { buildShare } from '@/share';
 import { recordSprint } from '@/stats';
 
 export type ScrambleGameHandle = { pressKey: (k: string) => void };
@@ -63,7 +64,15 @@ function sanitizeRecord(r: unknown): ScrambleRecord | null {
   };
 }
 
+// An incoming ?daily=/?play= link decides which board is waiting; without one
+// we keep whatever the player last had open.
 function loadStore(): ScrambleStore {
+  const store = readStore();
+  const forced = dailyIntent('descramble');
+  return forced === null ? store : { ...store, dailyMode: forced };
+}
+
+function readStore(): ScrambleStore {
   try {
     const raw = localStorage.getItem(SCRAMBLE_KEY);
     if (!raw) return DEFAULT_STORE;
@@ -492,10 +501,16 @@ const ScrambleGame = forwardRef<
               <>
                 <ShareButton
                   build={() =>
-                    buildShare(resultTitle('Scramble', store.dailyMode, store.dailyDate), [
-                      `${score}/${maxScore} pts`,
-                      `${record.found.length}/${answers?.length ?? 0} words`,
-                    ])
+                    buildShare({
+                      game: 'Scramble',
+                      slug: 'scramble',
+                      daily: store.dailyMode,
+                      date: store.dailyDate,
+                      body: [
+                        `${score}/${maxScore} pts`,
+                        `${record.found.length}/${answers?.length ?? 0} words`,
+                      ],
+                    })
                   }
                 />
                 <button

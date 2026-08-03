@@ -12,7 +12,8 @@ import { gridNeighbors } from '@/solvers';
 import { dailyDataUrl, WEAVE_POOL_URL } from '@/dailyData';
 import DailyStats from '@/DailyStats';
 import ShareButton from '@/ShareButton';
-import { buildShare, resultTitle, WEAVE_EMOJI } from '@/share';
+import { dailyIntent } from '@/deeplink';
+import { buildShare, WEAVE_EMOJI } from '@/share';
 import { usePalette } from '@/theme';
 import { recordWeaveReveal, recordWeaveSolve } from '@/stats';
 import type { NavKeys } from '@/storage';
@@ -91,7 +92,15 @@ function sanitizeRecord(r: unknown): WeaveRecord | null {
   };
 }
 
+// An incoming ?daily=/?play= link decides which board is waiting; without one
+// we keep whatever the player last had open.
 function loadStore(): WeaveStore {
+  const store = readStore();
+  const forced = dailyIntent('weave');
+  return forced === null ? store : { ...store, dailyMode: forced };
+}
+
+function readStore(): WeaveStore {
   try {
     const raw = localStorage.getItem(WEAVE_KEY);
     if (!raw) return DEFAULT_STORE;
@@ -721,15 +730,18 @@ const WeaveGame = forwardRef<
                     .join('');
                   // deliberately no clue: working out the theme is half the
                   // puzzle, so posting it would spoil the board
-                  return buildShare(
-                    resultTitle('Weave', store.dailyMode, store.dailyDate),
-                    [
+                  return buildShare({
+                    game: 'Weave',
+                    slug: 'weave',
+                    daily: store.dailyMode,
+                    date: store.dailyDate,
+                    body: [
                       marks + e.hint.repeat(record.hintsUsed),
                       solvedAll
                         ? `Solved in ${formatElapsed(record.elapsedMs ?? 0)}`
                         : 'Revealed',
-                    ]
-                  );
+                    ],
+                  });
                 }}
               />
             )}

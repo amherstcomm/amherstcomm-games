@@ -1,17 +1,23 @@
 import { useEffect, useRef, useState } from 'react';
 import { Check, Share2 } from 'lucide-react';
-import { shareText, type ShareResult } from '@/share';
+import { shareResult, type SharePayload, type ShareResult } from '@/share';
 
 // `build` is a function so the text is composed at click time, from whatever
 // the board looks like then
-export default function ShareButton({ build, label = 'Share' }: { build: () => string; label?: string }) {
+export default function ShareButton({
+  build,
+  label = 'Share',
+}: {
+  build: () => SharePayload;
+  label?: string;
+}) {
   const [state, setState] = useState<ShareResult | null>(null);
   const timer = useRef<number | undefined>(undefined);
 
   useEffect(() => () => window.clearTimeout(timer.current), []);
 
   async function onShare() {
-    const result = await shareText(build());
+    const result = await shareResult(build());
     setState(result);
     window.clearTimeout(timer.current);
     timer.current = window.setTimeout(() => setState(null), 2000);

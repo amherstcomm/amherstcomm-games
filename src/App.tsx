@@ -21,6 +21,7 @@ import WeaveGame, { type WeaveGameHandle } from '@/WeaveGame';
 import { dailyDataUrl } from '@/dailyData';
 import { DICTIONARIES, getDictionary, type DictionaryId } from '@/dictionaries';
 import { solvePattern, solveDescramble, solveBee, solveBoxed, solveGrid, findGridPath } from '@/solvers';
+import { clearIntentUrl, intent } from '@/deeplink';
 import { loadState, saveState, GRID_PRESET_DIMS, WEAVE_DIMS, type GridPreset, type Mode, type NavKeys, type SortPref, type WeaveSize } from '@/storage';
 
 const MIN_LEN = 3;
@@ -395,8 +396,15 @@ function WordChip({
 
 const initial = loadState();
 
+// A shared link names both a game and a tab. It only overrides the game it
+// names — every other game keeps whatever the visitor last had open.
+const linkView = intent?.view === 'play' ? true : intent?.view === 'solve' ? false : null;
+function initialPlay(mode: Mode, stored: boolean): boolean {
+  return intent?.mode === mode && linkView !== null ? linkView : stored;
+}
+
 function App() {
-  const [mode, setMode] = useState<Mode>(initial.mode);
+  const [mode, setMode] = useState<Mode>(intent?.mode ?? initial.mode);
   const [dictionaries, setDictionaries] = useState(initial.dictionaries);
   const [length, setLength] = useState(initial.pattern.length);
   const [known, setKnown] = useState<string[]>(initial.pattern.known);
@@ -411,10 +419,10 @@ function App() {
   const [solutionWords, setSolutionWords] = useState(initial.boxed.solutionWords);
   const [gridLetters, setGridLetters] = useState<string[]>(initial.grid.letters);
   const [gridPreset, setGridPreset] = useState<GridPreset>(initial.grid.preset);
-  const [gridPlay, setGridPlay] = useState(initial.gridPlay);
+  const [gridPlay, setGridPlay] = useState(initialPlay('grid', initial.gridPlay));
   const [weaveLetters, setWeaveLetters] = useState<string[]>(initial.weave.letters);
   const [weaveSize, setWeaveSize] = useState<WeaveSize>(initial.weave.size);
-  const [weavePlay, setWeavePlay] = useState(initial.weavePlay);
+  const [weavePlay, setWeavePlay] = useState(initialPlay('weave', initial.weavePlay));
 
   const weaveDims = WEAVE_DIMS[weaveSize];
 
@@ -594,7 +602,7 @@ function App() {
   const [aboutOpen, setAboutOpen] = useState(false);
   const [legalOpen, setLegalOpen] = useState(false);
   const [statsOpen, setStatsOpen] = useState(false);
-  const [learnMode, setLearnMode] = useState(false);
+  const [learnMode, setLearnMode] = useState(intent?.view === 'learn');
   const [accountOpen, setAccountOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [keysOpen, setKeysOpen] = useState(false);
@@ -713,10 +721,14 @@ function App() {
       history.replaceState(null, '', window.location.pathname + window.location.search);
     }
   }, []);
-  const [patternPlay, setPatternPlay] = useState(initial.patternPlay);
-  const [beePlay, setBeePlay] = useState(initial.beePlay);
-  const [boxedPlay, setBoxedPlay] = useState(initial.boxedPlay);
-  const [descramblePlay, setDescramblePlay] = useState(initial.descramblePlay);
+
+  // the link's query has been read into state by now; drop it so a later
+  // reload doesn't keep yanking the visitor back to someone else's game
+  useEffect(clearIntentUrl, []);
+  const [patternPlay, setPatternPlay] = useState(initialPlay('pattern', initial.patternPlay));
+  const [beePlay, setBeePlay] = useState(initialPlay('bee', initial.beePlay));
+  const [boxedPlay, setBoxedPlay] = useState(initialPlay('boxed', initial.boxedPlay));
+  const [descramblePlay, setDescramblePlay] = useState(initialPlay('descramble', initial.descramblePlay));
   const [letterStates, setLetterStates] = useState<Record<string, LetterState>>({});
   const [commonWordsArr, setCommonWordsArr] = useState<string[] | null>(null);
   const [fullWordsArr, setFullWordsArr] = useState<string[] | null>(null);

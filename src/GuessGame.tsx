@@ -11,7 +11,8 @@ import { dailyDataUrl } from '@/dailyData';
 import DailyStats from '@/DailyStats';
 import MobileKeyInput from '@/MobileKeyInput';
 import ShareButton from '@/ShareButton';
-import { buildShare, resultTitle, TILE_EMOJI } from '@/share';
+import { dailyIntent } from '@/deeplink';
+import { buildShare, TILE_EMOJI } from '@/share';
 import { usePalette } from '@/theme';
 import { recordGuessFinish } from '@/stats';
 import { formatElapsed, useUpTimer } from '@/useUpTimer';
@@ -41,7 +42,15 @@ const DEFAULT_STORE: PlayStore = {
   stats: { played: 0, won: 0, streak: 0, lastWinDate: '' },
 };
 
+// An incoming ?daily=/?play= link decides which board is waiting; without one
+// we keep whatever the player last had open.
 function loadStore(): PlayStore {
+  const store = readStore();
+  const forced = dailyIntent('pattern');
+  return forced === null ? store : { ...store, dailyMode: forced };
+}
+
+function readStore(): PlayStore {
   try {
     const raw = localStorage.getItem(PLAY_KEY);
     if (!raw) return DEFAULT_STORE;
@@ -492,16 +501,22 @@ const GuessGame = forwardRef<
             {(won || lost) && secret && (
               <ShareButton
                 build={() =>
-                  buildShare(resultTitle(`Guess (${length})`, dailyMode, dailyData?.date), [
-                    won ? `${guesses.length}/${MAX_GUESSES}` : `X/${MAX_GUESSES}`,
-                    '',
-                    // colours only — the letters stay secret
-                    ...guesses.map((g) =>
-                      scoreGuess(secret, g)
-                        .map((s) => TILE_EMOJI[palette][s])
-                        .join('')
-                    ),
-                  ])
+                  buildShare({
+                    game: `Guess (${length})`,
+                    slug: 'pattern',
+                    daily: dailyMode,
+                    date: dailyData?.date,
+                    body: [
+                      won ? `${guesses.length}/${MAX_GUESSES}` : `X/${MAX_GUESSES}`,
+                      '',
+                      // colours only — the letters stay secret
+                      ...guesses.map((g) =>
+                        scoreGuess(secret, g)
+                          .map((s) => TILE_EMOJI[palette][s])
+                          .join('')
+                      ),
+                    ],
+                  })
                 }
               />
             )}

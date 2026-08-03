@@ -13,7 +13,8 @@ import { dailyDataUrl } from '@/dailyData';
 import DailyStats from '@/DailyStats';
 import MobileKeyInput from '@/MobileKeyInput';
 import ShareButton from '@/ShareButton';
-import { buildShare, resultTitle } from '@/share';
+import { dailyIntent } from '@/deeplink';
+import { buildShare } from '@/share';
 import { recordBoxSolve } from '@/stats';
 
 export type BoxGameHandle = { pressKey: (k: string) => void };
@@ -57,7 +58,15 @@ function sanitizeRecord(r: unknown): BoxRecord | null {
   };
 }
 
+// An incoming ?daily=/?play= link decides which board is waiting; without one
+// we keep whatever the player last had open.
 function loadStore(): BoxStore {
+  const store = readStore();
+  const forced = dailyIntent('boxed');
+  return forced === null ? store : { ...store, dailyMode: forced };
+}
+
+function readStore(): BoxStore {
   try {
     const raw = localStorage.getItem(BOX_KEY);
     if (!raw) return DEFAULT_STORE;
@@ -599,12 +608,18 @@ const BoxGame = forwardRef<
             {done && (
               <ShareButton
                 build={() =>
-                  buildShare(resultTitle('Boxed', store.dailyMode, store.dailyDate), [
-                    // word count and time only; the chain itself is the answer
-                    solved
-                      ? `Solved in ${chain.length} word${chain.length === 1 ? '' : 's'} · ${formatElapsed(record.elapsedMs ?? 0)}`
-                      : 'Revealed',
-                  ])
+                  buildShare({
+                    game: 'Boxed',
+                    slug: 'boxed',
+                    daily: store.dailyMode,
+                    date: store.dailyDate,
+                    body: [
+                      // word count and time only; the chain itself is the answer
+                      solved
+                        ? `Solved in ${chain.length} word${chain.length === 1 ? '' : 's'} · ${formatElapsed(record.elapsedMs ?? 0)}`
+                        : 'Revealed',
+                    ],
+                  })
                 }
               />
             )}

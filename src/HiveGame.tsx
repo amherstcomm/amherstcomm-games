@@ -13,7 +13,8 @@ import { dailyDataUrl } from '@/dailyData';
 import DailyStats from '@/DailyStats';
 import MobileKeyInput from '@/MobileKeyInput';
 import ShareButton from '@/ShareButton';
-import { buildShare, resultTitle } from '@/share';
+import { dailyIntent } from '@/deeplink';
+import { buildShare } from '@/share';
 import { recordHiveWord } from '@/stats';
 
 export type HiveGameHandle = { pressKey: (k: string) => void };
@@ -85,7 +86,15 @@ function sanitizeRecord(r: unknown): HiveRecord | null {
   };
 }
 
+// An incoming ?daily=/?play= link decides which board is waiting; without one
+// we keep whatever the player last had open.
 function loadStore(): HiveStore {
+  const store = readStore();
+  const forced = dailyIntent('bee');
+  return forced === null ? store : { ...store, dailyMode: forced };
+}
+
+function readStore(): HiveStore {
   try {
     const raw = localStorage.getItem(HIVE_KEY);
     if (!raw) return DEFAULT_STORE;
@@ -465,13 +474,19 @@ const HiveGame = forwardRef<
             {record.found.length > 0 && (
               <ShareButton
                 build={() =>
-                  buildShare(resultTitle('Hive', store.dailyMode, store.dailyDate), [
-                    rank,
-                    `${score}/${maxScore} pts · ${record.found.length} words`,
-                    ...(record.found.filter(isPangram).length
-                      ? [`${record.found.filter(isPangram).length} pangram${record.found.filter(isPangram).length === 1 ? '' : 's'}`]
-                      : []),
-                  ])
+                  buildShare({
+                    game: 'Hive',
+                    slug: 'hive',
+                    daily: store.dailyMode,
+                    date: store.dailyDate,
+                    body: [
+                      rank,
+                      `${score}/${maxScore} pts · ${record.found.length} words`,
+                      ...(record.found.filter(isPangram).length
+                        ? [`${record.found.filter(isPangram).length} pangram${record.found.filter(isPangram).length === 1 ? '' : 's'}`]
+                        : []),
+                    ],
+                  })
                 }
               />
             )}
