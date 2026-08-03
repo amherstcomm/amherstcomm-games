@@ -1083,10 +1083,12 @@ function App() {
       <div className={`relative max-w-3xl mx-auto px-5 py-10 sm:py-16 ${kbOpen ? 'pb-64 sm:pb-64' : ''}`}>
         {/* header */}
         <header className="text-center mb-8">
-          <h1 className="pb-1 text-4xl sm:text-5xl font-bold tracking-tight bg-gradient-to-br from-white via-white to-slate-400 bg-clip-text text-transparent">
+          {/* pb + relaxed leading so the g's descender isn't clipped by the
+              gradient's text box or crowded into the line below */}
+          <h1 className="pb-3 leading-[1.2] text-4xl sm:text-5xl font-bold tracking-tight bg-gradient-to-br from-white via-white to-slate-400 bg-clip-text text-transparent">
             Anagrimoire
           </h1>
-          <p className="mt-2 text-slate-400 max-w-md mx-auto text-sm sm:text-base">
+          <p className="text-slate-400 max-w-md mx-auto text-sm sm:text-base">
             {MODES.find((m) => m.id === mode)?.description}
           </p>
         </header>

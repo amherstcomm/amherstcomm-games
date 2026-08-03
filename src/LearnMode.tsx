@@ -145,26 +145,39 @@ function scoreGuess(secret: string, guess: string): LetterState[] {
   return result;
 }
 
-const TILE_TONES: Record<LetterState | 'empty', string> = {
+const TILE_TONES: Record<LetterState | 'empty' | 'pending', string> = {
   correct: 'bg-emerald-500/80 border-emerald-400 text-white',
   present: 'bg-amber-400/80 border-amber-300 text-slate-950',
   absent: 'bg-white/[0.04] border-white/10 text-slate-500',
+  pending: 'bg-white/5 border-white/30 text-white',
   empty: 'bg-white/[0.02] border-white/10 text-transparent',
 };
 
-function GuessRow({ word, secret }: { word?: string; secret: string }) {
-  const score = word ? scoreGuess(secret, word) : null;
+// pending rows show what's being typed, uncolored until it's submitted
+function GuessRow({
+  word,
+  secret,
+  pending,
+}: {
+  word?: string;
+  secret: string;
+  pending?: boolean;
+}) {
+  const score = word && !pending ? scoreGuess(secret, word) : null;
   return (
     <div className="flex gap-1.5 justify-center">
-      {Array.from({ length: secret.length }, (_, i) => (
-        <div
-          key={i}
-          className={`w-10 h-12 flex items-center justify-center font-bold uppercase rounded-lg border-2 transition-colors text-xl
-            ${score ? TILE_TONES[score[i]] : TILE_TONES.empty}`}
-        >
-          {word?.[i] ?? '·'}
-        </div>
-      ))}
+      {Array.from({ length: secret.length }, (_, i) => {
+        const ch = word?.[i];
+        return (
+          <div
+            key={i}
+            className={`w-10 h-12 flex items-center justify-center font-bold uppercase rounded-lg border-2 transition-colors text-xl
+              ${score ? TILE_TONES[score[i]] : ch ? TILE_TONES.pending : TILE_TONES.empty}`}
+          >
+            {ch ?? '·'}
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -189,15 +202,48 @@ const GUESS_STEPS = [
   },
 ];
 
-function LearnGuess({ register }: { register: RegisterKeys }) {
-  const [step, setStep] = useState(0);
+const GUESS_ROWS = 6;
 
-  // Enter walks the example forward (and restarts at the end); Backspace
-  // steps back — works from the physical and on-screen keyboards alike
-  useDemoKeys(register, (k) => {
-    if (k === 'enter') setStep((s) => (s >= GUESS_STEPS.length ? 0 : s + 1));
-    else if (k === 'backspace') setStep((s) => Math.max(0, s - 1));
-  });
+function LearnGuess({ dict, register }: { dict: Set<string> | null; register: RegisterKeys }) {
+  const [guesses, setGuesses] = useState<string[]>([]);
+  const [current, setCurrent] = useState('');
+  const [flash, show] = useFlash();
+
+  const won = guesses.includes(GUESS_SECRET);
+  const done = won || guesses.length >= GUESS_ROWS;
+  // the scripted commentary appears whenever the latest guess is one of the
+  // example words — whether you typed it or clicked the example button
+  const note = GUESS_STEPS.find((s) => s.w === guesses[guesses.length - 1])?.note ?? null;
+  const nextExample = GUESS_STEPS.find((s) => !guesses.includes(s.w));
+
+  function submit() {
+    if (done) return;
+    if (current.length !== GUESS_SECRET.length) {
+      show(`Guesses are ${GUESS_SECRET.length} letters`);
+      return;
+    }
+    if (!dict) {
+      show(LOADING_NOTE);
+      return;
+    }
+    if (current !== GUESS_SECRET && !dict.has(current)) {
+      show('Not in dictionary');
+      return;
+    }
+    setGuesses((g) => [...g, current]);
+    setCurrent('');
+    if (current === GUESS_SECRET) show('That’s it — solved! 🎉', true);
+  }
+
+  function handleKey(k: string) {
+    if (done) return;
+    if (k === 'enter') return submit();
+    if (k === 'backspace') return setCurrent((c) => c.slice(0, -1));
+    if (/^[a-z]$/.test(k)) {
+      setCurrent((c) => (c.length < GUESS_SECRET.length ? c + k : c));
+    }
+  }
+  useDemoKeys(register, handleKey);
 
   return (
     <>
@@ -219,26 +265,44 @@ function LearnGuess({ register }: { register: RegisterKeys }) {
         />
       </Section>
 
-      <Section title="Try it — watch a game unfold">
+      <Section title="Try it — the answer is GRAPE">
         <p className="text-sm text-slate-400 mb-4">
-          The secret word is <span className="font-bold uppercase text-slate-200">grape</span>.
-          Step through a real solve:
+          We&apos;ve given away this one so you can watch the colors work. Type any
+          five-letter word and press Enter — or let the example play itself out.
         </p>
-        <div className="space-y-1.5">
-          {GUESS_STEPS.map((s, i) => (
-            <GuessRow key={i} word={i < step ? s.w : undefined} secret={GUESS_SECRET} />
+        <div className="relative space-y-1.5 w-fit mx-auto">
+          {!done && <MobileKeyInput onKey={handleKey} label="Type a five-letter guess" />}
+          {Array.from({ length: GUESS_ROWS }, (_, row) => (
+            <GuessRow
+              key={row}
+              word={guesses[row] ?? (row === guesses.length ? current : undefined)}
+              pending={row === guesses.length}
+              secret={GUESS_SECRET}
+            />
           ))}
         </div>
-        <div className="min-h-12 mt-3 mb-3 max-w-md mx-auto">
-          {step > 0 && <p className="text-sm text-slate-400">{GUESS_STEPS[step - 1].note}</p>}
+        <FlashLine flash={flash} />
+        <div className="min-h-12 mb-3 max-w-md mx-auto">
+          {!flash && note && <p className="text-sm text-slate-400">{note}</p>}
         </div>
-        <div className="flex justify-center gap-2.5">
-          {step < GUESS_STEPS.length ? (
-            <DemoButton onClick={() => setStep((s) => s + 1)}>
-              {step === 0 ? 'Make the first guess' : 'Next guess'}
+        <div className="flex flex-wrap justify-center gap-2.5">
+          {!done && nextExample && (
+            <DemoButton
+              onClick={() => {
+                setCurrent('');
+                setGuesses((g) => [...g, nextExample.w]);
+              }}
+            >
+              {guesses.length === 0 ? 'Show me a first guess' : 'Show me the next guess'}
             </DemoButton>
-          ) : (
-            <DemoButton onClick={() => setStep(0)}>
+          )}
+          {(done || guesses.length > 0) && (
+            <DemoButton
+              onClick={() => {
+                setGuesses([]);
+                setCurrent('');
+              }}
+            >
               <RotateCcw className="w-4 h-4" />
               Start over
             </DemoButton>
@@ -1385,7 +1449,7 @@ const LearnMode = forwardRef<LearnModeHandle, { mode: Mode; standardWords: strin
         The rules, the scoring, and a hands-on demo — no clock, no stakes.
       </p>
 
-      {mode === 'pattern' && <LearnGuess register={register} />}
+      {mode === 'pattern' && <LearnGuess dict={dict} register={register} />}
       {mode === 'descramble' && <LearnScramble dict={dict} register={register} />}
       {mode === 'bee' && <LearnHive dict={dict} register={register} />}
       {mode === 'grid' && <LearnGrid standardWords={standardWords} register={register} />}
