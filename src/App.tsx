@@ -1,5 +1,6 @@
 import { useMemo, useState, useEffect, useLayoutEffect, useRef, type ButtonHTMLAttributes, type ReactNode } from 'react';
 import { Search, Sparkles, Eraser, ArrowDown, ArrowUp, X, BookOpen, Grid3x3, Shuffle, Hexagon, Check, Keyboard, Delete, Github, Info, Square, CalendarDays, Star, Gamepad2, CornerDownLeft, LayoutGrid, Puzzle, BarChart3, UserRound } from 'lucide-react';
+import LearnMode, { type LearnModeHandle } from '@/LearnMode';
 import type { Session } from '@supabase/supabase-js';
 import StatsModal from '@/StatsModal';
 import AccountModal from '@/AccountModal';
@@ -478,6 +479,62 @@ function App() {
   const gridTraceHandlers = (word: string) => traceHandlersFor(word, gridLetters, gridDims.cols);
   const weaveTraceHandlers = (word: string) => traceHandlersFor(word, weaveLetters, weaveDims.cols);
 
+  // boxed solver: hover a word (or a solution chain) to draw its criss-cross
+  // chords on the box — each word in a chain gets its own color
+  const BOX_TRACE_COLORS = [
+    'rgb(125 211 252 / 0.9)', // sky
+    'rgb(251 113 133 / 0.9)', // rose
+    'rgb(167 139 250 / 0.9)', // violet
+    'rgb(52 211 153 / 0.9)', // emerald
+    'rgb(251 191 36 / 0.9)', // amber
+  ];
+  // text classes matching BOX_TRACE_COLORS, so chain chips double as a legend
+  const BOX_TRACE_TEXT = [
+    'text-sky-300',
+    'text-rose-300',
+    'text-violet-300',
+    'text-emerald-300',
+    'text-amber-300',
+  ];
+  const [boxedTrace, setBoxedTrace] = useState<string[] | null>(null);
+  const [boxedTracePts, setBoxedTracePts] = useState<{ x: number; y: number }[][]>([]);
+  const boxedBoardRef = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    if (!boxedTrace || !boxedBoardRef.current) {
+      setBoxedTracePts([]);
+      return;
+    }
+    const wrap = boxedBoardRef.current.getBoundingClientRect();
+    const measure = (word: string) => {
+      const pts: { x: number; y: number }[] = [];
+      for (const c of word) {
+        const idx = boxedLetters.findIndex((l) => l === c);
+        if (idx === -1) continue;
+        const el = boxedBoardRef.current!.querySelector(
+          `input[data-tile-group="boxed"][data-tile-index="${idx}"]`
+        );
+        if (!el) continue;
+        const r = el.getBoundingClientRect();
+        pts.push({ x: r.left + r.width / 2 - wrap.left, y: r.top + r.height / 2 - wrap.top });
+      }
+      return pts;
+    };
+    setBoxedTracePts(boxedTrace.map(measure));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [boxedTrace]);
+
+  function boxedTraceHandlers(words: string[]): ButtonHTMLAttributes<HTMLButtonElement> {
+    const show = () => setBoxedTrace(words);
+    const hide = () => setBoxedTrace(null);
+    return {
+      onMouseEnter: show,
+      onMouseLeave: hide,
+      onPointerDown: show,
+      onPointerUp: hide,
+      onPointerCancel: hide,
+    };
+  }
+
   function changeGridPreset(preset: GridPreset) {
     setGridPreset(preset);
     const dims = GRID_PRESET_DIMS[preset];
@@ -501,6 +558,7 @@ function App() {
   const [kbOpen, setKbOpen] = useState(initial.keyboard);
   const [aboutOpen, setAboutOpen] = useState(false);
   const [statsOpen, setStatsOpen] = useState(false);
+  const [learnMode, setLearnMode] = useState(false);
   const [accountOpen, setAccountOpen] = useState(false);
   const [session, setSession] = useState<Session | null>(null);
 
@@ -541,26 +599,31 @@ function App() {
   const boxRef = useRef<BoxGameHandle>(null);
   const scrambleRef = useRef<ScrambleGameHandle>(null);
   const gridRef = useRef<GridGameHandle>(null);
+  const learnRef = useRef<LearnModeHandle>(null);
 
-  const patternPlayActive = mode === 'pattern' && patternPlay;
-  const beePlayActive = mode === 'bee' && beePlay;
-  const boxedPlayActive = mode === 'boxed' && boxedPlay;
-  const descramblePlayActive = mode === 'descramble' && descramblePlay;
-  const gridPlayActive = mode === 'grid' && gridPlay;
-  const weavePlayActive = mode === 'weave' && weavePlay;
+  const patternPlayActive = mode === 'pattern' && patternPlay && !learnMode;
+  const beePlayActive = mode === 'bee' && beePlay && !learnMode;
+  const boxedPlayActive = mode === 'boxed' && boxedPlay && !learnMode;
+  const descramblePlayActive = mode === 'descramble' && descramblePlay && !learnMode;
+  const gridPlayActive = mode === 'grid' && gridPlay && !learnMode;
+  const weavePlayActive = mode === 'weave' && weavePlay && !learnMode;
   const playActive =
     patternPlayActive || beePlayActive || boxedPlayActive || descramblePlayActive || gridPlayActive || weavePlayActive;
 
   // the guess game validates against the full dictionary and picks practice
-  // words from the common one; hive, box, scramble, and grid play use standard
+  // words from the common one; hive, box, scramble, grid play — and the
+  // Learn demos — use standard
   useEffect(() => {
-    if (!playActive) return;
+    if (!playActive && !learnMode) return;
     if (!commonWordsArr) getDictionary('common').then(setCommonWordsArr);
     if (patternPlayActive && !fullWordsArr) getDictionary('full').then(setFullWordsArr);
-    if ((beePlayActive || boxedPlayActive || descramblePlayActive || gridPlayActive || weavePlayActive) && !standardWordsArr) {
+    if (
+      (learnMode || beePlayActive || boxedPlayActive || descramblePlayActive || gridPlayActive || weavePlayActive) &&
+      !standardWordsArr
+    ) {
       getDictionary('standard').then(setStandardWordsArr);
     }
-  }, [playActive, patternPlayActive, beePlayActive, boxedPlayActive, descramblePlayActive, gridPlayActive, weavePlayActive, commonWordsArr, fullWordsArr, standardWordsArr]);
+  }, [playActive, learnMode, patternPlayActive, beePlayActive, boxedPlayActive, descramblePlayActive, gridPlayActive, weavePlayActive, commonWordsArr, fullWordsArr, standardWordsArr]);
 
   useEffect(() => {
     if (!aboutOpen) return;
@@ -828,6 +891,10 @@ function App() {
   }
 
   function pressKey(k: string) {
+    if (learnMode) {
+      learnRef.current?.pressKey(k);
+      return;
+    }
     if (weavePlayActive) return; // weave play is trace-only
     if (patternPlayActive) {
       gameRef.current?.pressKey(k);
@@ -949,15 +1016,16 @@ function App() {
           </p>
         </header>
 
-        {/* solve / play toggle */}
+        {/* solve / play / learn toggle */}
         <section className="mb-7 text-center">
           <div className="inline-flex rounded-xl bg-white/5 border border-white/10 p-1 gap-1">
               {(
                 [
-                  { play: false, label: 'Solve', Icon: Search },
-                  { play: true, label: 'Play', Icon: Gamepad2 },
+                  { view: 'solve', label: 'Solve', Icon: Search },
+                  { view: 'play', label: 'Play', Icon: Gamepad2 },
+                  { view: 'learn', label: 'Learn', Icon: BookOpen },
                 ] as const
-              ).map(({ play, label, Icon }) => {
+              ).map(({ view, label, Icon }) => {
                 const flags: Record<Mode, [boolean, (v: boolean) => void]> = {
                   pattern: [patternPlay, setPatternPlay],
                   descramble: [descramblePlay, setDescramblePlay],
@@ -967,12 +1035,19 @@ function App() {
                   weave: [weavePlay, setWeavePlay],
                 };
                 const [flag, setFlag] = flags[mode];
-                const active = flag === play;
+                const active = view === 'learn' ? learnMode : !learnMode && flag === (view === 'play');
                 return (
                   <button
                     key={label}
-                    onClick={() => setFlag(play)}
-                    className={`inline-flex items-center gap-1.5 px-5 h-10 rounded-lg text-sm font-semibold transition-all duration-150
+                    onClick={() => {
+                      if (view === 'learn') {
+                        setLearnMode(true);
+                      } else {
+                        setLearnMode(false);
+                        setFlag(view === 'play');
+                      }
+                    }}
+                    className={`inline-flex items-center gap-1.5 px-4 sm:px-5 h-10 rounded-lg text-sm font-semibold transition-all duration-150
                       ${active
                         ? 'bg-emerald-400 text-slate-950 shadow-lg shadow-emerald-500/30'
                         : 'text-slate-300 hover:bg-white/10'}`}
@@ -985,6 +1060,14 @@ function App() {
           </div>
         </section>
 
+        {learnMode && (
+          <div className="mb-8">
+            <LearnMode ref={learnRef} mode={mode} standardWords={standardWordsArr} />
+          </div>
+        )}
+
+        {!learnMode && (
+        <>
         {weavePlayActive && (
         <div className="mb-8">
           <WeaveGame standardWords={standardWordsArr} />
@@ -1476,7 +1559,7 @@ function App() {
               <label className="block text-xs font-medium text-slate-400 uppercase tracking-wider mb-3">
                 Sides of the box
               </label>
-              <div className="relative w-72 h-72 mx-auto">
+              <div ref={boxedBoardRef} className="relative w-72 h-72 mx-auto">
                 <div className="absolute inset-14 rounded-xl border-2 border-white/15 bg-white/[0.02]" />
                 {/* top */}
                 <div className="absolute top-0 left-14 right-14 flex justify-around">
@@ -1494,6 +1577,30 @@ function App() {
                 <div className="absolute left-0 top-14 bottom-14 flex flex-col justify-around items-start">
                   {[9, 10, 11].map(boxTile)}
                 </div>
+                {boxedTracePts.some((pts) => pts.length > 1) && (
+                  <svg className="absolute inset-0 w-full h-full pointer-events-none">
+                    {boxedTracePts.map((pts, wi) =>
+                      pts.length > 1 ? (
+                        <g key={wi}>
+                          <polyline
+                            points={pts.map((p) => `${p.x},${p.y}`).join(' ')}
+                            fill="none"
+                            stroke={BOX_TRACE_COLORS[wi % BOX_TRACE_COLORS.length]}
+                            strokeWidth="3"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          />
+                          <circle
+                            cx={pts[0].x}
+                            cy={pts[0].y}
+                            r="5"
+                            fill={BOX_TRACE_COLORS[wi % BOX_TRACE_COLORS.length]}
+                          />
+                        </g>
+                      ) : null
+                    )}
+                  </svg>
+                )}
               </div>
               <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
                 <button
@@ -1652,12 +1759,13 @@ function App() {
                   <div className="grid grid-cols-1 gap-2.5">
                     <WordChip
                       word={boxedRecommended.words.join(' ')}
+                      hoverProps={boxedTraceHandlers(boxedRecommended.words)}
                       className="bg-amber-400/10 border border-amber-400/30 text-amber-200 font-semibold hover:bg-amber-400/20"
                     >
                       {boxedRecommended.words.map((w, i) => (
                         <span key={i}>
-                          {i > 0 && <span className="text-amber-400/60"> → </span>}
-                          {w}
+                          {i > 0 && <span className="text-slate-500"> → </span>}
+                          <span className={BOX_TRACE_TEXT[i % BOX_TRACE_TEXT.length]}>{w}</span>
                         </span>
                       ))}
                     </WordChip>
@@ -1683,12 +1791,13 @@ function App() {
                           <WordChip
                             key={s.join(' ')}
                             word={s.join(' ')}
+                            hoverProps={boxedTraceHandlers(s)}
                             className="bg-emerald-400/10 border border-emerald-400/30 text-emerald-200 font-semibold hover:bg-emerald-400/20"
                           >
                             {s.map((w, i) => (
                               <span key={i}>
-                                {i > 0 && <span className="text-emerald-400/60"> → </span>}
-                                {w}
+                                {i > 0 && <span className="text-slate-500"> → </span>}
+                                <span className={BOX_TRACE_TEXT[i % BOX_TRACE_TEXT.length]}>{w}</span>
                               </span>
                             ))}
                           </WordChip>
@@ -1738,7 +1847,7 @@ function App() {
                         <WordChip
                           key={w}
                           word={w}
-                          hoverProps={mode === 'grid' ? gridTraceHandlers(w) : mode === 'weave' ? weaveTraceHandlers(w) : undefined}
+                          hoverProps={mode === 'grid' ? gridTraceHandlers(w) : mode === 'weave' ? weaveTraceHandlers(w) : mode === 'boxed' ? boxedTraceHandlers([w]) : undefined}
                           className="bg-white/[0.04] border border-white/10 text-slate-300 hover:bg-white/[0.08] hover:border-white/20"
                         />
                       ))}
@@ -1751,7 +1860,7 @@ function App() {
                     <WordChip
                       key={w}
                       word={w}
-                      hoverProps={mode === 'grid' ? gridTraceHandlers(w) : mode === 'weave' ? weaveTraceHandlers(w) : undefined}
+                      hoverProps={mode === 'grid' ? gridTraceHandlers(w) : mode === 'weave' ? weaveTraceHandlers(w) : mode === 'boxed' ? boxedTraceHandlers([w]) : undefined}
                       className="bg-white/[0.04] border border-white/10 text-slate-300 hover:bg-white/[0.08] hover:border-white/20"
                     />
                   ))}
@@ -1779,9 +1888,11 @@ function App() {
         )}
         </>
         )}
+        </>
+        )}
 
         <footer className="mt-14 text-center text-xs text-slate-600">
-          {!playActive && (
+          {!playActive && !learnMode && (
             <p>
               Searching {words.length.toLocaleString()} English words (
               {DICTIONARIES.find((d) => d.id === dictionaryId)?.label.toLowerCase()} dictionary).
@@ -2001,7 +2112,7 @@ function App() {
               'qwertyuiop'.split(''),
               'asdfghjkl'.split(''),
               [
-                ...(playActive ? ['enter'] : []),
+                ...(playActive || learnMode ? ['enter'] : []),
                 ...(mode === 'descramble' ? ['?'] : []),
                 ...'zxcvbnm'.split(''),
                 'backspace',
