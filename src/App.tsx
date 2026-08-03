@@ -633,12 +633,29 @@ function App() {
     if (!supabase || !session || !settingsPulled.current) return;
     pushPending.current = true;
     const id = window.setTimeout(async () => {
-      // upsert, not update: a profile row may never have been created
-      const { error } = await supabase!
+      const settings = { theme, palette };
+      // update first — it needs only the update policy, which every install
+      // has. `select` reveals whether a row actually matched.
+      const { data, error } = await supabase!
         .from('profiles')
-        .upsert({ id: session.user.id, settings: { theme, palette } });
+        .update({ settings })
+        .eq('id', session.user.id)
+        .select('id');
+      if (error) {
+        console.warn('Anagrimoire settings sync failed:', error.message);
+      } else if (!data?.length) {
+        // no profile row yet (the signup trigger never fired) — create one
+        const { error: insertError } = await supabase!
+          .from('profiles')
+          .insert({ id: session.user.id, settings });
+        if (insertError) {
+          console.warn(
+            'Anagrimoire settings sync failed: no profile row, and creating one was refused —',
+            insertError.message
+          );
+        }
+      }
       pushPending.current = false;
-      if (error) console.warn('Anagrimoire settings sync failed:', error.message);
     }, 500);
     return () => {
       window.clearTimeout(id);
