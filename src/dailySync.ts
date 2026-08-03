@@ -208,7 +208,7 @@ const PROGRESS_FIELDS: Record<DailyGame, string[]> = {
   weave: ['found', 'hintWords', 'hintsUsed', 'revealed'],
 };
 
-function progressOf(game: DailyGame, state: Rec | null): Rec {
+export function progressOf(game: DailyGame, state: Rec | null): Rec {
   const out: Rec = {};
   if (!state) return out;
   for (const key of PROGRESS_FIELDS[game]) if (state[key] !== undefined) out[key] = state[key];
