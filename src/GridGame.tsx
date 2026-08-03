@@ -12,6 +12,7 @@ import { findGridPath, gridNeighbors, solveGrid } from '@/solvers';
 import type { LetterState } from '@/GuessGame';
 import { dailyDataUrl } from '@/dailyData';
 import DailyStats from '@/DailyStats';
+import MobileKeyInput from '@/MobileKeyInput';
 import { recordSprint } from '@/stats';
 
 export type GridGameHandle = { pressKey: (k: string) => void };
@@ -520,7 +521,8 @@ const GridGame = forwardRef<
 
           {/* entry */}
           {running ? (
-            <div className="mb-4 mx-auto max-w-sm h-12 px-4 rounded-xl bg-white/5 border-2 border-white/10 flex items-center justify-center overflow-hidden">
+            <div className="relative mb-4 mx-auto max-w-sm h-12 px-4 rounded-xl bg-white/5 border-2 border-white/10 flex items-center justify-center overflow-hidden">
+              <MobileKeyInput onKey={pressKey} />
               <span className="text-2xl font-bold tracking-[0.2em] uppercase text-white whitespace-nowrap">
                 {dragPath.length ? (
                   <span className="text-emerald-300">
