@@ -442,7 +442,7 @@ const BoxGame = forwardRef<
 
       {loading && <p className="text-sm text-slate-400 py-8">Loading…</p>}
       {store.dailyMode && dailyError && !record && (
-        <p className="text-sm text-rose-400 py-8">
+        <p className="text-sm text-danger py-8">
           Couldn&apos;t fetch today&apos;s box — try Practice instead.
         </p>
       )}
@@ -484,7 +484,7 @@ const BoxGame = forwardRef<
             <div className="relative mb-6 mx-auto max-w-sm h-12 px-4 rounded-xl bg-white/5 border-2 border-white/10 flex items-center justify-center overflow-hidden">
               <span className="text-xl font-bold tracking-[0.15em] uppercase text-white whitespace-nowrap">
                 {current}
-                <span className="text-amber-400 animate-pulse">|</span>
+                <span className="text-accent animate-pulse">|</span>
               </span>
               <MobileKeyInput onKey={pressKey} />
             </div>
@@ -512,14 +512,14 @@ const BoxGame = forwardRef<
                   <polyline
                     points={pts.map(([x, y]) => `${x},${y}`).join(' ')}
                     fill="none"
-                    stroke={live ? 'rgb(251 191 36 / 0.65)' : 'rgb(125 211 252 / 0.9)'}
+                    stroke={live ? 'rgb(var(--span) / 0.65)' : 'rgb(var(--trace) / 0.9)'}
                     strokeWidth="3"
                     vectorEffect="non-scaling-stroke"
                     strokeLinecap="round"
                     strokeLinejoin="round"
                     strokeDasharray={live ? '6 5' : undefined}
                   />
-                  <circle cx={pts[0][0]} cy={pts[0][1]} r="1.6" fill={live ? 'rgb(251 191 36)' : 'rgb(125 211 252)'} />
+                  <circle cx={pts[0][0]} cy={pts[0][1]} r="1.6" fill={live ? 'rgb(var(--span))' : 'rgb(var(--trace))'} />
                 </svg>
               );
             })()}

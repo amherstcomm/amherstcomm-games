@@ -11,12 +11,22 @@ create table if not exists public.profiles (
   created_at timestamptz not null default now()
 );
 
+-- appearance settings (theme, palette) so they follow the account
+alter table public.profiles add column if not exists settings jsonb;
+
 alter table public.profiles enable row level security;
 
 drop policy if exists "read own profile" on public.profiles;
 create policy "read own profile"
   on public.profiles for select
   using ((select auth.uid()) = id);
+
+-- lets the client upsert its own profile, so settings still save if the
+-- signup trigger never created the row
+drop policy if exists "insert own profile" on public.profiles;
+create policy "insert own profile"
+  on public.profiles for insert
+  with check ((select auth.uid()) = id);
 
 drop policy if exists "update own profile" on public.profiles;
 create policy "update own profile"
@@ -41,6 +51,12 @@ drop trigger if exists on_auth_user_created on auth.users;
 create trigger on_auth_user_created
   after insert on auth.users
   for each row execute function public.handle_new_user();
+
+-- backfill anyone the trigger missed (accounts created before it existed, or
+-- while it was failing), so per-user settings have a row to live in
+insert into public.profiles (id)
+select id from auth.users
+on conflict (id) do nothing;
 
 -- ---------------------------------------------------------------------------
 -- game_results: append-only log of completed games. Aggregates (lifetime

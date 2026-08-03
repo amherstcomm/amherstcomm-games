@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Grid3x3, Hexagon, LayoutGrid, Puzzle, Shuffle, Square, X } from 'lucide-react';
 import { combineStats, fetchSyncedStats, loadStats, type StatsStore } from '@/stats';
 import { formatElapsed } from '@/useUpTimer';
+import { useModalA11y } from '@/useModalA11y';
 
 type StatsView = 'overall' | 'daily' | 'practice';
 
@@ -9,7 +10,7 @@ function Stat({ label, value }: { label: string; value: string | number }) {
   return (
     <div className="rounded-lg bg-white/5 border border-white/10 px-3 py-2">
       <p className="text-lg font-bold text-white tabular-nums leading-tight">{value}</p>
-      <p className="text-[11px] text-slate-500">{label}</p>
+      <p className="text-[0.6875rem] text-slate-500">{label}</p>
     </div>
   );
 }
@@ -26,7 +27,7 @@ function Section({
   return (
     <div>
       <h3 className="flex items-center gap-2 text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">
-        <Icon className="w-3.5 h-3.5 text-amber-400/80" />
+        <Icon className="w-3.5 h-3.5 text-accent" />
         {title}
       </h3>
       {children}
@@ -93,13 +94,8 @@ export default function StatsModal({
     }
   });
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    };
-    document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
-  }, [onClose]);
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useModalA11y(dialogRef, onClose);
 
   const maxDist = Math.max(1, ...stats.guess.dist);
   const anyPlay =
@@ -118,6 +114,8 @@ export default function StatsModal({
       onClick={onClose}
     >
       <div
+        ref={dialogRef}
+        tabIndex={-1}
         role="dialog"
         aria-modal="true"
         aria-label="Play statistics"
@@ -190,7 +188,7 @@ export default function StatsModal({
                       <div className="flex-1 h-4 rounded bg-white/[0.03]">
                         {n > 0 && (
                           <div
-                            className="h-4 rounded bg-emerald-400/40 border border-emerald-400/50 flex items-center justify-end px-1.5 text-[10px] text-emerald-100 min-w-fit"
+                            className="h-4 rounded bg-emerald-400/40 border border-emerald-400/50 flex items-center justify-end px-1.5 text-[0.625rem] text-emerald-100 min-w-fit"
                             style={{ width: `${(100 * n) / maxDist}%` }}
                           >
                             {n}

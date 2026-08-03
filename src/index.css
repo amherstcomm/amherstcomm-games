@@ -2,6 +2,458 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ---------------------------------------------------------------------------
+   Palettes. Tailwind resolves every color through these variables, so a theme
+   is just a different set of values. Two axes: data-theme (dark | light) and
+   data-palette (default | deuter | tritan | mono). Contrast targets WCAG AA
+   for text in every combination.
+
+   Shade names carry a *role*, not a literal lightness: 100-300 are text on
+   the page (so they darken in light mode), 400-500 are saturated fills that
+   stay vivid and always carry dark `ink` text.
+--------------------------------------------------------------------------- */
+
+:root,
+:root[data-theme='dark'] {
+  color-scheme: dark;
+
+  --c-white: 255 255 255;
+  --c-black: 0 0 0;
+  --c-ink: 2 6 23;
+
+  --c-slate-950: 2 6 23;
+  --c-slate-900: 15 23 42;
+  --c-slate-800: 30 41 59;
+  --c-slate-700: 51 65 85;
+  /* the two dimmest text tiers are lifted off Tailwind's stock values so
+     small print still clears WCAG AA (4.5:1) against the page and panels */
+  --c-slate-600: 120 134 158;
+  --c-slate-500: 132 147 168;
+  --c-slate-400: 148 163 184;
+  --c-slate-300: 203 213 225;
+  --c-slate-200: 226 232 240;
+
+  --c-amber-100: 254 243 199;
+  --c-amber-200: 253 230 138;
+  --c-amber-300: 252 211 77;
+  --c-amber-400: 251 191 36;
+  --c-amber-500: 245 158 11;
+
+  --c-emerald-100: 209 250 229;
+  --c-emerald-200: 167 243 208;
+  --c-emerald-300: 110 231 183;
+  --c-emerald-400: 52 211 153;
+  --c-emerald-500: 16 185 129;
+
+  --c-rose-100: 255 228 230;
+  --c-rose-200: 254 205 211;
+  --c-rose-300: 253 164 175;
+  --c-rose-400: 251 113 133;
+  --c-rose-500: 244 63 94;
+  --c-rose-950: 76 5 25;
+
+  --c-sky-100: 224 242 254;
+  --c-sky-200: 186 230 253;
+  --c-sky-300: 125 211 252;
+  --c-sky-400: 56 189 248;
+
+  --c-violet-100: 237 233 254;
+  --c-violet-200: 221 214 254;
+  --c-violet-300: 196 181 253;
+  --c-violet-400: 167 139 250;
+
+  --c-accent: 251 191 36;
+  --c-success: 52 211 153;
+  --c-danger: 251 113 133;
+
+  /* keyboard focus ring */
+  --c-focus: 251 191 36;
+
+  /* board overlays drawn as SVG */
+  --trace: 125 211 252;
+  --span: 251 191 36;
+  --chord-1: 125 211 252;
+  --chord-2: 251 113 133;
+  --chord-3: 167 139 250;
+  --chord-4: 52 211 153;
+  --chord-5: 251 191 36;
+}
+
+:root[data-theme='light'] {
+  color-scheme: light;
+
+  /* "white" is the ink color: bg-white/5 becomes a faint dark tint, and
+     text-white becomes near-black, so existing classes just work */
+  --c-white: 15 23 42;
+  --c-black: 0 0 0;
+  --c-ink: 2 6 23;
+
+  --c-slate-950: 248 250 252;
+  --c-slate-900: 255 255 255;
+  --c-slate-800: 226 232 240;
+  --c-slate-700: 203 213 225;
+  --c-slate-600: 100 116 139;
+  --c-slate-500: 71 85 105;
+  --c-slate-400: 71 85 105;
+  --c-slate-300: 51 65 85;
+  --c-slate-200: 30 41 59;
+
+  /* accent text sits on white here, so these run darker than their dark-mode
+     counterparts — each clears AA at the sizes the app uses them */
+  --c-amber-100: 120 53 15;
+  --c-amber-200: 124 45 18;
+  --c-amber-300: 146 64 14;
+
+  --c-emerald-100: 6 78 59;
+  --c-emerald-200: 6 78 59;
+  --c-emerald-300: 6 95 70;
+
+  --c-rose-100: 136 19 55;
+  --c-rose-200: 136 19 55;
+  --c-rose-300: 159 18 57;
+  --c-rose-950: 255 241 242;
+
+  --c-sky-100: 12 74 110;
+  --c-sky-200: 12 74 110;
+  --c-sky-300: 7 89 133;
+
+  --c-violet-100: 76 29 149;
+  --c-violet-200: 76 29 149;
+  --c-violet-300: 91 33 182;
+
+  --c-accent: 146 64 14;
+  --c-success: 6 95 70;
+  --c-danger: 159 18 57;
+
+  --c-focus: 180 83 9;
+
+  --trace: 2 132 199;
+  --span: 217 119 6;
+  --chord-1: 2 132 199;
+  --chord-2: 190 18 60;
+  --chord-3: 109 40 217;
+  --chord-4: 4 120 87;
+  --chord-5: 180 83 9;
+}
+
+/* Red-green (deuteranopia / protanopia): the confusable green/amber and
+   green/red pairs become blue/orange and blue/magenta, on Okabe-Ito hues. */
+:root[data-palette='deuter'] {
+  --c-emerald-100: 219 234 254;
+  --c-emerald-200: 191 219 254;
+  --c-emerald-300: 147 197 253;
+  --c-emerald-400: 59 130 246;
+  --c-emerald-500: 29 100 190;
+
+  --c-amber-100: 254 240 199;
+  --c-amber-200: 253 224 138;
+  --c-amber-300: 250 204 77;
+  --c-amber-400: 230 159 0;
+  --c-amber-500: 199 132 0;
+
+  --c-rose-100: 252 231 243;
+  --c-rose-200: 251 207 232;
+  --c-rose-300: 249 168 212;
+  --c-rose-400: 236 72 153;
+  --c-rose-500: 219 39 119;
+  --c-rose-950: 80 7 41;
+
+  --c-sky-100: 224 242 254;
+  --c-sky-200: 186 230 253;
+  --c-sky-300: 134 200 240;
+  --c-sky-400: 86 180 233;
+
+  --c-violet-100: 243 224 236;
+  --c-violet-200: 235 205 224;
+  --c-violet-300: 222 178 205;
+  --c-violet-400: 204 121 167;
+
+  --c-accent: 230 159 0;
+  --c-success: 59 130 246;
+  --c-danger: 236 72 153;
+
+  --c-focus: 230 159 0;
+
+  --trace: 134 200 240;
+  --span: 230 159 0;
+  --chord-1: 86 180 233;
+  --chord-2: 236 72 153;
+  --chord-3: 204 121 167;
+  --chord-4: 59 130 246;
+  --chord-5: 230 159 0;
+}
+
+:root[data-theme='light'][data-palette='deuter'] {
+  --c-emerald-100: 23 55 106;
+  --c-emerald-200: 20 66 128;
+  --c-emerald-300: 0 82 142;
+  /* 400/500 are fills carrying dark ink, so they stay light enough for it */
+  --c-emerald-400: 56 140 208;
+  --c-emerald-500: 46 128 194;
+
+  --c-amber-100: 92 63 0;
+  --c-amber-200: 104 72 0;
+  --c-amber-300: 122 84 0;
+
+  --c-rose-100: 112 26 74;
+  --c-rose-200: 122 28 80;
+  --c-rose-300: 145 30 95;
+  --c-rose-950: 253 242 248;
+
+  --c-sky-100: 12 74 110;
+  --c-sky-200: 12 74 110;
+  --c-sky-300: 7 89 133;
+
+  --c-violet-100: 100 36 74;
+  --c-violet-200: 110 40 80;
+  --c-violet-300: 128 52 96;
+
+  --c-accent: 122 84 0;
+  --c-success: 0 82 142;
+  --c-danger: 145 30 95;
+
+  --c-focus: 155 107 0;
+
+  --trace: 0 114 178;
+  --span: 155 107 0;
+  --chord-1: 0 114 178;
+  --chord-2: 173 32 110;
+  --chord-3: 156 66 116;
+  --chord-4: 0 90 156;
+  --chord-5: 155 107 0;
+}
+
+/* Blue-yellow (tritanopia): blue reads as teal and yellow as pale pink, so
+   this palette leans on the red-green axis those eyes keep — green against
+   vermilion — and separates the rest by lightness. */
+:root[data-palette='tritan'] {
+  --c-emerald-100: 209 250 229;
+  --c-emerald-200: 178 240 210;
+  --c-emerald-300: 122 226 175;
+  --c-emerald-400: 45 190 125;
+  --c-emerald-500: 22 160 105;
+
+  --c-amber-100: 255 226 214;
+  --c-amber-200: 255 202 182;
+  --c-amber-300: 252 168 138;
+  /* kept notably lighter than the green fill so the two tile states also
+     differ in luminance, not just hue */
+  --c-amber-400: 250 152 96;
+  --c-amber-500: 232 122 66;
+
+  --c-rose-100: 255 224 236;
+  --c-rose-200: 253 196 219;
+  --c-rose-300: 250 155 195;
+  --c-rose-400: 236 88 150;
+  --c-rose-500: 214 60 128;
+  --c-rose-950: 74 10 42;
+
+  --c-sky-100: 236 250 253;
+  --c-sky-200: 208 243 250;
+  --c-sky-300: 165 228 240;
+  --c-sky-400: 110 200 220;
+
+  --c-violet-100: 236 226 250;
+  --c-violet-200: 218 200 246;
+  --c-violet-300: 195 168 240;
+  --c-violet-400: 158 120 224;
+
+  --c-accent: 252 168 138;
+  --c-success: 122 226 175;
+  --c-danger: 250 155 195;
+
+  --c-focus: 250 152 96;
+
+  --trace: 165 228 240;
+  --span: 232 106 58;
+  --chord-1: 165 228 240;
+  --chord-2: 236 88 150;
+  --chord-3: 195 168 240;
+  --chord-4: 45 190 125;
+  --chord-5: 232 106 58;
+}
+
+:root[data-theme='light'][data-palette='tritan'] {
+  --c-emerald-100: 5 66 44;
+  --c-emerald-200: 5 76 50;
+  --c-emerald-300: 6 90 60;
+  --c-emerald-400: 52 168 116;
+  --c-emerald-500: 40 150 102;
+
+  --c-amber-100: 108 34 12;
+  --c-amber-200: 122 40 14;
+  --c-amber-300: 145 50 18;
+  --c-amber-400: 232 106 58;
+  --c-amber-500: 205 84 40;
+
+  --c-rose-100: 108 16 58;
+  --c-rose-200: 120 18 64;
+  --c-rose-300: 143 22 76;
+  --c-rose-950: 255 240 247;
+
+  --c-sky-100: 10 66 78;
+  --c-sky-200: 10 66 78;
+  --c-sky-300: 12 84 100;
+
+  --c-violet-100: 62 30 122;
+  --c-violet-200: 62 30 122;
+  --c-violet-300: 78 38 150;
+
+  --c-accent: 145 50 18;
+  --c-success: 6 90 60;
+  --c-danger: 143 22 76;
+
+  --c-focus: 176 62 22;
+
+  --trace: 12 84 100;
+  --span: 176 62 22;
+  --chord-1: 12 84 100;
+  --chord-2: 143 22 76;
+  --chord-3: 78 38 150;
+  --chord-4: 6 90 60;
+  --chord-5: 176 62 22;
+}
+
+/* Monochrome: no hue at all, so every state that mattered by color is
+   separated by lightness instead — correct tiles read dark with light text,
+   present tiles light with dark text, absent darkest. */
+:root[data-palette='mono'] {
+  --c-emerald-100: 245 245 245;
+  --c-emerald-200: 235 235 235;
+  --c-emerald-300: 225 225 225;
+  --c-emerald-400: 150 150 150;
+  --c-emerald-500: 105 105 105;
+
+  --c-amber-100: 175 175 175;
+  --c-amber-200: 190 190 190;
+  --c-amber-300: 205 205 205;
+  --c-amber-400: 210 210 210;
+  --c-amber-500: 180 180 180;
+
+  --c-rose-100: 230 230 230;
+  --c-rose-200: 215 215 215;
+  --c-rose-300: 200 200 200;
+  --c-rose-400: 165 165 165;
+  --c-rose-500: 140 140 140;
+  --c-rose-950: 45 45 45;
+
+  --c-sky-100: 250 250 250;
+  --c-sky-200: 245 245 245;
+  --c-sky-300: 235 235 235;
+  --c-sky-400: 175 175 175;
+
+  --c-violet-100: 225 225 225;
+  --c-violet-200: 210 210 210;
+  --c-violet-300: 190 190 190;
+  --c-violet-400: 130 130 130;
+
+  --c-accent: 235 235 235;
+  --c-success: 220 220 220;
+  --c-danger: 250 250 250;
+
+  --c-focus: 245 245 245;
+
+  --trace: 200 200 200;
+  --span: 245 245 245;
+  --chord-1: 245 245 245;
+  --chord-2: 200 200 200;
+  --chord-3: 165 165 165;
+  --chord-4: 130 130 130;
+  --chord-5: 100 100 100;
+}
+
+:root[data-theme='light'][data-palette='mono'] {
+  --c-emerald-100: 55 55 55;
+  --c-emerald-200: 65 65 65;
+  --c-emerald-300: 75 75 75;
+  --c-emerald-400: 150 150 150;
+  --c-emerald-500: 120 120 120;
+
+  --c-amber-100: 70 70 70;
+  --c-amber-200: 80 80 80;
+  --c-amber-300: 90 90 90;
+  --c-amber-400: 195 195 195;
+  --c-amber-500: 170 170 170;
+
+  --c-rose-100: 50 50 50;
+  --c-rose-200: 58 58 58;
+  --c-rose-300: 68 68 68;
+  --c-rose-400: 140 140 140;
+  --c-rose-500: 115 115 115;
+  --c-rose-950: 242 242 242;
+
+  --c-sky-100: 60 60 60;
+  --c-sky-200: 68 68 68;
+  --c-sky-300: 80 80 80;
+  --c-sky-400: 160 160 160;
+
+  --c-violet-100: 62 62 62;
+  --c-violet-200: 72 72 72;
+  --c-violet-300: 88 88 88;
+  --c-violet-400: 140 140 140;
+
+  --c-accent: 90 90 90;
+  --c-success: 75 75 75;
+  --c-danger: 60 60 60;
+
+  --c-focus: 30 30 30;
+
+  --trace: 90 90 90;
+  --span: 40 40 40;
+  --chord-1: 40 40 40;
+  --chord-2: 80 80 80;
+  --chord-3: 115 115 115;
+  --chord-4: 150 150 150;
+  --chord-5: 25 25 25;
+}
+
+/* keep overscroll and the area behind the app in the active theme */
+body {
+  background-color: rgb(var(--c-slate-950));
+}
+
+@layer utilities {
+  /* A visible keyboard focus ring on everything focusable. Element+pseudo
+     specificity beats Tailwind's `outline-none` utility, which several
+     inputs use to suppress the browser default. :focus-visible keeps it off
+     mouse clicks. */
+  a:focus-visible,
+  button:focus-visible,
+  input:focus-visible,
+  select:focus-visible,
+  textarea:focus-visible,
+  [tabindex]:focus-visible {
+    outline: 2px solid rgb(var(--c-focus));
+    outline-offset: 2px;
+    border-radius: 2px;
+  }
+
+  /* the invisible type-here overlay can't show its own ring (opacity: 0),
+     so the entry box around it takes one instead */
+  :has(> input[data-key-overlay]:focus-visible) {
+    outline: 2px solid rgb(var(--c-focus));
+    outline-offset: 2px;
+  }
+
+  /* Weave's keyboard cursor: the board is a single tab stop, so the cell the
+     arrow keys are sitting on marks itself while the board holds focus, and
+     each reachable neighbour shows the key that gets there */
+  [role='application']:focus-within [data-wcursor] {
+    outline: 3px solid rgb(var(--c-white));
+    outline-offset: 1px;
+  }
+
+  [data-navkey] {
+    opacity: 0;
+    transition: opacity 120ms ease;
+    pointer-events: none;
+  }
+
+  [role='application']:focus-within [data-navkey] {
+    opacity: 1;
+  }
+}
+
 /* Without this, the browser's scroll anchoring latches onto the footer on a
    short page (e.g. a cleared solver) and chases it downward when a large
    result list suddenly renders above it — jumping the viewport deep into

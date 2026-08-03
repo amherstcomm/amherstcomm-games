@@ -1,4 +1,5 @@
 import type { DictionaryId } from '@/dictionaries';
+import type { Palette, TextScale, ThemeMode } from '@/theme';
 
 export type Mode = 'pattern' | 'descramble' | 'bee' | 'boxed' | 'grid' | 'weave';
 
@@ -6,6 +7,11 @@ const KEY = 'anagrimoire:v1';
 
 const ALL_MODES: Mode[] = ['pattern', 'descramble', 'bee', 'boxed', 'grid', 'weave'];
 const ALL_DICTS: DictionaryId[] = ['common', 'standard', 'full'];
+
+// which keys step the Weave board cursor around, besides the arrow keys:
+// the number pad's ring (7 8 9 / 4 6 / 1 2 3) or the letters around WASD
+// (q w e / a d / z s x)
+export type NavKeys = 'numpad' | 'wasd';
 
 export type SortKey = 'alpha' | 'length';
 export type SortDir = 'asc' | 'desc';
@@ -16,6 +22,10 @@ export type PersistedState = {
   dictionaries: Record<Mode, DictionaryId>;
   sort: Record<Mode, SortPref>;
   keyboard: boolean;
+  theme: ThemeMode;
+  palette: Palette;
+  textScale: TextScale;
+  navKeys: NavKeys;
   patternPlay: boolean;
   beePlay: boolean;
   boxedPlay: boolean;
@@ -55,6 +65,10 @@ export const DEFAULT_STATE: PersistedState = {
     weave: { key: 'length', dir: 'desc' },
   },
   keyboard: false,
+  theme: 'system',
+  palette: 'default',
+  textScale: 'normal',
+  navKeys: 'numpad',
   patternPlay: false,
   beePlay: false,
   boxedPlay: false,
@@ -153,6 +167,15 @@ export function loadState(): PersistedState {
       dictionaries,
       sort,
       keyboard: p?.keyboard === true,
+      theme: ['system', 'light', 'dark'].includes(p?.theme) ? p.theme : 'system',
+      // 'cvd' was the original name for the red-green palette
+      palette: p?.palette === 'cvd'
+        ? 'deuter'
+        : ['default', 'deuter', 'tritan', 'mono'].includes(p?.palette)
+          ? p.palette
+          : 'default',
+      textScale: ['normal', 'large', 'larger'].includes(p?.textScale) ? p.textScale : 'normal',
+      navKeys: p?.navKeys === 'wasd' ? 'wasd' : 'numpad',
       patternPlay: p?.patternPlay === true,
       beePlay: p?.beePlay === true,
       boxedPlay: p?.boxedPlay === true,

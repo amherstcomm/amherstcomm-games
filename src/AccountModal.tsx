@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useRef, useState } from 'react';
 import type { Session } from '@supabase/supabase-js';
 import { Github, LogOut, Mail, X } from 'lucide-react';
 import { supabase } from '@/supabase';
+import { useModalA11y } from '@/useModalA11y';
 
 export default function AccountModal({
   session,
@@ -17,13 +18,8 @@ export default function AccountModal({
   const [verifying, setVerifying] = useState(false);
   const [codeError, setCodeError] = useState('');
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    };
-    document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
-  }, [onClose]);
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useModalA11y(dialogRef, onClose);
 
   async function sendMagicLink(e: React.FormEvent) {
     e.preventDefault();
@@ -84,6 +80,8 @@ export default function AccountModal({
       onClick={onClose}
     >
       <div
+        ref={dialogRef}
+        tabIndex={-1}
         role="dialog"
         aria-modal="true"
         aria-label="Account"
@@ -142,7 +140,7 @@ export default function AccountModal({
             </div>
             <div className="flex items-center gap-3 mb-5">
               <div className="flex-1 h-px bg-white/10" />
-              <span className="text-[11px] text-slate-500 uppercase tracking-wider">or by email</span>
+              <span className="text-[0.6875rem] text-slate-500 uppercase tracking-wider">or by email</span>
               <div className="flex-1 h-px bg-white/10" />
             </div>
             {status === 'sent' ? (
@@ -164,11 +162,11 @@ export default function AccountModal({
                   <button
                     type="submit"
                     disabled={verifying || code.length < 6}
-                    className="w-full inline-flex items-center justify-center gap-1.5 h-11 rounded-lg text-sm font-semibold bg-emerald-400 text-slate-950 shadow-lg shadow-emerald-500/30 hover:bg-emerald-300 transition-colors disabled:opacity-50"
+                    className="w-full inline-flex items-center justify-center gap-1.5 h-11 rounded-lg text-sm font-semibold bg-emerald-400 text-ink shadow-lg shadow-emerald-500/30 hover:bg-emerald-300 transition-colors disabled:opacity-50"
                   >
                     {verifying ? 'Verifying…' : 'Verify code'}
                   </button>
-                  {codeError && <p className="text-sm text-rose-400">{codeError}</p>}
+                  {codeError && <p className="text-sm text-danger">{codeError}</p>}
                 </form>
               </div>
             ) : (
@@ -184,12 +182,12 @@ export default function AccountModal({
                 <button
                   type="submit"
                   disabled={status === 'sending'}
-                  className="w-full inline-flex items-center justify-center gap-1.5 h-11 rounded-lg text-sm font-semibold bg-emerald-400 text-slate-950 shadow-lg shadow-emerald-500/30 hover:bg-emerald-300 transition-colors disabled:opacity-50"
+                  className="w-full inline-flex items-center justify-center gap-1.5 h-11 rounded-lg text-sm font-semibold bg-emerald-400 text-ink shadow-lg shadow-emerald-500/30 hover:bg-emerald-300 transition-colors disabled:opacity-50"
                 >
                   <Mail className="w-4 h-4" />
                   {status === 'sending' ? 'Sending…' : 'Send magic link'}
                 </button>
-                {status === 'error' && <p className="text-sm text-rose-400">{error}</p>}
+                {status === 'error' && <p className="text-sm text-danger">{error}</p>}
               </form>
             )}
           </>

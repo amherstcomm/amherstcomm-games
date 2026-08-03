@@ -1,10 +1,14 @@
-import { useMemo, useState, useEffect, useLayoutEffect, useRef, type ButtonHTMLAttributes, type ReactNode } from 'react';
-import { Search, Sparkles, Eraser, ArrowDown, ArrowUp, X, BookOpen, Grid3x3, Shuffle, Hexagon, Check, Keyboard, Delete, Github, Info, Square, CalendarDays, Star, Gamepad2, CornerDownLeft, LayoutGrid, Puzzle, BarChart3, UserRound, Scale } from 'lucide-react';
+import { useCallback, useMemo, useState, useEffect, useLayoutEffect, useRef, type ButtonHTMLAttributes, type ReactNode } from 'react';
+import { Search, Sparkles, Eraser, ArrowDown, ArrowUp, X, BookOpen, Grid3x3, Shuffle, Hexagon, Check, Keyboard, Delete, Github, Info, Square, CalendarDays, Star, Gamepad2, CornerDownLeft, LayoutGrid, Puzzle, BarChart3, UserRound, Scale, Settings } from 'lucide-react';
 import LearnMode, { type LearnModeHandle } from '@/LearnMode';
 import type { Session } from '@supabase/supabase-js';
 import StatsModal from '@/StatsModal';
 import AccountModal from '@/AccountModal';
 import { OskContext } from '@/MobileKeyInput';
+import SettingsModal from '@/SettingsModal';
+import KeyboardHelp from '@/KeyboardHelp';
+import { PALETTES, TEXT_SCALES, THEME_MODES, useTheme, type Palette, type TextScale, type ThemeMode } from '@/theme';
+import { useModalA11y } from '@/useModalA11y';
 import { supabase } from '@/supabase';
 import { GA_ID } from '@/analytics';
 import { importBaselineOnce } from '@/stats';
@@ -13,11 +17,11 @@ import HiveGame, { type HiveGameHandle } from '@/HiveGame';
 import BoxGame, { type BoxGameHandle } from '@/BoxGame';
 import ScrambleGame, { type ScrambleGameHandle } from '@/ScrambleGame';
 import GridGame, { type GridGameHandle } from '@/GridGame';
-import WeaveGame from '@/WeaveGame';
+import WeaveGame, { type WeaveGameHandle } from '@/WeaveGame';
 import { dailyDataUrl } from '@/dailyData';
 import { DICTIONARIES, getDictionary, type DictionaryId } from '@/dictionaries';
 import { solvePattern, solveDescramble, solveBee, solveBoxed, solveGrid, findGridPath } from '@/solvers';
-import { loadState, saveState, GRID_PRESET_DIMS, WEAVE_DIMS, type GridPreset, type Mode, type SortPref, type WeaveSize } from '@/storage';
+import { loadState, saveState, GRID_PRESET_DIMS, WEAVE_DIMS, type GridPreset, type Mode, type NavKeys, type SortPref, type WeaveSize } from '@/storage';
 
 const MIN_LEN = 3;
 const MAX_LEN = 15;
@@ -483,11 +487,11 @@ function App() {
   // boxed solver: hover a word (or a solution chain) to draw its criss-cross
   // chords on the box — each word in a chain gets its own color
   const BOX_TRACE_COLORS = [
-    'rgb(125 211 252 / 0.9)', // sky
-    'rgb(251 113 133 / 0.9)', // rose
-    'rgb(167 139 250 / 0.9)', // violet
-    'rgb(52 211 153 / 0.9)', // emerald
-    'rgb(251 191 36 / 0.9)', // amber
+    'rgb(var(--chord-1) / 0.9)',
+    'rgb(var(--chord-2) / 0.9)',
+    'rgb(var(--chord-3) / 0.9)',
+    'rgb(var(--chord-4) / 0.9)',
+    'rgb(var(--chord-5) / 0.9)',
   ];
   // text classes matching BOX_TRACE_COLORS, so chain chips double as a legend
   const BOX_TRACE_TEXT = [
@@ -562,7 +566,15 @@ function App() {
   const [statsOpen, setStatsOpen] = useState(false);
   const [learnMode, setLearnMode] = useState(false);
   const [accountOpen, setAccountOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [keysOpen, setKeysOpen] = useState(false);
+  const [theme, setTheme] = useState<ThemeMode>(initial.theme);
+  const [palette, setPalette] = useState<Palette>(initial.palette);
+  const [navKeys, setNavKeys] = useState<NavKeys>(initial.navKeys);
+  const [textScale, setTextScale] = useState<TextScale>(initial.textScale);
   const [session, setSession] = useState<Session | null>(null);
+
+  useTheme(theme, palette, textScale);
 
   // track the auth session when Supabase is configured
   useEffect(() => {
@@ -576,6 +588,89 @@ function App() {
   useEffect(() => {
     if (session) void importBaselineOnce();
   }, [session]);
+
+  // appearance settings follow the account: pull on sign-in (and whenever the
+  // tab comes back to the foreground, so a change made on another device
+  // lands here), then push edits
+  const settingsPulled = useRef(false);
+  const pushPending = useRef(false);
+
+  const pullSettings = useCallback(async () => {
+    // don't clobber an edit that hasn't been written yet
+    if (!supabase || !session || pushPending.current) return;
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('settings')
+      .eq('id', session.user.id)
+      .maybeSingle();
+    if (error) {
+      console.warn('Anagrimoire settings pull failed:', error.message);
+      return;
+    }
+    const s = data?.settings as
+      | { theme?: ThemeMode; palette?: Palette; navKeys?: NavKeys; textScale?: TextScale }
+      | null;
+    if (s?.theme && THEME_MODES.includes(s.theme)) setTheme(s.theme);
+    if (s?.palette && PALETTES.includes(s.palette)) setPalette(s.palette);
+    if (s?.navKeys === 'numpad' || s?.navKeys === 'wasd') setNavKeys(s.navKeys);
+    if (s?.textScale && TEXT_SCALES.includes(s.textScale)) setTextScale(s.textScale);
+    settingsPulled.current = true;
+  }, [session]);
+
+  useEffect(() => {
+    if (!session) {
+      settingsPulled.current = false;
+      return;
+    }
+    void pullSettings();
+  }, [session, pullSettings]);
+
+  useEffect(() => {
+    if (!supabase || !session) return;
+    const onWake = () => {
+      if (document.visibilityState === 'visible') void pullSettings();
+    };
+    document.addEventListener('visibilitychange', onWake);
+    window.addEventListener('focus', onWake);
+    return () => {
+      document.removeEventListener('visibilitychange', onWake);
+      window.removeEventListener('focus', onWake);
+    };
+  }, [session, pullSettings]);
+
+  useEffect(() => {
+    if (!supabase || !session || !settingsPulled.current) return;
+    pushPending.current = true;
+    const id = window.setTimeout(async () => {
+      const settings = { theme, palette, navKeys, textScale };
+      // update first — it needs only the update policy, which every install
+      // has. `select` reveals whether a row actually matched.
+      const { data, error } = await supabase!
+        .from('profiles')
+        .update({ settings })
+        .eq('id', session.user.id)
+        .select('id');
+      if (error) {
+        console.warn('Anagrimoire settings sync failed:', error.message);
+      } else if (!data?.length) {
+        // no profile row yet (the signup trigger never fired) — create one
+        const { error: insertError } = await supabase!
+          .from('profiles')
+          .insert({ id: session.user.id, settings });
+        if (insertError) {
+          console.warn(
+            'Anagrimoire settings sync failed: no profile row, and creating one was refused —',
+            insertError.message
+          );
+        }
+      }
+      pushPending.current = false;
+    }, 500);
+    return () => {
+      window.clearTimeout(id);
+      pushPending.current = false;
+    };
+  }, [session, theme, palette, navKeys, textScale]);
 
   // surface auth errors that come back in the redirect URL (expired or
   // already-used magic links land here with no other visible sign)
@@ -602,6 +697,7 @@ function App() {
   const scrambleRef = useRef<ScrambleGameHandle>(null);
   const gridRef = useRef<GridGameHandle>(null);
   const learnRef = useRef<LearnModeHandle>(null);
+  const weaveRef = useRef<WeaveGameHandle>(null);
 
   const patternPlayActive = mode === 'pattern' && patternPlay && !learnMode;
   const beePlayActive = mode === 'bee' && beePlay && !learnMode;
@@ -627,17 +723,12 @@ function App() {
     }
   }, [playActive, learnMode, patternPlayActive, beePlayActive, boxedPlayActive, descramblePlayActive, gridPlayActive, weavePlayActive, commonWordsArr, fullWordsArr, standardWordsArr]);
 
-  useEffect(() => {
-    if (!aboutOpen && !legalOpen) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        setAboutOpen(false);
-        setLegalOpen(false);
-      }
-    };
-    document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
-  }, [aboutOpen, legalOpen]);
+  const aboutRef = useRef<HTMLDivElement>(null);
+  const legalRef = useRef<HTMLDivElement>(null);
+  const closeAbout = useCallback(() => setAboutOpen(false), []);
+  const closeLegal = useCallback(() => setLegalOpen(false), []);
+  useModalA11y(aboutRef, closeAbout, aboutOpen);
+  useModalA11y(legalRef, closeLegal, legalOpen);
 
   // the input the on-screen keyboard types into
   const lastFocused = useRef<HTMLInputElement | null>(null);
@@ -664,6 +755,10 @@ function App() {
       dictionaries,
       sort: sorts,
       keyboard: kbOpen,
+      theme,
+      palette,
+      textScale,
+      navKeys,
       patternPlay,
       beePlay,
       boxedPlay,
@@ -677,7 +772,7 @@ function App() {
       weave: { letters: weaveLetters, size: weaveSize },
       weavePlay,
     });
-  }, [mode, dictionaries, sorts, kbOpen, patternPlay, beePlay, boxedPlay, descramblePlay, gridPlay, length, known, containsStr, excludedStr, rackStr, useAll, minLength, beeCenter, beeOuters, boxedLetters, solutionWords, gridLetters, gridPreset, weaveLetters, weaveSize, weavePlay]);
+  }, [mode, dictionaries, sorts, kbOpen, theme, palette, textScale, navKeys, patternPlay, beePlay, boxedPlay, descramblePlay, gridPlay, length, known, containsStr, excludedStr, rackStr, useAll, minLength, beeCenter, beeOuters, boxedLetters, solutionWords, gridLetters, gridPreset, weaveLetters, weaveSize, weavePlay]);
 
   // keep known array sized to length
   useEffect(() => {
@@ -973,7 +1068,10 @@ function App() {
       learnRef.current?.pressKey(k);
       return;
     }
-    if (weavePlayActive) return; // weave play is trace-only
+    if (weavePlayActive) {
+      weaveRef.current?.pressKey(k);
+      return;
+    }
     if (patternPlayActive) {
       gameRef.current?.pressKey(k);
       return;
@@ -1051,11 +1149,22 @@ function App() {
       <div className="pointer-events-none absolute -top-40 -left-40 w-[500px] h-[500px] bg-amber-500/10 rounded-full blur-[120px]" />
       <div className="pointer-events-none absolute top-1/3 -right-40 w-[500px] h-[500px] bg-emerald-500/10 rounded-full blur-[120px]" />
 
+      {/* keyboard users can jump the mode tabs and land on the puzzle */}
+      <a
+        href="#main"
+        className="sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-[70] focus:px-4 focus:py-2.5 focus:rounded-lg focus:bg-amber-400 focus:text-ink focus:text-sm focus:font-semibold focus:shadow-lg"
+      >
+        Skip to content
+      </a>
+
       {/* top nav bar */}
-      <nav className="sticky top-0 z-40 bg-slate-950/80 backdrop-blur border-b border-white/10">
+      <nav
+        aria-label="Game modes"
+        className="sticky top-0 z-40 bg-slate-950/80 backdrop-blur border-b border-white/10"
+      >
         <div className="max-w-3xl mx-auto px-2 sm:px-5 flex items-center justify-between gap-2">
           <span className="hidden md:inline-flex items-center gap-2 text-lg font-bold tracking-tight">
-            <Sparkles className="w-4 h-4 text-amber-400" />
+            <Sparkles className="w-4 h-4 text-accent" />
             Anagrimoire
           </span>
           <div className="flex-1 md:flex-none grid grid-cols-6 md:flex gap-0.5 sm:gap-1 py-1.5">
@@ -1066,7 +1175,7 @@ function App() {
                   key={m.id}
                   onClick={() => setMode(m.id)}
                   title={m.blurb}
-                  className={`flex flex-col md:flex-row items-center justify-center gap-0.5 md:gap-1.5 px-1 md:px-3 py-1.5 rounded-lg whitespace-nowrap text-[10px] md:text-sm font-medium md:font-semibold transition-colors
+                  className={`flex flex-col md:flex-row items-center justify-center gap-0.5 md:gap-1.5 px-1 md:px-3 py-1.5 rounded-lg whitespace-nowrap text-[0.625rem] md:text-sm font-medium md:font-semibold transition-colors
                     ${mode === m.id
                       ? 'bg-emerald-400/15 text-emerald-300'
                       : 'text-slate-400 hover:text-white hover:bg-white/5'}`}
@@ -1080,7 +1189,11 @@ function App() {
         </div>
       </nav>
 
-      <div className={`relative max-w-3xl mx-auto px-5 py-10 sm:py-16 ${kbOpen ? 'pb-64 sm:pb-64' : ''}`}>
+      <main
+        id="main"
+        tabIndex={-1}
+        className={`relative max-w-3xl mx-auto px-5 py-10 sm:py-16 outline-none ${kbOpen ? 'pb-64 sm:pb-64' : ''}`}
+      >
         {/* header */}
         <header className="text-center mb-8">
           {/* pb + relaxed leading so the g's descender isn't clipped by the
@@ -1126,7 +1239,7 @@ function App() {
                     }}
                     className={`inline-flex items-center gap-1.5 px-4 sm:px-5 h-10 rounded-lg text-sm font-semibold transition-all duration-150
                       ${active
-                        ? 'bg-emerald-400 text-slate-950 shadow-lg shadow-emerald-500/30'
+                        ? 'bg-emerald-400 text-ink shadow-lg shadow-emerald-500/30'
                         : 'text-slate-300 hover:bg-white/10'}`}
                   >
                     <Icon className="w-4 h-4" />
@@ -1139,7 +1252,12 @@ function App() {
 
         {learnMode && (
           <div className="mb-8">
-            <LearnMode ref={learnRef} mode={mode} standardWords={standardWordsArr} />
+            <LearnMode
+              ref={learnRef}
+              mode={mode}
+              standardWords={standardWordsArr}
+              palette={palette}
+            />
           </div>
         )}
 
@@ -1147,7 +1265,7 @@ function App() {
         <>
         {weavePlayActive && (
         <div className="mb-8">
-          <WeaveGame standardWords={standardWordsArr} />
+          <WeaveGame ref={weaveRef} standardWords={standardWordsArr} navKeys={navKeys} />
         </div>
         )}
 
@@ -1199,12 +1317,12 @@ function App() {
                 <polyline
                   points={gridTracePts.map((p) => `${p.x},${p.y}`).join(' ')}
                   fill="none"
-                  stroke="rgb(125 211 252 / 0.9)"
+                  stroke="rgb(var(--trace) / 0.9)"
                   strokeWidth="4"
                   strokeLinecap="round"
                   strokeLinejoin="round"
                 />
-                <circle cx={gridTracePts[0].x} cy={gridTracePts[0].y} r="6" fill="rgb(125 211 252)" />
+                <circle cx={gridTracePts[0].x} cy={gridTracePts[0].y} r="6" fill="rgb(var(--trace))" />
               </svg>
             )}
           </div>
@@ -1227,7 +1345,7 @@ function App() {
             </button>
           </div>
           {todayStatus === 'error' && (
-            <p className="mt-2 text-xs text-rose-400">
+            <p className="mt-2 text-xs text-danger">
               Couldn&apos;t fetch today&apos;s puzzle — try again in a minute.
             </p>
           )}
@@ -1258,7 +1376,7 @@ function App() {
                 title={d.blurb}
                 className={`inline-flex items-center gap-1.5 px-4 h-9 rounded-lg text-sm font-semibold transition-all duration-150
                   ${dictionaryId === d.id
-                    ? 'bg-amber-400 text-slate-950 shadow-lg shadow-amber-500/30'
+                    ? 'bg-amber-400 text-ink shadow-lg shadow-amber-500/30'
                     : 'text-slate-300 hover:bg-white/10'}`}
               >
                 {d.id === 'common' && <BookOpen className="w-3.5 h-3.5" />}
@@ -1286,7 +1404,7 @@ function App() {
                 onClick={() => setLength(n)}
                 className={`w-11 h-11 rounded-xl text-sm font-semibold transition-all duration-150
                   ${length === n
-                    ? 'bg-amber-400 text-slate-950 shadow-lg shadow-amber-500/30 scale-105'
+                    ? 'bg-amber-400 text-ink shadow-lg shadow-amber-500/30 scale-105'
                     : 'bg-white/5 border border-white/10 text-slate-300 hover:bg-white/10 hover:border-white/20'}`}
               >
                 {n}
@@ -1344,7 +1462,7 @@ function App() {
         <div className="grid sm:grid-cols-2 gap-5 mb-8">
           <section>
             <label className="block text-xs font-medium text-slate-400 uppercase tracking-wider mb-2.5">
-              Must contain <span className="text-amber-400/70 normal-case">(position unknown)</span>
+              Must contain <span className="text-accent normal-case">(position unknown)</span>
             </label>
             <LetterChipInput
               value={containsStr}
@@ -1397,7 +1515,7 @@ function App() {
         <div className="mb-8">
           <section className="mb-5">
             <label className="block text-xs font-medium text-slate-400 uppercase tracking-wider mb-2.5 text-center">
-              Your letters <span className="text-amber-400/70 normal-case">(use ? for a blank tile)</span>
+              Your letters <span className="text-accent normal-case">(use ? for a blank tile)</span>
             </label>
             <LetterChipInput
               value={rackStr}
@@ -1423,7 +1541,7 @@ function App() {
               onClick={() => setUseAll((v) => !v)}
               className={`inline-flex items-center gap-1.5 px-4 h-10 rounded-lg text-sm font-semibold transition-all duration-150 border
                 ${useAll
-                  ? 'bg-amber-400 text-slate-950 border-amber-400 shadow-lg shadow-amber-500/30'
+                  ? 'bg-amber-400 text-ink border-amber-400 shadow-lg shadow-amber-500/30'
                   : 'bg-white/5 border-white/10 text-slate-300 hover:bg-white/10'}`}
             >
               Use every letter
@@ -1446,7 +1564,7 @@ function App() {
             )}
           </div>
           {todayStatus === 'error' && (
-            <p className="mt-2 text-xs text-rose-400 text-center">
+            <p className="mt-2 text-xs text-danger text-center">
               Couldn&apos;t fetch today&apos;s rack — try again in a minute.
             </p>
           )}
@@ -1525,7 +1643,7 @@ function App() {
             </button>
           </div>
           {todayStatus === 'error' && (
-            <p className="mt-2 text-xs text-rose-400">
+            <p className="mt-2 text-xs text-danger">
               Couldn&apos;t fetch today&apos;s puzzle — try again in a minute.
             </p>
           )}
@@ -1605,12 +1723,12 @@ function App() {
                 <polyline
                   points={gridTracePts.map((p) => `${p.x},${p.y}`).join(' ')}
                   fill="none"
-                  stroke="rgb(125 211 252 / 0.9)"
+                  stroke="rgb(var(--trace) / 0.9)"
                   strokeWidth="4"
                   strokeLinecap="round"
                   strokeLinejoin="round"
                 />
-                <circle cx={gridTracePts[0].x} cy={gridTracePts[0].y} r="6" fill="rgb(125 211 252)" />
+                <circle cx={gridTracePts[0].x} cy={gridTracePts[0].y} r="6" fill="rgb(var(--trace))" />
               </svg>
             )}
           </div>
@@ -1625,7 +1743,7 @@ function App() {
             </button>
           </div>
           {todayStatus === 'error' && (
-            <p className="mt-2 text-xs text-rose-400">
+            <p className="mt-2 text-xs text-danger">
               Couldn&apos;t fetch today&apos;s grid — try again in a minute.
             </p>
           )}
@@ -1751,7 +1869,7 @@ function App() {
                 </label>
               </div>
               {todayStatus === 'error' && (
-                <p className="mt-2 text-xs text-rose-400">
+                <p className="mt-2 text-xs text-danger">
                   Couldn&apos;t fetch today&apos;s puzzle — try again in a minute.
                 </p>
               )}
@@ -1868,10 +1986,10 @@ function App() {
               <>
               {boxedRecommended && (
                 <div className="mb-6">
-                  <p className="mb-2.5 text-xs font-medium text-amber-400/80 uppercase tracking-wider inline-flex items-center gap-1.5">
+                  <p className="mb-2.5 text-xs font-medium text-accent uppercase tracking-wider inline-flex items-center gap-1.5">
                     <Star className="w-3.5 h-3.5" />
                     Recommended
-                    <span className="text-amber-400/50 normal-case tracking-normal">
+                    <span className="text-accent normal-case tracking-normal">
                       · {boxedRecommended.words.length}{' '}
                       {boxedRecommended.words.length === 1 ? 'word' : 'words'}
                       {boxedRecommended.allCommon ? ', everyday vocabulary' : ''}
@@ -1895,9 +2013,9 @@ function App() {
               )}
               {mode === 'boxed' && boxedIndex && (
                 <div className="mb-6">
-                  <p className="mb-2.5 text-xs font-medium text-emerald-400/80 uppercase tracking-wider">
+                  <p className="mb-2.5 text-xs font-medium text-success uppercase tracking-wider">
                     {solutionWords}-word solutions{' '}
-                    <span className="text-emerald-400/50">
+                    <span className="text-success">
                       · {boxedChains.capped ? `${boxedChains.solutions.length}+` : boxedChains.solutions.length}
                     </span>
                   </p>
@@ -1939,8 +2057,8 @@ function App() {
               )}
               {pangrams.length > 0 && (
                 <div className="mb-6">
-                  <p className="mb-2.5 text-xs font-medium text-amber-400/80 uppercase tracking-wider">
-                    Pangrams <span className="text-amber-400/50">· {pangrams.length}</span>
+                  <p className="mb-2.5 text-xs font-medium text-accent uppercase tracking-wider">
+                    Pangrams <span className="text-accent">· {pangrams.length}</span>
                   </p>
                   <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2.5">
                     {pangrams.map((w) => (
@@ -2012,14 +2130,16 @@ function App() {
         </>
         )}
 
-        <footer className="mt-14 text-center text-xs text-slate-600">
+        {/* pb keeps the last row clear of the floating keyboard button */}
+        <footer className="mt-14 pb-24 sm:pb-4 text-center text-xs text-slate-500">
           {!playActive && !learnMode && (
             <p>
               Searching {words.length.toLocaleString()} English words (
               {DICTIONARIES.find((d) => d.id === dictionaryId)?.label.toLowerCase()} dictionary).
             </p>
           )}
-          <div className="mt-3 flex items-center justify-center gap-5">
+          {/* wraps into centered rows rather than one overflowing line */}
+          <div className="mt-3 flex flex-wrap items-center justify-center gap-x-5 gap-y-2.5">
             <a
               href="https://github.com/rptetzloff/anagrimoire"
               target="_blank"
@@ -2035,6 +2155,20 @@ function App() {
             >
               <BarChart3 className="w-3.5 h-3.5" />
               Stats
+            </button>
+            <button
+              onClick={() => setSettingsOpen(true)}
+              className="inline-flex items-center gap-1.5 hover:text-slate-300 transition-colors"
+            >
+              <Settings className="w-3.5 h-3.5" />
+              Settings
+            </button>
+            <button
+              onClick={() => setKeysOpen(true)}
+              className="inline-flex items-center gap-1.5 hover:text-slate-300 transition-colors"
+            >
+              <Keyboard className="w-3.5 h-3.5" />
+              Keys
             </button>
             {supabase && (
               <button
@@ -2061,7 +2195,7 @@ function App() {
             </button>
           </div>
         </footer>
-      </div>
+      </main>
 
       {authNotice && (
         <div className="fixed top-3 left-1/2 -translate-x-1/2 z-[70] max-w-md w-[calc(100%-2rem)] rounded-xl bg-rose-950/95 border border-rose-500/40 px-4 py-3 shadow-2xl flex items-start gap-3">
@@ -2083,6 +2217,23 @@ function App() {
 
       {accountOpen && <AccountModal session={session} onClose={() => setAccountOpen(false)} />}
 
+      {keysOpen && <KeyboardHelp navKeys={navKeys} onClose={() => setKeysOpen(false)} />}
+
+      {settingsOpen && (
+        <SettingsModal
+          theme={theme}
+          palette={palette}
+          navKeys={navKeys}
+          textScale={textScale}
+          signedIn={!!session}
+          onTheme={setTheme}
+          onPalette={setPalette}
+          onNavKeys={setNavKeys}
+          onTextScale={setTextScale}
+          onClose={() => setSettingsOpen(false)}
+        />
+      )}
+
       {/* about & FAQ modal */}
       {aboutOpen && (
         <div
@@ -2093,6 +2244,8 @@ function App() {
             role="dialog"
             aria-modal="true"
             aria-label="About and FAQ"
+            ref={aboutRef}
+            tabIndex={-1}
             onClick={(e) => e.stopPropagation()}
             className="relative w-full max-w-lg max-h-[80vh] overflow-y-auto rounded-2xl bg-slate-900 border border-white/10 p-6 sm:p-8 text-left shadow-2xl"
           >
@@ -2221,6 +2374,8 @@ function App() {
             role="dialog"
             aria-modal="true"
             aria-label="Legal and licenses"
+            ref={legalRef}
+            tabIndex={-1}
             onClick={(e) => e.stopPropagation()}
             className="relative w-full max-w-lg max-h-[80vh] overflow-y-auto rounded-2xl bg-slate-900 border border-white/10 p-6 sm:p-8 text-left shadow-2xl"
           >
@@ -2365,7 +2520,7 @@ function App() {
                     state === 'correct'
                       ? 'bg-emerald-500/80 hover:bg-emerald-500 text-white'
                       : state === 'present'
-                        ? 'bg-amber-400/80 hover:bg-amber-400 text-slate-950'
+                        ? 'bg-amber-400/80 hover:bg-amber-400 text-ink'
                         : state === 'absent'
                           ? 'bg-white/[0.04] hover:bg-white/10 text-slate-600'
                           : 'bg-white/10 hover:bg-white/20 active:bg-white/30 text-white';

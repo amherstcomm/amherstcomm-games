@@ -9,6 +9,31 @@
       name="description"
       content="Solve Wordle, crosswords, and hangman puzzles. Lock in known letters, list the ones you've seen, exclude the rest — Anagrimoire finds every word that fits."
     />
+    <script>
+      // Stamp the saved theme before first paint, so a light-mode visitor
+      // never sees a flash of the dark palette (or vice versa).
+      (function () {
+        try {
+          var s = JSON.parse(localStorage.getItem('anagrimoire:v1') || '{}');
+          var mode = s.theme || 'system';
+          var dark =
+            mode === 'dark' ||
+            (mode === 'system' && !window.matchMedia('(prefers-color-scheme: light)').matches);
+          var root = document.documentElement;
+          root.setAttribute('data-theme', dark ? 'dark' : 'light');
+          var pal = s.palette === 'cvd' ? 'deuter' : s.palette;
+          root.setAttribute(
+            'data-palette',
+            ['deuter', 'tritan', 'mono'].indexOf(pal) >= 0 ? pal : 'default'
+          );
+          root.style.colorScheme = dark ? 'dark' : 'light';
+          var scales = { normal: '100%', large: '112.5%', larger: '125%' };
+          if (scales[s.textScale]) root.style.fontSize = scales[s.textScale];
+        } catch (e) {
+          /* first visit, or storage unavailable — the app applies it on mount */
+        }
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

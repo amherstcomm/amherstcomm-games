@@ -371,7 +371,7 @@ const GuessGame = forwardRef<
       case 'correct':
         return 'bg-emerald-500/80 border-emerald-400 text-white';
       case 'present':
-        return 'bg-amber-400/80 border-amber-300 text-slate-950';
+        return 'bg-amber-400/80 border-amber-300 text-ink';
       case 'absent':
         return 'bg-white/[0.04] border-white/10 text-slate-500';
       case 'pending':
@@ -416,7 +416,7 @@ const GuessGame = forwardRef<
         {dailyMode && (
           <>
             <span className="inline-flex items-center gap-1.5">
-              <Trophy className="w-3.5 h-3.5 text-amber-400" />
+              <Trophy className="w-3.5 h-3.5 text-accent" />
               Streak {store.stats.streak}
             </span>
             <span>Played {store.stats.played}</span>
@@ -428,7 +428,7 @@ const GuessGame = forwardRef<
 
       {loading && <p className="text-sm text-slate-400 py-8">Loading…</p>}
       {dailyMode && dailyError && (
-        <p className="text-sm text-rose-400 py-8">
+        <p className="text-sm text-danger py-8">
           Couldn&apos;t fetch today&apos;s words — try Practice instead.
         </p>
       )}

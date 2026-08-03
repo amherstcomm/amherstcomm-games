@@ -366,7 +366,7 @@ const HiveGame = forwardRef<
 
       {loading && <p className="text-sm text-slate-400 py-8">Loading…</p>}
       {store.dailyMode && dailyError && !record && (
-        <p className="text-sm text-rose-400 py-8">
+        <p className="text-sm text-danger py-8">
           Couldn&apos;t fetch today&apos;s letters — try Practice instead.
         </p>
       )}
@@ -398,7 +398,7 @@ const HiveGame = forwardRef<
                   {c}
                 </span>
               ))}
-              <span className="text-amber-400 animate-pulse">|</span>
+              <span className="text-accent animate-pulse">|</span>
             </span>
           </div>
 

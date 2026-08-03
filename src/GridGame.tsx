@@ -490,7 +490,7 @@ const GridGame = forwardRef<
 
       {loading && <p className="text-sm text-slate-400 py-8">Loading…</p>}
       {store.dailyMode && dailyError && !record && (
-        <p className="text-sm text-rose-400 py-8">
+        <p className="text-sm text-danger py-8">
           Couldn&apos;t fetch today&apos;s grid — try Practice instead.
         </p>
       )}
@@ -501,7 +501,7 @@ const GridGame = forwardRef<
           <div className="mb-4 flex items-center justify-center gap-5 text-sm">
             <span
               className={`inline-flex items-center gap-1.5 font-bold text-xl tabular-nums
-                ${running && remaining < 30000 ? 'text-rose-400' : 'text-white'}`}
+                ${running && remaining < 30000 ? 'text-danger' : 'text-white'}`}
             >
               <Timer className="w-4 h-4 text-slate-400" />
               {mmss}
@@ -531,7 +531,7 @@ const GridGame = forwardRef<
                 ) : (
                   current
                 )}
-                <span className="text-amber-400 animate-pulse">|</span>
+                <span className="text-accent animate-pulse">|</span>
               </span>
             </div>
           ) : (
@@ -585,12 +585,12 @@ const GridGame = forwardRef<
                 <polyline
                   points={tracePts.map((p) => `${p.x},${p.y}`).join(' ')}
                   fill="none"
-                  stroke="rgb(125 211 252 / 0.9)"
+                  stroke="rgb(var(--trace) / 0.9)"
                   strokeWidth="4"
                   strokeLinecap="round"
                   strokeLinejoin="round"
                 />
-                <circle cx={tracePts[0].x} cy={tracePts[0].y} r="6" fill="rgb(125 211 252)" />
+                <circle cx={tracePts[0].x} cy={tracePts[0].y} r="6" fill="rgb(var(--trace))" />
               </svg>
             )}
           </div>
@@ -601,7 +601,7 @@ const GridGame = forwardRef<
               <button
                 onMouseDown={(e) => e.preventDefault()}
                 onClick={start}
-                className="inline-flex items-center gap-1.5 px-5 h-10 rounded-lg text-sm font-semibold bg-emerald-400 text-slate-950 shadow-lg shadow-emerald-500/30 hover:bg-emerald-300 transition-colors"
+                className="inline-flex items-center gap-1.5 px-5 h-10 rounded-lg text-sm font-semibold bg-emerald-400 text-ink shadow-lg shadow-emerald-500/30 hover:bg-emerald-300 transition-colors"
               >
                 <Play className="w-4 h-4" />
                 Start
