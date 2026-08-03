@@ -255,6 +255,7 @@ const WeaveGame = forwardRef<
 
   // after completion, draw every word's path as a line overlay
   const boardWrapRef = useRef<HTMLDivElement>(null);
+  const boardRef = useRef<HTMLDivElement>(null);
   const [solutionLines, setSolutionLines] = useState<{ pts: { x: number; y: number }[]; span: boolean }[]>([]);
   useLayoutEffect(() => {
     if (!complete || !answers || !boardWrapRef.current) {
@@ -312,6 +313,11 @@ const WeaveGame = forwardRef<
     const i = cellAt(e.clientX, e.clientY);
     if (i === null || locked.has(i)) return;
     e.preventDefault();
+    // preventDefault blocks the focus a click would normally give the board,
+    // so take it explicitly — that keeps the keyboard route available
+    boardRef.current?.focus();
+    setCursor(i);
+    setKeyPath([]);
     setPath([i]);
   }
 
@@ -449,11 +455,27 @@ const WeaveGame = forwardRef<
 
   useImperativeHandle(ref, () => ({ pressKey }));
 
+  const ring = navKeys === 'wasd' ? WASD_DIRS : NUMPAD_DIRS;
+
   // the chosen key ring plus arrows, as [row delta, column delta]
   const KEY_DIRS: Record<string, [number, number]> = {
-    ...(navKeys === 'wasd' ? WASD_DIRS : NUMPAD_DIRS),
+    ...ring,
     ArrowUp: [-1, 0], ArrowDown: [1, 0], ArrowLeft: [0, -1], ArrowRight: [0, 1],
   };
+
+  // which key reaches each cell adjacent to the cursor — shown as a corner
+  // pill so the next move is always visible rather than memorized
+  const navHints = useMemo(() => {
+    const m = new Map<number, string>();
+    for (const [key, [dr, dc]] of Object.entries(ring)) {
+      const r = Math.floor(cursor / cols) + dr;
+      const c = (cursor % cols) + dc;
+      if (r < 0 || r >= rows || c < 0 || c >= cols) continue;
+      m.set(r * cols + c, key.toUpperCase());
+    }
+    return m;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cursor, navKeys, cols, rows]);
 
   function onBoardKeyDown(e: React.KeyboardEvent) {
     if (e.ctrlKey || e.metaKey || e.altKey || complete) return;
@@ -607,6 +629,7 @@ const WeaveGame = forwardRef<
           {/* one tab stop for the whole board: the cells are driven by the
               cursor rather than being 48 separate stops */}
           <div
+            ref={boardRef}
             role="application"
             tabIndex={complete ? -1 : 0}
             aria-label={
@@ -630,7 +653,7 @@ const WeaveGame = forwardRef<
                   data-wcursor={i === cursor ? '' : undefined}
                   tabIndex={-1}
                   disabled={complete}
-                  className={`${cellSize} rounded-lg border-2 font-bold uppercase transition-colors
+                  className={`${cellSize} relative rounded-lg border-2 font-bold uppercase transition-colors
                     ${lock === 'span'
                       ? 'bg-amber-400/50 border-amber-300 text-white'
                       : lock === 'theme'
@@ -641,6 +664,15 @@ const WeaveGame = forwardRef<
                     ${hintCells.has(i) && !lock ? 'ring-2 ring-emerald-300/80' : ''}`}
                 >
                   {c}
+                  {navHints.has(i) && (
+                    <span
+                      data-navkey=""
+                      aria-hidden="true"
+                      className="absolute -top-1.5 -right-1.5 min-w-[1rem] h-4 px-1 flex items-center justify-center rounded-full bg-slate-900 border border-white/40 text-[9px] font-mono font-bold leading-none text-slate-200"
+                    >
+                      {navHints.get(i)}
+                    </span>
+                  )}
                 </button>
               );
             })}

@@ -436,10 +436,21 @@ body {
   }
 
   /* Weave's keyboard cursor: the board is a single tab stop, so the cell the
-     arrow keys are sitting on marks itself while the board holds focus */
+     arrow keys are sitting on marks itself while the board holds focus, and
+     each reachable neighbour shows the key that gets there */
   [role='application']:focus-within [data-wcursor] {
     outline: 3px solid rgb(var(--c-white));
     outline-offset: 1px;
+  }
+
+  [data-navkey] {
+    opacity: 0;
+    transition: opacity 120ms ease;
+    pointer-events: none;
+  }
+
+  [role='application']:focus-within [data-navkey] {
+    opacity: 1;
   }
 }
 

@@ -6,6 +6,7 @@ import StatsModal from '@/StatsModal';
 import AccountModal from '@/AccountModal';
 import { OskContext } from '@/MobileKeyInput';
 import SettingsModal from '@/SettingsModal';
+import KeyboardHelp from '@/KeyboardHelp';
 import { PALETTES, THEME_MODES, useTheme, type Palette, type ThemeMode } from '@/theme';
 import { useModalA11y } from '@/useModalA11y';
 import { supabase } from '@/supabase';
@@ -566,6 +567,7 @@ function App() {
   const [learnMode, setLearnMode] = useState(false);
   const [accountOpen, setAccountOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [keysOpen, setKeysOpen] = useState(false);
   const [theme, setTheme] = useState<ThemeMode>(initial.theme);
   const [palette, setPalette] = useState<Palette>(initial.palette);
   const [navKeys, setNavKeys] = useState<NavKeys>(initial.navKeys);
@@ -2156,6 +2158,13 @@ function App() {
               <Settings className="w-3.5 h-3.5" />
               Settings
             </button>
+            <button
+              onClick={() => setKeysOpen(true)}
+              className="inline-flex items-center gap-1.5 hover:text-slate-300 transition-colors"
+            >
+              <Keyboard className="w-3.5 h-3.5" />
+              Keys
+            </button>
             {supabase && (
               <button
                 onClick={() => setAccountOpen(true)}
@@ -2202,6 +2211,8 @@ function App() {
       {statsOpen && <StatsModal signedIn={!!session} onClose={() => setStatsOpen(false)} />}
 
       {accountOpen && <AccountModal session={session} onClose={() => setAccountOpen(false)} />}
+
+      {keysOpen && <KeyboardHelp navKeys={navKeys} onClose={() => setKeysOpen(false)} />}
 
       {settingsOpen && (
         <SettingsModal
