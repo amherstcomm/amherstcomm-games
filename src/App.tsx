@@ -2130,14 +2130,16 @@ function App() {
         </>
         )}
 
-        <footer className="mt-14 text-center text-xs text-slate-500">
+        {/* pb keeps the last row clear of the floating keyboard button */}
+        <footer className="mt-14 pb-24 sm:pb-4 text-center text-xs text-slate-500">
           {!playActive && !learnMode && (
             <p>
               Searching {words.length.toLocaleString()} English words (
               {DICTIONARIES.find((d) => d.id === dictionaryId)?.label.toLowerCase()} dictionary).
             </p>
           )}
-          <div className="mt-3 flex items-center justify-center gap-5">
+          {/* wraps into centered rows rather than one overflowing line */}
+          <div className="mt-3 flex flex-wrap items-center justify-center gap-x-5 gap-y-2.5">
             <a
               href="https://github.com/rptetzloff/anagrimoire"
               target="_blank"
