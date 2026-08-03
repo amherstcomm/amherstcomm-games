@@ -164,15 +164,71 @@ export function mergeDaily(
 // always looked like someone else's edit, while two reads in a row didn't.
 // That is a coin flip, not a rule, and it made syncing look erratic.
 //
-// Deliberately in memory only. After a reload there is no pending local edit
-// to protect, so an unknown base falling back to "prefer more progress" is
-// exactly right.
-const syncBase = new Map<string, string>();
+// Knowing the row moved is only half of it. The device that didn't make the
+// change has the mirror question: its row has moved, so "prefer more progress"
+// is what it falls back on — and a deletion can never win that comparison. It
+// needs to know one more thing about itself: whether it is holding any work
+// the server hasn't got. If it isn't, the server's version is simply the
+// truth, shorter or not.
+//
+// So the base records both what we believe the server holds and what it looked
+// like, giving three cases instead of two:
+//
+//   server unchanged          -> our copy is newer; keep it, deletions included
+//   server moved, we're clean -> take the server's copy whole, deletions too
+//   both moved                -> a real conflict; keep whichever has more done
+//
+// Persisted, because a reload otherwise loses the distinction and the stale
+// browser goes back to resurrecting on its next load.
+type Base = { stamp: string; state: string };
+
+const BASE_STORE = 'anagrimoire:syncbase:v1';
+
+function loadBases(): Map<string, Base> {
+  try {
+    return new Map(JSON.parse(localStorage.getItem(BASE_STORE) ?? '[]'));
+  } catch {
+    return new Map();
+  }
+}
+
+const syncBase = loadBases();
+
+// Key order is not content: jsonb hands a state back rearranged, so comparing
+// raw JSON would call every round trip a change.
+function canon(value: unknown): string {
+  const norm = (v: unknown): unknown => {
+    if (Array.isArray(v)) return v.map(norm);
+    if (v && typeof v === 'object') {
+      const src = v as Record<string, unknown>;
+      const out: Record<string, unknown> = {};
+      for (const k of Object.keys(src).sort()) if (src[k] !== undefined) out[k] = norm(src[k]);
+      return out;
+    }
+    return v;
+  };
+  return JSON.stringify(norm(value ?? null));
+}
 
 const baseKey = (game: DailyGame, variant: string, date: string) => `${game}:${variant}:${date}`;
 
+function saveBases(): void {
+  try {
+    // yesterday's puzzles are never coming back; don't grow this forever
+    const cutoff = new Date(Date.now() - 8 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    for (const key of syncBase.keys()) {
+      const date = key.split(':')[2] ?? '';
+      if (date && date < cutoff) syncBase.delete(key);
+    }
+    localStorage.setItem(BASE_STORE, JSON.stringify([...syncBase]));
+  } catch {
+    // storage full or unavailable — the base holds for this page view
+  }
+}
+
 export function clearSyncBase(): void {
   syncBase.clear();
+  saveBases();
 }
 
 // Merge a freshly-read row into the local board, using the base to decide
@@ -186,18 +242,39 @@ export function mergeFromServer(
 ): Rec | null {
   const key = baseKey(game, variant, puzzleDate);
   const base = syncBase.get(key);
-  const serverMoved = base === undefined || base !== row.updatedAt;
-  syncBase.set(key, row.updatedAt);
-  return mergeDaily(game, local, row.state, serverMoved ? 'pull' : 'push');
+  const serverMoved = base === undefined || base.stamp !== row.updatedAt;
+  const localDirty = base === undefined || canon(local) !== base.state;
+
+  let merged: Rec | null;
+  if (!serverMoved) {
+    merged = mergeDaily(game, local, row.state, 'push');
+  } else if (!localDirty && row.state) {
+    // nothing of ours is unsaved, so there is nothing to defend — take the row
+    // as it stands, which is the only way a deletion reaches this device
+    merged = { ...(local ?? {}), ...row.state };
+  } else {
+    merged = mergeDaily(game, local, row.state, 'pull');
+  }
+
+  // The base is our own copy at the moment we were last in step, not the row
+  // as it arrived. Merging fills in fields the stored state doesn't carry —
+  // `revealed` and the like — so comparing against the raw row would call an
+  // untouched board dirty forever, and a device that is never clean can never
+  // accept a deletion.
+  syncBase.set(key, { stamp: row.updatedAt, state: canon(merged) });
+  saveBases();
+  return merged;
 }
 
 export function noteWritten(
   game: DailyGame,
   variant: string,
   puzzleDate: string,
-  updatedAt: string
+  updatedAt: string,
+  state: Rec
 ): void {
-  syncBase.set(baseKey(game, variant, puzzleDate), updatedAt);
+  syncBase.set(baseKey(game, variant, puzzleDate), { stamp: updatedAt, state: canon(state) });
+  saveBases();
 }
 
 // ---------------------------------------------------------------------------
@@ -303,7 +380,7 @@ async function push(
     );
     // what we just wrote is now the server state we have reconciled with, so a
     // pull that reads it back knows it isn't news
-    if (!error) noteWritten(game, variant, puzzleDate, writtenAt);
+    if (!error) noteWritten(game, variant, puzzleDate, writtenAt, merged);
     if (error) {
       console.warn('Anagrimoire daily sync failed:', error.message);
       return;
