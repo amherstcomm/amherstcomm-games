@@ -828,6 +828,79 @@ function App() {
     }
   }
 
+  // our own generated dailies, loadable into every solver
+  async function fillDailyHive() {
+    setTodayStatus('loading');
+    try {
+      const r = await fetch(dailyDataUrl('daily-hive'), { cache: 'no-store' });
+      if (!r.ok) throw new Error(String(r.status));
+      const d = await r.json();
+      const center = String(d.center).toLowerCase();
+      const outers = (d.outers as string[]).map((c) => String(c).toLowerCase());
+      if (!/^[a-z]$/.test(center) || outers.length !== 6 || !outers.every((c) => /^[a-z]$/.test(c))) {
+        throw new Error('bad payload');
+      }
+      setBeeCenter(center);
+      setBeeOuters(outers);
+      setTodayStatus('idle');
+    } catch {
+      setTodayStatus('error');
+    }
+  }
+
+  async function fillDailyBox() {
+    setTodayStatus('loading');
+    try {
+      const r = await fetch(dailyDataUrl('daily-box'), { cache: 'no-store' });
+      if (!r.ok) throw new Error(String(r.status));
+      const d = await r.json();
+      const letters = (d.sides as string[])
+        .flatMap((s) => String(s).toLowerCase().replace(/[^a-z]/g, '').split(''))
+        .slice(0, 12);
+      if (letters.length !== 12) throw new Error('bad payload');
+      setBoxedLetters(letters);
+      setTodayStatus('idle');
+    } catch {
+      setTodayStatus('error');
+    }
+  }
+
+  async function fillDailyGrid() {
+    setTodayStatus('loading');
+    try {
+      const r = await fetch(dailyDataUrl('daily-grid'), { cache: 'no-store' });
+      if (!r.ok) throw new Error(String(r.status));
+      const d = await r.json();
+      const cells = (d.cells as string[]).map((c) => String(c).toLowerCase());
+      if (cells.length !== 16 || !cells.every((c) => /^[a-z]$/.test(c))) {
+        throw new Error('bad payload');
+      }
+      setGridPreset('4x4');
+      setGridLetters(cells);
+      setTodayStatus('idle');
+    } catch {
+      setTodayStatus('error');
+    }
+  }
+
+  async function fillDailyRack() {
+    setTodayStatus('loading');
+    try {
+      const r = await fetch(dailyDataUrl('daily-scramble'), { cache: 'no-store' });
+      if (!r.ok) throw new Error(String(r.status));
+      const d = await r.json();
+      const letters = (d.letters as string[]).map((c) => String(c).toLowerCase());
+      if (letters.length !== 7 || !letters.every((c) => /^[a-z]$/.test(c))) {
+        throw new Error('bad payload');
+      }
+      setRackStr(letters.join(''));
+      setUseAll(false);
+      setTodayStatus('idle');
+    } catch {
+      setTodayStatus('error');
+    }
+  }
+
   const sorted = useMemo(() => {
     const arr = [...results];
     const dir = sort.dir === 'asc' ? 1 : -1;
@@ -1003,15 +1076,11 @@ function App() {
 
       <div className={`relative max-w-3xl mx-auto px-5 py-10 sm:py-16 ${kbOpen ? 'pb-64 sm:pb-64' : ''}`}>
         {/* header */}
-        <header className="text-center mb-10">
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/5 border border-white/10 text-xs text-slate-300 mb-5">
-            <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-            Word Game Solver
-          </div>
-          <h1 className="pb-2 text-4xl sm:text-5xl font-bold tracking-tight bg-gradient-to-br from-white via-white to-slate-400 bg-clip-text text-transparent">
+        <header className="text-center mb-8">
+          <h1 className="pb-1 text-4xl sm:text-5xl font-bold tracking-tight bg-gradient-to-br from-white via-white to-slate-400 bg-clip-text text-transparent">
             Anagrimoire
           </h1>
-          <p className="mt-3 text-slate-400 max-w-md mx-auto text-sm sm:text-base">
+          <p className="mt-2 text-slate-400 max-w-md mx-auto text-sm sm:text-base">
             {MODES.find((m) => m.id === mode)?.description}
           </p>
         </header>
@@ -1138,7 +1207,7 @@ function App() {
               className="inline-flex items-center gap-1.5 px-4 h-10 rounded-lg text-sm font-semibold bg-white/5 border border-white/10 text-slate-300 hover:bg-white/10 hover:text-white transition-colors disabled:opacity-50"
             >
               <CalendarDays className="w-4 h-4" />
-              {todayStatus === 'loading' ? 'Fetching…' : "Today's Strands"}
+              {todayStatus === 'loading' ? 'Fetching…' : "Today's NYT Strands"}
             </button>
             <button
               onClick={fillTodaysWeave}
@@ -1146,7 +1215,7 @@ function App() {
               className="inline-flex items-center gap-1.5 px-4 h-10 rounded-lg text-sm font-semibold bg-white/5 border border-white/10 text-slate-300 hover:bg-white/10 hover:text-white transition-colors disabled:opacity-50"
             >
               <CalendarDays className="w-4 h-4" />
-              {todayStatus === 'loading' ? 'Fetching…' : "Today's Weave"}
+              {todayStatus === 'loading' ? 'Fetching…' : "Today's daily weave"}
             </button>
           </div>
           {todayStatus === 'error' && (
@@ -1335,6 +1404,14 @@ function App() {
           </section>
           <div className="flex flex-wrap items-center justify-center gap-3">
             <button
+              onClick={fillDailyRack}
+              disabled={todayStatus === 'loading'}
+              className="inline-flex items-center gap-1.5 px-4 h-10 rounded-lg text-sm font-semibold bg-white/5 border border-white/10 text-slate-300 hover:bg-white/10 hover:text-white transition-colors disabled:opacity-50"
+            >
+              <CalendarDays className="w-4 h-4" />
+              {todayStatus === 'loading' ? 'Fetching…' : "Today's daily rack"}
+            </button>
+            <button
               onClick={() => setUseAll((v) => !v)}
               className={`inline-flex items-center gap-1.5 px-4 h-10 rounded-lg text-sm font-semibold transition-all duration-150 border
                 ${useAll
@@ -1360,6 +1437,11 @@ function App() {
               </label>
             )}
           </div>
+          {todayStatus === 'error' && (
+            <p className="mt-2 text-xs text-rose-400 text-center">
+              Couldn&apos;t fetch today&apos;s rack — try again in a minute.
+            </p>
+          )}
         </div>
         )}
 
@@ -1418,12 +1500,20 @@ function App() {
           </div>
           <div className="mt-4 flex flex-wrap items-center justify-center gap-3">
             <button
+              onClick={fillDailyHive}
+              disabled={todayStatus === 'loading'}
+              className="inline-flex items-center gap-1.5 px-4 h-10 rounded-lg text-sm font-semibold bg-white/5 border border-white/10 text-slate-300 hover:bg-white/10 hover:text-white transition-colors disabled:opacity-50"
+            >
+              <CalendarDays className="w-4 h-4" />
+              {todayStatus === 'loading' ? 'Fetching…' : "Today's daily hive"}
+            </button>
+            <button
               onClick={fillTodaysBee}
               disabled={todayStatus === 'loading'}
               className="inline-flex items-center gap-1.5 px-4 h-10 rounded-lg text-sm font-semibold bg-white/5 border border-white/10 text-slate-300 hover:bg-white/10 hover:text-white transition-colors disabled:opacity-50"
             >
               <CalendarDays className="w-4 h-4" />
-              {todayStatus === 'loading' ? 'Fetching…' : "Today's puzzle"}
+              {todayStatus === 'loading' ? 'Fetching…' : "Today's NYT bee"}
             </button>
           </div>
           {todayStatus === 'error' && (
@@ -1433,8 +1523,8 @@ function App() {
           )}
           <p className="mt-3 text-xs text-slate-500">
             Words are 4+ letters, must use the amber center letter, and may repeat letters.
-            Words using all seven letters are pangrams. Today&apos;s puzzle becomes available
-            here about 15 minutes after the NYT publishes it (3:00&nbsp;a.m. Eastern).
+            Words using all seven letters are pangrams. Both today&apos;s puzzles become
+            available about 15 minutes after 3:00&nbsp;a.m. Eastern.
           </p>
         </div>
         )}
@@ -1516,6 +1606,21 @@ function App() {
               </svg>
             )}
           </div>
+          <div className="mt-4 flex flex-wrap items-center justify-center gap-3">
+            <button
+              onClick={fillDailyGrid}
+              disabled={todayStatus === 'loading'}
+              className="inline-flex items-center gap-1.5 px-4 h-10 rounded-lg text-sm font-semibold bg-white/5 border border-white/10 text-slate-300 hover:bg-white/10 hover:text-white transition-colors disabled:opacity-50"
+            >
+              <CalendarDays className="w-4 h-4" />
+              {todayStatus === 'loading' ? 'Fetching…' : "Today's daily grid"}
+            </button>
+          </div>
+          {todayStatus === 'error' && (
+            <p className="mt-2 text-xs text-rose-400">
+              Couldn&apos;t fetch today&apos;s grid — try again in a minute.
+            </p>
+          )}
           <p className="mt-3 text-xs text-slate-500">
             Words are 3+ letters traced through adjacent cells (diagonals count), using each
             cell once. Hover a result to trace it on the board.
@@ -1604,12 +1709,20 @@ function App() {
               </div>
               <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
                 <button
+                  onClick={fillDailyBox}
+                  disabled={todayStatus === 'loading'}
+                  className="inline-flex items-center gap-1.5 px-4 h-10 rounded-lg text-sm font-semibold bg-white/5 border border-white/10 text-slate-300 hover:bg-white/10 hover:text-white transition-colors disabled:opacity-50"
+                >
+                  <CalendarDays className="w-4 h-4" />
+                  {todayStatus === 'loading' ? 'Fetching…' : "Today's daily box"}
+                </button>
+                <button
                   onClick={fillTodaysPuzzle}
                   disabled={todayStatus === 'loading'}
                   className="inline-flex items-center gap-1.5 px-4 h-10 rounded-lg text-sm font-semibold bg-white/5 border border-white/10 text-slate-300 hover:bg-white/10 hover:text-white transition-colors disabled:opacity-50"
                 >
                   <CalendarDays className="w-4 h-4" />
-                  {todayStatus === 'loading' ? 'Fetching…' : "Today's puzzle"}
+                  {todayStatus === 'loading' ? 'Fetching…' : "Today's NYT box"}
                 </button>
                 <label className="inline-flex items-center gap-2 text-sm text-slate-300">
                   Solution words
@@ -1636,7 +1749,7 @@ function App() {
               )}
               <p className="mt-3 text-xs text-slate-500">
                 Words are 3+ letters and may reuse letters, but consecutive letters can&apos;t
-                come from the same side. Today&apos;s puzzle becomes available here about
+                come from the same side. Both today&apos;s puzzles become available about
                 15 minutes after the NYT publishes it (3:00&nbsp;a.m. Eastern).
               </p>
             </div>
@@ -1980,8 +2093,70 @@ function App() {
 
             <div className="space-y-5 text-sm text-slate-300">
               <p>
-                Anagrimoire is a free, open-source word-game solver. The code is released
-                under the{' '}
+                Anagrimoire is a free companion for word games: solvers for six kinds of
+                puzzles, our own daily and practice versions of each to play, and
+                interactive guides to learn them.
+              </p>
+              <p className="text-slate-400">
+                The name is <em>anagram</em> + <em>grimoire</em> — a grimoire being an old
+                book of spells. A spellbook for words, more or less.
+              </p>
+
+              <div>
+                <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">
+                  FAQ
+                </h3>
+                <div className="space-y-3 text-slate-400">
+                  <div>
+                    <p className="text-slate-300 font-medium">
+                      Are the daily puzzles the same as the NYT&apos;s?
+                    </p>
+                    <p>
+                      No — every daily here is our own, generated fresh each morning, so
+                      playing never spoils (or copies) anyone else&apos;s puzzle. The solvers
+                      can load today&apos;s NYT Spelling Bee, Letter Boxed, and Strands where
+                      noted.
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-slate-300 font-medium">Do I need an account?</p>
+                    <p>
+                      No. Everything works without one — signing in only adds cross-device
+                      syncing of your play statistics.
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-slate-300 font-medium">Where does my data live?</p>
+                    <p>
+                      In your browser. Solving never leaves your device; if you sign in,
+                      your completed games sync to your account.
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-slate-300 font-medium">When do new dailies arrive?</p>
+                    <p>About 15 minutes after 3:00&nbsp;a.m. Eastern, every day.</p>
+                  </div>
+                  <div>
+                    <p className="text-slate-300 font-medium">
+                      Found a bug, or have an idea?
+                    </p>
+                    <p>
+                      <a
+                        href="https://github.com/rptetzloff/anagrimoire/issues"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-amber-300 hover:text-amber-200 underline underline-offset-2"
+                      >
+                        Open an issue on GitHub
+                      </a>{' '}
+                      — reports and suggestions are both welcome.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <p>
+                The code is free and open-source, released under the{' '}
                 <a
                   href="https://github.com/rptetzloff/anagrimoire/blob/main/LICENSE"
                   target="_blank"

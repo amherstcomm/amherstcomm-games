@@ -16,6 +16,8 @@ A word-game solver for puzzles like Wordle, crosswords, hangman, Scrabble, Jumbl
 - **Grid** (Boggle-style) — enter the letters of a 3×3, 4×4, or 5×5 square and find every word traceable through adjacent cells (diagonals count), each cell used once per word
 - **Boxed** (Letter Boxed-style) — twelve letters entered around a square, 3+ letter words, letters reusable, but consecutive letters can't share a side. Pick a solution length (1–5 words) to see chains covering all twelve letters, get a starred recommendation (fewest words, everyday vocabulary, fewest letters), hover any word or solution chain to trace its criss-cross path on the box, or autofill today's NYT puzzle with one click (a daily GitHub Action publishes Letter Boxed and Spelling Bee data to the `puzzle-data` branch about 15 minutes after the NYT publishes at 3:00 a.m. Eastern)
 
+Every solver can autofill **today's daily puzzle** (ours) with one click; the Hive, Boxed, and Weave solvers can also load **today's NYT puzzle** (Spelling Bee, Letter Boxed, Strands).
+
 ### Play mode
 
 Every mode has a **Solve / Play** toggle.
