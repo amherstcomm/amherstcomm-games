@@ -19,7 +19,7 @@ import { supabase } from '@/supabase';
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Rec = Record<string, any>;
 
-const POLL_MS = 5000;
+const POLL_MS = 10_000;
 
 export function useDailySync({
   game,
@@ -71,11 +71,12 @@ export function useDailySync({
   // focus events — only one of them is focused, and the other just sits there
   // looking stale — so a board that is visible checks back on its own.
   //
-  // Five seconds rather than one: the other device is a person playing a word
-  // game, not a trading feed, and this is one request per open board per
-  // interval for every signed-in player. Fast enough to feel live, slow enough
-  // to be free. Realtime would replace this with a subscription if it ever
-  // needs to be instant.
+  // Ten seconds. The case this exists for — two windows open at once — is
+  // mostly a testing shape; the real one is a phone in the morning and a
+  // laptop at lunch, which the pull on open already covers. Ten still reads as
+  // live if you are watching, at a request per open board per interval for
+  // every signed-in player. Realtime would replace it with a subscription if
+  // it ever needs to be instant.
   useEffect(() => {
     if (!supabase || !active || !date) return;
     const id = window.setInterval(() => {

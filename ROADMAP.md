@@ -26,13 +26,12 @@ place a day-by-day series exists — the event log has timestamps but no puzzle
 identity, and hive wrote a row per word.
 
 ### Realtime instead of polling
-A visible board re-reads `daily_progress` every five seconds so two windows
+A visible board re-reads `daily_progress` every ten seconds so two windows
 stay in step. That mostly serves side-by-side testing; the real case is a
 phone in the morning and a laptop at lunch, which the pull on open already
-covers. Two ways to spend less:
+covers, and the interval is already a middle ground rather than a live feed.
+To stop polling altogether:
 
-- **Longer interval.** One line. Thirty seconds would be invisible to the
-  actual use case.
 - **Realtime.** `alter publication supabase_realtime add table
   public.daily_progress`, then one shared channel filtered to `user_id`. Use
   it as a doorbell — an event triggers the same authenticated read and merge
