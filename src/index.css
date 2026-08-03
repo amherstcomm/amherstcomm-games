@@ -1,3 +1,11 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* Without this, the browser's scroll anchoring latches onto the footer on a
+   short page (e.g. a cleared solver) and chases it downward when a large
+   result list suddenly renders above it — jumping the viewport deep into
+   the words. */
+html {
+  overflow-anchor: none;
+}

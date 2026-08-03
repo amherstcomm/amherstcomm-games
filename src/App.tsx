@@ -1,5 +1,5 @@
 import { useMemo, useState, useEffect, useLayoutEffect, useRef, type ButtonHTMLAttributes, type ReactNode } from 'react';
-import { Search, Sparkles, Eraser, ArrowDown, ArrowUp, X, BookOpen, Grid3x3, Shuffle, Hexagon, Check, Keyboard, Delete, Github, Info, Square, CalendarDays, Star, Gamepad2, CornerDownLeft, LayoutGrid, Puzzle, BarChart3, UserRound } from 'lucide-react';
+import { Search, Sparkles, Eraser, ArrowDown, ArrowUp, X, BookOpen, Grid3x3, Shuffle, Hexagon, Check, Keyboard, Delete, Github, Info, Square, CalendarDays, Star, Gamepad2, CornerDownLeft, LayoutGrid, Puzzle, BarChart3, UserRound, Scale } from 'lucide-react';
 import LearnMode, { type LearnModeHandle } from '@/LearnMode';
 import type { Session } from '@supabase/supabase-js';
 import StatsModal from '@/StatsModal';
@@ -557,6 +557,7 @@ function App() {
   const [sorts, setSorts] = useState(initial.sort);
   const [kbOpen, setKbOpen] = useState(initial.keyboard);
   const [aboutOpen, setAboutOpen] = useState(false);
+  const [legalOpen, setLegalOpen] = useState(false);
   const [statsOpen, setStatsOpen] = useState(false);
   const [learnMode, setLearnMode] = useState(false);
   const [accountOpen, setAccountOpen] = useState(false);
@@ -626,13 +627,16 @@ function App() {
   }, [playActive, learnMode, patternPlayActive, beePlayActive, boxedPlayActive, descramblePlayActive, gridPlayActive, weavePlayActive, commonWordsArr, fullWordsArr, standardWordsArr]);
 
   useEffect(() => {
-    if (!aboutOpen) return;
+    if (!aboutOpen && !legalOpen) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setAboutOpen(false);
+      if (e.key === 'Escape') {
+        setAboutOpen(false);
+        setLegalOpen(false);
+      }
     };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
-  }, [aboutOpen]);
+  }, [aboutOpen, legalOpen]);
 
   // the input the on-screen keyboard types into
   const lastFocused = useRef<HTMLInputElement | null>(null);
@@ -2042,7 +2046,14 @@ function App() {
               className="inline-flex items-center gap-1.5 hover:text-slate-300 transition-colors"
             >
               <Info className="w-3.5 h-3.5" />
-              About &amp; licenses
+              About &amp; FAQ
+            </button>
+            <button
+              onClick={() => setLegalOpen(true)}
+              className="inline-flex items-center gap-1.5 hover:text-slate-300 transition-colors"
+            >
+              <Scale className="w-3.5 h-3.5" />
+              Legal
             </button>
           </div>
         </footer>
@@ -2068,7 +2079,7 @@ function App() {
 
       {accountOpen && <AccountModal session={session} onClose={() => setAccountOpen(false)} />}
 
-      {/* about & licenses modal */}
+      {/* about & FAQ modal */}
       {aboutOpen && (
         <div
           className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
@@ -2077,7 +2088,7 @@ function App() {
           <div
             role="dialog"
             aria-modal="true"
-            aria-label="About and licenses"
+            aria-label="About and FAQ"
             onClick={(e) => e.stopPropagation()}
             className="relative w-full max-w-lg max-h-[80vh] overflow-y-auto rounded-2xl bg-slate-900 border border-white/10 p-6 sm:p-8 text-left shadow-2xl"
           >
@@ -2098,8 +2109,8 @@ function App() {
                 interactive guides to learn them.
               </p>
               <p className="text-slate-400">
-                The name is <em>anagram</em> + <em>grimoire</em> — a grimoire being an old
-                book of spells. A spellbook for words, more or less.
+                The name is a portmanteau of <em>anagram</em> and <em>grimoire</em> — a
+                grimoire being an old book of spells. A spellbook for words, more or less.
               </p>
 
               <div>
@@ -2121,8 +2132,10 @@ function App() {
                   <div>
                     <p className="text-slate-300 font-medium">Do I need an account?</p>
                     <p>
-                      No. Everything works without one — signing in only adds cross-device
-                      syncing of your play statistics.
+                      No. Everything works without one — signing in adds cross-device
+                      syncing of your play statistics, and the site-wide daily numbers
+                      (&quot;across all registered players&quot;) accumulate only from
+                      signed-in accounts.
                     </p>
                   </div>
                   <div>
@@ -2177,6 +2190,47 @@ function App() {
                 .
               </p>
 
+              <p className="text-slate-500 text-xs">
+                Vibe-coded with{' '}
+                <a
+                  href="https://claude.com/claude-code"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="hover:text-slate-300 underline underline-offset-2"
+                >
+                  Claude
+                </a>
+                .
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* legal, privacy & licenses modal */}
+      {legalOpen && (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
+          onClick={() => setLegalOpen(false)}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label="Legal and licenses"
+            onClick={(e) => e.stopPropagation()}
+            className="relative w-full max-w-lg max-h-[80vh] overflow-y-auto rounded-2xl bg-slate-900 border border-white/10 p-6 sm:p-8 text-left shadow-2xl"
+          >
+            <button
+              onClick={() => setLegalOpen(false)}
+              aria-label="Close"
+              className="absolute top-4 right-4 w-8 h-8 flex items-center justify-center rounded-lg text-slate-400 hover:text-white hover:bg-white/10 transition-colors"
+            >
+              <X className="w-4 h-4" />
+            </button>
+
+            <h2 className="text-xl font-bold mb-5">Legal &amp; licenses</h2>
+
+            <div className="space-y-5 text-sm text-slate-300">
               <div>
                 <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">
                   Disclaimer
@@ -2252,21 +2306,28 @@ function App() {
                     (CC0, public domain).
                   </li>
                 </ul>
+                <p className="mt-2 text-xs text-slate-500">
+                  No word list is guaranteed to match any game&apos;s official dictionary.
+                </p>
               </div>
 
-              <p className="text-slate-500 text-xs">
-                No word list is guaranteed to match any game&apos;s official dictionary.
-                Vibe-coded with{' '}
-                <a
-                  href="https://claude.com/claude-code"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="hover:text-slate-300 underline underline-offset-2"
-                >
-                  Claude
-                </a>
-                .
-              </p>
+              <div>
+                <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">
+                  License
+                </h3>
+                <p className="text-slate-400">
+                  The site&apos;s code is released under the{' '}
+                  <a
+                    href="https://github.com/rptetzloff/anagrimoire/blob/main/LICENSE"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-amber-300 hover:text-amber-200 underline underline-offset-2"
+                  >
+                    MIT License
+                  </a>
+                  .
+                </p>
+              </div>
             </div>
           </div>
         </div>
