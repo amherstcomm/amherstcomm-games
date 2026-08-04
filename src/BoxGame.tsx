@@ -272,7 +272,13 @@ const BoxGame = forwardRef<
     setRecord: (merged) => setStore((prev) => ({ ...prev, daily: merged as BoxRecord })),
     // a revealed board still syncs its state, so the other device knows not to
     // hand you the same puzzle again — it just has no numbers worth averaging
-    summary: solved ? { words: chain.length, timeMs: record?.elapsedMs ?? 0 } : null,
+    // the winning chain rides along with the result. Boxed is the one game you
+    // can restart after finishing, and the row keeps its result when you do —
+    // so the board in `state` stops being evidence for the score, and the
+    // result has to carry its own.
+    summary: solved
+      ? { words: chain.length, timeMs: record?.elapsedMs ?? 0, chain }
+      : null,
     active: store.dailyMode,
   });
 

@@ -432,8 +432,20 @@ begin
     end;
 
   elsif p_game = 'box' then
-    if coalesce((p_result->>'timeMs')::numeric, 0) < 3000 then return false; end if;
-    if has_state and p_state ? 'chain' then
+    -- only a recorded time can be too fast; an absent or zero one means the
+    -- clock never ran, which is not the same as a three-second solve
+    if coalesce((p_result->>'timeMs')::numeric, 0) > 0
+       and (p_result->>'timeMs')::numeric < 3000 then
+      return false;
+    end if;
+    -- Prefer the chain stored with the result. Boxed is the one game you can
+    -- restart after finishing, and the row keeps its result when you do, so
+    -- the live board stops being evidence — checking against it flagged
+    -- perfectly good solves.
+    if p_result ? 'chain' then
+      return (p_result->>'words')::int = jsonb_array_length(p_result->'chain');
+    end if;
+    if has_state and jsonb_array_length(coalesce(p_state->'chain', '[]'::jsonb)) > 0 then
       return (p_result->>'words')::int = jsonb_array_length(p_state->'chain');
     end if;
     return (p_result->>'words')::int >= 1;
@@ -562,7 +574,9 @@ begin
     from (
       select p.display_name as name,
              count(*) filter (where (dp.result->>'solved')::boolean) as value,
-             min((dp.result->>'timeMs')::numeric) filter (where (dp.result->>'solved')::boolean) as detail
+             min((dp.result->>'timeMs')::numeric) filter (
+               where (dp.result->>'solved')::boolean and (dp.result->>'timeMs')::numeric > 0
+             ) as detail
       from public.daily_progress dp
       join public.profiles p on p.id = dp.user_id
       where dp.game = 'weave' and dp.completed and dp.env = p_env and dp.puzzle_date >= since
