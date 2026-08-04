@@ -11,6 +11,18 @@ import {
 } from '@/leaderboard';
 import { useModalA11y } from '@/useModalA11y';
 
+// A different word per action, so a hand that has learned one doesn't finish
+// the other on autopilot, and a fresh code beside it — a phrase you can type
+// from memory is a phrase you can type without meaning to.
+const CONFIRM_WORD = { stats: 'clear', account: 'delete' } as const;
+
+// No O/0 or I/1/l. This gets read off the screen and typed back, and a code
+// you have to squint at is a worse gate rather than a stronger one.
+function newCode(): string {
+  const alphabet = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
+  return Array.from(crypto.getRandomValues(new Uint8Array(4)), (b) => alphabet[b % alphabet.length]).join('');
+}
+
 export default function AccountModal({
   session,
   onClose,
@@ -121,6 +133,7 @@ export default function AccountModal({
   // saying what it takes, and deletion also wants the word typed out.
   const [danger, setDanger] = useState<null | 'stats' | 'account'>(null);
   const [typed, setTyped] = useState('');
+  const [code, setCode] = useState('');
   const [wipeLocal, setWipeLocal] = useState(true);
   const [busy, setBusy] = useState(false);
   const [dangerError, setDangerError] = useState('');
@@ -128,15 +141,17 @@ export default function AccountModal({
 
   function openDanger(which: 'stats' | 'account') {
     setDanger(which);
+    setCode(newCode());
     setTyped('');
     setDangerError('');
     setStatsCleared(false);
   }
 
-  // A different word for each, so a hand that has learned one doesn't finish
-  // the other on autopilot.
-  const CONFIRM_WORD = { stats: 'clear', account: 'delete' } as const;
-  const typedOk = danger !== null && typed.trim().toLowerCase() === CONFIRM_WORD[danger];
+  // Tolerant about case and stray spaces: the point is that you looked at the
+  // code, not that you can hit shift accurately.
+  const expected = danger === null ? '' : `${CONFIRM_WORD[danger]} ${code}`;
+  const typedOk =
+    danger !== null && typed.trim().replace(/\s+/g, ' ').toLowerCase() === expected.toLowerCase();
 
   async function confirmClearStats() {
     if (busy || !typedOk) return;
@@ -294,8 +309,11 @@ export default function AccountModal({
                   </p>
 
                   <label htmlFor="clear-confirm" className="block text-xs text-slate-400 mb-1.5">
-                    Type <span className="text-slate-200 font-semibold">clear</span> to
-                    confirm
+                    Type{' '}
+                    <span className="text-slate-200 font-semibold">
+                      clear <span className="tracking-[0.2em]">{code}</span>
+                    </span>{' '}
+                    to confirm
                   </label>
                   <input
                     id="clear-confirm"
@@ -359,8 +377,11 @@ export default function AccountModal({
                     htmlFor="delete-confirm"
                     className="block text-xs text-slate-400 mb-1.5"
                   >
-                    Type <span className="text-rose-200 font-semibold">delete</span> to
-                    confirm
+                    Type{' '}
+                    <span className="text-rose-200 font-semibold">
+                      delete <span className="tracking-[0.2em]">{code}</span>
+                    </span>{' '}
+                    to confirm
                   </label>
                   <input
                     id="delete-confirm"
