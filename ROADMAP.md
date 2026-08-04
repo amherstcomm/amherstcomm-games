@@ -60,6 +60,9 @@ sync, so it follows an account across devices.
 - A shared link outranks hiding for that visit, without changing the setting:
   landing someone on the wrong page because of a preference they set months
   ago is worse than showing them one game they'd switched off
+- Pattern's thirteen word lengths narrow to a range in the same place. Set it
+  to 5–5 and the length row disappears too; the other lengths keep their
+  dailies and statistics, as with any hidden game
 
 ### Onboarding
 On a genuine first visit, a dismissible card: "New here? See how Weave works,"

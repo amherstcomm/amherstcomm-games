@@ -23,9 +23,10 @@ import { solvePattern, solveDescramble, solveBee, solveBoxed, solveGrid, findGri
 import ConsentBanner from '@/ConsentBanner';
 import { PrivacyPolicy, Terms } from '@/LegalDocs';
 import { clearIntentUrl, intent, legalIntent } from '@/deeplink';
-import { ALL_MODES, ALL_VIEWS, visibleModes, visibleViews, type View, loadState, saveState, GRID_PRESET_DIMS, WEAVE_DIMS, type GridPreset, type Mode, type NavKeys, type SortPref, type WeaveSize } from '@/storage';
+import { ALL_MODES, ALL_VIEWS, lengthChoices, visibleModes, visibleViews, type LengthRange, type View, loadState, saveState, GRID_PRESET_DIMS, WEAVE_DIMS, type GridPreset, type Mode, type NavKeys, type SortPref, type WeaveSize } from '@/storage';
 
-const MIN_LEN = 3;
+// longest rack the scramble solver accepts; word lengths come from the
+// player's own range now, in storage
 const MAX_LEN = 15;
 
 const MODES: { id: Mode; label: string; blurb: string; description: string }[] = [
@@ -616,6 +617,7 @@ function App() {
   const [textScale, setTextScale] = useState<TextScale>(initial.textScale);
   const [hiddenModes, setHiddenModes] = useState<Mode[]>(initial.hiddenModes);
   const [hiddenViews, setHiddenViews] = useState<View[]>(initial.hiddenViews);
+  const [lengthRange, setLengthRange] = useState<LengthRange>(initial.lengthRange);
   const [session, setSession] = useState<Session | null>(null);
 
   useTheme(theme, palette, textScale);
@@ -659,6 +661,7 @@ function App() {
           textScale?: TextScale;
           hiddenModes?: Mode[];
           hiddenViews?: View[];
+          lengthRange?: LengthRange;
         }
       | null;
     if (s?.theme && THEME_MODES.includes(s.theme)) setTheme(s.theme);
@@ -667,6 +670,7 @@ function App() {
     if (s?.textScale && TEXT_SCALES.includes(s.textScale)) setTextScale(s.textScale);
     if (Array.isArray(s?.hiddenModes)) setHiddenModes(s.hiddenModes.filter((m) => ALL_MODES.includes(m)));
     if (Array.isArray(s?.hiddenViews)) setHiddenViews(s.hiddenViews.filter((v) => ALL_VIEWS.includes(v)));
+    if (s?.lengthRange) setLengthRange(s.lengthRange);
     settingsPulled.current = true;
   }, [session]);
 
@@ -695,7 +699,7 @@ function App() {
     if (!supabase || !session || !settingsPulled.current) return;
     pushPending.current = true;
     const id = window.setTimeout(async () => {
-      const settings = { theme, palette, navKeys, textScale, hiddenModes, hiddenViews };
+      const settings = { theme, palette, navKeys, textScale, hiddenModes, hiddenViews, lengthRange };
       // update first — it needs only the update policy, which every install
       // has. `select` reveals whether a row actually matched.
       const { data, error } = await supabase!
@@ -723,7 +727,7 @@ function App() {
       window.clearTimeout(id);
       pushPending.current = false;
     };
-  }, [session, theme, palette, navKeys, textScale, hiddenModes, hiddenViews]);
+  }, [session, theme, palette, navKeys, textScale, hiddenModes, hiddenViews, lengthRange]);
 
   // surface auth errors that come back in the redirect URL (expired or
   // already-used magic links land here with no other visible sign)
@@ -839,10 +843,19 @@ function App() {
     playFlags[mode][1](view === 'play');
   }
 
+  const shownLengths = useMemo(() => lengthChoices(lengthRange), [lengthRange]);
+
   // hiding the game or tab you're standing on shouldn't leave you nowhere
   useEffect(() => {
     if (!shownModes.includes(mode)) setMode(shownModes[0]);
   }, [shownModes, mode]);
+
+  // narrowing the range around the length you're on moves you to the nearest
+  // one still offered, rather than leaving nothing selected
+  useEffect(() => {
+    if (length < lengthRange.min) setLength(lengthRange.min);
+    else if (length > lengthRange.max) setLength(lengthRange.max);
+  }, [lengthRange, length]);
 
   useEffect(() => {
     if (!shownViews.includes(currentView)) goToView(shownViews[0]);
@@ -862,6 +875,7 @@ function App() {
       navKeys,
       hiddenModes,
       hiddenViews,
+      lengthRange,
       patternPlay,
       beePlay,
       boxedPlay,
@@ -875,7 +889,7 @@ function App() {
       weave: { letters: weaveLetters, size: weaveSize },
       weavePlay,
     });
-  }, [mode, dictionaries, sorts, kbOpen, theme, palette, textScale, navKeys, hiddenModes, hiddenViews, patternPlay, beePlay, boxedPlay, descramblePlay, gridPlay, length, known, containsStr, excludedStr, rackStr, useAll, minLength, beeCenter, beeOuters, boxedLetters, solutionWords, gridLetters, gridPreset, weaveLetters, weaveSize, weavePlay]);
+  }, [mode, dictionaries, sorts, kbOpen, theme, palette, textScale, navKeys, hiddenModes, hiddenViews, lengthRange, patternPlay, beePlay, boxedPlay, descramblePlay, gridPlay, length, known, containsStr, excludedStr, rackStr, useAll, minLength, beeCenter, beeOuters, boxedLetters, solutionWords, gridLetters, gridPreset, weaveLetters, weaveSize, weavePlay]);
 
   // keep known array sized to length
   useEffect(() => {
@@ -1490,13 +1504,14 @@ function App() {
 
         {mode === 'pattern' && (
         <>
-        {/* length selector */}
-        <section className="mb-7 text-center">
+        {/* length selector — gone when the range allows only one, the same way
+            the view switch goes when one tab is left */}
+        <section className={`mb-7 text-center ${shownLengths.length > 1 ? '' : 'hidden'}`}>
           <label className="block text-xs font-medium text-slate-400 uppercase tracking-wider mb-2.5">
             Word length
           </label>
           <div className="flex flex-wrap gap-2 justify-center">
-            {Array.from({ length: MAX_LEN - MIN_LEN + 1 }, (_, i) => i + MIN_LEN).map((n) => (
+            {shownLengths.map((n) => (
               <button
                 key={n}
                 onClick={() => setLength(n)}
@@ -2332,6 +2347,7 @@ function App() {
           textScale={textScale}
           hiddenModes={hiddenModes}
           hiddenViews={hiddenViews}
+          lengthRange={lengthRange}
           signedIn={!!session}
           onTheme={setTheme}
           onPalette={setPalette}
@@ -2342,6 +2358,7 @@ function App() {
               prev.includes(m) ? prev.filter((x) => x !== m) : [...prev, m]
             )
           }
+          onLengthRange={setLengthRange}
           onToggleView={(v) =>
             setHiddenViews((prev) =>
               prev.includes(v) ? prev.filter((x) => x !== v) : [...prev, v]

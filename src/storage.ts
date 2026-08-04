@@ -30,6 +30,31 @@ export function visibleViews(hidden: View[]): View[] {
   return left.length ? left : ALL_VIEWS;
 }
 
+// Pattern offers thirteen word lengths, and plenty of people only ever want
+// one of them. Narrowing the range is the same idea as hiding a game: it
+// changes what's offered, not what exists — the other lengths keep their
+// daily boards and their statistics, and widening the range brings them back.
+export const MIN_WORD_LEN = 3;
+export const MAX_WORD_LEN = 15;
+
+export type LengthRange = { min: number; max: number };
+
+export function lengthChoices({ min, max }: LengthRange): number[] {
+  return Array.from({ length: max - min + 1 }, (_, i) => i + min);
+}
+
+function sanitizeRange(value: unknown): LengthRange {
+  const v = value as Partial<LengthRange> | undefined;
+  const clamp = (n: unknown, fallback: number) =>
+    typeof n === 'number' && Number.isInteger(n) && n >= MIN_WORD_LEN && n <= MAX_WORD_LEN
+      ? n
+      : fallback;
+  const min = clamp(v?.min, MIN_WORD_LEN);
+  const max = clamp(v?.max, MAX_WORD_LEN);
+  // an inverted range would offer nothing at all
+  return min <= max ? { min, max } : { min: MIN_WORD_LEN, max: MAX_WORD_LEN };
+}
+
 // which keys step the Weave board cursor around, besides the arrow keys:
 // the number pad's ring (7 8 9 / 4 6 / 1 2 3) or the letters around WASD
 // (q w e / a d / z s x)
@@ -50,6 +75,7 @@ export type PersistedState = {
   navKeys: NavKeys;
   hiddenModes: Mode[];
   hiddenViews: View[];
+  lengthRange: LengthRange;
   patternPlay: boolean;
   beePlay: boolean;
   boxedPlay: boolean;
@@ -95,6 +121,7 @@ export const DEFAULT_STATE: PersistedState = {
   navKeys: 'numpad',
   hiddenModes: [],
   hiddenViews: [],
+  lengthRange: { min: MIN_WORD_LEN, max: MAX_WORD_LEN },
   patternPlay: false,
   beePlay: false,
   boxedPlay: false,
@@ -213,6 +240,7 @@ export function loadState(): PersistedState {
       navKeys: p?.navKeys === 'wasd' ? 'wasd' : 'numpad',
       hiddenModes: sanitizeHidden(p?.hiddenModes, ALL_MODES),
       hiddenViews: sanitizeHidden(p?.hiddenViews, ALL_VIEWS),
+      lengthRange: sanitizeRange(p?.lengthRange),
       patternPlay: p?.patternPlay === true,
       beePlay: p?.beePlay === true,
       boxedPlay: p?.boxedPlay === true,

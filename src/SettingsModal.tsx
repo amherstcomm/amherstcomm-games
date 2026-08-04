@@ -10,7 +10,15 @@ import {
   writeConsent,
   type Consent,
 } from '@/consent';
-import type { Mode, NavKeys, View } from '@/storage';
+import {
+  lengthChoices,
+  MAX_WORD_LEN,
+  MIN_WORD_LEN,
+  type LengthRange,
+  type Mode,
+  type NavKeys,
+  type View,
+} from '@/storage';
 import type { Palette, TextScale, ThemeMode } from '@/theme';
 import { useModalA11y } from '@/useModalA11y';
 
@@ -63,6 +71,33 @@ const PALETTE_OPTIONS: { id: Palette; label: string; blurb: string; tones: strin
   },
 ];
 
+function LengthPicker({
+  label,
+  value,
+  options,
+  onChange,
+}: {
+  label: string;
+  value: number;
+  options: number[];
+  onChange: (n: number) => void;
+}) {
+  return (
+    <select
+      aria-label={label}
+      value={value}
+      onChange={(e) => onChange(Number(e.target.value))}
+      className="h-9 px-2 rounded-lg bg-white/5 border border-white/10 text-slate-200 text-sm font-semibold"
+    >
+      {options.map((n) => (
+        <option key={n} value={n} className="bg-slate-900">
+          {n}
+        </option>
+      ))}
+    </select>
+  );
+}
+
 // small live swatches so the palette choice is visible before committing
 function Swatches({ tones }: { tones: string[] }) {
   return (
@@ -85,6 +120,7 @@ export default function SettingsModal({
   navKeys,
   hiddenModes,
   hiddenViews,
+  lengthRange,
   signedIn,
   onTheme,
   onPalette,
@@ -92,6 +128,7 @@ export default function SettingsModal({
   onNavKeys,
   onToggleMode,
   onToggleView,
+  onLengthRange,
   onClose,
 }: {
   theme: ThemeMode;
@@ -100,6 +137,7 @@ export default function SettingsModal({
   navKeys: NavKeys;
   hiddenModes: Mode[];
   hiddenViews: View[];
+  lengthRange: LengthRange;
   signedIn: boolean;
   onTheme: (t: ThemeMode) => void;
   onPalette: (p: Palette) => void;
@@ -107,6 +145,7 @@ export default function SettingsModal({
   onNavKeys: (n: NavKeys) => void;
   onToggleMode: (m: Mode) => void;
   onToggleView: (v: View) => void;
+  onLengthRange: (r: LengthRange) => void;
   onClose: () => void;
 }) {
   const dialogRef = useRef<HTMLDivElement>(null);
@@ -333,6 +372,36 @@ export default function SettingsModal({
               streaks keep accruing, and unhiding brings everything back. One of
               each has to stay.
             </p>
+
+            {!hiddenModes.includes('pattern') && (
+              <div className="mt-4">
+                <p className="text-xs font-medium text-slate-400 mb-1.5">
+                  Pattern word lengths
+                </p>
+                <div className="flex items-center gap-2 text-sm">
+                  <LengthPicker
+                    label="Shortest word length"
+                    value={lengthRange.min}
+                    // never let the pair cross over — an empty range would
+                    // leave the picker with nothing to offer
+                    options={lengthChoices({ min: MIN_WORD_LEN, max: lengthRange.max })}
+                    onChange={(min) => onLengthRange({ ...lengthRange, min })}
+                  />
+                  <span className="text-slate-500">to</span>
+                  <LengthPicker
+                    label="Longest word length"
+                    value={lengthRange.max}
+                    options={lengthChoices({ min: lengthRange.min, max: MAX_WORD_LEN })}
+                    onChange={(max) => onLengthRange({ ...lengthRange, max })}
+                  />
+                </div>
+                <p className="mt-2 text-xs text-slate-500">
+                  {lengthRange.min === lengthRange.max
+                    ? `Only ${lengthRange.min}-letter words, and the length row disappears.`
+                    : 'Narrows the row of lengths Pattern offers. The rest keep their dailies and statistics.'}
+                </p>
+              </div>
+            )}
           </div>
 
           {GA_ID && (
