@@ -1762,7 +1762,7 @@ function App() {
           <label className="block text-xs font-medium text-slate-400 uppercase tracking-wider mb-3">
             The hive
           </label>
-          <div className="relative w-56 h-56 mx-auto">
+          <div className="relative w-full max-w-[14rem] aspect-square mx-auto">
             <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2">
               <Tile
                 index={0}
@@ -1960,7 +1960,7 @@ function App() {
               <label className="block text-xs font-medium text-slate-400 uppercase tracking-wider mb-3">
                 Sides of the box
               </label>
-              <div ref={boxedBoardRef} className="relative w-72 h-72 mx-auto">
+              <div ref={boxedBoardRef} className="relative w-full max-w-[18rem] aspect-square mx-auto">
                 <div className="absolute inset-14 rounded-xl border-2 border-white/15 bg-white/[0.02]" />
                 {/* top */}
                 <div className="absolute top-0 left-14 right-14 flex justify-around">

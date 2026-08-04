@@ -526,7 +526,7 @@ const BoxGame = forwardRef<
           )}
 
           {/* the box */}
-          <div className="relative w-72 h-72 mx-auto">
+          <div className="relative w-full max-w-[18rem] aspect-square mx-auto">
             <div className="absolute inset-12 rounded-xl border-2 border-white/15 bg-white/[0.02]" />
             {(() => {
               // hovered word takes priority; otherwise the live entry draws

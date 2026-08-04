@@ -606,7 +606,7 @@ function LearnHive({ dict, register }: { dict: Set<string> | null; register: Reg
             <span className="text-accent animate-pulse">|</span>
           </span>
         </div>
-        <div className="relative w-48 h-48 mx-auto">
+        <div className="relative w-full max-w-[12rem] aspect-square mx-auto">
           <button
             onMouseDown={(e) => e.preventDefault()}
             onClick={() => setCurrent((c) => c + HIVE_CENTER)}
@@ -1100,7 +1100,7 @@ function LearnBoxed({ dict, register }: { dict: Set<string> | null; register: Re
             <MobileKeyInput onKey={handleKey} />
           </div>
         )}
-        <div className="relative w-64 h-64 mx-auto my-5">
+        <div className="relative w-full max-w-[16rem] aspect-square mx-auto my-5">
           <div className="absolute inset-10 rounded-xl border-2 border-white/15 bg-white/[0.02]" />
           {(() => {
             // hovered chain word takes priority; the live entry draws dashed
