@@ -9,6 +9,7 @@ import SettingsModal from '@/SettingsModal';
 import KeyboardHelp from '@/KeyboardHelp';
 import { PALETTES, PaletteContext, TEXT_SCALES, THEME_MODES, useTheme, type Palette, type TextScale, type ThemeMode } from '@/theme';
 import { PrefsContext } from '@/prefs';
+import OnboardingCard from '@/OnboardingCard';
 import { useModalA11y } from '@/useModalA11y';
 import { supabase } from '@/supabase';
 import { importBaselineOnce } from '@/stats';
@@ -637,6 +638,7 @@ function App() {
   const [practiceAllowed, setPracticeAllowed] = useState(initial.practiceAllowed);
   const [helpAllowed, setHelpAllowed] = useState(initial.helpAllowed);
   const [solverDictionary, setSolverDictionary] = useState(initial.solverDictionary);
+  const [onboarded, setOnboarded] = useState(initial.onboarded);
   const [session, setSession] = useState<Session | null>(null);
 
   useTheme(theme, palette, textScale);
@@ -684,6 +686,7 @@ function App() {
           practiceAllowed?: boolean;
           helpAllowed?: boolean;
           solverDictionary?: DictionaryId | 'per-game';
+          onboarded?: boolean;
         }
       | null;
     if (s?.theme && THEME_MODES.includes(s.theme)) setTheme(s.theme);
@@ -696,6 +699,7 @@ function App() {
     if (typeof s?.practiceAllowed === 'boolean') setPracticeAllowed(s.practiceAllowed);
     if (typeof s?.helpAllowed === 'boolean') setHelpAllowed(s.helpAllowed);
     if (s?.solverDictionary) setSolverDictionary(s.solverDictionary);
+    if (s?.onboarded) setOnboarded(true);
     settingsPulled.current = true;
   }, [session]);
 
@@ -724,7 +728,7 @@ function App() {
     if (!supabase || !session || !settingsPulled.current) return;
     pushPending.current = true;
     const id = window.setTimeout(async () => {
-      const settings = { theme, palette, navKeys, textScale, hiddenModes, hiddenViews, lengthRange, practiceAllowed, helpAllowed, solverDictionary };
+      const settings = { theme, palette, navKeys, textScale, hiddenModes, hiddenViews, lengthRange, practiceAllowed, helpAllowed, solverDictionary, onboarded };
       // update first — it needs only the update policy, which every install
       // has. `select` reveals whether a row actually matched.
       const { data, error } = await supabase!
@@ -752,7 +756,7 @@ function App() {
       window.clearTimeout(id);
       pushPending.current = false;
     };
-  }, [session, theme, palette, navKeys, textScale, hiddenModes, hiddenViews, lengthRange, practiceAllowed, helpAllowed, solverDictionary]);
+  }, [session, theme, palette, navKeys, textScale, hiddenModes, hiddenViews, lengthRange, practiceAllowed, helpAllowed, solverDictionary, onboarded]);
 
   // surface auth errors that come back in the redirect URL (expired or
   // already-used magic links land here with no other visible sign)
@@ -907,6 +911,7 @@ function App() {
       practiceAllowed,
       helpAllowed,
       solverDictionary,
+      onboarded,
       patternPlay,
       beePlay,
       boxedPlay,
@@ -920,7 +925,7 @@ function App() {
       weave: { letters: weaveLetters, size: weaveSize },
       weavePlay,
     });
-  }, [mode, dictionaries, sorts, kbOpen, theme, palette, textScale, navKeys, hiddenModes, hiddenViews, lengthRange, practiceAllowed, helpAllowed, solverDictionary, patternPlay, beePlay, boxedPlay, descramblePlay, gridPlay, length, known, containsStr, excludedStr, rackStr, useAll, minLength, beeCenter, beeOuters, boxedLetters, solutionWords, gridLetters, gridPreset, weaveLetters, weaveSize, weavePlay]);
+  }, [mode, dictionaries, sorts, kbOpen, theme, palette, textScale, navKeys, hiddenModes, hiddenViews, lengthRange, practiceAllowed, helpAllowed, solverDictionary, onboarded, patternPlay, beePlay, boxedPlay, descramblePlay, gridPlay, length, known, containsStr, excludedStr, rackStr, useAll, minLength, beeCenter, beeOuters, boxedLetters, solutionWords, gridLetters, gridPreset, weaveLetters, weaveSize, weavePlay]);
 
   // keep known array sized to length
   useEffect(() => {
@@ -1384,6 +1389,21 @@ function App() {
               : MODES.find((m) => m.id === mode)?.playDescription}
           </p>
         </header>
+
+        {/* Only where there's a Learn tab to point at, and only until it's
+            been answered either way. `currentView` keeps it off the Learn tab
+            itself, where it would be telling someone about the page they're
+            already reading. */}
+        {!onboarded && shownViews.includes('learn') && currentView !== 'learn' && (
+          <OnboardingCard
+            game={MODES.find((m) => m.id === mode)?.label ?? 'this game'}
+            onLearn={() => {
+              goToView('learn');
+              setOnboarded(true);
+            }}
+            onDismiss={() => setOnboarded(true)}
+          />
+        )}
 
         {/* solve / play / learn toggle — gone entirely when only one is left,
             since a switch with one position is just clutter. Hiding Solve and
