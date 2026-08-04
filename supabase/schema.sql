@@ -192,6 +192,10 @@ exception
 end;
 $$;
 
+-- revoke first: the PUBLIC default would otherwise leave this callable by
+-- signed-out visitors. It only ever returns 'not signed in' to them, but a
+-- write function reachable by anon is not a thing to leave lying around.
+revoke execute on function public.set_display_name(text) from public, anon;
 grant execute on function public.set_display_name(text) to authenticated;
 
 -- Try a name against the list without claiming it. No grant, so it's yours
