@@ -81,21 +81,75 @@ screen. The Learn demos do the teaching; the card only points at them.
   from a version without the flag is treated as already onboarded rather than
   greeted with "new here?"
 
+### Self-serve account deletion — next
+The privacy policy promises deletion and currently routes it through email,
+which is a standing obligation on one person. Everything needed is already in
+place; this is a button and an RPC.
+
+- **One function, no argument.** `delete_account()` derives the account from
+  `auth.uid()`. A version taking a user id is a delete-anybody endpoint the
+  moment somebody reads the network tab.
+- **One delete does it all.** `profiles`, `game_results`, `daily_progress` and
+  `stats_baselines` all reference `auth.users` on delete cascade, so removing
+  that row is the whole job — one place to get right rather than five.
+- **Typed confirmation**, and say plainly that it can't be undone and that
+  signing in again starts a fresh account. Worth splitting "clear my stats"
+  from "delete my account": most people reaching for deletion want the first.
+- **Analytics needs no deletion, and the policy should say why.** We never
+  send GA4 a user id — `gtag('config', GA_ID)` and nothing more — so Google
+  holds a browser-scoped client id and no way to tie it to an account.
+  Google's deletion API works on identifiers you supply, and we record none,
+  so there is no handle to delete by. Clear the `_ga` cookies on the way out
+  (the Settings toggle already has that code) and let Google's retention do
+  the rest. Don't imply we can reach into their data, because we can't.
+- Local play state stays until the browser's site data is cleared. Say so
+  rather than quietly wiping boards someone might still want.
+
+### Admin portal — much later
+Everything owner-facing is SQL-editor-only today: clearing a display name,
+adding blocklist entries, reading `suspect_daily_results`. That's fine, and
+the Supabase dashboard is already a competent admin portal built by people who
+think about privilege escalation for a living.
+
+**The trigger isn't volume, it's delegation** — the moment somebody who isn't
+the owner needs to moderate, or moderation has to happen from a phone where
+the SQL editor is miserable. Until then a second portal is new attack surface
+guarding data the dashboard already reaches.
+
+If SQL starts to chafe before that, the cheap middle is owner-only helper
+functions so routine jobs are one-liners — clear a name, list names set this
+week, block a pattern and clear anyone already using it. Same safety model,
+most of the convenience.
+
+**Note for whenever this happens:** admin reach is exactly where grant
+defaults bite. Postgres gives `EXECUTE` on new functions to `PUBLIC`, and
+Supabase grants table privileges to the web roles, so anything new needs an
+explicit revoke. Two of those were missed on the leaderboard work and caught
+afterwards — including a view that read straight past row-level security.
+
 ## Needs a decision first
 
-### Display names → leaderboards
-The query is the same security-definer aggregate shape as `daily_stats`. The
-blockers are identity and trust:
+### ~~Display names → leaderboards~~ — done
+Setting a display name is the opt-in and the whole of it; without one you
+don't appear. Boards are per game over today, 7 days or 30, and multi-day
+windows rank on how often you played as well as how well.
 
-- **Display names.** `profiles.display_name` exists but nothing sets it. Once
-  names are public there's a moderation surface. Suggested: opt-in, and not
-  appearing on the leaderboard is the default.
-- **Score integrity.** Every score is client-reported and trivially forgeable
-  (a Weave time of 0.1s from the console). Server-side validation would mean
-  putting the dictionary and board logic in Postgres — not worth it.
-  Suggested: frame leaderboards as friendly rather than competitive, and cap
-  impossible values (sub-5-second Weave, a Boggle score above the board's own
-  maximum) so casual nonsense doesn't ruin the board.
+Both original blockers landed differently than expected:
+
+- **Names** are unique on the lowercased value, set through a definer function
+  so length, character set, blocklist and uniqueness are checked where the
+  client can't skip them. The blocklist has substring entries for slurs and
+  exact entries for bulk lists — one matcher can't do both without turning
+  away Scunthorpe.
+- **Score integrity** didn't need the dictionary in Postgres after all.
+  `daily_progress` already stores the words found, so the database recomputes
+  hive, scramble and grid scores from the word list and drops any row whose
+  claim disagrees with its own evidence. Forgery now needs a plausible list of
+  real words rather than a number.
+- The trap worth remembering: a result is a record of something that already
+  happened, and state is the board as it is now. Boxed can be restarted after
+  solving, so the two legitimately diverge — verifying one against the other
+  flagged real solves until the result started carrying its own evidence.
 
 ### Friends / competition
 The biggest architectural jump. Everything so far is "you can only read your
