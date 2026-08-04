@@ -120,16 +120,20 @@ export default function SettingsModal({
         aria-modal="true"
         aria-label="Settings"
         onClick={(e) => e.stopPropagation()}
-        className="relative w-full max-w-sm rounded-2xl bg-slate-900 border border-white/10 p-6 sm:p-8 text-left shadow-2xl"
+        className="relative w-full max-w-sm max-h-[85vh] flex flex-col rounded-2xl bg-slate-900 border border-white/10 text-left shadow-2xl"
       >
+        {/* Sits outside the scrolling area on purpose. This list is taller
+            than a phone, and a close button inside it slides off the top the
+            moment anyone scrolls. */}
         <button
           onClick={onClose}
           aria-label="Close"
-          className="absolute top-4 right-4 w-8 h-8 flex items-center justify-center rounded-lg text-slate-400 hover:text-white hover:bg-white/10 transition-colors"
+          className="absolute top-4 right-4 z-10 w-8 h-8 flex items-center justify-center rounded-lg text-slate-400 hover:text-white hover:bg-white/10 transition-colors"
         >
           <X className="w-4 h-4" />
         </button>
 
+        <div className="overflow-y-auto p-6 sm:p-8">
         <h2 className="text-xl font-bold mb-5">Settings</h2>
 
         <div className="space-y-6">
@@ -293,6 +297,7 @@ export default function SettingsModal({
               ? 'These settings are saved to your account and follow you across devices.'
               : 'Saved in this browser. Sign in to carry them across devices.'}
           </p>
+        </div>
         </div>
       </div>
     </div>

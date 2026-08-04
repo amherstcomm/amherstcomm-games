@@ -86,7 +86,7 @@ export default function AccountModal({
         aria-modal="true"
         aria-label="Account"
         onClick={(e) => e.stopPropagation()}
-        className="relative w-full max-w-sm rounded-2xl bg-slate-900 border border-white/10 p-6 sm:p-8 text-left shadow-2xl"
+        className="relative w-full max-w-sm max-h-[85vh] overflow-y-auto rounded-2xl bg-slate-900 border border-white/10 p-6 sm:p-8 text-left shadow-2xl"
       >
         <button
           onClick={onClose}
