@@ -368,7 +368,7 @@ const ScrambleGame = forwardRef<
     <div className="text-center">
       {/* daily / practice toggle */}
       <div
-        className={`mb-5 inline-flex rounded-xl bg-white/5 border border-white/10 p-1 gap-1 ${
+        className={`mb-5 inline-flex flex-wrap justify-center max-w-full rounded-xl bg-white/5 border border-white/10 p-1 gap-1 ${
           practiceAllowed ? '' : 'hidden'
         }`}
       >

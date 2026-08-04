@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState, useEffect, useLayoutEffect, useRef, type ButtonHTMLAttributes, type ReactNode } from 'react';
-import { Search, Sparkles, Eraser, ArrowDown, ArrowUp, X, BookOpen, Grid3x3, Shuffle, Hexagon, Check, Keyboard, Delete, Github, Info, Square, CalendarDays, Star, Gamepad2, CornerDownLeft, LayoutGrid, Puzzle, BarChart3, UserRound, Scale, Settings } from 'lucide-react';
+import { Search, Eraser, ArrowDown, ArrowUp, X, BookOpen, Grid3x3, Shuffle, Hexagon, Check, Keyboard, Delete, Github, Info, Square, CalendarDays, Star, Gamepad2, CornerDownLeft, LayoutGrid, Puzzle, BarChart3, UserRound, Scale, Settings } from 'lucide-react';
 import LearnMode, { type LearnModeHandle } from '@/LearnMode';
 import type { Session } from '@supabase/supabase-js';
 import StatsModal from '@/StatsModal';
@@ -1316,11 +1316,10 @@ function App() {
         aria-label="Game modes"
         className="sticky top-0 z-40 bg-slate-950/80 backdrop-blur border-b border-white/10"
       >
-        <div className="max-w-3xl mx-auto px-2 sm:px-5 flex items-center justify-between gap-2">
-          <span className="hidden md:inline-flex items-center gap-2 text-lg font-bold tracking-tight">
-            <Sparkles className="w-4 h-4 text-accent" />
-            Anagrimoire
-          </span>
+        {/* No wordmark up here any more — the page header carries the name,
+            and without it the tabs can sit centred at every width instead of
+            being pushed to one side on desktop. */}
+        <div className="max-w-3xl mx-auto px-2 sm:px-5 flex items-center justify-center">
           {/* the column count follows what's actually shown, so hiding games
               widens the rest rather than leaving gaps */}
           <div
@@ -1356,10 +1355,24 @@ function App() {
       >
         {/* header */}
         <header className="text-center mb-8">
-          {/* pb + relaxed leading so the g's descender isn't clipped by the
-              gradient's text box or crowded into the line below */}
-          <h1 className="pb-3 leading-[1.2] text-4xl sm:text-5xl font-bold tracking-tight bg-gradient-to-br from-white via-white to-slate-400 bg-clip-text text-transparent">
-            Anagrimoire
+          {/* The wordmark is a lockup rather than an image file: the mark is
+              the only part that has to be drawn, and the name is real text, so
+              it themes itself, follows the text-size setting, and can't render
+              in the wrong font on someone else's machine. The mark is alt=""
+              because the text beside it already names the heading.
+              Dimensions on the tag so it can't shove the page down as it
+              loads. */}
+          <h1 className="mb-4 flex flex-wrap items-center justify-center gap-x-3 sm:gap-x-4 gap-y-1">
+            <img
+              src="/logo.png"
+              alt=""
+              width={512}
+              height={512}
+              className="w-12 h-12 sm:w-16 sm:h-16 rounded-2xl shadow-lg shadow-black/30 shrink-0"
+            />
+            <span className="pb-1 leading-[1.2] text-4xl sm:text-5xl font-bold tracking-tight bg-gradient-to-br from-white via-white to-slate-400 bg-clip-text text-transparent">
+              Anagrimoire
+            </span>
           </h1>
           <p className="text-slate-400 max-w-md mx-auto text-sm sm:text-base">
             {shownViews.includes('solve')
@@ -1373,7 +1386,11 @@ function App() {
             Learn is how the site becomes a game site rather than a tool with
             games attached. */}
         <section className={`mb-7 text-center ${shownViews.length > 1 ? '' : 'hidden'}`}>
-          <div className="inline-flex rounded-xl bg-white/5 border border-white/10 p-1 gap-1">
+          {/* wraps rather than overflowing: at 320px with the largest text
+              this row is wider than the viewport, and the page clips its
+              horizontal overflow, so Learn was cut off with no way to reach
+              it */}
+          <div className="inline-flex flex-wrap justify-center max-w-full rounded-xl bg-white/5 border border-white/10 p-1 gap-1">
               {(
                 [
                   { view: 'solve', label: 'Solve', Icon: Search },
@@ -1520,7 +1537,7 @@ function App() {
           <label className="block text-xs font-medium text-slate-400 uppercase tracking-wider mb-2.5">
             Dictionary
           </label>
-          <div className="inline-flex rounded-xl bg-white/5 border border-white/10 p-1 gap-1">
+          <div className="inline-flex flex-wrap justify-center max-w-full rounded-xl bg-white/5 border border-white/10 p-1 gap-1">
             {DICTIONARIES.map((d) => (
               <button
                 key={d.id}

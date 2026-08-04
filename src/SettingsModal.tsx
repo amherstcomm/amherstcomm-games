@@ -280,7 +280,7 @@ export default function SettingsModal({
             <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2.5">
               Appearance
             </h3>
-            <div className="inline-flex rounded-xl bg-white/5 border border-white/10 p-1 gap-1">
+            <div className="inline-flex flex-wrap justify-center max-w-full rounded-xl bg-white/5 border border-white/10 p-1 gap-1">
               {THEME_OPTIONS.map(({ id, label, Icon }) => (
                 <button
                   key={id}
@@ -335,7 +335,7 @@ export default function SettingsModal({
               <Type className="w-3.5 h-3.5" />
               Text size
             </h3>
-            <div className="inline-flex rounded-xl bg-white/5 border border-white/10 p-1 gap-1">
+            <div className="inline-flex flex-wrap justify-center max-w-full rounded-xl bg-white/5 border border-white/10 p-1 gap-1">
               {(
                 [
                   { id: 'normal' as const, label: 'Normal', size: 'text-sm' },
@@ -368,7 +368,7 @@ export default function SettingsModal({
                 <BarChart3 className="w-3.5 h-3.5" />
                 Analytics
               </h3>
-              <div className="inline-flex rounded-xl bg-white/5 border border-white/10 p-1 gap-1">
+              <div className="inline-flex flex-wrap justify-center max-w-full rounded-xl bg-white/5 border border-white/10 p-1 gap-1">
                 {(
                   [
                     { id: 'granted' as const, label: 'Allowed' },
@@ -531,7 +531,7 @@ export default function SettingsModal({
               <Keyboard className="w-3.5 h-3.5" />
               Board navigation
             </h3>
-            <div className="inline-flex rounded-xl bg-white/5 border border-white/10 p-1 gap-1">
+            <div className="inline-flex flex-wrap justify-center max-w-full rounded-xl bg-white/5 border border-white/10 p-1 gap-1">
               {(
                 [
                   { id: 'numpad' as const, label: 'Number pad' },
