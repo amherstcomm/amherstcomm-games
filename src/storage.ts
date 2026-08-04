@@ -3,9 +3,15 @@ import type { Palette, TextScale, ThemeMode } from '@/theme';
 
 export type Mode = 'pattern' | 'descramble' | 'bee' | 'boxed' | 'grid' | 'weave';
 
+/** 'home' is the front page, 'last' is wherever you left off, and a Mode is
+ *  that game's daily — for people who came for one game and mean to keep
+ *  coming for it. */
+export type StartPage = 'home' | 'last' | Mode;
+
 const KEY = 'anagrimoire:v1';
 
 export const ALL_MODES: Mode[] = ['pattern', 'descramble', 'bee', 'boxed', 'grid', 'weave'];
+export const ALL_START_PAGES: StartPage[] = ['home', 'last', ...ALL_MODES];
 const ALL_DICTS: DictionaryId[] = ['common', 'standard', 'full'];
 
 // The three tabs a game can be shown in. Someone who only wants to play the
@@ -79,6 +85,9 @@ export type PersistedState = {
   practiceAllowed: boolean;
   helpAllowed: boolean;
   solverDictionary: DictionaryId | 'per-game';
+  /** what the front door opens onto: the home page, the game you last had
+   *  open, or one particular game for people who only ever want the one */
+  startPage: StartPage;
   /** true once the "new here?" card has been seen, dismissed, or followed */
   onboarded: boolean;
   patternPlay: boolean;
@@ -130,6 +139,7 @@ export const DEFAULT_STATE: PersistedState = {
   practiceAllowed: true,
   helpAllowed: true,
   solverDictionary: 'per-game',
+  startPage: 'home',
   onboarded: false,
   patternPlay: false,
   beePlay: false,
@@ -253,6 +263,7 @@ export function loadState(): PersistedState {
       practiceAllowed: p?.practiceAllowed !== false,
       helpAllowed: p?.helpAllowed !== false,
       solverDictionary: ALL_DICTS.includes(p?.solverDictionary) ? p.solverDictionary : 'per-game',
+      startPage: ALL_START_PAGES.includes(p?.startPage) ? p.startPage : 'home',
       // A stored blob means this browser has been here before, so anyone
       // arriving from a version without the flag has already used the site
       // and shouldn't be greeted with "new here?". Only a browser with no

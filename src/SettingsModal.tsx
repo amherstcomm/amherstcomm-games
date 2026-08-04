@@ -17,6 +17,7 @@ import {
   type LengthRange,
   type Mode,
   type NavKeys,
+  type StartPage,
   type View,
 } from '@/storage';
 import type { DictionaryId } from '@/dictionaries';
@@ -25,6 +26,19 @@ import type { Palette, TextScale, ThemeMode } from '@/theme';
 import { useModalA11y } from '@/useModalA11y';
 
 // the nav's own names, so the switch reads like the thing it switches
+// 'mode' marks the entries that disappear when that game is hidden — pointing
+// the front door at a game you've switched off would leave nowhere to land.
+const START_OPTIONS: { id: StartPage; label: string; mode?: Mode }[] = [
+  { id: 'home', label: 'Home page' },
+  { id: 'last', label: 'Where I left off' },
+  { id: 'pattern', label: 'Guess the Word', mode: 'pattern' },
+  { id: 'descramble', label: 'Scramble', mode: 'descramble' },
+  { id: 'bee', label: 'Hive', mode: 'bee' },
+  { id: 'grid', label: 'Grid', mode: 'grid' },
+  { id: 'boxed', label: 'Boxed', mode: 'boxed' },
+  { id: 'weave', label: 'Weave', mode: 'weave' },
+];
+
 const MODE_LABELS: { id: Mode; label: string }[] = [
   { id: 'pattern', label: 'Pattern' },
   { id: 'descramble', label: 'Scramble' },
@@ -176,6 +190,8 @@ export default function SettingsModal({
   onPracticeAllowed,
   onHelpAllowed,
   onSolverDictionary,
+  startPage,
+  onStartPage,
   tab,
   onTab,
   onClose,
@@ -201,6 +217,8 @@ export default function SettingsModal({
   onPracticeAllowed: (v: boolean) => void;
   onHelpAllowed: (v: boolean) => void;
   onSolverDictionary: (d: DictionaryId | 'per-game') => void;
+  startPage: StartPage;
+  onStartPage: (s: StartPage) => void;
   /** the open tab, held by App so it can live in the address bar */
   tab: SettingsTab;
   onTab: (t: SettingsTab) => void;
@@ -282,6 +300,33 @@ export default function SettingsModal({
         </div>
 
         <div className={`space-y-6 ${tab === 'site' ? '' : 'hidden'}`}>
+          <div>
+            <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2.5">
+              Start on
+            </h3>
+            <div className="flex flex-wrap gap-1.5">
+              {START_OPTIONS.filter((o) => o.mode === undefined || !hiddenModes.includes(o.mode)).map(
+                ({ id, label }) => (
+                  <button
+                    key={id}
+                    onClick={() => onStartPage(id)}
+                    aria-pressed={startPage === id}
+                    className={`px-3 h-9 rounded-lg text-sm font-semibold transition-colors
+                      ${startPage === id
+                        ? 'bg-amber-400 text-ink shadow-lg shadow-amber-500/30'
+                        : 'bg-white/5 border border-white/10 text-slate-300 hover:bg-white/10'}`}
+                  >
+                    {label}
+                  </button>
+                )
+              )}
+            </div>
+            <p className="mt-2 text-xs text-slate-500">
+              What opens when you arrive without a link. Pick a game and the front
+              page is skipped entirely.
+            </p>
+          </div>
+
           <div>
             <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2.5">
               Appearance

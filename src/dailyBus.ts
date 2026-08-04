@@ -13,6 +13,11 @@ type Report = (mode: Mode, daily: boolean) => void;
 const reporters = new Set<Report>();
 const switches = new Map<Mode, (daily: boolean) => void>();
 
+// A game that isn't on screen yet can't be asked anything, and the commonest
+// moment to ask is the one click that mounts it — opening a game from the home
+// page. So a request with nobody to hear it waits for whoever turns up.
+const pending = new Map<Mode, boolean>();
+
 /** A game saying which board it currently has open. */
 export function reportDaily(mode: Mode, daily: boolean): void {
   for (const fn of reporters) fn(mode, daily);
@@ -29,6 +34,11 @@ export function onDailyReport(fn: Report): () => void {
 /** A game offering to switch boards when an address asks it to. */
 export function offerDailySwitch(mode: Mode, fn: (daily: boolean) => void): () => void {
   switches.set(mode, fn);
+  if (pending.has(mode)) {
+    const wanted = pending.get(mode)!;
+    pending.delete(mode);
+    fn(wanted);
+  }
   return () => {
     // only clear our own: a remount registers the new one before the old
     // one's cleanup runs, and blindly deleting would leave nobody listening
@@ -36,9 +46,10 @@ export function offerDailySwitch(mode: Mode, fn: (daily: boolean) => void): () =
   };
 }
 
-/** An address asking a game to show the other board. Silently does nothing if
- *  that game isn't mounted, which is the right answer — it will read its own
- *  stored toggle when it does mount. */
+/** An address, or the home page, asking a game to show a particular board.
+ *  Held until that game exists if it isn't on screen yet. */
 export function requestDaily(mode: Mode, daily: boolean): void {
-  switches.get(mode)?.(daily);
+  const fn = switches.get(mode);
+  if (fn) fn(daily);
+  else pending.set(mode, daily);
 }
