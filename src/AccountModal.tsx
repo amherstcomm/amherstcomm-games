@@ -133,8 +133,13 @@ export default function AccountModal({
     setStatsCleared(false);
   }
 
+  // A different word for each, so a hand that has learned one doesn't finish
+  // the other on autopilot.
+  const CONFIRM_WORD = { stats: 'clear', account: 'delete' } as const;
+  const typedOk = danger !== null && typed.trim().toLowerCase() === CONFIRM_WORD[danger];
+
   async function confirmClearStats() {
-    if (busy) return;
+    if (busy || !typedOk) return;
     setBusy(true);
     setDangerError('');
     const ok = await clearMyStats();
@@ -148,7 +153,7 @@ export default function AccountModal({
   }
 
   async function confirmDeleteAccount() {
-    if (busy || typed.trim().toLowerCase() !== 'delete') return;
+    if (busy || !typedOk) return;
     setBusy(true);
     setDangerError('');
     const ok = await deleteAccount(wipeLocal);
@@ -287,11 +292,24 @@ export default function AccountModal({
                     account, your email and your display name all stay. A daily you
                     still have open here will save itself again as you keep playing.
                   </p>
+
+                  <label htmlFor="clear-confirm" className="block text-xs text-slate-400 mb-1.5">
+                    Type <span className="text-slate-200 font-semibold">clear</span> to
+                    confirm
+                  </label>
+                  <input
+                    id="clear-confirm"
+                    value={typed}
+                    onChange={(e) => setTyped(e.target.value)}
+                    autoComplete="off"
+                    className="w-full h-10 px-3 mb-3 rounded-lg bg-black/30 border border-white/15 text-slate-200 text-sm"
+                  />
+
                   <div className="flex flex-wrap gap-2">
                     <button
                       onClick={confirmClearStats}
-                      disabled={busy}
-                      className="inline-flex items-center px-4 h-10 rounded-lg text-sm font-semibold bg-rose-400 text-ink hover:bg-rose-300 transition-colors disabled:opacity-40"
+                      disabled={busy || !typedOk}
+                      className="inline-flex items-center px-4 h-10 rounded-lg text-sm font-semibold bg-rose-400 text-ink hover:bg-rose-300 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                     >
                       {busy ? 'Clearing…' : 'Clear statistics'}
                     </button>
@@ -355,7 +373,7 @@ export default function AccountModal({
                   <div className="flex flex-wrap gap-2">
                     <button
                       onClick={confirmDeleteAccount}
-                      disabled={busy || typed.trim().toLowerCase() !== 'delete'}
+                      disabled={busy || !typedOk}
                       className="inline-flex items-center px-4 h-10 rounded-lg text-sm font-semibold bg-rose-400 text-ink hover:bg-rose-300 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                     >
                       {busy ? 'Deleting…' : 'Delete account'}
