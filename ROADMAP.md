@@ -45,16 +45,21 @@ Deliberately parked until the merge rules had been proven in use — adding a
 second delivery path while they were still being validated would have made it
 impossible to tell a bad rule from a bad transport.
 
-### Hide games and features
-Let people hide modes they don't play, and hide the Solve or Learn views if
-they only want to play. Rides the existing settings sync.
+### ~~Hide games and features~~ — done
+Settings → Show, a pill per game and per tab. Rides the existing settings
+sync, so it follows an account across devices.
 
-- Enforce at least one mode and at least one view, so nobody can hide their
-  way into a blank page
-- Display filter only — stats and dailies keep accruing, unhiding restores
-  everything
-- Payoff: someone who only wants daily puzzles can hide Solve and the site
-  becomes a game site rather than a tool with games attached
+- A display filter and nothing else: statistics, streaks and dailies all keep
+  accruing for a hidden game, and unhiding brings back exactly what was there
+- The last game and the last tab can't be hidden — the control disables rather
+  than explaining an empty site afterwards, and the loader refuses a stored
+  list that hides everything
+- Hiding the game or tab you're standing on moves you to one that exists
+- The Solve/Play/Learn switch disappears entirely at one tab, which is how the
+  site becomes a game site rather than a tool with games attached
+- A shared link outranks hiding for that visit, without changing the setting:
+  landing someone on the wrong page because of a preference they set months
+  ago is worse than showing them one game they'd switched off
 
 ### Onboarding
 On a genuine first visit, a dismissible card: "New here? See how Weave works,"

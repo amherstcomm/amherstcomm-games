@@ -5,8 +5,30 @@ export type Mode = 'pattern' | 'descramble' | 'bee' | 'boxed' | 'grid' | 'weave'
 
 const KEY = 'anagrimoire:v1';
 
-const ALL_MODES: Mode[] = ['pattern', 'descramble', 'bee', 'boxed', 'grid', 'weave'];
+export const ALL_MODES: Mode[] = ['pattern', 'descramble', 'bee', 'boxed', 'grid', 'weave'];
 const ALL_DICTS: DictionaryId[] = ['common', 'standard', 'full'];
+
+// The three tabs a game can be shown in. Someone who only wants to play the
+// dailies shouldn't have to walk past a solver to get to them.
+export type View = 'solve' | 'play' | 'learn';
+export const ALL_VIEWS: View[] = ['solve', 'play', 'learn'];
+
+// Hiding is a display filter and nothing more: statistics, streaks and dailies
+// all keep accruing for a hidden game, and unhiding brings back exactly what
+// was there. Nothing is deleted, so nothing can be lost by experimenting.
+//
+// Both lists enforce one survivor. Hiding your way into a blank page is the
+// one outcome a settings screen must not allow, and it's easier to refuse the
+// last one than to explain an empty site.
+export function visibleModes(hidden: Mode[]): Mode[] {
+  const left = ALL_MODES.filter((m) => !hidden.includes(m));
+  return left.length ? left : ALL_MODES;
+}
+
+export function visibleViews(hidden: View[]): View[] {
+  const left = ALL_VIEWS.filter((v) => !hidden.includes(v));
+  return left.length ? left : ALL_VIEWS;
+}
 
 // which keys step the Weave board cursor around, besides the arrow keys:
 // the number pad's ring (7 8 9 / 4 6 / 1 2 3) or the letters around WASD
@@ -26,6 +48,8 @@ export type PersistedState = {
   palette: Palette;
   textScale: TextScale;
   navKeys: NavKeys;
+  hiddenModes: Mode[];
+  hiddenViews: View[];
   patternPlay: boolean;
   beePlay: boolean;
   boxedPlay: boolean;
@@ -69,6 +93,8 @@ export const DEFAULT_STATE: PersistedState = {
   palette: 'default',
   textScale: 'normal',
   navKeys: 'numpad',
+  hiddenModes: [],
+  hiddenViews: [],
   patternPlay: false,
   beePlay: false,
   boxedPlay: false,
@@ -93,6 +119,15 @@ function letterString(v: unknown, extra = ''): string {
     .toLowerCase()
     .replace(new RegExp(`[^a-z${extra}]`, 'g'), '')
     .slice(0, 32);
+}
+
+// Keeps only known names, and refuses a list that hides everything — a stored
+// value from a future version, or a hand-edited one, shouldn't be able to
+// produce a site with nothing on it.
+function sanitizeHidden<T extends string>(value: unknown, all: T[]): T[] {
+  if (!Array.isArray(value)) return [];
+  const kept = all.filter((item) => value.includes(item));
+  return kept.length === all.length ? [] : kept;
 }
 
 function clampInt(v: unknown, min: number, max: number, fallback: number): number {
@@ -176,6 +211,8 @@ export function loadState(): PersistedState {
           : 'default',
       textScale: ['normal', 'large', 'larger'].includes(p?.textScale) ? p.textScale : 'normal',
       navKeys: p?.navKeys === 'wasd' ? 'wasd' : 'numpad',
+      hiddenModes: sanitizeHidden(p?.hiddenModes, ALL_MODES),
+      hiddenViews: sanitizeHidden(p?.hiddenViews, ALL_VIEWS),
       patternPlay: p?.patternPlay === true,
       beePlay: p?.beePlay === true,
       boxedPlay: p?.boxedPlay === true,

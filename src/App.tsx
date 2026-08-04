@@ -23,7 +23,7 @@ import { solvePattern, solveDescramble, solveBee, solveBoxed, solveGrid, findGri
 import ConsentBanner from '@/ConsentBanner';
 import { PrivacyPolicy, Terms } from '@/LegalDocs';
 import { clearIntentUrl, intent, legalIntent } from '@/deeplink';
-import { loadState, saveState, GRID_PRESET_DIMS, WEAVE_DIMS, type GridPreset, type Mode, type NavKeys, type SortPref, type WeaveSize } from '@/storage';
+import { ALL_MODES, ALL_VIEWS, visibleModes, visibleViews, type View, loadState, saveState, GRID_PRESET_DIMS, WEAVE_DIMS, type GridPreset, type Mode, type NavKeys, type SortPref, type WeaveSize } from '@/storage';
 
 const MIN_LEN = 3;
 const MAX_LEN = 15;
@@ -614,6 +614,8 @@ function App() {
   const [palette, setPalette] = useState<Palette>(initial.palette);
   const [navKeys, setNavKeys] = useState<NavKeys>(initial.navKeys);
   const [textScale, setTextScale] = useState<TextScale>(initial.textScale);
+  const [hiddenModes, setHiddenModes] = useState<Mode[]>(initial.hiddenModes);
+  const [hiddenViews, setHiddenViews] = useState<View[]>(initial.hiddenViews);
   const [session, setSession] = useState<Session | null>(null);
 
   useTheme(theme, palette, textScale);
@@ -650,12 +652,21 @@ function App() {
       return;
     }
     const s = data?.settings as
-      | { theme?: ThemeMode; palette?: Palette; navKeys?: NavKeys; textScale?: TextScale }
+      | {
+          theme?: ThemeMode;
+          palette?: Palette;
+          navKeys?: NavKeys;
+          textScale?: TextScale;
+          hiddenModes?: Mode[];
+          hiddenViews?: View[];
+        }
       | null;
     if (s?.theme && THEME_MODES.includes(s.theme)) setTheme(s.theme);
     if (s?.palette && PALETTES.includes(s.palette)) setPalette(s.palette);
     if (s?.navKeys === 'numpad' || s?.navKeys === 'wasd') setNavKeys(s.navKeys);
     if (s?.textScale && TEXT_SCALES.includes(s.textScale)) setTextScale(s.textScale);
+    if (Array.isArray(s?.hiddenModes)) setHiddenModes(s.hiddenModes.filter((m) => ALL_MODES.includes(m)));
+    if (Array.isArray(s?.hiddenViews)) setHiddenViews(s.hiddenViews.filter((v) => ALL_VIEWS.includes(v)));
     settingsPulled.current = true;
   }, [session]);
 
@@ -684,7 +695,7 @@ function App() {
     if (!supabase || !session || !settingsPulled.current) return;
     pushPending.current = true;
     const id = window.setTimeout(async () => {
-      const settings = { theme, palette, navKeys, textScale };
+      const settings = { theme, palette, navKeys, textScale, hiddenModes, hiddenViews };
       // update first — it needs only the update policy, which every install
       // has. `select` reveals whether a row actually matched.
       const { data, error } = await supabase!
@@ -712,7 +723,7 @@ function App() {
       window.clearTimeout(id);
       pushPending.current = false;
     };
-  }, [session, theme, palette, navKeys, textScale]);
+  }, [session, theme, palette, navKeys, textScale, hiddenModes, hiddenViews]);
 
   // surface auth errors that come back in the redirect URL (expired or
   // already-used magic links land here with no other visible sign)
@@ -794,6 +805,50 @@ function App() {
   const setSort = (s: Partial<SortPref>) =>
     setSorts((prev) => ({ ...prev, [mode]: { ...prev[mode], ...s } }));
 
+  // A shared link names a game and a tab deliberately, so it outranks hiding
+  // for this visit: dropping someone on the wrong page because of a setting
+  // they made months ago is worse than showing them one game they'd switched
+  // off. It doesn't unhide anything — the setting is untouched.
+  const shownModes = useMemo(() => {
+    const vis = visibleModes(hiddenModes);
+    return ALL_MODES.filter((m) => vis.includes(m) || m === intent?.mode);
+  }, [hiddenModes]);
+
+  const shownViews = useMemo(() => {
+    const vis = visibleViews(hiddenViews);
+    return ALL_VIEWS.filter((v) => vis.includes(v) || v === intent?.view);
+  }, [hiddenViews]);
+
+  const playFlags: Record<Mode, [boolean, (v: boolean) => void]> = {
+    pattern: [patternPlay, setPatternPlay],
+    descramble: [descramblePlay, setDescramblePlay],
+    bee: [beePlay, setBeePlay],
+    boxed: [boxedPlay, setBoxedPlay],
+    grid: [gridPlay, setGridPlay],
+    weave: [weavePlay, setWeavePlay],
+  };
+
+  const currentView: View = learnMode ? 'learn' : playFlags[mode][0] ? 'play' : 'solve';
+
+  function goToView(view: View) {
+    if (view === 'learn') {
+      setLearnMode(true);
+      return;
+    }
+    setLearnMode(false);
+    playFlags[mode][1](view === 'play');
+  }
+
+  // hiding the game or tab you're standing on shouldn't leave you nowhere
+  useEffect(() => {
+    if (!shownModes.includes(mode)) setMode(shownModes[0]);
+  }, [shownModes, mode]);
+
+  useEffect(() => {
+    if (!shownViews.includes(currentView)) goToView(shownViews[0]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [shownViews, currentView, mode]);
+
   // persist tool, per-tool dictionary, and last inputs
   useEffect(() => {
     saveState({
@@ -805,6 +860,8 @@ function App() {
       palette,
       textScale,
       navKeys,
+      hiddenModes,
+      hiddenViews,
       patternPlay,
       beePlay,
       boxedPlay,
@@ -818,7 +875,7 @@ function App() {
       weave: { letters: weaveLetters, size: weaveSize },
       weavePlay,
     });
-  }, [mode, dictionaries, sorts, kbOpen, theme, palette, textScale, navKeys, patternPlay, beePlay, boxedPlay, descramblePlay, gridPlay, length, known, containsStr, excludedStr, rackStr, useAll, minLength, beeCenter, beeOuters, boxedLetters, solutionWords, gridLetters, gridPreset, weaveLetters, weaveSize, weavePlay]);
+  }, [mode, dictionaries, sorts, kbOpen, theme, palette, textScale, navKeys, hiddenModes, hiddenViews, patternPlay, beePlay, boxedPlay, descramblePlay, gridPlay, length, known, containsStr, excludedStr, rackStr, useAll, minLength, beeCenter, beeOuters, boxedLetters, solutionWords, gridLetters, gridPreset, weaveLetters, weaveSize, weavePlay]);
 
   // keep known array sized to length
   useEffect(() => {
@@ -1214,8 +1271,13 @@ function App() {
             <Sparkles className="w-4 h-4 text-accent" />
             Anagrimoire
           </span>
-          <div className="flex-1 md:flex-none grid grid-cols-6 md:flex gap-0.5 sm:gap-1 py-1.5">
-            {MODES.map((m) => {
+          {/* the column count follows what's actually shown, so hiding games
+              widens the rest rather than leaving gaps */}
+          <div
+            className="flex-1 md:flex-none grid md:flex gap-0.5 sm:gap-1 py-1.5"
+            style={{ gridTemplateColumns: `repeat(${shownModes.length}, minmax(0, 1fr))` }}
+          >
+            {MODES.filter((m) => shownModes.includes(m.id)).map((m) => {
               const Icon = MODE_ICONS[m.id];
               return (
                 <button
@@ -1253,8 +1315,11 @@ function App() {
           </p>
         </header>
 
-        {/* solve / play / learn toggle */}
-        <section className="mb-7 text-center">
+        {/* solve / play / learn toggle — gone entirely when only one is left,
+            since a switch with one position is just clutter. Hiding Solve and
+            Learn is how the site becomes a game site rather than a tool with
+            games attached. */}
+        <section className={`mb-7 text-center ${shownViews.length > 1 ? '' : 'hidden'}`}>
           <div className="inline-flex rounded-xl bg-white/5 border border-white/10 p-1 gap-1">
               {(
                 [
@@ -1262,28 +1327,14 @@ function App() {
                   { view: 'play', label: 'Play', Icon: Gamepad2 },
                   { view: 'learn', label: 'Learn', Icon: BookOpen },
                 ] as const
-              ).map(({ view, label, Icon }) => {
-                const flags: Record<Mode, [boolean, (v: boolean) => void]> = {
-                  pattern: [patternPlay, setPatternPlay],
-                  descramble: [descramblePlay, setDescramblePlay],
-                  bee: [beePlay, setBeePlay],
-                  boxed: [boxedPlay, setBoxedPlay],
-                  grid: [gridPlay, setGridPlay],
-                  weave: [weavePlay, setWeavePlay],
-                };
-                const [flag, setFlag] = flags[mode];
-                const active = view === 'learn' ? learnMode : !learnMode && flag === (view === 'play');
+              )
+                .filter(({ view }) => shownViews.includes(view))
+                .map(({ view, label, Icon }) => {
+                const active = currentView === view;
                 return (
                   <button
                     key={label}
-                    onClick={() => {
-                      if (view === 'learn') {
-                        setLearnMode(true);
-                      } else {
-                        setLearnMode(false);
-                        setFlag(view === 'play');
-                      }
-                    }}
+                    onClick={() => goToView(view)}
                     className={`inline-flex items-center gap-1.5 px-4 sm:px-5 h-10 rounded-lg text-sm font-semibold transition-all duration-150
                       ${active
                         ? 'bg-emerald-400 text-ink shadow-lg shadow-emerald-500/30'
@@ -2279,11 +2330,23 @@ function App() {
           palette={palette}
           navKeys={navKeys}
           textScale={textScale}
+          hiddenModes={hiddenModes}
+          hiddenViews={hiddenViews}
           signedIn={!!session}
           onTheme={setTheme}
           onPalette={setPalette}
           onNavKeys={setNavKeys}
           onTextScale={setTextScale}
+          onToggleMode={(m) =>
+            setHiddenModes((prev) =>
+              prev.includes(m) ? prev.filter((x) => x !== m) : [...prev, m]
+            )
+          }
+          onToggleView={(v) =>
+            setHiddenViews((prev) =>
+              prev.includes(v) ? prev.filter((x) => x !== v) : [...prev, v]
+            )
+          }
           onClose={() => setSettingsOpen(false)}
         />
       )}

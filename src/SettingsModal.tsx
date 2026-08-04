@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react';
-import { BarChart3, Check, Contrast, Keyboard, Monitor, Moon, Sun, Type, X } from 'lucide-react';
+import { BarChart3, Check, Contrast, EyeOff, Keyboard, Monitor, Moon, Sun, Type, X } from 'lucide-react';
 import KeyDiagram from '@/KeyDiagram';
 import { GA_ID, disableAnalytics, initAnalytics } from '@/analytics';
 import {
@@ -10,9 +10,25 @@ import {
   writeConsent,
   type Consent,
 } from '@/consent';
-import type { NavKeys } from '@/storage';
+import type { Mode, NavKeys, View } from '@/storage';
 import type { Palette, TextScale, ThemeMode } from '@/theme';
 import { useModalA11y } from '@/useModalA11y';
+
+// the nav's own names, so the switch reads like the thing it switches
+const MODE_LABELS: { id: Mode; label: string }[] = [
+  { id: 'pattern', label: 'Pattern' },
+  { id: 'descramble', label: 'Scramble' },
+  { id: 'bee', label: 'Hive' },
+  { id: 'grid', label: 'Grid' },
+  { id: 'boxed', label: 'Boxed' },
+  { id: 'weave', label: 'Weave' },
+];
+
+const VIEW_LABELS: { id: View; label: string }[] = [
+  { id: 'solve', label: 'Solve' },
+  { id: 'play', label: 'Play' },
+  { id: 'learn', label: 'Learn' },
+];
 
 const THEME_OPTIONS: { id: ThemeMode; label: string; Icon: typeof Sun }[] = [
   { id: 'system', label: 'System', Icon: Monitor },
@@ -67,22 +83,30 @@ export default function SettingsModal({
   palette,
   textScale,
   navKeys,
+  hiddenModes,
+  hiddenViews,
   signedIn,
   onTheme,
   onPalette,
   onTextScale,
   onNavKeys,
+  onToggleMode,
+  onToggleView,
   onClose,
 }: {
   theme: ThemeMode;
   palette: Palette;
   textScale: TextScale;
   navKeys: NavKeys;
+  hiddenModes: Mode[];
+  hiddenViews: View[];
   signedIn: boolean;
   onTheme: (t: ThemeMode) => void;
   onPalette: (p: Palette) => void;
   onTextScale: (t: TextScale) => void;
   onNavKeys: (n: NavKeys) => void;
+  onToggleMode: (m: Mode) => void;
+  onToggleView: (v: View) => void;
   onClose: () => void;
 }) {
   const dialogRef = useRef<HTMLDivElement>(null);
@@ -255,6 +279,60 @@ export default function SettingsModal({
                 keys always work too.
               </p>
             </div>
+          </div>
+
+          <div>
+            <h3 className="flex items-center gap-2 text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2.5">
+              <EyeOff className="w-3.5 h-3.5" />
+              Show
+            </h3>
+            <div className="flex flex-wrap gap-1.5 mb-2">
+              {MODE_LABELS.map(({ id, label }) => {
+                const shown = !hiddenModes.includes(id);
+                const last = shown && hiddenModes.length === MODE_LABELS.length - 1;
+                return (
+                  <button
+                    key={id}
+                    onClick={() => onToggleMode(id)}
+                    disabled={last}
+                    aria-pressed={shown}
+                    title={last ? 'At least one game has to stay' : undefined}
+                    className={`px-2.5 h-8 rounded-lg text-xs font-semibold border transition-colors disabled:opacity-100 disabled:cursor-not-allowed
+                      ${shown
+                        ? 'bg-amber-400/15 border-amber-400/40 text-amber-200'
+                        : 'bg-white/5 border-white/10 text-slate-500 hover:text-slate-300'}`}
+                  >
+                    {label}
+                  </button>
+                );
+              })}
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              {VIEW_LABELS.map(({ id, label }) => {
+                const shown = !hiddenViews.includes(id);
+                const last = shown && hiddenViews.length === VIEW_LABELS.length - 1;
+                return (
+                  <button
+                    key={id}
+                    onClick={() => onToggleView(id)}
+                    disabled={last}
+                    aria-pressed={shown}
+                    title={last ? 'At least one tab has to stay' : undefined}
+                    className={`px-2.5 h-8 rounded-lg text-xs font-semibold border transition-colors disabled:opacity-100 disabled:cursor-not-allowed
+                      ${shown
+                        ? 'bg-emerald-400/15 border-emerald-400/40 text-emerald-200'
+                        : 'bg-white/5 border-white/10 text-slate-500 hover:text-slate-300'}`}
+                  >
+                    {label}
+                  </button>
+                );
+              })}
+            </div>
+            <p className="mt-2 text-xs text-slate-500">
+              Tap to hide a game or a tab. Nothing is deleted — statistics and
+              streaks keep accruing, and unhiding brings everything back. One of
+              each has to stay.
+            </p>
           </div>
 
           {GA_ID && (
