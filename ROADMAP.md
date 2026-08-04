@@ -69,15 +69,17 @@ sync, so it follows an account across devices.
 - One dictionary for every solver, instead of a pick per game; the per-solver
   picker disappears when it's set, since there'd be nothing left to choose
 
-### Onboarding
-On a genuine first visit, a dismissible card: "New here? See how Weave works,"
-routing into the Learn tab for the current mode. The Learn demos already do
-the teaching — onboarding only needs to point at them. No forced multi-step
-tour.
+### ~~Onboarding~~ — done
+One dismissible card above the view switch, naming the game actually on
+screen. The Learn demos do the teaching; the card only points at them.
 
-**Note:** first *visit* ≠ first *login*. A returning player signing in on a
-new device shouldn't be re-onboarded, so the "seen it" flag belongs in the
-synced settings, not just localStorage.
+- "Show me" opens Learn and retires the card; the X retires it without
+- Only where there's a Learn tab to point at, and never on Learn itself
+- The flag rides the synced settings, and the pull only ever promotes it to
+  true — an account that has seen the card has seen it on every device
+- A stored blob means the browser has been here before, so anyone upgrading
+  from a version without the flag is treated as already onboarded rather than
+  greeted with "new here?"
 
 ## Needs a decision first
 

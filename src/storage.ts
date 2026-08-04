@@ -79,6 +79,8 @@ export type PersistedState = {
   practiceAllowed: boolean;
   helpAllowed: boolean;
   solverDictionary: DictionaryId | 'per-game';
+  /** true once the "new here?" card has been seen, dismissed, or followed */
+  onboarded: boolean;
   patternPlay: boolean;
   beePlay: boolean;
   boxedPlay: boolean;
@@ -128,6 +130,7 @@ export const DEFAULT_STATE: PersistedState = {
   practiceAllowed: true,
   helpAllowed: true,
   solverDictionary: 'per-game',
+  onboarded: false,
   patternPlay: false,
   beePlay: false,
   boxedPlay: false,
@@ -250,6 +253,12 @@ export function loadState(): PersistedState {
       practiceAllowed: p?.practiceAllowed !== false,
       helpAllowed: p?.helpAllowed !== false,
       solverDictionary: ALL_DICTS.includes(p?.solverDictionary) ? p.solverDictionary : 'per-game',
+      // A stored blob means this browser has been here before, so anyone
+      // arriving from a version without the flag has already used the site
+      // and shouldn't be greeted with "new here?". Only a browser with no
+      // stored state at all is genuinely new, and that path returns
+      // DEFAULT_STATE above, where the flag is false.
+      onboarded: p?.onboarded !== false,
       patternPlay: p?.patternPlay === true,
       beePlay: p?.beePlay === true,
       boxedPlay: p?.boxedPlay === true,
