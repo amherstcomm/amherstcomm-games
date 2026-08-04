@@ -11,7 +11,8 @@ import { dailyDataUrl } from '@/dailyData';
 import DailyStats from '@/DailyStats';
 import MobileKeyInput from '@/MobileKeyInput';
 import ShareButton from '@/ShareButton';
-import { dailyIntent } from '@/deeplink';
+import { dailyIntent } from '@/routes';
+import { offerDailySwitch, reportDaily } from '@/dailyBus';
 import { usePrefs } from '@/prefs';
 import { useDailySync } from '@/useDailySync';
 import { buildShare, TILE_EMOJI } from '@/share';
@@ -44,7 +45,7 @@ const DEFAULT_STORE: PlayStore = {
   stats: { played: 0, won: 0, streak: 0, lastWinDate: '' },
 };
 
-// An incoming ?daily=/?play= link decides which board is waiting; without one
+// An incoming /daily/ or /play/ link decides which board is waiting; without one
 // we keep whatever the player last had open.
 function loadStore(): PlayStore {
   const store = readStore();
@@ -114,6 +115,12 @@ const GuessGame = forwardRef<
   useEffect(() => {
     if (!practiceAllowed && !store.dailyMode) setStore((prev) => ({ ...prev, dailyMode: true }));
   }, [practiceAllowed, store.dailyMode]);
+  // the address bar says which board is open, and can ask for the other
+  useEffect(() => reportDaily('pattern', store.dailyMode), [store.dailyMode]);
+  useEffect(
+    () => offerDailySwitch('pattern', (d) => setStore((prev) => ({ ...prev, dailyMode: d }))),
+    []
+  );
   const [dailyData, setDailyData] = useState<{ date: string; words: Record<string, string> } | null>(null);
   const [dailyError, setDailyError] = useState(false);
   const [current, setCurrent] = useState('');

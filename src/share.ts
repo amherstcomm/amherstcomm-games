@@ -2,7 +2,7 @@
 // answers — blocks and counts only, never letters or words. The emoji follow
 // the sharer's palette, so what they post matches what they saw.
 import type { Palette } from '@/theme';
-import { SITE, SLUG_NAME, gameUrl, type Slug } from '@/deeplink';
+import { SITE, SLUG_NAME, gameUrl, type Slug } from '@/routes';
 
 export type TileKind = 'correct' | 'present' | 'absent';
 

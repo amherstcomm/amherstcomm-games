@@ -13,10 +13,12 @@ sharer's palette. Verified that no shared text contains a letter or word from
 any answer — including Weave's clue, which was dropped because working out
 the theme is half the puzzle.
 
-Results carry a deep link (`?daily=hive`, `?play=weave`, `?solve=boxed`,
-`?learn=grid`) that opens the exact board, and a 1200×630 preview card so a
+Results carry a deep link (`/daily/hive`, `/play/weave`, `/solve/boxed`,
+`/learn/grid`) that opens the exact board, and a 1200×630 preview card so a
 pasted link renders as something rather than a naked URL. Each deployment
-stamps its own origin from `VITE_SITE_ORIGIN`.
+stamps its own origin from `VITE_SITE_ORIGIN`. The older `?daily=hive` query
+form still works and is rewritten to a path on arrival — those links are out
+in shared results and in Google's OAuth console, so they don't get to break.
 
 ### ~~Personal history~~ — done
 A card per game under Stats → History: Guess as a distribution plus a table
