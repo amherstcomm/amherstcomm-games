@@ -159,6 +159,22 @@ export function PrivacyPolicy() {
         an account can only ever read or write its own rows.
       </P>
 
+      <H>Display names and leaderboards</H>
+      <P>
+        You can set a display name on your account. It is the{' '}
+        <strong className="text-slate-300">only thing about you any other player can
+        ever see</strong>, and setting one is entirely optional — accounts have no name
+        until you give them one, and without one you don&apos;t appear on the
+        leaderboards at all.
+      </P>
+      <P>
+        Set one and your name appears on the daily leaderboards alongside your scores
+        for those puzzles: how many you solved, points, times. Never your email, never
+        anything you typed, and never a link between the name and the account behind
+        it. Clearing the name removes you from the boards immediately and permanently
+        — your own statistics carry on as before, they just stop being public.
+      </P>
+
       <H>Site-wide numbers</H>
       <P>
         Figures like &ldquo;today across all registered players&rdquo; are produced
@@ -291,13 +307,21 @@ export function Terms() {
         account that is being used to attack or abuse the site.
       </P>
 
+      <H>Display names</H>
+      <P>
+        Optional, and the only part of your account other people see. Pick something
+        you&apos;d be comfortable having on a public list. Don&apos;t impersonate
+        anyone, and don&apos;t use a name intended to harass or abuse — those we will
+        clear without warning, and repeat attempts will cost the account.
+      </P>
+
       <H>Fair use of the site</H>
       <P>Please don&apos;t:</P>
       <List>
         <li>Attempt to access data belonging to anyone else</li>
         <li>Attack, overload, or probe the site for weaknesses</li>
         <li>Automate requests heavily enough to degrade it for other people</li>
-        <li>Submit fabricated results to distort the shared statistics</li>
+        <li>Submit fabricated results to distort the shared statistics or the leaderboards</li>
       </List>
       <P>
         If you find a security problem, please report it via{' '}
