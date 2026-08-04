@@ -14,6 +14,7 @@ import DailyStats from '@/DailyStats';
 import MobileKeyInput from '@/MobileKeyInput';
 import ShareButton from '@/ShareButton';
 import { dailyIntent } from '@/deeplink';
+import { usePrefs } from '@/prefs';
 import { useDailySync } from '@/useDailySync';
 import { buildShare } from '@/share';
 import { recordBoxSolve } from '@/stats';
@@ -187,6 +188,12 @@ const BoxGame = forwardRef<
   }
 >(function BoxGame({ standardWords, commonWords, onLetterStates, onReveal }, ref) {
   const [store, setStore] = useState<BoxStore>(loadStore);
+  const { practiceAllowed } = usePrefs();
+  // pinned to the daily: someone who switched practice off shouldn't be left
+  // looking at a practice board they can no longer leave
+  useEffect(() => {
+    if (!practiceAllowed && !store.dailyMode) setStore((prev) => ({ ...prev, dailyMode: true }));
+  }, [practiceAllowed, store.dailyMode]);
   const [current, setCurrent] = useState('');
   const [flash, setFlash] = useState<{ text: string; good: boolean } | null>(null);
   const [dailyError, setDailyError] = useState(false);
@@ -441,7 +448,11 @@ const BoxGame = forwardRef<
   return (
     <div className="text-center">
       {/* daily / practice toggle */}
-      <div className="mb-5 inline-flex rounded-xl bg-white/5 border border-white/10 p-1 gap-1">
+      <div
+        className={`mb-5 inline-flex rounded-xl bg-white/5 border border-white/10 p-1 gap-1 ${
+          practiceAllowed ? '' : 'hidden'
+        }`}
+      >
         {(
           [
             { id: true, label: 'Daily', Icon: CalendarDays },

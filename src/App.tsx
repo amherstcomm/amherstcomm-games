@@ -8,6 +8,7 @@ import { OskContext } from '@/MobileKeyInput';
 import SettingsModal from '@/SettingsModal';
 import KeyboardHelp from '@/KeyboardHelp';
 import { PALETTES, PaletteContext, TEXT_SCALES, THEME_MODES, useTheme, type Palette, type TextScale, type ThemeMode } from '@/theme';
+import { PrefsContext } from '@/prefs';
 import { useModalA11y } from '@/useModalA11y';
 import { supabase } from '@/supabase';
 import { importBaselineOnce } from '@/stats';
@@ -633,6 +634,9 @@ function App() {
   const [hiddenModes, setHiddenModes] = useState<Mode[]>(initial.hiddenModes);
   const [hiddenViews, setHiddenViews] = useState<View[]>(initial.hiddenViews);
   const [lengthRange, setLengthRange] = useState<LengthRange>(initial.lengthRange);
+  const [practiceAllowed, setPracticeAllowed] = useState(initial.practiceAllowed);
+  const [helpAllowed, setHelpAllowed] = useState(initial.helpAllowed);
+  const [solverDictionary, setSolverDictionary] = useState(initial.solverDictionary);
   const [session, setSession] = useState<Session | null>(null);
 
   useTheme(theme, palette, textScale);
@@ -677,6 +681,9 @@ function App() {
           hiddenModes?: Mode[];
           hiddenViews?: View[];
           lengthRange?: LengthRange;
+          practiceAllowed?: boolean;
+          helpAllowed?: boolean;
+          solverDictionary?: DictionaryId | 'per-game';
         }
       | null;
     if (s?.theme && THEME_MODES.includes(s.theme)) setTheme(s.theme);
@@ -686,6 +693,9 @@ function App() {
     if (Array.isArray(s?.hiddenModes)) setHiddenModes(s.hiddenModes.filter((m) => ALL_MODES.includes(m)));
     if (Array.isArray(s?.hiddenViews)) setHiddenViews(s.hiddenViews.filter((v) => ALL_VIEWS.includes(v)));
     if (s?.lengthRange) setLengthRange(s.lengthRange);
+    if (typeof s?.practiceAllowed === 'boolean') setPracticeAllowed(s.practiceAllowed);
+    if (typeof s?.helpAllowed === 'boolean') setHelpAllowed(s.helpAllowed);
+    if (s?.solverDictionary) setSolverDictionary(s.solverDictionary);
     settingsPulled.current = true;
   }, [session]);
 
@@ -714,7 +724,7 @@ function App() {
     if (!supabase || !session || !settingsPulled.current) return;
     pushPending.current = true;
     const id = window.setTimeout(async () => {
-      const settings = { theme, palette, navKeys, textScale, hiddenModes, hiddenViews, lengthRange };
+      const settings = { theme, palette, navKeys, textScale, hiddenModes, hiddenViews, lengthRange, practiceAllowed, helpAllowed, solverDictionary };
       // update first — it needs only the update policy, which every install
       // has. `select` reveals whether a row actually matched.
       const { data, error } = await supabase!
@@ -742,7 +752,7 @@ function App() {
       window.clearTimeout(id);
       pushPending.current = false;
     };
-  }, [session, theme, palette, navKeys, textScale, hiddenModes, hiddenViews, lengthRange]);
+  }, [session, theme, palette, navKeys, textScale, hiddenModes, hiddenViews, lengthRange, practiceAllowed, helpAllowed, solverDictionary]);
 
   // surface auth errors that come back in the redirect URL (expired or
   // already-used magic links land here with no other visible sign)
@@ -816,7 +826,8 @@ function App() {
     return () => document.removeEventListener('focusin', onFocusIn);
   }, []);
 
-  const dictionaryId = dictionaries[mode];
+  // 'per-game' keeps each solver's own pick; anything else is the whole site's
+  const dictionaryId = solverDictionary === 'per-game' ? dictionaries[mode] : solverDictionary;
   const setDictionaryId = (id: DictionaryId) =>
     setDictionaries((prev) => ({ ...prev, [mode]: id }));
 
@@ -846,6 +857,8 @@ function App() {
     grid: [gridPlay, setGridPlay],
     weave: [weavePlay, setWeavePlay],
   };
+
+  const prefs = useMemo(() => ({ practiceAllowed }), [practiceAllowed]);
 
   const currentView: View = learnMode ? 'learn' : playFlags[mode][0] ? 'play' : 'solve';
 
@@ -891,6 +904,9 @@ function App() {
       hiddenModes,
       hiddenViews,
       lengthRange,
+      practiceAllowed,
+      helpAllowed,
+      solverDictionary,
       patternPlay,
       beePlay,
       boxedPlay,
@@ -904,7 +920,7 @@ function App() {
       weave: { letters: weaveLetters, size: weaveSize },
       weavePlay,
     });
-  }, [mode, dictionaries, sorts, kbOpen, theme, palette, textScale, navKeys, hiddenModes, hiddenViews, lengthRange, patternPlay, beePlay, boxedPlay, descramblePlay, gridPlay, length, known, containsStr, excludedStr, rackStr, useAll, minLength, beeCenter, beeOuters, boxedLetters, solutionWords, gridLetters, gridPreset, weaveLetters, weaveSize, weavePlay]);
+  }, [mode, dictionaries, sorts, kbOpen, theme, palette, textScale, navKeys, hiddenModes, hiddenViews, lengthRange, practiceAllowed, helpAllowed, solverDictionary, patternPlay, beePlay, boxedPlay, descramblePlay, gridPlay, length, known, containsStr, excludedStr, rackStr, useAll, minLength, beeCenter, beeOuters, boxedLetters, solutionWords, gridLetters, gridPreset, weaveLetters, weaveSize, weavePlay]);
 
   // keep known array sized to length
   useEffect(() => {
@@ -1276,6 +1292,7 @@ function App() {
 
   return (
     <PaletteContext.Provider value={palette}>
+    <PrefsContext.Provider value={prefs}>
     <OskContext.Provider value={kbOpen}>
     <div className="min-h-screen bg-slate-950 text-white relative overflow-x-clip">
       {/* ambient glow */}
@@ -1491,8 +1508,9 @@ function App() {
         </div>
         )}
 
-        {/* dictionary selector */}
-        {!playActive && (
+        {/* dictionary selector — hidden when one dictionary has been chosen
+            for the whole site, since there'd be nothing left for it to pick */}
+        {!playActive && solverDictionary === 'per-game' && (
         <section className="mb-7 text-center">
           <label className="block text-xs font-medium text-slate-400 uppercase tracking-wider mb-2.5">
             Dictionary
@@ -1551,7 +1569,7 @@ function App() {
             commonWords={commonWordsArr}
             fullWords={fullWordsArr}
             onLetterStates={setLetterStates}
-            onReveal={!shownViews.includes('solve') ? undefined : ({ length: len, known: k, contains, excluded }) => {
+            onReveal={!shownViews.includes('solve') || !helpAllowed ? undefined : ({ length: len, known: k, contains, excluded }) => {
               setLength(len);
               setKnown(k);
               setContainsStr(contains);
@@ -1631,7 +1649,7 @@ function App() {
             standardWords={standardWordsArr}
             commonWords={commonWordsArr}
             onLetterStates={setLetterStates}
-            onReveal={!shownViews.includes('solve') ? undefined : (letters) => {
+            onReveal={!shownViews.includes('solve') || !helpAllowed ? undefined : (letters) => {
               setRackStr(letters);
               setUseAll(false);
               setMinLength(3);
@@ -1708,7 +1726,7 @@ function App() {
             standardWords={standardWordsArr}
             commonWords={commonWordsArr}
             onLetterStates={setLetterStates}
-            onReveal={!shownViews.includes('solve') ? undefined : (center, outers) => {
+            onReveal={!shownViews.includes('solve') || !helpAllowed ? undefined : (center, outers) => {
               setBeeCenter(center);
               setBeeOuters(outers);
               setBeePlay(false);
@@ -1791,7 +1809,7 @@ function App() {
             ref={gridRef}
             standardWords={standardWordsArr}
             onLetterStates={setLetterStates}
-            onReveal={!shownViews.includes('solve') ? undefined : (cells) => {
+            onReveal={!shownViews.includes('solve') || !helpAllowed ? undefined : (cells) => {
               setGridPreset(cells.length === 9 ? '3x3' : cells.length === 25 ? '5x5' : '4x4');
               setGridLetters(cells);
               setGridPlay(false);
@@ -1891,7 +1909,7 @@ function App() {
             standardWords={standardWordsArr}
             commonWords={commonWordsArr}
             onLetterStates={setLetterStates}
-            onReveal={!shownViews.includes('solve') ? undefined : (sides) => {
+            onReveal={!shownViews.includes('solve') || !helpAllowed ? undefined : (sides) => {
               setBoxedLetters(sides.flatMap((s) => s.split('')).slice(0, 12));
               setBoxedPlay(false);
             }}
@@ -2365,6 +2383,9 @@ function App() {
           hiddenModes={hiddenModes}
           hiddenViews={hiddenViews}
           lengthRange={lengthRange}
+          practiceAllowed={practiceAllowed}
+          helpAllowed={helpAllowed}
+          solverDictionary={solverDictionary}
           signedIn={!!session}
           onTheme={setTheme}
           onPalette={setPalette}
@@ -2376,6 +2397,9 @@ function App() {
             )
           }
           onLengthRange={setLengthRange}
+          onPracticeAllowed={setPracticeAllowed}
+          onHelpAllowed={setHelpAllowed}
+          onSolverDictionary={setSolverDictionary}
           onToggleView={(v) =>
             setHiddenViews((prev) =>
               prev.includes(v) ? prev.filter((x) => x !== v) : [...prev, v]
@@ -2733,6 +2757,7 @@ function App() {
       )}
     </div>
     </OskContext.Provider>
+    </PrefsContext.Provider>
     </PaletteContext.Provider>
   );
 }

@@ -19,6 +19,7 @@ import {
   type NavKeys,
   type View,
 } from '@/storage';
+import type { DictionaryId } from '@/dictionaries';
 import type { Palette, TextScale, ThemeMode } from '@/theme';
 import { useModalA11y } from '@/useModalA11y';
 
@@ -36,6 +37,12 @@ const VIEW_LABELS: { id: View; label: string }[] = [
   { id: 'solve', label: 'Solve' },
   { id: 'play', label: 'Play' },
   { id: 'learn', label: 'Learn' },
+];
+
+const DICTIONARY_LABELS: { id: DictionaryId; label: string }[] = [
+  { id: 'common', label: 'Common' },
+  { id: 'standard', label: 'Standard' },
+  { id: 'full', label: 'Full' },
 ];
 
 const THEME_OPTIONS: { id: ThemeMode; label: string; Icon: typeof Sun }[] = [
@@ -70,6 +77,39 @@ const PALETTE_OPTIONS: { id: Palette; label: string; blurb: string; tones: strin
     tones: ['235 235 235', '180 180 180', '130 130 130', '90 90 90'],
   },
 ];
+
+function Pill({
+  on,
+  onClick,
+  disabled,
+  title,
+  tone,
+  children,
+}: {
+  on: boolean;
+  onClick: () => void;
+  disabled?: boolean;
+  title?: string;
+  tone: 'amber' | 'emerald';
+  children: React.ReactNode;
+}) {
+  const lit =
+    tone === 'amber'
+      ? 'bg-amber-400/15 border-amber-400/40 text-amber-200'
+      : 'bg-emerald-400/15 border-emerald-400/40 text-emerald-200';
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      aria-pressed={on}
+      title={title}
+      className={`px-2.5 h-8 rounded-lg text-xs font-semibold border transition-colors disabled:cursor-not-allowed
+        ${on ? lit : 'bg-white/5 border-white/10 text-slate-500 hover:text-slate-300'}`}
+    >
+      {children}
+    </button>
+  );
+}
 
 function LengthPicker({
   label,
@@ -121,6 +161,9 @@ export default function SettingsModal({
   hiddenModes,
   hiddenViews,
   lengthRange,
+  practiceAllowed,
+  helpAllowed,
+  solverDictionary,
   signedIn,
   onTheme,
   onPalette,
@@ -129,6 +172,9 @@ export default function SettingsModal({
   onToggleMode,
   onToggleView,
   onLengthRange,
+  onPracticeAllowed,
+  onHelpAllowed,
+  onSolverDictionary,
   onClose,
 }: {
   theme: ThemeMode;
@@ -138,6 +184,9 @@ export default function SettingsModal({
   hiddenModes: Mode[];
   hiddenViews: View[];
   lengthRange: LengthRange;
+  practiceAllowed: boolean;
+  helpAllowed: boolean;
+  solverDictionary: DictionaryId | 'per-game';
   signedIn: boolean;
   onTheme: (t: ThemeMode) => void;
   onPalette: (p: Palette) => void;
@@ -146,6 +195,9 @@ export default function SettingsModal({
   onToggleMode: (m: Mode) => void;
   onToggleView: (v: View) => void;
   onLengthRange: (r: LengthRange) => void;
+  onPracticeAllowed: (v: boolean) => void;
+  onHelpAllowed: (v: boolean) => void;
+  onSolverDictionary: (d: DictionaryId | 'per-game') => void;
   onClose: () => void;
 }) {
   const dialogRef = useRef<HTMLDivElement>(null);
@@ -330,19 +382,16 @@ export default function SettingsModal({
                 const shown = !hiddenModes.includes(id);
                 const last = shown && hiddenModes.length === MODE_LABELS.length - 1;
                 return (
-                  <button
+                  <Pill
                     key={id}
+                    on={shown}
                     onClick={() => onToggleMode(id)}
                     disabled={last}
-                    aria-pressed={shown}
                     title={last ? 'At least one game has to stay' : undefined}
-                    className={`px-2.5 h-8 rounded-lg text-xs font-semibold border transition-colors disabled:opacity-100 disabled:cursor-not-allowed
-                      ${shown
-                        ? 'bg-amber-400/15 border-amber-400/40 text-amber-200'
-                        : 'bg-white/5 border-white/10 text-slate-500 hover:text-slate-300'}`}
+                    tone="amber"
                   >
                     {label}
-                  </button>
+                  </Pill>
                 );
               })}
             </div>
@@ -351,27 +400,68 @@ export default function SettingsModal({
                 const shown = !hiddenViews.includes(id);
                 const last = shown && hiddenViews.length === VIEW_LABELS.length - 1;
                 return (
-                  <button
+                  <Pill
                     key={id}
+                    on={shown}
                     onClick={() => onToggleView(id)}
                     disabled={last}
-                    aria-pressed={shown}
                     title={last ? 'At least one tab has to stay' : undefined}
-                    className={`px-2.5 h-8 rounded-lg text-xs font-semibold border transition-colors disabled:opacity-100 disabled:cursor-not-allowed
-                      ${shown
-                        ? 'bg-emerald-400/15 border-emerald-400/40 text-emerald-200'
-                        : 'bg-white/5 border-white/10 text-slate-500 hover:text-slate-300'}`}
+                    tone="emerald"
                   >
                     {label}
-                  </button>
+                  </Pill>
                 );
               })}
             </div>
+            <div className="flex flex-wrap gap-1.5 mt-1.5">
+              <Pill
+                on={practiceAllowed}
+                onClick={() => onPracticeAllowed(!practiceAllowed)}
+                tone="emerald"
+              >
+                Practice
+              </Pill>
+              {/* only meaningful while there's a solver to reach */}
+              {!hiddenViews.includes('solve') && (
+                <Pill on={helpAllowed} onClick={() => onHelpAllowed(!helpAllowed)} tone="emerald">
+                  Help &amp; reveal
+                </Pill>
+              )}
+            </div>
             <p className="mt-2 text-xs text-slate-500">
-              Tap to hide a game or a tab. Nothing is deleted — statistics and
-              streaks keep accruing, and unhiding brings everything back. One of
-              each has to stay.
+              Tap to hide a game, a tab, the practice boards, or the buttons that
+              hand a game to the solver. Nothing is deleted — statistics and
+              streaks keep accruing, and unhiding brings everything back. One
+              game and one tab have to stay.
             </p>
+
+            {!hiddenViews.includes('solve') && (
+              <div className="mt-4">
+                <p className="text-xs font-medium text-slate-400 mb-1.5">Solver dictionary</p>
+                <select
+                  aria-label="Solver dictionary"
+                  value={solverDictionary}
+                  onChange={(e) =>
+                    onSolverDictionary(e.target.value as DictionaryId | 'per-game')
+                  }
+                  className="h-9 px-2 rounded-lg bg-white/5 border border-white/10 text-slate-200 text-sm font-semibold"
+                >
+                  <option value="per-game" className="bg-slate-900">
+                    Per game
+                  </option>
+                  {DICTIONARY_LABELS.map(({ id, label }) => (
+                    <option key={id} value={id} className="bg-slate-900">
+                      {label}
+                    </option>
+                  ))}
+                </select>
+                <p className="mt-2 text-xs text-slate-500">
+                  {solverDictionary === 'per-game'
+                    ? 'Each solver remembers its own, which is what the picker above each one sets.'
+                    : 'Every solver uses this one, and the per-solver picker goes away.'}
+                </p>
+              </div>
+            )}
 
             {!hiddenModes.includes('pattern') && (
               <div className="mt-4">

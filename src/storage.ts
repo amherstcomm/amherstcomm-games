@@ -76,6 +76,9 @@ export type PersistedState = {
   hiddenModes: Mode[];
   hiddenViews: View[];
   lengthRange: LengthRange;
+  practiceAllowed: boolean;
+  helpAllowed: boolean;
+  solverDictionary: DictionaryId | 'per-game';
   patternPlay: boolean;
   beePlay: boolean;
   boxedPlay: boolean;
@@ -122,6 +125,9 @@ export const DEFAULT_STATE: PersistedState = {
   hiddenModes: [],
   hiddenViews: [],
   lengthRange: { min: MIN_WORD_LEN, max: MAX_WORD_LEN },
+  practiceAllowed: true,
+  helpAllowed: true,
+  solverDictionary: 'per-game',
   patternPlay: false,
   beePlay: false,
   boxedPlay: false,
@@ -241,6 +247,9 @@ export function loadState(): PersistedState {
       hiddenModes: sanitizeHidden(p?.hiddenModes, ALL_MODES),
       hiddenViews: sanitizeHidden(p?.hiddenViews, ALL_VIEWS),
       lengthRange: sanitizeRange(p?.lengthRange),
+      practiceAllowed: p?.practiceAllowed !== false,
+      helpAllowed: p?.helpAllowed !== false,
+      solverDictionary: ALL_DICTS.includes(p?.solverDictionary) ? p.solverDictionary : 'per-game',
       patternPlay: p?.patternPlay === true,
       beePlay: p?.beePlay === true,
       boxedPlay: p?.boxedPlay === true,

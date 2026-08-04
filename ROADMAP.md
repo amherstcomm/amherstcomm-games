@@ -63,6 +63,11 @@ sync, so it follows an account across devices.
 - Pattern's thirteen word lengths narrow to a range in the same place. Set it
   to 5–5 and the length row disappears too; the other lengths keep their
   dailies and statistics, as with any hidden game
+- Practice can go on its own, pinning every game to the daily
+- Help and Reveal can go while the solver stays, for someone who wants the
+  solver available but not one keypress from the board they're playing
+- One dictionary for every solver, instead of a pick per game; the per-solver
+  picker disappears when it's set, since there'd be nothing left to choose
 
 ### Onboarding
 On a genuine first visit, a dismissible card: "New here? See how Weave works,"
