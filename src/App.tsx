@@ -2372,7 +2372,13 @@ function App() {
         }}
       />
 
-      {keysOpen && <KeyboardHelp navKeys={navKeys} onClose={() => setKeysOpen(false)} />}
+      {keysOpen && (
+        <KeyboardHelp
+          navKeys={navKeys}
+          showWeave={shownModes.includes('weave')}
+          onClose={() => setKeysOpen(false)}
+        />
+      )}
 
       {settingsOpen && (
         <SettingsModal

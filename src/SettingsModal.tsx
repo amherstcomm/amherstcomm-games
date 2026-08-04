@@ -524,6 +524,8 @@ export default function SettingsModal({
             </div>
           )}
 
+          {/* steers Weave's board and nothing else, so it goes with Weave */}
+          {!hiddenModes.includes('weave') && (
           <div>
             <h3 className="flex items-center gap-2 text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2.5">
               <Keyboard className="w-3.5 h-3.5" />
@@ -557,6 +559,7 @@ export default function SettingsModal({
               </p>
             </div>
           </div>
+          )}
         </div>
 
         <p className="text-xs text-slate-500 border-t border-white/10 pt-4 mt-6">

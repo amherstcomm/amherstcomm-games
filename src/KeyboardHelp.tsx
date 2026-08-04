@@ -38,9 +38,11 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 
 export default function KeyboardHelp({
   navKeys,
+  showWeave,
   onClose,
 }: {
   navKeys: NavKeys;
+  showWeave: boolean;
   onClose: () => void;
 }) {
   const dialogRef = useRef<HTMLDivElement>(null);
@@ -97,6 +99,9 @@ export default function KeyboardHelp({
             </Row>
           </Section>
 
+          {/* the only game with a board cursor — pointless reading if it's
+              been hidden */}
+          {showWeave && (
           <Section title="Weave board">
             <p className="text-xs text-slate-500 mb-2">
               Tab to the board — it&apos;s a single stop — then steer a cursor. Each cell
@@ -119,6 +124,7 @@ export default function KeyboardHelp({
             </Row>
             <Row keys={['Esc']}>Clear the word you&apos;re tracing and start over.</Row>
           </Section>
+          )}
 
           <Section title="On-screen keyboard">
             <p className="text-sm text-slate-400">
