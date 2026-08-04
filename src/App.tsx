@@ -659,7 +659,12 @@ function App() {
   // appearance settings follow the account: pull on sign-in (and whenever the
   // tab comes back to the foreground, so a change made on another device
   // lands here), then push edits
-  const settingsPulled = useRef(false);
+  // State, not a ref: the push effect is gated on this, and a ref changing
+  // doesn't re-run an effect. As a ref, the first pull flipped it silently and
+  // nothing was ever written back unless the player happened to change a
+  // setting afterwards — so a value that was already true locally at load,
+  // like onboarded, never reached the account at all.
+  const [settingsPulled, setSettingsPulled] = useState(false);
   const pushPending = useRef(false);
 
   const pullSettings = useCallback(async () => {
@@ -700,12 +705,12 @@ function App() {
     if (typeof s?.helpAllowed === 'boolean') setHelpAllowed(s.helpAllowed);
     if (s?.solverDictionary) setSolverDictionary(s.solverDictionary);
     if (s?.onboarded) setOnboarded(true);
-    settingsPulled.current = true;
+    setSettingsPulled(true);
   }, [session]);
 
   useEffect(() => {
     if (!session) {
-      settingsPulled.current = false;
+      setSettingsPulled(false);
       return;
     }
     void pullSettings();
@@ -725,7 +730,7 @@ function App() {
   }, [session, pullSettings]);
 
   useEffect(() => {
-    if (!supabase || !session || !settingsPulled.current) return;
+    if (!supabase || !session || !settingsPulled) return;
     pushPending.current = true;
     const id = window.setTimeout(async () => {
       const settings = { theme, palette, navKeys, textScale, hiddenModes, hiddenViews, lengthRange, practiceAllowed, helpAllowed, solverDictionary, onboarded };
@@ -756,7 +761,7 @@ function App() {
       window.clearTimeout(id);
       pushPending.current = false;
     };
-  }, [session, theme, palette, navKeys, textScale, hiddenModes, hiddenViews, lengthRange, practiceAllowed, helpAllowed, solverDictionary, onboarded]);
+  }, [session, settingsPulled, theme, palette, navKeys, textScale, hiddenModes, hiddenViews, lengthRange, practiceAllowed, helpAllowed, solverDictionary, onboarded]);
 
   // surface auth errors that come back in the redirect URL (expired or
   // already-used magic links land here with no other visible sign)
@@ -1394,7 +1399,12 @@ function App() {
             been answered either way. `currentView` keeps it off the Learn tab
             itself, where it would be telling someone about the page they're
             already reading. */}
-        {!onboarded && shownViews.includes('learn') && currentView !== 'learn' && (
+        {!onboarded &&
+          // signed in, the account gets the deciding vote — wait for it rather
+          // than flashing "new here?" at someone who answered on another device
+          (!session || settingsPulled) &&
+          shownViews.includes('learn') &&
+          currentView !== 'learn' && (
           <OnboardingCard
             game={MODES.find((m) => m.id === mode)?.label ?? 'this game'}
             onLearn={() => {
