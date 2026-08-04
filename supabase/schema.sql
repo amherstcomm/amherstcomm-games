@@ -200,13 +200,19 @@ grant execute on function public.set_display_name(text) to authenticated;
 --
 --   select n, public.would_block(n) from unnest(array['Sam','Scunthorpe']) n;
 create or replace function public.would_block(p_name text)
-returns boolean language sql stable as $$
+returns boolean language sql stable security definer set search_path = '' as $$
   select exists (
     select 1 from public.blocked_names b
     where (b.match = 'substring' and public.normalise_name(p_name) like '%' || b.pattern || '%')
        or (b.match = 'exact' and public.normalise_name(p_name) = b.pattern)
   );
 $$;
+
+-- Postgres grants EXECUTE on a new function to PUBLIC, and PostgREST exposes
+-- anything in this schema that a web role can execute. Left alone, this one
+-- would let anybody map the blocklist a guess at a time — which is the exact
+-- thing keeping the list out of the repo was for.
+revoke execute on function public.would_block(text) from public, anon, authenticated;
 
 -- ---------------------------------------------------------------------------
 -- game_results: append-only log of completed games. Aggregates (lifetime
@@ -527,6 +533,12 @@ create or replace view public.suspect_daily_results as
   from public.daily_progress dp
   left join public.profiles p on p.id = dp.user_id
   where dp.completed and not public.result_is_plausible(dp.game, dp.state, dp.result);
+
+-- A view runs with its owner's rights, so this one reads straight past the
+-- row-level security on the tables underneath — and Supabase grants table
+-- privileges to the web roles by default. Without this revoke it would hand
+-- any visitor every player's id and board.
+revoke all on public.suspect_daily_results from public, anon, authenticated;
 
 -- ---------------------------------------------------------------------------
 -- leaderboard: top ten per game over a window of days, by display name.
