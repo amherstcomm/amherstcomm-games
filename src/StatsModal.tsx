@@ -4,8 +4,9 @@ import { combineStats, fetchSyncedStats, loadStats, type StatsStore } from '@/st
 import { formatElapsed } from '@/useUpTimer';
 import { useModalA11y } from '@/useModalA11y';
 import HistoryView from '@/HistoryView';
+import LeaderboardView from '@/LeaderboardView';
 
-type StatsView = 'overall' | 'daily' | 'practice' | 'history';
+type StatsView = 'overall' | 'daily' | 'practice' | 'history' | 'boards';
 
 function Stat({ label, value }: { label: string; value: string | number }) {
   return (
@@ -83,7 +84,7 @@ export default function StatsModal({
   const store = synced ?? localStore;
   const stats = useMemo(
     () =>
-      view === 'overall' || view === 'history'
+      view === 'overall' || view === 'history' || view === 'boards'
         ? combineStats(store.daily, store.practice)
         : store[view],
     [store, view]
@@ -139,12 +140,13 @@ export default function StatsModal({
         <h2 className="text-xl font-bold mb-1">Statistics</h2>
         <p className="text-xs text-slate-500 mb-4">
           {view === 'history' && 'Your dailies, day by day.'}
-          {view !== 'history' &&
+          {view === 'boards' && 'How everyone who opted in is doing.'}
+          {view !== 'history' && view !== 'boards' &&
             syncState === 'local' &&
             'Lifetime totals, stored only in this browser.'}
-          {view !== 'history' && syncState === 'loading' && 'Lifetime totals — syncing from your account…'}
-          {view !== 'history' && syncState === 'synced' && 'Lifetime totals, synced to your account.'}
-          {view !== 'history' && syncState === 'error' &&
+          {view !== 'history' && view !== 'boards' && syncState === 'loading' && 'Lifetime totals — syncing from your account…'}
+          {view !== 'history' && view !== 'boards' && syncState === 'synced' && 'Lifetime totals, synced to your account.'}
+          {view !== 'history' && view !== 'boards' && syncState === 'error' &&
             "Couldn't reach your account — showing this browser's totals."}
         </p>
 
@@ -155,6 +157,7 @@ export default function StatsModal({
               { id: 'daily', label: 'Daily' },
               { id: 'practice', label: 'Practice' },
               { id: 'history', label: 'History' },
+              { id: 'boards', label: 'Boards' },
             ] as const
           ).map(({ id, label }) => (
             <button
@@ -170,8 +173,9 @@ export default function StatsModal({
         </div>
 
         {view === 'history' && <HistoryView signedIn={signedIn} />}
+        {view === 'boards' && <LeaderboardView signedIn={signedIn} />}
 
-        {view !== 'history' && !anyPlay && (
+        {view !== 'history' && view !== 'boards' && !anyPlay && (
           <p className="text-sm text-slate-400 py-6 text-center">
             {view === 'overall'
               ? 'Nothing recorded yet — finish a game in any Play mode and it lands here.'
@@ -179,7 +183,7 @@ export default function StatsModal({
           </p>
         )}
 
-        {view !== 'history' && anyPlay && (
+        {view !== 'history' && view !== 'boards' && anyPlay && (
           <div className="space-y-6">
             <Section Icon={Grid3x3} title="Guess the word">
               <div className="grid grid-cols-4 gap-2">

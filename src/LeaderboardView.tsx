@@ -1,0 +1,130 @@
+import { useEffect, useState } from 'react';
+import { Grid3x3, Hexagon, LayoutGrid, Puzzle, Shuffle, Square } from 'lucide-react';
+import {
+  BOARD_LABELS,
+  fetchBoards,
+  fetchDisplayName,
+  WINDOWS,
+  type BoardGame,
+  type Boards,
+} from '@/leaderboard';
+import { formatElapsed } from '@/useUpTimer';
+
+const ICONS: Record<BoardGame, typeof Grid3x3> = {
+  guess: Grid3x3,
+  hive: Hexagon,
+  scramble: Shuffle,
+  grid: LayoutGrid,
+  box: Square,
+  weave: Puzzle,
+};
+
+const ORDER: BoardGame[] = ['guess', 'scramble', 'hive', 'grid', 'box', 'weave'];
+
+function Board({ game, rows, me }: { game: BoardGame; rows: Boards[BoardGame]; me: string | null }) {
+  if (!rows.length) return null;
+  const { label, value, detail } = BOARD_LABELS[game];
+  const Icon = ICONS[game];
+  return (
+    <div className="rounded-xl bg-white/5 border border-white/10 p-4">
+      <h4 className="flex items-center gap-2 text-sm font-semibold text-white mb-2">
+        <Icon className="w-3.5 h-3.5 text-accent" />
+        {label}
+      </h4>
+      <ol className="space-y-1">
+        {rows.map((r, i) => {
+          const mine = me !== null && r.name.toLowerCase() === me.toLowerCase();
+          return (
+            <li
+              key={r.name}
+              className={`flex items-baseline gap-2 text-sm rounded-md px-2 py-1 ${
+                mine ? 'bg-amber-400/10 text-amber-100' : 'text-slate-300'
+              }`}
+            >
+              <span className="w-5 shrink-0 text-xs text-slate-500 tabular-nums">{i + 1}</span>
+              <span className="flex-1 min-w-0 truncate font-medium">{r.name}</span>
+              <span className="tabular-nums shrink-0">{value(r.value)}</span>
+              {r.detail !== null && (
+                <span className="text-xs text-slate-500 tabular-nums shrink-0 hidden sm:inline">
+                  {game === 'weave' ? formatElapsed(r.detail) : detail(r.detail)}
+                </span>
+              )}
+            </li>
+          );
+        })}
+      </ol>
+    </div>
+  );
+}
+
+export default function LeaderboardView({ signedIn }: { signedIn: boolean }) {
+  const [days, setDays] = useState<number>(1);
+  const [boards, setBoards] = useState<Boards | null>(null);
+  const [state, setState] = useState<'loading' | 'ready' | 'error'>('loading');
+  const [me, setMe] = useState<string | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    setState('loading');
+    fetchBoards(days).then((b) => {
+      if (!alive) return;
+      setBoards(b);
+      setState(b ? 'ready' : 'error');
+    });
+    return () => {
+      alive = false;
+    };
+  }, [days]);
+
+  useEffect(() => {
+    if (!signedIn) return;
+    let alive = true;
+    fetchDisplayName().then((n) => alive && setMe(n));
+    return () => {
+      alive = false;
+    };
+  }, [signedIn]);
+
+  const played = boards ? ORDER.filter((g) => boards[g].length) : [];
+
+  return (
+    <div className="space-y-3">
+      <div className="inline-flex flex-wrap justify-center max-w-full rounded-lg bg-white/5 border border-white/10 p-0.5 gap-0.5">
+        {WINDOWS.map((w) => (
+          <button
+            key={w.days}
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={() => setDays(w.days)}
+            className={`px-3 py-1.5 rounded-md text-sm font-semibold transition-colors
+              ${days === w.days ? 'bg-emerald-400/15 text-emerald-300' : 'text-slate-400 hover:text-white'}`}
+          >
+            {w.label}
+          </button>
+        ))}
+      </div>
+
+      {state === 'loading' && <p className="text-sm text-slate-400 py-6 text-center">Loading…</p>}
+      {state === 'error' && (
+        <p className="text-sm text-slate-400 py-6 text-center">Couldn&apos;t load the boards.</p>
+      )}
+      {state === 'ready' && !played.length && (
+        <p className="text-sm text-slate-400 py-6 text-center">
+          Nothing here yet for this stretch. Boards only count players who&apos;ve set a
+          display name.
+        </p>
+      )}
+
+      {state === 'ready' && played.map((g) => (
+        <Board key={g} game={g} rows={boards![g]} me={me} />
+      ))}
+
+      <p className="text-xs text-slate-500 pt-1">
+        Dailies only, top ten. {me === null
+          ? 'Set a display name under Account to take part — without one you don’t appear.'
+          : `You appear as ${me}.`}{' '}
+        Multi-day boards count how often you played as well as how well, so turning up
+        counts for something.
+      </p>
+    </div>
+  );
+}

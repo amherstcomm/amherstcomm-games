@@ -1,7 +1,13 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { Session } from '@supabase/supabase-js';
 import { Github, LogOut, Mail, X } from 'lucide-react';
 import { supabase } from '@/supabase';
+import {
+  fetchDisplayName,
+  setDisplayName,
+  NAME_MESSAGES,
+  type NameResult,
+} from '@/leaderboard';
 import { useModalA11y } from '@/useModalA11y';
 
 export default function AccountModal({
@@ -20,6 +26,42 @@ export default function AccountModal({
 
   const dialogRef = useRef<HTMLDivElement>(null);
   useModalA11y(dialogRef, onClose);
+
+  // The name lives in profiles rather than the synced settings blob, because
+  // it has to be unique across accounts — that's a database constraint, not a
+  // preference.
+  const [name, setName] = useState<string | null>(null);
+  const [nameDraft, setNameDraft] = useState('');
+  const [nameState, setNameState] = useState<'idle' | 'saving' | 'saved' | Exclude<NameResult, 'ok'>>(
+    'idle'
+  );
+
+  useEffect(() => {
+    if (!session) return;
+    let alive = true;
+    fetchDisplayName().then((n) => {
+      if (!alive) return;
+      setName(n);
+      setNameDraft(n ?? '');
+    });
+    return () => {
+      alive = false;
+    };
+  }, [session]);
+
+  async function saveName() {
+    if (nameState === 'saving') return;
+    setNameState('saving');
+    const result = await setDisplayName(nameDraft.trim());
+    if (result === 'ok') {
+      const saved = nameDraft.trim() || null;
+      setName(saved);
+      setNameDraft(saved ?? '');
+      setNameState('saved');
+    } else {
+      setNameState(result);
+    }
+  }
 
   async function sendMagicLink(e: React.FormEvent) {
     e.preventDefault();
@@ -104,6 +146,44 @@ export default function AccountModal({
             <p className="text-sm text-slate-400 mb-5">
               Signed in as <span className="text-slate-200">{session.user.email}</span>
             </p>
+            <div className="mb-6">
+              <label
+                htmlFor="display-name"
+                className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2"
+              >
+                Display name
+              </label>
+              <div className="flex flex-wrap gap-2">
+                <input
+                  id="display-name"
+                  value={nameDraft}
+                  onChange={(e) => {
+                    setNameDraft(e.target.value);
+                    setNameState('idle');
+                  }}
+                  maxLength={24}
+                  placeholder="Not shown to anyone"
+                  className="flex-1 min-w-[10rem] h-10 px-3 rounded-lg bg-white/5 border border-white/10 text-slate-200 placeholder:text-slate-600 text-sm"
+                />
+                <button
+                  onClick={saveName}
+                  disabled={nameState === 'saving' || nameDraft.trim() === (name ?? '')}
+                  className="inline-flex items-center px-4 h-10 rounded-lg text-sm font-semibold bg-emerald-400 text-ink hover:bg-emerald-300 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  {nameState === 'saving' ? 'Saving…' : 'Save'}
+                </button>
+              </div>
+              <p className="mt-2 text-xs text-slate-500" aria-live="polite">
+                {nameState === 'saved'
+                  ? name
+                    ? `Saved. You appear as ${name} on the leaderboards.`
+                    : 'Cleared. You no longer appear on the leaderboards.'
+                  : nameState !== 'idle' && nameState !== 'saving'
+                    ? NAME_MESSAGES[nameState]
+                    : 'The only thing other players can see. Setting one puts you on the leaderboards; clearing it takes you off. Everything else about your account stays private.'}
+              </p>
+            </div>
+
             <button
               onClick={signOut}
               className="inline-flex items-center gap-1.5 px-4 h-10 rounded-lg text-sm font-semibold bg-white/5 border border-white/10 text-slate-300 hover:bg-white/10 hover:text-white transition-colors"
