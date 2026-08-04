@@ -81,29 +81,31 @@ screen. The Learn demos do the teaching; the card only points at them.
   from a version without the flag is treated as already onboarded rather than
   greeted with "new here?"
 
-### Self-serve account deletion — next
-The privacy policy promises deletion and currently routes it through email,
-which is a standing obligation on one person. Everything needed is already in
-place; this is a button and an RPC.
+### ~~Self-serve account deletion~~ — done
+Two buttons under Account, each behind its own panel: `clear_my_stats()` wipes
+the play record and keeps the account, `delete_account()` removes the account
+itself. Neither takes an argument — the account comes from `auth.uid()` and
+only from there, because a function accepting a user id is a delete-anybody
+endpoint the moment somebody edits one uuid in the network tab.
 
-- **One function, no argument.** `delete_account()` derives the account from
-  `auth.uid()`. A version taking a user id is a delete-anybody endpoint the
-  moment somebody reads the network tab.
-- **One delete does it all.** `profiles`, `game_results`, `daily_progress` and
-  `stats_baselines` all reference `auth.users` on delete cascade, so removing
-  that row is the whole job — one place to get right rather than five.
-- **Typed confirmation**, and say plainly that it can't be undone and that
-  signing in again starts a fresh account. Worth splitting "clear my stats"
-  from "delete my account": most people reaching for deletion want the first.
-- **Analytics needs no deletion, and the policy should say why.** We never
-  send GA4 a user id — `gtag('config', GA_ID)` and nothing more — so Google
-  holds a browser-scoped client id and no way to tie it to an account.
-  Google's deletion API works on identifiers you supply, and we record none,
-  so there is no handle to delete by. Clear the `_ga` cookies on the way out
-  (the Settings toggle already has that code) and let Google's retention do
-  the rest. Don't imply we can reach into their data, because we can't.
-- Local play state stays until the browser's site data is cleared. Say so
-  rather than quietly wiping boards someone might still want.
+- Deleting the `auth.users` row is the whole job; all four tables cascade from
+  it, so there's no list here to fall out of date when a fifth is added. It
+  works because the function runs as its owner — worth re-checking after any
+  project migration, though it fails loudly and rolls back if that ever stops
+  being true.
+- **The trap was the baseline flag, not the delete.** Clearing stats removes
+  `stats_baselines`, and `importBaselineOnce` would happily put this browser's
+  totals straight back — except it guards on a localStorage flag we don't
+  touch, so the clear stays cleared. Deleting the account and signing up again
+  *does* re-import, because that's a new user id and a new flag: correct, and
+  what the "erase this browser too" tick is for.
+- Local play state is the player's own copy, so deletion offers to erase it
+  rather than deciding. Ticked by default, since someone deleting an account
+  usually means all of it.
+- **Analytics needed no deletion, and the policy now says why.** We never sent
+  GA4 a user id, so Google holds a browser-scoped client id with nothing to
+  tie it to an account, and their deletion API works on identifiers you
+  supply. Dropping the `_ga` cookies is the honest whole of what we can do.
 
 ### Admin portal — much later
 Everything owner-facing is SQL-editor-only today: clearing a display name,

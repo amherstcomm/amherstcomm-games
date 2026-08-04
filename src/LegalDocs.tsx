@@ -5,7 +5,7 @@
 
 import type { ReactNode } from 'react';
 
-export const LEGAL_UPDATED = '3 August 2026';
+export const LEGAL_UPDATED = '4 August 2026';
 export const PRIVACY_EMAIL = 'privacy@anagrimoire.com';
 
 function H({ children }: { children: ReactNode }) {
@@ -60,10 +60,13 @@ export function PrivacyPolicy() {
 
       <div className="rounded-xl bg-white/5 border border-white/10 p-4 my-4">
         <p className="text-slate-300">
-          <strong className="font-semibold">The short version.</strong> The letters
-          you type never leave your device. You can use every game and every solver
-          without an account. If you make one, we store your email address and your
-          game results — scores and times, never the words you found.
+          <strong className="font-semibold">The short version.</strong> What you type
+          into a solver never leaves your device. You can play every game and use
+          every solver without an account. If you make one, we store your email
+          address, your results, and the daily boards you have in progress — so they
+          follow you between devices. Nothing about you is public unless you choose a
+          display name, which puts you on the leaderboards and can be cleared again
+          at any time.
         </p>
       </div>
 
@@ -122,9 +125,9 @@ export function PrivacyPolicy() {
 
       <H>If you create an account</H>
       <P>
-        Accounts are optional and exist only to sync your statistics between
-        devices. You can sign in with GitHub, with Google, or with a code emailed to
-        you. Authentication is handled by{' '}
+        Accounts are optional, and exist so your statistics, settings and
+        half-finished dailies follow you from one device to the next. You can sign in
+        with GitHub, with Google, or with a code emailed to you. Authentication is handled by{' '}
         <Ext href="https://supabase.com/privacy">Supabase</Ext>, and sign-in emails
         are delivered by <Ext href="https://resend.com/legal/privacy-policy">Resend</Ext>.
       </P>
@@ -151,6 +154,7 @@ export function PrivacyPolicy() {
           A one-time snapshot, per browser, of the statistics you had accumulated
           before signing in
         </li>
+        <li>A display name, if you choose to set one — the next section is about that</li>
       </List>
       <P>
         We never see your password. Signing in with GitHub or Google tells us your
@@ -169,10 +173,16 @@ export function PrivacyPolicy() {
       </P>
       <P>
         Set one and your name appears on the daily leaderboards alongside your scores
-        for those puzzles: how many you solved, points, times. Never your email, never
-        anything you typed, and never a link between the name and the account behind
-        it. Clearing the name removes you from the boards immediately and permanently
-        — your own statistics carry on as before, they just stop being public.
+        for those puzzles: how many you solved, points, times. That is the whole of
+        it. The boards are built by a database function that can return names and
+        numbers and nothing else — not your email, not anything you typed, and no way
+        for a reader to get from a name back to the account it belongs to. Because the
+        name is the public part, pick one you are happy to be seen under rather than
+        one that identifies you.
+      </P>
+      <P>
+        Clearing the name removes you from the boards immediately and permanently.
+        Your own statistics carry on exactly as before; they just stop being public.
       </P>
 
       <H>Site-wide numbers</H>
@@ -217,10 +227,41 @@ export function PrivacyPolicy() {
 
       <H>Deleting your data</H>
       <P>
-        Email <Mail /> from the address you signed up with and we will delete your
-        account and everything attached to it. A button to do this yourself is being
-        built; until it exists, email is the route. You can also ask for a copy of
-        what we hold, or for something to be corrected.
+        Both of these are buttons under Account, and neither needs to go through us:
+      </P>
+      <List>
+        <li>
+          <strong className="text-slate-300">Clear my statistics</strong> deletes every
+          result on your account, the daily boards stored with it, and the totals
+          imported from your browsers. The account itself stays, display name included.
+        </li>
+        <li>
+          <strong className="text-slate-300">Delete my account</strong> removes the
+          account and everything attached to it — results, daily boards, display name,
+          settings, and the sign-in itself. Signing in again afterwards starts a new
+          account rather than finding the old one.
+        </li>
+      </List>
+      <P>
+        Both are immediate and neither can be undone. If you would rather we did it, or
+        you want a copy of what we hold or something corrected, email <Mail /> from the
+        address you signed up with.
+      </P>
+      <P>
+        Two things are worth saying plainly about what deletion does and doesn&apos;t
+        reach. Your browser keeps its own copy of your boards and totals, so deletion
+        offers to erase those here as well — ticked by default, and worth unticking
+        only if you mean to carry on playing on this device without an account.
+        Either way it is local, and clearing this site&apos;s data removes whatever is
+        left.
+      </P>
+      <P>
+        Analytics is the other. It was never tied to your account — we have never sent
+        Google an account identifier, only the page you were on — so there is nothing
+        there filed under you to delete, and we won&apos;t pretend we can reach into
+        Google&apos;s records. What we can do is drop the browser-scoped cookie that
+        ties those visits together, which deleting an account does automatically and
+        the Settings → Analytics toggle does on its own.
       </P>
       <P>
         If you are in the EEA or the UK you have rights of access, correction,
@@ -301,9 +342,10 @@ export function Terms() {
 
       <H>Accounts</H>
       <P>
-        Accounts are optional and exist to sync your statistics. Use an email address
-        you control, and don&apos;t share an account with anyone else. You can delete
-        yours at any time — see the privacy policy. We may suspend or remove an
+        Accounts are optional, and exist to carry your statistics, settings and daily
+        progress between devices. Use an email address you control, and don&apos;t
+        share an account with anyone else. You can delete yours at any time from the
+        Account panel — see the privacy policy. We may suspend or remove an
         account that is being used to attack or abuse the site.
       </P>
 

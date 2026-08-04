@@ -125,6 +125,17 @@ export function loadStats(): StatsStore {
   }
 }
 
+// Forget this browser's lifetime totals. Boards in progress are a separate
+// key each and deliberately untouched — clearing statistics shouldn't take
+// a puzzle away from someone mid-solve.
+export function clearLocalStats(): void {
+  try {
+    localStorage.removeItem(STATS_KEY);
+  } catch {
+    // nothing sensible to do; the account copy is the one that mattered
+  }
+}
+
 // the single source of truth for how an event changes a stats bucket —
 // used for live local updates and for replaying the synced event log
 export function applyEvent(s: LifetimeStats, e: GameEvent): void {
