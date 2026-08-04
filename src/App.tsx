@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState, useEffect, useLayoutEffect, useRef, type ButtonHTMLAttributes, type ReactNode } from 'react';
-import { Search, Eraser, ArrowDown, ArrowUp, X, BookOpen, Grid3x3, Shuffle, Hexagon, Check, Keyboard, Delete, Github, Info, Square, CalendarDays, Star, Gamepad2, CornerDownLeft, LayoutGrid, Puzzle, BarChart3, UserRound, Scale, Settings } from 'lucide-react';
+import { Search, Eraser, ArrowDown, ArrowUp, X, BookOpen, Grid3x3, Shuffle, Hexagon, Check, Keyboard, Delete, Github, Info, Square, CalendarDays, Star, Gamepad2, CornerDownLeft, LayoutGrid, Puzzle, BarChart3, UserRound, Scale, Settings, Home } from 'lucide-react';
 import LearnMode, { type LearnModeHandle } from '@/LearnMode';
 import type { Session } from '@supabase/supabase-js';
 import StatsModal from '@/StatsModal';
@@ -24,8 +24,21 @@ import { DICTIONARIES, getDictionary, type DictionaryId } from '@/dictionaries';
 import { solvePattern, solveDescramble, solveBee, solveBoxed, solveGrid, findGridPath } from '@/solvers';
 import ConsentBanner from '@/ConsentBanner';
 import { PrivacyPolicy, Terms } from '@/LegalDocs';
-import { clearIntentUrl, intent, legalIntent } from '@/deeplink';
-import { ALL_MODES, ALL_VIEWS, lengthChoices, visibleModes, visibleViews, type LengthRange, type View, loadState, saveState, GRID_PRESET_DIMS, WEAVE_DIMS, type GridPreset, type Mode, type NavKeys, type SortPref, type WeaveSize } from '@/storage';
+import { onDailyReport, requestDaily } from '@/dailyBus';
+import HomeView from '@/HomeView';
+import {
+  MODE_SLUG,
+  initialGame,
+  initialRoute,
+  modeOf,
+  parsePath,
+  pathOf,
+  type Panel,
+  type Route,
+  type SettingsTab,
+  type StatsTab,
+} from '@/routes';
+import { ALL_MODES, ALL_START_PAGES, ALL_VIEWS, lengthChoices, visibleModes, visibleViews, type LengthRange, type StartPage, type View, loadState, saveState, GRID_PRESET_DIMS, WEAVE_DIMS, type GridPreset, type Mode, type NavKeys, type SortPref, type WeaveSize } from '@/storage';
 
 // longest rack the scramble solver accepts; word lengths come from the
 // player's own range now, in storage
@@ -415,15 +428,31 @@ function WordChip({
 
 const initial = loadState();
 
-// A shared link names both a game and a tab. It only overrides the game it
-// names — every other game keeps whatever the visitor last had open.
-const linkView = intent?.view === 'play' ? true : intent?.view === 'solve' ? false : null;
+// Arriving at "/" with a start page set to one particular game is the same
+// kind of instruction a link gives, so it travels the same path. 'home' stays
+// on the front page; 'last' falls through to whatever was stored.
+const startTarget =
+  initialRoute.kind === 'home' &&
+  initial.startPage !== 'home' &&
+  initial.startPage !== 'last'
+    ? ({ view: 'play', slug: MODE_SLUG[initial.startPage] } as const)
+    : null;
+
+// A link names both a game and a tab. It only overrides the game it names —
+// every other game keeps whatever the visitor last had open.
+const entryGame = initialGame ?? startTarget;
+const linkMode = entryGame ? modeOf(entryGame.slug) : null;
+const linkView = entryGame?.view === 'play' ? true : entryGame?.view === 'solve' ? false : null;
 function initialPlay(mode: Mode, stored: boolean): boolean {
-  return intent?.mode === mode && linkView !== null ? linkView : stored;
+  return linkMode === mode && linkView !== null ? linkView : stored;
 }
 
+// Panels and legal documents are addresses too, so arriving at one opens it.
+const panelAtLoad = (p: Panel) => initialRoute.kind === 'panel' && initialRoute.panel === p;
+const isOverlay = (r: Route) => r.kind === 'panel' || r.kind === 'legal';
+
 function App() {
-  const [mode, setMode] = useState<Mode>(intent?.mode ?? initial.mode);
+  const [mode, setMode] = useState<Mode>(linkMode ?? initial.mode);
   const [dictionaries, setDictionaries] = useState(initial.dictionaries);
   const [length, setLength] = useState(initial.pattern.length);
   const [known, setKnown] = useState<string[]>(initial.pattern.known);
@@ -618,16 +647,27 @@ function App() {
   const [showAll, setShowAll] = useState(false);
   const [sorts, setSorts] = useState(initial.sort);
   const [kbOpen, setKbOpen] = useState(initial.keyboard);
-  const [aboutOpen, setAboutOpen] = useState(false);
-  const [legalOpen, setLegalOpen] = useState(legalIntent !== null);
-  const [legalTab, setLegalTab] = useState<'notices' | 'privacy' | 'terms'>(
-    legalIntent ?? 'notices'
+  // "/" is a page now, not a synonym for wherever you left off
+  const [atHome, setAtHome] = useState(
+    initialRoute.kind === 'home' && initial.startPage === 'home'
   );
-  const [statsOpen, setStatsOpen] = useState(false);
-  const [learnMode, setLearnMode] = useState(intent?.view === 'learn');
-  const [accountOpen, setAccountOpen] = useState(false);
-  const [settingsOpen, setSettingsOpen] = useState(false);
-  const [keysOpen, setKeysOpen] = useState(false);
+  const [startPage, setStartPage] = useState(initial.startPage);
+  const [aboutOpen, setAboutOpen] = useState(panelAtLoad('about'));
+  const [legalOpen, setLegalOpen] = useState(initialRoute.kind === 'legal');
+  const [legalTab, setLegalTab] = useState<'notices' | 'privacy' | 'terms'>(
+    initialRoute.kind === 'legal' ? initialRoute.doc : 'notices'
+  );
+  const [statsOpen, setStatsOpen] = useState(initialRoute.kind === 'stats');
+  const [statsTab, setStatsTab] = useState<StatsTab>(
+    initialRoute.kind === 'stats' ? initialRoute.tab : 'overall'
+  );
+  const [learnMode, setLearnMode] = useState(initialGame?.view === 'learn');
+  const [accountOpen, setAccountOpen] = useState(panelAtLoad('account'));
+  const [settingsOpen, setSettingsOpen] = useState(initialRoute.kind === 'settings');
+  const [settingsTab, setSettingsTab] = useState<SettingsTab>(
+    initialRoute.kind === 'settings' ? initialRoute.tab : 'site'
+  );
+  const [keysOpen, setKeysOpen] = useState(panelAtLoad('keys'));
   const [theme, setTheme] = useState<ThemeMode>(initial.theme);
   const [palette, setPalette] = useState<Palette>(initial.palette);
   const [navKeys, setNavKeys] = useState<NavKeys>(initial.navKeys);
@@ -691,6 +731,7 @@ function App() {
           practiceAllowed?: boolean;
           helpAllowed?: boolean;
           solverDictionary?: DictionaryId | 'per-game';
+          startPage?: StartPage;
           onboarded?: boolean;
         }
       | null;
@@ -704,6 +745,7 @@ function App() {
     if (typeof s?.practiceAllowed === 'boolean') setPracticeAllowed(s.practiceAllowed);
     if (typeof s?.helpAllowed === 'boolean') setHelpAllowed(s.helpAllowed);
     if (s?.solverDictionary) setSolverDictionary(s.solverDictionary);
+    if (s?.startPage && ALL_START_PAGES.includes(s.startPage)) setStartPage(s.startPage);
     if (s?.onboarded) setOnboarded(true);
     setSettingsPulled(true);
   }, [session]);
@@ -733,7 +775,7 @@ function App() {
     if (!supabase || !session || !settingsPulled) return;
     pushPending.current = true;
     const id = window.setTimeout(async () => {
-      const settings = { theme, palette, navKeys, textScale, hiddenModes, hiddenViews, lengthRange, practiceAllowed, helpAllowed, solverDictionary, onboarded };
+      const settings = { theme, palette, navKeys, textScale, hiddenModes, hiddenViews, lengthRange, practiceAllowed, helpAllowed, solverDictionary, startPage, onboarded };
       // update first — it needs only the update policy, which every install
       // has. `select` reveals whether a row actually matched.
       const { data, error } = await supabase!
@@ -761,7 +803,7 @@ function App() {
       window.clearTimeout(id);
       pushPending.current = false;
     };
-  }, [session, settingsPulled, theme, palette, navKeys, textScale, hiddenModes, hiddenViews, lengthRange, practiceAllowed, helpAllowed, solverDictionary, onboarded]);
+  }, [session, settingsPulled, theme, palette, navKeys, textScale, hiddenModes, hiddenViews, lengthRange, practiceAllowed, helpAllowed, solverDictionary, startPage, onboarded]);
 
   // surface auth errors that come back in the redirect URL (expired or
   // already-used magic links land here with no other visible sign)
@@ -775,9 +817,6 @@ function App() {
     }
   }, []);
 
-  // the link's query has been read into state by now; drop it so a later
-  // reload doesn't keep yanking the visitor back to someone else's game
-  useEffect(clearIntentUrl, []);
   const [patternPlay, setPatternPlay] = useState(initialPlay('pattern', initial.patternPlay));
   const [beePlay, setBeePlay] = useState(initialPlay('bee', initial.beePlay));
   const [boxedPlay, setBoxedPlay] = useState(initialPlay('boxed', initial.boxedPlay));
@@ -850,12 +889,12 @@ function App() {
   // off. It doesn't unhide anything — the setting is untouched.
   const shownModes = useMemo(() => {
     const vis = visibleModes(hiddenModes);
-    return ALL_MODES.filter((m) => vis.includes(m) || m === intent?.mode);
+    return ALL_MODES.filter((m) => vis.includes(m) || m === linkMode);
   }, [hiddenModes]);
 
   const shownViews = useMemo(() => {
     const vis = visibleViews(hiddenViews);
-    return ALL_VIEWS.filter((v) => vis.includes(v) || v === intent?.view);
+    return ALL_VIEWS.filter((v) => vis.includes(v) || v === initialGame?.view);
   }, [hiddenViews]);
 
   const playFlags: Record<Mode, [boolean, (v: boolean) => void]> = {
@@ -879,6 +918,114 @@ function App() {
     setLearnMode(false);
     playFlags[mode][1](view === 'play');
   }
+
+  // Which board each game has open. The games own this — they persist it and
+  // they draw the toggle — so they report it up rather than being told. The
+  // handle is only for the other direction, when an address asks for the board
+  // the player isn't currently on.
+  const [dailyByMode, setDailyByMode] = useState<Record<Mode, boolean>>(() => {
+    const seed = Object.fromEntries(ALL_MODES.map((m) => [m, true])) as Record<Mode, boolean>;
+    if (initialGame?.view === 'play') seed[modeOf(initialGame.slug)] = initialGame.daily;
+    return seed;
+  });
+
+  useEffect(
+    () =>
+      onDailyReport((m, daily) =>
+        setDailyByMode((prev) => (prev[m] === daily ? prev : { ...prev, [m]: daily }))
+      ),
+    []
+  );
+
+  // Where the app is, written as an address.
+  const currentRoute: Route = useMemo(() => {
+    if (legalOpen) return { kind: 'legal', doc: legalTab };
+    if (statsOpen) return { kind: 'stats', tab: statsTab };
+    if (settingsOpen) return { kind: 'settings', tab: settingsTab };
+    const panel: Panel | null = keysOpen ? 'keys' : accountOpen ? 'account' : aboutOpen ? 'about' : null;
+    if (panel) return { kind: 'panel', panel };
+    if (atHome) return { kind: 'home' };
+    return { kind: 'game', view: currentView, slug: MODE_SLUG[mode], daily: dailyByMode[mode] };
+  }, [legalOpen, legalTab, statsOpen, statsTab, settingsOpen, settingsTab, keysOpen, accountOpen, aboutOpen, atHome, currentView, mode, dailyByMode]);
+
+  // Did we put the panel in the history ourselves? Closing one we pushed is a
+  // step back rather than a new address, so Back doesn't reopen what was just
+  // dismissed. False at load: arriving straight at /stats leaves nothing of
+  // ours behind it, and going back from there should leave the site.
+  const ourOverlay = useRef(false);
+  const settled = useRef(false);
+  const prevRoute = useRef<Route | null>(null);
+
+  useEffect(() => {
+    const path = pathOf(currentRoute);
+    // "/" is a real page when it's the home page, and a placeholder when the
+    // start page sends you straight to a game. Leaving the first should be a
+    // step you can come back from; overwriting the second is the whole point.
+    const leavingHome = prevRoute.current?.kind === 'home';
+    prevRoute.current = currentRoute;
+    // The first render writes nothing: someone who typed "/" keeps the tidy
+    // link they typed, and a route asked for by hand is already on screen.
+    if (!settled.current) {
+      settled.current = true;
+      return;
+    }
+    if (path === window.location.pathname) return;
+
+    // one panel swapped for another replaces the entry rather than stacking it
+    if (isOverlay(currentRoute) && ourOverlay.current) {
+      history.replaceState(null, '', path + window.location.hash);
+      return;
+    }
+    if (!isOverlay(currentRoute) && ourOverlay.current) {
+      ourOverlay.current = false;
+      history.back();
+      return;
+    }
+    if (window.location.pathname === '/' && !leavingHome) {
+      history.replaceState(null, '', path + window.location.hash);
+    } else {
+      history.pushState(null, '', path + window.location.hash);
+    }
+    ourOverlay.current = isOverlay(currentRoute);
+  }, [currentRoute]);
+
+  // Back and Forward. The browser has already changed the URL by the time this
+  // runs, so the effect above sees a match and stays quiet.
+  function applyRoute(r: Route) {
+    setAboutOpen(r.kind === 'panel' && r.panel === 'about');
+    setKeysOpen(r.kind === 'panel' && r.panel === 'keys');
+    setAccountOpen(r.kind === 'panel' && r.panel === 'account');
+    setStatsOpen(r.kind === 'stats');
+    setSettingsOpen(r.kind === 'settings');
+    setLegalOpen(r.kind === 'legal');
+    if (r.kind === 'stats') setStatsTab(r.tab);
+    if (r.kind === 'settings') setSettingsTab(r.tab);
+    if (r.kind === 'legal') setLegalTab(r.doc);
+    setAtHome(r.kind === 'home');
+    if (r.kind === 'game') {
+      const m = modeOf(r.slug);
+      setMode(m);
+      if (r.view === 'learn') {
+        setLearnMode(true);
+      } else {
+        setLearnMode(false);
+        playFlags[m][1](r.view === 'play');
+        if (r.view === 'play') requestDaily(m, r.daily);
+      }
+    }
+    ourOverlay.current = false;
+  }
+
+  // through a ref so the listener is registered once, but always runs the
+  // current closure rather than one holding last render's state
+  const applyRef = useRef(applyRoute);
+  applyRef.current = applyRoute;
+  useEffect(() => {
+    const onPop = () =>
+      applyRef.current(parsePath(window.location.pathname) ?? { kind: 'home' });
+    window.addEventListener('popstate', onPop);
+    return () => window.removeEventListener('popstate', onPop);
+  }, []);
 
   const shownLengths = useMemo(() => lengthChoices(lengthRange), [lengthRange]);
 
@@ -916,6 +1063,7 @@ function App() {
       practiceAllowed,
       helpAllowed,
       solverDictionary,
+      startPage,
       onboarded,
       patternPlay,
       beePlay,
@@ -930,7 +1078,7 @@ function App() {
       weave: { letters: weaveLetters, size: weaveSize },
       weavePlay,
     });
-  }, [mode, dictionaries, sorts, kbOpen, theme, palette, textScale, navKeys, hiddenModes, hiddenViews, lengthRange, practiceAllowed, helpAllowed, solverDictionary, onboarded, patternPlay, beePlay, boxedPlay, descramblePlay, gridPlay, length, known, containsStr, excludedStr, rackStr, useAll, minLength, beeCenter, beeOuters, boxedLetters, solutionWords, gridLetters, gridPreset, weaveLetters, weaveSize, weavePlay]);
+  }, [mode, dictionaries, sorts, kbOpen, theme, palette, textScale, navKeys, hiddenModes, hiddenViews, lengthRange, practiceAllowed, helpAllowed, solverDictionary, startPage, onboarded, patternPlay, beePlay, boxedPlay, descramblePlay, gridPlay, length, known, containsStr, excludedStr, rackStr, useAll, minLength, beeCenter, beeOuters, boxedLetters, solutionWords, gridLetters, gridPreset, weaveLetters, weaveSize, weavePlay]);
 
   // keep known array sized to length
   useEffect(() => {
@@ -1341,10 +1489,14 @@ function App() {
               return (
                 <button
                   key={m.id}
-                  onClick={() => setMode(m.id)}
+                  onClick={() => {
+                    // picking a game from the nav is also how you leave home
+                    setAtHome(false);
+                    setMode(m.id);
+                  }}
                   title={m.blurb}
                   className={`flex flex-col md:flex-row items-center justify-center gap-0.5 md:gap-1.5 px-1 md:px-3 py-1.5 rounded-lg whitespace-nowrap text-[0.625rem] md:text-sm font-medium md:font-semibold transition-colors
-                    ${mode === m.id
+                    ${!atHome && mode === m.id
                       ? 'bg-emerald-400/15 text-emerald-300'
                       : 'text-slate-400 hover:text-white hover:bg-white/5'}`}
                 >
@@ -1388,13 +1540,37 @@ function App() {
               Anagrimoire
             </span>
           </h1>
-          <p className="text-slate-400 max-w-md mx-auto text-sm sm:text-base">
-            {shownViews.includes('solve')
-              ? MODES.find((m) => m.id === mode)?.description
-              : MODES.find((m) => m.id === mode)?.playDescription}
-          </p>
+          {!atHome && (
+            <p className="text-slate-400 max-w-md mx-auto text-sm sm:text-base">
+              {shownViews.includes('solve')
+                ? MODES.find((m) => m.id === mode)?.description
+                : MODES.find((m) => m.id === mode)?.playDescription}
+            </p>
+          )}
         </header>
 
+        {atHome && (
+          <HomeView
+            modes={shownModes}
+            onOpen={(m) => {
+              setAtHome(false);
+              setMode(m);
+              // not goToView: that reads `mode`, which is still the game we're
+              // leaving until this render commits, so it would flip the wrong
+              // game's tab
+              setLearnMode(false);
+              playFlags[m][1](true);
+              requestDaily(m, true);
+            }}
+            onBoards={() => {
+              setStatsTab('boards');
+              setStatsOpen(true);
+            }}
+          />
+        )}
+
+        {!atHome && (
+        <>
         {/* Only where there's a Learn tab to point at, and only until it's
             been answered either way. `currentView` keeps it off the Learn tab
             itself, where it would be telling someone about the page they're
@@ -2333,6 +2509,8 @@ function App() {
         )}
         </>
         )}
+        </>
+        )}
 
         {/* pb keeps the last row clear of the floating keyboard button */}
         <footer className="mt-14 pb-24 sm:pb-4 text-center text-xs text-slate-500">
@@ -2344,6 +2522,13 @@ function App() {
           )}
           {/* wraps into centered rows rather than one overflowing line */}
           <div className="mt-3 flex flex-wrap items-center justify-center gap-x-5 gap-y-2.5">
+            <button
+              onClick={() => setAtHome(true)}
+              className="inline-flex items-center gap-1.5 hover:text-slate-300 transition-colors"
+            >
+              <Home className="w-3.5 h-3.5" />
+              Home
+            </button>
             <a
               href="https://github.com/rptetzloff/anagrimoire"
               target="_blank"
@@ -2417,7 +2602,14 @@ function App() {
         </div>
       )}
 
-      {statsOpen && <StatsModal signedIn={!!session} onClose={() => setStatsOpen(false)} />}
+      {statsOpen && (
+        <StatsModal
+          signedIn={!!session}
+          view={statsTab}
+          onView={setStatsTab}
+          onClose={() => setStatsOpen(false)}
+        />
+      )}
 
       {accountOpen && <AccountModal session={session} onClose={() => setAccountOpen(false)} />}
 
@@ -2438,6 +2630,10 @@ function App() {
 
       {settingsOpen && (
         <SettingsModal
+          tab={settingsTab}
+          onTab={setSettingsTab}
+          startPage={startPage}
+          onStartPage={setStartPage}
           theme={theme}
           palette={palette}
           navKeys={navKeys}

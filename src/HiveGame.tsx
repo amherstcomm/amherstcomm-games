@@ -13,7 +13,8 @@ import { dailyDataUrl } from '@/dailyData';
 import DailyStats from '@/DailyStats';
 import MobileKeyInput from '@/MobileKeyInput';
 import ShareButton from '@/ShareButton';
-import { dailyIntent } from '@/deeplink';
+import { dailyIntent } from '@/routes';
+import { offerDailySwitch, reportDaily } from '@/dailyBus';
 import { usePrefs } from '@/prefs';
 import { useDailySync } from '@/useDailySync';
 import { buildShare } from '@/share';
@@ -88,7 +89,7 @@ function sanitizeRecord(r: unknown): HiveRecord | null {
   };
 }
 
-// An incoming ?daily=/?play= link decides which board is waiting; without one
+// An incoming /daily/ or /play/ link decides which board is waiting; without one
 // we keep whatever the player last had open.
 function loadStore(): HiveStore {
   const store = readStore();
@@ -132,6 +133,12 @@ const HiveGame = forwardRef<
   useEffect(() => {
     if (!practiceAllowed && !store.dailyMode) setStore((prev) => ({ ...prev, dailyMode: true }));
   }, [practiceAllowed, store.dailyMode]);
+  // the address bar says which board is open, and can ask for the other
+  useEffect(() => reportDaily('bee', store.dailyMode), [store.dailyMode]);
+  useEffect(
+    () => offerDailySwitch('bee', (d) => setStore((prev) => ({ ...prev, dailyMode: d }))),
+    []
+  );
   const [current, setCurrent] = useState('');
   const [flash, setFlash] = useState<{ text: string; good: boolean } | null>(null);
   const [dailyError, setDailyError] = useState(false);
