@@ -2301,16 +2301,18 @@ function App() {
             ref={aboutRef}
             tabIndex={-1}
             onClick={(e) => e.stopPropagation()}
-            className="relative w-full max-w-lg max-h-[80vh] overflow-y-auto rounded-2xl bg-slate-900 border border-white/10 p-6 sm:p-8 text-left shadow-2xl"
+            className="relative w-full max-w-lg max-h-[80vh] flex flex-col rounded-2xl bg-slate-900 border border-white/10 text-left shadow-2xl"
           >
+            {/* outside the scroll, so it can't slide away mid-read */}
             <button
               onClick={() => setAboutOpen(false)}
               aria-label="Close"
-              className="absolute top-4 right-4 w-8 h-8 flex items-center justify-center rounded-lg text-slate-400 hover:text-white hover:bg-white/10 transition-colors"
+              className="absolute top-4 right-4 z-10 w-8 h-8 flex items-center justify-center rounded-lg bg-slate-900/95 text-slate-400 hover:bg-slate-800 hover:text-white transition-colors"
             >
               <X className="w-4 h-4" />
             </button>
 
+            <div className="overflow-y-auto p-6 sm:p-8">
             <h2 className="text-xl font-bold mb-5">About Anagrimoire</h2>
 
             <div className="space-y-5 text-sm text-slate-300">
@@ -2418,6 +2420,7 @@ function App() {
                 .
               </p>
             </div>
+            </div>
           </div>
         </div>
       )}
@@ -2435,16 +2438,19 @@ function App() {
             ref={legalRef}
             tabIndex={-1}
             onClick={(e) => e.stopPropagation()}
-            className="relative w-full max-w-2xl max-h-[85vh] overflow-y-auto rounded-2xl bg-slate-900 border border-white/10 p-6 sm:p-8 text-left shadow-2xl"
+            className="relative w-full max-w-2xl max-h-[85vh] flex flex-col rounded-2xl bg-slate-900 border border-white/10 text-left shadow-2xl"
           >
+            {/* outside the scroll — the privacy policy is the longest thing on
+                the site, and losing the close button partway down it is grim */}
             <button
               onClick={() => setLegalOpen(false)}
               aria-label="Close"
-              className="absolute top-4 right-4 w-8 h-8 flex items-center justify-center rounded-lg text-slate-400 hover:text-white hover:bg-white/10 transition-colors"
+              className="absolute top-4 right-4 z-10 w-8 h-8 flex items-center justify-center rounded-lg bg-slate-900/95 text-slate-400 hover:bg-slate-800 hover:text-white transition-colors"
             >
               <X className="w-4 h-4" />
             </button>
 
+            <div className="overflow-y-auto p-6 sm:p-8">
             <h2 className="text-xl font-bold mb-4">Legal</h2>
 
             <div className="inline-flex flex-wrap rounded-xl bg-white/5 border border-white/10 p-1 gap-1 mb-5">
@@ -2557,6 +2563,7 @@ function App() {
                   .
                 </p>
               </div>
+            </div>
             </div>
           </div>
         </div>

@@ -58,16 +58,18 @@ export default function KeyboardHelp({
         aria-modal="true"
         aria-label="Keyboard controls"
         onClick={(e) => e.stopPropagation()}
-        className="relative w-full max-w-lg max-h-[80vh] overflow-y-auto rounded-2xl bg-slate-900 border border-white/10 p-6 sm:p-8 text-left shadow-2xl"
+        className="relative w-full max-w-lg max-h-[80vh] flex flex-col rounded-2xl bg-slate-900 border border-white/10 text-left shadow-2xl"
       >
+        {/* outside the scroll, so it can't slide away mid-read */}
         <button
           onClick={onClose}
           aria-label="Close"
-          className="absolute top-4 right-4 w-8 h-8 flex items-center justify-center rounded-lg text-slate-400 hover:text-white hover:bg-white/10 transition-colors"
+          className="absolute top-4 right-4 z-10 w-8 h-8 flex items-center justify-center rounded-lg bg-slate-900/95 text-slate-400 hover:bg-slate-800 hover:text-white transition-colors"
         >
           <X className="w-4 h-4" />
         </button>
 
+        <div className="overflow-y-auto p-6 sm:p-8">
         <h2 className="text-xl font-bold mb-1">Keyboard controls</h2>
         <p className="text-xs text-slate-500 mb-5">
           Everything here is playable without a mouse.
@@ -125,6 +127,7 @@ export default function KeyboardHelp({
               open, the device&apos;s own keyboard stays out of the way.
             </p>
           </Section>
+        </div>
         </div>
       </div>
     </div>
