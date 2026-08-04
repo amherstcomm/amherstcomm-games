@@ -34,6 +34,8 @@ import {
   pathOf,
   type Panel,
   type Route,
+  type SettingsTab,
+  type StatsTab,
 } from '@/routes';
 import { ALL_MODES, ALL_VIEWS, lengthChoices, visibleModes, visibleViews, type LengthRange, type View, loadState, saveState, GRID_PRESET_DIMS, WEAVE_DIMS, type GridPreset, type Mode, type NavKeys, type SortPref, type WeaveSize } from '@/storage';
 
@@ -639,10 +641,16 @@ function App() {
   const [legalTab, setLegalTab] = useState<'notices' | 'privacy' | 'terms'>(
     initialRoute.kind === 'legal' ? initialRoute.doc : 'notices'
   );
-  const [statsOpen, setStatsOpen] = useState(panelAtLoad('stats'));
+  const [statsOpen, setStatsOpen] = useState(initialRoute.kind === 'stats');
+  const [statsTab, setStatsTab] = useState<StatsTab>(
+    initialRoute.kind === 'stats' ? initialRoute.tab : 'overall'
+  );
   const [learnMode, setLearnMode] = useState(initialGame?.view === 'learn');
   const [accountOpen, setAccountOpen] = useState(panelAtLoad('account'));
-  const [settingsOpen, setSettingsOpen] = useState(panelAtLoad('settings'));
+  const [settingsOpen, setSettingsOpen] = useState(initialRoute.kind === 'settings');
+  const [settingsTab, setSettingsTab] = useState<SettingsTab>(
+    initialRoute.kind === 'settings' ? initialRoute.tab : 'site'
+  );
   const [keysOpen, setKeysOpen] = useState(panelAtLoad('keys'));
   const [theme, setTheme] = useState<ThemeMode>(initial.theme);
   const [palette, setPalette] = useState<Palette>(initial.palette);
@@ -914,20 +922,12 @@ function App() {
   // Where the app is, written as an address.
   const currentRoute: Route = useMemo(() => {
     if (legalOpen) return { kind: 'legal', doc: legalTab };
-    const panel: Panel | null = statsOpen
-      ? 'stats'
-      : keysOpen
-        ? 'keys'
-        : settingsOpen
-          ? 'settings'
-          : accountOpen
-            ? 'account'
-            : aboutOpen
-              ? 'about'
-              : null;
+    if (statsOpen) return { kind: 'stats', tab: statsTab };
+    if (settingsOpen) return { kind: 'settings', tab: settingsTab };
+    const panel: Panel | null = keysOpen ? 'keys' : accountOpen ? 'account' : aboutOpen ? 'about' : null;
     if (panel) return { kind: 'panel', panel };
     return { kind: 'game', view: currentView, slug: MODE_SLUG[mode], daily: dailyByMode[mode] };
-  }, [legalOpen, legalTab, statsOpen, keysOpen, settingsOpen, accountOpen, aboutOpen, currentView, mode, dailyByMode]);
+  }, [legalOpen, legalTab, statsOpen, statsTab, settingsOpen, settingsTab, keysOpen, accountOpen, aboutOpen, currentView, mode, dailyByMode]);
 
   // Did we put the panel in the history ourselves? Closing one we pushed is a
   // step back rather than a new address, so Back doesn't reopen what was just
@@ -970,11 +970,13 @@ function App() {
   // runs, so the effect above sees a match and stays quiet.
   function applyRoute(r: Route) {
     setAboutOpen(r.kind === 'panel' && r.panel === 'about');
-    setStatsOpen(r.kind === 'panel' && r.panel === 'stats');
     setKeysOpen(r.kind === 'panel' && r.panel === 'keys');
-    setSettingsOpen(r.kind === 'panel' && r.panel === 'settings');
     setAccountOpen(r.kind === 'panel' && r.panel === 'account');
+    setStatsOpen(r.kind === 'stats');
+    setSettingsOpen(r.kind === 'settings');
     setLegalOpen(r.kind === 'legal');
+    if (r.kind === 'stats') setStatsTab(r.tab);
+    if (r.kind === 'settings') setSettingsTab(r.tab);
     if (r.kind === 'legal') setLegalTab(r.doc);
     if (r.kind === 'game') {
       const m = modeOf(r.slug);
@@ -2538,7 +2540,14 @@ function App() {
         </div>
       )}
 
-      {statsOpen && <StatsModal signedIn={!!session} onClose={() => setStatsOpen(false)} />}
+      {statsOpen && (
+        <StatsModal
+          signedIn={!!session}
+          view={statsTab}
+          onView={setStatsTab}
+          onClose={() => setStatsOpen(false)}
+        />
+      )}
 
       {accountOpen && <AccountModal session={session} onClose={() => setAccountOpen(false)} />}
 
@@ -2559,6 +2568,8 @@ function App() {
 
       {settingsOpen && (
         <SettingsModal
+          tab={settingsTab}
+          onTab={setSettingsTab}
           theme={theme}
           palette={palette}
           navKeys={navKeys}

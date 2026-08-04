@@ -18,8 +18,10 @@ import type { Mode } from '@/storage';
 
 export type View = 'solve' | 'play' | 'learn';
 export type Slug = 'pattern' | 'scramble' | 'hive' | 'grid' | 'boxed' | 'weave';
-export type Panel = 'stats' | 'keys' | 'settings' | 'account' | 'about';
+export type Panel = 'keys' | 'account' | 'about';
 export type LegalDoc = 'notices' | 'privacy' | 'terms';
+export type StatsTab = 'overall' | 'daily' | 'practice' | 'history' | 'boards';
+export type SettingsTab = 'site' | 'games';
 
 const SLUG_MODE: Record<Slug, Mode> = {
   pattern: 'pattern',
@@ -46,8 +48,17 @@ export const SLUG_NAME: Record<Slug, string> = {
 };
 
 const VIEWS: View[] = ['solve', 'play', 'learn'];
-const PANELS: Panel[] = ['stats', 'keys', 'settings', 'account', 'about'];
+const PANELS: Panel[] = ['keys', 'account', 'about'];
 const DOCS: LegalDoc[] = ['notices', 'privacy', 'terms'];
+const STATS_TABS: StatsTab[] = ['overall', 'daily', 'practice', 'history', 'boards'];
+const SETTINGS_TABS: SettingsTab[] = ['site', 'games'];
+
+// A panel with tabs names the tab, always — /stats/overall rather than a bare
+// /stats that means the same thing. One state, one address, no exceptions to
+// remember. The bare forms are still accepted and settle onto the first tab.
+const DEFAULT_STATS: StatsTab = 'overall';
+const DEFAULT_SETTINGS: SettingsTab = 'site';
+const DEFAULT_DOC: LegalDoc = 'notices';
 
 // Share from dev and the link points at dev; www is folded into the apex so
 // shared text reads the way the site is canonically named.
@@ -66,6 +77,8 @@ export type Route =
   | { kind: 'home' }
   | { kind: 'game'; view: View; slug: Slug; daily: boolean }
   | { kind: 'panel'; panel: Panel }
+  | { kind: 'stats'; tab: StatsTab }
+  | { kind: 'settings'; tab: SettingsTab }
   | { kind: 'legal'; doc: LegalDoc };
 
 export function pathOf(route: Route): string {
@@ -77,6 +90,10 @@ export function pathOf(route: Route): string {
       return `/${route.view}/${route.slug}`;
     case 'panel':
       return `/${route.panel}`;
+    case 'stats':
+      return `/stats/${route.tab}`;
+    case 'settings':
+      return `/settings/${route.tab}`;
     case 'legal':
       return `/legal/${route.doc}`;
   }
@@ -96,8 +113,20 @@ export function parsePath(pathname: string): Route | null {
   const [first, second] = parts;
 
   if (first === 'legal') {
-    if (second === undefined) return { kind: 'legal', doc: 'notices' };
+    if (second === undefined) return { kind: 'legal', doc: DEFAULT_DOC };
     return DOCS.includes(second as LegalDoc) ? { kind: 'legal', doc: second as LegalDoc } : null;
+  }
+
+  if (first === 'stats') {
+    if (second === undefined) return { kind: 'stats', tab: DEFAULT_STATS };
+    return STATS_TABS.includes(second as StatsTab) ? { kind: 'stats', tab: second as StatsTab } : null;
+  }
+
+  if (first === 'settings') {
+    if (second === undefined) return { kind: 'settings', tab: DEFAULT_SETTINGS };
+    return SETTINGS_TABS.includes(second as SettingsTab)
+      ? { kind: 'settings', tab: second as SettingsTab }
+      : null;
   }
 
   // /sign-in and /account are the same panel wearing whichever face fits

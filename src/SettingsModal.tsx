@@ -20,6 +20,7 @@ import {
   type View,
 } from '@/storage';
 import type { DictionaryId } from '@/dictionaries';
+import type { SettingsTab } from '@/routes';
 import type { Palette, TextScale, ThemeMode } from '@/theme';
 import { useModalA11y } from '@/useModalA11y';
 
@@ -175,6 +176,8 @@ export default function SettingsModal({
   onPracticeAllowed,
   onHelpAllowed,
   onSolverDictionary,
+  tab,
+  onTab,
   onClose,
 }: {
   theme: ThemeMode;
@@ -198,12 +201,15 @@ export default function SettingsModal({
   onPracticeAllowed: (v: boolean) => void;
   onHelpAllowed: (v: boolean) => void;
   onSolverDictionary: (d: DictionaryId | 'per-game') => void;
+  /** the open tab, held by App so it can live in the address bar */
+  tab: SettingsTab;
+  onTab: (t: SettingsTab) => void;
   onClose: () => void;
 }) {
   const dialogRef = useRef<HTMLDivElement>(null);
   useModalA11y(dialogRef, onClose);
 
-  const [tab, setTab] = useState<'site' | 'games'>('site');
+  // the open tab lives in App so it can live in the address bar too
 
   // Somewhere that requires asking, an unanswered visitor is off; everywhere
   // else analytics runs unless it's been turned off, which is the state this
@@ -265,7 +271,7 @@ export default function SettingsModal({
           ).map(({ id, label }) => (
             <button
               key={id}
-              onClick={() => setTab(id)}
+              onClick={() => onTab(id)}
               aria-current={tab === id ? 'page' : undefined}
               className={`px-4 h-9 rounded-lg text-sm font-semibold transition-colors
                 ${tab === id ? 'bg-emerald-400 text-ink' : 'text-slate-300 hover:bg-white/10'}`}

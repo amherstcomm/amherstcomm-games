@@ -6,7 +6,7 @@ import { useModalA11y } from '@/useModalA11y';
 import HistoryView from '@/HistoryView';
 import LeaderboardView from '@/LeaderboardView';
 
-type StatsView = 'overall' | 'daily' | 'practice' | 'history' | 'boards';
+import type { StatsTab as StatsView } from '@/routes';
 
 function Stat({ label, value }: { label: string; value: string | number }) {
   return (
@@ -51,9 +51,14 @@ function time(ms: number | null): string {
 
 export default function StatsModal({
   signedIn,
+  view,
+  onView,
   onClose,
 }: {
   signedIn: boolean;
+  /** the open tab, held by App so it can live in the address bar */
+  view: StatsView;
+  onView: (v: StatsView) => void;
   onClose: () => void;
 }) {
   const [localStore] = useState(loadStats);
@@ -61,7 +66,6 @@ export default function StatsModal({
   const [syncState, setSyncState] = useState<'local' | 'loading' | 'synced' | 'error'>(
     signedIn ? 'loading' : 'local'
   );
-  const [view, setView] = useState<StatsView>('overall');
 
   // signed in: replace the local view with baseline + event-log replay
   useEffect(() => {
@@ -163,7 +167,7 @@ export default function StatsModal({
             <button
               key={id}
               onMouseDown={(e) => e.preventDefault()}
-              onClick={() => setView(id)}
+              onClick={() => onView(id)}
               className={`px-3 py-1.5 rounded-md text-sm font-semibold transition-colors
                 ${view === id ? 'bg-emerald-400/15 text-emerald-300' : 'text-slate-400 hover:text-white'}`}
             >
