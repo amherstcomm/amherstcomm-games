@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react';
-import { BarChart3, Check, Contrast, Keyboard, Monitor, Moon, Sun, Type, X } from 'lucide-react';
+import { BarChart3, Check, Contrast, EyeOff, Keyboard, Monitor, Moon, Sun, Type, X } from 'lucide-react';
 import KeyDiagram from '@/KeyDiagram';
 import { GA_ID, disableAnalytics, initAnalytics } from '@/analytics';
 import {
@@ -10,9 +10,40 @@ import {
   writeConsent,
   type Consent,
 } from '@/consent';
-import type { NavKeys } from '@/storage';
+import {
+  lengthChoices,
+  MAX_WORD_LEN,
+  MIN_WORD_LEN,
+  type LengthRange,
+  type Mode,
+  type NavKeys,
+  type View,
+} from '@/storage';
+import type { DictionaryId } from '@/dictionaries';
 import type { Palette, TextScale, ThemeMode } from '@/theme';
 import { useModalA11y } from '@/useModalA11y';
+
+// the nav's own names, so the switch reads like the thing it switches
+const MODE_LABELS: { id: Mode; label: string }[] = [
+  { id: 'pattern', label: 'Pattern' },
+  { id: 'descramble', label: 'Scramble' },
+  { id: 'bee', label: 'Hive' },
+  { id: 'grid', label: 'Grid' },
+  { id: 'boxed', label: 'Boxed' },
+  { id: 'weave', label: 'Weave' },
+];
+
+const VIEW_LABELS: { id: View; label: string }[] = [
+  { id: 'solve', label: 'Solve' },
+  { id: 'play', label: 'Play' },
+  { id: 'learn', label: 'Learn' },
+];
+
+const DICTIONARY_LABELS: { id: DictionaryId; label: string }[] = [
+  { id: 'common', label: 'Common' },
+  { id: 'standard', label: 'Standard' },
+  { id: 'full', label: 'Full' },
+];
 
 const THEME_OPTIONS: { id: ThemeMode; label: string; Icon: typeof Sun }[] = [
   { id: 'system', label: 'System', Icon: Monitor },
@@ -47,6 +78,66 @@ const PALETTE_OPTIONS: { id: Palette; label: string; blurb: string; tones: strin
   },
 ];
 
+function Pill({
+  on,
+  onClick,
+  disabled,
+  title,
+  tone,
+  children,
+}: {
+  on: boolean;
+  onClick: () => void;
+  disabled?: boolean;
+  title?: string;
+  tone: 'amber' | 'emerald';
+  children: React.ReactNode;
+}) {
+  const lit =
+    tone === 'amber'
+      ? 'bg-amber-400/15 border-amber-400/40 text-amber-200'
+      : 'bg-emerald-400/15 border-emerald-400/40 text-emerald-200';
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      aria-pressed={on}
+      title={title}
+      className={`px-2.5 h-8 rounded-lg text-xs font-semibold border transition-colors disabled:cursor-not-allowed
+        ${on ? lit : 'bg-white/5 border-white/10 text-slate-500 hover:text-slate-300'}`}
+    >
+      {children}
+    </button>
+  );
+}
+
+function LengthPicker({
+  label,
+  value,
+  options,
+  onChange,
+}: {
+  label: string;
+  value: number;
+  options: number[];
+  onChange: (n: number) => void;
+}) {
+  return (
+    <select
+      aria-label={label}
+      value={value}
+      onChange={(e) => onChange(Number(e.target.value))}
+      className="h-9 px-2 rounded-lg bg-white/5 border border-white/10 text-slate-200 text-sm font-semibold"
+    >
+      {options.map((n) => (
+        <option key={n} value={n} className="bg-slate-900">
+          {n}
+        </option>
+      ))}
+    </select>
+  );
+}
+
 // small live swatches so the palette choice is visible before committing
 function Swatches({ tones }: { tones: string[] }) {
   return (
@@ -67,26 +158,52 @@ export default function SettingsModal({
   palette,
   textScale,
   navKeys,
+  hiddenModes,
+  hiddenViews,
+  lengthRange,
+  practiceAllowed,
+  helpAllowed,
+  solverDictionary,
   signedIn,
   onTheme,
   onPalette,
   onTextScale,
   onNavKeys,
+  onToggleMode,
+  onToggleView,
+  onLengthRange,
+  onPracticeAllowed,
+  onHelpAllowed,
+  onSolverDictionary,
   onClose,
 }: {
   theme: ThemeMode;
   palette: Palette;
   textScale: TextScale;
   navKeys: NavKeys;
+  hiddenModes: Mode[];
+  hiddenViews: View[];
+  lengthRange: LengthRange;
+  practiceAllowed: boolean;
+  helpAllowed: boolean;
+  solverDictionary: DictionaryId | 'per-game';
   signedIn: boolean;
   onTheme: (t: ThemeMode) => void;
   onPalette: (p: Palette) => void;
   onTextScale: (t: TextScale) => void;
   onNavKeys: (n: NavKeys) => void;
+  onToggleMode: (m: Mode) => void;
+  onToggleView: (v: View) => void;
+  onLengthRange: (r: LengthRange) => void;
+  onPracticeAllowed: (v: boolean) => void;
+  onHelpAllowed: (v: boolean) => void;
+  onSolverDictionary: (d: DictionaryId | 'per-game') => void;
   onClose: () => void;
 }) {
   const dialogRef = useRef<HTMLDivElement>(null);
   useModalA11y(dialogRef, onClose);
+
+  const [tab, setTab] = useState<'site' | 'games'>('site');
 
   // Somewhere that requires asking, an unanswered visitor is off; everywhere
   // else analytics runs unless it's been turned off, which is the state this
@@ -134,14 +251,36 @@ export default function SettingsModal({
         </button>
 
         <div className="overflow-y-auto p-6 sm:p-8">
-        <h2 className="text-xl font-bold mb-5">Settings</h2>
+        <h2 className="text-xl font-bold mb-4">Settings</h2>
 
-        <div className="space-y-6">
+        {/* Two halves, because they answer different questions: how the site
+            looks to you, and which of it you want. Long enough now that one
+            list buried the games half under four appearance controls. */}
+        <div className="inline-flex flex-wrap rounded-xl bg-white/5 border border-white/10 p-1 gap-1 mb-5">
+          {(
+            [
+              { id: 'site', label: 'Site' },
+              { id: 'games', label: 'Games' },
+            ] as const
+          ).map(({ id, label }) => (
+            <button
+              key={id}
+              onClick={() => setTab(id)}
+              aria-current={tab === id ? 'page' : undefined}
+              className={`px-4 h-9 rounded-lg text-sm font-semibold transition-colors
+                ${tab === id ? 'bg-emerald-400 text-ink' : 'text-slate-300 hover:bg-white/10'}`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+
+        <div className={`space-y-6 ${tab === 'site' ? '' : 'hidden'}`}>
           <div>
             <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2.5">
               Appearance
             </h3>
-            <div className="inline-flex rounded-xl bg-white/5 border border-white/10 p-1 gap-1">
+            <div className="inline-flex flex-wrap justify-center max-w-full rounded-xl bg-white/5 border border-white/10 p-1 gap-1">
               {THEME_OPTIONS.map(({ id, label, Icon }) => (
                 <button
                   key={id}
@@ -196,7 +335,7 @@ export default function SettingsModal({
               <Type className="w-3.5 h-3.5" />
               Text size
             </h3>
-            <div className="inline-flex rounded-xl bg-white/5 border border-white/10 p-1 gap-1">
+            <div className="inline-flex flex-wrap justify-center max-w-full rounded-xl bg-white/5 border border-white/10 p-1 gap-1">
               {(
                 [
                   { id: 'normal' as const, label: 'Normal', size: 'text-sm' },
@@ -223,47 +362,13 @@ export default function SettingsModal({
             </p>
           </div>
 
-          <div>
-            <h3 className="flex items-center gap-2 text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2.5">
-              <Keyboard className="w-3.5 h-3.5" />
-              Board navigation
-            </h3>
-            <div className="inline-flex rounded-xl bg-white/5 border border-white/10 p-1 gap-1">
-              {(
-                [
-                  { id: 'numpad' as const, label: 'Number pad' },
-                  { id: 'wasd' as const, label: 'WASD' },
-                ]
-              ).map(({ id, label }) => (
-                <button
-                  key={id}
-                  onClick={() => onNavKeys(id)}
-                  aria-pressed={navKeys === id}
-                  className={`px-3 h-9 rounded-lg text-sm font-semibold transition-colors
-                    ${navKeys === id
-                      ? 'bg-amber-400 text-ink shadow-lg shadow-amber-500/30'
-                      : 'text-slate-300 hover:bg-white/10'}`}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-            <div className="mt-3 flex items-center gap-3">
-              <KeyDiagram scheme={navKeys} />
-              <p className="text-xs text-slate-500 flex-1">
-                Steers the cursor around Weave&apos;s board, diagonals included. Arrow
-                keys always work too.
-              </p>
-            </div>
-          </div>
-
           {GA_ID && (
             <div>
               <h3 className="flex items-center gap-2 text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2.5">
                 <BarChart3 className="w-3.5 h-3.5" />
                 Analytics
               </h3>
-              <div className="inline-flex rounded-xl bg-white/5 border border-white/10 p-1 gap-1">
+              <div className="inline-flex flex-wrap justify-center max-w-full rounded-xl bg-white/5 border border-white/10 p-1 gap-1">
                 {(
                   [
                     { id: 'granted' as const, label: 'Allowed' },
@@ -291,13 +396,177 @@ export default function SettingsModal({
               </p>
             </div>
           )}
-
-          <p className="text-xs text-slate-500 border-t border-white/10 pt-4">
-            {signedIn
-              ? 'These settings are saved to your account and follow you across devices.'
-              : 'Saved in this browser. Sign in to carry them across devices.'}
-          </p>
         </div>
+
+        <div className={`space-y-6 ${tab === 'games' ? '' : 'hidden'}`}>
+          <div>
+            <h3 className="flex items-center gap-2 text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2.5">
+              <EyeOff className="w-3.5 h-3.5" />
+              Show
+            </h3>
+            <div className="flex flex-wrap gap-1.5 mb-2">
+              {MODE_LABELS.map(({ id, label }) => {
+                const shown = !hiddenModes.includes(id);
+                const last = shown && hiddenModes.length === MODE_LABELS.length - 1;
+                return (
+                  <Pill
+                    key={id}
+                    on={shown}
+                    onClick={() => onToggleMode(id)}
+                    disabled={last}
+                    title={last ? 'At least one game has to stay' : undefined}
+                    tone="amber"
+                  >
+                    {label}
+                  </Pill>
+                );
+              })}
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              {VIEW_LABELS.map(({ id, label }) => {
+                const shown = !hiddenViews.includes(id);
+                const last = shown && hiddenViews.length === VIEW_LABELS.length - 1;
+                return (
+                  <Pill
+                    key={id}
+                    on={shown}
+                    onClick={() => onToggleView(id)}
+                    disabled={last}
+                    title={last ? 'At least one tab has to stay' : undefined}
+                    tone="emerald"
+                  >
+                    {label}
+                  </Pill>
+                );
+              })}
+            </div>
+            <div className="flex flex-wrap gap-1.5 mt-1.5">
+              <Pill
+                on={practiceAllowed}
+                onClick={() => onPracticeAllowed(!practiceAllowed)}
+                tone="emerald"
+              >
+                Practice
+              </Pill>
+              {/* only meaningful while there's a solver to reach */}
+              {!hiddenViews.includes('solve') && (
+                <Pill on={helpAllowed} onClick={() => onHelpAllowed(!helpAllowed)} tone="emerald">
+                  Help &amp; reveal
+                </Pill>
+              )}
+            </div>
+            <p className="mt-2 text-xs text-slate-500">
+              Tap to hide a game, a tab, the practice boards, or the buttons that
+              hand a game to the solver. Nothing is deleted — statistics and
+              streaks keep accruing, and unhiding brings everything back. One
+              game and one tab have to stay.
+            </p>
+
+          </div>
+
+          {!hiddenViews.includes('solve') && (
+            <div>
+              <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2.5">
+                Solver dictionary
+              </h3>
+                <select
+                  aria-label="Solver dictionary"
+                  value={solverDictionary}
+                  onChange={(e) =>
+                    onSolverDictionary(e.target.value as DictionaryId | 'per-game')
+                  }
+                  className="h-9 px-2 rounded-lg bg-white/5 border border-white/10 text-slate-200 text-sm font-semibold"
+                >
+                  <option value="per-game" className="bg-slate-900">
+                    Per game
+                  </option>
+                  {DICTIONARY_LABELS.map(({ id, label }) => (
+                    <option key={id} value={id} className="bg-slate-900">
+                      {label}
+                    </option>
+                  ))}
+                </select>
+                <p className="mt-2 text-xs text-slate-500">
+                  {solverDictionary === 'per-game'
+                    ? 'Each solver remembers its own, which is what the picker above each one sets.'
+                    : 'Every solver uses this one, and the per-solver picker goes away.'}
+                </p>
+            </div>
+          )}
+
+          {!hiddenModes.includes('pattern') && (
+            <div>
+              <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2.5">
+                Pattern word lengths
+              </h3>
+                <div className="flex items-center gap-2 text-sm">
+                  <LengthPicker
+                    label="Shortest word length"
+                    value={lengthRange.min}
+                    // never let the pair cross over — an empty range would
+                    // leave the picker with nothing to offer
+                    options={lengthChoices({ min: MIN_WORD_LEN, max: lengthRange.max })}
+                    onChange={(min) => onLengthRange({ ...lengthRange, min })}
+                  />
+                  <span className="text-slate-500">to</span>
+                  <LengthPicker
+                    label="Longest word length"
+                    value={lengthRange.max}
+                    options={lengthChoices({ min: lengthRange.min, max: MAX_WORD_LEN })}
+                    onChange={(max) => onLengthRange({ ...lengthRange, max })}
+                  />
+                </div>
+                <p className="mt-2 text-xs text-slate-500">
+                  {lengthRange.min === lengthRange.max
+                    ? `Only ${lengthRange.min}-letter words, and the length row disappears.`
+                    : 'Narrows the row of lengths Pattern offers. The rest keep their dailies and statistics.'}
+                </p>
+            </div>
+          )}
+
+          {/* steers Weave's board and nothing else, so it goes with Weave */}
+          {!hiddenModes.includes('weave') && (
+          <div>
+            <h3 className="flex items-center gap-2 text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2.5">
+              <Keyboard className="w-3.5 h-3.5" />
+              Board navigation
+            </h3>
+            <div className="inline-flex flex-wrap justify-center max-w-full rounded-xl bg-white/5 border border-white/10 p-1 gap-1">
+              {(
+                [
+                  { id: 'numpad' as const, label: 'Number pad' },
+                  { id: 'wasd' as const, label: 'WASD' },
+                ]
+              ).map(({ id, label }) => (
+                <button
+                  key={id}
+                  onClick={() => onNavKeys(id)}
+                  aria-pressed={navKeys === id}
+                  className={`px-3 h-9 rounded-lg text-sm font-semibold transition-colors
+                    ${navKeys === id
+                      ? 'bg-amber-400 text-ink shadow-lg shadow-amber-500/30'
+                      : 'text-slate-300 hover:bg-white/10'}`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            <div className="mt-3 flex items-center gap-3">
+              <KeyDiagram scheme={navKeys} />
+              <p className="text-xs text-slate-500 flex-1">
+                Steers the cursor around Weave&apos;s board, diagonals included. Arrow
+                keys always work too.
+              </p>
+            </div>
+          </div>
+          )}
+        </div>
+
+        <p className="text-xs text-slate-500 border-t border-white/10 pt-4 mt-6">
+          {signedIn
+            ? 'These settings are saved to your account and follow you across devices.'
+            : 'Saved in this browser. Sign in to carry them across devices.'}
+        </p>
         </div>
       </div>
     </div>

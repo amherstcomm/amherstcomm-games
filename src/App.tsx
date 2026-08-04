@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState, useEffect, useLayoutEffect, useRef, type ButtonHTMLAttributes, type ReactNode } from 'react';
-import { Search, Sparkles, Eraser, ArrowDown, ArrowUp, X, BookOpen, Grid3x3, Shuffle, Hexagon, Check, Keyboard, Delete, Github, Info, Square, CalendarDays, Star, Gamepad2, CornerDownLeft, LayoutGrid, Puzzle, BarChart3, UserRound, Scale, Settings } from 'lucide-react';
+import { Search, Eraser, ArrowDown, ArrowUp, X, BookOpen, Grid3x3, Shuffle, Hexagon, Check, Keyboard, Delete, Github, Info, Square, CalendarDays, Star, Gamepad2, CornerDownLeft, LayoutGrid, Puzzle, BarChart3, UserRound, Scale, Settings } from 'lucide-react';
 import LearnMode, { type LearnModeHandle } from '@/LearnMode';
 import type { Session } from '@supabase/supabase-js';
 import StatsModal from '@/StatsModal';
@@ -8,6 +8,7 @@ import { OskContext } from '@/MobileKeyInput';
 import SettingsModal from '@/SettingsModal';
 import KeyboardHelp from '@/KeyboardHelp';
 import { PALETTES, PaletteContext, TEXT_SCALES, THEME_MODES, useTheme, type Palette, type TextScale, type ThemeMode } from '@/theme';
+import { PrefsContext } from '@/prefs';
 import { useModalA11y } from '@/useModalA11y';
 import { supabase } from '@/supabase';
 import { importBaselineOnce } from '@/stats';
@@ -23,18 +24,24 @@ import { solvePattern, solveDescramble, solveBee, solveBoxed, solveGrid, findGri
 import ConsentBanner from '@/ConsentBanner';
 import { PrivacyPolicy, Terms } from '@/LegalDocs';
 import { clearIntentUrl, intent, legalIntent } from '@/deeplink';
-import { loadState, saveState, GRID_PRESET_DIMS, WEAVE_DIMS, type GridPreset, type Mode, type NavKeys, type SortPref, type WeaveSize } from '@/storage';
+import { ALL_MODES, ALL_VIEWS, lengthChoices, visibleModes, visibleViews, type LengthRange, type View, loadState, saveState, GRID_PRESET_DIMS, WEAVE_DIMS, type GridPreset, type Mode, type NavKeys, type SortPref, type WeaveSize } from '@/storage';
 
-const MIN_LEN = 3;
+// longest rack the scramble solver accepts; word lengths come from the
+// player's own range now, in storage
 const MAX_LEN = 15;
 
-const MODES: { id: Mode; label: string; blurb: string; description: string }[] = [
+// description sells the solver, which is the wrong pitch for someone who has
+// hidden it — playDescription is what they get instead.
+const MODES: { id: Mode; label: string; blurb: string; description: string; playDescription: string }[] = [
   {
     id: 'pattern',
     label: 'Pattern',
     blurb: 'Wordle, crosswords, hangman — clues about positions',
     description:
       "Lock in the letters you know, list the ones you've seen, and exclude the rest. We'll surface every dictionary word that fits.",
+    playDescription:
+      // no colour names — they change with the palette
+      'Six guesses at a hidden word. Each one tells you which letters are in the right place and which are merely in there somewhere.',
   },
   {
     id: 'descramble',
@@ -42,6 +49,8 @@ const MODES: { id: Mode; label: string; blurb: string; description: string }[] =
     blurb: 'Scrabble, Jumble — what can these letters spell?',
     description:
       "Type the letters you're holding — with ? for blank tiles — and we'll show every word they can spell.",
+    playDescription:
+      'Three minutes, seven letters, as many words as you can find. Longer words score more.',
   },
   {
     id: 'bee',
@@ -49,6 +58,8 @@ const MODES: { id: Mode; label: string; blurb: string; description: string }[] =
     blurb: 'Seven letters, 4+ letter words, center letter required — Spelling Bee style',
     description:
       "Enter the hive's seven letters and we'll find every word that uses the center — pangrams first.",
+    playDescription:
+      'Every word uses the centre letter and at least four letters. Use all seven for a pangram.',
   },
   {
     id: 'grid',
@@ -56,6 +67,8 @@ const MODES: { id: Mode; label: string; blurb: string; description: string }[] =
     blurb: 'Boggle style — chain adjacent letters, each cell once',
     description:
       "Enter the grid letters and we'll find every word traceable through adjacent cells.",
+    playDescription:
+      'Three minutes to trace words through touching letters, each cell used once per word.',
   },
   {
     id: 'boxed',
@@ -63,6 +76,8 @@ const MODES: { id: Mode; label: string; blurb: string; description: string }[] =
     blurb: "Twelve letters on four sides, no two in a row from the same side — Letter Boxed style",
     description:
       "Enter the twelve letters, three per side. We'll find every legal word and the two-word solutions that use all twelve.",
+    playDescription:
+      'Use all twelve letters in a chain of words, never twice in a row from the same side.',
   },
   {
     id: 'weave',
@@ -70,6 +85,8 @@ const MODES: { id: Mode; label: string; blurb: string; description: string }[] =
     blurb: 'Themed words tile the whole board — Strands style',
     description:
       'Play the themed tiling puzzle, or use Solve to list every traceable word on a Strands-style board.',
+    playDescription:
+      'Find the themed words that tile the whole board, plus the one that spans it corner to corner.',
   },
 ];
 
@@ -614,6 +631,12 @@ function App() {
   const [palette, setPalette] = useState<Palette>(initial.palette);
   const [navKeys, setNavKeys] = useState<NavKeys>(initial.navKeys);
   const [textScale, setTextScale] = useState<TextScale>(initial.textScale);
+  const [hiddenModes, setHiddenModes] = useState<Mode[]>(initial.hiddenModes);
+  const [hiddenViews, setHiddenViews] = useState<View[]>(initial.hiddenViews);
+  const [lengthRange, setLengthRange] = useState<LengthRange>(initial.lengthRange);
+  const [practiceAllowed, setPracticeAllowed] = useState(initial.practiceAllowed);
+  const [helpAllowed, setHelpAllowed] = useState(initial.helpAllowed);
+  const [solverDictionary, setSolverDictionary] = useState(initial.solverDictionary);
   const [session, setSession] = useState<Session | null>(null);
 
   useTheme(theme, palette, textScale);
@@ -650,12 +673,29 @@ function App() {
       return;
     }
     const s = data?.settings as
-      | { theme?: ThemeMode; palette?: Palette; navKeys?: NavKeys; textScale?: TextScale }
+      | {
+          theme?: ThemeMode;
+          palette?: Palette;
+          navKeys?: NavKeys;
+          textScale?: TextScale;
+          hiddenModes?: Mode[];
+          hiddenViews?: View[];
+          lengthRange?: LengthRange;
+          practiceAllowed?: boolean;
+          helpAllowed?: boolean;
+          solverDictionary?: DictionaryId | 'per-game';
+        }
       | null;
     if (s?.theme && THEME_MODES.includes(s.theme)) setTheme(s.theme);
     if (s?.palette && PALETTES.includes(s.palette)) setPalette(s.palette);
     if (s?.navKeys === 'numpad' || s?.navKeys === 'wasd') setNavKeys(s.navKeys);
     if (s?.textScale && TEXT_SCALES.includes(s.textScale)) setTextScale(s.textScale);
+    if (Array.isArray(s?.hiddenModes)) setHiddenModes(s.hiddenModes.filter((m) => ALL_MODES.includes(m)));
+    if (Array.isArray(s?.hiddenViews)) setHiddenViews(s.hiddenViews.filter((v) => ALL_VIEWS.includes(v)));
+    if (s?.lengthRange) setLengthRange(s.lengthRange);
+    if (typeof s?.practiceAllowed === 'boolean') setPracticeAllowed(s.practiceAllowed);
+    if (typeof s?.helpAllowed === 'boolean') setHelpAllowed(s.helpAllowed);
+    if (s?.solverDictionary) setSolverDictionary(s.solverDictionary);
     settingsPulled.current = true;
   }, [session]);
 
@@ -684,7 +724,7 @@ function App() {
     if (!supabase || !session || !settingsPulled.current) return;
     pushPending.current = true;
     const id = window.setTimeout(async () => {
-      const settings = { theme, palette, navKeys, textScale };
+      const settings = { theme, palette, navKeys, textScale, hiddenModes, hiddenViews, lengthRange, practiceAllowed, helpAllowed, solverDictionary };
       // update first — it needs only the update policy, which every install
       // has. `select` reveals whether a row actually matched.
       const { data, error } = await supabase!
@@ -712,7 +752,7 @@ function App() {
       window.clearTimeout(id);
       pushPending.current = false;
     };
-  }, [session, theme, palette, navKeys, textScale]);
+  }, [session, theme, palette, navKeys, textScale, hiddenModes, hiddenViews, lengthRange, practiceAllowed, helpAllowed, solverDictionary]);
 
   // surface auth errors that come back in the redirect URL (expired or
   // already-used magic links land here with no other visible sign)
@@ -786,13 +826,69 @@ function App() {
     return () => document.removeEventListener('focusin', onFocusIn);
   }, []);
 
-  const dictionaryId = dictionaries[mode];
+  // 'per-game' keeps each solver's own pick; anything else is the whole site's
+  const dictionaryId = solverDictionary === 'per-game' ? dictionaries[mode] : solverDictionary;
   const setDictionaryId = (id: DictionaryId) =>
     setDictionaries((prev) => ({ ...prev, [mode]: id }));
 
   const sort = sorts[mode];
   const setSort = (s: Partial<SortPref>) =>
     setSorts((prev) => ({ ...prev, [mode]: { ...prev[mode], ...s } }));
+
+  // A shared link names a game and a tab deliberately, so it outranks hiding
+  // for this visit: dropping someone on the wrong page because of a setting
+  // they made months ago is worse than showing them one game they'd switched
+  // off. It doesn't unhide anything — the setting is untouched.
+  const shownModes = useMemo(() => {
+    const vis = visibleModes(hiddenModes);
+    return ALL_MODES.filter((m) => vis.includes(m) || m === intent?.mode);
+  }, [hiddenModes]);
+
+  const shownViews = useMemo(() => {
+    const vis = visibleViews(hiddenViews);
+    return ALL_VIEWS.filter((v) => vis.includes(v) || v === intent?.view);
+  }, [hiddenViews]);
+
+  const playFlags: Record<Mode, [boolean, (v: boolean) => void]> = {
+    pattern: [patternPlay, setPatternPlay],
+    descramble: [descramblePlay, setDescramblePlay],
+    bee: [beePlay, setBeePlay],
+    boxed: [boxedPlay, setBoxedPlay],
+    grid: [gridPlay, setGridPlay],
+    weave: [weavePlay, setWeavePlay],
+  };
+
+  const prefs = useMemo(() => ({ practiceAllowed }), [practiceAllowed]);
+
+  const currentView: View = learnMode ? 'learn' : playFlags[mode][0] ? 'play' : 'solve';
+
+  function goToView(view: View) {
+    if (view === 'learn') {
+      setLearnMode(true);
+      return;
+    }
+    setLearnMode(false);
+    playFlags[mode][1](view === 'play');
+  }
+
+  const shownLengths = useMemo(() => lengthChoices(lengthRange), [lengthRange]);
+
+  // hiding the game or tab you're standing on shouldn't leave you nowhere
+  useEffect(() => {
+    if (!shownModes.includes(mode)) setMode(shownModes[0]);
+  }, [shownModes, mode]);
+
+  // narrowing the range around the length you're on moves you to the nearest
+  // one still offered, rather than leaving nothing selected
+  useEffect(() => {
+    if (length < lengthRange.min) setLength(lengthRange.min);
+    else if (length > lengthRange.max) setLength(lengthRange.max);
+  }, [lengthRange, length]);
+
+  useEffect(() => {
+    if (!shownViews.includes(currentView)) goToView(shownViews[0]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [shownViews, currentView, mode]);
 
   // persist tool, per-tool dictionary, and last inputs
   useEffect(() => {
@@ -805,6 +901,12 @@ function App() {
       palette,
       textScale,
       navKeys,
+      hiddenModes,
+      hiddenViews,
+      lengthRange,
+      practiceAllowed,
+      helpAllowed,
+      solverDictionary,
       patternPlay,
       beePlay,
       boxedPlay,
@@ -818,7 +920,7 @@ function App() {
       weave: { letters: weaveLetters, size: weaveSize },
       weavePlay,
     });
-  }, [mode, dictionaries, sorts, kbOpen, theme, palette, textScale, navKeys, patternPlay, beePlay, boxedPlay, descramblePlay, gridPlay, length, known, containsStr, excludedStr, rackStr, useAll, minLength, beeCenter, beeOuters, boxedLetters, solutionWords, gridLetters, gridPreset, weaveLetters, weaveSize, weavePlay]);
+  }, [mode, dictionaries, sorts, kbOpen, theme, palette, textScale, navKeys, hiddenModes, hiddenViews, lengthRange, practiceAllowed, helpAllowed, solverDictionary, patternPlay, beePlay, boxedPlay, descramblePlay, gridPlay, length, known, containsStr, excludedStr, rackStr, useAll, minLength, beeCenter, beeOuters, boxedLetters, solutionWords, gridLetters, gridPreset, weaveLetters, weaveSize, weavePlay]);
 
   // keep known array sized to length
   useEffect(() => {
@@ -1190,6 +1292,7 @@ function App() {
 
   return (
     <PaletteContext.Provider value={palette}>
+    <PrefsContext.Provider value={prefs}>
     <OskContext.Provider value={kbOpen}>
     <div className="min-h-screen bg-slate-950 text-white relative overflow-x-clip">
       {/* ambient glow */}
@@ -1204,18 +1307,26 @@ function App() {
         Skip to content
       </a>
 
-      {/* top nav bar */}
+      {/* Top nav bar — gone entirely with one game. A bar holding a single
+          tab is a switch with one position, and dropping to just the wordmark
+          would only print the site's name directly above the h1 that already
+          says it. The page header below carries the identity instead. */}
+      {shownModes.length > 1 && (
       <nav
         aria-label="Game modes"
         className="sticky top-0 z-40 bg-slate-950/80 backdrop-blur border-b border-white/10"
       >
-        <div className="max-w-3xl mx-auto px-2 sm:px-5 flex items-center justify-between gap-2">
-          <span className="hidden md:inline-flex items-center gap-2 text-lg font-bold tracking-tight">
-            <Sparkles className="w-4 h-4 text-accent" />
-            Anagrimoire
-          </span>
-          <div className="flex-1 md:flex-none grid grid-cols-6 md:flex gap-0.5 sm:gap-1 py-1.5">
-            {MODES.map((m) => {
+        {/* No wordmark up here any more — the page header carries the name,
+            and without it the tabs can sit centred at every width instead of
+            being pushed to one side on desktop. */}
+        <div className="max-w-3xl mx-auto px-2 sm:px-5 flex items-center justify-center">
+          {/* the column count follows what's actually shown, so hiding games
+              widens the rest rather than leaving gaps */}
+          <div
+            className="flex-1 md:flex-none grid md:flex gap-0.5 sm:gap-1 py-1.5"
+            style={{ gridTemplateColumns: `repeat(${shownModes.length}, minmax(0, 1fr))` }}
+          >
+            {MODES.filter((m) => shownModes.includes(m.id)).map((m) => {
               const Icon = MODE_ICONS[m.id];
               return (
                 <button
@@ -1235,6 +1346,7 @@ function App() {
           </div>
         </div>
       </nav>
+      )}
 
       <main
         id="main"
@@ -1243,47 +1355,60 @@ function App() {
       >
         {/* header */}
         <header className="text-center mb-8">
-          {/* pb + relaxed leading so the g's descender isn't clipped by the
-              gradient's text box or crowded into the line below */}
-          <h1 className="pb-3 leading-[1.2] text-4xl sm:text-5xl font-bold tracking-tight bg-gradient-to-br from-white via-white to-slate-400 bg-clip-text text-transparent">
-            Anagrimoire
+          {/* The wordmark is a lockup rather than an image file: the mark is
+              the only part that has to be drawn, and the name is real text, so
+              it themes itself, follows the text-size setting, and can't render
+              in the wrong font on someone else's machine. The mark is alt=""
+              because the text beside it already names the heading.
+              Dimensions on the tag so it can't shove the page down as it
+              loads. */}
+          <h1 className="mb-4 flex flex-wrap items-center justify-center gap-x-3 sm:gap-x-4 gap-y-1">
+            <img
+              src="/logo.png"
+              alt=""
+              width={512}
+              height={512}
+              className="w-12 h-12 sm:w-16 sm:h-16 rounded-2xl shadow-lg shadow-black/30 shrink-0"
+            />
+            {/* bg-clip-text paints inside the element's box, so the g's tail
+                needs padding below the line or it gets sliced off. The
+                matching negative margin keeps that padding out of the layout,
+                so the name still sits centred against the mark. */}
+            <span className="pb-[0.4em] -mb-[0.4em] text-4xl sm:text-5xl font-bold tracking-tight bg-gradient-to-br from-white via-white to-slate-400 bg-clip-text text-transparent">
+              Anagrimoire
+            </span>
           </h1>
           <p className="text-slate-400 max-w-md mx-auto text-sm sm:text-base">
-            {MODES.find((m) => m.id === mode)?.description}
+            {shownViews.includes('solve')
+              ? MODES.find((m) => m.id === mode)?.description
+              : MODES.find((m) => m.id === mode)?.playDescription}
           </p>
         </header>
 
-        {/* solve / play / learn toggle */}
-        <section className="mb-7 text-center">
-          <div className="inline-flex rounded-xl bg-white/5 border border-white/10 p-1 gap-1">
+        {/* solve / play / learn toggle — gone entirely when only one is left,
+            since a switch with one position is just clutter. Hiding Solve and
+            Learn is how the site becomes a game site rather than a tool with
+            games attached. */}
+        <section className={`mb-7 text-center ${shownViews.length > 1 ? '' : 'hidden'}`}>
+          {/* wraps rather than overflowing: at 320px with the largest text
+              this row is wider than the viewport, and the page clips its
+              horizontal overflow, so Learn was cut off with no way to reach
+              it */}
+          <div className="inline-flex flex-wrap justify-center max-w-full rounded-xl bg-white/5 border border-white/10 p-1 gap-1">
               {(
                 [
                   { view: 'solve', label: 'Solve', Icon: Search },
                   { view: 'play', label: 'Play', Icon: Gamepad2 },
                   { view: 'learn', label: 'Learn', Icon: BookOpen },
                 ] as const
-              ).map(({ view, label, Icon }) => {
-                const flags: Record<Mode, [boolean, (v: boolean) => void]> = {
-                  pattern: [patternPlay, setPatternPlay],
-                  descramble: [descramblePlay, setDescramblePlay],
-                  bee: [beePlay, setBeePlay],
-                  boxed: [boxedPlay, setBoxedPlay],
-                  grid: [gridPlay, setGridPlay],
-                  weave: [weavePlay, setWeavePlay],
-                };
-                const [flag, setFlag] = flags[mode];
-                const active = view === 'learn' ? learnMode : !learnMode && flag === (view === 'play');
+              )
+                .filter(({ view }) => shownViews.includes(view))
+                .map(({ view, label, Icon }) => {
+                const active = currentView === view;
                 return (
                   <button
                     key={label}
-                    onClick={() => {
-                      if (view === 'learn') {
-                        setLearnMode(true);
-                      } else {
-                        setLearnMode(false);
-                        setFlag(view === 'play');
-                      }
-                    }}
+                    onClick={() => goToView(view)}
                     className={`inline-flex items-center gap-1.5 px-4 sm:px-5 h-10 rounded-lg text-sm font-semibold transition-all duration-150
                       ${active
                         ? 'bg-emerald-400 text-ink shadow-lg shadow-emerald-500/30'
@@ -1409,13 +1534,14 @@ function App() {
         </div>
         )}
 
-        {/* dictionary selector */}
-        {!playActive && (
+        {/* dictionary selector — hidden when one dictionary has been chosen
+            for the whole site, since there'd be nothing left for it to pick */}
+        {!playActive && solverDictionary === 'per-game' && (
         <section className="mb-7 text-center">
           <label className="block text-xs font-medium text-slate-400 uppercase tracking-wider mb-2.5">
             Dictionary
           </label>
-          <div className="inline-flex rounded-xl bg-white/5 border border-white/10 p-1 gap-1">
+          <div className="inline-flex flex-wrap justify-center max-w-full rounded-xl bg-white/5 border border-white/10 p-1 gap-1">
             {DICTIONARIES.map((d) => (
               <button
                 key={d.id}
@@ -1439,13 +1565,14 @@ function App() {
 
         {mode === 'pattern' && (
         <>
-        {/* length selector */}
-        <section className="mb-7 text-center">
+        {/* length selector — gone when the range allows only one, the same way
+            the view switch goes when one tab is left */}
+        <section className={`mb-7 text-center ${shownLengths.length > 1 ? '' : 'hidden'}`}>
           <label className="block text-xs font-medium text-slate-400 uppercase tracking-wider mb-2.5">
             Word length
           </label>
           <div className="flex flex-wrap gap-2 justify-center">
-            {Array.from({ length: MAX_LEN - MIN_LEN + 1 }, (_, i) => i + MIN_LEN).map((n) => (
+            {shownLengths.map((n) => (
               <button
                 key={n}
                 onClick={() => setLength(n)}
@@ -1468,7 +1595,7 @@ function App() {
             commonWords={commonWordsArr}
             fullWords={fullWordsArr}
             onLetterStates={setLetterStates}
-            onReveal={({ length: len, known: k, contains, excluded }) => {
+            onReveal={!shownViews.includes('solve') || !helpAllowed ? undefined : ({ length: len, known: k, contains, excluded }) => {
               setLength(len);
               setKnown(k);
               setContainsStr(contains);
@@ -1548,7 +1675,7 @@ function App() {
             standardWords={standardWordsArr}
             commonWords={commonWordsArr}
             onLetterStates={setLetterStates}
-            onReveal={(letters) => {
+            onReveal={!shownViews.includes('solve') || !helpAllowed ? undefined : (letters) => {
               setRackStr(letters);
               setUseAll(false);
               setMinLength(3);
@@ -1625,7 +1752,7 @@ function App() {
             standardWords={standardWordsArr}
             commonWords={commonWordsArr}
             onLetterStates={setLetterStates}
-            onReveal={(center, outers) => {
+            onReveal={!shownViews.includes('solve') || !helpAllowed ? undefined : (center, outers) => {
               setBeeCenter(center);
               setBeeOuters(outers);
               setBeePlay(false);
@@ -1639,7 +1766,7 @@ function App() {
           <label className="block text-xs font-medium text-slate-400 uppercase tracking-wider mb-3">
             The hive
           </label>
-          <div className="relative w-56 h-56 mx-auto">
+          <div className="relative w-full max-w-[14rem] aspect-square mx-auto">
             <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2">
               <Tile
                 index={0}
@@ -1708,7 +1835,7 @@ function App() {
             ref={gridRef}
             standardWords={standardWordsArr}
             onLetterStates={setLetterStates}
-            onReveal={(cells) => {
+            onReveal={!shownViews.includes('solve') || !helpAllowed ? undefined : (cells) => {
               setGridPreset(cells.length === 9 ? '3x3' : cells.length === 25 ? '5x5' : '4x4');
               setGridLetters(cells);
               setGridPlay(false);
@@ -1808,7 +1935,7 @@ function App() {
             standardWords={standardWordsArr}
             commonWords={commonWordsArr}
             onLetterStates={setLetterStates}
-            onReveal={(sides) => {
+            onReveal={!shownViews.includes('solve') || !helpAllowed ? undefined : (sides) => {
               setBoxedLetters(sides.flatMap((s) => s.split('')).slice(0, 12));
               setBoxedPlay(false);
             }}
@@ -1837,7 +1964,7 @@ function App() {
               <label className="block text-xs font-medium text-slate-400 uppercase tracking-wider mb-3">
                 Sides of the box
               </label>
-              <div ref={boxedBoardRef} className="relative w-72 h-72 mx-auto">
+              <div ref={boxedBoardRef} className="relative w-full max-w-[18rem] aspect-square mx-auto">
                 <div className="absolute inset-14 rounded-xl border-2 border-white/15 bg-white/[0.02]" />
                 {/* top */}
                 <div className="absolute top-0 left-14 right-14 flex justify-around">
@@ -2271,7 +2398,13 @@ function App() {
         }}
       />
 
-      {keysOpen && <KeyboardHelp navKeys={navKeys} onClose={() => setKeysOpen(false)} />}
+      {keysOpen && (
+        <KeyboardHelp
+          navKeys={navKeys}
+          shownModes={shownModes}
+          onClose={() => setKeysOpen(false)}
+        />
+      )}
 
       {settingsOpen && (
         <SettingsModal
@@ -2279,11 +2412,31 @@ function App() {
           palette={palette}
           navKeys={navKeys}
           textScale={textScale}
+          hiddenModes={hiddenModes}
+          hiddenViews={hiddenViews}
+          lengthRange={lengthRange}
+          practiceAllowed={practiceAllowed}
+          helpAllowed={helpAllowed}
+          solverDictionary={solverDictionary}
           signedIn={!!session}
           onTheme={setTheme}
           onPalette={setPalette}
           onNavKeys={setNavKeys}
           onTextScale={setTextScale}
+          onToggleMode={(m) =>
+            setHiddenModes((prev) =>
+              prev.includes(m) ? prev.filter((x) => x !== m) : [...prev, m]
+            )
+          }
+          onLengthRange={setLengthRange}
+          onPracticeAllowed={setPracticeAllowed}
+          onHelpAllowed={setHelpAllowed}
+          onSolverDictionary={setSolverDictionary}
+          onToggleView={(v) =>
+            setHiddenViews((prev) =>
+              prev.includes(v) ? prev.filter((x) => x !== v) : [...prev, v]
+            )
+          }
           onClose={() => setSettingsOpen(false)}
         />
       )}
@@ -2636,6 +2789,7 @@ function App() {
       )}
     </div>
     </OskContext.Provider>
+    </PrefsContext.Provider>
     </PaletteContext.Provider>
   );
 }

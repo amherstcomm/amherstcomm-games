@@ -14,6 +14,7 @@ import DailyStats from '@/DailyStats';
 import MobileKeyInput from '@/MobileKeyInput';
 import ShareButton from '@/ShareButton';
 import { dailyIntent } from '@/deeplink';
+import { usePrefs } from '@/prefs';
 import { useDailySync } from '@/useDailySync';
 import { buildShare } from '@/share';
 import { recordBoxSolve } from '@/stats';
@@ -183,10 +184,16 @@ const BoxGame = forwardRef<
     standardWords: string[] | null;
     commonWords: string[] | null;
     onLetterStates: (states: Record<string, LetterState>) => void;
-    onReveal: (sides: string[]) => void;
+    onReveal?: (sides: string[]) => void;
   }
 >(function BoxGame({ standardWords, commonWords, onLetterStates, onReveal }, ref) {
   const [store, setStore] = useState<BoxStore>(loadStore);
+  const { practiceAllowed } = usePrefs();
+  // pinned to the daily: someone who switched practice off shouldn't be left
+  // looking at a practice board they can no longer leave
+  useEffect(() => {
+    if (!practiceAllowed && !store.dailyMode) setStore((prev) => ({ ...prev, dailyMode: true }));
+  }, [practiceAllowed, store.dailyMode]);
   const [current, setCurrent] = useState('');
   const [flash, setFlash] = useState<{ text: string; good: boolean } | null>(null);
   const [dailyError, setDailyError] = useState(false);
@@ -441,7 +448,11 @@ const BoxGame = forwardRef<
   return (
     <div className="text-center">
       {/* daily / practice toggle */}
-      <div className="mb-5 inline-flex rounded-xl bg-white/5 border border-white/10 p-1 gap-1">
+      <div
+        className={`mb-5 inline-flex flex-wrap justify-center max-w-full rounded-xl bg-white/5 border border-white/10 p-1 gap-1 ${
+          practiceAllowed ? '' : 'hidden'
+        }`}
+      >
         {(
           [
             { id: true, label: 'Daily', Icon: CalendarDays },
@@ -515,7 +526,7 @@ const BoxGame = forwardRef<
           )}
 
           {/* the box */}
-          <div className="relative w-72 h-72 mx-auto">
+          <div className="relative w-full max-w-[18rem] aspect-square mx-auto">
             <div className="absolute inset-12 rounded-xl border-2 border-white/15 bg-white/[0.02]" />
             {(() => {
               // hovered word takes priority; otherwise the live entry draws
@@ -636,6 +647,10 @@ const BoxGame = forwardRef<
                 }
               />
             )}
+            {/* Both of these end up in the solver, so they go when the solver
+                is hidden — a give-up that shows nothing isn't giving up. */}
+            {onReveal && (
+              <>
             <button
               onMouseDown={(e) => e.preventDefault()}
               onClick={() => onReveal(record.sides)}
@@ -668,6 +683,8 @@ const BoxGame = forwardRef<
                 <Eye className="w-4 h-4" />
                 Reveal
               </button>
+            )}
+              </>
             )}
           </div>
 

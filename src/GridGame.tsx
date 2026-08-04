@@ -15,6 +15,7 @@ import DailyStats from '@/DailyStats';
 import MobileKeyInput from '@/MobileKeyInput';
 import ShareButton from '@/ShareButton';
 import { dailyIntent } from '@/deeplink';
+import { usePrefs } from '@/prefs';
 import { useDailySync } from '@/useDailySync';
 import { buildShare } from '@/share';
 import { recordSprint } from '@/stats';
@@ -125,10 +126,16 @@ const GridGame = forwardRef<
   {
     standardWords: string[] | null;
     onLetterStates: (states: Record<string, LetterState>) => void;
-    onReveal: (cells: string[]) => void;
+    onReveal?: (cells: string[]) => void;
   }
 >(function GridGame({ standardWords, onLetterStates, onReveal }, ref) {
   const [store, setStore] = useState<GridStore>(loadStore);
+  const { practiceAllowed } = usePrefs();
+  // pinned to the daily: someone who switched practice off shouldn't be left
+  // looking at a practice board they can no longer leave
+  useEffect(() => {
+    if (!practiceAllowed && !store.dailyMode) setStore((prev) => ({ ...prev, dailyMode: true }));
+  }, [practiceAllowed, store.dailyMode]);
   const [current, setCurrent] = useState('');
   const [flash, setFlash] = useState<{ text: string; good: boolean } | null>(null);
   const [dailyError, setDailyError] = useState(false);
@@ -464,7 +471,11 @@ const GridGame = forwardRef<
   return (
     <div className="text-center">
       {/* daily / practice toggle */}
-      <div className="mb-5 inline-flex rounded-xl bg-white/5 border border-white/10 p-1 gap-1">
+      <div
+        className={`mb-5 inline-flex flex-wrap justify-center max-w-full rounded-xl bg-white/5 border border-white/10 p-1 gap-1 ${
+          practiceAllowed ? '' : 'hidden'
+        }`}
+      >
         {(
           [
             { id: true, label: 'Daily', Icon: CalendarDays },
@@ -675,14 +686,17 @@ const GridGame = forwardRef<
                     })
                   }
                 />
-                <button
-                  onMouseDown={(e) => e.preventDefault()}
-                  onClick={() => onReveal(record.cells)}
-                  className="inline-flex items-center gap-1.5 px-4 h-10 rounded-lg text-sm font-semibold bg-amber-400/15 border border-amber-400/30 text-amber-200 hover:bg-amber-400/25 transition-colors"
-                >
-                  <Search className="w-4 h-4" />
-                  Reveal all in solver
-                </button>
+                {/* nothing to reveal into when the solver is hidden */}
+                {onReveal && (
+                  <button
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={() => onReveal(record.cells)}
+                    className="inline-flex items-center gap-1.5 px-4 h-10 rounded-lg text-sm font-semibold bg-amber-400/15 border border-amber-400/30 text-amber-200 hover:bg-amber-400/25 transition-colors"
+                  >
+                    <Search className="w-4 h-4" />
+                    Reveal all in solver
+                  </button>
+                )}
                 {!store.dailyMode && (
                   <button
                     onMouseDown={(e) => e.preventDefault()}

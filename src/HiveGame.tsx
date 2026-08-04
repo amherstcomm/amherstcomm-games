@@ -14,6 +14,7 @@ import DailyStats from '@/DailyStats';
 import MobileKeyInput from '@/MobileKeyInput';
 import ShareButton from '@/ShareButton';
 import { dailyIntent } from '@/deeplink';
+import { usePrefs } from '@/prefs';
 import { useDailySync } from '@/useDailySync';
 import { buildShare } from '@/share';
 import { recordHiveWord } from '@/stats';
@@ -121,10 +122,16 @@ const HiveGame = forwardRef<
     standardWords: string[] | null;
     commonWords: string[] | null;
     onLetterStates: (states: Record<string, LetterState>) => void;
-    onReveal: (center: string, outers: string[]) => void;
+    onReveal?: (center: string, outers: string[]) => void;
   }
 >(function HiveGame({ standardWords, commonWords, onLetterStates, onReveal }, ref) {
   const [store, setStore] = useState<HiveStore>(loadStore);
+  const { practiceAllowed } = usePrefs();
+  // pinned to the daily: someone who switched practice off shouldn't be left
+  // looking at a practice board they can no longer leave
+  useEffect(() => {
+    if (!practiceAllowed && !store.dailyMode) setStore((prev) => ({ ...prev, dailyMode: true }));
+  }, [practiceAllowed, store.dailyMode]);
   const [current, setCurrent] = useState('');
   const [flash, setFlash] = useState<{ text: string; good: boolean } | null>(null);
   const [dailyError, setDailyError] = useState(false);
@@ -373,7 +380,11 @@ const HiveGame = forwardRef<
   return (
     <div className="text-center">
       {/* daily / practice toggle */}
-      <div className="mb-5 inline-flex rounded-xl bg-white/5 border border-white/10 p-1 gap-1">
+      <div
+        className={`mb-5 inline-flex flex-wrap justify-center max-w-full rounded-xl bg-white/5 border border-white/10 p-1 gap-1 ${
+          practiceAllowed ? '' : 'hidden'
+        }`}
+      >
         {(
           [
             { id: true, label: 'Daily', Icon: CalendarDays },
@@ -511,6 +522,10 @@ const HiveGame = forwardRef<
                 }
               />
             )}
+            {/* Both of these end up in the solver, so they go when the solver
+                is hidden — a give-up that shows nothing isn't giving up. */}
+            {onReveal && (
+              <>
             <button
               onMouseDown={(e) => e.preventDefault()}
               onClick={() => onReveal(record.center, record.outers)}
@@ -543,6 +558,8 @@ const HiveGame = forwardRef<
                 <Eye className="w-4 h-4" />
                 Reveal
               </button>
+            )}
+              </>
             )}
           </div>
 

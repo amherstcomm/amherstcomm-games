@@ -14,6 +14,7 @@ import DailyStats from '@/DailyStats';
 import MobileKeyInput from '@/MobileKeyInput';
 import ShareButton from '@/ShareButton';
 import { dailyIntent } from '@/deeplink';
+import { usePrefs } from '@/prefs';
 import { useDailySync } from '@/useDailySync';
 import { buildShare } from '@/share';
 import { recordSprint } from '@/stats';
@@ -99,10 +100,16 @@ const ScrambleGame = forwardRef<
     standardWords: string[] | null;
     commonWords: string[] | null;
     onLetterStates: (states: Record<string, LetterState>) => void;
-    onReveal: (letters: string) => void;
+    onReveal?: (letters: string) => void;
   }
 >(function ScrambleGame({ standardWords, commonWords, onLetterStates, onReveal }, ref) {
   const [store, setStore] = useState<ScrambleStore>(loadStore);
+  const { practiceAllowed } = usePrefs();
+  // pinned to the daily: someone who switched practice off shouldn't be left
+  // looking at a practice board they can no longer leave
+  useEffect(() => {
+    if (!practiceAllowed && !store.dailyMode) setStore((prev) => ({ ...prev, dailyMode: true }));
+  }, [practiceAllowed, store.dailyMode]);
   const [current, setCurrent] = useState('');
   const [flash, setFlash] = useState<{ text: string; good: boolean } | null>(null);
   const [dailyError, setDailyError] = useState(false);
@@ -360,7 +367,11 @@ const ScrambleGame = forwardRef<
   return (
     <div className="text-center">
       {/* daily / practice toggle */}
-      <div className="mb-5 inline-flex rounded-xl bg-white/5 border border-white/10 p-1 gap-1">
+      <div
+        className={`mb-5 inline-flex flex-wrap justify-center max-w-full rounded-xl bg-white/5 border border-white/10 p-1 gap-1 ${
+          practiceAllowed ? '' : 'hidden'
+        }`}
+      >
         {(
           [
             { id: true, label: 'Daily', Icon: CalendarDays },
@@ -524,14 +535,17 @@ const ScrambleGame = forwardRef<
                     })
                   }
                 />
-                <button
-                  onMouseDown={(e) => e.preventDefault()}
-                  onClick={() => onReveal(record.rack.join(''))}
-                  className="inline-flex items-center gap-1.5 px-4 h-10 rounded-lg text-sm font-semibold bg-amber-400/15 border border-amber-400/30 text-amber-200 hover:bg-amber-400/25 transition-colors"
-                >
-                  <Search className="w-4 h-4" />
-                  Reveal all in solver
-                </button>
+                {/* nothing to reveal into when the solver is hidden */}
+                {onReveal && (
+                  <button
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={() => onReveal(record.rack.join(''))}
+                    className="inline-flex items-center gap-1.5 px-4 h-10 rounded-lg text-sm font-semibold bg-amber-400/15 border border-amber-400/30 text-amber-200 hover:bg-amber-400/25 transition-colors"
+                  >
+                    <Search className="w-4 h-4" />
+                    Reveal all in solver
+                  </button>
+                )}
                 {!store.dailyMode && (
                   <button
                     onMouseDown={(e) => e.preventDefault()}

@@ -5,8 +5,55 @@ export type Mode = 'pattern' | 'descramble' | 'bee' | 'boxed' | 'grid' | 'weave'
 
 const KEY = 'anagrimoire:v1';
 
-const ALL_MODES: Mode[] = ['pattern', 'descramble', 'bee', 'boxed', 'grid', 'weave'];
+export const ALL_MODES: Mode[] = ['pattern', 'descramble', 'bee', 'boxed', 'grid', 'weave'];
 const ALL_DICTS: DictionaryId[] = ['common', 'standard', 'full'];
+
+// The three tabs a game can be shown in. Someone who only wants to play the
+// dailies shouldn't have to walk past a solver to get to them.
+export type View = 'solve' | 'play' | 'learn';
+export const ALL_VIEWS: View[] = ['solve', 'play', 'learn'];
+
+// Hiding is a display filter and nothing more: statistics, streaks and dailies
+// all keep accruing for a hidden game, and unhiding brings back exactly what
+// was there. Nothing is deleted, so nothing can be lost by experimenting.
+//
+// Both lists enforce one survivor. Hiding your way into a blank page is the
+// one outcome a settings screen must not allow, and it's easier to refuse the
+// last one than to explain an empty site.
+export function visibleModes(hidden: Mode[]): Mode[] {
+  const left = ALL_MODES.filter((m) => !hidden.includes(m));
+  return left.length ? left : ALL_MODES;
+}
+
+export function visibleViews(hidden: View[]): View[] {
+  const left = ALL_VIEWS.filter((v) => !hidden.includes(v));
+  return left.length ? left : ALL_VIEWS;
+}
+
+// Pattern offers thirteen word lengths, and plenty of people only ever want
+// one of them. Narrowing the range is the same idea as hiding a game: it
+// changes what's offered, not what exists — the other lengths keep their
+// daily boards and their statistics, and widening the range brings them back.
+export const MIN_WORD_LEN = 3;
+export const MAX_WORD_LEN = 15;
+
+export type LengthRange = { min: number; max: number };
+
+export function lengthChoices({ min, max }: LengthRange): number[] {
+  return Array.from({ length: max - min + 1 }, (_, i) => i + min);
+}
+
+function sanitizeRange(value: unknown): LengthRange {
+  const v = value as Partial<LengthRange> | undefined;
+  const clamp = (n: unknown, fallback: number) =>
+    typeof n === 'number' && Number.isInteger(n) && n >= MIN_WORD_LEN && n <= MAX_WORD_LEN
+      ? n
+      : fallback;
+  const min = clamp(v?.min, MIN_WORD_LEN);
+  const max = clamp(v?.max, MAX_WORD_LEN);
+  // an inverted range would offer nothing at all
+  return min <= max ? { min, max } : { min: MIN_WORD_LEN, max: MAX_WORD_LEN };
+}
 
 // which keys step the Weave board cursor around, besides the arrow keys:
 // the number pad's ring (7 8 9 / 4 6 / 1 2 3) or the letters around WASD
@@ -26,6 +73,12 @@ export type PersistedState = {
   palette: Palette;
   textScale: TextScale;
   navKeys: NavKeys;
+  hiddenModes: Mode[];
+  hiddenViews: View[];
+  lengthRange: LengthRange;
+  practiceAllowed: boolean;
+  helpAllowed: boolean;
+  solverDictionary: DictionaryId | 'per-game';
   patternPlay: boolean;
   beePlay: boolean;
   boxedPlay: boolean;
@@ -69,6 +122,12 @@ export const DEFAULT_STATE: PersistedState = {
   palette: 'default',
   textScale: 'normal',
   navKeys: 'numpad',
+  hiddenModes: [],
+  hiddenViews: [],
+  lengthRange: { min: MIN_WORD_LEN, max: MAX_WORD_LEN },
+  practiceAllowed: true,
+  helpAllowed: true,
+  solverDictionary: 'per-game',
   patternPlay: false,
   beePlay: false,
   boxedPlay: false,
@@ -93,6 +152,15 @@ function letterString(v: unknown, extra = ''): string {
     .toLowerCase()
     .replace(new RegExp(`[^a-z${extra}]`, 'g'), '')
     .slice(0, 32);
+}
+
+// Keeps only known names, and refuses a list that hides everything — a stored
+// value from a future version, or a hand-edited one, shouldn't be able to
+// produce a site with nothing on it.
+function sanitizeHidden<T extends string>(value: unknown, all: T[]): T[] {
+  if (!Array.isArray(value)) return [];
+  const kept = all.filter((item) => value.includes(item));
+  return kept.length === all.length ? [] : kept;
 }
 
 function clampInt(v: unknown, min: number, max: number, fallback: number): number {
@@ -176,6 +244,12 @@ export function loadState(): PersistedState {
           : 'default',
       textScale: ['normal', 'large', 'larger'].includes(p?.textScale) ? p.textScale : 'normal',
       navKeys: p?.navKeys === 'wasd' ? 'wasd' : 'numpad',
+      hiddenModes: sanitizeHidden(p?.hiddenModes, ALL_MODES),
+      hiddenViews: sanitizeHidden(p?.hiddenViews, ALL_VIEWS),
+      lengthRange: sanitizeRange(p?.lengthRange),
+      practiceAllowed: p?.practiceAllowed !== false,
+      helpAllowed: p?.helpAllowed !== false,
+      solverDictionary: ALL_DICTS.includes(p?.solverDictionary) ? p.solverDictionary : 'per-game',
       patternPlay: p?.patternPlay === true,
       beePlay: p?.beePlay === true,
       boxedPlay: p?.boxedPlay === true,
