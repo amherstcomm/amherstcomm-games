@@ -1,7 +1,7 @@
 import { useRef } from 'react';
 import { X } from 'lucide-react';
 import KeyDiagram from '@/KeyDiagram';
-import type { NavKeys } from '@/storage';
+import type { Mode, NavKeys } from '@/storage';
 import { useModalA11y } from '@/useModalA11y';
 
 function Key({ children }: { children: React.ReactNode }) {
@@ -25,6 +25,21 @@ function Row({ keys, children }: { keys: React.ReactNode[]; children: React.Reac
   );
 }
 
+// the games that take typed words — Weave is traced, not typed
+const TYPING_GAMES: { id: Mode; label: string }[] = [
+  { id: 'pattern', label: 'Guess the Word' },
+  { id: 'descramble', label: 'Scramble' },
+  { id: 'bee', label: 'Hive' },
+  { id: 'boxed', label: 'Boxed' },
+  { id: 'grid', label: 'Grid' },
+];
+
+function listOf(names: string[]): string {
+  if (names.length <= 1) return names[0] ?? '';
+  if (names.length === 2) return `${names[0]} and ${names[1]}`;
+  return `${names.slice(0, -1).join(', ')}, and ${names[names.length - 1]}`;
+}
+
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div>
@@ -38,13 +53,14 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 
 export default function KeyboardHelp({
   navKeys,
-  showWeave,
+  shownModes,
   onClose,
 }: {
   navKeys: NavKeys;
-  showWeave: boolean;
+  shownModes: Mode[];
   onClose: () => void;
 }) {
+  const typingGames = TYPING_GAMES.filter((g) => shownModes.includes(g.id)).map((g) => g.label);
   const dialogRef = useRef<HTMLDivElement>(null);
   useModalA11y(dialogRef, onClose);
 
@@ -87,21 +103,27 @@ export default function KeyboardHelp({
             <Row keys={['Esc']}>Close whichever dialog is open.</Row>
           </Section>
 
-          <Section title="Typing games">
-            <p className="text-xs text-slate-500 mb-1">
-              Guess the Word, Scramble, Hive, Boxed, and Grid all take typed words.
-            </p>
-            <Row keys={['A – Z']}>Add a letter to the current word.</Row>
-            <Row keys={['Enter']}>Submit it.</Row>
-            <Row keys={['⌫']}>
-              Delete the last letter — in Boxed, once the word is empty this un-commits
-              the previous word so you can rework the chain.
-            </Row>
-          </Section>
+          {/* naming a game that's been hidden sends people looking for it */}
+          {typingGames.length > 0 && (
+            <Section title="Typing games">
+              <p className="text-xs text-slate-500 mb-1">
+                {listOf(typingGames)}{' '}
+                {typingGames.length === 1 ? 'takes' : typingGames.length === 2 ? 'both take' : 'all take'}{' '}
+                typed words.
+              </p>
+              <Row keys={['A – Z']}>Add a letter to the current word.</Row>
+              <Row keys={['Enter']}>Submit it.</Row>
+              <Row keys={['⌫']}>
+                {shownModes.includes('boxed')
+                  ? 'Delete the last letter — in Boxed, once the word is empty this un-commits the previous word so you can rework the chain.'
+                  : 'Delete the last letter.'}
+              </Row>
+            </Section>
+          )}
 
           {/* the only game with a board cursor — pointless reading if it's
               been hidden */}
-          {showWeave && (
+          {shownModes.includes('weave') && (
           <Section title="Weave board">
             <p className="text-xs text-slate-500 mb-2">
               Tab to the board — it&apos;s a single stop — then steer a cursor. Each cell

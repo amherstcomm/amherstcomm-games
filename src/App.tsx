@@ -2375,7 +2375,7 @@ function App() {
       {keysOpen && (
         <KeyboardHelp
           navKeys={navKeys}
-          showWeave={shownModes.includes('weave')}
+          shownModes={shownModes}
           onClose={() => setKeysOpen(false)}
         />
       )}
