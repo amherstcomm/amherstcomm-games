@@ -227,19 +227,41 @@ export function PrivacyPolicy() {
 
       <H>Deleting your data</H>
       <P>
-        Email <Mail /> from the address you signed up with and we will delete your
-        account and everything attached to it — results, daily boards, display name,
-        settings. A button to do this yourself is being built; until it exists, email
-        is the route. You can also ask for a copy of what we hold, or for something to
-        be corrected.
+        Both of these are buttons under Account, and neither needs to go through us:
+      </P>
+      <List>
+        <li>
+          <strong className="text-slate-300">Clear my statistics</strong> deletes every
+          result on your account, the daily boards stored with it, and the totals
+          imported from your browsers. The account itself stays, display name included.
+        </li>
+        <li>
+          <strong className="text-slate-300">Delete my account</strong> removes the
+          account and everything attached to it — results, daily boards, display name,
+          settings, and the sign-in itself. Signing in again afterwards starts a new
+          account rather than finding the old one.
+        </li>
+      </List>
+      <P>
+        Both are immediate and neither can be undone. If you would rather we did it, or
+        you want a copy of what we hold or something corrected, email <Mail /> from the
+        address you signed up with.
       </P>
       <P>
-        Two things are worth saying plainly about what that does and doesn&apos;t
-        reach. Anything held only in your browser is yours to clear, and clearing this
-        site&apos;s data removes it. Analytics is separate: it was never tied to your
-        account in the first place, so there is nothing there filed under you — turn
-        it off under Settings → Analytics and the cookies it had set are cleared with
-        it.
+        Two things are worth saying plainly about what deletion does and doesn&apos;t
+        reach. Your browser keeps its own copy of your boards and totals, so deletion
+        offers to erase those here as well — ticked by default, and worth unticking
+        only if you mean to carry on playing on this device without an account.
+        Either way it is local, and clearing this site&apos;s data removes whatever is
+        left.
+      </P>
+      <P>
+        Analytics is the other. It was never tied to your account — we have never sent
+        Google an account identifier, only the page you were on — so there is nothing
+        there filed under you to delete, and we won&apos;t pretend we can reach into
+        Google&apos;s records. What we can do is drop the browser-scoped cookie that
+        ties those visits together, which deleting an account does automatically and
+        the Settings → Analytics toggle does on its own.
       </P>
       <P>
         If you are in the EEA or the UK you have rights of access, correction,
@@ -322,8 +344,8 @@ export function Terms() {
       <P>
         Accounts are optional, and exist to carry your statistics, settings and daily
         progress between devices. Use an email address you control, and don&apos;t
-        share an account with anyone else. You can have yours deleted at any time —
-        see the privacy policy. We may suspend or remove an
+        share an account with anyone else. You can delete yours at any time from the
+        Account panel — see the privacy policy. We may suspend or remove an
         account that is being used to attack or abuse the site.
       </P>
 

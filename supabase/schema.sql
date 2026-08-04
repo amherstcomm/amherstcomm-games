@@ -694,3 +694,71 @@ drop policy if exists "read own baseline" on public.stats_baselines;
 create policy "read own baseline"
   on public.stats_baselines for select
   using ((select auth.uid()) = user_id);
+
+-- ---------------------------------------------------------------------------
+-- Leaving. Two different things people mean by "delete my data", kept apart
+-- because most of the time it's the first one.
+--
+-- Neither takes an argument. A function that accepted a user id would be a
+-- delete-anybody endpoint the moment somebody opened the network tab and
+-- changed one uuid — the account has to come from the token, and only from
+-- the token.
+--
+-- Both raise rather than return quietly when there's no session: this is the
+-- one place where a silent no-op could read as success.
+-- ---------------------------------------------------------------------------
+
+-- Wipe the play record, keep the account. Results, daily boards and the
+-- pre-account baselines all go; the profile row and display name stay, so
+-- the name is still yours and you simply drop off the boards along with the
+-- results that put you there.
+create or replace function public.clear_my_stats()
+returns void
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  uid uuid := (select auth.uid());
+begin
+  if uid is null then
+    raise exception 'not signed in' using errcode = '42501';
+  end if;
+
+  delete from public.game_results where user_id = uid;
+  delete from public.daily_progress where user_id = uid;
+  delete from public.stats_baselines where user_id = uid;
+end;
+$$;
+
+revoke execute on function public.clear_my_stats() from public, anon;
+grant execute on function public.clear_my_stats() to authenticated;
+
+-- Delete the account itself. profiles, game_results, daily_progress and
+-- stats_baselines all reference auth.users on delete cascade, so this one
+-- row is the entire job — no list of tables here to fall out of date the
+-- next time one is added.
+--
+-- It runs as the function's owner because auth.users belongs to the auth
+-- system, not to us. Worth confirming after any project migration that this
+-- still succeeds; if the owner ever loses the privilege it fails loudly and
+-- the whole call rolls back, which is the right way round.
+create or replace function public.delete_account()
+returns void
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  uid uuid := (select auth.uid());
+begin
+  if uid is null then
+    raise exception 'not signed in' using errcode = '42501';
+  end if;
+
+  delete from auth.users where id = uid;
+end;
+$$;
+
+revoke execute on function public.delete_account() from public, anon;
+grant execute on function public.delete_account() to authenticated;
