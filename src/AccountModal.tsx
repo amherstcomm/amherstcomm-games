@@ -148,11 +148,13 @@ export default function AccountModal({
     setStatsCleared(false);
   }
 
-  // Tolerant about case and stray spaces: the point is that you looked at the
-  // code, not that you can hit shift accurately.
+  // Every space and capital thrown away before comparing. Reading "clear NAXB"
+  // off the screen, there's no way to tell whether it wants one space, four, or
+  // none — and getting the letters right is the whole of the work being asked
+  // for. Gating on typography would just be a second puzzle.
   const expected = danger === null ? '' : `${CONFIRM_WORD[danger]} ${confirmCode}`;
-  const typedOk =
-    danger !== null && typed.trim().replace(/\s+/g, ' ').toLowerCase() === expected.toLowerCase();
+  const norm = (s: string) => s.replace(/\s+/g, '').toLowerCase();
+  const typedOk = danger !== null && norm(typed) === norm(expected);
 
   async function confirmClearStats() {
     if (busy || !typedOk) return;
@@ -314,7 +316,7 @@ export default function AccountModal({
                     <span className="text-slate-200 font-semibold">
                       clear <span className="tracking-[0.2em]">{confirmCode}</span>
                     </span>{' '}
-                    to confirm
+                    to confirm — spaces and capitals don&apos;t matter
                   </label>
                   <input
                     id="clear-confirm"
@@ -382,7 +384,7 @@ export default function AccountModal({
                     <span className="text-rose-200 font-semibold">
                       delete <span className="tracking-[0.2em]">{confirmCode}</span>
                     </span>{' '}
-                    to confirm
+                    to confirm — spaces and capitals don&apos;t matter
                   </label>
                   <input
                     id="delete-confirm"
