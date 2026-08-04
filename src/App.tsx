@@ -1370,7 +1370,11 @@ function App() {
               height={512}
               className="w-12 h-12 sm:w-16 sm:h-16 rounded-2xl shadow-lg shadow-black/30 shrink-0"
             />
-            <span className="pb-1 leading-[1.2] text-4xl sm:text-5xl font-bold tracking-tight bg-gradient-to-br from-white via-white to-slate-400 bg-clip-text text-transparent">
+            {/* bg-clip-text paints inside the element's box, so the g's tail
+                needs padding below the line or it gets sliced off. The
+                matching negative margin keeps that padding out of the layout,
+                so the name still sits centred against the mark. */}
+            <span className="pb-[0.4em] -mb-[0.4em] text-4xl sm:text-5xl font-bold tracking-tight bg-gradient-to-br from-white via-white to-slate-400 bg-clip-text text-transparent">
               Anagrimoire
             </span>
           </h1>
