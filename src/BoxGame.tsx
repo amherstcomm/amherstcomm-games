@@ -183,7 +183,7 @@ const BoxGame = forwardRef<
     standardWords: string[] | null;
     commonWords: string[] | null;
     onLetterStates: (states: Record<string, LetterState>) => void;
-    onReveal: (sides: string[]) => void;
+    onReveal?: (sides: string[]) => void;
   }
 >(function BoxGame({ standardWords, commonWords, onLetterStates, onReveal }, ref) {
   const [store, setStore] = useState<BoxStore>(loadStore);
@@ -636,6 +636,10 @@ const BoxGame = forwardRef<
                 }
               />
             )}
+            {/* Both of these end up in the solver, so they go when the solver
+                is hidden — a give-up that shows nothing isn't giving up. */}
+            {onReveal && (
+              <>
             <button
               onMouseDown={(e) => e.preventDefault()}
               onClick={() => onReveal(record.sides)}
@@ -668,6 +672,8 @@ const BoxGame = forwardRef<
                 <Eye className="w-4 h-4" />
                 Reveal
               </button>
+            )}
+              </>
             )}
           </div>
 

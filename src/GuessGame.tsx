@@ -103,7 +103,7 @@ const GuessGame = forwardRef<
     commonWords: string[] | null;
     fullWords: string[] | null;
     onLetterStates: (states: Record<string, LetterState>) => void;
-    onReveal: (clues: { length: number; known: string[]; contains: string; excluded: string }) => void;
+    onReveal?: (clues: { length: number; known: string[]; contains: string; excluded: string }) => void;
   }
 >(function GuessGame({ length, commonWords, fullWords, onLetterStates, onReveal }, ref) {
   const [store, setStore] = useState<PlayStore>(loadStore);
@@ -342,7 +342,7 @@ const GuessGame = forwardRef<
     for (const c of [...absent]) if (present.has(c) || known.includes(c)) absent.delete(c);
     // presents already locked into a green slot don't need a contains clue
     for (const c of [...present]) if (known.includes(c)) present.delete(c);
-    onReveal({
+    onReveal?.({
       length,
       known,
       contains: [...present].sort().join(''),
@@ -539,7 +539,8 @@ const GuessGame = forwardRef<
                 }
               />
             )}
-            {guesses.length > 0 && (
+            {/* hands the board's clues to the solver, so it goes with it */}
+            {onReveal && guesses.length > 0 && (
               <button
                 onMouseDown={(e) => e.preventDefault()}
                 onClick={reveal}

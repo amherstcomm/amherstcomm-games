@@ -29,13 +29,18 @@ import { ALL_MODES, ALL_VIEWS, lengthChoices, visibleModes, visibleViews, type L
 // player's own range now, in storage
 const MAX_LEN = 15;
 
-const MODES: { id: Mode; label: string; blurb: string; description: string }[] = [
+// description sells the solver, which is the wrong pitch for someone who has
+// hidden it — playDescription is what they get instead.
+const MODES: { id: Mode; label: string; blurb: string; description: string; playDescription: string }[] = [
   {
     id: 'pattern',
     label: 'Pattern',
     blurb: 'Wordle, crosswords, hangman — clues about positions',
     description:
       "Lock in the letters you know, list the ones you've seen, and exclude the rest. We'll surface every dictionary word that fits.",
+    playDescription:
+      // no colour names — they change with the palette
+      'Six guesses at a hidden word. Each one tells you which letters are in the right place and which are merely in there somewhere.',
   },
   {
     id: 'descramble',
@@ -43,6 +48,8 @@ const MODES: { id: Mode; label: string; blurb: string; description: string }[] =
     blurb: 'Scrabble, Jumble — what can these letters spell?',
     description:
       "Type the letters you're holding — with ? for blank tiles — and we'll show every word they can spell.",
+    playDescription:
+      'Three minutes, seven letters, as many words as you can find. Longer words score more.',
   },
   {
     id: 'bee',
@@ -50,6 +57,8 @@ const MODES: { id: Mode; label: string; blurb: string; description: string }[] =
     blurb: 'Seven letters, 4+ letter words, center letter required — Spelling Bee style',
     description:
       "Enter the hive's seven letters and we'll find every word that uses the center — pangrams first.",
+    playDescription:
+      'Every word uses the centre letter and at least four letters. Use all seven for a pangram.',
   },
   {
     id: 'grid',
@@ -57,6 +66,8 @@ const MODES: { id: Mode; label: string; blurb: string; description: string }[] =
     blurb: 'Boggle style — chain adjacent letters, each cell once',
     description:
       "Enter the grid letters and we'll find every word traceable through adjacent cells.",
+    playDescription:
+      'Three minutes to trace words through touching letters, each cell used once per word.',
   },
   {
     id: 'boxed',
@@ -64,6 +75,8 @@ const MODES: { id: Mode; label: string; blurb: string; description: string }[] =
     blurb: "Twelve letters on four sides, no two in a row from the same side — Letter Boxed style",
     description:
       "Enter the twelve letters, three per side. We'll find every legal word and the two-word solutions that use all twelve.",
+    playDescription:
+      'Use all twelve letters in a chain of words, never twice in a row from the same side.',
   },
   {
     id: 'weave',
@@ -71,6 +84,8 @@ const MODES: { id: Mode; label: string; blurb: string; description: string }[] =
     blurb: 'Themed words tile the whole board — Strands style',
     description:
       'Play the themed tiling puzzle, or use Solve to list every traceable word on a Strands-style board.',
+    playDescription:
+      'Find the themed words that tile the whole board, plus the one that spans it corner to corner.',
   },
 ];
 
@@ -1325,7 +1340,9 @@ function App() {
             Anagrimoire
           </h1>
           <p className="text-slate-400 max-w-md mx-auto text-sm sm:text-base">
-            {MODES.find((m) => m.id === mode)?.description}
+            {shownViews.includes('solve')
+              ? MODES.find((m) => m.id === mode)?.description
+              : MODES.find((m) => m.id === mode)?.playDescription}
           </p>
         </header>
 
@@ -1534,7 +1551,7 @@ function App() {
             commonWords={commonWordsArr}
             fullWords={fullWordsArr}
             onLetterStates={setLetterStates}
-            onReveal={({ length: len, known: k, contains, excluded }) => {
+            onReveal={!shownViews.includes('solve') ? undefined : ({ length: len, known: k, contains, excluded }) => {
               setLength(len);
               setKnown(k);
               setContainsStr(contains);
@@ -1614,7 +1631,7 @@ function App() {
             standardWords={standardWordsArr}
             commonWords={commonWordsArr}
             onLetterStates={setLetterStates}
-            onReveal={(letters) => {
+            onReveal={!shownViews.includes('solve') ? undefined : (letters) => {
               setRackStr(letters);
               setUseAll(false);
               setMinLength(3);
@@ -1691,7 +1708,7 @@ function App() {
             standardWords={standardWordsArr}
             commonWords={commonWordsArr}
             onLetterStates={setLetterStates}
-            onReveal={(center, outers) => {
+            onReveal={!shownViews.includes('solve') ? undefined : (center, outers) => {
               setBeeCenter(center);
               setBeeOuters(outers);
               setBeePlay(false);
@@ -1774,7 +1791,7 @@ function App() {
             ref={gridRef}
             standardWords={standardWordsArr}
             onLetterStates={setLetterStates}
-            onReveal={(cells) => {
+            onReveal={!shownViews.includes('solve') ? undefined : (cells) => {
               setGridPreset(cells.length === 9 ? '3x3' : cells.length === 25 ? '5x5' : '4x4');
               setGridLetters(cells);
               setGridPlay(false);
@@ -1874,7 +1891,7 @@ function App() {
             standardWords={standardWordsArr}
             commonWords={commonWordsArr}
             onLetterStates={setLetterStates}
-            onReveal={(sides) => {
+            onReveal={!shownViews.includes('solve') ? undefined : (sides) => {
               setBoxedLetters(sides.flatMap((s) => s.split('')).slice(0, 12));
               setBoxedPlay(false);
             }}

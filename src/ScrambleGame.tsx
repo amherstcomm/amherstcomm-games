@@ -99,7 +99,7 @@ const ScrambleGame = forwardRef<
     standardWords: string[] | null;
     commonWords: string[] | null;
     onLetterStates: (states: Record<string, LetterState>) => void;
-    onReveal: (letters: string) => void;
+    onReveal?: (letters: string) => void;
   }
 >(function ScrambleGame({ standardWords, commonWords, onLetterStates, onReveal }, ref) {
   const [store, setStore] = useState<ScrambleStore>(loadStore);
@@ -524,14 +524,17 @@ const ScrambleGame = forwardRef<
                     })
                   }
                 />
-                <button
-                  onMouseDown={(e) => e.preventDefault()}
-                  onClick={() => onReveal(record.rack.join(''))}
-                  className="inline-flex items-center gap-1.5 px-4 h-10 rounded-lg text-sm font-semibold bg-amber-400/15 border border-amber-400/30 text-amber-200 hover:bg-amber-400/25 transition-colors"
-                >
-                  <Search className="w-4 h-4" />
-                  Reveal all in solver
-                </button>
+                {/* nothing to reveal into when the solver is hidden */}
+                {onReveal && (
+                  <button
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={() => onReveal(record.rack.join(''))}
+                    className="inline-flex items-center gap-1.5 px-4 h-10 rounded-lg text-sm font-semibold bg-amber-400/15 border border-amber-400/30 text-amber-200 hover:bg-amber-400/25 transition-colors"
+                  >
+                    <Search className="w-4 h-4" />
+                    Reveal all in solver
+                  </button>
+                )}
                 {!store.dailyMode && (
                   <button
                     onMouseDown={(e) => e.preventDefault()}

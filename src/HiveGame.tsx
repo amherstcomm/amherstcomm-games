@@ -121,7 +121,7 @@ const HiveGame = forwardRef<
     standardWords: string[] | null;
     commonWords: string[] | null;
     onLetterStates: (states: Record<string, LetterState>) => void;
-    onReveal: (center: string, outers: string[]) => void;
+    onReveal?: (center: string, outers: string[]) => void;
   }
 >(function HiveGame({ standardWords, commonWords, onLetterStates, onReveal }, ref) {
   const [store, setStore] = useState<HiveStore>(loadStore);
@@ -511,6 +511,10 @@ const HiveGame = forwardRef<
                 }
               />
             )}
+            {/* Both of these end up in the solver, so they go when the solver
+                is hidden — a give-up that shows nothing isn't giving up. */}
+            {onReveal && (
+              <>
             <button
               onMouseDown={(e) => e.preventDefault()}
               onClick={() => onReveal(record.center, record.outers)}
@@ -543,6 +547,8 @@ const HiveGame = forwardRef<
                 <Eye className="w-4 h-4" />
                 Reveal
               </button>
+            )}
+              </>
             )}
           </div>
 
