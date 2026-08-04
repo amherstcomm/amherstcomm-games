@@ -203,6 +203,8 @@ export default function SettingsModal({
   const dialogRef = useRef<HTMLDivElement>(null);
   useModalA11y(dialogRef, onClose);
 
+  const [tab, setTab] = useState<'site' | 'games'>('site');
+
   // Somewhere that requires asking, an unanswered visitor is off; everywhere
   // else analytics runs unless it's been turned off, which is the state this
   // control exists to make reachable.
@@ -249,9 +251,31 @@ export default function SettingsModal({
         </button>
 
         <div className="overflow-y-auto p-6 sm:p-8">
-        <h2 className="text-xl font-bold mb-5">Settings</h2>
+        <h2 className="text-xl font-bold mb-4">Settings</h2>
 
-        <div className="space-y-6">
+        {/* Two halves, because they answer different questions: how the site
+            looks to you, and which of it you want. Long enough now that one
+            list buried the games half under four appearance controls. */}
+        <div className="inline-flex flex-wrap rounded-xl bg-white/5 border border-white/10 p-1 gap-1 mb-5">
+          {(
+            [
+              { id: 'site', label: 'Site' },
+              { id: 'games', label: 'Games' },
+            ] as const
+          ).map(({ id, label }) => (
+            <button
+              key={id}
+              onClick={() => setTab(id)}
+              aria-current={tab === id ? 'page' : undefined}
+              className={`px-4 h-9 rounded-lg text-sm font-semibold transition-colors
+                ${tab === id ? 'bg-emerald-400 text-ink' : 'text-slate-300 hover:bg-white/10'}`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+
+        <div className={`space-y-6 ${tab === 'site' ? '' : 'hidden'}`}>
           <div>
             <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2.5">
               Appearance
@@ -338,40 +362,43 @@ export default function SettingsModal({
             </p>
           </div>
 
-          <div>
-            <h3 className="flex items-center gap-2 text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2.5">
-              <Keyboard className="w-3.5 h-3.5" />
-              Board navigation
-            </h3>
-            <div className="inline-flex rounded-xl bg-white/5 border border-white/10 p-1 gap-1">
-              {(
-                [
-                  { id: 'numpad' as const, label: 'Number pad' },
-                  { id: 'wasd' as const, label: 'WASD' },
-                ]
-              ).map(({ id, label }) => (
-                <button
-                  key={id}
-                  onClick={() => onNavKeys(id)}
-                  aria-pressed={navKeys === id}
-                  className={`px-3 h-9 rounded-lg text-sm font-semibold transition-colors
-                    ${navKeys === id
-                      ? 'bg-amber-400 text-ink shadow-lg shadow-amber-500/30'
-                      : 'text-slate-300 hover:bg-white/10'}`}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-            <div className="mt-3 flex items-center gap-3">
-              <KeyDiagram scheme={navKeys} />
-              <p className="text-xs text-slate-500 flex-1">
-                Steers the cursor around Weave&apos;s board, diagonals included. Arrow
-                keys always work too.
+          {GA_ID && (
+            <div>
+              <h3 className="flex items-center gap-2 text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2.5">
+                <BarChart3 className="w-3.5 h-3.5" />
+                Analytics
+              </h3>
+              <div className="inline-flex rounded-xl bg-white/5 border border-white/10 p-1 gap-1">
+                {(
+                  [
+                    { id: 'granted' as const, label: 'Allowed' },
+                    { id: 'denied' as const, label: 'Off' },
+                  ]
+                ).map(({ id, label }) => (
+                  <button
+                    key={id}
+                    onClick={() => setAnalytics(id)}
+                    aria-pressed={analytics === id}
+                    disabled={gpc}
+                    className={`px-3 h-9 rounded-lg text-sm font-semibold transition-colors
+                      ${analytics === id
+                        ? 'bg-amber-400 text-ink shadow-lg shadow-amber-500/30'
+                        : 'text-slate-300 hover:bg-white/10'}`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+              <p className="mt-2 text-xs text-slate-500">
+                {gpc
+                  ? 'Your browser sends a Global Privacy Control signal, so analytics is off and stays off.'
+                  : 'Counts visits, never your letters or results. Turning it off also clears the cookies it left behind. Kept per browser, since cookies are.'}
               </p>
             </div>
-          </div>
+          )}
+        </div>
 
+        <div className={`space-y-6 ${tab === 'games' ? '' : 'hidden'}`}>
           <div>
             <h3 className="flex items-center gap-2 text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2.5">
               <EyeOff className="w-3.5 h-3.5" />
@@ -435,9 +462,13 @@ export default function SettingsModal({
               game and one tab have to stay.
             </p>
 
-            {!hiddenViews.includes('solve') && (
-              <div className="mt-4">
-                <p className="text-xs font-medium text-slate-400 mb-1.5">Solver dictionary</p>
+          </div>
+
+          {!hiddenViews.includes('solve') && (
+            <div>
+              <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2.5">
+                Solver dictionary
+              </h3>
                 <select
                   aria-label="Solver dictionary"
                   value={solverDictionary}
@@ -460,14 +491,14 @@ export default function SettingsModal({
                     ? 'Each solver remembers its own, which is what the picker above each one sets.'
                     : 'Every solver uses this one, and the per-solver picker goes away.'}
                 </p>
-              </div>
-            )}
+            </div>
+          )}
 
-            {!hiddenModes.includes('pattern') && (
-              <div className="mt-4">
-                <p className="text-xs font-medium text-slate-400 mb-1.5">
-                  Pattern word lengths
-                </p>
+          {!hiddenModes.includes('pattern') && (
+            <div>
+              <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2.5">
+                Pattern word lengths
+              </h3>
                 <div className="flex items-center gap-2 text-sm">
                   <LengthPicker
                     label="Shortest word length"
@@ -490,51 +521,49 @@ export default function SettingsModal({
                     ? `Only ${lengthRange.min}-letter words, and the length row disappears.`
                     : 'Narrows the row of lengths Pattern offers. The rest keep their dailies and statistics.'}
                 </p>
-              </div>
-            )}
-          </div>
-
-          {GA_ID && (
-            <div>
-              <h3 className="flex items-center gap-2 text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2.5">
-                <BarChart3 className="w-3.5 h-3.5" />
-                Analytics
-              </h3>
-              <div className="inline-flex rounded-xl bg-white/5 border border-white/10 p-1 gap-1">
-                {(
-                  [
-                    { id: 'granted' as const, label: 'Allowed' },
-                    { id: 'denied' as const, label: 'Off' },
-                  ]
-                ).map(({ id, label }) => (
-                  <button
-                    key={id}
-                    onClick={() => setAnalytics(id)}
-                    aria-pressed={analytics === id}
-                    disabled={gpc}
-                    className={`px-3 h-9 rounded-lg text-sm font-semibold transition-colors
-                      ${analytics === id
-                        ? 'bg-amber-400 text-ink shadow-lg shadow-amber-500/30'
-                        : 'text-slate-300 hover:bg-white/10'}`}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
-              <p className="mt-2 text-xs text-slate-500">
-                {gpc
-                  ? 'Your browser sends a Global Privacy Control signal, so analytics is off and stays off.'
-                  : 'Counts visits, never your letters or results. Turning it off also clears the cookies it left behind. Kept per browser, since cookies are.'}
-              </p>
             </div>
           )}
 
-          <p className="text-xs text-slate-500 border-t border-white/10 pt-4">
-            {signedIn
-              ? 'These settings are saved to your account and follow you across devices.'
-              : 'Saved in this browser. Sign in to carry them across devices.'}
-          </p>
+          <div>
+            <h3 className="flex items-center gap-2 text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2.5">
+              <Keyboard className="w-3.5 h-3.5" />
+              Board navigation
+            </h3>
+            <div className="inline-flex rounded-xl bg-white/5 border border-white/10 p-1 gap-1">
+              {(
+                [
+                  { id: 'numpad' as const, label: 'Number pad' },
+                  { id: 'wasd' as const, label: 'WASD' },
+                ]
+              ).map(({ id, label }) => (
+                <button
+                  key={id}
+                  onClick={() => onNavKeys(id)}
+                  aria-pressed={navKeys === id}
+                  className={`px-3 h-9 rounded-lg text-sm font-semibold transition-colors
+                    ${navKeys === id
+                      ? 'bg-amber-400 text-ink shadow-lg shadow-amber-500/30'
+                      : 'text-slate-300 hover:bg-white/10'}`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            <div className="mt-3 flex items-center gap-3">
+              <KeyDiagram scheme={navKeys} />
+              <p className="text-xs text-slate-500 flex-1">
+                Steers the cursor around Weave&apos;s board, diagonals included. Arrow
+                keys always work too.
+              </p>
+            </div>
+          </div>
         </div>
+
+        <p className="text-xs text-slate-500 border-t border-white/10 pt-4 mt-6">
+          {signedIn
+            ? 'These settings are saved to your account and follow you across devices.'
+            : 'Saved in this browser. Sign in to carry them across devices.'}
+        </p>
         </div>
       </div>
     </div>
