@@ -27,3 +27,6 @@ dist-ssr
 
 # Vite cache
 .vite/
+
+# tsc -b leaves these at the root
+*.tsbuildinfo
