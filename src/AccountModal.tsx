@@ -133,7 +133,8 @@ export default function AccountModal({
   // saying what it takes, and deletion also wants the word typed out.
   const [danger, setDanger] = useState<null | 'stats' | 'account'>(null);
   const [typed, setTyped] = useState('');
-  const [code, setCode] = useState('');
+  // not `code` — that's the sign-in one-time code a few lines up
+  const [confirmCode, setConfirmCode] = useState('');
   const [wipeLocal, setWipeLocal] = useState(true);
   const [busy, setBusy] = useState(false);
   const [dangerError, setDangerError] = useState('');
@@ -141,7 +142,7 @@ export default function AccountModal({
 
   function openDanger(which: 'stats' | 'account') {
     setDanger(which);
-    setCode(newCode());
+    setConfirmCode(newCode());
     setTyped('');
     setDangerError('');
     setStatsCleared(false);
@@ -149,7 +150,7 @@ export default function AccountModal({
 
   // Tolerant about case and stray spaces: the point is that you looked at the
   // code, not that you can hit shift accurately.
-  const expected = danger === null ? '' : `${CONFIRM_WORD[danger]} ${code}`;
+  const expected = danger === null ? '' : `${CONFIRM_WORD[danger]} ${confirmCode}`;
   const typedOk =
     danger !== null && typed.trim().replace(/\s+/g, ' ').toLowerCase() === expected.toLowerCase();
 
@@ -311,7 +312,7 @@ export default function AccountModal({
                   <label htmlFor="clear-confirm" className="block text-xs text-slate-400 mb-1.5">
                     Type{' '}
                     <span className="text-slate-200 font-semibold">
-                      clear <span className="tracking-[0.2em]">{code}</span>
+                      clear <span className="tracking-[0.2em]">{confirmCode}</span>
                     </span>{' '}
                     to confirm
                   </label>
@@ -379,7 +380,7 @@ export default function AccountModal({
                   >
                     Type{' '}
                     <span className="text-rose-200 font-semibold">
-                      delete <span className="tracking-[0.2em]">{code}</span>
+                      delete <span className="tracking-[0.2em]">{confirmCode}</span>
                     </span>{' '}
                     to confirm
                   </label>
