@@ -1307,7 +1307,11 @@ function App() {
         Skip to content
       </a>
 
-      {/* top nav bar */}
+      {/* Top nav bar — gone entirely with one game. A bar holding a single
+          tab is a switch with one position, and dropping to just the wordmark
+          would only print the site's name directly above the h1 that already
+          says it. The page header below carries the identity instead. */}
+      {shownModes.length > 1 && (
       <nav
         aria-label="Game modes"
         className="sticky top-0 z-40 bg-slate-950/80 backdrop-blur border-b border-white/10"
@@ -1343,6 +1347,7 @@ function App() {
           </div>
         </div>
       </nav>
+      )}
 
       <main
         id="main"
