@@ -76,16 +76,57 @@ create unique index if not exists profiles_display_name_key
 -- separator-insensitive, so spacing tricks don't get around it.
 --
 -- Ships empty on purpose. A blocklist in a public repository is a map of what
--- to work around, so the entries belong in the database and nowhere else. Add
--- them from the SQL editor, lowercase and letters/digits only, since the name
--- is squashed to that before matching:
+-- to work around, so the entries belong in the database and nowhere else.
 --
---   insert into public.blocked_names (pattern) values ('...') on conflict do nothing;
+-- To populate it, from the SQL editor:
+--
+--   -- slurs: short, hand-written, blocked anywhere in a name
+--   insert into public.blocked_names (pattern, match)
+--   values ('...', 'substring') on conflict (pattern) do nothing;
+--
+--   -- general profanity: bulk, blocked only as the whole name. Paste a public
+--   -- word list here; it gets normalised on the way in, and anything that
+--   -- normalises to nothing is dropped.
+--   insert into public.blocked_names (pattern, match)
+--   select distinct public.normalise_name(w), 'exact'
+--   from unnest(array['word1', 'word2', 'word3']) w
+--   where public.normalise_name(w) <> ''
+--   on conflict (pattern) do nothing;
+--
+-- Check the licence of any list you import. Loading it into your own database
+-- isn't redistribution, but the repo staying clean of it is deliberate.
 --
 create table if not exists public.blocked_names (
   pattern text primary key,
   added_at timestamptz not null default now()
 );
+
+-- Two kinds of entry, because one size genuinely doesn't fit.
+--
+--   'substring' rejects a name containing it anywhere. Right for slurs, which
+--               must not appear at all — and wrong for anything else, because
+--               "assassin", "Cummings" and Penistone are all real, and a big
+--               list matched this way rejects far more innocent names than
+--               abusive ones.
+--   'exact'     rejects only the whole name. Safe for bulk-importing a general
+--               profanity list: it stops the name being that word without
+--               ruining every name that happens to contain it.
+alter table public.blocked_names
+  add column if not exists match text not null default 'substring';
+alter table public.blocked_names drop constraint if exists blocked_names_match_check;
+alter table public.blocked_names
+  add constraint blocked_names_match_check check (match in ('substring', 'exact'));
+
+-- Names are compared in a normalised form: lowercased, stripped to letters and
+-- digits, then the usual digit-for-letter swaps undone, so "s p a m", "s-p-a-m"
+-- and "5pam" all match the one entry "spam". Store patterns in this same form.
+create or replace function public.normalise_name(p_name text)
+returns text language sql immutable as $$
+  select translate(
+    lower(regexp_replace(coalesce(p_name, ''), '[^A-Za-z0-9]', '', 'g')),
+    '013457', 'oieast'
+  );
+$$;
 
 alter table public.blocked_names enable row level security;
 -- no policies: nothing but the definer functions below can read it
@@ -124,10 +165,12 @@ begin
     return 'characters';
   end if;
 
-  -- strip everything but letters and digits before matching, so "s p a m"
-  -- and "s-p-a-m" are caught by the same entry as "spam"
-  squashed := lower(regexp_replace(cleaned, '[^A-Za-z0-9]', '', 'g'));
-  if exists (select 1 from public.blocked_names b where squashed like '%' || b.pattern || '%') then
+  squashed := public.normalise_name(cleaned);
+  if exists (
+    select 1 from public.blocked_names b
+    where (b.match = 'substring' and squashed like '%' || b.pattern || '%')
+       or (b.match = 'exact' and squashed = b.pattern)
+  ) then
     return 'blocked';
   end if;
 
@@ -150,6 +193,20 @@ end;
 $$;
 
 grant execute on function public.set_display_name(text) to authenticated;
+
+-- Try a name against the list without claiming it. No grant, so it's yours
+-- alone through the SQL editor — for checking a new entry doesn't take
+-- ordinary names down with it:
+--
+--   select n, public.would_block(n) from unnest(array['Sam','Scunthorpe']) n;
+create or replace function public.would_block(p_name text)
+returns boolean language sql stable as $$
+  select exists (
+    select 1 from public.blocked_names b
+    where (b.match = 'substring' and public.normalise_name(p_name) like '%' || b.pattern || '%')
+       or (b.match = 'exact' and public.normalise_name(p_name) = b.pattern)
+  );
+$$;
 
 -- ---------------------------------------------------------------------------
 -- game_results: append-only log of completed games. Aggregates (lifetime
