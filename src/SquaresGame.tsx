@@ -1,13 +1,18 @@
 import { forwardRef, Fragment, useEffect, useImperativeHandle, useMemo, useState } from 'react';
 import { CalendarDays, Eye, RefreshCw, Timer } from 'lucide-react';
 import { dailyDataUrl, SQUARES_POOL_URL } from '@/dailyData';
-import MobileKeyInput from '@/MobileKeyInput';
 import { dailyIntent } from '@/routes';
 import { offerDailySwitch, reportDaily } from '@/dailyBus';
 import { usePrefs } from '@/prefs';
 import { formatElapsed, useUpTimer } from '@/useUpTimer';
 
 export type SquaresGameHandle = { pressKey: (k: string) => void };
+
+// No MobileKeyInput here, unlike the other play modes. That overlay exists to
+// raise the phone's keyboard by tapping a game's single entry box, and this
+// game has none — you tap the cell you mean. A separate tap target would be a
+// second thing to aim at for the same job. Phones type through the site's own
+// keyboard, which reaches this board via the handle above.
 
 export type SquareSize = 4 | 5;
 
@@ -512,12 +517,7 @@ const SquaresGame = forwardRef<
             )}
           </div>
 
-          {!done && (
-            <div className="relative mt-4 mx-auto max-w-xs h-11 rounded-xl bg-white/5 border-2 border-white/10 flex items-center justify-center overflow-hidden">
-              <MobileKeyInput onKey={pressKey} label="Type a letter" />
-              <span className="text-xs text-slate-400">Tap here to type</span>
-            </div>
-          )}
+
         </>
       )}
     </div>
