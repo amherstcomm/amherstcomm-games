@@ -1,6 +1,9 @@
 import { forwardRef, Fragment, useEffect, useImperativeHandle, useMemo, useState } from 'react';
 import { CalendarDays, Eye, RefreshCw, Timer } from 'lucide-react';
 import { dailyDataUrl, SQUARES_POOL_URL } from '@/dailyData';
+import ShareButton from '@/ShareButton';
+import { buildShare, TILE_EMOJI } from '@/share';
+import { usePalette } from '@/theme';
 import { dailyIntent } from '@/routes';
 import { offerDailySwitch, reportDaily } from '@/dailyBus';
 import { usePrefs } from '@/prefs';
@@ -145,6 +148,7 @@ const SquaresGame = forwardRef<
 >(function SquaresGame({ standardWords }, ref) {
   const [store, setStore] = useState<SquaresStore>(loadStore);
   const { practiceAllowed } = usePrefs();
+  const palette = usePalette();
   // pinned to the daily: someone who switched practice off shouldn't be left
   // looking at a practice board they can no longer leave
   useEffect(() => {
@@ -497,6 +501,34 @@ const SquaresGame = forwardRef<
           </p>
 
           <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
+            {done && (
+              <ShareButton
+                build={() =>
+                  buildShare({
+                    game: `Squares (${n}×${n})`,
+                    slug: 'squares',
+                    daily: store.dailyMode,
+                    date: store.dailyDate,
+                    body: [
+                      record.revealed
+                        ? 'Revealed'
+                        : `Solved in ${formatElapsed(record.elapsedMs ?? 0)}`,
+                      // The grid is the puzzle's shape, not a record of play —
+                      // it is the same for everyone today. Under "Revealed" a
+                      // wall of filled cells would read as "I did all these",
+                      // so it only goes out with a genuine solve.
+                      ...(record.revealed ? [] : Array.from({ length: n }, (_, r) =>
+                        Array.from({ length: n }, (_, c) =>
+                          record.cells[r * n + c] !== null
+                            ? TILE_EMOJI[palette].absent
+                            : TILE_EMOJI[palette].correct
+                        ).join('')
+                      )),
+                    ],
+                  })
+                }
+              />
+            )}
             {!store.dailyMode && (
               <button
                 onClick={newPractice}
