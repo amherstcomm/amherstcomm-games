@@ -109,6 +109,38 @@ endpoint the moment somebody edits one uuid in the network tab.
   tie it to an account, and their deletion API works on identifiers you
   supply. Dropping the `_ga` cookies is the honest whole of what we can do.
 
+### Verified results — a word list in the database
+`result_is_plausible()` recomputes each score from the words the client says it
+found. That catches a score disagreeing with its own evidence, but the database
+has no dictionary, so ten invented words score exactly like ten real ones.
+Every game sits in that tier — Squares, whose grid can only be checked for
+shape, is no worse than the rest.
+
+**Client-side signing can't fix it at any key length.** If the browser computes
+an HMAC, the browser holds the key, and anything shipped to the browser is
+public. The flaw isn't where the key is kept, it's that the key is there at
+all — the same wall the display-name work hit.
+
+So the fix is the server knowing the truth independently, as one piece of work
+rather than a patch per game:
+
+- **Our own word list, in Postgres.** The dictionaries are already normalised
+  in the build; publishing them to a `words` table lets `result_is_plausible`
+  check membership instead of re-adding a claimed score. Worth pricing first —
+  the full list is large, and the check runs per row.
+- **Answer hashes for Squares**, whose evidence is a grid rather than words.
+  The pipeline writes `sha256(rows joined)` per date and size; the check hashes
+  the submitted grid and compares.
+- Written by the daily workflow under a service-role key held only as a CI
+  secret, never in the bundle. Grants revoked from every web role: a readable
+  answers table is just the answers, and a hash over a small answer space is
+  guessable.
+
+**Not urgent.** The realistic threat is one curious person with the network tab
+open, and the exposure is bounded — `daily_progress` holds one row per puzzle,
+so nobody can claim more solves than there are days, unlike an unbounded score.
+Doing it for Squares alone would leave one trustworthy board among seven.
+
 ### Admin portal — much later
 Everything owner-facing is SQL-editor-only today: clearing a display name,
 adding blocklist entries, reading `suspect_daily_results`. That's fine, and

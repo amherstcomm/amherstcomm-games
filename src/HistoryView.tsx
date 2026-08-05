@@ -2,7 +2,7 @@
 // already heavy, and a sparkline is a polyline.
 
 import { useEffect, useMemo, useState } from 'react';
-import { Grid3x3, Hexagon, LayoutGrid, Puzzle, Shuffle, Square } from 'lucide-react';
+import { Grid3x3, Hexagon, LayoutGrid, Puzzle, Shuffle, Square, Table2 } from 'lucide-react';
 import {
   fetchHistory,
   guessByLength,
@@ -17,13 +17,23 @@ import {
 } from '@/history';
 import { formatElapsed } from '@/useUpTimer';
 
-const GAMES: { id: HistoryGame; label: string; Icon: typeof Grid3x3; unit: string; lowerIsBetter: boolean }[] = [
+const GAMES: {
+  id: HistoryGame;
+  label: string;
+  Icon: typeof Grid3x3;
+  unit: string;
+  lowerIsBetter: boolean;
+  /** when set, this card covers only that board of the day */
+  variant?: string;
+}[] = [
   { id: 'guess', label: 'Guess the Word', Icon: Grid3x3, unit: 'guesses', lowerIsBetter: true },
   { id: 'hive', label: 'Hive', Icon: Hexagon, unit: 'points', lowerIsBetter: false },
   { id: 'scramble', label: 'Scramble', Icon: Shuffle, unit: 'points', lowerIsBetter: false },
   { id: 'grid', label: 'Grid', Icon: LayoutGrid, unit: 'points', lowerIsBetter: false },
   { id: 'box', label: 'Boxed', Icon: Square, unit: 'words', lowerIsBetter: true },
   { id: 'weave', label: 'Weave', Icon: Puzzle, unit: 'time', lowerIsBetter: true },
+  { id: 'squares', label: 'Word squares (4×4)', Icon: Table2, unit: 'time', lowerIsBetter: true, variant: '4' },
+  { id: 'squares', label: 'Word squares (5×5)', Icon: Table2, unit: 'time', lowerIsBetter: true, variant: '5' },
 ];
 
 function todayEt(): string {
@@ -145,7 +155,10 @@ function LengthTable({ rows }: { rows: LengthRecord[] }) {
 }
 
 function GameCard({ game, history }: { game: (typeof GAMES)[number]; history: History }) {
-  const entries = history[game.id];
+  const entries = useMemo(() => {
+    const all = history[game.id];
+    return game.variant === undefined ? all : all.filter((e) => e.variant === game.variant);
+  }, [history, game.id, game.variant]);
   const today = todayEt();
   const { current, best } = useMemo(
     () => streaks(entries, STREAK_RULE[game.id], today),
@@ -236,7 +249,11 @@ export default function HistoryView({ signedIn }: { signedIn: boolean }) {
     );
   }
 
-  const played = GAMES.filter((g) => history[g.id].length);
+  const played = GAMES.filter((g) =>
+    g.variant === undefined
+      ? history[g.id].length
+      : history[g.id].some((e) => e.variant === g.variant)
+  );
   if (!played.length) {
     return (
       <p className="text-sm text-slate-400 py-6 text-center">
@@ -249,7 +266,7 @@ export default function HistoryView({ signedIn }: { signedIn: boolean }) {
   return (
     <div className="space-y-3">
       {played.map((g) => (
-        <GameCard key={g.id} game={g} history={history} />
+        <GameCard key={`${g.id}${g.variant ?? ''}`} game={g} history={history} />
       ))}
       <p className="text-xs text-slate-500 pt-1">
         Dailies only, since practice boards have no date to sit on. History starts when
