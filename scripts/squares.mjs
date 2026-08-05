@@ -64,7 +64,19 @@ export function buildSquare({ pool, byPrefix }, n, rng, nodeBudget = 4_000_000) 
   let nodes = 0;
 
   function place(depth) {
-    if (depth === n) return true;
+    if (depth === n) {
+      // Ten different words, not five read twice. Nothing above forbids a
+      // symmetric square — where column c spells the same as row c — and it
+      // halves the puzzle while looking like a full one.
+      const seen = [];
+      for (let c = 0; c < n; c++) {
+        let w = '';
+        for (const r of rows) w += r[c];
+        if (used.has(w) || seen.includes(w)) return false;
+        seen.push(w);
+      }
+      return true;
+    }
     if (nodes > nodeBudget) return false;
     const pre = columnPrefixes(rows, n);
     for (const w of order) {

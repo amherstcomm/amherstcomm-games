@@ -365,8 +365,13 @@ const SquaresGame = forwardRef<
   }
 
   const n = store.size;
+  // Grid's *play* board metrics, not its solver tiles — Grid uses two sizes
+  // (40x48 for the solver's letter inputs, 48x56 for the board you play on)
+  // and squares is a play board. One size at both 4x4 and 5x5, since Grid
+  // doesn't shrink between its presets either.
   const cell =
-    'w-full aspect-square flex items-center justify-center rounded-lg text-xl sm:text-2xl font-bold uppercase transition-colors';
+    'w-11 h-12 sm:w-12 sm:h-14 text-xl sm:text-2xl ' +
+    'flex items-center justify-center rounded-xl border-2 font-bold uppercase transition-colors';
 
   return (
     <div className="text-center">
@@ -392,7 +397,7 @@ const SquaresGame = forwardRef<
       </div>
 
       {/* size */}
-      <div className="mb-5 flex flex-wrap items-center justify-center gap-2">
+      <div className="mb-3 flex flex-wrap items-center justify-center gap-2">
         <div className="inline-flex rounded-xl bg-white/5 border border-white/10 p-1 gap-1">
           {([4, 5] as SquareSize[]).map((s) => (
             <button
@@ -410,13 +415,16 @@ const SquaresGame = forwardRef<
             </button>
           ))}
         </div>
-        {record && (
+      </div>
+
+      {record && (
+        <div className="mb-5 flex items-center justify-center">
           <span className="inline-flex items-center gap-1.5 text-sm text-slate-400 tabular-nums">
             <Timer className="w-4 h-4" />
             {formatElapsed(record.elapsedMs ?? 0)}
           </span>
-        )}
-      </div>
+        </div>
+      )}
 
       {!record && (
         <p className="text-sm text-slate-400 py-8">
@@ -433,11 +441,8 @@ const SquaresGame = forwardRef<
               states under the board reads as columns, which is exactly the
               wrong thing for it to say. */}
           <div
-            className="grid gap-1 mx-auto w-full"
-            style={{
-              gridTemplateColumns: `repeat(${n}, minmax(0, 1fr)) 0.375rem`,
-              maxWidth: `${n * 4.25 + 0.5}rem`,
-            }}
+            className="grid gap-2 w-fit mx-auto"
+            style={{ gridTemplateColumns: `repeat(${n}, auto) 0.375rem` }}
           >
             {colStates.map((s, c) => (
               <div key={`col-${c}`} aria-hidden className={`h-1.5 rounded-full ${barTone(s)}`} />
@@ -463,10 +468,10 @@ const SquaresGame = forwardRef<
                       // bg-black/20 collapses to the same colour in light mode.
                       className={`${cell} ${
                         given
-                          ? 'bg-white/35 border border-white/40 text-white cursor-default'
+                          ? 'bg-white/35 border-white/40 text-white cursor-default'
                           : focused
-                            ? 'bg-amber-400/15 border-2 border-amber-400 text-accent'
-                            : 'bg-transparent border border-white/25 text-accent hover:bg-white/10'
+                            ? 'bg-amber-400/15 border-amber-400 text-accent'
+                            : 'bg-transparent border-white/25 text-accent hover:bg-white/10'
                       }`}
                     >
                       {letter}
@@ -507,7 +512,12 @@ const SquaresGame = forwardRef<
             )}
           </div>
 
-          {!done && <MobileKeyInput onKey={pressKey} label="Type a letter" />}
+          {!done && (
+            <div className="relative mt-4 mx-auto max-w-xs h-11 rounded-xl bg-white/5 border-2 border-white/10 flex items-center justify-center overflow-hidden">
+              <MobileKeyInput onKey={pressKey} label="Type a letter" />
+              <span className="text-xs text-slate-400">Tap here to type</span>
+            </div>
+          )}
         </>
       )}
     </div>
