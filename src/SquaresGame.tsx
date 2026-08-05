@@ -8,6 +8,7 @@ import { dailyIntent } from '@/routes';
 import { offerDailySwitch, reportDaily } from '@/dailyBus';
 import { usePrefs } from '@/prefs';
 import { formatElapsed, useUpTimer } from '@/useUpTimer';
+import { recordSquaresFinish } from '@/stats';
 
 export type SquaresGameHandle = { pressKey: (k: string) => void };
 
@@ -276,8 +277,20 @@ const SquaresGame = forwardRef<
   }
 
   useEffect(() => {
-    if (solved && record && !record.solved) update((r) => ({ ...r, solved: true }));
-  }, [solved, record]);
+    if (!record) return;
+    // The persisted flag doubles as the guard: a board counts once, and a
+    // reload of a finished board doesn't count it again.
+    if (solved && !record.solved) {
+      update((r) => ({ ...r, solved: true }));
+      recordSquaresFinish(
+        store.dailyMode,
+        true,
+        store.size,
+        record.elapsedMs ?? 0,
+        store.dailyMode ? store.dailyDate : null
+      );
+    }
+  }, [solved, record, store.dailyMode, store.size, store.dailyDate]);
 
   // the record accumulates its own time, so a board picked up tomorrow carries
   // yesterday's minutes rather than starting from zero
@@ -363,6 +376,15 @@ const SquaresGame = forwardRef<
         entries: answer.join('').split(''),
         revealed: true,
       }));
+      if (!record.revealed && !record.solved) {
+        recordSquaresFinish(
+          store.dailyMode,
+          false,
+          store.size,
+          record.elapsedMs ?? 0,
+          store.dailyMode ? store.dailyDate : null
+        );
+      }
     } catch {
       // a board with no readable answer just can't be revealed
     }

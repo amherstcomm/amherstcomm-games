@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Grid3x3, Hexagon, LayoutGrid, Puzzle, Shuffle, Square, X } from 'lucide-react';
+import { Grid3x3, Hexagon, LayoutGrid, Puzzle, Shuffle, Square, Table2, X } from 'lucide-react';
 import { combineStats, fetchSyncedStats, loadStats, type StatsStore } from '@/stats';
 import { formatElapsed } from '@/useUpTimer';
 import { useModalA11y } from '@/useModalA11y';
@@ -114,7 +114,9 @@ export default function StatsModal({
       stats.grid.sprints +
       stats.box.solved +
       stats.weave.solved +
-      stats.weave.revealed >
+      stats.weave.revealed +
+      stats.squares.solved +
+      stats.squares.revealed >
     0;
 
   return (
@@ -258,6 +260,22 @@ export default function StatsModal({
                   value={
                     stats.box.solved > 0
                       ? (stats.box.totalWords / stats.box.solved).toFixed(1)
+                      : '—'
+                  }
+                />
+              </div>
+            </Section>
+
+            <Section Icon={Table2} title="Word squares">
+              <div className="grid grid-cols-4 gap-2">
+                <Stat label="Solved" value={stats.squares.solved} />
+                <Stat label="Revealed" value={stats.squares.revealed} />
+                <Stat label="Best time" value={time(stats.squares.bestTimeMs)} />
+                <Stat
+                  label="Avg time"
+                  value={
+                    stats.squares.solved > 0
+                      ? formatElapsed(Math.round(stats.squares.totalTimeMs / stats.squares.solved))
                       : '—'
                   }
                 />

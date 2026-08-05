@@ -42,6 +42,12 @@ export type LifetimeStats = {
     bestTimeMs: number | null;
     totalTimeMs: number;
   };
+  squares: {
+    solved: number;
+    revealed: number;
+    bestTimeMs: number | null;
+    totalTimeMs: number;
+  };
 };
 
 export type StatsStore = { daily: LifetimeStats; practice: LifetimeStats };
@@ -55,7 +61,8 @@ export type GameEvent =
     }
   | { game: 'scramble' | 'grid'; payload: { score: number; words: number } }
   | { game: 'box'; payload: { words: number; timeMs: number } }
-  | { game: 'weave'; payload: { solved: boolean; timeMs: number; hints: number } };
+  | { game: 'weave'; payload: { solved: boolean; timeMs: number; hints: number } }
+  | { game: 'squares'; payload: { solved: boolean; size: number; timeMs: number } };
 
 function num(v: unknown): number {
   return typeof v === 'number' && Number.isFinite(v) && v >= 0 ? v : 0;
@@ -107,6 +114,12 @@ function sanitizeBucket(p: any): LifetimeStats {
       hintsUsed: num(p?.weave?.hintsUsed),
       bestTimeMs: numOrNull(p?.weave?.bestTimeMs),
       totalTimeMs: num(p?.weave?.totalTimeMs),
+    },
+    squares: {
+      solved: num(p?.squares?.solved),
+      revealed: num(p?.squares?.revealed),
+      bestTimeMs: numOrNull(p?.squares?.bestTimeMs),
+      totalTimeMs: num(p?.squares?.totalTimeMs),
     },
   };
 }
@@ -194,6 +207,19 @@ export function applyEvent(s: LifetimeStats, e: GameEvent): void {
       }
       break;
     }
+    case 'squares': {
+      const { solved, timeMs } = e.payload;
+      if (solved) {
+        s.squares.solved += 1;
+        s.squares.totalTimeMs += num(timeMs);
+        if (s.squares.bestTimeMs === null || timeMs < s.squares.bestTimeMs) {
+          s.squares.bestTimeMs = num(timeMs);
+        }
+      } else {
+        s.squares.revealed += 1;
+      }
+      break;
+    }
   }
 }
 
@@ -247,6 +273,15 @@ export function applyDailySummary(s: LifetimeStats, game: string, p: any): void 
         s.weave.revealed += 1;
       }
       break;
+    case 'squares':
+      if (p?.solved) {
+        s.squares.solved += 1;
+        s.squares.totalTimeMs += num(p?.timeMs);
+        s.squares.bestTimeMs = minNullable(s.squares.bestTimeMs, num(p?.timeMs));
+      } else {
+        s.squares.revealed += 1;
+      }
+      break;
   }
 }
 
@@ -298,6 +333,12 @@ export function combineStats(a: LifetimeStats, b: LifetimeStats): LifetimeStats 
       hintsUsed: a.weave.hintsUsed + b.weave.hintsUsed,
       bestTimeMs: minNullable(a.weave.bestTimeMs, b.weave.bestTimeMs),
       totalTimeMs: a.weave.totalTimeMs + b.weave.totalTimeMs,
+    },
+    squares: {
+      solved: a.squares.solved + b.squares.solved,
+      revealed: a.squares.revealed + b.squares.revealed,
+      bestTimeMs: minNullable(a.squares.bestTimeMs, b.squares.bestTimeMs),
+      totalTimeMs: a.squares.totalTimeMs + b.squares.totalTimeMs,
     },
   };
 }
@@ -406,6 +447,19 @@ export function recordWeaveReveal(
   puzzleDate: string | null = null
 ): void {
   record(daily, { game: 'weave', payload: { solved: false, timeMs: 0, hints } }, puzzleDate);
+}
+
+/** A squares board is over exactly once — solved or given up on — so both
+ *  outcomes are one event, and `size` rides along because the 4x4 and the 5x5
+ *  are separate puzzles on the same day. */
+export function recordSquaresFinish(
+  daily: boolean,
+  solved: boolean,
+  size: number,
+  timeMs: number,
+  puzzleDate: string | null = null
+): void {
+  record(daily, { game: 'squares', payload: { solved, size, timeMs } }, puzzleDate);
 }
 
 // ---------------------------------------------------------------------------
