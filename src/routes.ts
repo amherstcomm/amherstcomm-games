@@ -17,7 +17,7 @@
 import type { Mode } from '@/storage';
 
 export type View = 'solve' | 'play' | 'learn';
-export type Slug = 'pattern' | 'scramble' | 'hive' | 'grid' | 'boxed' | 'weave';
+export type Slug = 'pattern' | 'scramble' | 'hive' | 'grid' | 'boxed' | 'weave' | 'squares';
 export type Panel = 'keys' | 'account' | 'about';
 export type LegalDoc = 'notices' | 'privacy' | 'terms';
 export type StatsTab = 'overall' | 'daily' | 'practice' | 'history' | 'boards';
@@ -30,6 +30,7 @@ const SLUG_MODE: Record<Slug, Mode> = {
   grid: 'grid',
   boxed: 'boxed',
   weave: 'weave',
+  squares: 'squares',
 };
 
 export const MODE_SLUG = Object.fromEntries(
@@ -45,6 +46,7 @@ export const SLUG_NAME: Record<Slug, string> = {
   grid: 'Grid',
   boxed: 'Boxed',
   weave: 'Weave',
+  squares: 'Word Squares',
 };
 
 const VIEWS: View[] = ['solve', 'play', 'learn'];

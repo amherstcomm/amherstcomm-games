@@ -37,6 +37,7 @@ const START_OPTIONS: { id: StartPage; label: string; mode?: Mode }[] = [
   { id: 'grid', label: 'Grid', mode: 'grid' },
   { id: 'boxed', label: 'Boxed', mode: 'boxed' },
   { id: 'weave', label: 'Weave', mode: 'weave' },
+  { id: 'squares', label: 'Word Squares', mode: 'squares' },
 ];
 
 const MODE_LABELS: { id: Mode; label: string }[] = [
@@ -46,6 +47,7 @@ const MODE_LABELS: { id: Mode; label: string }[] = [
   { id: 'grid', label: 'Grid' },
   { id: 'boxed', label: 'Boxed' },
   { id: 'weave', label: 'Weave' },
+  { id: 'squares', label: 'Squares' },
 ];
 
 const VIEW_LABELS: { id: View; label: string }[] = [

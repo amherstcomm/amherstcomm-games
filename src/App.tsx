@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState, useEffect, useLayoutEffect, useRef, type ButtonHTMLAttributes, type ReactNode } from 'react';
-import { Search, Eraser, ArrowDown, ArrowUp, X, BookOpen, Grid3x3, Shuffle, Hexagon, Check, Keyboard, Delete, Github, Info, Square, CalendarDays, Star, Gamepad2, CornerDownLeft, LayoutGrid, Puzzle, BarChart3, UserRound, Scale, Settings, Home } from 'lucide-react';
+import { Search, Eraser, ArrowDown, ArrowUp, X, BookOpen, Grid3x3, Shuffle, Hexagon, Check, Keyboard, Delete, Github, Info, Square, CalendarDays, Star, Gamepad2, CornerDownLeft, LayoutGrid, Puzzle, BarChart3, UserRound, Scale, Settings, Home, Table2 } from 'lucide-react';
 import LearnMode, { type LearnModeHandle } from '@/LearnMode';
 import type { Session } from '@supabase/supabase-js';
 import StatsModal from '@/StatsModal';
@@ -26,6 +26,7 @@ import ConsentBanner from '@/ConsentBanner';
 import { PrivacyPolicy, Terms } from '@/LegalDocs';
 import { onDailyReport, requestDaily } from '@/dailyBus';
 import HomeView from '@/HomeView';
+import SquaresGame, { type SquaresGameHandle } from '@/SquaresGame';
 import {
   MODE_SLUG,
   initialGame,
@@ -94,6 +95,15 @@ const MODES: { id: Mode; label: string; blurb: string; description: string; play
       'Use all twelve letters in a chain of words, never twice in a row from the same side.',
   },
   {
+    id: 'squares',
+    label: 'Squares',
+    blurb: 'Fill the grid so every row and column is a word',
+    description:
+      'Word squares are play-only for now — the solver is still to come.',
+    playDescription:
+      'Fill the blanks so that every row and every column spells a word.',
+  },
+  {
     id: 'weave',
     label: 'Weave',
     blurb: 'Themed words tile the whole board — Strands style',
@@ -111,6 +121,7 @@ const MODE_ICONS: Record<Mode, typeof Grid3x3> = {
   grid: LayoutGrid,
   boxed: Square,
   weave: Puzzle,
+  squares: Table2,
 };
 
 function normalizeLetters(s: string): string[] {
@@ -471,6 +482,7 @@ function App() {
   const [weaveLetters, setWeaveLetters] = useState<string[]>(initial.weave.letters);
   const [weaveSize, setWeaveSize] = useState<WeaveSize>(initial.weave.size);
   const [weavePlay, setWeavePlay] = useState(initialPlay('weave', initial.weavePlay));
+  const [squaresPlay, setSquaresPlay] = useState(initialPlay('squares', initial.squaresPlay));
 
   const weaveDims = WEAVE_DIMS[weaveSize];
 
@@ -832,6 +844,7 @@ function App() {
   const gridRef = useRef<GridGameHandle>(null);
   const learnRef = useRef<LearnModeHandle>(null);
   const weaveRef = useRef<WeaveGameHandle>(null);
+  const squaresRef = useRef<SquaresGameHandle>(null);
 
   const patternPlayActive = mode === 'pattern' && patternPlay && !learnMode;
   const beePlayActive = mode === 'bee' && beePlay && !learnMode;
@@ -839,8 +852,9 @@ function App() {
   const descramblePlayActive = mode === 'descramble' && descramblePlay && !learnMode;
   const gridPlayActive = mode === 'grid' && gridPlay && !learnMode;
   const weavePlayActive = mode === 'weave' && weavePlay && !learnMode;
+  const squaresPlayActive = mode === 'squares' && squaresPlay && !learnMode;
   const playActive =
-    patternPlayActive || beePlayActive || boxedPlayActive || descramblePlayActive || gridPlayActive || weavePlayActive;
+    patternPlayActive || beePlayActive || boxedPlayActive || descramblePlayActive || gridPlayActive || weavePlayActive || squaresPlayActive;
 
   // the guess game validates against the full dictionary and picks practice
   // words from the common one; hive, box, scramble, grid play — and the
@@ -850,12 +864,12 @@ function App() {
     if (!commonWordsArr) getDictionary('common').then(setCommonWordsArr);
     if (patternPlayActive && !fullWordsArr) getDictionary('full').then(setFullWordsArr);
     if (
-      (learnMode || beePlayActive || boxedPlayActive || descramblePlayActive || gridPlayActive || weavePlayActive) &&
+      (learnMode || beePlayActive || boxedPlayActive || descramblePlayActive || gridPlayActive || weavePlayActive || squaresPlayActive) &&
       !standardWordsArr
     ) {
       getDictionary('standard').then(setStandardWordsArr);
     }
-  }, [playActive, learnMode, patternPlayActive, beePlayActive, boxedPlayActive, descramblePlayActive, gridPlayActive, weavePlayActive, commonWordsArr, fullWordsArr, standardWordsArr]);
+  }, [playActive, learnMode, patternPlayActive, beePlayActive, boxedPlayActive, descramblePlayActive, gridPlayActive, weavePlayActive, squaresPlayActive, commonWordsArr, fullWordsArr, standardWordsArr]);
 
   const aboutRef = useRef<HTMLDivElement>(null);
   const legalRef = useRef<HTMLDivElement>(null);
@@ -904,6 +918,7 @@ function App() {
     boxed: [boxedPlay, setBoxedPlay],
     grid: [gridPlay, setGridPlay],
     weave: [weavePlay, setWeavePlay],
+    squares: [squaresPlay, setSquaresPlay],
   };
 
   const prefs = useMemo(() => ({ practiceAllowed }), [practiceAllowed]);
@@ -1077,8 +1092,9 @@ function App() {
       grid: { letters: gridLetters, preset: gridPreset },
       weave: { letters: weaveLetters, size: weaveSize },
       weavePlay,
+      squaresPlay,
     });
-  }, [mode, dictionaries, sorts, kbOpen, theme, palette, textScale, navKeys, hiddenModes, hiddenViews, lengthRange, practiceAllowed, helpAllowed, solverDictionary, startPage, onboarded, patternPlay, beePlay, boxedPlay, descramblePlay, gridPlay, length, known, containsStr, excludedStr, rackStr, useAll, minLength, beeCenter, beeOuters, boxedLetters, solutionWords, gridLetters, gridPreset, weaveLetters, weaveSize, weavePlay]);
+  }, [mode, dictionaries, sorts, kbOpen, theme, palette, textScale, navKeys, hiddenModes, hiddenViews, lengthRange, practiceAllowed, helpAllowed, solverDictionary, startPage, onboarded, patternPlay, beePlay, boxedPlay, descramblePlay, gridPlay, length, known, containsStr, excludedStr, rackStr, useAll, minLength, beeCenter, beeOuters, boxedLetters, solutionWords, gridLetters, gridPreset, weaveLetters, weaveSize, weavePlay, squaresPlay]);
 
   // keep known array sized to length
   useEffect(() => {
@@ -1378,6 +1394,10 @@ function App() {
       weaveRef.current?.pressKey(k);
       return;
     }
+    if (squaresPlayActive) {
+      squaresRef.current?.pressKey(k);
+      return;
+    }
     if (patternPlayActive) {
       gameRef.current?.pressKey(k);
       return;
@@ -1641,6 +1661,12 @@ function App() {
 
         {!learnMode && (
         <>
+        {squaresPlayActive && (
+        <div className="mb-8">
+          <SquaresGame ref={squaresRef} standardWords={standardWordsArr} />
+        </div>
+        )}
+
         {weavePlayActive && (
         <div className="mb-8">
           <WeaveGame ref={weaveRef} standardWords={standardWordsArr} navKeys={navKeys} />

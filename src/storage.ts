@@ -1,7 +1,7 @@
 import type { DictionaryId } from '@/dictionaries';
 import type { Palette, TextScale, ThemeMode } from '@/theme';
 
-export type Mode = 'pattern' | 'descramble' | 'bee' | 'boxed' | 'grid' | 'weave';
+export type Mode = 'pattern' | 'descramble' | 'bee' | 'boxed' | 'grid' | 'weave' | 'squares';
 
 /** 'home' is the front page, 'last' is wherever you left off, and a Mode is
  *  that game's daily — for people who came for one game and mean to keep
@@ -10,7 +10,7 @@ export type StartPage = 'home' | 'last' | Mode;
 
 const KEY = 'anagrimoire:v1';
 
-export const ALL_MODES: Mode[] = ['pattern', 'descramble', 'bee', 'boxed', 'grid', 'weave'];
+export const ALL_MODES: Mode[] = ['pattern', 'descramble', 'bee', 'boxed', 'grid', 'weave', 'squares'];
 export const ALL_START_PAGES: StartPage[] = ['home', 'last', ...ALL_MODES];
 const ALL_DICTS: DictionaryId[] = ['common', 'standard', 'full'];
 
@@ -102,6 +102,7 @@ export type PersistedState = {
   grid: { letters: string[]; preset: GridPreset };
   weave: { letters: string[]; size: WeaveSize };
   weavePlay: boolean;
+  squaresPlay: boolean;
 };
 
 export type GridPreset = '3x3' | '4x4' | '5x5';
@@ -119,7 +120,7 @@ export const WEAVE_DIMS: Record<WeaveSize, { rows: number; cols: number }> = {
 
 export const DEFAULT_STATE: PersistedState = {
   mode: 'pattern',
-  dictionaries: { pattern: 'common', descramble: 'common', bee: 'common', boxed: 'common', grid: 'common', weave: 'standard' },
+  dictionaries: { pattern: 'common', descramble: 'common', bee: 'common', boxed: 'common', grid: 'common', weave: 'standard', squares: 'standard' },
   sort: {
     pattern: { key: 'alpha', dir: 'asc' },
     descramble: { key: 'length', dir: 'desc' },
@@ -127,6 +128,7 @@ export const DEFAULT_STATE: PersistedState = {
     boxed: { key: 'length', dir: 'desc' },
     grid: { key: 'length', dir: 'desc' },
     weave: { key: 'length', dir: 'desc' },
+    squares: { key: 'length', dir: 'desc' },
   },
   keyboard: false,
   theme: 'system',
@@ -153,6 +155,7 @@ export const DEFAULT_STATE: PersistedState = {
   grid: { letters: Array(16).fill(''), preset: '4x4' },
   weave: { letters: Array(48).fill(''), size: '6x8' },
   weavePlay: true,
+  squaresPlay: true,
 };
 
 function singleLetter(v: unknown): string {
@@ -200,6 +203,7 @@ export function loadState(): PersistedState {
       boxed: { ...DEFAULT_STATE.sort.boxed },
       grid: { ...DEFAULT_STATE.sort.grid },
       weave: { ...DEFAULT_STATE.sort.weave },
+      squares: { ...DEFAULT_STATE.sort.squares },
     };
     for (const m of ALL_MODES) {
       const s = p?.sort?.[m];
@@ -297,6 +301,7 @@ export function loadState(): PersistedState {
       grid: { letters: gridLetters, preset: gridPreset },
       weave: { letters: weaveLetters, size: weaveSize },
       weavePlay: p?.weavePlay !== false,
+      squaresPlay: p?.squaresPlay !== false,
     };
   } catch {
     return DEFAULT_STATE;

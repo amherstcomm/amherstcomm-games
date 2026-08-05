@@ -1449,6 +1449,7 @@ const TITLES: Record<Mode, string> = {
   grid: 'Grid',
   boxed: 'Boxed',
   weave: 'Weave',
+  squares: 'Word Squares',
 };
 
 const LearnMode = forwardRef<
