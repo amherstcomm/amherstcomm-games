@@ -1,4 +1,4 @@
-import { forwardRef, useEffect, useImperativeHandle, useMemo, useState } from 'react';
+import { forwardRef, Fragment, useEffect, useImperativeHandle, useMemo, useState } from 'react';
 import { CalendarDays, Eye, RefreshCw, Timer } from 'lucide-react';
 import { dailyDataUrl, SQUARES_POOL_URL } from '@/dailyData';
 import MobileKeyInput from '@/MobileKeyInput';
@@ -120,6 +120,10 @@ function colsOf(rec: SquareRecord): string[] {
  *  would be nagging, not helping. */
 type LineState = 'empty' | 'partial' | 'good' | 'bad';
 
+function barTone(s: LineState): string {
+  return s === 'good' ? 'bg-emerald-400' : s === 'bad' ? 'bg-rose-400' : 'bg-white/15';
+}
+
 function lineState(word: string, size: number, dict: Set<string> | null): LineState {
   if (!word) return 'empty';
   if (word.length < size) return 'partial';
@@ -148,6 +152,8 @@ const SquaresGame = forwardRef<
     []
   );
 
+  // Not 0: if the top-left is a given letter, typing does nothing and the
+  // board looks broken until you happen to click an empty cell.
   const [cursor, setCursor] = useState(0);
   const [dailyError, setDailyError] = useState(false);
   const [pool, setPool] = useState<Record<string, SquareRecord[]> | null>(null);
@@ -228,6 +234,16 @@ const SquaresGame = forwardRef<
     () => (standardWords ? new Set(standardWords.filter((w) => w.length === store.size)) : null),
     [standardWords, store.size]
   );
+
+  // Seat the cursor on a cell that accepts letters whenever the board changes
+  // — switching size, drawing a new practice square, or the daily arriving.
+  const boardKey = record ? `${store.dailyMode}:${store.size}:${record.cells.join('')}` : '';
+  useEffect(() => {
+    if (!record) return;
+    const first = record.cells.findIndex((c) => c === null);
+    if (first >= 0) setCursor(first);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [boardKey]);
 
   const rows = record ? rowsOf(record) : [];
   const cols = record ? colsOf(record) : [];
@@ -349,7 +365,8 @@ const SquaresGame = forwardRef<
   }
 
   const n = store.size;
-  const cell = 'w-full aspect-square flex items-center justify-center rounded-lg text-lg sm:text-xl font-bold uppercase transition-colors';
+  const cell =
+    'w-full aspect-square flex items-center justify-center rounded-lg text-xl sm:text-2xl font-bold uppercase transition-colors';
 
   return (
     <div className="text-center">
@@ -411,66 +428,54 @@ const SquaresGame = forwardRef<
 
       {record && (
         <>
-          {/* the board, with a column-state strip above and row states beside */}
-          <div className="inline-block max-w-full">
-            <div
-              className="grid gap-1 mx-auto w-full"
-              style={{ gridTemplateColumns: `repeat(${n}, minmax(0, 1fr))`, maxWidth: `${n * 3.5}rem` }}
-            >
-              {colStates.map((s, c) => (
-                <div
-                  key={`col-${c}`}
-                  aria-hidden
-                  className={`h-1 rounded-full ${
-                    s === 'good' ? 'bg-emerald-400' : s === 'bad' ? 'bg-rose-400' : 'bg-white/10'
-                  }`}
-                />
-              ))}
-            </div>
+          {/* One grid, n+1 columns wide: the last column carries each row's
+              indicator so it sits beside the line it judges. A strip of row
+              states under the board reads as columns, which is exactly the
+              wrong thing for it to say. */}
+          <div
+            className="grid gap-1 mx-auto w-full"
+            style={{
+              gridTemplateColumns: `repeat(${n}, minmax(0, 1fr)) 0.375rem`,
+              maxWidth: `${n * 4.25 + 0.5}rem`,
+            }}
+          >
+            {colStates.map((s, c) => (
+              <div key={`col-${c}`} aria-hidden className={`h-1.5 rounded-full ${barTone(s)}`} />
+            ))}
+            <div aria-hidden />
 
-            <div
-              className="grid gap-1 mx-auto w-full mt-1"
-              style={{ gridTemplateColumns: `repeat(${n}, minmax(0, 1fr))`, maxWidth: `${n * 3.5}rem` }}
-            >
-              {Array.from({ length: n * n }, (_, i) => {
-                const given = record.cells[i] !== null;
-                const focused = i === cursor && !done;
-                const letter = letterAt(record, i);
-                return (
-                  <button
-                    key={i}
-                    onClick={() => !given && setCursor(i)}
-                    aria-label={`row ${Math.floor(i / n) + 1} column ${(i % n) + 1}${
-                      given ? `, ${letter}, given` : letter ? `, ${letter}` : ', empty'
-                    }`}
-                    className={`${cell} ${
-                      given
-                        ? 'bg-white/20 border border-white/30 text-white cursor-default'
-                        : focused
-                          ? 'bg-amber-400/15 border-2 border-amber-400 text-accent'
-                          : 'bg-black/20 border border-white/10 text-accent hover:bg-black/10'
-                    }`}
-                  >
-                    {letter}
-                  </button>
-                );
-              })}
-            </div>
-
-            <div
-              className="grid gap-1 mx-auto w-full mt-1"
-              style={{ gridTemplateColumns: `repeat(${n}, minmax(0, 1fr))`, maxWidth: `${n * 3.5}rem` }}
-            >
-              {rowStates.map((s, r) => (
-                <div
-                  key={`row-${r}`}
-                  aria-hidden
-                  className={`h-1 rounded-full ${
-                    s === 'good' ? 'bg-emerald-400' : s === 'bad' ? 'bg-rose-400' : 'bg-white/10'
-                  }`}
-                />
-              ))}
-            </div>
+            {Array.from({ length: n }, (_, r) => (
+              <Fragment key={`r-${r}`}>
+                {Array.from({ length: n }, (_, c) => {
+                  const i = r * n + c;
+                  const given = record.cells[i] !== null;
+                  const focused = i === cursor && !done;
+                  const letter = letterAt(record, i);
+                  return (
+                    <button
+                      key={i}
+                      onClick={() => !given && setCursor(i)}
+                      aria-label={`row ${r + 1} column ${c + 1}${
+                        given ? `, ${letter}, given` : letter ? `, ${letter}` : ', empty'
+                      }`}
+                      // Filled vs outline, not two tints: `white` and `black`
+                      // are theme tokens that invert, so bg-white/20 against
+                      // bg-black/20 collapses to the same colour in light mode.
+                      className={`${cell} ${
+                        given
+                          ? 'bg-white/35 border border-white/40 text-white cursor-default'
+                          : focused
+                            ? 'bg-amber-400/15 border-2 border-amber-400 text-accent'
+                            : 'bg-transparent border border-white/25 text-accent hover:bg-white/10'
+                      }`}
+                    >
+                      {letter}
+                    </button>
+                  );
+                })}
+                <div aria-hidden className={`w-1.5 h-full rounded-full ${barTone(rowStates[r])}`} />
+              </Fragment>
+            ))}
           </div>
 
           <p className="mt-4 text-sm text-slate-400" aria-live="polite">
