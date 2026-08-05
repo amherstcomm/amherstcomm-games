@@ -5,6 +5,7 @@
 import { mkdir, writeFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import { generateWeave } from './weave.mjs';
+import { generateSquare, GIVEN_TARGET } from './squares.mjs';
 import { THEMES } from './themes.mjs';
 
 const require = createRequire(import.meta.url);
@@ -123,6 +124,7 @@ const etDate = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York' }
 
 const commonSet = loadTierSet(COMMON_FILES);
 let standardSet = null; // loaded lazily; long lengths are sparse in the common tiers
+const standardWords = () => (standardSet ??= loadTierSet(STANDARD_FILES));
 let fullList = null;
 
 // shared candidate pools, computed once and drawn from per variant
@@ -283,6 +285,30 @@ for (const variant of ['', 'dev']) {
     ) + '\n'
   );
   console.log(`Wrote data/${prefix}daily-weave.json: ${weave.clue} (${weave.spangram.w})`);
+
+  // squares: one 4x4 and one 5x5 a day. `cells` is the board as the player
+  // first sees it, so the client renders without decoding anything; the
+  // answer rides along base64'd for the reveal button, same as weave.
+  const squareBoards = {};
+  for (const n of [4, 5]) {
+    const sqRng = mulberry32(xmur3(`anagrimoire-squares-${n}-${etDate}${salt}`)());
+    const sq = generateSquare(sqRng, n, [...commonSet], [...standardWords()], GIVEN_TARGET[n]);
+    if (!sq) throw new Error(`Could not generate a daily ${n}x${n} square`);
+    const flat = sq.rows.join('').split('');
+    squareBoards[n] = {
+      size: n,
+      cells: flat.map((ch, i) => (sq.given.includes(i) ? ch : null)),
+      answer: Buffer.from(JSON.stringify({ rows: sq.rows })).toString('base64'),
+    };
+  }
+  await writeFile(
+    `data/${prefix}daily-squares.json`,
+    JSON.stringify({ date: etDate, boards: squareBoards, fetchedAt: stamp }, null, 2) + '\n'
+  );
+  console.log(
+    `Wrote data/${prefix}daily-squares.json: ` +
+      [4, 5].map((n) => `${n}x${n} ${squareBoards[n].cells.filter(Boolean).length} given`).join(', ')
+  );
 }
 
 // shared practice pool for weave: pre-generated boards in both sizes,
@@ -309,3 +335,29 @@ await writeFile(
   JSON.stringify({ date: etDate, pool, fetchedAt: new Date().toISOString() }, null, 2) + '\n'
 );
 console.log(`Wrote data/weave-pool.json (${pool['6x8'].length} + ${pool['8x10'].length} puzzles)`);
+
+// shared practice pool for squares, same idea: pre-generated boards in both
+// sizes so the browser never has to run the search itself.
+const sqPoolRng = mulberry32(xmur3(`anagrimoire-squares-pool-${etDate}`)());
+const squaresPool = { 4: [], 5: [] };
+for (const [n, count] of [[4, 20], [5, 12]]) {
+  const seen = new Set();
+  for (let i = 0; i < count; i++) {
+    const sq = generateSquare(sqPoolRng, n, [...commonSet], [...standardWords()], GIVEN_TARGET[n]);
+    if (!sq) throw new Error(`Could not generate pool square ${n}x${n} #${i}`);
+    const key = sq.rows.join('/');
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const flat = sq.rows.join('').split('');
+    squaresPool[n].push({
+      size: n,
+      cells: flat.map((ch, j) => (sq.given.includes(j) ? ch : null)),
+      answer: Buffer.from(JSON.stringify({ rows: sq.rows })).toString('base64'),
+    });
+  }
+}
+await writeFile(
+  'data/squares-pool.json',
+  JSON.stringify({ date: etDate, pool: squaresPool, fetchedAt: new Date().toISOString() }, null, 2) + '\n'
+);
+console.log(`Wrote data/squares-pool.json (${squaresPool[4].length} + ${squaresPool[5].length} puzzles)`);
