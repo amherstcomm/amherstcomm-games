@@ -178,10 +178,35 @@ many cells are revealed.
 **Caveat:** it's a logic puzzle wearing letters — the dictionary does almost
 no work.
 
-### Word squares
-An N×N grid where every row *and* column is a real word. Much closer to the
-site's identity than Wordoku, and probably buildable on the same subset-sum +
-backtracking packer behind Weave.
+### Word squares — generator done, game not built
+An N×N grid where every row *and* column is a real word, some letters given
+and the rest to fill in. Two sizes, like Guess's word-length picker: 4×4 and
+5×5. `scripts/squares.mjs` generates and verifies them; nothing is wired into
+the pipeline or the UI yet.
+
+It needed none of Weave's packer — plain backtracking with prefix pruning is
+enough. What the probes settled:
+
+- **Sizes stop at five.** 4×4 solves on every seed in milliseconds, 5×5 on
+  about four seeds in five. 6×6 falls off a cliff (1 in 5, and the words it
+  finds are obscure).
+- **Uniqueness is a check, not a goal.** Word squares are so constrained that
+  a 5×5 stays mathematically unique down to *three* given letters — and no
+  human deduces ten words from three letters. Difficulty comes from a target
+  reveal count; uniqueness is verified at that count.
+- **Which cells are shown matters as much as how many.** Building up from a
+  random subset until it happens to be unique showed 13 of 16 letters on
+  average. Removing from the full square instead keeps uniqueness true at
+  every step, so it can stop dead on the target: 6 of 16, and 10 of 25.
+- **Validate against the list the game accepts typing against.** Uniqueness
+  measured against a different dictionary means something different to us
+  than to the player. Using `standard` rather than `common` barely moved the
+  numbers, so there's no reason to be stingy.
+
+Still to build: pipeline wiring (`daily-squares.json`, prod + dev salts), the
+game component, a solver, a Learn demo, stats/sync/share/routes/settings/home
+card. Deliberately *not* wired into `fetch-puzzles.mjs` yet — a bug there
+breaks the daily run for all six existing games.
 
 ### Crossword
 Blocked on something that isn't code: **clues**. Grid construction is
