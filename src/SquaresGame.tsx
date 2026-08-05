@@ -9,6 +9,7 @@ import { offerDailySwitch, reportDaily } from '@/dailyBus';
 import { usePrefs } from '@/prefs';
 import { formatElapsed, useUpTimer } from '@/useUpTimer';
 import { recordSquaresFinish } from '@/stats';
+import { useDailySync } from '@/useDailySync';
 
 export type SquaresGameHandle = { pressKey: (k: string) => void };
 
@@ -291,6 +292,26 @@ const SquaresGame = forwardRef<
       );
     }
   }, [solved, record, store.dailyMode, store.size, store.dailyDate]);
+
+  useDailySync({
+    game: 'squares',
+    // the 4x4 and the 5x5 are separate puzzles on the same day, so they need
+    // separate rows rather than fighting over one
+    variant: String(store.size),
+    date: store.dailyDate,
+    record: (record as unknown as Record<string, unknown>) ?? null,
+    setRecord: (merged) =>
+      setStore((prev) => {
+        const cur = prev.daily[prev.size];
+        if (!cur) return prev;
+        const next = sanitizeRecord({ ...cur, ...merged });
+        return next ? { ...prev, daily: { ...prev.daily, [prev.size]: next } } : prev;
+      }),
+    summary: done
+      ? { solved: !record?.revealed, size: store.size, timeMs: record?.elapsedMs ?? 0 }
+      : null,
+    active: store.dailyMode,
+  });
 
   // the record accumulates its own time, so a board picked up tomorrow carries
   // yesterday's minutes rather than starting from zero
