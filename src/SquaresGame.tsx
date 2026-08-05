@@ -441,14 +441,14 @@ const SquaresGame = forwardRef<
                     key={i}
                     onClick={() => !given && setCursor(i)}
                     aria-label={`row ${Math.floor(i / n) + 1} column ${(i % n) + 1}${
-                      letter ? `, ${letter}` : ', empty'
+                      given ? `, ${letter}, given` : letter ? `, ${letter}` : ', empty'
                     }`}
                     className={`${cell} ${
                       given
-                        ? 'bg-white/10 border border-white/15 text-slate-200 cursor-default'
+                        ? 'bg-white/20 border border-white/30 text-white cursor-default'
                         : focused
-                          ? 'bg-amber-400/20 border-2 border-amber-400 text-white'
-                          : 'bg-white/5 border border-white/10 text-white hover:bg-white/10'
+                          ? 'bg-amber-400/15 border-2 border-amber-400 text-accent'
+                          : 'bg-black/20 border border-white/10 text-accent hover:bg-black/10'
                     }`}
                   >
                     {letter}
