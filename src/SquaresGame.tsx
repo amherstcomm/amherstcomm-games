@@ -241,9 +241,14 @@ const SquaresGame = forwardRef<
   }, [store.dailyMode, store.practice, store.size, pool]);
 
   const record = store.dailyMode ? store.daily[store.size] ?? null : store.practice;
+  // The board's own size, never store.size: that flips the instant you press
+  // 5×5, while the record is still the old board until the new one arrives.
+  // Rendering n² cells against the old board's bars pushed the last column off
+  // the grid and up a row.
+  const n = record?.size ?? store.size;
   const dict = useMemo(
-    () => (standardWords ? new Set(standardWords.filter((w) => w.length === store.size)) : null),
-    [standardWords, store.size]
+    () => (standardWords ? new Set(standardWords.filter((w) => w.length === n)) : null),
+    [standardWords, n]
   );
 
   // Seat the cursor on a cell that accepts letters whenever the board changes
@@ -258,8 +263,8 @@ const SquaresGame = forwardRef<
 
   const rows = record ? rowsOf(record) : [];
   const cols = record ? colsOf(record) : [];
-  const rowStates = rows.map((w) => lineState(w, store.size, dict));
-  const colStates = cols.map((w) => lineState(w, store.size, dict));
+  const rowStates = rows.map((w) => lineState(w, n, dict));
+  const colStates = cols.map((w) => lineState(w, n, dict));
   const solved =
     !!record &&
     rowStates.every((s) => s === 'good') &&
@@ -286,18 +291,18 @@ const SquaresGame = forwardRef<
       recordSquaresFinish(
         store.dailyMode,
         true,
-        store.size,
+        n,
         record.elapsedMs ?? 0,
         store.dailyMode ? store.dailyDate : null
       );
     }
-  }, [solved, record, store.dailyMode, store.size, store.dailyDate]);
+  }, [solved, record, n, store.dailyMode, store.dailyDate]);
 
   useDailySync({
     game: 'squares',
     // the 4x4 and the 5x5 are separate puzzles on the same day, so they need
     // separate rows rather than fighting over one
-    variant: String(store.size),
+    variant: String(n),
     date: store.dailyDate,
     record: (record as unknown as Record<string, unknown>) ?? null,
     setRecord: (merged) =>
@@ -308,7 +313,7 @@ const SquaresGame = forwardRef<
         return next ? { ...prev, daily: { ...prev.daily, [prev.size]: next } } : prev;
       }),
     summary: done
-      ? { solved: !record?.revealed, size: store.size, timeMs: record?.elapsedMs ?? 0 }
+      ? { solved: !record?.revealed, size: n, timeMs: record?.elapsedMs ?? 0 }
       : null,
     active: store.dailyMode,
   });
@@ -322,7 +327,7 @@ const SquaresGame = forwardRef<
   /** the next cell the player can actually type in */
   function step(from: number, dir: 1 | -1): number {
     if (!record) return from;
-    const total = store.size * store.size;
+    const total = n * n;
     for (let k = 1; k <= total; k++) {
       const i = (from + dir * k + total * 2) % total;
       if (record.cells[i] === null) return i;
@@ -371,7 +376,6 @@ const SquaresGame = forwardRef<
       if (e.key === 'Backspace') pressKey('backspace');
       else if (/^[a-zA-Z]$/.test(e.key)) pressKey(e.key.toLowerCase());
       else if (e.key.startsWith('Arrow')) {
-        const n = store.size;
         const r = Math.floor(cursor / n);
         const c = cursor % n;
         const to =
@@ -401,7 +405,7 @@ const SquaresGame = forwardRef<
         recordSquaresFinish(
           store.dailyMode,
           false,
-          store.size,
+          n,
           record.elapsedMs ?? 0,
           store.dailyMode ? store.dailyDate : null
         );
@@ -416,7 +420,6 @@ const SquaresGame = forwardRef<
     if (board) setStore((prev) => ({ ...prev, practice: board }));
   }
 
-  const n = store.size;
   // Grid's *play* board metrics, not its solver tiles — Grid uses two sizes
   // (40x48 for the solver's letter inputs, 48x56 for the board you play on)
   // and squares is a play board. One size at both 4x4 and 5x5, since Grid
