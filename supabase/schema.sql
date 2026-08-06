@@ -225,7 +225,7 @@ revoke execute on function public.would_block(text) from public, anon, authentic
 create table if not exists public.game_results (
   id bigint generated always as identity primary key,
   user_id uuid not null references auth.users (id) on delete cascade,
-  game text not null check (game in ('guess', 'hive', 'scramble', 'grid', 'box', 'weave')),
+  game text not null check (game in ('guess', 'hive', 'scramble', 'grid', 'box', 'weave', 'squares')),
   daily boolean not null,
   puzzle_date date, -- Eastern-time date of the daily puzzle; null for practice
   payload jsonb not null default '{}'::jsonb,
@@ -265,7 +265,7 @@ create policy "read own results"
 -- ---------------------------------------------------------------------------
 create table if not exists public.daily_progress (
   user_id uuid not null references auth.users (id) on delete cascade,
-  game text not null check (game in ('guess', 'hive', 'scramble', 'grid', 'box', 'weave')),
+  game text not null check (game in ('guess', 'hive', 'scramble', 'grid', 'box', 'weave', 'squares')),
   variant text not null default '',
   puzzle_date date not null,
   env text not null default 'prod',
@@ -668,6 +668,20 @@ end;
 $$;
 
 grant execute on function public.leaderboard(int, text) to anon, authenticated;
+
+-- Adding a game means widening both of these, and `create table if not exists`
+-- leaves an existing table exactly as it was — so the constraint has to be
+-- replaced explicitly or every write for the new game comes back 400 and the
+-- game silently never syncs. Idempotent, so re-running the file is safe.
+alter table public.game_results drop constraint if exists game_results_game_check;
+alter table public.game_results
+  add constraint game_results_game_check
+  check (game in ('guess', 'hive', 'scramble', 'grid', 'box', 'weave', 'squares'));
+
+alter table public.daily_progress drop constraint if exists daily_progress_game_check;
+alter table public.daily_progress
+  add constraint daily_progress_game_check
+  check (game in ('guess', 'hive', 'scramble', 'grid', 'box', 'weave', 'squares'));
 
 -- ---------------------------------------------------------------------------
 -- stats_baselines: one-time import of the lifetime stats a browser
