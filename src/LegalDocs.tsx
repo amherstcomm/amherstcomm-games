@@ -5,7 +5,7 @@
 
 import type { ReactNode } from 'react';
 
-export const LEGAL_UPDATED = '4 August 2026';
+export const LEGAL_UPDATED = '5 August 2026';
 export const PRIVACY_EMAIL = 'privacy@anagrimoire.com';
 
 function H({ children }: { children: ReactNode }) {
@@ -204,11 +204,19 @@ export function PrivacyPolicy() {
         data is retained for the period configured in our property.
       </P>
       <P>
-        Where consent is required — the EEA, the UK and Switzerland — nothing loads
-        until you agree, and declining is a single click that we remember.
-        Elsewhere it loads by default. If your browser sends a{' '}
+        We ask everyone, wherever they are, and nothing loads until you say yes.
+        That used to depend on guessing your region from your time zone — right
+        often enough, but a VPN or a holiday was enough to track someone who had
+        never been asked, and that's the only failure here that costs anything.
+        Declining is a single click, the same as accepting, and we remember it. If
+        your browser sends a{' '}
         <Ext href="https://globalprivacycontrol.org/">Global Privacy Control</Ext>{' '}
-        signal we treat that as a no, everywhere, without asking.
+        signal we treat that as a no without asking at all.
+      </P>
+      <P>
+        An answer lasts a year, then we ask again — a yes from two years ago
+        isn&apos;t really a current one. The date you answered is shown under
+        Settings → Analytics, where you can also change it.
       </P>
       <P>
         Either way you can turn it off at any time under Settings → Analytics, with

@@ -4,8 +4,8 @@ import KeyDiagram from '@/KeyDiagram';
 import { GA_ID, disableAnalytics, initAnalytics } from '@/analytics';
 import {
   clearAnalyticsCookies,
+  consentGivenAt,
   gpcEnabled,
-  needsConsent,
   readConsent,
   writeConsent,
   type Consent,
@@ -235,14 +235,16 @@ export default function SettingsModal({
   // else analytics runs unless it's been turned off, which is the state this
   // control exists to make reachable.
   const gpc = gpcEnabled();
-  const [analytics, setAnalyticsState] = useState<Consent>(
-    () => readConsent() ?? (gpc || needsConsent() ? 'denied' : 'granted')
-  );
+  // Unanswered is off. Nothing loads before a yes, so the control has to show
+  // that state rather than a cheerful default.
+  const [analytics, setAnalyticsState] = useState<Consent>(() => readConsent() ?? 'denied');
+  const [answeredAt, setAnsweredAt] = useState<Date | null>(consentGivenAt);
 
   function setAnalytics(value: Consent) {
     if (gpc) return;
     writeConsent(value);
     setAnalyticsState(value);
+    setAnsweredAt(consentGivenAt());
     if (value === 'granted') {
       initAnalytics();
     } else {
@@ -447,6 +449,18 @@ export default function SettingsModal({
                   ? 'Your browser sends a Global Privacy Control signal, so analytics is off and stays off.'
                   : 'Counts visits, never your letters or results. Turning it off also clears the cookies it left behind. Kept per browser, since cookies are.'}
               </p>
+              {!gpc && answeredAt && (
+                <p className="mt-1 text-xs text-slate-500">
+                  You answered on{' '}
+                  {answeredAt.toLocaleDateString(undefined, {
+                    year: 'numeric',
+                    month: 'long',
+                    day: 'numeric',
+                  })}
+                  . We ask again after a year — an answer from long ago isn&apos;t really
+                  a current one.
+                </p>
+              )}
             </div>
           )}
         </div>

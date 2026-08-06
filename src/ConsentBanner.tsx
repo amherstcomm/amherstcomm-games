@@ -1,15 +1,11 @@
 import { useState } from 'react';
 import { BarChart3 } from 'lucide-react';
 import { GA_ID, disableAnalytics, initAnalytics } from '@/analytics';
-import {
-  clearAnalyticsCookies,
-  gpcEnabled,
-  needsConsent,
-  readConsent,
-  writeConsent,
-} from '@/consent';
+import { clearAnalyticsCookies, gpcEnabled, readConsent, writeConsent } from '@/consent';
 
-// Shown only where consent is required and hasn't been given or refused yet.
+// Shown until it's been answered — everywhere, not only where the law names a
+// region. Guessing the region from a time zone was fine until someone used a
+// VPN, and being tracked unasked is the only failure here that costs anything.
 // Deliberately not a modal: nothing is being tracked while it sits there, so
 // there's no reason to hold the page hostage until someone answers. Declining
 // is one click, the same as accepting — a banner where "no" is harder than
@@ -17,7 +13,7 @@ import {
 export default function ConsentBanner({ onReadPolicy }: { onReadPolicy: () => void }) {
   // A browser sending GPC has already answered; don't ask it again.
   const [asking, setAsking] = useState(
-    () => !!GA_ID && !gpcEnabled() && needsConsent() && readConsent() === null
+    () => !!GA_ID && !gpcEnabled() && readConsent() === null
   );
 
   if (!asking) return null;

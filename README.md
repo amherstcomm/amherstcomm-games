@@ -110,7 +110,7 @@ Note: Supabase's built-in email service is rate-limited (a few magic links per h
 
 Set `VITE_GA_ID` to a Google Analytics 4 measurement ID (`G-…`) and the site loads gtag and reports pageviews; leave it unset and nothing is injected. Use one GA4 property with a separate web data stream (and measurement ID) for each environment, set on the matching Render site, so prod and dev numbers stay separable.
 
-Where consent is required — the EEA, the UK and Switzerland, decided from the browser's own time zone rather than by asking a third party where the visitor is — nothing loads until it's granted, and declining is remembered. A Global Privacy Control signal is treated as a refusal everywhere, without asking. Either way it can be switched off under Settings → Analytics, which also clears the cookies it had set. No account identifier is ever sent, so Google holds a browser-scoped id with nothing to tie it to a person.
+Every visitor is asked, wherever they are, and nothing loads until they agree — no geo-IP lookup, and no guessing the region from a time zone, which was the previous approach and could be defeated by a VPN. Declining is one click, the same as accepting, and is remembered. An answer lasts a year before it's asked again. A Global Privacy Control signal counts as a refusal without asking at all. Either way it can be switched off under Settings → Analytics, which also clears the cookies it had set. No account identifier is ever sent, so Google holds a browser-scoped id with nothing to tie it to a person.
 
 ## Privacy and terms
 
