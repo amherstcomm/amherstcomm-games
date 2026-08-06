@@ -95,8 +95,27 @@ export function PrivacyPolicy() {
           lets us add this browser&apos;s existing statistics to your account exactly
           once instead of twice. It is not used to track you and is never shared.
         </li>
-        <li>Your answer to the analytics question, where we ask it</li>
+        <li>Your answer to the analytics question, and the date you gave it</li>
+        <li>
+          While you&apos;re signed in, the token that keeps you signed in. Clearing
+          this site&apos;s data signs you out, which is the same thing.
+        </li>
       </List>
+      <P>
+        None of that is a cookie, and none of it is tracking — it&apos;s the site
+        remembering what you asked it to remember. The rules that govern storing
+        things on your device carve out exactly this: what a service needs to do the
+        job you asked for. The part that <em>isn&apos;t</em> exempt is analytics, and
+        that is the one thing we ask about.
+      </P>
+      <P>
+        <strong className="text-slate-300">Cookies specifically:</strong> the only
+        cookies this site sets are Google Analytics&apos;s, and only after you agree.
+        Say no and none are set; say nothing and none are set; say yes and later
+        change your mind and the ones already there are removed. If your answer
+        lapses after a year they&apos;re removed too, on the next visit, without
+        waiting for you to answer again.
+      </P>
       <P>
         Clearing this site&apos;s data in your browser erases all of it. If you have
         no account, that is genuinely everything we hold.
