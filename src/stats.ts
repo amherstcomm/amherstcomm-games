@@ -518,7 +518,19 @@ export async function importBaselineOnce(): Promise<void> {
   }
 }
 
-const KNOWN_GAMES = new Set(['guess', 'hive', 'scramble', 'grid', 'box', 'weave']);
+// Every game name GameEvent can carry. A row for anything else is from a
+// version this build doesn't know about, and gets skipped rather than crashing
+// the replay — which is also why a game missing from here disappears from the
+// synced view entirely while still showing up signed out. Add new games here.
+const KNOWN_GAMES = new Set<GameEvent['game']>([
+  'guess',
+  'hive',
+  'scramble',
+  'grid',
+  'box',
+  'weave',
+  'squares',
+]);
 
 // sum of all device baselines + full event-log replay -> the account's
 // synced stats
