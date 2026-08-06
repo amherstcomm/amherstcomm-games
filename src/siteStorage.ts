@@ -40,10 +40,19 @@ function isEssential(key: string): boolean {
 // rather than a consolation.
 const memory = new Map<string, string>();
 
-function canPersist(key: string, level: StorageLevel): boolean {
-  if (level === 'full') return true;
-  if (level === 'session') return false;
-  return isEssential(key);
+/** Where a key is allowed to live under a given level.
+ *
+ *  'session' doesn't mean "forget between reloads" — it means "leave nothing
+ *  on the device". The browser drops sessionStorage with the tab, so the few
+ *  essential keys go there: your answers survive a refresh, which stops the
+ *  banner asking again every time you reload, and still vanish when the tab
+ *  closes. Everything else is plain memory. */
+type Target = 'local' | 'session' | 'memory';
+
+function targetFor(key: string, level: StorageLevel): Target {
+  if (level === 'full') return 'local';
+  if (isEssential(key)) return level === 'session' ? 'session' : 'local';
+  return 'memory';
 }
 
 function rawGet(key: string): string | null {
@@ -65,6 +74,30 @@ function rawSet(key: string, value: string): void {
 function rawRemove(key: string): void {
   try {
     localStorage.removeItem(key);
+  } catch {
+    // nothing to do
+  }
+}
+
+function sessionGet(key: string): string | null {
+  try {
+    return sessionStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+function sessionSet(key: string, value: string): void {
+  try {
+    sessionStorage.setItem(key, value);
+  } catch {
+    // holds for this page view only
+  }
+}
+
+function sessionRemove(key: string): void {
+  try {
+    sessionStorage.removeItem(key);
   } catch {
     // nothing to do
   }
@@ -128,26 +161,42 @@ function purge(next: StorageLevel): void {
   }
   for (const key of keys) {
     if (!key.startsWith('anagrimoire:') && !key.startsWith('sb-')) continue;
-    if (canPersist(key, next)) continue;
+    if (targetFor(key, next) === 'local') continue;
     const value = rawGet(key);
-    if (value !== null) memory.set(key, value);
+    if (value !== null) {
+      if (targetFor(key, next) === 'session') sessionSet(key, value);
+      else memory.set(key, value);
+    }
     rawRemove(key);
   }
 }
 
 export const store = {
   getItem(key: string): string | null {
-    const lvl = level();
-    if (canPersist(key, lvl)) return rawGet(key);
-    return memory.has(key) ? memory.get(key)! : null;
+    switch (targetFor(key, level())) {
+      case 'local':
+        return rawGet(key);
+      case 'session':
+        return sessionGet(key);
+      default:
+        return memory.has(key) ? memory.get(key)! : null;
+    }
   },
   setItem(key: string, value: string): void {
-    const lvl = level();
-    if (canPersist(key, lvl)) rawSet(key, value);
-    else memory.set(key, value);
+    switch (targetFor(key, level())) {
+      case 'local':
+        rawSet(key, value);
+        break;
+      case 'session':
+        sessionSet(key, value);
+        break;
+      default:
+        memory.set(key, value);
+    }
   },
   removeItem(key: string): void {
     memory.delete(key);
+    sessionRemove(key);
     rawRemove(key);
   },
   /** Every key we hold, wherever it lives — used by account deletion, which

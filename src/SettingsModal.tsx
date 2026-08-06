@@ -305,6 +305,7 @@ export default function SettingsModal({
             [
               { id: 'site', label: 'Site' },
               { id: 'games', label: 'Games' },
+              { id: 'privacy', label: 'Privacy' },
             ] as const
           ).map(({ id, label }) => (
             <button
@@ -320,36 +321,6 @@ export default function SettingsModal({
         </div>
 
         <div className={`space-y-6 ${tab === 'site' ? '' : 'hidden'}`}>
-          <div>
-            <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2.5">
-              What this device keeps
-            </h3>
-            <div className="flex flex-wrap gap-1.5">
-              {STORAGE_OPTIONS.map(({ id, label }) => (
-                <button
-                  key={id}
-                  onClick={() => {
-                    // takes effect immediately, including removing what a
-                    // stricter setting no longer allows
-                    setLevel(id);
-                    setStorageState(id);
-                  }}
-                  aria-pressed={storage === id}
-                  className={`px-3 h-9 rounded-lg text-sm font-semibold transition-colors
-                    ${storage === id
-                      ? 'bg-amber-400 text-ink shadow-lg shadow-amber-500/30'
-                      : 'bg-white/5 border border-white/10 text-slate-300 hover:bg-white/10'}`}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-            <p className="mt-2 text-xs text-slate-500">
-              {STORAGE_OPTIONS.find((o) => o.id === storage)?.blurb} Choosing less
-              clears what was already here.
-            </p>
-          </div>
-
           <div>
             <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2.5">
               Start on
@@ -463,6 +434,41 @@ export default function SettingsModal({
             </p>
           </div>
 
+        </div>
+
+        {/* The two questions the banner asks, in one place — what stays on
+            this device, and what leaves it. */}
+        <div className={`space-y-6 ${tab === 'privacy' ? '' : 'hidden'}`}>
+          <div>
+            <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2.5">
+              What this device keeps
+            </h3>
+            <div className="flex flex-wrap gap-1.5">
+              {STORAGE_OPTIONS.map(({ id, label }) => (
+                <button
+                  key={id}
+                  onClick={() => {
+                    // takes effect immediately, including removing what a
+                    // stricter setting no longer allows
+                    setLevel(id);
+                    setStorageState(id);
+                  }}
+                  aria-pressed={storage === id}
+                  className={`px-3 h-9 rounded-lg text-sm font-semibold transition-colors
+                    ${storage === id
+                      ? 'bg-amber-400 text-ink shadow-lg shadow-amber-500/30'
+                      : 'bg-white/5 border border-white/10 text-slate-300 hover:bg-white/10'}`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            <p className="mt-2 text-xs text-slate-500">
+              {STORAGE_OPTIONS.find((o) => o.id === storage)?.blurb} Choosing less
+              clears what was already here.
+            </p>
+          </div>
+
           {GA_ID && (
             <div>
               <h3 className="flex items-center gap-2 text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2.5">
@@ -505,6 +511,8 @@ export default function SettingsModal({
                   })}
                   . We ask again after a year — an answer from long ago isn&apos;t really
                   a current one.
+                  {storage === 'session' &&
+                    ' While this device is set to forget everything, that answer is forgotten with it, so we ask again next visit.'}
                 </p>
               )}
             </div>

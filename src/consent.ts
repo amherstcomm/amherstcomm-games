@@ -10,6 +10,8 @@
 // Asking everyone removes the guess, is a good deal less code, and gives the
 // same answer in every jurisdiction: nothing loads until yes.
 
+import { store } from '@/siteStorage';
+
 const CONSENT_KEY = 'anagrimoire:analytics-consent:v2';
 
 // Consent is meant to be current rather than perpetual — a yes from two years
@@ -24,7 +26,7 @@ type Stored = { value: Consent; at: number };
 
 function read(): Stored | null {
   try {
-    const raw = localStorage.getItem(CONSENT_KEY);
+    const raw = store.getItem(CONSENT_KEY);
     if (!raw) return null;
     const p = JSON.parse(raw) as Partial<Stored>;
     if (p?.value !== 'granted' && p?.value !== 'denied') return null;
@@ -36,7 +38,12 @@ function read(): Stored | null {
 }
 
 /** The current answer, or null if never asked or the answer has aged out.
- *  Null means "ask" everywhere this is consulted. */
+ *  Null means "ask" everywhere this is consulted.
+ *
+ *  This goes through the storage gate like everything else, which matters at
+ *  "forget everything": the answer is held for the tab and no longer, so we
+ *  ask again next visit. Writing it to the disk would have been a small lie
+ *  inside a promise not to write anything. */
 export function readConsent(): Consent | null {
   const s = read();
   if (!s) return null;
@@ -56,7 +63,7 @@ export function consentGivenAt(): Date | null {
 
 export function writeConsent(value: Consent): void {
   try {
-    localStorage.setItem(CONSENT_KEY, JSON.stringify({ value, at: Date.now() } satisfies Stored));
+    store.setItem(CONSENT_KEY, JSON.stringify({ value, at: Date.now() } satisfies Stored));
   } catch {
     // private mode — the choice holds for this page view only
   }

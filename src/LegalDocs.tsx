@@ -127,10 +127,12 @@ export function PrivacyPolicy() {
         </li>
       </List>
       <P>
-        It&apos;s under Settings → What this device keeps, and choosing less removes
+        It&apos;s under Settings → Privacy, alongside the analytics answer, and choosing less removes
         what was already there rather than merely stopping more. The one thing we
-        keep either way is the answer itself — at &quot;forget everything&quot; even
-        that is held only for the tab, so closing it really does leave nothing behind.
+        keep either way is your answers themselves — and at &quot;forget
+        everything&quot; even those are held only for the tab, so a refresh
+        doesn&apos;t ask you again and closing the tab really does leave nothing
+        behind.
       </P>
       <P>
         <strong className="text-slate-300">Cookies specifically:</strong> the only

@@ -21,7 +21,7 @@ export type Slug = 'guess' | 'scramble' | 'hive' | 'grid' | 'boxed' | 'weave' | 
 export type Panel = 'keys' | 'account' | 'about';
 export type LegalDoc = 'notices' | 'privacy' | 'terms';
 export type StatsTab = 'overall' | 'daily' | 'practice' | 'history' | 'boards';
-export type SettingsTab = 'site' | 'games';
+export type SettingsTab = 'site' | 'games' | 'privacy';
 
 // the slug is what a person reads; the mode id is what storage is keyed on,
 // so they don't have to match and 'pattern' stays put internally
@@ -55,7 +55,7 @@ const VIEWS: View[] = ['solve', 'play', 'learn'];
 const PANELS: Panel[] = ['keys', 'account', 'about'];
 const DOCS: LegalDoc[] = ['notices', 'privacy', 'terms'];
 const STATS_TABS: StatsTab[] = ['overall', 'daily', 'practice', 'history', 'boards'];
-const SETTINGS_TABS: SettingsTab[] = ['site', 'games'];
+const SETTINGS_TABS: SettingsTab[] = ['site', 'games', 'privacy'];
 
 // A panel with tabs names the tab, always — /stats/overall rather than a bare
 // /stats that means the same thing. One state, one address, no exceptions to
