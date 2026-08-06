@@ -14,7 +14,7 @@ import { fetchBoards, BOARD_LABELS, type BoardGame, type Boards } from '@/leader
 import type { Mode } from '@/storage';
 
 const ICONS: Record<Slug, typeof Grid3x3> = {
-  pattern: Grid3x3,
+  guess: Grid3x3,
   scramble: Shuffle,
   hive: Hexagon,
   grid: LayoutGrid,
@@ -25,7 +25,7 @@ const ICONS: Record<Slug, typeof Grid3x3> = {
 
 // One line each, written for somebody who has never seen the game.
 const BLURB: Record<Slug, string> = {
-  pattern: 'Guess the hidden word in six tries, one letter of feedback at a time.',
+  guess: 'Guess the hidden word in six tries, one letter of feedback at a time.',
   scramble: 'A rack of letters and a clock. Find as many words as you can before it runs out.',
   hive: 'Seven letters, one compulsory. Build as many words as you can from them.',
   grid: 'A grid of letters against the clock — trace words through neighbouring cells.',
