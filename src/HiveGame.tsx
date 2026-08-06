@@ -466,7 +466,7 @@ const HiveGame = forwardRef<
                 key={i}
                 onMouseDown={(e) => e.preventDefault()}
                 onClick={() => pressKey(record.outers[i])}
-                className="absolute -translate-x-1/2 -translate-y-1/2 w-12 h-14 rounded-xl border-2 bg-white/5 border-white/15 text-white text-2xl font-bold uppercase hover:bg-white/10 hover:border-white/30 transition-colors"
+                className="absolute -translate-x-1/2 -translate-y-1/2 w-12 h-14 rounded-xl border-2 bg-white/5 border-white/55 text-white text-2xl font-bold uppercase hover:bg-white/10 hover:border-white/75 transition-colors"
                 style={{ left: `${x}%`, top: `${y}%` }}
               >
                 {record.outers[i]}

@@ -212,7 +212,7 @@ function Tile({
             ? tone?.filled ?? 'bg-emerald-500/15 border-emerald-400 text-emerald-200 shadow-[0_0_20px_-6px] shadow-emerald-500/40'
             : state === 'center'
               ? 'bg-amber-400/15 border-amber-400 text-amber-200 shadow-[0_0_20px_-6px] shadow-amber-400/50 placeholder-amber-200/30'
-              : tone?.empty ?? 'bg-white/5 border-white/10 text-white placeholder-white/25 hover:border-white/20'}
+              : tone?.empty ?? 'bg-white/5 border-white/55 text-white placeholder-white/25 hover:border-white/75'}
           focus:border-amber-400 focus:bg-amber-400/10 focus:shadow-[0_0_24px_-6px] focus:shadow-amber-400/50`}
       />
       {value && (
@@ -2854,6 +2854,14 @@ function App() {
                   FAQ
                 </h3>
                 <div className="space-y-3 text-slate-400">
+                  <div>
+                    <p className="text-slate-300 font-medium">How do you say it?</p>
+                    <p>
+                      <em>AN-uh-grim-WAHR</em> — <em>anagram</em> up front, then{' '}
+                      <em>grimoire</em> the French way, rhyming with{' '}
+                      <em>memoir</em>. Four syllables, stress on the first and last.
+                    </p>
+                  </div>
                   <div>
                     <p className="text-slate-300 font-medium">
                       Are the daily puzzles the same as the NYT&apos;s?

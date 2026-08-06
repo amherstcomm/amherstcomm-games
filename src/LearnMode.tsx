@@ -150,9 +150,9 @@ function scoreGuess(secret: string, guess: string): LetterState[] {
 const TILE_TONES: Record<LetterState | 'empty' | 'pending', string> = {
   correct: 'bg-emerald-500/80 border-emerald-400 text-white',
   present: 'bg-amber-400/80 border-amber-300 text-ink',
-  absent: 'bg-white/[0.04] border-white/10 text-slate-500',
+  absent: 'bg-white/[0.04] border-white/45 text-slate-500',
   pending: 'bg-white/5 border-white/30 text-white',
-  empty: 'bg-white/[0.02] border-white/10 text-transparent',
+  empty: 'bg-white/[0.02] border-white/55 text-transparent',
 };
 
 // pending rows show what's being typed, uncolored until it's submitted
@@ -871,7 +871,7 @@ function LearnGrid({
                     ? 'bg-sky-400/30 border-sky-300 text-white'
                     : dragPath.includes(i)
                       ? 'bg-emerald-400/30 border-emerald-300 text-white'
-                      : 'bg-amber-400/10 border-amber-400/40 text-amber-200 hover:bg-amber-400/20'}`}
+                      : 'bg-amber-400/10 border-amber-400 text-amber-200 hover:bg-amber-400/20'}`}
               >
                 {c}
               </button>
