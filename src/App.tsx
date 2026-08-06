@@ -35,6 +35,7 @@ import {
   modeOf,
   parsePath,
   pathOf,
+  titleOf,
   type Panel,
   type Route,
   type SettingsTab,
@@ -972,6 +973,11 @@ function App() {
   // step back rather than a new address, so Back doesn't reopen what was just
   // dismissed. False at load: arriving straight at /stats leaves nothing of
   // ours behind it, and going back from there should leave the site.
+  // the tab, the bookmark, and what a search result would show
+  useEffect(() => {
+    document.title = titleOf(currentRoute);
+  }, [currentRoute]);
+
   const ourOverlay = useRef(false);
   const settled = useRef(false);
   const prevRoute = useRef<Route | null>(null);

@@ -103,6 +103,32 @@ export function pathOf(route: Route): string {
   }
 }
 
+const VIEW_WORD: Record<View, string> = { solve: 'Solver', play: 'Play', learn: 'How to play' };
+
+/** What the tab says, and what a search result would show. Every address
+ *  returning one title makes 33 sitemap entries look like 33 copies of the
+ *  same page. */
+export function titleOf(route: Route): string {
+  const suffix = ' · Anagrimoire';
+  switch (route.kind) {
+    case 'home':
+      return 'Anagrimoire — word game solvers and daily puzzles';
+    case 'game': {
+      const name = SLUG_NAME[route.slug];
+      if (route.view === 'play') return `${name} — ${route.daily ? 'Daily' : 'Practice'}${suffix}`;
+      return `${name} — ${VIEW_WORD[route.view]}${suffix}`;
+    }
+    case 'stats':
+      return `Statistics${suffix}`;
+    case 'settings':
+      return `Settings${suffix}`;
+    case 'legal':
+      return `${route.doc === 'privacy' ? 'Privacy policy' : route.doc === 'terms' ? 'Terms' : 'Notices'}${suffix}`;
+    case 'panel':
+      return `${route.panel === 'about' ? 'About & FAQ' : route.panel === 'account' ? 'Account' : 'Keyboard controls'}${suffix}`;
+  }
+}
+
 export function urlOf(route: Route): string {
   return ORIGIN + pathOf(route);
 }
