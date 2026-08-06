@@ -25,6 +25,7 @@ import { solvePattern, solveDescramble, solveBee, solveBoxed, solveGrid, findGri
 import ConsentBanner from '@/ConsentBanner';
 import { PrivacyPolicy, Terms } from '@/LegalDocs';
 import { onDailyReport, requestDaily } from '@/dailyBus';
+import { solveSquare } from '@/squares';
 import HomeView from '@/HomeView';
 import SquaresGame, { type SquaresGameHandle } from '@/SquaresGame';
 import {
@@ -39,7 +40,7 @@ import {
   type SettingsTab,
   type StatsTab,
 } from '@/routes';
-import { ALL_MODES, ALL_START_PAGES, ALL_VIEWS, lengthChoices, visibleModes, visibleViews, type LengthRange, type StartPage, type View, loadState, saveState, GRID_PRESET_DIMS, WEAVE_DIMS, type GridPreset, type Mode, type NavKeys, type SortPref, type WeaveSize } from '@/storage';
+import { ALL_MODES, ALL_START_PAGES, ALL_VIEWS, lengthChoices, visibleModes, visibleViews, type LengthRange, type StartPage, type View, loadState, saveState, GRID_PRESET_DIMS, WEAVE_DIMS, type GridPreset, type Mode, type NavKeys, type SortPref, type SquareSolverSize, type WeaveSize } from '@/storage';
 
 // longest rack the scramble solver accepts; word lengths come from the
 // player's own range now, in storage
@@ -99,7 +100,7 @@ const MODES: { id: Mode; label: string; blurb: string; description: string; play
     label: 'Squares',
     blurb: 'Fill the grid so every row and column is a word',
     description:
-      'Word squares are play-only for now — the solver is still to come.',
+      "Type the letters you're sure of and we'll fill the rest, so every row and every column spells a word.",
     playDescription:
       'Fill the blanks so that every row and every column spells a word.',
   },
@@ -476,6 +477,8 @@ function App() {
   const [beeOuters, setBeeOuters] = useState<string[]>(initial.bee.outers);
   const [boxedLetters, setBoxedLetters] = useState<string[]>(initial.boxed.letters);
   const [solutionWords, setSolutionWords] = useState(initial.boxed.solutionWords);
+  const [squaresLetters, setSquaresLetters] = useState<string[]>(initial.squares.letters);
+  const [squaresSize, setSquaresSize] = useState<SquareSolverSize>(initial.squares.size);
   const [gridLetters, setGridLetters] = useState<string[]>(initial.grid.letters);
   const [gridPreset, setGridPreset] = useState<GridPreset>(initial.grid.preset);
   const [gridPlay, setGridPlay] = useState(initialPlay('grid', initial.gridPlay));
@@ -1090,11 +1093,12 @@ function App() {
       bee: { center: beeCenter, outers: beeOuters },
       boxed: { letters: boxedLetters, solutionWords },
       grid: { letters: gridLetters, preset: gridPreset },
+      squares: { letters: squaresLetters, size: squaresSize },
       weave: { letters: weaveLetters, size: weaveSize },
       weavePlay,
       squaresPlay,
     });
-  }, [mode, dictionaries, sorts, kbOpen, theme, palette, textScale, navKeys, hiddenModes, hiddenViews, lengthRange, practiceAllowed, helpAllowed, solverDictionary, startPage, onboarded, patternPlay, beePlay, boxedPlay, descramblePlay, gridPlay, length, known, containsStr, excludedStr, rackStr, useAll, minLength, beeCenter, beeOuters, boxedLetters, solutionWords, gridLetters, gridPreset, weaveLetters, weaveSize, weavePlay, squaresPlay]);
+  }, [mode, dictionaries, sorts, kbOpen, theme, palette, textScale, navKeys, hiddenModes, hiddenViews, lengthRange, practiceAllowed, helpAllowed, solverDictionary, startPage, onboarded, patternPlay, beePlay, boxedPlay, descramblePlay, gridPlay, length, known, containsStr, excludedStr, rackStr, useAll, minLength, beeCenter, beeOuters, boxedLetters, solutionWords, gridLetters, gridPreset, weaveLetters, weaveSize, weavePlay, squaresPlay, squaresLetters, squaresSize]);
 
   // keep known array sized to length
   useEffect(() => {
@@ -1322,6 +1326,17 @@ function App() {
       setTodayStatus('error');
     }
   }
+
+  const squareFill = useMemo(() => {
+    if (mode !== 'squares' || squaresPlay) return null;
+    const n = squaresSize;
+    const grid = Array.from({ length: n * n }, (_, i) => {
+      const r = Math.floor(i / n);
+      const c = i % n;
+      return squaresLetters[r * 5 + c] || null;
+    });
+    return solveSquare(words, grid, n, 6);
+  }, [mode, squaresPlay, squaresSize, squaresLetters, words]);
 
   const sorted = useMemo(() => {
     const arr = [...results];
@@ -1670,6 +1685,107 @@ function App() {
         {weavePlayActive && (
         <div className="mb-8">
           <WeaveGame ref={weaveRef} standardWords={standardWordsArr} navKeys={navKeys} />
+        </div>
+        )}
+
+        {mode === 'squares' && !squaresPlay && (
+        <div className="mb-8 text-center">
+          <label className="block text-xs font-medium text-slate-400 uppercase tracking-wider mb-2.5">
+            Grid size
+          </label>
+          <div className="mb-5 inline-flex rounded-lg bg-white/5 border border-white/10 p-0.5 gap-0.5">
+            {([4, 5] as SquareSolverSize[]).map((sz) => (
+              <button
+                key={sz}
+                onClick={() => setSquaresSize(sz)}
+                className={`px-3 py-1.5 rounded-md text-sm font-semibold transition-colors
+                  ${squaresSize === sz ? 'bg-white/15 text-white' : 'text-slate-400 hover:text-white'}`}
+              >
+                {sz}×{sz}
+              </button>
+            ))}
+          </div>
+
+          <label className="block text-xs font-medium text-slate-400 uppercase tracking-wider mb-2.5">
+            Known letters
+          </label>
+          {/* letters live in a 25-slot array indexed by row*5+col, so dropping
+              to 4×4 and back doesn't throw away what was typed */}
+          <div className="w-fit mx-auto">
+            <div
+              className="grid gap-2"
+              style={{ gridTemplateColumns: `repeat(${squaresSize}, auto)` }}
+            >
+              {Array.from({ length: squaresSize * squaresSize }, (_, i) => {
+                const slot = Math.floor(i / squaresSize) * 5 + (i % squaresSize);
+                return (
+                  <Tile
+                    key={slot}
+                    index={i}
+                    group="squares"
+                    osk={kbOpen}
+                    value={squaresLetters[slot]}
+                    state={squaresLetters[slot] ? 'known' : 'empty'}
+                    size="sm"
+                    onChange={(c) =>
+                      setSquaresLetters((prev) => prev.map((x, j) => (j === slot ? c : x)))
+                    }
+                  />
+                );
+              })}
+            </div>
+          </div>
+
+          <p className="mt-4 text-sm text-slate-400">
+            Leave a cell blank and we&apos;ll fill it. Every row and every column
+            comes out a word.
+          </p>
+
+          {squareFill && (
+            <div className="mt-6">
+              {squareFill.solutions.length === 0 ? (
+                <p className="text-sm text-slate-400">
+                  {squareFill.exhausted
+                    ? 'No square fits those letters.'
+                    : 'Gave up looking — pin down another letter or two and try again.'}
+                </p>
+              ) : (
+                <>
+                  <p className="text-sm text-slate-400 mb-4">
+                    {squareFill.solutions.length}
+                    {squareFill.exhausted ? '' : '+'}{' '}
+                    {squareFill.solutions.length === 1 ? 'square' : 'squares'} fit
+                  </p>
+                  <div className="flex flex-wrap justify-center gap-5">
+                    {squareFill.solutions.map((rows, k) => (
+                      <div
+                        key={k}
+                        className="grid gap-1"
+                        style={{ gridTemplateColumns: `repeat(${squaresSize}, auto)` }}
+                      >
+                        {rows.flatMap((w, r) =>
+                          w.split('').map((ch, c) => {
+                            const typed = !!squaresLetters[r * 5 + c];
+                            return (
+                              <span
+                                key={`${r}-${c}`}
+                                className={`w-7 h-8 flex items-center justify-center rounded-md border text-sm font-bold uppercase
+                                  ${typed
+                                    ? 'bg-white/15 border-white/25 text-white'
+                                    : 'bg-transparent border-white/10 text-accent'}`}
+                              >
+                                {ch}
+                              </span>
+                            );
+                          })
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
+          )}
         </div>
         )}
 
@@ -2288,7 +2404,7 @@ function App() {
           );
         })()}
 
-        {!playActive && (
+        {!playActive && mode !== 'squares' && (
         <>
         {/* results header */}
         <div className="flex items-center justify-between mb-4 flex-wrap gap-y-3">

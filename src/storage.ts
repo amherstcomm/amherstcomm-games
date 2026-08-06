@@ -102,6 +102,9 @@ export type PersistedState = {
   grid: { letters: string[]; preset: GridPreset };
   weave: { letters: string[]; size: WeaveSize };
   weavePlay: boolean;
+  /** the squares solver's own grid, kept at the largest size so switching
+   *  down and back doesn't lose what was typed */
+  squares: { letters: string[]; size: SquareSolverSize };
   squaresPlay: boolean;
 };
 
@@ -111,6 +114,8 @@ export const GRID_PRESET_DIMS: Record<GridPreset, { rows: number; cols: number }
   '4x4': { rows: 4, cols: 4 },
   '5x5': { rows: 5, cols: 5 },
 };
+
+export type SquareSolverSize = 4 | 5;
 
 export type WeaveSize = '6x8' | '8x10';
 export const WEAVE_DIMS: Record<WeaveSize, { rows: number; cols: number }> = {
@@ -155,6 +160,7 @@ export const DEFAULT_STATE: PersistedState = {
   grid: { letters: Array(16).fill(''), preset: '4x4' },
   weave: { letters: Array(48).fill(''), size: '6x8' },
   weavePlay: true,
+  squares: { letters: Array(25).fill(''), size: 4 },
   squaresPlay: true,
 };
 
@@ -229,6 +235,14 @@ export function loadState(): PersistedState {
       for (let i = 0; i < 12; i++) boxedLetters[i] = singleLetter(p.boxed.letters[i]);
     }
 
+    const squaresSize: SquareSolverSize = p?.squares?.size === 5 ? 5 : 4;
+    const squaresLetters = Array(25).fill('');
+    if (Array.isArray(p?.squares?.letters)) {
+      for (let i = 0; i < squaresLetters.length; i++) {
+        squaresLetters[i] = singleLetter(p.squares.letters[i]);
+      }
+    }
+
     const gridPreset: GridPreset = Object.keys(GRID_PRESET_DIMS).includes(p?.grid?.preset)
       ? p.grid.preset
       : '4x4';
@@ -300,6 +314,7 @@ export function loadState(): PersistedState {
       },
       grid: { letters: gridLetters, preset: gridPreset },
       weave: { letters: weaveLetters, size: weaveSize },
+      squares: { letters: squaresLetters, size: squaresSize },
       weavePlay: p?.weavePlay !== false,
       squaresPlay: p?.squaresPlay !== false,
     };
