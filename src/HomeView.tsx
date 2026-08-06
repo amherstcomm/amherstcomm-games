@@ -8,7 +8,8 @@
 
 import { Grid3x3, Hexagon, LayoutGrid, Puzzle, Shuffle, Square, Table2, Trophy } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import { MODE_SLUG, SLUG_NAME, type Slug } from '@/routes';
+import { MODE_SLUG, pathOf, SLUG_NAME, type Slug } from '@/routes';
+import RouteLink from '@/RouteLink';
 import { allDailyStatus, type DailyState } from '@/dailyStatus';
 import { fetchBoards, BOARD_LABELS, type BoardGame, type Boards } from '@/leaderboard';
 import type { Mode } from '@/storage';
@@ -99,10 +100,11 @@ export default function HomeView({
             const Icon = ICONS[slug];
             const state = status[m] ?? 'none';
             return (
-              <button
+              <RouteLink
                 key={m}
-                onClick={() => onOpen(m)}
-                className="text-left rounded-xl bg-white/5 border border-white/10 p-4 hover:bg-white/10 hover:border-white/20 transition-colors"
+                to={pathOf({ kind: 'game', view: 'play', slug, daily: true })}
+                onGo={() => onOpen(m)}
+                className="block text-left rounded-xl bg-white/5 border border-white/10 p-4 hover:bg-white/10 hover:border-white/20 transition-colors"
               >
                 <span className="flex items-center gap-2 mb-1">
                   <Icon className="w-4 h-4 text-accent shrink-0" />
@@ -112,7 +114,7 @@ export default function HomeView({
                   </span>
                 </span>
                 <span className="block text-sm text-slate-400">{BLURB[slug]}</span>
-              </button>
+              </RouteLink>
             );
           })}
         </div>

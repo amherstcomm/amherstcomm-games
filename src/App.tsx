@@ -27,6 +27,7 @@ import { PrivacyPolicy, Terms } from '@/LegalDocs';
 import { onDailyReport, requestDaily } from '@/dailyBus';
 import { solveSquare } from '@/squares';
 import HomeView from '@/HomeView';
+import RouteLink from '@/RouteLink';
 import SquaresGame, { type SquaresGameHandle } from '@/SquaresGame';
 import {
   MODE_SLUG,
@@ -1530,9 +1531,15 @@ function App() {
             {MODES.filter((m) => shownModes.includes(m.id)).map((m) => {
               const Icon = MODE_ICONS[m.id];
               return (
-                <button
+                <RouteLink
                   key={m.id}
-                  onClick={() => {
+                  to={pathOf({
+                    kind: 'game',
+                    view: currentView,
+                    slug: MODE_SLUG[m.id],
+                    daily: dailyByMode[m.id],
+                  })}
+                  onGo={() => {
                     // picking a game from the nav is also how you leave home
                     setAtHome(false);
                     setMode(m.id);
@@ -1545,7 +1552,7 @@ function App() {
                 >
                   <Icon className="w-5 h-5 md:w-4 md:h-4" />
                   <span>{m.label}</span>
-                </button>
+                </RouteLink>
               );
             })}
           </div>
@@ -1655,9 +1662,15 @@ function App() {
                 .map(({ view, label, Icon }) => {
                 const active = currentView === view;
                 return (
-                  <button
+                  <RouteLink
                     key={label}
-                    onClick={() => goToView(view)}
+                    to={pathOf({
+                      kind: 'game',
+                      view,
+                      slug: MODE_SLUG[mode],
+                      daily: dailyByMode[mode],
+                    })}
+                    onGo={() => goToView(view)}
                     className={`inline-flex items-center gap-1.5 px-4 sm:px-5 h-10 rounded-lg text-sm font-semibold transition-all duration-150
                       ${active
                         ? 'bg-emerald-400 text-ink shadow-lg shadow-emerald-500/30'
@@ -1665,7 +1678,7 @@ function App() {
                   >
                     <Icon className="w-4 h-4" />
                     {label}
-                  </button>
+                  </RouteLink>
                 );
               })}
           </div>
@@ -2672,13 +2685,14 @@ function App() {
           )}
           {/* wraps into centered rows rather than one overflowing line */}
           <div className="mt-3 flex flex-wrap items-center justify-center gap-x-5 gap-y-2.5">
-            <button
-              onClick={() => setAtHome(true)}
+            <RouteLink
+              to="/"
+              onGo={() => setAtHome(true)}
               className="inline-flex items-center gap-1.5 hover:text-slate-300 transition-colors"
             >
               <Home className="w-3.5 h-3.5" />
               Home
-            </button>
+            </RouteLink>
             <a
               href="https://github.com/rptetzloff/anagrimoire"
               target="_blank"
@@ -2688,50 +2702,56 @@ function App() {
               <Github className="w-3.5 h-3.5" />
               GitHub
             </a>
-            <button
-              onClick={() => setStatsOpen(true)}
+            <RouteLink
+              to="/stats/overall"
+              onGo={() => setStatsOpen(true)}
               className="inline-flex items-center gap-1.5 hover:text-slate-300 transition-colors"
             >
               <BarChart3 className="w-3.5 h-3.5" />
               Stats
-            </button>
-            <button
-              onClick={() => setSettingsOpen(true)}
+            </RouteLink>
+            <RouteLink
+              to="/settings/site"
+              onGo={() => setSettingsOpen(true)}
               className="inline-flex items-center gap-1.5 hover:text-slate-300 transition-colors"
             >
               <Settings className="w-3.5 h-3.5" />
               Settings
-            </button>
-            <button
-              onClick={() => setKeysOpen(true)}
+            </RouteLink>
+            <RouteLink
+              to="/keys"
+              onGo={() => setKeysOpen(true)}
               className="inline-flex items-center gap-1.5 hover:text-slate-300 transition-colors"
             >
               <Keyboard className="w-3.5 h-3.5" />
               Keys
-            </button>
+            </RouteLink>
             {supabase && (
-              <button
-                onClick={() => setAccountOpen(true)}
+              <RouteLink
+                to={session ? '/account' : '/sign-in'}
+                onGo={() => setAccountOpen(true)}
                 className="inline-flex items-center gap-1.5 hover:text-slate-300 transition-colors"
               >
                 <UserRound className="w-3.5 h-3.5" />
                 {session ? 'Account' : 'Sign in'}
-              </button>
+              </RouteLink>
             )}
-            <button
-              onClick={() => setAboutOpen(true)}
+            <RouteLink
+              to="/about"
+              onGo={() => setAboutOpen(true)}
               className="inline-flex items-center gap-1.5 hover:text-slate-300 transition-colors"
             >
               <Info className="w-3.5 h-3.5" />
               About &amp; FAQ
-            </button>
-            <button
-              onClick={() => setLegalOpen(true)}
+            </RouteLink>
+            <RouteLink
+              to="/legal/notices"
+              onGo={() => setLegalOpen(true)}
               className="inline-flex items-center gap-1.5 hover:text-slate-300 transition-colors"
             >
               <Scale className="w-3.5 h-3.5" />
               Legal
-            </button>
+            </RouteLink>
           </div>
         </footer>
       </main>
