@@ -1,7 +1,7 @@
 import type { DictionaryId } from '@/dictionaries';
 import type { Palette, TextScale, ThemeMode } from '@/theme';
 
-export type Mode = 'pattern' | 'descramble' | 'bee' | 'boxed' | 'grid' | 'weave';
+export type Mode = 'pattern' | 'descramble' | 'bee' | 'boxed' | 'grid' | 'weave' | 'squares';
 
 /** 'home' is the front page, 'last' is wherever you left off, and a Mode is
  *  that game's daily — for people who came for one game and mean to keep
@@ -10,7 +10,7 @@ export type StartPage = 'home' | 'last' | Mode;
 
 const KEY = 'anagrimoire:v1';
 
-export const ALL_MODES: Mode[] = ['pattern', 'descramble', 'bee', 'boxed', 'grid', 'weave'];
+export const ALL_MODES: Mode[] = ['pattern', 'descramble', 'bee', 'boxed', 'grid', 'weave', 'squares'];
 export const ALL_START_PAGES: StartPage[] = ['home', 'last', ...ALL_MODES];
 const ALL_DICTS: DictionaryId[] = ['common', 'standard', 'full'];
 
@@ -102,6 +102,10 @@ export type PersistedState = {
   grid: { letters: string[]; preset: GridPreset };
   weave: { letters: string[]; size: WeaveSize };
   weavePlay: boolean;
+  /** the squares solver's own grid, kept at the largest size so switching
+   *  down and back doesn't lose what was typed */
+  squares: { letters: string[]; size: SquareSolverSize };
+  squaresPlay: boolean;
 };
 
 export type GridPreset = '3x3' | '4x4' | '5x5';
@@ -111,6 +115,8 @@ export const GRID_PRESET_DIMS: Record<GridPreset, { rows: number; cols: number }
   '5x5': { rows: 5, cols: 5 },
 };
 
+export type SquareSolverSize = 4 | 5;
+
 export type WeaveSize = '6x8' | '8x10';
 export const WEAVE_DIMS: Record<WeaveSize, { rows: number; cols: number }> = {
   '6x8': { rows: 8, cols: 6 }, // Strands-shaped board: 6 wide, 8 tall
@@ -119,7 +125,7 @@ export const WEAVE_DIMS: Record<WeaveSize, { rows: number; cols: number }> = {
 
 export const DEFAULT_STATE: PersistedState = {
   mode: 'pattern',
-  dictionaries: { pattern: 'common', descramble: 'common', bee: 'common', boxed: 'common', grid: 'common', weave: 'standard' },
+  dictionaries: { pattern: 'common', descramble: 'common', bee: 'common', boxed: 'common', grid: 'common', weave: 'standard', squares: 'standard' },
   sort: {
     pattern: { key: 'alpha', dir: 'asc' },
     descramble: { key: 'length', dir: 'desc' },
@@ -127,6 +133,7 @@ export const DEFAULT_STATE: PersistedState = {
     boxed: { key: 'length', dir: 'desc' },
     grid: { key: 'length', dir: 'desc' },
     weave: { key: 'length', dir: 'desc' },
+    squares: { key: 'length', dir: 'desc' },
   },
   keyboard: false,
   theme: 'system',
@@ -153,6 +160,8 @@ export const DEFAULT_STATE: PersistedState = {
   grid: { letters: Array(16).fill(''), preset: '4x4' },
   weave: { letters: Array(48).fill(''), size: '6x8' },
   weavePlay: true,
+  squares: { letters: Array(25).fill(''), size: 4 },
+  squaresPlay: true,
 };
 
 function singleLetter(v: unknown): string {
@@ -200,6 +209,7 @@ export function loadState(): PersistedState {
       boxed: { ...DEFAULT_STATE.sort.boxed },
       grid: { ...DEFAULT_STATE.sort.grid },
       weave: { ...DEFAULT_STATE.sort.weave },
+      squares: { ...DEFAULT_STATE.sort.squares },
     };
     for (const m of ALL_MODES) {
       const s = p?.sort?.[m];
@@ -223,6 +233,14 @@ export function loadState(): PersistedState {
     const boxedLetters = Array(12).fill('');
     if (Array.isArray(p?.boxed?.letters)) {
       for (let i = 0; i < 12; i++) boxedLetters[i] = singleLetter(p.boxed.letters[i]);
+    }
+
+    const squaresSize: SquareSolverSize = p?.squares?.size === 5 ? 5 : 4;
+    const squaresLetters = Array(25).fill('');
+    if (Array.isArray(p?.squares?.letters)) {
+      for (let i = 0; i < squaresLetters.length; i++) {
+        squaresLetters[i] = singleLetter(p.squares.letters[i]);
+      }
     }
 
     const gridPreset: GridPreset = Object.keys(GRID_PRESET_DIMS).includes(p?.grid?.preset)
@@ -296,7 +314,9 @@ export function loadState(): PersistedState {
       },
       grid: { letters: gridLetters, preset: gridPreset },
       weave: { letters: weaveLetters, size: weaveSize },
+      squares: { letters: squaresLetters, size: squaresSize },
       weavePlay: p?.weavePlay !== false,
+      squaresPlay: p?.squaresPlay !== false,
     };
   } catch {
     return DEFAULT_STATE;

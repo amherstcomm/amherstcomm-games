@@ -1,6 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Grid3x3, Hexagon, LayoutGrid, Puzzle, Shuffle, Square, X } from 'lucide-react';
-import { combineStats, fetchSyncedStats, loadStats, type StatsStore } from '@/stats';
+import { Grid3x3, Hexagon, LayoutGrid, Puzzle, Shuffle, Square, Table2, X } from 'lucide-react';
+import {
+  combineStats,
+  fetchSyncedStats,
+  loadStats,
+  SQUARE_STAT_SIZES,
+  type StatsStore,
+} from '@/stats';
 import { formatElapsed } from '@/useUpTimer';
 import { useModalA11y } from '@/useModalA11y';
 import HistoryView from '@/HistoryView';
@@ -114,7 +120,11 @@ export default function StatsModal({
       stats.grid.sprints +
       stats.box.solved +
       stats.weave.solved +
-      stats.weave.revealed >
+      stats.weave.revealed +
+      SQUARE_STAT_SIZES.reduce(
+        (t, k) => t + stats.squares[k].solved + stats.squares[k].revealed,
+        0
+      ) >
     0;
 
   return (
@@ -263,6 +273,26 @@ export default function StatsModal({
                 />
               </div>
             </Section>
+
+            {SQUARE_STAT_SIZES.map((k) => (
+              <Section key={k} Icon={Table2} title={`Word squares (${k}×${k})`}>
+                <div className="grid grid-cols-4 gap-2">
+                  <Stat label="Solved" value={stats.squares[k].solved} />
+                  <Stat label="Revealed" value={stats.squares[k].revealed} />
+                  <Stat label="Best time" value={time(stats.squares[k].bestTimeMs)} />
+                  <Stat
+                    label="Avg time"
+                    value={
+                      stats.squares[k].solved > 0
+                        ? formatElapsed(
+                            Math.round(stats.squares[k].totalTimeMs / stats.squares[k].solved)
+                          )
+                        : '—'
+                    }
+                  />
+                </div>
+              </Section>
+            ))}
 
             <Section Icon={Puzzle} title="Weave">
               <div className="grid grid-cols-4 gap-2">

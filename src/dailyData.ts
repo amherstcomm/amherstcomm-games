@@ -12,13 +12,21 @@ const IS_DEV_SITE =
 const BASE = 'https://raw.githubusercontent.com/rptetzloff/anagrimoire/puzzle-data/data';
 
 export function dailyDataUrl(
-  name: 'daily-words' | 'daily-hive' | 'daily-box' | 'daily-scramble' | 'daily-grid' | 'daily-weave'
+  name:
+    | 'daily-words'
+    | 'daily-hive'
+    | 'daily-box'
+    | 'daily-scramble'
+    | 'daily-grid'
+    | 'daily-weave'
+    | 'daily-squares'
 ): string {
   return `${BASE}/${IS_DEV_SITE ? 'dev-' : ''}${name}.json`;
 }
 
 // practice puzzles are pre-generated server-side and shared by both sites
 export const WEAVE_POOL_URL = `${BASE}/weave-pool.json`;
+export const SQUARES_POOL_URL = `${BASE}/squares-pool.json`;
 
 // which daily set this site plays — synced results are tagged with it so
 // dev-site testing never pollutes production's global daily stats

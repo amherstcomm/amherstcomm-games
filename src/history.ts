@@ -10,7 +10,7 @@
 import { DAILY_ENV } from '@/dailyData';
 import { supabase } from '@/supabase';
 
-export type HistoryGame = 'guess' | 'hive' | 'scramble' | 'grid' | 'box' | 'weave';
+export type HistoryGame = 'guess' | 'hive' | 'scramble' | 'grid' | 'box' | 'weave' | 'squares';
 
 export type HistoryEntry = {
   date: string; // the puzzle's Eastern-time date, not when it was played
@@ -22,10 +22,10 @@ export type HistoryEntry = {
 
 export type History = Record<HistoryGame, HistoryEntry[]>;
 
-const GAMES: HistoryGame[] = ['guess', 'hive', 'scramble', 'grid', 'box', 'weave'];
+const GAMES: HistoryGame[] = ['guess', 'hive', 'scramble', 'grid', 'box', 'weave', 'squares'];
 
 export function emptyHistory(): History {
-  return { guess: [], hive: [], scramble: [], grid: [], box: [], weave: [] };
+  return { guess: [], hive: [], scramble: [], grid: [], box: [], weave: [], squares: [] };
 }
 
 export async function fetchHistory(): Promise<History | null> {
@@ -116,6 +116,8 @@ export const STREAK_RULE: Record<HistoryGame, (e: HistoryEntry) => boolean> = {
   grid: () => true,
   box: () => true,
   weave: (e) => !!e.result.solved,
+  // giving up doesn't keep a streak alive, same as Guess and Weave
+  squares: (e) => !!e.result.solved,
 };
 
 // ---------------------------------------------------------------------------
@@ -132,6 +134,7 @@ export const SERIES_VALUE: Record<HistoryGame, (e: HistoryEntry) => number | nul
   grid: (e) => Number(e.result.score) || 0,
   box: (e) => Number(e.result.words) || null,
   weave: (e) => (e.result.solved ? Number(e.result.timeMs) || null : null),
+  squares: (e) => (e.result.solved ? Number(e.result.timeMs) || null : null),
 };
 
 export function series(entries: HistoryEntry[], game: HistoryGame): Series {

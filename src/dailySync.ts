@@ -13,7 +13,7 @@
 import { DAILY_ENV } from '@/dailyData';
 import { supabase } from '@/supabase';
 
-export type DailyGame = 'guess' | 'hive' | 'scramble' | 'grid' | 'box' | 'weave';
+export type DailyGame = 'guess' | 'hive' | 'scramble' | 'grid' | 'box' | 'weave' | 'squares';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Rec = Record<string, any>;
@@ -133,6 +133,32 @@ export function mergeDaily(
         endsAt: minDefined(local.endsAt, remote.endsAt),
         finished: !!(local.finished || remote.finished),
       };
+    case 'squares': {
+      const mine = (local.entries ?? []) as string[];
+      const theirs = (remote.entries ?? []) as string[];
+      const filled = (e: string[]) => e.filter(Boolean).length;
+      const localDone = !!local.revealed || (local.solved ?? false);
+      const remoteDone = !!remote.revealed || (remote.solved ?? false);
+      // A fixed-length grid can't be unioned cell by cell: that would restore
+      // a letter erased on the other device, the same way it did for Boxed.
+      // One side wins whole — mine when I'm saving an edit, so a clearing
+      // survives; otherwise the finished board, else the fuller one.
+      const entries =
+        mode === 'push'
+          ? mine
+          : remoteDone && !localDone
+            ? theirs
+            : filled(theirs) > filled(mine)
+              ? theirs
+              : mine;
+      return {
+        ...local,
+        entries,
+        solved: !!(local.solved || remote.solved),
+        revealed: !!(local.revealed || remote.revealed),
+        elapsedMs: maxNum(local.elapsedMs, remote.elapsedMs),
+      };
+    }
     case 'weave':
       return {
         ...local,
@@ -206,6 +232,11 @@ const PROGRESS_FIELDS: Record<DailyGame, string[]> = {
   scramble: ['found', 'invalid', 'endsAt', 'finished'],
   grid: ['found', 'invalid', 'endsAt', 'finished'],
   weave: ['found', 'hintWords', 'hintsUsed', 'revealed'],
+  // `entries` is the play; cells, answer and size are the puzzle, identical on
+  // both devices. elapsedMs is left out on purpose — a running clock rewriting
+  // state every second would leave no device ever looking "clean", which is
+  // what lets a merge take the other side's deletions.
+  squares: ['entries', 'solved', 'revealed'],
 };
 
 export function progressOf(game: DailyGame, state: Rec | null): Rec {

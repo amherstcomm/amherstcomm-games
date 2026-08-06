@@ -109,6 +109,38 @@ endpoint the moment somebody edits one uuid in the network tab.
   tie it to an account, and their deletion API works on identifiers you
   supply. Dropping the `_ga` cookies is the honest whole of what we can do.
 
+### Verified results — a word list in the database
+`result_is_plausible()` recomputes each score from the words the client says it
+found. That catches a score disagreeing with its own evidence, but the database
+has no dictionary, so ten invented words score exactly like ten real ones.
+Every game sits in that tier — Squares, whose grid can only be checked for
+shape, is no worse than the rest.
+
+**Client-side signing can't fix it at any key length.** If the browser computes
+an HMAC, the browser holds the key, and anything shipped to the browser is
+public. The flaw isn't where the key is kept, it's that the key is there at
+all — the same wall the display-name work hit.
+
+So the fix is the server knowing the truth independently, as one piece of work
+rather than a patch per game:
+
+- **Our own word list, in Postgres.** The dictionaries are already normalised
+  in the build; publishing them to a `words` table lets `result_is_plausible`
+  check membership instead of re-adding a claimed score. Worth pricing first —
+  the full list is large, and the check runs per row.
+- **Answer hashes for Squares**, whose evidence is a grid rather than words.
+  The pipeline writes `sha256(rows joined)` per date and size; the check hashes
+  the submitted grid and compares.
+- Written by the daily workflow under a service-role key held only as a CI
+  secret, never in the bundle. Grants revoked from every web role: a readable
+  answers table is just the answers, and a hash over a small answer space is
+  guessable.
+
+**Not urgent.** The realistic threat is one curious person with the network tab
+open, and the exposure is bounded — `daily_progress` holds one row per puzzle,
+so nobody can claim more solves than there are days, unlike an unbounded score.
+Doing it for Squares alone would leave one trustworthy board among seven.
+
 ### Admin portal — much later
 Everything owner-facing is SQL-editor-only today: clearing a display name,
 adding blocklist entries, reading `suspect_daily_results`. That's fine, and
@@ -178,10 +210,35 @@ many cells are revealed.
 **Caveat:** it's a logic puzzle wearing letters — the dictionary does almost
 no work.
 
-### Word squares
-An N×N grid where every row *and* column is a real word. Much closer to the
-site's identity than Wordoku, and probably buildable on the same subset-sum +
-backtracking packer behind Weave.
+### Word squares — generator done, game not built
+An N×N grid where every row *and* column is a real word, some letters given
+and the rest to fill in. Two sizes, like Guess's word-length picker: 4×4 and
+5×5. `scripts/squares.mjs` generates and verifies them; nothing is wired into
+the pipeline or the UI yet.
+
+It needed none of Weave's packer — plain backtracking with prefix pruning is
+enough. What the probes settled:
+
+- **Sizes stop at five.** 4×4 solves on every seed in milliseconds, 5×5 on
+  about four seeds in five. 6×6 falls off a cliff (1 in 5, and the words it
+  finds are obscure).
+- **Uniqueness is a check, not a goal.** Word squares are so constrained that
+  a 5×5 stays mathematically unique down to *three* given letters — and no
+  human deduces ten words from three letters. Difficulty comes from a target
+  reveal count; uniqueness is verified at that count.
+- **Which cells are shown matters as much as how many.** Building up from a
+  random subset until it happens to be unique showed 13 of 16 letters on
+  average. Removing from the full square instead keeps uniqueness true at
+  every step, so it can stop dead on the target: 6 of 16, and 10 of 25.
+- **Validate against the list the game accepts typing against.** Uniqueness
+  measured against a different dictionary means something different to us
+  than to the player. Using `standard` rather than `common` barely moved the
+  numbers, so there's no reason to be stingy.
+
+Still to build: pipeline wiring (`daily-squares.json`, prod + dev salts), the
+game component, a solver, a Learn demo, stats/sync/share/routes/settings/home
+card. Deliberately *not* wired into `fetch-puzzles.mjs` yet — a bug there
+breaks the daily run for all six existing games.
 
 ### Crossword
 Blocked on something that isn't code: **clues**. Grid construction is

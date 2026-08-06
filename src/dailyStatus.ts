@@ -85,7 +85,22 @@ function openState(s: Store | null): DailyState {
   return arr(r.found).length ? 'started' : 'none';
 }
 
+// Squares keeps one record per size, so today counts as touched if either
+// board has been. `solved` is written by the game itself — this module holds
+// no dictionary and couldn't judge a finished square on its own.
+function squaresState(s: Store | null): DailyState {
+  const boards = Object.values((s?.daily ?? {}) as Record<string, Record<string, unknown>>);
+  let state: DailyState = 'none';
+  for (const b of boards) {
+    if (!b) continue;
+    if (b.solved === true || b.revealed === true) return 'done';
+    if (arr(b.entries).some((e) => e)) state = 'started';
+  }
+  return state;
+}
+
 const READERS: Record<Mode, { key: string; state: (s: Store | null) => DailyState }> = {
+  squares: { key: 'anagrimoire:squares:v1', state: squaresState },
   pattern: { key: 'anagrimoire:play:v1', state: guessState },
   bee: { key: 'anagrimoire:hive:v1', state: openState },
   boxed: { key: 'anagrimoire:box:v1', state: boxState },

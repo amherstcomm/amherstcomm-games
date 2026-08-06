@@ -6,7 +6,7 @@
 // Regulars who don't want a lobby can set Settings -> Site -> Start on to a
 // game and never see this again.
 
-import { Grid3x3, Hexagon, LayoutGrid, Puzzle, Shuffle, Square, Trophy } from 'lucide-react';
+import { Grid3x3, Hexagon, LayoutGrid, Puzzle, Shuffle, Square, Table2, Trophy } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { MODE_SLUG, SLUG_NAME, type Slug } from '@/routes';
 import { allDailyStatus, type DailyState } from '@/dailyStatus';
@@ -20,6 +20,7 @@ const ICONS: Record<Slug, typeof Grid3x3> = {
   grid: LayoutGrid,
   boxed: Square,
   weave: Puzzle,
+  squares: Table2,
 };
 
 // One line each, written for somebody who has never seen the game.
@@ -30,6 +31,7 @@ const BLURB: Record<Slug, string> = {
   grid: 'A grid of letters against the clock — trace words through neighbouring cells.',
   boxed: 'Twelve letters around a square. Chain words together and use every one.',
   weave: 'Find the words hiding in the board, all on a theme you have to work out.',
+  squares: 'Fill the grid so every row and every column spells a word.',
 };
 
 const STATE_LABEL: Record<DailyState, string> = {

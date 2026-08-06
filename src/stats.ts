@@ -42,6 +42,18 @@ export type LifetimeStats = {
     bestTimeMs: number | null;
     totalTimeMs: number;
   };
+  /** kept per board size: a 4×4 and a 5×5 are different puzzles, and pooling
+   *  their times makes an average that describes neither */
+  squares: Record<SquareStatSize, SquaresStat>;
+};
+
+export type SquareStatSize = '4' | '5';
+export const SQUARE_STAT_SIZES: SquareStatSize[] = ['4', '5'];
+export type SquaresStat = {
+  solved: number;
+  revealed: number;
+  bestTimeMs: number | null;
+  totalTimeMs: number;
 };
 
 export type StatsStore = { daily: LifetimeStats; practice: LifetimeStats };
@@ -55,7 +67,8 @@ export type GameEvent =
     }
   | { game: 'scramble' | 'grid'; payload: { score: number; words: number } }
   | { game: 'box'; payload: { words: number; timeMs: number } }
-  | { game: 'weave'; payload: { solved: boolean; timeMs: number; hints: number } };
+  | { game: 'weave'; payload: { solved: boolean; timeMs: number; hints: number } }
+  | { game: 'squares'; payload: { solved: boolean; size: number; timeMs: number } };
 
 function num(v: unknown): number {
   return typeof v === 'number' && Number.isFinite(v) && v >= 0 ? v : 0;
@@ -108,6 +121,17 @@ function sanitizeBucket(p: any): LifetimeStats {
       bestTimeMs: numOrNull(p?.weave?.bestTimeMs),
       totalTimeMs: num(p?.weave?.totalTimeMs),
     },
+    squares: Object.fromEntries(
+      SQUARE_STAT_SIZES.map((k) => [
+        k,
+        {
+          solved: num(p?.squares?.[k]?.solved),
+          revealed: num(p?.squares?.[k]?.revealed),
+          bestTimeMs: numOrNull(p?.squares?.[k]?.bestTimeMs),
+          totalTimeMs: num(p?.squares?.[k]?.totalTimeMs),
+        },
+      ])
+    ) as Record<SquareStatSize, SquaresStat>,
   };
 }
 
@@ -194,6 +218,19 @@ export function applyEvent(s: LifetimeStats, e: GameEvent): void {
       }
       break;
     }
+    case 'squares': {
+      const { solved, size, timeMs } = e.payload;
+      const b = s.squares[String(size) as SquareStatSize];
+      if (!b) break;
+      if (solved) {
+        b.solved += 1;
+        b.totalTimeMs += num(timeMs);
+        if (b.bestTimeMs === null || timeMs < b.bestTimeMs) b.bestTimeMs = num(timeMs);
+      } else {
+        b.revealed += 1;
+      }
+      break;
+    }
   }
 }
 
@@ -247,6 +284,18 @@ export function applyDailySummary(s: LifetimeStats, game: string, p: any): void 
         s.weave.revealed += 1;
       }
       break;
+    case 'squares': {
+      const sq = s.squares[String(p?.size) as SquareStatSize];
+      if (!sq) break;
+      if (p?.solved) {
+        sq.solved += 1;
+        sq.totalTimeMs += num(p?.timeMs);
+        sq.bestTimeMs = minNullable(sq.bestTimeMs, num(p?.timeMs));
+      } else {
+        sq.revealed += 1;
+      }
+      break;
+    }
   }
 }
 
@@ -299,6 +348,17 @@ export function combineStats(a: LifetimeStats, b: LifetimeStats): LifetimeStats 
       bestTimeMs: minNullable(a.weave.bestTimeMs, b.weave.bestTimeMs),
       totalTimeMs: a.weave.totalTimeMs + b.weave.totalTimeMs,
     },
+    squares: Object.fromEntries(
+      SQUARE_STAT_SIZES.map((k) => [
+        k,
+        {
+          solved: a.squares[k].solved + b.squares[k].solved,
+          revealed: a.squares[k].revealed + b.squares[k].revealed,
+          bestTimeMs: minNullable(a.squares[k].bestTimeMs, b.squares[k].bestTimeMs),
+          totalTimeMs: a.squares[k].totalTimeMs + b.squares[k].totalTimeMs,
+        },
+      ])
+    ) as Record<SquareStatSize, SquaresStat>,
   };
 }
 
@@ -408,6 +468,19 @@ export function recordWeaveReveal(
   record(daily, { game: 'weave', payload: { solved: false, timeMs: 0, hints } }, puzzleDate);
 }
 
+/** A squares board is over exactly once — solved or given up on — so both
+ *  outcomes are one event, and `size` rides along because the 4x4 and the 5x5
+ *  are separate puzzles on the same day. */
+export function recordSquaresFinish(
+  daily: boolean,
+  solved: boolean,
+  size: number,
+  timeMs: number,
+  puzzleDate: string | null = null
+): void {
+  record(daily, { game: 'squares', payload: { solved, size, timeMs } }, puzzleDate);
+}
+
 // ---------------------------------------------------------------------------
 // Synced view
 // ---------------------------------------------------------------------------
@@ -445,7 +518,19 @@ export async function importBaselineOnce(): Promise<void> {
   }
 }
 
-const KNOWN_GAMES = new Set(['guess', 'hive', 'scramble', 'grid', 'box', 'weave']);
+// Every game name GameEvent can carry. A row for anything else is from a
+// version this build doesn't know about, and gets skipped rather than crashing
+// the replay — which is also why a game missing from here disappears from the
+// synced view entirely while still showing up signed out. Add new games here.
+const KNOWN_GAMES = new Set<GameEvent['game']>([
+  'guess',
+  'hive',
+  'scramble',
+  'grid',
+  'box',
+  'weave',
+  'squares',
+]);
 
 // sum of all device baselines + full event-log replay -> the account's
 // synced stats

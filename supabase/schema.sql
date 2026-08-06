@@ -225,7 +225,7 @@ revoke execute on function public.would_block(text) from public, anon, authentic
 create table if not exists public.game_results (
   id bigint generated always as identity primary key,
   user_id uuid not null references auth.users (id) on delete cascade,
-  game text not null check (game in ('guess', 'hive', 'scramble', 'grid', 'box', 'weave')),
+  game text not null check (game in ('guess', 'hive', 'scramble', 'grid', 'box', 'weave', 'squares')),
   daily boolean not null,
   puzzle_date date, -- Eastern-time date of the daily puzzle; null for practice
   payload jsonb not null default '{}'::jsonb,
@@ -265,7 +265,7 @@ create policy "read own results"
 -- ---------------------------------------------------------------------------
 create table if not exists public.daily_progress (
   user_id uuid not null references auth.users (id) on delete cascade,
-  game text not null check (game in ('guess', 'hive', 'scramble', 'grid', 'box', 'weave')),
+  game text not null check (game in ('guess', 'hive', 'scramble', 'grid', 'box', 'weave', 'squares')),
   variant text not null default '',
   puzzle_date date not null,
   env text not null default 'prod',
@@ -474,7 +474,24 @@ declare
 begin
   if p_result is null then return false; end if;
 
-  if p_game = 'guess' then
+  if p_game = 'squares' then
+    -- Shape only, and deliberately so: the database holds no dictionary, so it
+    -- cannot tell a real word from a plausible-looking one. That is true of
+    -- every game here — hive and the sprints re-add the score from whatever
+    -- words the client claims — so squares is no weaker than the rest. See the
+    -- roadmap entry on putting a word list in Postgres.
+    if coalesce((p_result->>'size')::int, 0) not in (4, 5) then return false; end if;
+    -- a reveal is a legitimate result; it just isn't a solve
+    if coalesce((p_result->>'solved')::boolean, false) is not true then return true; end if;
+    -- nobody fills a grid this size in under five seconds
+    if coalesce((p_result->>'timeMs')::numeric, 0) < 5000 then return false; end if;
+    if has_state and p_state ? 'entries' then
+      return jsonb_array_length(p_state->'entries')
+             = (p_result->>'size')::int * (p_result->>'size')::int;
+    end if;
+    return true;
+
+  elsif p_game = 'guess' then
     if (p_result->>'guesses')::int not between 1 and 6 then return false; end if;
     -- nobody reads, thinks and types a word in under two seconds
     if coalesce((p_result->>'timeMs')::numeric, 0) < 2000 then return false; end if;
@@ -663,11 +680,64 @@ begin
   ) s;
   out_json := jsonb_set(out_json, '{weave}', part);
 
+  -- squares: one board per size. A 4×4 and a 5×5 aren't the same puzzle, and a
+  -- combined ranking would quietly reward whoever played more of the easier
+  -- one. Days solved, then the fastest — weave's shape, keyed on variant.
+  select coalesce(jsonb_object_agg('squares' || b.variant, b.board), '{}'::jsonb) into part
+  from (
+    select v.variant as variant,
+           coalesce(
+             jsonb_agg(jsonb_build_object('name', t.name, 'value', t.value, 'detail', t.detail)
+                       order by t.rk) filter (where t.name is not null),
+             '[]'::jsonb
+           ) as board
+    from (values ('4'), ('5')) as v(variant)
+    left join lateral (
+      select p.display_name as name,
+             count(*) filter (where (dp.result->>'solved')::boolean) as value,
+             min((dp.result->>'timeMs')::numeric) filter (
+               where (dp.result->>'solved')::boolean and (dp.result->>'timeMs')::numeric > 0
+             ) as detail,
+             row_number() over (
+               order by count(*) filter (where (dp.result->>'solved')::boolean) desc,
+                        min((dp.result->>'timeMs')::numeric) filter (
+                          where (dp.result->>'solved')::boolean
+                            and (dp.result->>'timeMs')::numeric > 0
+                        ) asc
+             ) as rk
+      from public.daily_progress dp
+      join public.profiles p on p.id = dp.user_id
+      where dp.game = 'squares' and dp.variant = v.variant and dp.completed
+        and dp.env = p_env and dp.puzzle_date >= since
+        and p.display_name is not null
+        and public.result_is_plausible('squares', dp.state, dp.result)
+      group by p.display_name
+      having count(*) filter (where (dp.result->>'solved')::boolean) > 0
+      limit 10
+    ) t on true
+    group by v.variant
+  ) b;
+  out_json := out_json || part;
+
   return out_json;
 end;
 $$;
 
 grant execute on function public.leaderboard(int, text) to anon, authenticated;
+
+-- Adding a game means widening both of these, and `create table if not exists`
+-- leaves an existing table exactly as it was — so the constraint has to be
+-- replaced explicitly or every write for the new game comes back 400 and the
+-- game silently never syncs. Idempotent, so re-running the file is safe.
+alter table public.game_results drop constraint if exists game_results_game_check;
+alter table public.game_results
+  add constraint game_results_game_check
+  check (game in ('guess', 'hive', 'scramble', 'grid', 'box', 'weave', 'squares'));
+
+alter table public.daily_progress drop constraint if exists daily_progress_game_check;
+alter table public.daily_progress
+  add constraint daily_progress_game_check
+  check (game in ('guess', 'hive', 'scramble', 'grid', 'box', 'weave', 'squares'));
 
 -- ---------------------------------------------------------------------------
 -- stats_baselines: one-time import of the lifetime stats a browser
