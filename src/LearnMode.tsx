@@ -1,5 +1,6 @@
 import {
   forwardRef,
+  Fragment,
   useEffect,
   useImperativeHandle,
   useLayoutEffect,
@@ -965,6 +966,134 @@ BOX_SIDES.forEach((side, s) => {
   side.split('').forEach((c, j) => BOX_LETTER_POS.set(c, BOX_POSITIONS[s][j]));
 });
 
+// ---------------------------------------------------------------------------
+// Word squares
+// ---------------------------------------------------------------------------
+
+// One board, small and mostly filled: the point is to feel the constraint bite
+// — a letter you place has to satisfy a row and a column at once — not to sit
+// through a whole puzzle before reaching Play.
+const SQ_ANSWER = ['swat', 'mole', 'urge', 'teas'];
+const SQ_GIVEN = [1, 3, 4, 5, 6, 8, 12, 15];
+
+function LearnSquares({ dict, register }: { dict: Set<string> | null; register: RegisterKeys }) {
+  const n = 4;
+  const cells = useMemo(
+    () => SQ_ANSWER.join('').split('').map((c, i) => (SQ_GIVEN.includes(i) ? c : null)),
+    []
+  );
+  const [entries, setEntries] = useState<string[]>(() => Array(n * n).fill(''));
+  const [cursor, setCursor] = useState(() => cells.findIndex((c) => c === null));
+  const [flash, show] = useFlash();
+
+  const at = (i: number) => cells[i] ?? entries[i] ?? '';
+  const rows = Array.from({ length: n }, (_, r) =>
+    Array.from({ length: n }, (_, c) => at(r * n + c)).join('')
+  );
+  const cols = Array.from({ length: n }, (_, c) =>
+    Array.from({ length: n }, (_, r) => at(r * n + c)).join('')
+  );
+  const ok = (w: string) => w.length === n && !!dict?.has(w);
+  const solved = rows.every(ok) && cols.every(ok);
+
+  function step(from: number, dir: 1 | -1) {
+    for (let k = 1; k <= n * n; k++) {
+      const i = (from + dir * k + n * n * 2) % (n * n);
+      if (cells[i] === null) return i;
+    }
+    return from;
+  }
+
+  function handleKey(k: string) {
+    if (solved) return;
+    if (k === 'backspace') {
+      setEntries((e) => e.map((v, i) => (i === cursor ? '' : v)));
+      return;
+    }
+    if (!/^[a-z]$/.test(k)) return;
+    setEntries((e) => e.map((v, i) => (i === cursor ? k : v)));
+    setCursor((c) => step(c, 1));
+  }
+  useDemoKeys(register, handleKey);
+
+  useEffect(() => {
+    if (solved) show('Every row and every column — a word square! 🎉', true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [solved]);
+
+  const tone = (w: string) =>
+    !w || w.length < n ? 'bg-white/15' : ok(w) ? 'bg-emerald-400' : 'bg-rose-400';
+
+  return (
+    <>
+      <Section title="The goal">
+        <p className="text-sm text-slate-400 mb-4">
+          Fill the grid so that <strong className="text-slate-200">every row and every
+          column</strong> spells a word. Some letters are given; the rest are yours.
+        </p>
+        <Rules
+          items={[
+            'A four-letter grid holds eight words — four across and four down',
+            'Every letter you place has to work twice, once each way',
+            'There is exactly one way to finish it',
+          ]}
+        />
+      </Section>
+
+      <Section title="Try it — half the grid is yours">
+        <p className="text-sm text-slate-400 mb-4">
+          Eight letters are given and eight are blank. Tap a square and type — the
+          bar beside each line turns green once that line is a word.
+        </p>
+
+        <div className="w-fit mx-auto">
+          <div className="grid gap-2" style={{ gridTemplateColumns: `repeat(${n}, auto) 0.375rem` }}>
+            {cols.map((w, c) => (
+              <div key={`c${c}`} aria-hidden className={`h-1.5 rounded-full ${tone(w)}`} />
+            ))}
+            <div aria-hidden />
+            {Array.from({ length: n }, (_, r) => (
+              <Fragment key={r}>
+                {Array.from({ length: n }, (_, c) => {
+                  const i = r * n + c;
+                  const given = cells[i] !== null;
+                  return (
+                    <button
+                      key={i}
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={() => !given && setCursor(i)}
+                      className={`w-11 h-12 rounded-xl border-2 text-xl font-bold uppercase transition-colors
+                        ${given
+                          ? 'bg-white/20 border-white/30 text-white'
+                          : i === cursor && !solved
+                            ? 'bg-amber-400/15 border-amber-400 text-accent'
+                            : 'bg-transparent border-white/25 text-accent hover:bg-white/10'}`}
+                    >
+                      {at(i)}
+                    </button>
+                  );
+                })}
+                <div aria-hidden className={`w-1.5 h-full rounded-full ${tone(rows[r])}`} />
+              </Fragment>
+            ))}
+          </div>
+        </div>
+
+        <div className="relative mt-4 mx-auto max-w-xs h-11 rounded-xl bg-white/5 border-2 border-white/10 flex items-center justify-center overflow-hidden">
+          <MobileKeyInput onKey={handleKey} label="Type a letter" />
+          <span className="text-xs text-slate-400">Tap here to type</span>
+        </div>
+
+        {flash && (
+          <p className={`mt-3 text-sm font-semibold ${flash.good ? 'text-emerald-300' : 'text-danger'}`}>
+            {flash.text}
+          </p>
+        )}
+      </Section>
+    </>
+  );
+}
+
 function LearnBoxed({ dict, register }: { dict: Set<string> | null; register: RegisterKeys }) {
   const [chain, setChain] = useState<string[]>([]);
   const [current, setCurrent] = useState('');
@@ -1480,6 +1609,7 @@ const LearnMode = forwardRef<
       {mode === 'grid' && <LearnGrid standardWords={standardWords} register={register} />}
       {mode === 'boxed' && <LearnBoxed dict={dict} register={register} />}
       {mode === 'weave' && <LearnWeave dict={dict} colors={colors} />}
+      {mode === 'squares' && <LearnSquares dict={dict} register={register} />}
 
       <p className="mt-2 text-xs text-slate-500 border-t border-white/10 pt-5 max-w-lg mx-auto">
         Daily puzzles refresh about 15 minutes after 3:00&nbsp;a.m. Eastern. Progress and stats
