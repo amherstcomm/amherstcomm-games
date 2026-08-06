@@ -2,7 +2,8 @@ import { useState } from 'react';
 import { BarChart3, HardDrive } from 'lucide-react';
 import { GA_ID, disableAnalytics, initAnalytics } from '@/analytics';
 import { clearAnalyticsCookies, gpcEnabled, readConsent, writeConsent } from '@/consent';
-import { readLevel, setLevel, type StorageLevel } from '@/siteStorage';
+import { readLevel, STORAGE_OPTIONS, type StorageLevel } from '@/siteStorage';
+import { applyStorageLevel } from '@/account';
 
 // Two questions, asked separately, because they are not the same question.
 // One is the site remembering what you did here; the other is data going to
@@ -13,6 +14,9 @@ import { readLevel, setLevel, type StorageLevel } from '@/siteStorage';
 // Not a modal: nothing is being tracked while it sits there, so there's no
 // reason to hold the page hostage. And declining is exactly as easy as
 // accepting — a banner where "no" is harder than "yes" isn't really asking.
+// Every button here is deliberately identical: highlighting the one that
+// shares the most would be a nudge dressed up as a default, and "equally
+// easy" is meant to include how the choices look.
 export default function ConsentBanner({ onReadPolicy }: { onReadPolicy: () => void }) {
   const [askStorage, setAskStorage] = useState(() => readLevel() === null);
   // A browser sending GPC has already answered the analytics question.
@@ -23,7 +27,7 @@ export default function ConsentBanner({ onReadPolicy }: { onReadPolicy: () => vo
   if (!askStorage && !askAnalytics) return null;
 
   function chooseStorage(next: StorageLevel) {
-    setLevel(next);
+    void applyStorageLevel(next);
     setAskStorage(false);
   }
 
@@ -40,9 +44,6 @@ export default function ConsentBanner({ onReadPolicy }: { onReadPolicy: () => vo
   const choice =
     'inline-flex items-center px-3.5 h-9 rounded-lg text-sm font-semibold transition-colors ' +
     'bg-white/5 border border-white/25 text-slate-200 hover:bg-white/10 hover:text-white';
-  const preferred =
-    'inline-flex items-center px-3.5 h-9 rounded-lg text-sm font-semibold transition-colors ' +
-    'bg-emerald-400 text-ink hover:bg-emerald-300';
 
   return (
     <div
@@ -57,23 +58,19 @@ export default function ConsentBanner({ onReadPolicy }: { onReadPolicy: () => vo
               <HardDrive className="w-4 h-4 mt-0.5 shrink-0 text-accent" aria-hidden="true" />
               <span>
                 <strong className="font-semibold text-slate-200">
-                  Shall we remember your games on this device?
+                  What may we keep?
                 </strong>{' '}
-                Boards, settings and statistics, kept in your browser and sent nowhere.
-                Say no and everything still plays — it&apos;s just forgotten when you
-                close the tab.
+                Every game plays in full either way. Keeping data in your browser is
+                what lets today&apos;s board still be there tomorrow; signing in is
+                what lets it follow you to another device.
               </span>
             </p>
             <div className="flex flex-wrap items-center justify-center gap-2">
-              <button onClick={() => chooseStorage('session')} className={choice}>
-                Forget everything
-              </button>
-              <button onClick={() => chooseStorage('essential')} className={choice}>
-                Just keep me signed in
-              </button>
-              <button onClick={() => chooseStorage('full')} className={preferred}>
-                Remember
-              </button>
+              {STORAGE_OPTIONS.map(({ id, label }) => (
+                <button key={id} onClick={() => chooseStorage(id)} className={choice}>
+                  {label}
+                </button>
+              ))}
             </div>
           </div>
         )}
@@ -102,7 +99,7 @@ export default function ConsentBanner({ onReadPolicy }: { onReadPolicy: () => vo
               <button onClick={() => chooseAnalytics('denied')} className={choice}>
                 No thanks
               </button>
-              <button onClick={() => chooseAnalytics('granted')} className={preferred}>
+              <button onClick={() => chooseAnalytics('granted')} className={choice}>
                 Allow
               </button>
             </div>

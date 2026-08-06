@@ -110,29 +110,35 @@ export function PrivacyPolicy() {
       </P>
       <List>
         <li>
-          <strong className="text-slate-300">Remember</strong> — boards, settings and
-          statistics stay in this browser, as described above.
+          <strong className="text-slate-300">Essential only</strong> — your answers on
+          this page, and nothing else. Every game and every solver works exactly as it
+          does otherwise; close the tab and it starts over. You won&apos;t stay signed
+          in, because staying signed in is a thing kept on your device.
         </li>
         <li>
-          <strong className="text-slate-300">Signed in only</strong> — we keep the
-          token that keeps you signed in, and nothing else touches the disk. With an
-          account your dailies and settings still follow you, because they live in
-          the account rather than the browser.
+          <strong className="text-slate-300">Allow browser game data</strong> — boards,
+          settings and statistics stay in this browser, as described above. They&apos;re
+          on your machine and they go nowhere.
         </li>
         <li>
-          <strong className="text-slate-300">Forget everything</strong> — nothing is
-          written to your device at all. Every game and every solver works exactly as
-          it does otherwise; close the tab and it starts over. You won&apos;t stay
-          signed in, because staying signed in is a thing kept on your device.
+          <strong className="text-slate-300">Allow server game data (sign in)</strong> —
+          the above, plus the token that keeps you signed in, which is what lets your
+          results reach your account and follow you to another device.
         </li>
       </List>
       <P>
-        It&apos;s under Settings → Privacy, alongside the analytics answer, and choosing less removes
-        what was already there rather than merely stopping more. The one thing we
-        keep either way is your answers themselves — and at &quot;forget
-        everything&quot; even those are held only for the tab, so a refresh
-        doesn&apos;t ask you again and closing the tab really does leave nothing
-        behind.
+        They&apos;re in that order for a reason. The rungs aren&apos;t sorted by how
+        much data there is but by how far it goes: a file on your own disk is a
+        smaller thing to agree to than a row on our server, whatever their relative
+        sizes. That&apos;s also why signing in is the top rung rather than the middle
+        one — choosing either of the others signs you out here.
+      </P>
+      <P>
+        It&apos;s under Settings → Privacy, alongside the analytics answer, and choosing
+        less removes what was already there rather than merely stopping more. The one
+        thing kept at every level is your answers themselves — remembering that you
+        said no is the only way to honour it, and asking again on every load would be
+        worse for you rather than better.
       </P>
       <P>
         <strong className="text-slate-300">Cookies specifically:</strong> the only

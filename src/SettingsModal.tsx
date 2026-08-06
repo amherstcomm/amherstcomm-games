@@ -22,26 +22,14 @@ import {
 } from '@/storage';
 import type { DictionaryId } from '@/dictionaries';
 import type { SettingsTab } from '@/routes';
-import { level as storageLevel, setLevel, type StorageLevel } from '@/siteStorage';
+import { level as storageLevel, STORAGE_OPTIONS, type StorageLevel } from '@/siteStorage';
+import { applyStorageLevel } from '@/account';
 import type { Palette, TextScale, ThemeMode } from '@/theme';
 import { useModalA11y } from '@/useModalA11y';
 
 // the nav's own names, so the switch reads like the thing it switches
 // 'mode' marks the entries that disappear when that game is hidden — pointing
 // the front door at a game you've switched off would leave nowhere to land.
-const STORAGE_OPTIONS: { id: StorageLevel; label: string; blurb: string }[] = [
-  { id: 'full', label: 'Remember', blurb: 'Boards, settings and statistics stay on this device.' },
-  {
-    id: 'essential',
-    label: 'Signed in only',
-    blurb: 'Keeps you signed in; nothing else is written here. With an account your dailies still follow you, because they live in the account.',
-  },
-  {
-    id: 'session',
-    label: 'Forget everything',
-    blurb: 'Nothing is written to this device at all. Everything works until you close the tab, then it starts over.',
-  },
-];
 
 const START_OPTIONS: { id: StartPage; label: string; mode?: Mode }[] = [
   { id: 'home', label: 'Home page' },
@@ -441,16 +429,17 @@ export default function SettingsModal({
         <div className={`space-y-6 ${tab === 'privacy' ? '' : 'hidden'}`}>
           <div>
             <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2.5">
-              What this device keeps
+              What may be kept
             </h3>
             <div className="flex flex-wrap gap-1.5">
               {STORAGE_OPTIONS.map(({ id, label }) => (
                 <button
                   key={id}
                   onClick={() => {
-                    // takes effect immediately, including removing what a
-                    // stricter setting no longer allows
-                    setLevel(id);
+                    // takes effect immediately: removes what a stricter
+                    // setting no longer allows, and ends the session if the
+                    // new setting doesn't permit one
+                    void applyStorageLevel(id);
                     setStorageState(id);
                   }}
                   aria-pressed={storage === id}
@@ -465,7 +454,8 @@ export default function SettingsModal({
             </div>
             <p className="mt-2 text-xs text-slate-500">
               {STORAGE_OPTIONS.find((o) => o.id === storage)?.blurb} Choosing less
-              clears what was already here.
+              clears what was already here, and anything below the last option signs
+              you out on this device.
             </p>
           </div>
 
@@ -511,8 +501,6 @@ export default function SettingsModal({
                   })}
                   . We ask again after a year — an answer from long ago isn&apos;t really
                   a current one.
-                  {storage === 'session' &&
-                    ' While this device is set to forget everything, that answer is forgotten with it, so we ask again next visit.'}
                 </p>
               )}
             </div>

@@ -40,10 +40,9 @@ function read(): Stored | null {
 /** The current answer, or null if never asked or the answer has aged out.
  *  Null means "ask" everywhere this is consulted.
  *
- *  This goes through the storage gate like everything else, which matters at
- *  "forget everything": the answer is held for the tab and no longer, so we
- *  ask again next visit. Writing it to the disk would have been a small lie
- *  inside a promise not to write anything. */
+ *  This goes through the storage gate like everything else. The gate classes
+ *  it as a privacy choice, so it's kept at every level including the
+ *  strictest — remembering a no is the only way to act on one. */
 export function readConsent(): Consent | null {
   const s = read();
   if (!s) return null;
