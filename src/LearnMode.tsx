@@ -1043,10 +1043,8 @@ function LearnSquares({ dict, register }: { dict: Set<string> | null; register: 
         />
       </Section>
 
-      {/* No MobileKeyInput here, unlike the other demos: they each have one
-          entry box to tap, and this has sixteen squares that are themselves
-          the tap target. Phones reach it through the site keyboard, which
-          useDemoKeys registers for. */}
+      {/* The key overlay rides the focused square rather than sitting in a box
+          of its own: the square you're typing into is the thing you tap. */}
       <Section title="Try it — half the grid is yours">
         <p className="text-sm text-slate-400 mb-4">
           Eight letters are given and eight are blank. Tap a square and type — the
@@ -1065,8 +1063,8 @@ function LearnSquares({ dict, register }: { dict: Set<string> | null; register: 
                   const i = r * n + c;
                   const given = cells[i] !== null;
                   return (
+                    <div key={i} className="relative">
                     <button
-                      key={i}
                       onMouseDown={(e) => e.preventDefault()}
                       onClick={() => !given && setCursor(i)}
                       className={`w-11 h-12 rounded-xl border-2 text-xl font-bold uppercase transition-colors
@@ -1078,6 +1076,10 @@ function LearnSquares({ dict, register }: { dict: Set<string> | null; register: 
                     >
                       {at(i)}
                     </button>
+                    {i === cursor && !given && !solved && (
+                      <MobileKeyInput onKey={handleKey} label="Type a letter" />
+                    )}
+                    </div>
                   );
                 })}
                 <div aria-hidden className={`w-1.5 h-full rounded-full ${tone(rows[r])}`} />

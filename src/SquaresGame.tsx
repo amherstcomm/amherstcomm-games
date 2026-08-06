@@ -1,6 +1,7 @@
 import { forwardRef, Fragment, useEffect, useImperativeHandle, useMemo, useState } from 'react';
 import { CalendarDays, Eye, RefreshCw, Timer } from 'lucide-react';
 import { dailyDataUrl, SQUARES_POOL_URL } from '@/dailyData';
+import MobileKeyInput from '@/MobileKeyInput';
 import ShareButton from '@/ShareButton';
 import { buildShare, TILE_EMOJI } from '@/share';
 import { usePalette } from '@/theme';
@@ -13,11 +14,12 @@ import { useDailySync } from '@/useDailySync';
 
 export type SquaresGameHandle = { pressKey: (k: string) => void };
 
-// No MobileKeyInput here, unlike the other play modes. That overlay exists to
-// raise the phone's keyboard by tapping a game's single entry box, and this
-// game has none — you tap the cell you mean. A separate tap target would be a
-// second thing to aim at for the same job. Phones type through the site's own
-// keyboard, which reaches this board via the handle above.
+// The key overlay sits on the focused cell, not on a box of its own and not
+// over the board. Other games have one entry box to tap, so theirs lives
+// there; here the cell you're typing into is the thing you tap, so the overlay
+// follows the cursor. Tap another cell and you hit its button, the cursor
+// moves, and the overlay moves with it. It unmounts while the site's own
+// keyboard is open, which is what stops both keyboards appearing at once.
 
 export type SquareSize = 4 | 5;
 
@@ -516,8 +518,8 @@ const SquaresGame = forwardRef<
                   const focused = i === cursor && !done;
                   const letter = letterAt(record, i);
                   return (
+                    <div key={i} className="relative">
                     <button
-                      key={i}
                       onClick={() => !given && setCursor(i)}
                       aria-label={`row ${r + 1} column ${c + 1}${
                         given ? `, ${letter}, given` : letter ? `, ${letter}` : ', empty'
@@ -535,6 +537,10 @@ const SquaresGame = forwardRef<
                     >
                       {letter}
                     </button>
+                    {focused && !given && (
+                      <MobileKeyInput onKey={pressKey} label="Type a letter" />
+                    )}
+                    </div>
                   );
                 })}
                 <div aria-hidden className={`w-1.5 h-full rounded-full ${barTone(rowStates[r])}`} />
