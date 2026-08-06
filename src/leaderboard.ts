@@ -8,7 +8,16 @@
 import { DAILY_ENV } from '@/dailyData';
 import { supabase } from '@/supabase';
 
-export type BoardGame = 'guess' | 'hive' | 'scramble' | 'grid' | 'box' | 'weave';
+// squares fields one board per size — see the note in leaderboard()
+export type BoardGame =
+  | 'guess'
+  | 'hive'
+  | 'scramble'
+  | 'grid'
+  | 'box'
+  | 'weave'
+  | 'squares4'
+  | 'squares5';
 
 export type BoardRow = { name: string; value: number; detail: number | null };
 export type Boards = Record<BoardGame, BoardRow[]>;
@@ -21,7 +30,7 @@ export const WINDOWS = [
 ] as const;
 
 export function emptyBoards(): Boards {
-  return { guess: [], hive: [], scramble: [], grid: [], box: [], weave: [] };
+  return { guess: [], hive: [], scramble: [], grid: [], box: [], weave: [], squares4: [], squares5: [] };
 }
 
 export async function fetchBoards(days: number): Promise<Boards | null> {
@@ -75,6 +84,16 @@ export const BOARD_LABELS: Record<
     detail: (n) => `best ${n} word${n === 1 ? '' : 's'}`,
   },
   weave: { label: 'Weave', value: (n) => `${n} solved`, detail: () => '' },
+  squares4: {
+    label: 'Word Squares (4×4)',
+    value: (n) => `${n} solved`,
+    detail: () => '',
+  },
+  squares5: {
+    label: 'Word Squares (5×5)',
+    value: (n) => `${n} solved`,
+    detail: () => '',
+  },
 };
 
 // ---------------------------------------------------------------------------
