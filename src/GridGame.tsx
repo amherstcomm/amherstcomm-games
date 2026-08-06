@@ -20,6 +20,7 @@ import { usePrefs } from '@/prefs';
 import { useDailySync } from '@/useDailySync';
 import { buildShare } from '@/share';
 import { recordSprint } from '@/stats';
+import { store as siteStore } from '@/siteStorage';
 
 export type GridGameHandle = { pressKey: (k: string) => void };
 
@@ -99,7 +100,7 @@ function loadStore(): GridStore {
 
 function readStore(): GridStore {
   try {
-    const raw = localStorage.getItem(GRID_KEY);
+    const raw = siteStore.getItem(GRID_KEY);
     if (!raw) return DEFAULT_STORE;
     const p = JSON.parse(raw);
     return {
@@ -181,7 +182,7 @@ const GridGame = forwardRef<
 
   useEffect(() => {
     try {
-      localStorage.setItem(GRID_KEY, JSON.stringify(store));
+      siteStore.setItem(GRID_KEY, JSON.stringify(store));
     } catch {
       // best-effort persistence
     }

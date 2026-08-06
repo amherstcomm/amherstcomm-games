@@ -13,6 +13,7 @@ import HistoryView from '@/HistoryView';
 import LeaderboardView from '@/LeaderboardView';
 
 import type { StatsTab as StatsView } from '@/routes';
+import { store as siteStore } from '@/siteStorage';
 
 function Stat({ label, value }: { label: string; value: string | number }) {
   return (
@@ -103,7 +104,7 @@ export default function StatsModal({
   // Guess's daily streak lives in the play store, maintained by GuessGame
   const [streak] = useState(() => {
     try {
-      return Number(JSON.parse(localStorage.getItem('anagrimoire:play:v1') ?? '{}')?.stats?.streak) || 0;
+      return Number(JSON.parse(siteStore.getItem('anagrimoire:play:v1') ?? '{}')?.stats?.streak) || 0;
     } catch {
       return 0;
     }

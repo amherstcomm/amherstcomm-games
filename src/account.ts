@@ -10,6 +10,7 @@
 import { clearAnalyticsCookies } from '@/consent';
 import { clearLocalStats } from '@/stats';
 import { supabase } from '@/supabase';
+import { store as siteStore } from '@/siteStorage';
 
 /** Keys that survive a local wipe: how the site looks, and the analytics
  *  answer. Resetting a privacy choice as a side effect of a privacy action
@@ -20,10 +21,13 @@ const KEEP = ['anagrimoire:v1', 'anagrimoire:analytics-consent'];
  *  base, the device id and its baseline flags. Not settings, not consent. */
 export function wipeLocalPlayData(): void {
   try {
-    const doomed = Object.keys(localStorage).filter(
-      (k) => k.startsWith('anagrimoire:') && !KEEP.some((keep) => k.startsWith(keep))
-    );
-    for (const k of doomed) localStorage.removeItem(k);
+    const doomed = siteStore
+      .keys()
+      .filter((k) => k.startsWith('anagrimoire:') && !KEEP.some((keep) => k.startsWith(keep)));
+    // through the facade, so anything held in memory under a stricter storage
+    // setting goes as well — erasing only the disk copy would leave the board
+    // sitting there for the rest of the session
+    for (const k of doomed) siteStore.removeItem(k);
   } catch {
     // a browser that won't let us enumerate storage isn't one we can tidy
   }

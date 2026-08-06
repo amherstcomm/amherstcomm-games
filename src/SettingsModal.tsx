@@ -22,12 +22,27 @@ import {
 } from '@/storage';
 import type { DictionaryId } from '@/dictionaries';
 import type { SettingsTab } from '@/routes';
+import { level as storageLevel, setLevel, type StorageLevel } from '@/siteStorage';
 import type { Palette, TextScale, ThemeMode } from '@/theme';
 import { useModalA11y } from '@/useModalA11y';
 
 // the nav's own names, so the switch reads like the thing it switches
 // 'mode' marks the entries that disappear when that game is hidden — pointing
 // the front door at a game you've switched off would leave nowhere to land.
+const STORAGE_OPTIONS: { id: StorageLevel; label: string; blurb: string }[] = [
+  { id: 'full', label: 'Remember', blurb: 'Boards, settings and statistics stay on this device.' },
+  {
+    id: 'essential',
+    label: 'Signed in only',
+    blurb: 'Keeps you signed in; nothing else is written here. With an account your dailies still follow you, because they live in the account.',
+  },
+  {
+    id: 'session',
+    label: 'Forget everything',
+    blurb: 'Nothing is written to this device at all. Everything works until you close the tab, then it starts over.',
+  },
+];
+
 const START_OPTIONS: { id: StartPage; label: string; mode?: Mode }[] = [
   { id: 'home', label: 'Home page' },
   { id: 'last', label: 'Where I left off' },
@@ -237,6 +252,7 @@ export default function SettingsModal({
   const gpc = gpcEnabled();
   // Unanswered is off. Nothing loads before a yes, so the control has to show
   // that state rather than a cheerful default.
+  const [storage, setStorageState] = useState<StorageLevel>(storageLevel);
   const [analytics, setAnalyticsState] = useState<Consent>(() => readConsent() ?? 'denied');
   const [answeredAt, setAnsweredAt] = useState<Date | null>(consentGivenAt);
 
@@ -304,6 +320,36 @@ export default function SettingsModal({
         </div>
 
         <div className={`space-y-6 ${tab === 'site' ? '' : 'hidden'}`}>
+          <div>
+            <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2.5">
+              What this device keeps
+            </h3>
+            <div className="flex flex-wrap gap-1.5">
+              {STORAGE_OPTIONS.map(({ id, label }) => (
+                <button
+                  key={id}
+                  onClick={() => {
+                    // takes effect immediately, including removing what a
+                    // stricter setting no longer allows
+                    setLevel(id);
+                    setStorageState(id);
+                  }}
+                  aria-pressed={storage === id}
+                  className={`px-3 h-9 rounded-lg text-sm font-semibold transition-colors
+                    ${storage === id
+                      ? 'bg-amber-400 text-ink shadow-lg shadow-amber-500/30'
+                      : 'bg-white/5 border border-white/10 text-slate-300 hover:bg-white/10'}`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            <p className="mt-2 text-xs text-slate-500">
+              {STORAGE_OPTIONS.find((o) => o.id === storage)?.blurb} Choosing less
+              clears what was already here.
+            </p>
+          </div>
+
           <div>
             <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2.5">
               Start on

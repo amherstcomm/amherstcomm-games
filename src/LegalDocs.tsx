@@ -103,10 +103,34 @@ export function PrivacyPolicy() {
       </List>
       <P>
         None of that is a cookie, and none of it is tracking — it&apos;s the site
-        remembering what you asked it to remember. The rules that govern storing
-        things on your device carve out exactly this: what a service needs to do the
-        job you asked for. The part that <em>isn&apos;t</em> exempt is analytics, and
-        that is the one thing we ask about.
+        remembering what you asked it to remember, and the rules about storing
+        things on your device carve out exactly that. We ask anyway, because
+        &quot;we keep things on your device&quot; deserves an answer other than a
+        banner that only offers yes. Three of them:
+      </P>
+      <List>
+        <li>
+          <strong className="text-slate-300">Remember</strong> — boards, settings and
+          statistics stay in this browser, as described above.
+        </li>
+        <li>
+          <strong className="text-slate-300">Signed in only</strong> — we keep the
+          token that keeps you signed in, and nothing else touches the disk. With an
+          account your dailies and settings still follow you, because they live in
+          the account rather than the browser.
+        </li>
+        <li>
+          <strong className="text-slate-300">Forget everything</strong> — nothing is
+          written to your device at all. Every game and every solver works exactly as
+          it does otherwise; close the tab and it starts over. You won&apos;t stay
+          signed in, because staying signed in is a thing kept on your device.
+        </li>
+      </List>
+      <P>
+        It&apos;s under Settings → What this device keeps, and choosing less removes
+        what was already there rather than merely stopping more. The one thing we
+        keep either way is the answer itself — at &quot;forget everything&quot; even
+        that is held only for the tab, so closing it really does leave nothing behind.
       </P>
       <P>
         <strong className="text-slate-300">Cookies specifically:</strong> the only

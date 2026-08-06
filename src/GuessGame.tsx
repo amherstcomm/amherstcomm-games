@@ -19,6 +19,7 @@ import { buildShare, TILE_EMOJI } from '@/share';
 import { usePalette } from '@/theme';
 import { recordGuessFinish } from '@/stats';
 import { formatElapsed, useUpTimer } from '@/useUpTimer';
+import { store as siteStore } from '@/siteStorage';
 
 export type LetterState = 'correct' | 'present' | 'absent';
 export type GuessGameHandle = { pressKey: (k: string) => void };
@@ -55,7 +56,7 @@ function loadStore(): PlayStore {
 
 function readStore(): PlayStore {
   try {
-    const raw = localStorage.getItem(PLAY_KEY);
+    const raw = siteStore.getItem(PLAY_KEY);
     if (!raw) return DEFAULT_STORE;
     const p = JSON.parse(raw);
     return {
@@ -130,7 +131,7 @@ const GuessGame = forwardRef<
 
   useEffect(() => {
     try {
-      localStorage.setItem(PLAY_KEY, JSON.stringify(store));
+      siteStore.setItem(PLAY_KEY, JSON.stringify(store));
     } catch {
       // best-effort persistence
     }

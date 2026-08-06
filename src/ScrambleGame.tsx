@@ -19,6 +19,7 @@ import { usePrefs } from '@/prefs';
 import { useDailySync } from '@/useDailySync';
 import { buildShare } from '@/share';
 import { recordSprint } from '@/stats';
+import { store as siteStore } from '@/siteStorage';
 
 export type ScrambleGameHandle = { pressKey: (k: string) => void };
 
@@ -77,7 +78,7 @@ function loadStore(): ScrambleStore {
 
 function readStore(): ScrambleStore {
   try {
-    const raw = localStorage.getItem(SCRAMBLE_KEY);
+    const raw = siteStore.getItem(SCRAMBLE_KEY);
     if (!raw) return DEFAULT_STORE;
     const p = JSON.parse(raw);
     return {
@@ -125,7 +126,7 @@ const ScrambleGame = forwardRef<
 
   useEffect(() => {
     try {
-      localStorage.setItem(SCRAMBLE_KEY, JSON.stringify(store));
+      siteStore.setItem(SCRAMBLE_KEY, JSON.stringify(store));
     } catch {
       // best-effort persistence
     }

@@ -19,6 +19,7 @@ import { usePrefs } from '@/prefs';
 import { useDailySync } from '@/useDailySync';
 import { buildShare } from '@/share';
 import { recordBoxSolve } from '@/stats';
+import { store as siteStore } from '@/siteStorage';
 
 export type BoxGameHandle = { pressKey: (k: string) => void };
 
@@ -71,7 +72,7 @@ function loadStore(): BoxStore {
 
 function readStore(): BoxStore {
   try {
-    const raw = localStorage.getItem(BOX_KEY);
+    const raw = siteStore.getItem(BOX_KEY);
     if (!raw) return DEFAULT_STORE;
     const p = JSON.parse(raw);
     return {
@@ -208,7 +209,7 @@ const BoxGame = forwardRef<
 
   useEffect(() => {
     try {
-      localStorage.setItem(BOX_KEY, JSON.stringify(store));
+      siteStore.setItem(BOX_KEY, JSON.stringify(store));
     } catch {
       // best-effort persistence
     }
@@ -683,7 +684,7 @@ const BoxGame = forwardRef<
                     ? { ...store, daily: { ...record, revealed: true } }
                     : { ...store, practice: { ...record, revealed: true } };
                   try {
-                    localStorage.setItem(BOX_KEY, JSON.stringify(next));
+                    siteStore.setItem(BOX_KEY, JSON.stringify(next));
                   } catch {
                     // best-effort persistence
                   }

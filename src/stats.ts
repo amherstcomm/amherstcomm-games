@@ -8,6 +8,7 @@
 
 import { DAILY_ENV } from '@/dailyData';
 import { supabase } from '@/supabase';
+import { store as siteStore } from '@/siteStorage';
 
 const STATS_KEY = 'anagrimoire:stats:v1';
 
@@ -142,7 +143,7 @@ export function sanitizeStore(p: any): StatsStore {
 
 export function loadStats(): StatsStore {
   try {
-    const raw = localStorage.getItem(STATS_KEY);
+    const raw = siteStore.getItem(STATS_KEY);
     return sanitizeStore(raw ? JSON.parse(raw) : null);
   } catch {
     return sanitizeStore(null);
@@ -154,7 +155,7 @@ export function loadStats(): StatsStore {
 // a puzzle away from someone mid-solve.
 export function clearLocalStats(): void {
   try {
-    localStorage.removeItem(STATS_KEY);
+    siteStore.removeItem(STATS_KEY);
   } catch {
     // nothing sensible to do; the account copy is the one that mattered
   }
@@ -396,7 +397,7 @@ function record(daily: boolean, e: GameEvent, puzzleDate: string | null = null):
   try {
     const store = loadStats();
     applyEvent(daily ? store.daily : store.practice, e);
-    localStorage.setItem(STATS_KEY, JSON.stringify(store));
+    siteStore.setItem(STATS_KEY, JSON.stringify(store));
   } catch {
     // storage unavailable — stats are best-effort
   }
@@ -489,10 +490,10 @@ export function recordSquaresFinish(
 // pre-account history exactly once
 function deviceId(): string {
   const KEY = 'anagrimoire:device:v1';
-  let id = localStorage.getItem(KEY);
+  let id = siteStore.getItem(KEY);
   if (!id) {
     id = crypto.randomUUID();
-    localStorage.setItem(KEY, id);
+    siteStore.setItem(KEY, id);
   }
   return id;
 }
@@ -506,12 +507,12 @@ export async function importBaselineOnce(): Promise<void> {
     const userId = sess.session?.user.id;
     if (!userId) return;
     const flagKey = `anagrimoire:baseline-imported:${userId}`;
-    if (localStorage.getItem(flagKey)) return;
+    if (siteStore.getItem(flagKey)) return;
     const { error } = await supabase
       .from('stats_baselines')
       .insert({ user_id: userId, device_id: deviceId(), baseline: loadStats() });
     // 23505 = already imported (row exists from a previous visit)
-    if (!error || error.code === '23505') localStorage.setItem(flagKey, '1');
+    if (!error || error.code === '23505') siteStore.setItem(flagKey, '1');
     else console.warn('Anagrimoire baseline import failed:', error.message);
   } catch {
     // best-effort; retried on next load

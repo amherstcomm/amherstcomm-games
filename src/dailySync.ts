@@ -12,6 +12,7 @@
 
 import { DAILY_ENV } from '@/dailyData';
 import { supabase } from '@/supabase';
+import { store as siteStore } from '@/siteStorage';
 
 export type DailyGame = 'guess' | 'hive' | 'scramble' | 'grid' | 'box' | 'weave' | 'squares';
 
@@ -212,7 +213,7 @@ const BASE_STORE = 'anagrimoire:syncbase:v1';
 
 function loadBases(): Map<string, Base> {
   try {
-    return new Map(JSON.parse(localStorage.getItem(BASE_STORE) ?? '[]'));
+    return new Map(JSON.parse(siteStore.getItem(BASE_STORE) ?? '[]'));
   } catch {
     return new Map();
   }
@@ -272,7 +273,7 @@ function saveBases(): void {
       const date = key.split(':')[2] ?? '';
       if (date && date < cutoff) syncBase.delete(key);
     }
-    localStorage.setItem(BASE_STORE, JSON.stringify([...syncBase]));
+    siteStore.setItem(BASE_STORE, JSON.stringify([...syncBase]));
   } catch {
     // storage full or unavailable — the base holds for this page view
   }
