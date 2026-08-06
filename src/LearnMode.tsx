@@ -1043,6 +1043,10 @@ function LearnSquares({ dict, register }: { dict: Set<string> | null; register: 
         />
       </Section>
 
+      {/* No MobileKeyInput here, unlike the other demos: they each have one
+          entry box to tap, and this has sixteen squares that are themselves
+          the tap target. Phones reach it through the site keyboard, which
+          useDemoKeys registers for. */}
       <Section title="Try it — half the grid is yours">
         <p className="text-sm text-slate-400 mb-4">
           Eight letters are given and eight are blank. Tap a square and type — the
@@ -1080,11 +1084,6 @@ function LearnSquares({ dict, register }: { dict: Set<string> | null; register: 
               </Fragment>
             ))}
           </div>
-        </div>
-
-        <div className="relative mt-4 mx-auto max-w-xs h-11 rounded-xl bg-white/5 border-2 border-white/10 flex items-center justify-center overflow-hidden">
-          <MobileKeyInput onKey={handleKey} label="Type a letter" />
-          <span className="text-xs text-slate-400">Tap here to type</span>
         </div>
 
         {flash && (
