@@ -133,7 +133,10 @@ function colsOf(rec: SquareRecord): string[] {
 type LineState = 'empty' | 'partial' | 'good' | 'bad';
 
 function barTone(s: LineState): string {
-  return s === 'good' ? 'bg-emerald-400' : s === 'bad' ? 'bg-rose-400' : 'bg-white/15';
+  // the semantic tokens, not emerald/rose 400: those are fills meant to carry
+  // dark text, and against the light theme's page they measure 1.84 and 2.57 —
+  // under the 3:1 that 1.4.11 wants of something conveying state on its own.
+  return s === 'good' ? 'bg-success' : s === 'bad' ? 'bg-danger' : 'bg-white/25';
 }
 
 function lineState(word: string, size: number, dict: Set<string> | null): LineState {
@@ -426,12 +429,12 @@ const SquaresGame = forwardRef<
     if (board) setStore((prev) => ({ ...prev, practice: board }));
   }
 
-  // Grid's *play* board metrics, not its solver tiles — Grid uses two sizes
-  // (40x48 for the solver's letter inputs, 48x56 for the board you play on)
-  // and squares is a play board. One size at both 4x4 and 5x5, since Grid
-  // doesn't shrink between its presets either.
+  // Grid's *play* board metrics — and Grid does shrink at 25 cells, which I
+  // wrongly said it didn't. It has to: at 320px with the largest text a 5×5 of
+  // the bigger cells is 333px wide, and the page clips horizontal overflow, so
+  // the last column isn't scrolled off, it's gone.
   const cell =
-    'w-11 h-12 sm:w-12 sm:h-14 text-xl sm:text-2xl ' +
+    `${n === 4 ? 'w-11 h-12 sm:w-12 sm:h-14 text-xl sm:text-2xl' : 'w-9 h-10 sm:w-11 sm:h-12 text-lg sm:text-xl'} ` +
     'flex items-center justify-center rounded-xl border-2 font-bold uppercase transition-colors';
 
   return (
@@ -537,10 +540,10 @@ const SquaresGame = forwardRef<
                       // bg-black/20 collapses to the same colour in light mode.
                       className={`${cell} ${
                         given
-                          ? 'bg-white/35 border-white/40 text-white cursor-default'
+                          ? 'bg-white/45 border-white/50 text-white cursor-default'
                           : focused
                             ? 'bg-amber-400/15 border-amber-400 text-accent'
-                            : 'bg-transparent border-white/25 text-accent hover:bg-white/10'
+                            : 'bg-transparent border-white/60 text-accent hover:bg-white/10'
                       }`}
                     >
                       {letter}
@@ -570,6 +573,15 @@ const SquaresGame = forwardRef<
               </div>
             )}
           </div>
+
+          <p className="sr-only" aria-live="polite">
+            {rowStates.filter((s) => s === 'good').length +
+              colStates.filter((s) => s === 'good').length}{' '}
+            of {n * 2} lines are words
+            {rowStates.some((s) => s === 'bad') || colStates.some((s) => s === 'bad')
+              ? `, ${rowStates.filter((s) => s === 'bad').length + colStates.filter((s) => s === 'bad').length} full but not words`
+              : ''}
+          </p>
 
           <p className="mt-4 text-sm text-slate-400" aria-live="polite">
             {done

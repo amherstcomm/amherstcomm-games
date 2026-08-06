@@ -1025,7 +1025,7 @@ function LearnSquares({ dict, register }: { dict: Set<string> | null; register: 
   }, [solved]);
 
   const tone = (w: string) =>
-    !w || w.length < n ? 'bg-white/15' : ok(w) ? 'bg-emerald-400' : 'bg-rose-400';
+    !w || w.length < n ? 'bg-white/25' : ok(w) ? 'bg-success' : 'bg-danger';
 
   return (
     <>
