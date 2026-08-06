@@ -255,19 +255,19 @@ const BEE_POSITIONS: [number, number][] = [
 // boxed solver tiles share the play board's side hues (top, right, bottom, left)
 const BOX_SIDE_TONES = [
   {
-    empty: 'bg-sky-400/5 border-sky-400/30 text-sky-100 placeholder-sky-200/25 hover:border-sky-400/60',
+    empty: 'bg-sky-400/10 border-sky-400 text-sky-100 placeholder-sky-200/40 hover:bg-sky-400/20',
     filled: 'bg-sky-400/20 border-sky-400 text-sky-100 shadow-[0_0_20px_-6px] shadow-sky-400/40',
   },
   {
-    empty: 'bg-violet-400/5 border-violet-400/30 text-violet-100 placeholder-violet-200/25 hover:border-violet-400/60',
+    empty: 'bg-violet-400/10 border-violet-400 text-violet-100 placeholder-violet-200/40 hover:bg-violet-400/20',
     filled: 'bg-violet-400/20 border-violet-400 text-violet-100 shadow-[0_0_20px_-6px] shadow-violet-400/40',
   },
   {
-    empty: 'bg-rose-400/5 border-rose-400/30 text-rose-100 placeholder-rose-200/25 hover:border-rose-400/60',
+    empty: 'bg-rose-400/10 border-rose-400 text-rose-100 placeholder-rose-200/40 hover:bg-rose-400/20',
     filled: 'bg-rose-400/20 border-rose-400 text-rose-100 shadow-[0_0_20px_-6px] shadow-rose-400/40',
   },
   {
-    empty: 'bg-amber-400/5 border-amber-400/30 text-amber-100 placeholder-amber-200/25 hover:border-amber-400/60',
+    empty: 'bg-amber-400/10 border-amber-400 text-amber-100 placeholder-amber-200/40 hover:bg-amber-400/20',
     filled: 'bg-amber-400/20 border-amber-400 text-amber-100 shadow-[0_0_20px_-6px] shadow-amber-400/40',
   },
 ];

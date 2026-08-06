@@ -80,6 +80,18 @@
 }
 
 :root[data-theme='light'] {
+  /* -400 hues double as the edge that identifies a control — the side a box
+     letter sits on, a traced path. On a light page the dark-theme values read
+     around 2:1 to someone trying to tell them apart, so light carries its own,
+     scaled toward black to keep the hue and clear 3:1. */
+  --c-sky-400: 43 146 191;
+  --c-rose-400: 218 98 116;
+  --c-violet-400: 145 121 218;
+  /* Amber does double duty: a fill carrying dark ink, and the border that
+     says which cell is selected. Against a light page the dark-theme value
+     reads 1.6 to the eye that has to find the selection, so light gets its own
+     — dark enough for the 3:1 of 1.4.11, light enough to keep ink past 4.5. */
+  --c-amber-400: 198 109 8;
   color-scheme: light;
 
   /* "white" is the ink color: bg-white/5 becomes a faint dark tint, and
@@ -184,6 +196,9 @@
 }
 
 :root[data-theme='light'][data-palette='deuter'] {
+  --c-sky-400: 69 144 186;
+  --c-violet-400: 188 111 154;
+  --c-amber-400: 178 116 0;
   --c-emerald-100: 23 55 106;
   --c-emerald-200: 20 66 128;
   --c-emerald-300: 0 82 142;
@@ -274,6 +289,7 @@
 }
 
 :root[data-theme='light'][data-palette='tritan'] {
+  --c-sky-400: 80 146 161;
   --c-emerald-100: 5 66 44;
   --c-emerald-200: 5 76 50;
   --c-emerald-300: 6 90 60;
@@ -372,7 +388,7 @@
   --c-amber-100: 70 70 70;
   --c-amber-200: 80 80 80;
   --c-amber-300: 90 90 90;
-  --c-amber-400: 195 195 195;
+  --c-amber-400: 124 124 124;
   --c-amber-500: 170 170 170;
 
   --c-rose-100: 50 50 50;
@@ -385,7 +401,7 @@
   --c-sky-100: 60 60 60;
   --c-sky-200: 68 68 68;
   --c-sky-300: 80 80 80;
-  --c-sky-400: 160 160 160;
+  --c-sky-400: 136 136 136;
 
   --c-violet-100: 62 62 62;
   --c-violet-200: 72 72 72;
