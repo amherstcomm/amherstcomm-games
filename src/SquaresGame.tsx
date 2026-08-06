@@ -265,8 +265,12 @@ const SquaresGame = forwardRef<
   const cols = record ? colsOf(record) : [];
   const rowStates = rows.map((w) => lineState(w, n, dict));
   const colStates = cols.map((w) => lineState(w, n, dict));
+  // A revealed board reads as correct in every line, because revealing writes
+  // the answer into it. Without this it counts as a solve, and "Revealed" can
+  // never be anything but zero.
   const solved =
     !!record &&
+    !record.revealed &&
     rowStates.every((s) => s === 'good') &&
     colStates.every((s) => s === 'good');
   const done = solved || !!record?.revealed;

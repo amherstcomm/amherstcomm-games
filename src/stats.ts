@@ -42,12 +42,18 @@ export type LifetimeStats = {
     bestTimeMs: number | null;
     totalTimeMs: number;
   };
-  squares: {
-    solved: number;
-    revealed: number;
-    bestTimeMs: number | null;
-    totalTimeMs: number;
-  };
+  /** kept per board size: a 4×4 and a 5×5 are different puzzles, and pooling
+   *  their times makes an average that describes neither */
+  squares: Record<SquareStatSize, SquaresStat>;
+};
+
+export type SquareStatSize = '4' | '5';
+export const SQUARE_STAT_SIZES: SquareStatSize[] = ['4', '5'];
+export type SquaresStat = {
+  solved: number;
+  revealed: number;
+  bestTimeMs: number | null;
+  totalTimeMs: number;
 };
 
 export type StatsStore = { daily: LifetimeStats; practice: LifetimeStats };
@@ -115,12 +121,17 @@ function sanitizeBucket(p: any): LifetimeStats {
       bestTimeMs: numOrNull(p?.weave?.bestTimeMs),
       totalTimeMs: num(p?.weave?.totalTimeMs),
     },
-    squares: {
-      solved: num(p?.squares?.solved),
-      revealed: num(p?.squares?.revealed),
-      bestTimeMs: numOrNull(p?.squares?.bestTimeMs),
-      totalTimeMs: num(p?.squares?.totalTimeMs),
-    },
+    squares: Object.fromEntries(
+      SQUARE_STAT_SIZES.map((k) => [
+        k,
+        {
+          solved: num(p?.squares?.[k]?.solved),
+          revealed: num(p?.squares?.[k]?.revealed),
+          bestTimeMs: numOrNull(p?.squares?.[k]?.bestTimeMs),
+          totalTimeMs: num(p?.squares?.[k]?.totalTimeMs),
+        },
+      ])
+    ) as Record<SquareStatSize, SquaresStat>,
   };
 }
 
@@ -208,15 +219,15 @@ export function applyEvent(s: LifetimeStats, e: GameEvent): void {
       break;
     }
     case 'squares': {
-      const { solved, timeMs } = e.payload;
+      const { solved, size, timeMs } = e.payload;
+      const b = s.squares[String(size) as SquareStatSize];
+      if (!b) break;
       if (solved) {
-        s.squares.solved += 1;
-        s.squares.totalTimeMs += num(timeMs);
-        if (s.squares.bestTimeMs === null || timeMs < s.squares.bestTimeMs) {
-          s.squares.bestTimeMs = num(timeMs);
-        }
+        b.solved += 1;
+        b.totalTimeMs += num(timeMs);
+        if (b.bestTimeMs === null || timeMs < b.bestTimeMs) b.bestTimeMs = num(timeMs);
       } else {
-        s.squares.revealed += 1;
+        b.revealed += 1;
       }
       break;
     }
@@ -273,15 +284,18 @@ export function applyDailySummary(s: LifetimeStats, game: string, p: any): void 
         s.weave.revealed += 1;
       }
       break;
-    case 'squares':
+    case 'squares': {
+      const sq = s.squares[String(p?.size) as SquareStatSize];
+      if (!sq) break;
       if (p?.solved) {
-        s.squares.solved += 1;
-        s.squares.totalTimeMs += num(p?.timeMs);
-        s.squares.bestTimeMs = minNullable(s.squares.bestTimeMs, num(p?.timeMs));
+        sq.solved += 1;
+        sq.totalTimeMs += num(p?.timeMs);
+        sq.bestTimeMs = minNullable(sq.bestTimeMs, num(p?.timeMs));
       } else {
-        s.squares.revealed += 1;
+        sq.revealed += 1;
       }
       break;
+    }
   }
 }
 
@@ -334,12 +348,17 @@ export function combineStats(a: LifetimeStats, b: LifetimeStats): LifetimeStats 
       bestTimeMs: minNullable(a.weave.bestTimeMs, b.weave.bestTimeMs),
       totalTimeMs: a.weave.totalTimeMs + b.weave.totalTimeMs,
     },
-    squares: {
-      solved: a.squares.solved + b.squares.solved,
-      revealed: a.squares.revealed + b.squares.revealed,
-      bestTimeMs: minNullable(a.squares.bestTimeMs, b.squares.bestTimeMs),
-      totalTimeMs: a.squares.totalTimeMs + b.squares.totalTimeMs,
-    },
+    squares: Object.fromEntries(
+      SQUARE_STAT_SIZES.map((k) => [
+        k,
+        {
+          solved: a.squares[k].solved + b.squares[k].solved,
+          revealed: a.squares[k].revealed + b.squares[k].revealed,
+          bestTimeMs: minNullable(a.squares[k].bestTimeMs, b.squares[k].bestTimeMs),
+          totalTimeMs: a.squares[k].totalTimeMs + b.squares[k].totalTimeMs,
+        },
+      ])
+    ) as Record<SquareStatSize, SquaresStat>,
   };
 }
 
