@@ -973,8 +973,11 @@ BOX_SIDES.forEach((side, s) => {
 // One board, small and mostly filled: the point is to feel the constraint bite
 // — a letter you place has to satisfy a row and a column at once — not to sit
 // through a whole puzzle before reaching Play.
-const SQ_ANSWER = ['swat', 'mole', 'urge', 'teas'];
-const SQ_GIVEN = [1, 3, 4, 5, 6, 8, 12, 15];
+// this/hide/area/neat reading down as than/hire/idea/seat — eight everyday
+// words. Worth reading both directions before picking one: the first square I
+// used here spelled something I wouldn't put in a tutorial.
+const SQ_ANSWER = ['this', 'hide', 'area', 'neat'];
+const SQ_GIVEN = [0, 3, 5, 6, 9, 11, 12, 15];
 
 function LearnSquares({ dict, register }: { dict: Set<string> | null; register: RegisterKeys }) {
   const n = 4;
