@@ -41,7 +41,7 @@ const START_OPTIONS: { id: StartPage; label: string; mode?: Mode }[] = [
 ];
 
 const MODE_LABELS: { id: Mode; label: string }[] = [
-  { id: 'pattern', label: 'Pattern' },
+  { id: 'pattern', label: 'Guess' },
   { id: 'descramble', label: 'Scramble' },
   { id: 'bee', label: 'Hive' },
   { id: 'grid', label: 'Grid' },

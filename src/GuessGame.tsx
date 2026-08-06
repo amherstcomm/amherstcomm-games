@@ -540,7 +540,7 @@ const GuessGame = forwardRef<
                 build={() =>
                   buildShare({
                     game: `Guess (${length})`,
-                    slug: 'pattern',
+                    slug: 'guess',
                     daily: dailyMode,
                     date: dailyData?.date,
                     body: [

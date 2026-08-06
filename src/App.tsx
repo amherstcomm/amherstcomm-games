@@ -27,6 +27,7 @@ import { PrivacyPolicy, Terms } from '@/LegalDocs';
 import { onDailyReport, requestDaily } from '@/dailyBus';
 import { solveSquare } from '@/squares';
 import HomeView from '@/HomeView';
+import RouteLink from '@/RouteLink';
 import SquaresGame, { type SquaresGameHandle } from '@/SquaresGame';
 import {
   MODE_SLUG,
@@ -35,6 +36,7 @@ import {
   modeOf,
   parsePath,
   pathOf,
+  titleOf,
   type Panel,
   type Route,
   type SettingsTab,
@@ -51,7 +53,9 @@ const MAX_LEN = 15;
 const MODES: { id: Mode; label: string; blurb: string; description: string; playDescription: string }[] = [
   {
     id: 'pattern',
-    label: 'Pattern',
+    // the slug stays 'pattern' — it's in shared links — but nothing else calls
+    // it that, so the label matches Learn, the boards and the home page
+    label: 'Guess',
     blurb: 'Wordle, crosswords, hangman — clues about positions',
     description:
       "Lock in the letters you know, list the ones you've seen, and exclude the rest. We'll surface every dictionary word that fits.",
@@ -210,7 +214,7 @@ function Tile({
             ? tone?.filled ?? 'bg-emerald-500/15 border-emerald-400 text-emerald-200 shadow-[0_0_20px_-6px] shadow-emerald-500/40'
             : state === 'center'
               ? 'bg-amber-400/15 border-amber-400 text-amber-200 shadow-[0_0_20px_-6px] shadow-amber-400/50 placeholder-amber-200/30'
-              : tone?.empty ?? 'bg-white/5 border-white/10 text-white placeholder-white/25 hover:border-white/20'}
+              : tone?.empty ?? 'bg-white/5 border-white/55 text-white placeholder-white/25 hover:border-white/75'}
           focus:border-amber-400 focus:bg-amber-400/10 focus:shadow-[0_0_24px_-6px] focus:shadow-amber-400/50`}
       />
       {value && (
@@ -251,19 +255,19 @@ const BEE_POSITIONS: [number, number][] = [
 // boxed solver tiles share the play board's side hues (top, right, bottom, left)
 const BOX_SIDE_TONES = [
   {
-    empty: 'bg-sky-400/5 border-sky-400/30 text-sky-100 placeholder-sky-200/25 hover:border-sky-400/60',
+    empty: 'bg-sky-400/10 border-sky-400 text-sky-100 placeholder-sky-200/40 hover:bg-sky-400/20',
     filled: 'bg-sky-400/20 border-sky-400 text-sky-100 shadow-[0_0_20px_-6px] shadow-sky-400/40',
   },
   {
-    empty: 'bg-violet-400/5 border-violet-400/30 text-violet-100 placeholder-violet-200/25 hover:border-violet-400/60',
+    empty: 'bg-violet-400/10 border-violet-400 text-violet-100 placeholder-violet-200/40 hover:bg-violet-400/20',
     filled: 'bg-violet-400/20 border-violet-400 text-violet-100 shadow-[0_0_20px_-6px] shadow-violet-400/40',
   },
   {
-    empty: 'bg-rose-400/5 border-rose-400/30 text-rose-100 placeholder-rose-200/25 hover:border-rose-400/60',
+    empty: 'bg-rose-400/10 border-rose-400 text-rose-100 placeholder-rose-200/40 hover:bg-rose-400/20',
     filled: 'bg-rose-400/20 border-rose-400 text-rose-100 shadow-[0_0_20px_-6px] shadow-rose-400/40',
   },
   {
-    empty: 'bg-amber-400/5 border-amber-400/30 text-amber-100 placeholder-amber-200/25 hover:border-amber-400/60',
+    empty: 'bg-amber-400/10 border-amber-400 text-amber-100 placeholder-amber-200/40 hover:bg-amber-400/20',
     filled: 'bg-amber-400/20 border-amber-400 text-amber-100 shadow-[0_0_20px_-6px] shadow-amber-400/40',
   },
 ];
@@ -970,6 +974,11 @@ function App() {
   // step back rather than a new address, so Back doesn't reopen what was just
   // dismissed. False at load: arriving straight at /stats leaves nothing of
   // ours behind it, and going back from there should leave the site.
+  // the tab, the bookmark, and what a search result would show
+  useEffect(() => {
+    document.title = titleOf(currentRoute);
+  }, [currentRoute]);
+
   const ourOverlay = useRef(false);
   const settled = useRef(false);
   const prevRoute = useRef<Route | null>(null);
@@ -1522,9 +1531,15 @@ function App() {
             {MODES.filter((m) => shownModes.includes(m.id)).map((m) => {
               const Icon = MODE_ICONS[m.id];
               return (
-                <button
+                <RouteLink
                   key={m.id}
-                  onClick={() => {
+                  to={pathOf({
+                    kind: 'game',
+                    view: currentView,
+                    slug: MODE_SLUG[m.id],
+                    daily: dailyByMode[m.id],
+                  })}
+                  onGo={() => {
                     // picking a game from the nav is also how you leave home
                     setAtHome(false);
                     setMode(m.id);
@@ -1537,7 +1552,7 @@ function App() {
                 >
                   <Icon className="w-5 h-5 md:w-4 md:h-4" />
                   <span>{m.label}</span>
-                </button>
+                </RouteLink>
               );
             })}
           </div>
@@ -1647,9 +1662,15 @@ function App() {
                 .map(({ view, label, Icon }) => {
                 const active = currentView === view;
                 return (
-                  <button
+                  <RouteLink
                     key={label}
-                    onClick={() => goToView(view)}
+                    to={pathOf({
+                      kind: 'game',
+                      view,
+                      slug: MODE_SLUG[mode],
+                      daily: dailyByMode[mode],
+                    })}
+                    onGo={() => goToView(view)}
                     className={`inline-flex items-center gap-1.5 px-4 sm:px-5 h-10 rounded-lg text-sm font-semibold transition-all duration-150
                       ${active
                         ? 'bg-emerald-400 text-ink shadow-lg shadow-emerald-500/30'
@@ -1657,7 +1678,7 @@ function App() {
                   >
                     <Icon className="w-4 h-4" />
                     {label}
-                  </button>
+                  </RouteLink>
                 );
               })}
           </div>
@@ -2664,13 +2685,14 @@ function App() {
           )}
           {/* wraps into centered rows rather than one overflowing line */}
           <div className="mt-3 flex flex-wrap items-center justify-center gap-x-5 gap-y-2.5">
-            <button
-              onClick={() => setAtHome(true)}
+            <RouteLink
+              to="/"
+              onGo={() => setAtHome(true)}
               className="inline-flex items-center gap-1.5 hover:text-slate-300 transition-colors"
             >
               <Home className="w-3.5 h-3.5" />
               Home
-            </button>
+            </RouteLink>
             <a
               href="https://github.com/rptetzloff/anagrimoire"
               target="_blank"
@@ -2680,50 +2702,56 @@ function App() {
               <Github className="w-3.5 h-3.5" />
               GitHub
             </a>
-            <button
-              onClick={() => setStatsOpen(true)}
+            <RouteLink
+              to="/stats/overall"
+              onGo={() => setStatsOpen(true)}
               className="inline-flex items-center gap-1.5 hover:text-slate-300 transition-colors"
             >
               <BarChart3 className="w-3.5 h-3.5" />
               Stats
-            </button>
-            <button
-              onClick={() => setSettingsOpen(true)}
+            </RouteLink>
+            <RouteLink
+              to="/settings/site"
+              onGo={() => setSettingsOpen(true)}
               className="inline-flex items-center gap-1.5 hover:text-slate-300 transition-colors"
             >
               <Settings className="w-3.5 h-3.5" />
               Settings
-            </button>
-            <button
-              onClick={() => setKeysOpen(true)}
+            </RouteLink>
+            <RouteLink
+              to="/keys"
+              onGo={() => setKeysOpen(true)}
               className="inline-flex items-center gap-1.5 hover:text-slate-300 transition-colors"
             >
               <Keyboard className="w-3.5 h-3.5" />
               Keys
-            </button>
+            </RouteLink>
             {supabase && (
-              <button
-                onClick={() => setAccountOpen(true)}
+              <RouteLink
+                to={session ? '/account' : '/sign-in'}
+                onGo={() => setAccountOpen(true)}
                 className="inline-flex items-center gap-1.5 hover:text-slate-300 transition-colors"
               >
                 <UserRound className="w-3.5 h-3.5" />
                 {session ? 'Account' : 'Sign in'}
-              </button>
+              </RouteLink>
             )}
-            <button
-              onClick={() => setAboutOpen(true)}
+            <RouteLink
+              to="/about"
+              onGo={() => setAboutOpen(true)}
               className="inline-flex items-center gap-1.5 hover:text-slate-300 transition-colors"
             >
               <Info className="w-3.5 h-3.5" />
               About &amp; FAQ
-            </button>
-            <button
-              onClick={() => setLegalOpen(true)}
+            </RouteLink>
+            <RouteLink
+              to="/legal/notices"
+              onGo={() => setLegalOpen(true)}
               className="inline-flex items-center gap-1.5 hover:text-slate-300 transition-colors"
             >
               <Scale className="w-3.5 h-3.5" />
               Legal
-            </button>
+            </RouteLink>
           </div>
         </footer>
       </main>
@@ -2853,6 +2881,15 @@ function App() {
                 </h3>
                 <div className="space-y-3 text-slate-400">
                   <div>
+                    <p className="text-slate-300 font-medium">How do you say it?</p>
+                    <p>
+                      <span className="whitespace-nowrap">/ ˈæn ə grimˈwɑr /</span> —{' '}
+                      <em>AN-uh-grim-WAHR</em>. <em>Anagram</em> up front, then{' '}
+                      <em>grimoire</em> the French way, rhyming with <em>memoir</em>.
+                      Stress on the first syllable and the last.
+                    </p>
+                  </div>
+                  <div>
                     <p className="text-slate-300 font-medium">
                       Are the daily puzzles the same as the NYT&apos;s?
                     </p>
@@ -2926,6 +2963,19 @@ function App() {
                   GitHub
                 </a>
                 .
+              </p>
+
+              <p>
+                Also by me:{' '}
+                <a
+                  href="https://getrandompassword.net"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-amber-300 hover:text-amber-200 underline underline-offset-2"
+                >
+                  getrandompassword.net
+                </a>
+                , a password generator.
               </p>
 
               <p className="text-slate-500 text-xs">

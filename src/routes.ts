@@ -17,14 +17,16 @@
 import type { Mode } from '@/storage';
 
 export type View = 'solve' | 'play' | 'learn';
-export type Slug = 'pattern' | 'scramble' | 'hive' | 'grid' | 'boxed' | 'weave' | 'squares';
+export type Slug = 'guess' | 'scramble' | 'hive' | 'grid' | 'boxed' | 'weave' | 'squares';
 export type Panel = 'keys' | 'account' | 'about';
 export type LegalDoc = 'notices' | 'privacy' | 'terms';
 export type StatsTab = 'overall' | 'daily' | 'practice' | 'history' | 'boards';
 export type SettingsTab = 'site' | 'games';
 
+// the slug is what a person reads; the mode id is what storage is keyed on,
+// so they don't have to match and 'pattern' stays put internally
 const SLUG_MODE: Record<Slug, Mode> = {
-  pattern: 'pattern',
+  guess: 'pattern',
   scramble: 'descramble',
   hive: 'bee',
   grid: 'grid',
@@ -40,7 +42,7 @@ export const MODE_SLUG = Object.fromEntries(
 // How each game is named in an invitation — plainer than the result title,
 // which carries board size and word length the reader doesn't need yet.
 export const SLUG_NAME: Record<Slug, string> = {
-  pattern: 'Guess the Word',
+  guess: 'Guess the Word',
   scramble: 'Scramble',
   hive: 'Hive',
   grid: 'Grid',
@@ -101,6 +103,32 @@ export function pathOf(route: Route): string {
   }
 }
 
+const VIEW_WORD: Record<View, string> = { solve: 'Solver', play: 'Play', learn: 'How to play' };
+
+/** What the tab says, and what a search result would show. Every address
+ *  returning one title makes 33 sitemap entries look like 33 copies of the
+ *  same page. */
+export function titleOf(route: Route): string {
+  const suffix = ' · Anagrimoire';
+  switch (route.kind) {
+    case 'home':
+      return 'Anagrimoire — word game solvers and daily puzzles';
+    case 'game': {
+      const name = SLUG_NAME[route.slug];
+      if (route.view === 'play') return `${name} — ${route.daily ? 'Daily' : 'Practice'}${suffix}`;
+      return `${name} — ${VIEW_WORD[route.view]}${suffix}`;
+    }
+    case 'stats':
+      return `Statistics${suffix}`;
+    case 'settings':
+      return `Settings${suffix}`;
+    case 'legal':
+      return `${route.doc === 'privacy' ? 'Privacy policy' : route.doc === 'terms' ? 'Terms' : 'Notices'}${suffix}`;
+    case 'panel':
+      return `${route.panel === 'about' ? 'About & FAQ' : route.panel === 'account' ? 'Account' : 'Keyboard controls'}${suffix}`;
+  }
+}
+
 export function urlOf(route: Route): string {
   return ORIGIN + pathOf(route);
 }
@@ -136,14 +164,24 @@ export function parsePath(pathname: string): Route | null {
   if (PANELS.includes(first as Panel)) return { kind: 'panel', panel: first as Panel };
 
   if (first === 'daily' || VIEWS.includes(first as View)) {
-    if (!second || !(second in SLUG_MODE)) return null;
-    const slug = second as Slug;
+    const slug = second ? canonicalSlug(second) : null;
+    if (!slug) return null;
     if (first === 'daily') return { kind: 'game', view: 'play', slug, daily: true };
     // daily is only meaningful under /play; solve and learn carry it as false
     return { kind: 'game', view: first as View, slug, daily: false };
   }
 
   return null;
+}
+
+// /solve/pattern was the address for a while and is out there in shared
+// results. It resolves to the same board and the URL corrects itself, because
+// parsePath hands back the canonical slug and the address bar follows state.
+const SLUG_ALIASES: Record<string, Slug> = { pattern: 'guess' };
+
+function canonicalSlug(raw: string): Slug | null {
+  if (raw in SLUG_MODE) return raw as Slug;
+  return SLUG_ALIASES[raw] ?? null;
 }
 
 export function modeOf(slug: Slug): Mode {
@@ -173,8 +211,9 @@ const LEGACY: { param: string; make: (slug: Slug) => Route }[] = [
 export function legacyRoute(search: string): Route | null {
   const q = new URLSearchParams(search);
   for (const { param, make } of LEGACY) {
-    const slug = q.get(param);
-    if (slug && slug in SLUG_MODE) return make(slug as Slug);
+    const raw = q.get(param);
+    const slug = raw ? canonicalSlug(raw) : null;
+    if (slug) return make(slug);
   }
   const doc = q.get('legal');
   if (doc && DOCS.includes(doc as LegalDoc)) return { kind: 'legal', doc: doc as LegalDoc };

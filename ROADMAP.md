@@ -193,6 +193,25 @@ own rows"; friends means mutual relationships, invitations, and RLS that lets
 a friend read *some* of your results, plus blocking and removal. Build after
 display names exist and after leaderboards prove the aggregate pattern.
 
+### More themes, for taste rather than need
+The four palettes exist for colour vision — default, red–green, blue–yellow,
+monochrome — and the theme switch is light/dark/system. Nothing yet is there
+just because someone likes it: sepia, high-contrast, a warmer dark, seasonal.
+
+The architecture already takes them. Every colour resolves through CSS
+variables keyed on `data-theme` × `data-palette`, so a new palette is a block
+in `index.css` plus an entry in Settings, and no component changes at all.
+
+**The cost isn't the colours, it's the audit.** Contrast is checked across
+every theme × palette combination, and that grid is what grows: four palettes
+in two themes is eight passes today, and each new one adds two. A palette
+that ships unaudited is worse than no palette, because the accessible ones
+imply the rest were checked too. Budget the sweep, not the CSS.
+
+Worth separating the two axes in Settings if this happens — colour-vision
+palettes and decorative ones sitting in one list invites someone to pick a
+seasonal theme and lose an accommodation they needed.
+
 ## New game modes
 
 ### Word Tetris

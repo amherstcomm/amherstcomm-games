@@ -707,7 +707,7 @@ const WeaveGame = forwardRef<
                         ? 'bg-sky-400/40 border-sky-300 text-white'
                         : onPath
                           ? 'bg-emerald-400/30 border-emerald-300 text-white'
-                          : 'bg-white/5 border-white/15 text-white hover:bg-white/10'}
+                          : 'bg-white/5 border-white/55 text-white hover:bg-white/10'}
                     ${hintCells.has(i) && !lock ? 'ring-2 ring-emerald-300/80' : ''}`}
                 >
                   {c}

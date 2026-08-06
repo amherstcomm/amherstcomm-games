@@ -134,22 +134,22 @@ function generateBox(commonWords: string[]): BoxRecord | null {
 // states (idle / in current word / used) are shades within the side's hue
 const SIDE_TONES = [
   {
-    idle: 'bg-sky-400/10 border-sky-400/40 text-sky-200 hover:bg-sky-400/20',
+    idle: 'bg-sky-400/10 border-sky-400 text-sky-200 hover:bg-sky-400/20',
     current: 'bg-sky-400/20 border-sky-400/70 text-sky-100',
     used: 'bg-sky-400/40 border-sky-300 text-white',
   },
   {
-    idle: 'bg-violet-400/10 border-violet-400/40 text-violet-200 hover:bg-violet-400/20',
+    idle: 'bg-violet-400/10 border-violet-400 text-violet-200 hover:bg-violet-400/20',
     current: 'bg-violet-400/20 border-violet-400/70 text-violet-100',
     used: 'bg-violet-400/40 border-violet-300 text-white',
   },
   {
-    idle: 'bg-rose-400/10 border-rose-400/40 text-rose-200 hover:bg-rose-400/20',
+    idle: 'bg-rose-400/10 border-rose-400 text-rose-200 hover:bg-rose-400/20',
     current: 'bg-rose-400/20 border-rose-400/70 text-rose-100',
     used: 'bg-rose-400/40 border-rose-300 text-white',
   },
   {
-    idle: 'bg-amber-400/10 border-amber-400/40 text-amber-200 hover:bg-amber-400/20',
+    idle: 'bg-amber-400/10 border-amber-400 text-amber-200 hover:bg-amber-400/20',
     current: 'bg-amber-400/20 border-amber-400/70 text-amber-100',
     used: 'bg-amber-400/40 border-amber-300 text-white',
   },

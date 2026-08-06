@@ -8,13 +8,14 @@
 
 import { Grid3x3, Hexagon, LayoutGrid, Puzzle, Shuffle, Square, Table2, Trophy } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import { MODE_SLUG, SLUG_NAME, type Slug } from '@/routes';
+import { MODE_SLUG, pathOf, SLUG_NAME, type Slug } from '@/routes';
+import RouteLink from '@/RouteLink';
 import { allDailyStatus, type DailyState } from '@/dailyStatus';
 import { fetchBoards, BOARD_LABELS, type BoardGame, type Boards } from '@/leaderboard';
 import type { Mode } from '@/storage';
 
 const ICONS: Record<Slug, typeof Grid3x3> = {
-  pattern: Grid3x3,
+  guess: Grid3x3,
   scramble: Shuffle,
   hive: Hexagon,
   grid: LayoutGrid,
@@ -25,7 +26,7 @@ const ICONS: Record<Slug, typeof Grid3x3> = {
 
 // One line each, written for somebody who has never seen the game.
 const BLURB: Record<Slug, string> = {
-  pattern: 'Guess the hidden word in six tries, one letter of feedback at a time.',
+  guess: 'Guess the hidden word in six tries, one letter of feedback at a time.',
   scramble: 'A rack of letters and a clock. Find as many words as you can before it runs out.',
   hive: 'Seven letters, one compulsory. Build as many words as you can from them.',
   grid: 'A grid of letters against the clock — trace words through neighbouring cells.',
@@ -99,10 +100,11 @@ export default function HomeView({
             const Icon = ICONS[slug];
             const state = status[m] ?? 'none';
             return (
-              <button
+              <RouteLink
                 key={m}
-                onClick={() => onOpen(m)}
-                className="text-left rounded-xl bg-white/5 border border-white/10 p-4 hover:bg-white/10 hover:border-white/20 transition-colors"
+                to={pathOf({ kind: 'game', view: 'play', slug, daily: true })}
+                onGo={() => onOpen(m)}
+                className="block text-left rounded-xl bg-white/5 border border-white/10 p-4 hover:bg-white/10 hover:border-white/20 transition-colors"
               >
                 <span className="flex items-center gap-2 mb-1">
                   <Icon className="w-4 h-4 text-accent shrink-0" />
@@ -112,7 +114,7 @@ export default function HomeView({
                   </span>
                 </span>
                 <span className="block text-sm text-slate-400">{BLURB[slug]}</span>
-              </button>
+              </RouteLink>
             );
           })}
         </div>
