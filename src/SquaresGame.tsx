@@ -506,9 +506,13 @@ const SquaresGame = forwardRef<
             style={{ gridTemplateColumns: `repeat(${n}, auto) 0.375rem` }}
           >
             {colStates.map((s, c) => (
-              <div key={`col-${c}`} aria-hidden className={`h-1.5 rounded-full ${barTone(s)}`} />
+              <div
+                key={`col-${c}`}
+                aria-hidden
+                style={{ gridRow: 1, gridColumn: c + 1 }}
+                className={`h-1.5 rounded-full ${barTone(s)}`}
+              />
             ))}
-            <div aria-hidden />
 
             {Array.from({ length: n }, (_, r) => (
               <Fragment key={`r-${r}`}>
@@ -518,7 +522,11 @@ const SquaresGame = forwardRef<
                   const focused = i === cursor && !done;
                   const letter = letterAt(record, i);
                   return (
-                    <div key={i} className="relative">
+                    <div
+                      key={i}
+                      className="relative"
+                      style={{ gridRow: r + 2, gridColumn: c + 1 }}
+                    >
                     <button
                       onClick={() => !given && setCursor(i)}
                       aria-label={`row ${r + 1} column ${c + 1}${
@@ -537,15 +545,30 @@ const SquaresGame = forwardRef<
                     >
                       {letter}
                     </button>
-                    {focused && !given && (
-                      <MobileKeyInput onKey={pressKey} label="Type a letter" />
-                    )}
                     </div>
                   );
                 })}
-                <div aria-hidden className={`w-1.5 h-full rounded-full ${barTone(rowStates[r])}`} />
+                <div
+                  aria-hidden
+                  style={{ gridRow: r + 2, gridColumn: n + 1 }}
+                  className={`w-1.5 h-full rounded-full ${barTone(rowStates[r])}`}
+                />
               </Fragment>
             ))}
+
+            {/* One overlay for the board, parked on the cursor's cell. It has
+                to be moved rather than re-rendered per cell: a fresh input
+                isn't focused, and Android closes the keyboard the moment the
+                focused element goes away — so every letter shut it. Row 1 is
+                the column bars, hence the +2. */}
+            {!done && (
+              <div
+                className="relative"
+                style={{ gridRow: Math.floor(cursor / n) + 2, gridColumn: (cursor % n) + 1 }}
+              >
+                <MobileKeyInput onKey={pressKey} label="Type a letter" />
+              </div>
+            )}
           </div>
 
           <p className="mt-4 text-sm text-slate-400" aria-live="polite">

@@ -1054,16 +1054,24 @@ function LearnSquares({ dict, register }: { dict: Set<string> | null; register: 
         <div className="w-fit mx-auto">
           <div className="grid gap-2" style={{ gridTemplateColumns: `repeat(${n}, auto) 0.375rem` }}>
             {cols.map((w, c) => (
-              <div key={`c${c}`} aria-hidden className={`h-1.5 rounded-full ${tone(w)}`} />
+              <div
+                key={`c${c}`}
+                aria-hidden
+                style={{ gridRow: 1, gridColumn: c + 1 }}
+                className={`h-1.5 rounded-full ${tone(w)}`}
+              />
             ))}
-            <div aria-hidden />
             {Array.from({ length: n }, (_, r) => (
               <Fragment key={r}>
                 {Array.from({ length: n }, (_, c) => {
                   const i = r * n + c;
                   const given = cells[i] !== null;
                   return (
-                    <div key={i} className="relative">
+                    <div
+                      key={i}
+                      className="relative"
+                      style={{ gridRow: r + 2, gridColumn: c + 1 }}
+                    >
                     <button
                       onMouseDown={(e) => e.preventDefault()}
                       onClick={() => !given && setCursor(i)}
@@ -1076,15 +1084,26 @@ function LearnSquares({ dict, register }: { dict: Set<string> | null; register: 
                     >
                       {at(i)}
                     </button>
-                    {i === cursor && !given && !solved && (
-                      <MobileKeyInput onKey={handleKey} label="Type a letter" />
-                    )}
                     </div>
                   );
                 })}
-                <div aria-hidden className={`w-1.5 h-full rounded-full ${tone(rows[r])}`} />
+                <div
+                  aria-hidden
+                  style={{ gridRow: r + 2, gridColumn: n + 1 }}
+                  className={`w-1.5 h-full rounded-full ${tone(rows[r])}`}
+                />
               </Fragment>
             ))}
+
+            {/* moved, not remounted — see the board's copy of this */}
+            {!solved && (
+              <div
+                className="relative"
+                style={{ gridRow: Math.floor(cursor / n) + 2, gridColumn: (cursor % n) + 1 }}
+              >
+                <MobileKeyInput onKey={handleKey} label="Type a letter" />
+              </div>
+            )}
           </div>
         </div>
 
