@@ -1,6 +1,6 @@
 # Anagrimoire
 
-A word-game solver for puzzles like Wordle, crosswords, hangman, Scrabble, Jumble, Spelling Bee, and Letter Boxed. Solve by pattern — lock in the letters you know by position, list the letters that must appear somewhere, exclude the rest — descramble a rack of letters, crack a Spelling Bee hive, or find two-word Letter Boxed solutions.
+Seven word games, each with a solver behind it, a fresh puzzle every morning, and a guided demo. Solve by pattern — lock in the letters you know by position, list the letters that must appear somewhere, exclude the rest — descramble a rack, crack a Spelling Bee hive, find two-word Letter Boxed solutions, trace a Strands-style board, or fill a word square.
 
 *Vibe-coded with [Claude](https://claude.com/claude-code).*
 
@@ -10,11 +10,12 @@ A word-game solver for puzzles like Wordle, crosswords, hangman, Scrabble, Jumbl
 
 ### Solver modes
 
-- **Pattern** (Wordle, crosswords, hangman) — word lengths from 3 to 15; tile inputs for known positions, must-contain letters (position unknown, duplicates respected), and excluded letters, with per-letter highlighting in the results
+- **Guess the Word** (Wordle, crosswords, hangman) — word lengths from 3 to 15; tile inputs for known positions, must-contain letters (position unknown, duplicates respected), and excluded letters, with per-letter highlighting in the results
 - **Scramble** (Scrabble, Jumble) — find every word a rack of letters can spell, with `?` wildcards for blank tiles, an exact-anagram "use every letter" option, and a minimum-length filter
 - **Hive** (Spelling Bee-style) — seven letters entered on a hive (amber center, six around), 4+ letter words, center letter required, letters reusable; pangrams surface in their own highlighted group, and today's NYT puzzle autofills with one click for solving
 - **Grid** (Boggle-style) — enter the letters of a 3×3, 4×4, or 5×5 square and find every word traceable through adjacent cells (diagonals count), each cell used once per word
 - **Boxed** (Letter Boxed-style) — twelve letters entered around a square, 3+ letter words, letters reusable, but consecutive letters can't share a side. Pick a solution length (1–5 words) to see chains covering all twelve letters, get a starred recommendation (fewest words, everyday vocabulary, fewest letters), hover any word or solution chain to trace its criss-cross path on the box, or autofill today's NYT puzzle with one click (a daily GitHub Action publishes Letter Boxed and Spelling Bee data to the `puzzle-data` branch about 15 minutes after the NYT publishes at 3:00 a.m. Eastern)
+- **Squares** — type the letters you're sure of in a 4×4 or 5×5 grid and it fills the rest so that every row *and* every column spells a word, showing several ways where more than one fits
 
 Every solver can autofill **today's daily puzzle** (ours) with one click; the Hive, Boxed, and Weave solvers can also load **today's NYT puzzle** (Spelling Bee, Letter Boxed, Strands).
 
@@ -22,13 +23,14 @@ Every solver can autofill **today's daily puzzle** (ours) with one click; the Hi
 
 Every mode has a **Solve / Play** toggle.
 
-- **Guess the word** (Pattern): six tries at any length from 3 to 15 letters, duplicate-aware coloring, physical and on-screen keyboard support (with letter coloring), and persistent boards and stats. **Daily** serves the same word to everyone per length — generated deterministically by the daily GitHub Action — with a win streak; **Practice** deals unlimited random words. Answers come from the Common dictionary so they're always fair; guesses are validated against the Full one.
+- **Guess the Word**: six tries at any length from 3 to 15 letters, duplicate-aware coloring, physical and on-screen keyboard support (with letter coloring), and persistent boards and stats. **Daily** serves the same word to everyone per length — generated deterministically by the daily GitHub Action — with a win streak; **Practice** deals unlimited random words. Answers come from the Common dictionary so they're always fair; guesses are validated against the Full one.
 - **Scramble**: a three-minute sprint to find every word you can from a seven-letter rack (each letter usable once per word). Racks are shuffled real words, so a full-rack bonus word always exists; 3-letter words score 1, longer words their length, whole-rack +7. When time's up, one click reveals every answer in the solver. **Daily** rack for everyone; **Practice** deals unlimited racks.
 - **Grid** (Boggle-style): a three-minute sprint to find every word you can trace through the 4×4 grid, with classic scoring (3–4 letters 1 pt, 5: 2, 6: 3, 7: 5, 8+: 11). Cells stay face-down until you press Start. **Daily** grids roll from the classic sixteen-dice distributions; **Practice** deals unlimited grids in 3×3, 4×4, or 5×5 (Big Boggle dice for the largest).
 - **Box** (Letter Boxed-style): chain words around the square to use all twelve letters — each word starts with the previous word's last letter, consecutive letters can't share a side. Boxes are our own, built from two chainable words so a two-word solution always exists; **Daily** is the same generated box for everyone, **Practice** deals unlimited boxes. Backspace un-commits words for editing. The current entry draws its criss-cross line live on the box, and hovering a committed word traces its path. **Help** peeks at the solver mid-game; **Reveal** gives up, ending the board unfinished (no solve is recorded).
 - **Hive**: find words from seven letters — 4-letter words score 1, longer words score their length, pangrams +7 — with a rank ladder up to Queen Bee, scored against the Standard dictionary. **Daily** plays our own generated hive (the same one for everyone, seeded from a pangram so it's always completable — not the NYT's puzzle); **Practice** deals unlimited fresh hives. Tap the hive or type; shuffle, delete, and found-word history included. **Help** peeks at the solver mid-game; **Reveal** gives up, ending the hive unfinished.
 
 - **Weave** (Strands-style): themed words tile the whole board — every letter used exactly once, with a spangram spanning the board. Drag to trace; theme words lock blue, the spangram gold, other dictionary words (4+ letters) bank toward hints that outline an unfound word, and a Reveal gives up gracefully. Completion (either way) draws every word's path as a line overlay. Puzzles are generated from a curated theme file with a subset-sum + backtracking packer. **Daily** is a 6×8 board; **Practice** draws from a daily pool in 6×8 or 8×10 (hard). Weave also has a Solve mode: enter any 6×8 Strands or 8×10 board (or autofill today's NYT Strands with its theme clue) to list every traceable word, hover to see its path.
+- **Word Squares**: fill a grid so every row and every column is a word. Some letters are given and the rest are yours; a bar beside each line turns green when that line is a word and red when it's full but isn't. Two sizes — a 4×4 with six letters given and a 5×5 with ten — each a separate daily and a separate leaderboard, since they aren't the same puzzle. Boards are generated so that ten *different* words appear (five read twice would be half a puzzle) and exactly one filling works. **Practice** draws from a daily pool.
 
 Daily content refreshes about 15 minutes after 3:00 a.m. Eastern. The dev site (and local development) gets its own independently generated daily set, so testing there never spoils the production puzzles.
 
@@ -51,7 +53,9 @@ Three tiers, selectable per mode: **Common** (everyday words, ideal for Wordle-s
 - **Keyboard accessible** — a skip link jumps past the mode tabs to the puzzle, every focusable control shows a high-contrast focus ring, and dialogs move focus in, trap Tab, close on Escape, and hand focus back to whatever opened them. Every game is playable by keyboard: the typing games listen directly, and Weave's board (a single tab stop) gets a cursor you steer with the arrow keys plus a diagonal ring — number pad `7 8 9 / 4 6 / 1 2 3` or `Q W E / A D / Z S X`, selectable in Settings with a diagram of the chosen layout. Enter starts a word and submits it, Backspace steps back — and every reachable cell shows its key in the corner, so the next move is never a guess. You still have to find the word on the board. A **Keys** panel in the footer lists every shortcut.
 - **Learn mode** — every game has a third Solve / Play / **Learn** tab: rules, scoring, daily/practice differences, tips, and a hands-on interactive demo (step through a worked Guess solve, tap out words on a mini rack/hive/box, drag-trace a mini grid or Weave board) validated against the real dictionary
 - **Everything is remembered** — active mode, per-mode dictionary and sort preferences, your last letters in each mode, and the keyboard state persist in localStorage
-- **Lifetime statistics** — a Stats panel (in the footer) tracks every finished game, viewable overall or split into daily and practice: Guess win rate, streak, and guess distribution; Hive words, pangrams, Genius and Queen Bee counts; Scramble and Grid sprint scores; Boxed solves with fewest words and best time; Weave solves, reveals, and hints. Stored only in your browser.
+- **Statistics, history and boards** — a Stats panel (in the footer) with five tabs. **Overall / Daily / Practice** are lifetime totals: Guess win rate, streak and distribution; Hive words, pangrams, Genius and Queen Bee; Scramble and Grid sprint scores; Boxed solves with fewest words and best time; Weave solves, reveals and hints; Word Squares solves and best time, kept per board size. **History** plots your dailies day by day — Guess as a distribution plus a table per word length, the rest as sparklines, with streaks counted off puzzle dates rather than a stored counter. **Boards** ranks everyone who has set a display name. Signed out it's all local; signed in it's your account's.
+- **Real addresses** — every state has a URL and the address bar follows you: `/solve/pattern`, `/play/hive`, `/daily/squares`, `/learn/grid`, `/stats/history`, `/settings/games`, `/legal/privacy`. Opening a panel puts it in the bar and Back closes it; closing one steps back rather than stacking a new entry. The older `?daily=hive` query links still work and are rewritten to a path on arrival.
+- **A front page** — `/` lists the seven games with today's state on each (read from your own browser, so it works signed out) and the top of today's board. Regulars who'd rather skip it can set Settings → Site → Start on to a game, or to wherever they left off.
 
 ## Getting started
 
@@ -80,7 +84,16 @@ Other scripts:
 
 ## Accounts & sync (optional)
 
-The site is fully functional with no backend — solving and playing stay in the browser. Optionally, a [Supabase](https://supabase.com/) project adds sign-in (passwordless magic links) and cross-device stat sync: while signed in, every completed game is appended to a per-user event log, the browser's pre-account stats are imported once as a baseline, and the Stats panel shows the account's synced totals (baseline + event replay) instead of the local ones. Signed out — or without the env vars below — every auth surface hides and stats stay purely local.
+The site is fully functional with no backend — solving and playing stay in the browser. Optionally, a [Supabase](https://supabase.com/) project adds sign-in (magic link, one-time code, GitHub or Google) and carries four things between devices:
+
+- **Statistics.** Every completed practice game is appended to a per-user event log; the browser's pre-account totals are imported once as a baseline, and the Stats panel replays baseline + log instead of reading the local store.
+- **Dailies in progress.** A daily's board is one row per puzzle, merged rather than overwritten, so you can start on a phone and finish on a laptop — and can't accidentally play the same day twice. The merge rules are deliberate about deletions: erasing a letter has to survive the next sync, which a naive union would undo.
+- **Settings.** Theme, palette, text size, which games are shown, and the start page.
+- **A display name**, which is the opt-in to the leaderboards and the only thing about an account any other player can see. Without one you don't appear at all.
+
+There's also self-serve deletion under Account: one button clears your play record and keeps the account, another deletes the account outright. Both derive the account from `auth.uid()` and take no argument, because a function accepting a user id is a delete-anybody endpoint the moment somebody edits a uuid in the network tab.
+
+Signed out — or without the env vars below — every auth surface hides and everything stays local.
 
 Setup:
 
@@ -95,7 +108,13 @@ Note: Supabase's built-in email service is rate-limited (a few magic links per h
 
 ## Analytics (optional)
 
-Set `VITE_GA_ID` to a Google Analytics 4 measurement ID (`G-…`) and the site loads gtag and reports pageviews; leave it unset and nothing is injected. Use one GA4 property with a separate web data stream (and measurement ID) for each environment, set on the matching Render site, so prod and dev numbers stay separable. When enabled, the About modal discloses it under a Privacy heading.
+Set `VITE_GA_ID` to a Google Analytics 4 measurement ID (`G-…`) and the site loads gtag and reports pageviews; leave it unset and nothing is injected. Use one GA4 property with a separate web data stream (and measurement ID) for each environment, set on the matching Render site, so prod and dev numbers stay separable.
+
+Where consent is required — the EEA, the UK and Switzerland, decided from the browser's own time zone rather than by asking a third party where the visitor is — nothing loads until it's granted, and declining is remembered. A Global Privacy Control signal is treated as a refusal everywhere, without asking. Either way it can be switched off under Settings → Analytics, which also clears the cookies it had set. No account identifier is ever sent, so Google holds a browser-scoped id with nothing to tie it to a person.
+
+## Privacy and terms
+
+`/legal/privacy` and `/legal/terms`, written to describe what the code actually does — the rule being that if the two disagree, the code is right and the document is wrong. Both live in [src/LegalDocs.tsx](src/LegalDocs.tsx).
 
 ## Deployment
 

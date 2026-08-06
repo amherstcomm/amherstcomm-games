@@ -51,7 +51,9 @@ const MAX_LEN = 15;
 const MODES: { id: Mode; label: string; blurb: string; description: string; playDescription: string }[] = [
   {
     id: 'pattern',
-    label: 'Pattern',
+    // the slug stays 'pattern' — it's in shared links — but nothing else calls
+    // it that, so the label matches Learn, the boards and the home page
+    label: 'Guess',
     blurb: 'Wordle, crosswords, hangman — clues about positions',
     description:
       "Lock in the letters you know, list the ones you've seen, and exclude the rest. We'll surface every dictionary word that fits.",
@@ -2926,6 +2928,19 @@ function App() {
                   GitHub
                 </a>
                 .
+              </p>
+
+              <p>
+                Also by me:{' '}
+                <a
+                  href="https://getrandompassword.net"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-amber-300 hover:text-amber-200 underline underline-offset-2"
+                >
+                  getrandompassword.net
+                </a>
+                , a password generator.
               </p>
 
               <p className="text-slate-500 text-xs">
