@@ -2857,9 +2857,10 @@ function App() {
                   <div>
                     <p className="text-slate-300 font-medium">How do you say it?</p>
                     <p>
-                      <em>AN-uh-grim-WAHR</em> — <em>anagram</em> up front, then{' '}
-                      <em>grimoire</em> the French way, rhyming with{' '}
-                      <em>memoir</em>. Four syllables, stress on the first and last.
+                      <span className="whitespace-nowrap">/ ˈæn ə grimˈwɑr /</span> —{' '}
+                      <em>AN-uh-grim-WAHR</em>. <em>Anagram</em> up front, then{' '}
+                      <em>grimoire</em> the French way, rhyming with <em>memoir</em>.
+                      Stress on the first syllable and the last.
                     </p>
                   </div>
                   <div>
