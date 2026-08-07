@@ -106,32 +106,29 @@ export function PrivacyPolicy() {
         remembering what you asked it to remember, and the rules about storing
         things on your device carve out exactly that. We ask anyway, because
         &quot;we keep things on your device&quot; deserves an answer other than a
-        banner that only offers yes. Three of them:
+        banner that only offers yes. Two of them:
       </P>
       <List>
         <li>
-          <strong className="text-slate-300">Essential only</strong> — your answers on
-          this page, and nothing else. Every game and every solver works exactly as it
-          does otherwise; close the tab and it starts over. You won&apos;t stay signed
-          in, because staying signed in is a thing kept on your device.
+          <strong className="text-slate-300">Keep essentials only</strong> — your
+          answers on this page, and nothing else. Every game and every solver works
+          exactly as it does otherwise; close the tab and it starts over, sign-in
+          included, because staying signed in is itself a thing kept on your device.
         </li>
         <li>
-          <strong className="text-slate-300">Allow browser game data</strong> — boards,
-          settings and statistics stay in this browser, as described above. They&apos;re
-          on your machine and they go nowhere.
-        </li>
-        <li>
-          <strong className="text-slate-300">Allow server game data (sign in)</strong> —
-          the above, plus the token that keeps you signed in, which is what lets your
-          results reach your account and follow you to another device.
+          <strong className="text-slate-300">Keep my games and settings</strong> —
+          boards, settings, statistics and your sign-in stay in this browser, as
+          described above. They&apos;re on your machine.
         </li>
       </List>
       <P>
-        They&apos;re in that order for a reason. The rungs aren&apos;t sorted by how
-        much data there is but by how far it goes: a file on your own disk is a
-        smaller thing to agree to than a row on our server, whatever their relative
-        sizes. That&apos;s also why signing in is the top rung rather than the middle
-        one — choosing either of the others signs you out here.
+        There is no third setting for whether anything may reach our server, because
+        signing in already is that answer. Nobody signs in by accident, and asking a
+        second time would imply we might do it unasked. It leaves two separate
+        questions rather than one muddled ladder: signing in decides whether anything
+        leaves this device, and the setting above decides what stays on it. You can
+        sign in under either — at the first, the session is held in memory and ends
+        with the tab.
       </P>
       <P>
         It&apos;s under Settings → Privacy, alongside the analytics answer, and choosing

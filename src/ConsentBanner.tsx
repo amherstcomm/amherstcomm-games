@@ -2,8 +2,7 @@ import { useState } from 'react';
 import { BarChart3, HardDrive } from 'lucide-react';
 import { GA_ID, disableAnalytics, initAnalytics } from '@/analytics';
 import { clearAnalyticsCookies, gpcEnabled, readConsent, writeConsent } from '@/consent';
-import { readLevel, STORAGE_OPTIONS, type StorageLevel } from '@/siteStorage';
-import { applyStorageLevel } from '@/account';
+import { readLevel, setLevel, STORAGE_OPTIONS, type StorageLevel } from '@/siteStorage';
 
 // Two questions, asked separately, because they are not the same question.
 // One is the site remembering what you did here; the other is data going to
@@ -27,7 +26,7 @@ export default function ConsentBanner({ onReadPolicy }: { onReadPolicy: () => vo
   if (!askStorage && !askAnalytics) return null;
 
   function chooseStorage(next: StorageLevel) {
-    void applyStorageLevel(next);
+    setLevel(next);
     setAskStorage(false);
   }
 
@@ -58,11 +57,11 @@ export default function ConsentBanner({ onReadPolicy }: { onReadPolicy: () => vo
               <HardDrive className="w-4 h-4 mt-0.5 shrink-0 text-accent" aria-hidden="true" />
               <span>
                 <strong className="font-semibold text-slate-200">
-                  What may we keep?
+                  What may we keep on this device?
                 </strong>{' '}
-                Every game plays in full either way. Keeping data in your browser is
-                what lets today&apos;s board still be there tomorrow; signing in is
-                what lets it follow you to another device.
+                Every game and solver works in full either way. Keeping things here is
+                what lets today&apos;s board still be there tomorrow; the alternative
+                forgets it all when you close the tab.
               </span>
             </p>
             <div className="flex flex-wrap items-center justify-center gap-2">

@@ -6,29 +6,30 @@
 // than a banner that only offers yes, and because the honest version of
 // declining is not "the site breaks" but "it forgets".
 //
-// Three levels, each one adding to the last, ordered by how far your data
-// travels rather than by how much of it there is:
+// Two levels:
 //
 //   essential  your privacy choices, and nothing else. Every game plays in
 //              full; it's all held in memory, so closing the tab starts over.
-//   browser    the above, plus boards, settings and statistics kept in this
-//              browser. Yours, on your machine, sent nowhere.
-//   server     the above, plus staying signed in — which is what lets results
-//              leave this device and follow you to another one.
+//   browser    boards, settings, statistics and your sign-in kept in this
+//              browser. Yours, on your machine.
 //
-// Sign-in sits at the top rather than in the middle on purpose. It's the only
-// rung where anything reaches us, and that's a bigger ask than a file on your
-// own disk, however small the file is.
+// There is deliberately no third level for "may anything reach the server",
+// because signing in already is that answer — nobody signs in by accident,
+// and asking a second time would imply we might do it without being asked.
+// That leaves two genuinely separate questions instead of one muddled ladder:
+// signing in decides whether anything leaves this device, and the setting
+// here decides what stays on it. So you can still sign in at 'essential';
+// the session is simply held in memory, and closing the tab ends it.
 //
 // Everything in the app reads and writes through `store` rather than
 // localStorage directly, so the level is enforced in one place instead of
 // fifteen.
 
-export type StorageLevel = 'essential' | 'browser' | 'server';
+export type StorageLevel = 'essential' | 'browser';
 
 /** The wording, in one place, because it appears in both the banner and
  *  Settings and the two saying slightly different things would be its own
- *  small dishonesty. Ascending, since each level adds to the one before it. */
+ *  small dishonesty. */
 export const STORAGE_OPTIONS: {
   id: StorageLevel;
   label: string;
@@ -36,21 +37,15 @@ export const STORAGE_OPTIONS: {
 }[] = [
   {
     id: 'essential',
-    label: 'Essential only',
+    label: 'Keep essentials only',
     blurb:
-      'Only your privacy choices are kept — we have to remember them to honour them. Every game plays in full, and closing the tab starts over.',
+      'Only your privacy answers, which we have to remember in order to honour them. Every game and solver still works in full; close the tab and it starts over, sign-in included.',
   },
   {
     id: 'browser',
-    label: 'Allow browser game data',
+    label: 'Keep my games and settings',
     blurb:
-      'Boards, settings and statistics stay in this browser, on this machine, sent nowhere.',
-  },
-  {
-    id: 'server',
-    label: 'Allow server game data (sign in)',
-    blurb:
-      'The above, plus staying signed in — which is what lets your results follow you to another device.',
+      'Boards, settings, statistics and your sign-in stay in this browser, on this machine.',
   },
 ];
 
@@ -63,10 +58,10 @@ function isChoice(key: string): boolean {
   return key === LEVEL_KEY || key.startsWith('anagrimoire:analytics-consent');
 }
 
-/** The token that keeps you signed in. supabase-js writes it as
- *  sb-<project ref>-auth-token. */
-function isAuth(key: string): boolean {
-  return key.startsWith('sb-');
+/** Our keys, wherever they came from. supabase-js writes the session as
+ *  sb-<project ref>-auth-token; everything else of ours is namespaced. */
+function isOurs(key: string): boolean {
+  return key.startsWith('anagrimoire:') || key.startsWith('sb-');
 }
 
 // Where anything not allowed on disk goes instead. It behaves like storage for
@@ -75,9 +70,7 @@ function isAuth(key: string): boolean {
 const memory = new Map<string, string>();
 
 function persists(key: string, level: StorageLevel): boolean {
-  if (isChoice(key)) return true;
-  if (isAuth(key)) return level === 'server';
-  return level !== 'essential';
+  return isChoice(key) || level === 'browser';
 }
 
 function rawGet(key: string): string | null {
@@ -104,10 +97,16 @@ function rawRemove(key: string): void {
   }
 }
 
-/** The chosen level, or null if never asked. */
+/** The chosen level, or null if never asked.
+ *
+ *  'server' is the third level this key briefly held, back when sign-in was a
+ *  rung of its own. It was the most permissive answer then and 'browser' is
+ *  the most permissive now, so reading it as that honours what was agreed
+ *  rather than asking again. */
 export function readLevel(): StorageLevel | null {
   const v = rawGet(LEVEL_KEY);
-  return v === 'essential' || v === 'browser' || v === 'server' ? v : null;
+  if (v === 'essential' || v === 'browser') return v;
+  return v === 'server' ? 'browser' : null;
 }
 
 /** The level in force right now. Unanswered behaves as the most permissive so
@@ -115,13 +114,7 @@ export function readLevel(): StorageLevel | null {
  *  signed in isn't thrown out, while the banner is still sitting there. The
  *  banner is what turns that into a decision. */
 export function level(): StorageLevel {
-  return readLevel() ?? 'server';
-}
-
-/** True when the level permits staying signed in. Callers use this to sign out
- *  of a browser that is no longer allowed to hold the session. */
-export function serverAllowed(level_: StorageLevel = level()): boolean {
-  return level_ === 'server';
+  return readLevel() ?? 'browser';
 }
 
 /** Record the choice — and make it true immediately. Dropping to a stricter
@@ -142,7 +135,7 @@ function purge(next: StorageLevel): void {
     return;
   }
   for (const key of keys) {
-    if (!key.startsWith('anagrimoire:') && !isAuth(key)) continue;
+    if (!isOurs(key)) continue;
     if (persists(key, next)) continue;
     const value = rawGet(key);
     if (value !== null) memory.set(key, value);

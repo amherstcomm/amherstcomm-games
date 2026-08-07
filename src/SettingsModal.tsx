@@ -22,8 +22,7 @@ import {
 } from '@/storage';
 import type { DictionaryId } from '@/dictionaries';
 import type { SettingsTab } from '@/routes';
-import { level as storageLevel, STORAGE_OPTIONS, type StorageLevel } from '@/siteStorage';
-import { applyStorageLevel } from '@/account';
+import { level as storageLevel, setLevel, STORAGE_OPTIONS, type StorageLevel } from '@/siteStorage';
 import type { Palette, TextScale, ThemeMode } from '@/theme';
 import { useModalA11y } from '@/useModalA11y';
 
@@ -436,10 +435,9 @@ export default function SettingsModal({
                 <button
                   key={id}
                   onClick={() => {
-                    // takes effect immediately: removes what a stricter
-                    // setting no longer allows, and ends the session if the
-                    // new setting doesn't permit one
-                    void applyStorageLevel(id);
+                    // takes effect immediately, including removing what the
+                    // stricter setting no longer allows
+                    setLevel(id);
                     setStorageState(id);
                   }}
                   aria-pressed={storage === id}
@@ -454,8 +452,7 @@ export default function SettingsModal({
             </div>
             <p className="mt-2 text-xs text-slate-500">
               {STORAGE_OPTIONS.find((o) => o.id === storage)?.blurb} Choosing less
-              clears what was already here, and anything below the last option signs
-              you out on this device.
+              clears what was already here rather than merely stopping more.
             </p>
           </div>
 

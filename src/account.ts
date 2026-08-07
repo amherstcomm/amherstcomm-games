@@ -10,24 +10,7 @@
 import { clearAnalyticsCookies } from '@/consent';
 import { clearLocalStats } from '@/stats';
 import { supabase } from '@/supabase';
-import { setLevel, serverAllowed, store as siteStore, type StorageLevel } from '@/siteStorage';
-
-/** Apply a storage choice, including the part the storage layer can't do
- *  itself. Below the top level nothing about you is meant to reach us, so a
- *  session that's already open has to end — otherwise "no server data" would
- *  be true of the disk and false of the next twenty minutes.
- *
- *  Local scope: the token is being discarded here, so there's no call for
- *  asking the server to revoke sessions on the user's other devices too. */
-export async function applyStorageLevel(next: StorageLevel): Promise<void> {
-  setLevel(next);
-  if (serverAllowed(next) || !supabase) return;
-  try {
-    await supabase.auth.signOut({ scope: 'local' });
-  } catch {
-    // the token is off the disk either way
-  }
-}
+import { store as siteStore } from '@/siteStorage';
 
 /** Keys that survive a local wipe: how the site looks, and the analytics
  *  answer. Resetting a privacy choice as a side effect of a privacy action
