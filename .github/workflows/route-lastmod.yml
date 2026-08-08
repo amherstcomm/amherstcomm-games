@@ -2,26 +2,34 @@
 # time, because Render builds without usable git history — the first version
 # computed them with `git log` and shipped 33 URLs and no dates at all.
 #
-# So the dates are only as fresh as the last `npm run lastmod`. This checks
-# they're current rather than fixing them: a bot commit here would land after
-# Render has already started building and cost a second deploy every merge.
-# A red check that says which command to run is cheaper than that.
-name: Sitemap lastmod is current
+# So something has to keep the committed file current, and it shouldn't be
+# anyone's memory. This does it on the working branch rather than on main: by
+# the time a PR merges the file is already right, so production still deploys
+# once. A bot commit on main would land after Render had started building and
+# cost a second deploy every merge.
+#
+# It can't loop. The dates describe source files, so committing the JSON
+# doesn't change them — a second run computes the same values and commits
+# nothing. The paths filter means the bot's own commit doesn't even trigger it.
+name: Update sitemap lastmod
 
 on:
-  pull_request:
+  push:
+    branches: [dev, main]
     paths:
       - 'src/**'
-      - 'data/route-lastmod.json'
       - 'scripts/route-lastmod.mjs'
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
-  check:
+  update:
     runs-on: ubuntu-latest
     steps:
       # full history: the script computes dates from it and refuses to run
-      # against a shallow clone, which is the whole point of doing this here
+      # against a shallow clone, which is the whole reason this job exists
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
@@ -29,9 +37,14 @@ jobs:
         with:
           node-version: 20
       - run: node scripts/route-lastmod.mjs
-      - name: Fail if the committed dates are stale
+      - name: Commit if the dates moved
         run: |
-          if ! git diff --exit-code -- data/route-lastmod.json; then
-            echo "::error::data/route-lastmod.json is out of date — run 'npm run lastmod' and commit the result"
-            exit 1
+          if git diff --quiet -- data/route-lastmod.json; then
+            echo "already current"
+            exit 0
           fi
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add data/route-lastmod.json
+          git commit -m "Update sitemap lastmod dates"
+          git push origin HEAD:${GITHUB_REF_NAME}
