@@ -14,7 +14,8 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit -p tsconfig.app.json",
-    "lastmod": "node scripts/route-lastmod.mjs"
+    "lastmod": "node scripts/route-lastmod.mjs",
+    "blocklist": "node scripts/blocklist.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.111.0",

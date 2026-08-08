@@ -3091,6 +3091,20 @@ function App() {
                     © Kevin Atkinson.
                   </li>
                   <li>
+                    Words we won&apos;t use as puzzle answers are drawn from the{' '}
+                    <a
+                      href="https://github.com/en-wl/wordlist"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-amber-300/90 hover:text-amber-200 underline underline-offset-2"
+                    >
+                      English Speller Database
+                    </a>{' '}
+                    © 2000–2026 Kevin Atkinson, which marks offensive and vulgar
+                    words. It filters what we publish, never what you&apos;re
+                    allowed to type.
+                  </li>
+                  <li>
                     Full dictionary:{' '}
                     <a
                       href="https://github.com/words/an-array-of-english-words"

@@ -3,6 +3,7 @@
 // and data/daily-words.json.
 // Run by .github/workflows/daily-puzzle-data.yml on a daily schedule.
 import { mkdir, writeFile } from 'node:fs/promises';
+import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { generateWeave } from './weave.mjs';
 import { generateSquare, GIVEN_TARGET } from './squares.mjs';
@@ -106,6 +107,21 @@ function mulberry32(a) {
   };
 }
 
+// Words we won't hand anyone as an answer. Applied to the pools puzzles are
+// *built* from, never to the sets they're *validated* against: refusing to
+// publish a word and refusing to accept one a player typed are different
+// things, and only the first is ours to decide. See scripts/blocklist.mjs.
+const blockedFromAnswers = new Set(
+  JSON.parse(readFileSync('scripts/blocked-words.json', 'utf8')).words.map((w) => w.word)
+);
+
+/** A generation pool with the blocked words taken out. */
+function answerPool(set) {
+  const out = new Set();
+  for (const w of set) if (!blockedFromAnswers.has(w)) out.add(w);
+  return out;
+}
+
 function loadTierSet(files) {
   const set = new Set();
   for (const f of files) {
@@ -122,8 +138,14 @@ const STANDARD_FILES = [...COMMON_FILES, 'english-words-40', 'english-words-50',
 
 const etDate = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York' }).format(new Date());
 
-const commonSet = loadTierSet(COMMON_FILES);
+// Generation draws from here, so it's filtered. It catches three words in the
+// common tier today — crap, bugger, buggers — and 27 more the moment
+// generation widens to standard, which is where the swearing actually lives.
+const commonSet = answerPool(loadTierSet(COMMON_FILES));
 let standardSet = null; // loaded lazily; long lengths are sparse in the common tiers
+// Unfiltered on purpose: squares checks solution uniqueness against this, and
+// a square with a rude alternative solution is still a square with two
+// solutions. We want to know.
 const standardWords = () => (standardSet ??= loadTierSet(STANDARD_FILES));
 let fullList = null;
 
@@ -201,13 +223,11 @@ for (const variant of ['', 'dev']) {
     const pickable = (set) =>
       [...set].filter((w) => w.length === len && !(w.endsWith('s') && set.has(w.slice(0, -1))));
     let pool = pickable(commonSet);
-    if (pool.length === 0) {
-      standardSet ??= loadTierSet(STANDARD_FILES);
-      pool = pickable(standardSet);
-    }
+    // the wider fallbacks are answers too, so they get the same treatment
+    if (pool.length === 0) pool = pickable(answerPool(standardWords()));
     if (pool.length === 0) {
       fullList ??= require('an-array-of-english-words');
-      pool = fullList.filter((w) => w.length === len);
+      pool = fullList.filter((w) => w.length === len && !blockedFromAnswers.has(w));
     }
     if (pool.length === 0) throw new Error(`No candidate words of length ${len}`);
     pool.sort(); // Set iteration order is insertion order — sort for determinism
