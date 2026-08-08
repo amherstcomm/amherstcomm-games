@@ -189,32 +189,23 @@ rejecting words that were legal below. The ladder must nest strictly.
 Generating extreme answers from the raw 275k would give unguessable
 obscurities; 10–70 is hard for the right reason.
 
-**Difficulty is also the obscurity lever, which removes a job.** The worry that
-Squares publishes odd words — `adze` and friends — isn't a filtering problem,
-it's a tiering one: those are level-35 words, so a genuinely easy band leaves
-them out by construction and an extreme one is *supposed* to have them. No
-separate obscurity review needed.
+**Difficulty is the obscurity lever, which removes a job.** The worry that
+Squares publishes odd words doesn't need a second review pass: how obscure a
+word is tracks which SCOWL size it enters at, and difficulty already selects
+that. Extreme is *supposed* to reach words easy doesn't have.
 
-That argues for narrower bands than `common`/`standard`/`full`, which lump 10,
-20 and 35 together and so put the obscurities in "easy". Measured per length,
-with the blocklist applied:
+What it does not need is narrower bands. An earlier draft here proposed easy =
+levels 10–20 on the theory that level 35 was "where the odd words live". That
+was wrong, and worth recording so it isn't re-derived: SCOWL's sizes are 35
+small, 50 medium, 60 medium-large (the default spell-checking dictionary), 70
+large, 80 a valid word in current usage. Level 35 is ordinary vocabulary —
+aback, civic, flank, gourd, impel, nasal, pique, upend — and `adze`, the word
+that prompted the theory, is level 50 and not in `common` at all.
 
-| length | easy (10–20) | hard (10–50) | extreme (10–70) |
-|---|---|---|---|
-| 3 | **271** | 565 | 761 |
-| 4–11 | 459–1,378 | 1,839–7,588 | 2,615–13,267 |
-| 12 | **238** | 2,326 | 5,536 |
-
-Easy at 10–20 holds everywhere except the ends: 271 and 238 are below the 365
-a one-year cooldown needs. Squares is unaffected — 4 and 5 letters give 1,778
-candidates at 10–20 — so it can take the narrow band as-is.
-
-Guess needs the tier ladder that already exists in `fetch-puzzles.mjs`, fired
-on the right condition. Today it widens only when a length has *zero*
-candidates, which never happens; widening when a length is too thin to sustain
-a cooldown is the same mechanism doing the job it was written for. Easy would
-then be 10–20 everywhere but lengths 3 and 12, which reach to 35 because there
-is no honest alternative.
+So the three tiers above stand as written: easy is the small dictionary
+(10–35), hard the medium (10–55), extreme the large (10–70). Easy has ample
+depth at every length that survives the cap — 464 words at three letters, 1,065
+at twelve — so the tier ladder in `fetch-puzzles.mjs` has nothing to fix.
 
 **Guess caps at 12 — and so does everything else.** One puzzle per length per day means each length is its own
 stream, and on `common` the long ones are threadbare: 82 words at 15 (under
