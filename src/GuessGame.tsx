@@ -211,6 +211,23 @@ const GuessGame = forwardRef<
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dailyMode, dailyData, commonWords, lenKey, store.daily, store.practice]);
 
+  // Which lengths today's feed actually carries, read from the feed rather
+  // than hardcoded: the daily stops at 12 because the pool of common words
+  // that long runs thin — 82 at fifteen letters is under three months before
+  // every one has been used — but the client shouldn't have to be told again
+  // if that number ever moves.
+  const dailyLengths = useMemo(
+    () =>
+      dailyData
+        ? Object.keys(dailyData.words)
+            .map(Number)
+            .filter((n) => Number.isFinite(n))
+            .sort((a, b) => a - b)
+        : [],
+    [dailyData]
+  );
+  const noDailyAtLength = dailyMode && !!dailyData && !dailyData.words[lenKey];
+
   const record = dailyMode ? store.daily[lenKey] : store.practice[lenKey];
   const secret = useMemo(() => {
     if (!record) return null;
@@ -481,6 +498,15 @@ const GuessGame = forwardRef<
       {dailyMode && dailyError && (
         <p className="text-sm text-danger py-8">
           Couldn&apos;t fetch today&apos;s words — try Practice instead.
+        </p>
+      )}
+      {/* A length with no daily used to render an empty board and no
+          explanation, which reads as broken rather than as absent. */}
+      {noDailyAtLength && !dailyError && (
+        <p className="text-sm text-slate-400 py-8">
+          No daily puzzle at {length} letters — today&apos;s run from{' '}
+          {dailyLengths[0]} to {dailyLengths[dailyLengths.length - 1]}. Practice
+          works at every length.
         </p>
       )}
 
