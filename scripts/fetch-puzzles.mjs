@@ -268,6 +268,12 @@ const GRID_DICE = [
 // Two independent daily sets: production, and a dev-salted set for
 // dev.anagrimoire.com/localhost so testing never spoils the production
 // puzzles. Everything stays deterministic per Eastern date.
+// Easy keeps the seed it has always had, so shipping difficulty doesn't
+// change the puzzle anyone is already playing — only hard and extreme are new.
+// Without this, republishing mid-day would swap today's board out from under
+// whoever is on it.
+const diffSalt = (d) => (d === 'easy' ? '' : `-${d}`);
+
 const dailyWeaveClues = new Set();
 for (const variant of ['', 'dev']) {
   const salt = variant ? `-${variant}` : '';
@@ -285,7 +291,7 @@ for (const variant of ['', 'dev']) {
     // Salted per difficulty. Without it the same seed draws the same index
     // from three nested pools and lands on the same word more often than
     // chance would.
-    const rng = mulberry32(xmur3(`anagrimoire-guess-${etDate}${salt}-${difficulty}`)());
+    const rng = mulberry32(xmur3(`anagrimoire-guess-${etDate}${salt}${diffSalt(difficulty)}`)());
     const { answers, cumulative } = poolsFor(difficulty);
     const words = {};
     for (let len = 3; len <= 12; len++) {
@@ -328,7 +334,7 @@ for (const variant of ['', 'dev']) {
   // hive: seeded from a pangram so it is always completable
   const hiveByDifficulty = {};
   for (const difficulty of DIFFICULTIES) {
-    const hiveRng = mulberry32(xmur3(`anagrimoire-hive-${etDate}${salt}-${difficulty}`)());
+    const hiveRng = mulberry32(xmur3(`anagrimoire-hive-${etDate}${salt}${diffSalt(difficulty)}`)());
     const { hiveBases } = poolsFor(difficulty);
     const base = hiveBases[Math.floor(hiveRng() * hiveBases.length)];
     const hiveLetters = [...new Set(base)];
@@ -354,7 +360,7 @@ for (const variant of ['', 'dev']) {
   // box: two chainable words covering exactly 12 distinct letters
   const boxByDifficulty = {};
   for (const difficulty of DIFFICULTIES) {
-    const boxRng = mulberry32(xmur3(`anagrimoire-box-${etDate}${salt}-${difficulty}`)());
+    const boxRng = mulberry32(xmur3(`anagrimoire-box-${etDate}${salt}${diffSalt(difficulty)}`)());
     const { boxWords, boxByFirst } = poolsFor(difficulty);
     let boxSides = null;
     for (let attempt = 0; attempt < 2000 && !boxSides; attempt++) {
@@ -386,7 +392,7 @@ for (const variant of ['', 'dev']) {
   const scrambleByDifficulty = {};
   for (const difficulty of DIFFICULTIES) {
     const scrambleRng = mulberry32(
-      xmur3(`anagrimoire-scramble-${etDate}${salt}-${difficulty}`)()
+      xmur3(`anagrimoire-scramble-${etDate}${salt}${diffSalt(difficulty)}`)()
     );
     const { rackBases } = poolsFor(difficulty);
     const rackBase = rackBases[Math.floor(scrambleRng() * rackBases.length)];
@@ -430,7 +436,7 @@ for (const variant of ['', 'dev']) {
   const weaveByDifficulty = {};
   for (const difficulty of DIFFICULTIES) {
     const [cols, rows] = WEAVE_SHAPE[difficulty];
-    const weaveRng = mulberry32(xmur3(`anagrimoire-weave-${etDate}${salt}-${difficulty}`)());
+    const weaveRng = mulberry32(xmur3(`anagrimoire-weave-${etDate}${salt}${diffSalt(difficulty)}`)());
     const weave = generateWeave(weaveRng, cols, rows, THEMES);
     if (!weave) throw new Error(`Could not generate a ${difficulty} daily weave`);
     dailyWeaveClues.add(weave.clue);
@@ -473,7 +479,7 @@ for (const variant of ['', 'dev']) {
   for (const difficulty of DIFFICULTIES) {
     const { size: n, given } = SQUARE_SHAPE[difficulty];
     const sqRng = mulberry32(
-      xmur3(`anagrimoire-squares-${etDate}${salt}-${difficulty}`)()
+      xmur3(`anagrimoire-squares-${etDate}${salt}${diffSalt(difficulty)}`)()
     );
     // built from the easy tier at every difficulty: these words are the answer
     // and have to be guessable, whatever the shape asks of you
