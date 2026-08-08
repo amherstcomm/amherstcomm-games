@@ -376,6 +376,13 @@ on conflict (user_id, game, variant, difficulty, puzzle_date, env) do nothing;
 -- ---------------------------------------------------------------------------
 drop function if exists public.daily_stats(text, date);
 
+-- Adding p_difficulty changes the signature, and `create or replace function`
+-- would leave the old three-argument version behind as an overload rather than
+-- replacing it. PostgREST then has two candidates for the same call and
+-- refuses to pick, which breaks the live site. Drop it by its exact signature
+-- first. Harmless before the column exists, and harmless on a re-run.
+drop function if exists public.daily_stats(text, date, text);
+
 create or replace function public.daily_stats(
   p_game text,
   p_date date,
@@ -613,6 +620,8 @@ revoke all on public.suspect_daily_results from public, anon, authenticated;
 -- One board per difficulty rather than one board with three kinds of result
 -- mixed in: a time on easy and a time on extreme are not the same event, and
 -- ranking them together would be a category error.
+drop function if exists public.leaderboard(int, text);
+
 create or replace function public.leaderboard(
   p_days int default 1,
   p_env text default 'prod',
