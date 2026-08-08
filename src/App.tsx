@@ -3101,8 +3101,17 @@ function App() {
                       English Speller Database
                     </a>{' '}
                     © 2000–2026 Kevin Atkinson, which marks offensive and vulgar
-                    words. It filters what we publish, never what you&apos;re
-                    allowed to type.
+                    words, and from the{' '}
+                    <a
+                      href="https://github.com/LDNOOBW/List-of-Dirty-Naughty-Obscene-and-Otherwise-Bad-Words"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-amber-300/90 hover:text-amber-200 underline underline-offset-2"
+                    >
+                      LDNOOBW list
+                    </a>{' '}
+                    (CC BY 4.0). They filter what we publish, never what
+                    you&apos;re allowed to type.
                   </li>
                   <li>
                     Full dictionary:{' '}
