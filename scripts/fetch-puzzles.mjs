@@ -166,6 +166,45 @@ const TIER_FILES = {
 let uniquenessSet = null;
 const uniquenessWords = () => (uniquenessSet ??= loadTierSet(STANDARD_FILES));
 
+// How many words a hive board actually yields, which nothing used to check.
+//
+// Sampling 60 bases per difficulty found boards ranging from 6 findable words
+// to 210, with about one in seven under twenty — at every difficulty, easy
+// included. That's a thin puzzle arriving by chance rather than by design, and
+// it has nothing to do with difficulty: seven letters' worth of words doesn't
+// care whether the seed word was common or obscure.
+//
+// Counted against the list the game actually accepts, so the number here is
+// the number a player can reach.
+const HIVE_MIN_WORDS = 30;
+
+let hiveIndex = null;
+function hiveWordIndex() {
+  if (hiveIndex) return hiveIndex;
+  const bit = (c) => 1 << (c.charCodeAt(0) - 97);
+  const words = [];
+  for (const w of uniquenessWords()) {
+    if (w.length < 4) continue;
+    let mask = 0;
+    for (const c of w) mask |= bit(c);
+    // seven letters at most, or it can never fit on a board
+    if (mask && (mask & (mask - 1)) !== 0) words.push({ mask, letters: mask });
+  }
+  hiveIndex = { words, bit };
+  return hiveIndex;
+}
+
+/** Words findable on this board: every letter on the board, and the centre. */
+function hiveWordCount(letters, center) {
+  const { words, bit } = hiveWordIndex();
+  let board = 0;
+  for (const c of letters) board |= bit(c);
+  const need = bit(center);
+  let n = 0;
+  for (const w of words) if ((w.mask & ~board) === 0 && (w.mask & need) !== 0) n++;
+  return n;
+}
+
 // Daily box for play mode: our own generated Letter Boxed-style puzzle.
 // Built from two chainable words covering exactly 12 distinct letters, with
 // sides assigned so no consecutive pair shares a side — which guarantees a
@@ -336,11 +375,36 @@ for (const variant of ['', 'dev']) {
   for (const difficulty of DIFFICULTIES) {
     const hiveRng = mulberry32(xmur3(`anagrimoire-hive-${etDate}${salt}${diffSalt(difficulty)}`)());
     const { hiveBases } = poolsFor(difficulty);
-    const base = hiveBases[Math.floor(hiveRng() * hiveBases.length)];
-    const hiveLetters = [...new Set(base)];
-    const center = hiveLetters[Math.floor(hiveRng() * hiveLetters.length)];
-    const outers = hiveLetters.filter((c) => c !== center).sort(() => hiveRng() - 0.5);
-    hiveByDifficulty[difficulty] = { center, outers };
+    // Keep looking until the board is worth playing. The centre matters as
+    // much as the letters — the same seven letters can yield 9 words with one
+    // centre and 90 with another — so every centre is tried before the base is
+    // given up on.
+    let picked = null;
+    let best = null;
+    for (let attempt = 0; attempt < 300 && !picked; attempt++) {
+      const base = hiveBases[Math.floor(hiveRng() * hiveBases.length)];
+      const letters = [...new Set(base)];
+      for (const center of letters.slice().sort(() => hiveRng() - 0.5)) {
+        const count = hiveWordCount(letters, center);
+        if (!best || count > best.count) best = { letters, center, count };
+        if (count >= HIVE_MIN_WORDS) {
+          picked = { letters, center, count };
+          break;
+        }
+      }
+    }
+    // Three hundred bases without one is not a thin day, it's a broken pool —
+    // but a puzzle nobody can play is worse than a thin one, so take the best
+    // seen and say so.
+    if (!picked) {
+      picked = best;
+      console.warn(
+        `hive ${difficulty}: no board reached ${HIVE_MIN_WORDS} words; using ${best.count}`
+      );
+    }
+    const outers = picked.letters.filter((c) => c !== picked.center).sort(() => hiveRng() - 0.5);
+    hiveByDifficulty[difficulty] = { center: picked.center, outers };
+    hiveByDifficulty[difficulty].words = picked.count;
   }
   await writeFile(
     `data/${prefix}daily-hive.json`,
@@ -353,7 +417,8 @@ for (const variant of ['', 'dev']) {
   console.log(
     `Wrote data/${prefix}daily-hive.json: ` +
       DIFFICULTIES.map(
-        (d) => `${hiveByDifficulty[d].center}/${hiveByDifficulty[d].outers.join('')}`
+        (d) =>
+          `${hiveByDifficulty[d].center}/${hiveByDifficulty[d].outers.join('')} (${hiveByDifficulty[d].words}w)`
       ).join(' ')
   );
 
