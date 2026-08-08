@@ -11,7 +11,13 @@ import { useEffect, useState } from 'react';
 import { MODE_SLUG, pathOf, SLUG_NAME, type Slug } from '@/routes';
 import RouteLink from '@/RouteLink';
 import { allDailyStatus, type DailyState } from '@/dailyStatus';
-import { fetchBoards, BOARD_LABELS, type BoardGame, type Boards } from '@/leaderboard';
+import {
+  boardsToShow,
+  fetchBoards,
+  fetchDisplayName,
+  BOARD_LABELS,
+  type Boards,
+} from '@/leaderboard';
 import type { Mode } from '@/storage';
 
 const ICONS: Record<Slug, typeof Grid3x3> = {
@@ -59,21 +65,23 @@ export default function HomeView({
 }) {
   const [status, setStatus] = useState<Record<string, DailyState>>({});
   const [boards, setBoards] = useState<Boards | null>(null);
+  // so you can find yourself in the column; null when signed out or unnamed,
+  // which is most people, and the boards read fine without it
+  const [me, setMe] = useState<string | null>(null);
 
   useEffect(() => setStatus(allDailyStatus(modes)), [modes]);
 
   useEffect(() => {
     let alive = true;
     fetchBoards(1).then((b) => alive && setBoards(b));
+    fetchDisplayName().then((n) => alive && setMe(n));
     return () => {
       alive = false;
     };
   }, []);
 
   const doneCount = modes.filter((m) => status[m] === 'done').length;
-  const topBoard = boards
-    ? (Object.keys(boards) as BoardGame[]).find((g) => boards[g].length)
-    : undefined;
+  const shownBoards = boards ? boardsToShow(boards, modes, status) : [];
 
   return (
     <div className="max-w-3xl mx-auto text-left">
@@ -120,34 +128,69 @@ export default function HomeView({
         </div>
       </section>
 
-      {topBoard && (
+      {shownBoards.length > 0 && (
         <section>
           <h2 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">
             On the boards today
           </h2>
-          <button
-            onClick={onBoards}
-            className="w-full text-left rounded-xl bg-white/5 border border-white/10 p-4 hover:bg-white/10 hover:border-white/20 transition-colors"
-          >
-            <span className="flex items-center gap-2 mb-2 text-sm font-semibold text-white">
-              <Trophy className="w-4 h-4 text-accent shrink-0" />
-              {BOARD_LABELS[topBoard].label}
-            </span>
-            <ol className="space-y-1">
-              {boards![topBoard].slice(0, 3).map((r, i) => (
-                <li key={r.name} className="flex items-baseline gap-2 text-sm text-slate-300">
-                  <span className="w-4 shrink-0 text-xs text-slate-500 tabular-nums">{i + 1}</span>
-                  <span className="flex-1 min-w-0 truncate">{r.name}</span>
-                  <span className="tabular-nums shrink-0">
-                    {BOARD_LABELS[topBoard].value(r.value)}
+          <div className="grid gap-2 sm:grid-cols-2">
+            {shownBoards.map((g) => {
+              const rows = boards![g];
+              const label = BOARD_LABELS[g];
+              const myIndex = me ? rows.findIndex((r) => r.name === me) : -1;
+              // your own line, kept even when the top three don't include it —
+              // being 14th is still an answer to "how did I do?"
+              const below = myIndex >= 3 ? rows[myIndex] : null;
+              return (
+                <button
+                  key={g}
+                  onClick={onBoards}
+                  className="w-full text-left rounded-xl bg-white/5 border border-white/10 p-4 hover:bg-white/10 hover:border-white/20 transition-colors"
+                >
+                  <span className="flex items-center gap-2 mb-2 text-sm font-semibold text-white">
+                    <Trophy className="w-4 h-4 text-accent shrink-0" />
+                    {label.label}
                   </span>
-                </li>
-              ))}
-            </ol>
-            <span className="block mt-2 text-xs text-slate-500">
-              Set a display name to take part — see all the boards
-            </span>
-          </button>
+                  <ol className="space-y-1">
+                    {rows.slice(0, 3).map((r, i) => (
+                      <li
+                        key={r.name}
+                        className={`flex items-baseline gap-2 text-sm ${
+                          i === myIndex ? 'text-emerald-300 font-semibold' : 'text-slate-300'
+                        }`}
+                      >
+                        <span className="w-4 shrink-0 text-xs text-slate-500 tabular-nums">
+                          {i + 1}
+                        </span>
+                        <span className="flex-1 min-w-0 truncate">
+                          {r.name}
+                          {i === myIndex && <span className="text-xs font-normal"> (you)</span>}
+                        </span>
+                        <span className="tabular-nums shrink-0">{label.value(r.value)}</span>
+                      </li>
+                    ))}
+                    {below && (
+                      <li className="flex items-baseline gap-2 text-sm text-emerald-300 font-semibold border-t border-white/10 pt-1 mt-1">
+                        <span className="w-4 shrink-0 text-xs text-slate-500 tabular-nums">
+                          {myIndex + 1}
+                        </span>
+                        <span className="flex-1 min-w-0 truncate">
+                          {below.name}
+                          <span className="text-xs font-normal"> (you)</span>
+                        </span>
+                        <span className="tabular-nums shrink-0">{label.value(below.value)}</span>
+                      </li>
+                    )}
+                  </ol>
+                </button>
+              );
+            })}
+          </div>
+          <p className="mt-2 text-xs text-slate-500">
+            {me
+              ? 'See all the boards, and the week and month behind them.'
+              : 'Set a display name to take part — see all the boards.'}
+          </p>
         </section>
       )}
     </div>

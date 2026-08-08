@@ -7,6 +7,8 @@
 
 import { DAILY_ENV } from '@/dailyData';
 import { supabase } from '@/supabase';
+import type { DailyState } from '@/dailyStatus';
+import type { Mode } from '@/storage';
 
 // squares fields one board per size — see the note in leaderboard()
 export type BoardGame =
@@ -28,6 +30,41 @@ export const WINDOWS = [
   { days: 7, label: '7 days' },
   { days: 30, label: '30 days' },
 ] as const;
+
+// Which board belongs to which game. Squares fields one per size, so finishing
+// it can put you on two.
+const MODE_BOARDS: Record<Mode, BoardGame[]> = {
+  pattern: ['guess'],
+  bee: ['hive'],
+  descramble: ['scramble'],
+  grid: ['grid'],
+  boxed: ['box'],
+  weave: ['weave'],
+  squares: ['squares4', 'squares5'],
+};
+
+/** The boards worth showing: the ones for games you finished today.
+ *
+ *  This used to be a single card picked with find(), which sounds like "the
+ *  most interesting board" and behaves like "whichever is first in the object"
+ *  — always Guess, since it's listed first and is never empty. So the other
+ *  five were unreachable from here no matter what happened on them.
+ *
+ *  Having played is what makes a board mean anything: a column of strangers'
+ *  scores is a table, the same column with your morning in it is a result. If
+ *  you haven't played yet there's no such reading, so we fall back to the
+ *  busiest board as a taste of what's going on. */
+export function boardsToShow(boards: Boards, modes: Mode[], status: Record<string, DailyState>): BoardGame[] {
+  const mine = modes
+    .filter((m) => status[m] === 'done')
+    .flatMap((m) => MODE_BOARDS[m] ?? [])
+    .filter((g) => boards[g]?.length);
+  if (mine.length) return mine;
+  const busiest = (Object.keys(boards) as BoardGame[])
+    .filter((g) => boards[g].length)
+    .sort((a, b) => boards[b].length - boards[a].length)[0];
+  return busiest ? [busiest] : [];
+}
 
 export function emptyBoards(): Boards {
   return { guess: [], hive: [], scramble: [], grid: [], box: [], weave: [], squares4: [], squares5: [] };
