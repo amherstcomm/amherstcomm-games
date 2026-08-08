@@ -333,6 +333,44 @@ matters once play-validation varies. Guess already does it
 (`current !== secret`); Squares and Weave will need it the moment their play
 dictionary stops being a constant.
 
+**What difficulty means, per game.** It isn't one thing. Four games vary by
+word tier, one by what it accepts, and two by shape — because a tier is
+meaningless for a dice grid and for hand-curated themes.
+
+| game | easy | hard | extreme |
+|---|---|---|---|
+| Guess | answer from easy tier | hard tier | extreme tier |
+| Hive | pangram base, easy tier | hard | extreme |
+| Boxed | chain words, easy tier | hard | extreme |
+| Scramble | rack from easy tier | hard | extreme |
+| Grid | accepts easy tier | hard | extreme |
+| Squares | 4×4, 8 given | 5×5, 10 given | 5×5, 6 given |
+| Weave | 6×8 | 7×9 | 8×10 |
+
+Grid earns its place despite the board being dice-generated: it scores against
+the maximum achievable, so a wider dictionary moves the target.
+
+Two sizes that looked obvious don't exist, both measured rather than assumed:
+
+- **Squares 6×6 is not buildable.** 0/5 from the easy tier, 0/5 from hard, and
+  0/3 against all 22,418 six-letter words in the large list. Order-6 double
+  word squares are genuinely scarce, and the generator also rejects symmetric
+  ones. So extreme keeps the 5×5 grid and takes letters away instead.
+- **Weave 10×12 is not fillable.** A theme carries 69–105 letters (median 91)
+  and 120 cells need 120. Only 21 of 60 themes even have a spangram long
+  enough to span ten columns. 6×8, 7×9 and 8×10 all build 40/40.
+
+**Squares' given count is also its distribution.** At today's 10 givens the
+spread is uneven — of 25 puzzles, 10 had a line with 4 givens and one had all
+5, which is an entire word handed over. Asking for 6 instead brings the worst
+line down to 2.2 on average without needing an explicit per-line cap: the
+count and the spread are the same dial. Note `target` is a floor the chooser
+removes down to, not a ceiling — asking 6 yields 6–8, averaging 6.6.
+
+**Cost to watch:** an extreme square takes ~20s to generate against 0.2s for
+easy. Across three difficulties, two environments and the practice pools, that
+is where the daily workflow could get slow.
+
 **Difficulty is a dimension, not a setting.** Taking it through the dailies
 means `daily_puzzles`, `daily_progress`, `game_results`, the leaderboard RPC and
 its boards, streaks and share cards all carry it. A streak has to be
