@@ -29,7 +29,7 @@ const SITEMAP_PATHS = [
 // Reading a file works wherever the build runs.
 const LASTMOD: Record<string, string> = (() => {
   try {
-    return JSON.parse(readFileSync('data/route-lastmod.json', 'utf8')) as Record<string, string>;
+    return JSON.parse(readFileSync('scripts/route-lastmod.json', 'utf8')) as Record<string, string>;
   } catch {
     return {};
   }

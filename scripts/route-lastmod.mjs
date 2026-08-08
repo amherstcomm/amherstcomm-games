@@ -15,7 +15,10 @@
 import { execFileSync } from 'node:child_process';
 import { readFileSync, writeFileSync } from 'node:fs';
 
-const OUT = 'data/route-lastmod.json';
+// deliberately not under data/ — that whole directory is gitignored as
+// generated puzzle data, so a file written there is never committed, which is
+// exactly how the first attempt shipped a sitemap with no dates at all
+const OUT = 'scripts/route-lastmod.json';
 
 // Kept in step with SITEMAP_PATHS in vite.config.ts by hand. Drift is not
 // silent: the build warns about any page it can't find a date for.

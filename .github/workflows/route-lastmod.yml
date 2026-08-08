@@ -39,12 +39,12 @@ jobs:
       - run: node scripts/route-lastmod.mjs
       - name: Commit if the dates moved
         run: |
-          if git diff --quiet -- data/route-lastmod.json; then
+          if git diff --quiet -- scripts/route-lastmod.json; then
             echo "already current"
             exit 0
           fi
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add data/route-lastmod.json
+          git add scripts/route-lastmod.json
           git commit -m "Update sitemap lastmod dates"
           git push origin HEAD:${GITHUB_REF_NAME}
