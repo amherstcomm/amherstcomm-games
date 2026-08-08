@@ -81,7 +81,10 @@ function sanitizeRecord(r: unknown): WeaveRecord | null {
   if (
     !rec ||
     typeof rec.clue !== 'string' ||
-    ![6, 8].includes(rec.cols) ||
+    // 6, 7 and 8 wide — easy, hard and extreme. Hard's 7-wide board was
+    // rejected here and the game kept the previous one, so switching to hard
+    // looked like the switch doing nothing at all.
+    ![6, 7, 8].includes(rec.cols) ||
     !Array.isArray(rec.board) ||
     !rec.board.every((row) => typeof row === 'string' && row.length === rec.cols) ||
     typeof rec.answersB64 !== 'string'

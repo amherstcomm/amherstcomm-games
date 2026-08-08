@@ -1713,6 +1713,29 @@ function App() {
           </div>
         </section>
 
+        {showDifficultySwitch && (
+          <section className="mb-7 text-center">
+            <label className="block text-xs font-medium text-slate-400 uppercase tracking-wider mb-2.5">
+              Difficulty
+            </label>
+            <div className="inline-flex flex-wrap justify-center max-w-full rounded-xl bg-white/5 border border-white/10 p-1 gap-1">
+              {DIFFICULTIES.map((id) => (
+                <button
+                  key={id}
+                  onClick={() => setDifficulty(id)}
+                  aria-pressed={level === id}
+                  className={`px-3.5 h-9 rounded-lg text-sm font-semibold transition-colors
+                    ${level === id
+                      ? 'bg-amber-400 text-ink shadow-lg shadow-amber-500/30'
+                      : 'text-slate-300 hover:bg-white/10'}`}
+                >
+                  {DIFFICULTY_LABEL[id]}
+                </button>
+              ))}
+            </div>
+          </section>
+        )}
+
         {learnMode && (
           <div className="mb-8">
             <LearnMode
@@ -1959,29 +1982,6 @@ function App() {
             {DICTIONARIES.find((d) => d.id === dictionaryId)?.blurb}
           </p>
         </section>
-        )}
-
-        {showDifficultySwitch && (
-          <section className="mb-7 text-center">
-            <label className="block text-xs font-medium text-slate-400 uppercase tracking-wider mb-2.5">
-              Difficulty
-            </label>
-            <div className="inline-flex flex-wrap justify-center max-w-full rounded-xl bg-white/5 border border-white/10 p-1 gap-1">
-              {DIFFICULTIES.map((id) => (
-                <button
-                  key={id}
-                  onClick={() => setDifficulty(id)}
-                  aria-pressed={level === id}
-                  className={`px-3.5 h-9 rounded-lg text-sm font-semibold transition-colors
-                    ${level === id
-                      ? 'bg-amber-400 text-ink shadow-lg shadow-amber-500/30'
-                      : 'text-slate-300 hover:bg-white/10'}`}
-                >
-                  {DIFFICULTY_LABEL[id]}
-                </button>
-              ))}
-            </div>
-          </section>
         )}
 
         {mode === 'pattern' && (
