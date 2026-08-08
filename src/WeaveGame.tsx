@@ -9,7 +9,7 @@ import {
 } from 'react';
 import { CalendarDays, Eye, Lightbulb, RefreshCw, Timer } from 'lucide-react';
 import { gridNeighbors } from '@/solvers';
-import { difficulty } from '@/difficulty';
+import { difficulty, resolveDifficulty, type Difficulty } from '@/difficulty';
 import { dailyDataUrl, WEAVE_POOL_URL } from '@/dailyData';
 import DailyStats from '@/DailyStats';
 import ShareButton from '@/ShareButton';
@@ -175,6 +175,10 @@ const WeaveGame = forwardRef<
     []
   );
   const [pool, setPool] = useState<Record<string, PuzzlePayload[]> | null>(null);
+  // The difficulty this board actually is. Usually the one asked for, but a
+  // feed generated before difficulty existed only has the easy board, and a
+  // result has to be recorded as what was played rather than what was wanted.
+  const [playedAt, setPlayedAt] = useState<Difficulty>(difficulty);
   const [dailyError, setDailyError] = useState(false);
   const [flash, setFlash] = useState<{ text: string; good: boolean } | null>(null);
   const flashTimer = useRef<number | undefined>(undefined);
@@ -193,8 +197,14 @@ const WeaveGame = forwardRef<
     let alive = true;
     fetch(DAILY_WEAVE_URL, { cache: 'no-store' })
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
-      .then((d) => {
+      .then((raw) => {
         if (!alive) return;
+        const chosen = resolveDifficulty(raw, difficulty());
+        if (!chosen.board) throw new Error('bad payload');
+        setPlayedAt(chosen.difficulty);
+        // the date lives at the top level; the board's own fields come from
+        // whichever difficulty was resolved
+        const d = { ...raw, ...chosen.board };
         const rec = toRecord(d);
         if (!rec || typeof d.date !== 'string') throw new Error('bad payload');
         // reset on date change or a different board (content-aware)
@@ -284,7 +294,7 @@ const WeaveGame = forwardRef<
   const complete = solvedAll || !!record?.revealed;
 
   const syncing = useDailySync({
-    difficulty: difficulty(),
+    difficulty: playedAt,
     game: 'weave',
     date: store.dailyDate,
     record,

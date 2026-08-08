@@ -8,7 +8,7 @@ import {
 } from 'react';
 import { CalendarDays, CornerDownLeft, Delete, Eye, LifeBuoy, RefreshCw, Shuffle, Timer } from 'lucide-react';
 import { formatElapsed, useUpTimer } from '@/useUpTimer';
-import { difficulty } from '@/difficulty';
+import { difficulty, resolveDifficulty, type Difficulty } from '@/difficulty';
 import type { LetterState } from '@/GuessGame';
 import { dailyDataUrl } from '@/dailyData';
 import DailyStats from '@/DailyStats';
@@ -143,6 +143,10 @@ const HiveGame = forwardRef<
   );
   const [current, setCurrent] = useState('');
   const [flash, setFlash] = useState<{ text: string; good: boolean } | null>(null);
+  // The difficulty this board actually is. Usually the one asked for, but a
+  // feed generated before difficulty existed only has the easy board, and a
+  // result has to be recorded as what was played rather than what was wanted.
+  const [playedAt, setPlayedAt] = useState<Difficulty>(difficulty);
   const [dailyError, setDailyError] = useState(false);
   const flashTimer = useRef<number | undefined>(undefined);
 
@@ -159,8 +163,14 @@ const HiveGame = forwardRef<
     let alive = true;
     fetch(DAILY_HIVE_URL, { cache: 'no-store' })
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
-      .then((d) => {
+      .then((raw) => {
         if (!alive) return;
+        const chosen = resolveDifficulty(raw, difficulty());
+        if (!chosen.board) throw new Error('bad payload');
+        setPlayedAt(chosen.difficulty);
+        // the date lives at the top level; the board's own fields come from
+        // whichever difficulty was resolved
+        const d = { ...raw, ...chosen.board };
         const center = String(d.center).toLowerCase();
         const outers = (d.outers as string[]).map((c) => String(c).toLowerCase());
         if (!/^[a-z]$/.test(center) || outers.length !== 6) throw new Error('bad payload');
@@ -255,7 +265,7 @@ const HiveGame = forwardRef<
   // A hive has no finish line — every word counts, so its summary is the
   // running totals rather than something written once at the end.
   const syncing = useDailySync({
-    difficulty: difficulty(),
+    difficulty: playedAt,
     game: 'hive',
     date: store.dailyDate,
     record,

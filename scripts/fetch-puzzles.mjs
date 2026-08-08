@@ -303,7 +303,10 @@ for (const variant of ['', 'dev']) {
       if (pool.length === 0) throw new Error(`No ${difficulty} words of length ${len}`);
       words[len] = Buffer.from(pool[Math.floor(rng() * pool.length)]).toString('base64');
     }
-    guessByDifficulty[difficulty] = words;
+    // wrapped in { words } so every byDifficulty entry has the same field
+    // names as the top level — the client merges one over the other, and a
+    // variant shaped differently silently leaves the easy board in place
+    guessByDifficulty[difficulty] = { words };
   }
   await writeFile(
     `data/${prefix}daily-words.json`,
@@ -312,7 +315,7 @@ for (const variant of ['', 'dev']) {
         date: etDate,
         // The easy board repeated at the top level, so a client that predates
         // difficulty keeps working. Removed once none do.
-        words: guessByDifficulty.easy,
+        words: guessByDifficulty.easy.words,
         byDifficulty: guessByDifficulty,
         fetchedAt: stamp,
       },

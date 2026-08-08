@@ -67,3 +67,20 @@ export function pickDifficulty<T extends object>(
   // present; anything else genuinely isn't there yet.
   return want === 'easy' ? payload : null;
 }
+
+/** The board to play, and the difficulty it actually is.
+ *
+ *  Those can differ. A feed generated before difficulty existed has only the
+ *  easy board, and there will be such a feed in production until the workflow
+ *  next runs. Falling back to easy is the right call — a playable puzzle beats
+ *  an empty one — but the result must then be recorded as easy, because it is.
+ *  Saving it as "hard" would put a board nobody played at that difficulty onto
+ *  that difficulty's leaderboard. */
+export function resolveDifficulty<T extends object>(
+  payload: (T & { byDifficulty?: Partial<Record<Difficulty, unknown>> }) | null,
+  want: Difficulty
+): { board: T | null; difficulty: Difficulty } {
+  const board = pickDifficulty(payload, want);
+  if (board) return { board, difficulty: want };
+  return { board: pickDifficulty(payload, 'easy'), difficulty: 'easy' };
+}

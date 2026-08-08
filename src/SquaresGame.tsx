@@ -1,7 +1,6 @@
 import { forwardRef, Fragment, useEffect, useImperativeHandle, useMemo, useState } from 'react';
 import { CalendarDays, Eye, RefreshCw, Timer } from 'lucide-react';
 import { dailyDataUrl, SQUARES_POOL_URL } from '@/dailyData';
-import { difficulty } from '@/difficulty';
 import MobileKeyInput from '@/MobileKeyInput';
 import ShareButton from '@/ShareButton';
 import { buildShare, TILE_EMOJI } from '@/share';
@@ -189,8 +188,14 @@ const SquaresGame = forwardRef<
     let alive = true;
     fetch(DAILY_SQUARES_URL, { cache: 'no-store' })
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
-      .then((d) => {
+      .then((raw) => {
         if (!alive) return;
+        // Squares is deliberately left on the legacy `boards` shape for now.
+        // It already expresses difficulty as size — 4x4 and 5x5 are two boards
+        // a day — and folding a difficulty on top of that needs the size
+        // selector rethinking rather than a payload swap. Until then it plays
+        // as it always has, and records itself as easy.
+        const d = raw;
         if (typeof d?.date !== 'string' || !d?.boards) throw new Error('bad payload');
         setStore((prev) => {
           const daily = prev.dailyDate === d.date ? { ...prev.daily } : {};
@@ -310,7 +315,8 @@ const SquaresGame = forwardRef<
   }, [solved, record, n, store.dailyMode, store.dailyDate]);
 
   useDailySync({
-    difficulty: difficulty(),
+    // squares still plays its legacy two-size board, so it is easy
+    difficulty: 'easy',
     game: 'squares',
     // the 4x4 and the 5x5 are separate puzzles on the same day, so they need
     // separate rows rather than fighting over one

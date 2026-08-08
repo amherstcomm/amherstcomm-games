@@ -8,7 +8,7 @@ import {
 } from 'react';
 import { CalendarDays, CornerDownLeft, Delete, Eye, LifeBuoy, RefreshCw, RotateCcw, Timer } from 'lucide-react';
 import { formatElapsed, useUpTimer } from '@/useUpTimer';
-import { difficulty } from '@/difficulty';
+import { difficulty, resolveDifficulty, type Difficulty } from '@/difficulty';
 import type { LetterState } from '@/GuessGame';
 import { dailyDataUrl } from '@/dailyData';
 import DailyStats from '@/DailyStats';
@@ -205,6 +205,10 @@ const BoxGame = forwardRef<
   );
   const [current, setCurrent] = useState('');
   const [flash, setFlash] = useState<{ text: string; good: boolean } | null>(null);
+  // The difficulty this board actually is. Usually the one asked for, but a
+  // feed generated before difficulty existed only has the easy board, and a
+  // result has to be recorded as what was played rather than what was wanted.
+  const [playedAt, setPlayedAt] = useState<Difficulty>(difficulty);
   const [dailyError, setDailyError] = useState(false);
   const flashTimer = useRef<number | undefined>(undefined);
 
@@ -221,8 +225,14 @@ const BoxGame = forwardRef<
     let alive = true;
     fetch(DAILY_BOX_URL, { cache: 'no-store' })
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
-      .then((d) => {
+      .then((raw) => {
         if (!alive) return;
+        const chosen = resolveDifficulty(raw, difficulty());
+        if (!chosen.board) throw new Error('bad payload');
+        setPlayedAt(chosen.difficulty);
+        // the date lives at the top level; the board's own fields come from
+        // whichever difficulty was resolved
+        const d = { ...raw, ...chosen.board };
         const rec = sanitizeRecord({ sides: d.sides, chain: [] });
         if (!rec || typeof d.date !== 'string') throw new Error('bad payload');
         // reset when the date changes OR the sides differ (e.g. the daily
@@ -275,7 +285,7 @@ const BoxGame = forwardRef<
   const done = solved || !!record?.revealed;
 
   const syncing = useDailySync({
-    difficulty: difficulty(),
+    difficulty: playedAt,
     game: 'box',
     date: store.dailyDate,
     record,

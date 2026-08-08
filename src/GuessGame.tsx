@@ -8,7 +8,7 @@ import {
 } from 'react';
 import { CalendarDays, RefreshCw, Search, Timer, Trophy } from 'lucide-react';
 import { dailyDataUrl } from '@/dailyData';
-import { difficulty } from '@/difficulty';
+import { difficulty, resolveDifficulty, type Difficulty } from '@/difficulty';
 import DailyStats from '@/DailyStats';
 import MobileKeyInput from '@/MobileKeyInput';
 import ShareButton from '@/ShareButton';
@@ -124,6 +124,10 @@ const GuessGame = forwardRef<
     []
   );
   const [dailyData, setDailyData] = useState<{ date: string; words: Record<string, string> } | null>(null);
+  // The difficulty this board actually is. Usually the one asked for, but a
+  // feed generated before difficulty existed only has the easy board, and a
+  // result has to be recorded as what was played rather than what was wanted.
+  const [playedAt, setPlayedAt] = useState<Difficulty>(difficulty);
   const [dailyError, setDailyError] = useState(false);
   const [current, setCurrent] = useState('');
   const [flash, setFlash] = useState('');
@@ -143,8 +147,14 @@ const GuessGame = forwardRef<
     let alive = true;
     fetch(DAILY_URL, { cache: 'no-store' })
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
-      .then((d) => {
+      .then((raw) => {
         if (!alive) return;
+        const chosen = resolveDifficulty(raw, difficulty());
+        if (!chosen.board) throw new Error('bad payload');
+        setPlayedAt(chosen.difficulty);
+        // the date lives at the top level; the board's own fields come from
+        // whichever difficulty was resolved
+        const d = { ...raw, ...chosen.board };
         if (typeof d?.date !== 'string' || typeof d?.words !== 'object') throw new Error('bad payload');
         setDailyData({ date: d.date, words: d.words });
         // a new day resets all daily boards; same-day boards whose secret no
@@ -247,7 +257,7 @@ const GuessGame = forwardRef<
   // Each word length is its own board on the same date, so the length is the
   // variant that keeps today's 5- and 6-letter puzzles apart.
   const syncing = useDailySync({
-    difficulty: difficulty(),
+    difficulty: playedAt,
     game: 'guess',
     variant: String(length),
     date: dailyData?.date ?? '',
