@@ -197,6 +197,13 @@ nothing, because the binding constraint at either cap is length 3, not the long
 end. The requirement is a cooldown, not permanent exclusion — "don't repeat
 within a year" needs ≥365 words per length, which lengths 3–13 all clear.
 
+**Done, and it removed the reason to widen.** Capping at 12 was going to come
+with a move from `common` to `standard`, because the long lengths were
+threadbare. With 13–15 gone they aren't: every remaining stream clears a
+one-year cooldown on `common` alone, the thinnest being length 3 at 464 words.
+So generation stays on `common` for now, and widening becomes purely a
+difficulty feature rather than something the depth numbers demand.
+
 **A blocked-words table, not a hardcoded list.** ESDB (the English Speller
 Database, `en-wl/wordlist` — the upstream `wordlist-english` is built from)
 marks words with usage notes: `offensive-1` (7 racial slurs), `offensive-2`

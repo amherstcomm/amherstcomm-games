@@ -215,10 +215,15 @@ for (const variant of ['', 'dev']) {
   const prefix = variant ? 'dev-' : '';
   const stamp = new Date().toISOString();
 
-  // guess words: one per length 3-15
+  // guess words: one per length 3-12. Each length is its own daily stream, so
+  // what matters is depth per length rather than the total: at 13, 14 and 15
+  // the common tier holds 558, 199 and 82 words, and 82 is under three months
+  // before every fifteen-letter daily has been used. Twelve still has 1,065,
+  // which is three years. Cutting lower would cost words and buy nothing —
+  // below 12 the thinnest stream becomes length 3, not the long end.
   const rng = mulberry32(xmur3(`anagrimoire-guess-${etDate}${salt}`)());
   const dailyWords = {};
-  for (let len = 3; len <= 15; len++) {
+  for (let len = 3; len <= 12; len++) {
     // skip simple plurals whose stem is also a word
     const pickable = (set) =>
       [...set].filter((w) => w.length === len && !(w.endsWith('s') && set.has(w.slice(0, -1))));
