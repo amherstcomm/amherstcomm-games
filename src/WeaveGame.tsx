@@ -76,6 +76,12 @@ const DEFAULT_STORE: WeaveStore = {
   practiceSize: '6x8',
 };
 
+const WEAVE_LAYOUT: Record<number, { grid: string; cell: string }> = {
+  6: { grid: 'grid-cols-6', cell: 'w-9 h-10 sm:w-11 sm:h-12 text-lg sm:text-xl' },
+  7: { grid: 'grid-cols-7', cell: 'w-8 h-9 sm:w-10 sm:h-11 text-base sm:text-lg' },
+  8: { grid: 'grid-cols-8', cell: 'w-8 h-9 sm:w-9 sm:h-10 text-base sm:text-lg' },
+};
+
 function sanitizeRecord(r: unknown): WeaveRecord | null {
   const rec = r as WeaveRecord | null;
   if (
@@ -604,8 +610,12 @@ const WeaveGame = forwardRef<
   }
 
   const loading = (store.dailyMode ? !record && !dailyError : !record) || syncing;
-  const cellSize =
-    cols === 8 ? 'w-8 h-9 sm:w-9 sm:h-10 text-base sm:text-lg' : 'w-9 h-10 sm:w-11 sm:h-12 text-lg sm:text-xl';
+  // Three widths now — 6, 7 and 8 for easy, hard and extreme. Written out per
+  // width rather than computed, because Tailwind generates classes by reading
+  // the source: a template-built `grid-cols-${n}` is a class that never exists.
+  // Cells shrink as the board widens so eight of them still fit a 320px screen.
+  const { grid: gridCols, cell: cellSize } =
+    WEAVE_LAYOUT[cols] ?? WEAVE_LAYOUT[6];
 
   return (
     <div className="text-center">
@@ -712,7 +722,7 @@ const WeaveGame = forwardRef<
             onKeyDown={onBoardKeyDown}
             onPointerDown={onBoardPointerDown}
             onPointerMove={onBoardPointerMove}
-            className={`grid gap-1.5 touch-none select-none rounded-xl ${cols === 8 ? 'grid-cols-8' : 'grid-cols-6'}`}
+            className={`grid gap-1.5 touch-none select-none rounded-xl ${gridCols}`}
           >
             {cells.map((c, i) => {
               const lock = locked.get(i);
