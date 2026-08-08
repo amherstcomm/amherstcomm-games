@@ -1,0 +1,462 @@
+{
+  "_source": "Derived from the English Speller Database (https://github.com/en-wl/wordlist), © 2000-2026 Kevin Atkinson. Entries marked origin \"manual\" are ours.",
+  "_scope": "'both' = never generated and not accepted from a player. 'generation' = never generated, but accepted if a player types it.",
+  "_regenerate": "npm run blocklist — refreshes the esdb: entries, keeps the manual ones",
+  "words": [
+    {
+      "word": "abo",
+      "origin": "esdb:offensive-2",
+      "scope": "both"
+    },
+    {
+      "word": "abos",
+      "origin": "esdb:offensive-2",
+      "scope": "both"
+    },
+    {
+      "word": "arsehole",
+      "origin": "esdb:vulgar-1",
+      "scope": "both"
+    },
+    {
+      "word": "arseholes",
+      "origin": "esdb:vulgar-1",
+      "scope": "both"
+    },
+    {
+      "word": "asshole",
+      "origin": "esdb:vulgar-1",
+      "scope": "both"
+    },
+    {
+      "word": "assholes",
+      "origin": "esdb:vulgar-1",
+      "scope": "both"
+    },
+    {
+      "word": "bugger",
+      "origin": "esdb:vulgar-3",
+      "scope": "generation"
+    },
+    {
+      "word": "buggered",
+      "origin": "esdb:vulgar-3",
+      "scope": "generation"
+    },
+    {
+      "word": "buggering",
+      "origin": "esdb:vulgar-3",
+      "scope": "generation"
+    },
+    {
+      "word": "buggers",
+      "origin": "esdb:vulgar-3",
+      "scope": "generation"
+    },
+    {
+      "word": "bullshit",
+      "origin": "esdb:vulgar-1",
+      "scope": "both"
+    },
+    {
+      "word": "bullshits",
+      "origin": "esdb:vulgar-1",
+      "scope": "both"
+    },
+    {
+      "word": "bullshitted",
+      "origin": "esdb:vulgar-1",
+      "scope": "both"
+    },
+    {
+      "word": "bullshitter",
+      "origin": "esdb:vulgar-1",
+      "scope": "both"
+    },
+    {
+      "word": "bullshitters",
+      "origin": "esdb:vulgar-1",
+      "scope": "both"
+    },
+    {
+      "word": "bullshitting",
+      "origin": "esdb:vulgar-1",
+      "scope": "both"
+    },
+    {
+      "word": "chickenshit",
+      "origin": "esdb:vulgar-1",
+      "scope": "both"
+    },
+    {
+      "word": "chickenshits",
+      "origin": "esdb:vulgar-1",
+      "scope": "both"
+    },
+    {
+      "word": "cocksucker",
+      "origin": "esdb:vulgar-1",
+      "scope": "both"
+    },
+    {
+      "word": "cocksuckers",
+      "origin": "esdb:vulgar-1",
+      "scope": "both"
+    },
+    {
+      "word": "coon",
+      "origin": "esdb:offensive-2",
+      "scope": "both"
+    },
+    {
+      "word": "coons",
+      "origin": "esdb:offensive-2",
+      "scope": "both"
+    },
+    {
+      "word": "crap",
+      "origin": "esdb:vulgar-3",
+      "scope": "generation"
+    },
+    {
+      "word": "crapped",
+      "origin": "esdb:vulgar-3",
+      "scope": "generation"
+    },
+    {
+      "word": "crapper",
+      "origin": "esdb:vulgar-3",
+      "scope": "generation"
+    },
+    {
+      "word": "crappers",
+      "origin": "esdb:vulgar-3",
+      "scope": "generation"
+    },
+    {
+      "word": "crapping",
+      "origin": "esdb:vulgar-3",
+      "scope": "generation"
+    },
+    {
+      "word": "cunt",
+      "origin": "esdb:vulgar-1",
+      "scope": "both"
+    },
+    {
+      "word": "cunts",
+      "origin": "esdb:vulgar-1",
+      "scope": "both"
+    },
+    {
+      "word": "dick",
+      "origin": "esdb:vulgar-3",
+      "scope": "generation"
+    },
+    {
+      "word": "dicked",
+      "origin": "esdb:vulgar-3",
+      "scope": "generation"
+    },
+    {
+      "word": "dicking",
+      "origin": "esdb:vulgar-3",
+      "scope": "generation"
+    },
+    {
+      "word": "dicks",
+      "origin": "esdb:vulgar-3",
+      "scope": "generation"
+    },
+    {
+      "word": "fart",
+      "origin": "esdb:vulgar-3",
+      "scope": "generation"
+    },
+    {
+      "word": "farted",
+      "origin": "esdb:vulgar-3",
+      "scope": "generation"
+    },
+    {
+      "word": "farting",
+      "origin": "esdb:vulgar-3",
+      "scope": "generation"
+    },
+    {
+      "word": "farts",
+      "origin": "esdb:vulgar-3",
+      "scope": "generation"
+    },
+    {
+      "word": "fuck",
+      "origin": "esdb:vulgar-1",
+      "scope": "both"
+    },
+    {
+      "word": "fucked",
+      "origin": "esdb:vulgar-1",
+      "scope": "both"
+    },
+    {
+      "word": "fucker",
+      "origin": "esdb:vulgar-1",
+      "scope": "both"
+    },
+    {
+      "word": "fuckers",
+      "origin": "esdb:vulgar-1",
+      "scope": "both"
+    },
+    {
+      "word": "fuckhead",
+      "origin": "esdb:vulgar-1",
+      "scope": "both"
+    },
+    {
+      "word": "fuckheads",
+      "origin": "esdb:vulgar-1",
+      "scope": "both"
+    },
+    {
+      "word": "fucking",
+      "origin": "esdb:vulgar-1",
+      "scope": "both"
+    },
+    {
+      "word": "fuckings",
+      "origin": "esdb:vulgar-1",
+      "scope": "both"
+    },
+    {
+      "word": "fucks",
+      "origin": "esdb:vulgar-1",
+      "scope": "both"
+    },
+    {
+      "word": "horseshit",
+      "origin": "esdb:vulgar-1",
+      "scope": "both"
+    },
+    {
+      "word": "kraut",
+      "origin": "esdb:offensive-2",
+      "scope": "both"
+    },
+    {
+      "word": "krauts",
+      "origin": "esdb:offensive-2",
+      "scope": "both"
+    },
+    {
+      "word": "motherfucker",
+      "origin": "esdb:vulgar-1",
+      "scope": "both"
+    },
+    {
+      "word": "motherfuckers",
+      "origin": "esdb:vulgar-1",
+      "scope": "both"
+    },
+    {
+      "word": "motherfucking",
+      "origin": "esdb:vulgar-1",
+      "scope": "both"
+    },
+    {
+      "word": "nigga",
+      "origin": "esdb:offensive-1",
+      "scope": "both"
+    },
+    {
+      "word": "niggas",
+      "origin": "esdb:offensive-1",
+      "scope": "both"
+    },
+    {
+      "word": "niggaz",
+      "origin": "esdb:offensive-1",
+      "scope": "both"
+    },
+    {
+      "word": "niggazunmarkedvariantsniggas",
+      "origin": "esdb:offensive-1",
+      "scope": "both"
+    },
+    {
+      "word": "nigger",
+      "origin": "esdb:offensive-1",
+      "scope": "both"
+    },
+    {
+      "word": "niggerdom",
+      "origin": "esdb:offensive-1",
+      "scope": "both"
+    },
+    {
+      "word": "niggered",
+      "origin": "esdb:offensive-1",
+      "scope": "both"
+    },
+    {
+      "word": "niggerhead",
+      "origin": "esdb:offensive-1",
+      "scope": "both"
+    },
+    {
+      "word": "niggering",
+      "origin": "esdb:offensive-1",
+      "scope": "both"
+    },
+    {
+      "word": "niggerish",
+      "origin": "esdb:offensive-1",
+      "scope": "both"
+    },
+    {
+      "word": "niggerism",
+      "origin": "esdb:offensive-1",
+      "scope": "both"
+    },
+    {
+      "word": "niggerisms",
+      "origin": "esdb:offensive-1",
+      "scope": "both"
+    },
+    {
+      "word": "niggerling",
+      "origin": "esdb:offensive-1",
+      "scope": "both"
+    },
+    {
+      "word": "niggerlings",
+      "origin": "esdb:offensive-1",
+      "scope": "both"
+    },
+    {
+      "word": "niggers",
+      "origin": "esdb:offensive-1",
+      "scope": "both"
+    },
+    {
+      "word": "piss",
+      "origin": "esdb:vulgar-3",
+      "scope": "generation"
+    },
+    {
+      "word": "pissed",
+      "origin": "esdb:vulgar-3",
+      "scope": "generation"
+    },
+    {
+      "word": "pisser",
+      "origin": "esdb:vulgar-3",
+      "scope": "generation"
+    },
+    {
+      "word": "pissers",
+      "origin": "esdb:vulgar-3",
+      "scope": "generation"
+    },
+    {
+      "word": "pisses",
+      "origin": "esdb:vulgar-3",
+      "scope": "generation"
+    },
+    {
+      "word": "pissing",
+      "origin": "esdb:vulgar-3",
+      "scope": "generation"
+    },
+    {
+      "word": "shat",
+      "origin": "esdb:vulgar-1",
+      "scope": "both"
+    },
+    {
+      "word": "shit",
+      "origin": "esdb:vulgar-1",
+      "scope": "both"
+    },
+    {
+      "word": "shite",
+      "origin": "esdb:vulgar-1",
+      "scope": "both"
+    },
+    {
+      "word": "shites",
+      "origin": "esdb:vulgar-1",
+      "scope": "both"
+    },
+    {
+      "word": "shitfaced",
+      "origin": "esdb:vulgar-1",
+      "scope": "both"
+    },
+    {
+      "word": "shithead",
+      "origin": "esdb:vulgar-1",
+      "scope": "both"
+    },
+    {
+      "word": "shitheads",
+      "origin": "esdb:vulgar-1",
+      "scope": "both"
+    },
+    {
+      "word": "shitload",
+      "origin": "esdb:vulgar-1",
+      "scope": "both"
+    },
+    {
+      "word": "shits",
+      "origin": "esdb:vulgar-1",
+      "scope": "both"
+    },
+    {
+      "word": "shittier",
+      "origin": "esdb:vulgar-1",
+      "scope": "both"
+    },
+    {
+      "word": "shittiest",
+      "origin": "esdb:vulgar-1",
+      "scope": "both"
+    },
+    {
+      "word": "shitting",
+      "origin": "esdb:vulgar-1",
+      "scope": "both"
+    },
+    {
+      "word": "shitty",
+      "origin": "esdb:vulgar-1",
+      "scope": "both"
+    },
+    {
+      "word": "vshat",
+      "origin": "esdb:vulgar-1",
+      "scope": "both"
+    },
+    {
+      "word": "wop",
+      "origin": "esdb:offensive-2",
+      "scope": "both"
+    },
+    {
+      "word": "wopped",
+      "origin": "esdb:offensive-2",
+      "scope": "both"
+    },
+    {
+      "word": "wopping",
+      "origin": "esdb:offensive-2",
+      "scope": "both"
+    },
+    {
+      "word": "wops",
+      "origin": "esdb:offensive-2",
+      "scope": "both"
+    }
+  ]
+}
