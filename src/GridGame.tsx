@@ -9,6 +9,7 @@ import {
 } from 'react';
 import { CalendarDays, ChevronDown, CornerDownLeft, Delete, Flag, Play, RefreshCw, Search, Timer } from 'lucide-react';
 import { findGridPath, gridNeighbors, solveGrid } from '@/solvers';
+import { difficulty } from '@/difficulty';
 import type { LetterState } from '@/GuessGame';
 import { dailyDataUrl } from '@/dailyData';
 import DailyStats from '@/DailyStats';
@@ -278,6 +279,7 @@ const GridGame = forwardRef<
   );
 
   const syncing = useDailySync({
+    difficulty: difficulty(),
     game: 'grid',
     date: store.dailyDate,
     record,

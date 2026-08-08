@@ -8,6 +8,7 @@ import {
 } from 'react';
 import { CalendarDays, RefreshCw, Search, Timer, Trophy } from 'lucide-react';
 import { dailyDataUrl } from '@/dailyData';
+import { difficulty } from '@/difficulty';
 import DailyStats from '@/DailyStats';
 import MobileKeyInput from '@/MobileKeyInput';
 import ShareButton from '@/ShareButton';
@@ -246,6 +247,7 @@ const GuessGame = forwardRef<
   // Each word length is its own board on the same date, so the length is the
   // variant that keeps today's 5- and 6-letter puzzles apart.
   const syncing = useDailySync({
+    difficulty: difficulty(),
     game: 'guess',
     variant: String(length),
     date: dailyData?.date ?? '',

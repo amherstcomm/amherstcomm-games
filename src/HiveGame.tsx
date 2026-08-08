@@ -8,6 +8,7 @@ import {
 } from 'react';
 import { CalendarDays, CornerDownLeft, Delete, Eye, LifeBuoy, RefreshCw, Shuffle, Timer } from 'lucide-react';
 import { formatElapsed, useUpTimer } from '@/useUpTimer';
+import { difficulty } from '@/difficulty';
 import type { LetterState } from '@/GuessGame';
 import { dailyDataUrl } from '@/dailyData';
 import DailyStats from '@/DailyStats';
@@ -254,6 +255,7 @@ const HiveGame = forwardRef<
   // A hive has no finish line — every word counts, so its summary is the
   // running totals rather than something written once at the end.
   const syncing = useDailySync({
+    difficulty: difficulty(),
     game: 'hive',
     date: store.dailyDate,
     record,

@@ -8,6 +8,7 @@ import {
 } from 'react';
 import { CalendarDays, CornerDownLeft, Delete, Flag, Play, RefreshCw, Search, Shuffle, Timer } from 'lucide-react';
 import { solveDescramble } from '@/solvers';
+import { difficulty } from '@/difficulty';
 import type { LetterState } from '@/GuessGame';
 import { dailyDataUrl } from '@/dailyData';
 import DailyStats from '@/DailyStats';
@@ -229,6 +230,7 @@ const ScrambleGame = forwardRef<
   }, [record]);
 
   const syncing = useDailySync({
+    difficulty: difficulty(),
     game: 'scramble',
     date: store.dailyDate,
     record,

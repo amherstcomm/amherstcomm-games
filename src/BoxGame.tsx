@@ -8,6 +8,7 @@ import {
 } from 'react';
 import { CalendarDays, CornerDownLeft, Delete, Eye, LifeBuoy, RefreshCw, RotateCcw, Timer } from 'lucide-react';
 import { formatElapsed, useUpTimer } from '@/useUpTimer';
+import { difficulty } from '@/difficulty';
 import type { LetterState } from '@/GuessGame';
 import { dailyDataUrl } from '@/dailyData';
 import DailyStats from '@/DailyStats';
@@ -274,6 +275,7 @@ const BoxGame = forwardRef<
   const done = solved || !!record?.revealed;
 
   const syncing = useDailySync({
+    difficulty: difficulty(),
     game: 'box',
     date: store.dailyDate,
     record,

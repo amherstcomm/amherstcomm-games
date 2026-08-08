@@ -1,6 +1,7 @@
 import { forwardRef, Fragment, useEffect, useImperativeHandle, useMemo, useState } from 'react';
 import { CalendarDays, Eye, RefreshCw, Timer } from 'lucide-react';
 import { dailyDataUrl, SQUARES_POOL_URL } from '@/dailyData';
+import { difficulty } from '@/difficulty';
 import MobileKeyInput from '@/MobileKeyInput';
 import ShareButton from '@/ShareButton';
 import { buildShare, TILE_EMOJI } from '@/share';
@@ -309,6 +310,7 @@ const SquaresGame = forwardRef<
   }, [solved, record, n, store.dailyMode, store.dailyDate]);
 
   useDailySync({
+    difficulty: difficulty(),
     game: 'squares',
     // the 4x4 and the 5x5 are separate puzzles on the same day, so they need
     // separate rows rather than fighting over one

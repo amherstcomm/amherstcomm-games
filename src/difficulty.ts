@@ -1,0 +1,69 @@
+// Difficulty is part of a puzzle's identity, not a setting beside it.
+//
+// The easy and hard Guess for a given day are different puzzles with different
+// answers, and one player may do both — the same way today's 5-letter and
+// 6-letter boards are different puzzles. So it keys the board, the saved
+// progress and the leaderboard, and the preference below only decides which of
+// them you're shown.
+//
+// What it means is not the same in every game. Guess, Hive, Boxed and Scramble
+// draw their answers from a wider band of words; Grid keeps its dice and only
+// widens what it accepts, which moves the score you're chasing; Squares and
+// Weave change shape, because a word tier means nothing to a dice grid or to a
+// hand-written theme.
+
+import { store } from '@/siteStorage';
+
+export type Difficulty = 'easy' | 'hard' | 'extreme';
+
+export const DIFFICULTIES: Difficulty[] = ['easy', 'hard', 'extreme'];
+
+export const DIFFICULTY_LABEL: Record<Difficulty, string> = {
+  easy: 'Easy',
+  hard: 'Hard',
+  extreme: 'Extreme',
+};
+
+/** What changes, in the player's terms rather than ours. */
+export const DIFFICULTY_BLURB: Record<Difficulty, string> = {
+  easy: 'Everyday words, and the smaller boards.',
+  hard: 'Less common words, and a bigger board where there is one.',
+  extreme: 'Words you may have to think about, and the least help.',
+};
+
+const KEY = 'anagrimoire:difficulty:v1';
+
+export function isDifficulty(v: unknown): v is Difficulty {
+  return v === 'easy' || v === 'hard' || v === 'extreme';
+}
+
+/** The difficulty being played. Easy by default, which is what every daily
+ *  generated before this was: drawn from the common tier. Nobody's puzzle
+ *  changes character until they ask it to. */
+export function difficulty(): Difficulty {
+  const v = store.getItem(KEY);
+  return isDifficulty(v) ? v : 'easy';
+}
+
+export function setDifficulty(next: Difficulty): void {
+  store.setItem(KEY, next);
+}
+
+/** Read a difficulty out of a daily feed.
+ *
+ *  The feed carries `byDifficulty` alongside the keys it has always had, and
+ *  those legacy keys hold the easy board. So this falls back to the payload
+ *  itself, which keeps working against a feed generated before difficulty
+ *  existed — including the one currently in production, since the generator
+ *  ships ahead of the workflow that runs it. */
+export function pickDifficulty<T extends object>(
+  payload: (T & { byDifficulty?: Partial<Record<Difficulty, unknown>> }) | null,
+  want: Difficulty
+): T | null {
+  if (!payload) return null;
+  const variant = payload.byDifficulty?.[want];
+  if (variant && typeof variant === 'object') return variant as T;
+  // No such difficulty in this feed. Easy is the legacy shape and always
+  // present; anything else genuinely isn't there yet.
+  return want === 'easy' ? payload : null;
+}

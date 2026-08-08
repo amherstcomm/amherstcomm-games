@@ -9,6 +9,7 @@ import {
 } from 'react';
 import { CalendarDays, Eye, Lightbulb, RefreshCw, Timer } from 'lucide-react';
 import { gridNeighbors } from '@/solvers';
+import { difficulty } from '@/difficulty';
 import { dailyDataUrl, WEAVE_POOL_URL } from '@/dailyData';
 import DailyStats from '@/DailyStats';
 import ShareButton from '@/ShareButton';
@@ -283,6 +284,7 @@ const WeaveGame = forwardRef<
   const complete = solvedAll || !!record?.revealed;
 
   const syncing = useDailySync({
+    difficulty: difficulty(),
     game: 'weave',
     date: store.dailyDate,
     record,
