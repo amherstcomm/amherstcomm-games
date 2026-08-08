@@ -138,25 +138,72 @@ const STANDARD_FILES = [...COMMON_FILES, 'english-words-40', 'english-words-50',
 
 const etDate = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York' }).format(new Date());
 
-// Generation draws from here, so it's filtered. It catches three words in the
-// common tier today — crap, bugger, buggers — and 27 more the moment
-// generation widens to standard, which is where the swearing actually lives.
-const commonSet = answerPool(loadTierSet(COMMON_FILES));
-let standardSet = null; // loaded lazily; long lengths are sparse in the common tiers
-// Unfiltered on purpose: squares checks solution uniqueness against this, and
-// a square with a rude alternative solution is still a square with two
-// solutions. We want to know.
-const standardWords = () => (standardSet ??= loadTierSet(STANDARD_FILES));
-let fullList = null;
+// Three difficulties, and they don't all mean the same thing. Guess, Hive,
+// Boxed and Scramble vary by word tier; Grid varies only by what it accepts,
+// so its board is the same at every level; Squares and Weave vary by shape,
+// because a tier is meaningless to a dice grid or to hand-curated themes.
+export const DIFFICULTIES = ['easy', 'hard', 'extreme'];
 
-// shared candidate pools, computed once and drawn from per variant
-// no 's' in the hive (plurals would flood the answer list)
-const hiveBases = [...commonSet]
-  .filter((w) => w.length >= 7 && new Set(w).size === 7 && !w.includes('s'))
-  .sort();
-if (!hiveBases.length) throw new Error('No pangram bases for the daily hive');
-const rackBases = [...commonSet].filter((w) => w.length === 7).sort();
-if (!rackBases.length) throw new Error('No seven-letter rack bases');
+/** The band below each difficulty, so a difficulty can generate from what it
+ *  alone adds. */
+const PREVIOUS = { hard: 'easy', extreme: 'hard' };
+
+const TIER_FILES = {
+  easy: COMMON_FILES,
+  hard: STANDARD_FILES,
+  extreme: [
+    ...STANDARD_FILES,
+    'english-words-60',
+    'english-words-70',
+    'american-words-60',
+    'american-words-70',
+  ],
+};
+
+// Squares checks solution uniqueness against this, unfiltered on purpose: a
+// square with a rude second solution is still a square with two solutions, and
+// we want to know.
+let uniquenessSet = null;
+const uniquenessWords = () => (uniquenessSet ??= loadTierSet(STANDARD_FILES));
+
+// How many words a hive board actually yields, which nothing used to check.
+//
+// Sampling 60 bases per difficulty found boards ranging from 6 findable words
+// to 210, with about one in seven under twenty — at every difficulty, easy
+// included. That's a thin puzzle arriving by chance rather than by design, and
+// it has nothing to do with difficulty: seven letters' worth of words doesn't
+// care whether the seed word was common or obscure.
+//
+// Counted against the list the game actually accepts, so the number here is
+// the number a player can reach.
+const HIVE_MIN_WORDS = 30;
+
+let hiveIndex = null;
+function hiveWordIndex() {
+  if (hiveIndex) return hiveIndex;
+  const bit = (c) => 1 << (c.charCodeAt(0) - 97);
+  const words = [];
+  for (const w of uniquenessWords()) {
+    if (w.length < 4) continue;
+    let mask = 0;
+    for (const c of w) mask |= bit(c);
+    // seven letters at most, or it can never fit on a board
+    if (mask && (mask & (mask - 1)) !== 0) words.push({ mask, letters: mask });
+  }
+  hiveIndex = { words, bit };
+  return hiveIndex;
+}
+
+/** Words findable on this board: every letter on the board, and the centre. */
+function hiveWordCount(letters, center) {
+  const { words, bit } = hiveWordIndex();
+  let board = 0;
+  for (const c of letters) board |= bit(c);
+  const need = bit(center);
+  let n = 0;
+  for (const w of words) if ((w.mask & ~board) === 0 && (w.mask & need) !== 0) n++;
+  return n;
+}
 
 // Daily box for play mode: our own generated Letter Boxed-style puzzle.
 // Built from two chainable words covering exactly 12 distinct letters, with
@@ -191,13 +238,64 @@ function assignSides(w1, w2, rng) {
   return bt(0) ? sides.map((s) => s.join('')) : null;
 }
 
-const boxWords = [...commonSet].filter((w) => w.length >= 4 && !/(.)\1/.test(w)).sort();
-const boxByFirst = new Map();
-for (const w of boxWords) {
-  const g = boxByFirst.get(w[0]) ?? [];
-  g.push(w);
-  boxByFirst.set(w[0], g);
+/** Everything a difficulty draws from, built once and reused.
+ *
+ *  These used to be module-level constants off the common tier, which was fine
+ *  while there was one difficulty and wrong the moment there were three. */
+const poolCache = new Map();
+
+/** How many candidates a length needs to go a year without repeating itself. */
+const YEAR = 365;
+
+function poolsFor(difficulty) {
+  const cached = poolCache.get(difficulty);
+  if (cached) return cached;
+
+  // Everything the difficulty accepts...
+  const cumulative = answerPool(loadTierSet(TIER_FILES[difficulty]));
+
+  // ...but generate from the band it *adds*, not the whole nested pool.
+  // Cumulative pools make a mockery of the ladder: extreme is 35% easy words,
+  // so a third of extreme puzzles would land on one. Measured, that's exactly
+  // what happened — the first extreme run drew "cat" for three letters while
+  // easy drew "coo".
+  const easier = difficulty === 'easy' ? null : answerPool(loadTierSet(TIER_FILES[PREVIOUS[difficulty]]));
+  const answers = easier
+    ? new Set([...cumulative].filter((w) => !easier.has(w)))
+    : cumulative;
+
+  // no 's' in the hive — plurals would flood the answer list
+  const hiveBases = [...answers]
+    .filter((w) => w.length >= 7 && new Set(w).size === 7 && !w.includes('s'))
+    .sort();
+  if (!hiveBases.length) throw new Error(`No pangram bases for ${difficulty} hive`);
+
+  const rackBases = [...answers].filter((w) => w.length === 7).sort();
+  if (!rackBases.length) throw new Error(`No seven-letter rack bases for ${difficulty}`);
+
+  const boxWords = [...answers].filter((w) => w.length >= 4 && !/(.)\1/.test(w)).sort();
+  const boxByFirst = new Map();
+  for (const w of boxWords) {
+    const g = boxByFirst.get(w[0]) ?? [];
+    g.push(w);
+    boxByFirst.set(w[0], g);
+  }
+
+  const pools = { answers, cumulative, hiveBases, rackBases, boxWords, boxByFirst };
+  poolCache.set(difficulty, pools);
+  return pools;
 }
+
+// Shape rather than tier. Squares takes letters away instead of growing the
+// grid, because 6x6 double word squares don't exist in any usable number —
+// measured at 0 out of 3 against all 22,418 six-letter words. Weave stops at
+// 8x10 because a theme carries about 91 letters and 10x12 needs 120.
+const SQUARE_SHAPE = {
+  easy: { size: 4, given: 8 },
+  hard: { size: 5, given: 10 },
+  extreme: { size: 5, given: 6 },
+};
+const WEAVE_SHAPE = { easy: [6, 8], hard: [7, 9], extreme: [8, 10] };
 
 const GRID_DICE = [
   'aaeegn', 'abbjoo', 'achops', 'affkps',
@@ -209,6 +307,12 @@ const GRID_DICE = [
 // Two independent daily sets: production, and a dev-salted set for
 // dev.anagrimoire.com/localhost so testing never spoils the production
 // puzzles. Everything stays deterministic per Eastern date.
+// Easy keeps the seed it has always had, so shipping difficulty doesn't
+// change the puzzle anyone is already playing — only hard and extreme are new.
+// Without this, republishing mid-day would swap today's board out from under
+// whoever is on it.
+const diffSalt = (d) => (d === 'easy' ? '' : `-${d}`);
+
 const dailyWeaveClues = new Set();
 for (const variant of ['', 'dev']) {
   const salt = variant ? `-${variant}` : '';
@@ -221,70 +325,163 @@ for (const variant of ['', 'dev']) {
   // before every fifteen-letter daily has been used. Twelve still has 1,065,
   // which is three years. Cutting lower would cost words and buy nothing —
   // below 12 the thinnest stream becomes length 3, not the long end.
-  const rng = mulberry32(xmur3(`anagrimoire-guess-${etDate}${salt}`)());
-  const dailyWords = {};
-  for (let len = 3; len <= 12; len++) {
-    // skip simple plurals whose stem is also a word
-    const pickable = (set) =>
-      [...set].filter((w) => w.length === len && !(w.endsWith('s') && set.has(w.slice(0, -1))));
-    let pool = pickable(commonSet);
-    // the wider fallbacks are answers too, so they get the same treatment
-    if (pool.length === 0) pool = pickable(answerPool(standardWords()));
-    if (pool.length === 0) {
-      fullList ??= require('an-array-of-english-words');
-      pool = fullList.filter((w) => w.length === len && !blockedFromAnswers.has(w));
+  const guessByDifficulty = {};
+  for (const difficulty of DIFFICULTIES) {
+    // Salted per difficulty. Without it the same seed draws the same index
+    // from three nested pools and lands on the same word more often than
+    // chance would.
+    const rng = mulberry32(xmur3(`anagrimoire-guess-${etDate}${salt}${diffSalt(difficulty)}`)());
+    const { answers, cumulative } = poolsFor(difficulty);
+    const words = {};
+    for (let len = 3; len <= 12; len++) {
+      // skip simple plurals whose stem is also a word
+      const at = (set) =>
+        [...set]
+          .filter((w) => w.length === len && !(w.endsWith('s') && set.has(w.slice(0, -1))))
+          .sort(); // Set iteration order is insertion order — sort for determinism
+      // The band first. Three-letter words are the one place it runs dry —
+      // 154 hard-only and 148 extreme-only, under five months before repeating
+      // — because short words are almost all common ones. There the ladder
+      // widens rather than repeat itself, which is the honest trade.
+      let pool = at(answers);
+      if (pool.length < YEAR) pool = at(cumulative);
+      if (pool.length === 0) throw new Error(`No ${difficulty} words of length ${len}`);
+      words[len] = Buffer.from(pool[Math.floor(rng() * pool.length)]).toString('base64');
     }
-    if (pool.length === 0) throw new Error(`No candidate words of length ${len}`);
-    pool.sort(); // Set iteration order is insertion order — sort for determinism
-    const word = pool[Math.floor(rng() * pool.length)];
-    dailyWords[len] = Buffer.from(word).toString('base64');
+    // wrapped in { words } so every byDifficulty entry has the same field
+    // names as the top level — the client merges one over the other, and a
+    // variant shaped differently silently leaves the easy board in place
+    guessByDifficulty[difficulty] = { words };
   }
   await writeFile(
     `data/${prefix}daily-words.json`,
-    JSON.stringify({ date: etDate, words: dailyWords, fetchedAt: stamp }, null, 2) + '\n'
+    JSON.stringify(
+      {
+        date: etDate,
+        // The easy board repeated at the top level, so a client that predates
+        // difficulty keeps working. Removed once none do.
+        words: guessByDifficulty.easy.words,
+        byDifficulty: guessByDifficulty,
+        fetchedAt: stamp,
+      },
+      null,
+      2
+    ) + '\n'
   );
   console.log(`Wrote data/${prefix}daily-words.json for ${etDate}`);
 
   // hive: seeded from a pangram so it is always completable
-  const hiveRng = mulberry32(xmur3(`anagrimoire-hive-${etDate}${salt}`)());
-  const base = hiveBases[Math.floor(hiveRng() * hiveBases.length)];
-  const hiveLetters = [...new Set(base)];
-  const center = hiveLetters[Math.floor(hiveRng() * hiveLetters.length)];
-  const outers = hiveLetters.filter((c) => c !== center).sort(() => hiveRng() - 0.5);
+  const hiveByDifficulty = {};
+  for (const difficulty of DIFFICULTIES) {
+    const hiveRng = mulberry32(xmur3(`anagrimoire-hive-${etDate}${salt}${diffSalt(difficulty)}`)());
+    const { hiveBases } = poolsFor(difficulty);
+    // Keep looking until the board is worth playing. The centre matters as
+    // much as the letters — the same seven letters can yield 9 words with one
+    // centre and 90 with another — so every centre is tried before the base is
+    // given up on.
+    let picked = null;
+    let best = null;
+    for (let attempt = 0; attempt < 300 && !picked; attempt++) {
+      const base = hiveBases[Math.floor(hiveRng() * hiveBases.length)];
+      const letters = [...new Set(base)];
+      for (const center of letters.slice().sort(() => hiveRng() - 0.5)) {
+        const count = hiveWordCount(letters, center);
+        if (!best || count > best.count) best = { letters, center, count };
+        if (count >= HIVE_MIN_WORDS) {
+          picked = { letters, center, count };
+          break;
+        }
+      }
+    }
+    // Three hundred bases without one is not a thin day, it's a broken pool —
+    // but a puzzle nobody can play is worse than a thin one, so take the best
+    // seen and say so.
+    if (!picked) {
+      picked = best;
+      console.warn(
+        `hive ${difficulty}: no board reached ${HIVE_MIN_WORDS} words; using ${best.count}`
+      );
+    }
+    const outers = picked.letters.filter((c) => c !== picked.center).sort(() => hiveRng() - 0.5);
+    hiveByDifficulty[difficulty] = { center: picked.center, outers };
+    hiveByDifficulty[difficulty].words = picked.count;
+  }
   await writeFile(
     `data/${prefix}daily-hive.json`,
-    JSON.stringify({ date: etDate, center, outers, fetchedAt: stamp }, null, 2) + '\n'
+    JSON.stringify(
+      { date: etDate, ...hiveByDifficulty.easy, byDifficulty: hiveByDifficulty, fetchedAt: stamp },
+      null,
+      2
+    ) + '\n'
   );
-  console.log(`Wrote data/${prefix}daily-hive.json: ${center}/${outers.join('')}`);
+  console.log(
+    `Wrote data/${prefix}daily-hive.json: ` +
+      DIFFICULTIES.map(
+        (d) =>
+          `${hiveByDifficulty[d].center}/${hiveByDifficulty[d].outers.join('')} (${hiveByDifficulty[d].words}w)`
+      ).join(' ')
+  );
 
   // box: two chainable words covering exactly 12 distinct letters
-  const boxRng = mulberry32(xmur3(`anagrimoire-box-${etDate}${salt}`)());
-  let boxSides = null;
-  for (let attempt = 0; attempt < 2000 && !boxSides; attempt++) {
-    const w1 = boxWords[Math.floor(boxRng() * boxWords.length)];
-    const cands = (boxByFirst.get(w1[w1.length - 1]) ?? []).filter(
-      (w2) => w2 !== w1 && new Set(w1 + w2).size === 12
-    );
-    if (!cands.length) continue;
-    const w2 = cands[Math.floor(boxRng() * cands.length)];
-    boxSides = assignSides(w1, w2, boxRng);
+  const boxByDifficulty = {};
+  for (const difficulty of DIFFICULTIES) {
+    const boxRng = mulberry32(xmur3(`anagrimoire-box-${etDate}${salt}${diffSalt(difficulty)}`)());
+    const { boxWords, boxByFirst } = poolsFor(difficulty);
+    let boxSides = null;
+    for (let attempt = 0; attempt < 2000 && !boxSides; attempt++) {
+      const w1 = boxWords[Math.floor(boxRng() * boxWords.length)];
+      const cands = (boxByFirst.get(w1[w1.length - 1]) ?? []).filter(
+        (w2) => w2 !== w1 && new Set(w1 + w2).size === 12
+      );
+      if (!cands.length) continue;
+      const w2 = cands[Math.floor(boxRng() * cands.length)];
+      boxSides = assignSides(w1, w2, boxRng);
+    }
+    if (!boxSides) throw new Error(`Could not generate a ${difficulty} daily box`);
+    boxByDifficulty[difficulty] = { sides: boxSides, par: 2 };
   }
-  if (!boxSides) throw new Error('Could not generate a daily box');
   await writeFile(
     `data/${prefix}daily-box.json`,
-    JSON.stringify({ date: etDate, sides: boxSides, par: 2, fetchedAt: stamp }, null, 2) + '\n'
+    JSON.stringify(
+      { date: etDate, ...boxByDifficulty.easy, byDifficulty: boxByDifficulty, fetchedAt: stamp },
+      null,
+      2
+    ) + '\n'
   );
-  console.log(`Wrote data/${prefix}daily-box.json: ${boxSides.join('/')}`);
+  console.log(
+    `Wrote data/${prefix}daily-box.json: ` +
+      DIFFICULTIES.map((d) => boxByDifficulty[d].sides.join('/')).join('  ')
+  );
 
   // scramble rack: shuffled seven-letter word, full-rack bonus guaranteed
-  const scrambleRng = mulberry32(xmur3(`anagrimoire-scramble-${etDate}${salt}`)());
-  const rackBase = rackBases[Math.floor(scrambleRng() * rackBases.length)];
-  const rack = rackBase.split('').sort(() => scrambleRng() - 0.5);
+  const scrambleByDifficulty = {};
+  for (const difficulty of DIFFICULTIES) {
+    const scrambleRng = mulberry32(
+      xmur3(`anagrimoire-scramble-${etDate}${salt}${diffSalt(difficulty)}`)()
+    );
+    const { rackBases } = poolsFor(difficulty);
+    const rackBase = rackBases[Math.floor(scrambleRng() * rackBases.length)];
+    scrambleByDifficulty[difficulty] = {
+      letters: rackBase.split('').sort(() => scrambleRng() - 0.5),
+    };
+  }
   await writeFile(
     `data/${prefix}daily-scramble.json`,
-    JSON.stringify({ date: etDate, letters: rack, fetchedAt: stamp }, null, 2) + '\n'
+    JSON.stringify(
+      {
+        date: etDate,
+        ...scrambleByDifficulty.easy,
+        byDifficulty: scrambleByDifficulty,
+        fetchedAt: stamp,
+      },
+      null,
+      2
+    ) + '\n'
   );
-  console.log(`Wrote data/${prefix}daily-scramble.json: ${rack.join('')}`);
+  console.log(
+    `Wrote data/${prefix}daily-scramble.json: ` +
+      DIFFICULTIES.map((d) => scrambleByDifficulty[d].letters.join('')).join(' ')
+  );
 
   // 4x4 grid from the classic dice (q treated as a plain letter)
   const gridRng = mulberry32(xmur3(`anagrimoire-grid-${etDate}${salt}`)());
@@ -297,42 +494,92 @@ for (const variant of ['', 'dev']) {
 
   // weave: themed 6x8 tiling puzzle (Strands-style); answers ship base64d
   // to avoid casual spoilers
-  const weaveRng = mulberry32(xmur3(`anagrimoire-weave-${etDate}${salt}`)());
-  const weave = generateWeave(weaveRng, 6, 8, THEMES);
-  if (!weave) throw new Error('Could not generate a daily weave');
-  dailyWeaveClues.add(weave.clue);
+  // Weave varies by board size, not by word tier — its words come from
+  // hand-curated themes, so there is no tier to widen. 10x12 was the obvious
+  // extreme and doesn't exist: a theme carries about 91 letters and 120 cells
+  // need 120.
+  const weaveByDifficulty = {};
+  for (const difficulty of DIFFICULTIES) {
+    const [cols, rows] = WEAVE_SHAPE[difficulty];
+    const weaveRng = mulberry32(xmur3(`anagrimoire-weave-${etDate}${salt}${diffSalt(difficulty)}`)());
+    const weave = generateWeave(weaveRng, cols, rows, THEMES);
+    if (!weave) throw new Error(`Could not generate a ${difficulty} daily weave`);
+    dailyWeaveClues.add(weave.clue);
+    weaveByDifficulty[difficulty] = {
+      clue: weave.clue,
+      cols,
+      board: weave.board,
+      answers: encodeAnswers(weave),
+    };
+  }
   await writeFile(
     `data/${prefix}daily-weave.json`,
     JSON.stringify(
-      { date: etDate, clue: weave.clue, cols: 6, board: weave.board, answers: encodeAnswers(weave), fetchedAt: stamp },
+      {
+        date: etDate,
+        ...weaveByDifficulty.easy,
+        byDifficulty: weaveByDifficulty,
+        fetchedAt: stamp,
+      },
       null,
       2
     ) + '\n'
   );
-  console.log(`Wrote data/${prefix}daily-weave.json: ${weave.clue} (${weave.spangram.w})`);
+  console.log(
+    `Wrote data/${prefix}daily-weave.json: ` +
+      DIFFICULTIES.map((d) => `${weaveByDifficulty[d].cols}w ${weaveByDifficulty[d].clue}`).join(' | ')
+  );
 
   // squares: one 4x4 and one 5x5 a day. `cells` is the board as the player
   // first sees it, so the client renders without decoding anything; the
   // answer rides along base64'd for the reveal button, same as weave.
+  // Squares varies by shape too, and by how much of it you're shown. 6x6
+  // isn't an option — order-6 double word squares are scarce enough that the
+  // generator found none in 3 attempts against all 22,418 six-letter words —
+  // so extreme keeps the 5x5 grid and takes letters away. That also fixes the
+  // spread: at 10 givens a line could hold 4 or even 5 of them, which hands
+  // over a whole word.
   const squareBoards = {};
-  for (const n of [4, 5]) {
-    const sqRng = mulberry32(xmur3(`anagrimoire-squares-${n}-${etDate}${salt}`)());
-    const sq = generateSquare(sqRng, n, [...commonSet], [...standardWords()], GIVEN_TARGET[n]);
-    if (!sq) throw new Error(`Could not generate a daily ${n}x${n} square`);
+  const squaresByDifficulty = {};
+  for (const difficulty of DIFFICULTIES) {
+    const { size: n, given } = SQUARE_SHAPE[difficulty];
+    const sqRng = mulberry32(
+      xmur3(`anagrimoire-squares-${etDate}${salt}${diffSalt(difficulty)}`)()
+    );
+    // built from the easy tier at every difficulty: these words are the answer
+    // and have to be guessable, whatever the shape asks of you
+    const sq = generateSquare(
+      sqRng,
+      n,
+      [...poolsFor('easy').answers],
+      [...uniquenessWords()],
+      given
+    );
+    if (!sq) throw new Error(`Could not generate a ${difficulty} daily square`);
     const flat = sq.rows.join('').split('');
-    squareBoards[n] = {
+    const board = {
       size: n,
       cells: flat.map((ch, i) => (sq.given.includes(i) ? ch : null)),
       answer: Buffer.from(JSON.stringify({ rows: sq.rows })).toString('base64'),
     };
+    squaresByDifficulty[difficulty] = board;
+    // the legacy shape, keyed by size, for clients that predate difficulty
+    squareBoards[n] = board;
   }
   await writeFile(
     `data/${prefix}daily-squares.json`,
-    JSON.stringify({ date: etDate, boards: squareBoards, fetchedAt: stamp }, null, 2) + '\n'
+    JSON.stringify(
+      { date: etDate, boards: squareBoards, byDifficulty: squaresByDifficulty, fetchedAt: stamp },
+      null,
+      2
+    ) + '\n'
   );
   console.log(
     `Wrote data/${prefix}daily-squares.json: ` +
-      [4, 5].map((n) => `${n}x${n} ${squareBoards[n].cells.filter(Boolean).length} given`).join(', ')
+      DIFFICULTIES.map((d) => {
+        const b = squaresByDifficulty[d];
+        return `${d} ${b.size}x${b.size} ${b.cells.filter(Boolean).length} given`;
+      }).join(', ')
   );
 }
 
@@ -368,7 +615,15 @@ const squaresPool = { 4: [], 5: [] };
 for (const [n, count] of [[4, 20], [5, 12]]) {
   const seen = new Set();
   for (let i = 0; i < count; i++) {
-    const sq = generateSquare(sqPoolRng, n, [...commonSet], [...standardWords()], GIVEN_TARGET[n]);
+    // practice pools keep the old sizes and given counts for now; difficulty
+    // reaches the dailies first, and these are unscored
+    const sq = generateSquare(
+      sqPoolRng,
+      n,
+      [...poolsFor('easy').answers],
+      [...uniquenessWords()],
+      GIVEN_TARGET[n]
+    );
     if (!sq) throw new Error(`Could not generate pool square ${n}x${n} #${i}`);
     const key = sq.rows.join('/');
     if (seen.has(key)) continue;
