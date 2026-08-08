@@ -11,6 +11,7 @@ import { usePrefs } from '@/prefs';
 import { formatElapsed, useUpTimer } from '@/useUpTimer';
 import { recordSquaresFinish } from '@/stats';
 import { useDailySync } from '@/useDailySync';
+import { store as siteStore } from '@/siteStorage';
 
 export type SquaresGameHandle = { pressKey: (k: string) => void };
 
@@ -88,7 +89,7 @@ function loadStore(): SquaresStore {
 
 function readStore(): SquaresStore {
   try {
-    const raw = localStorage.getItem(SQUARES_KEY);
+    const raw = siteStore.getItem(SQUARES_KEY);
     if (!raw) return DEFAULT_STORE;
     const p = JSON.parse(raw);
     const daily: Partial<Record<SquareSize, SquareRecord>> = {};
@@ -176,7 +177,7 @@ const SquaresGame = forwardRef<
 
   useEffect(() => {
     try {
-      localStorage.setItem(SQUARES_KEY, JSON.stringify(store));
+      siteStore.setItem(SQUARES_KEY, JSON.stringify(store));
     } catch {
       // best-effort persistence
     }

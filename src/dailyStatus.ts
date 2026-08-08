@@ -9,6 +9,7 @@
 // half-finished hive done.
 
 import type { Mode } from '@/storage';
+import { store as siteStore } from '@/siteStorage';
 
 export type DailyState = 'none' | 'started' | 'done';
 
@@ -25,7 +26,7 @@ type Store = {
 
 function read(key: string): Store | null {
   try {
-    const raw = localStorage.getItem(key);
+    const raw = siteStore.getItem(key);
     return raw ? (JSON.parse(raw) as Store) : null;
   } catch {
     return null;

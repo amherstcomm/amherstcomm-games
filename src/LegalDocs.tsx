@@ -5,7 +5,7 @@
 
 import type { ReactNode } from 'react';
 
-export const LEGAL_UPDATED = '4 August 2026';
+export const LEGAL_UPDATED = '5 August 2026';
 export const PRIVACY_EMAIL = 'privacy@anagrimoire.com';
 
 function H({ children }: { children: ReactNode }) {
@@ -95,8 +95,56 @@ export function PrivacyPolicy() {
           lets us add this browser&apos;s existing statistics to your account exactly
           once instead of twice. It is not used to track you and is never shared.
         </li>
-        <li>Your answer to the analytics question, where we ask it</li>
+        <li>Your answer to the analytics question, and the date you gave it</li>
+        <li>
+          While you&apos;re signed in, the token that keeps you signed in. Clearing
+          this site&apos;s data signs you out, which is the same thing.
+        </li>
       </List>
+      <P>
+        None of that is a cookie, and none of it is tracking — it&apos;s the site
+        remembering what you asked it to remember, and the rules about storing
+        things on your device carve out exactly that. We ask anyway, because
+        &quot;we keep things on your device&quot; deserves an answer other than a
+        banner that only offers yes. Two of them:
+      </P>
+      <List>
+        <li>
+          <strong className="text-slate-300">Keep essentials only</strong> — your
+          answers on this page, and nothing else. Every game and every solver works
+          exactly as it does otherwise; close the tab and it starts over, sign-in
+          included, because staying signed in is itself a thing kept on your device.
+        </li>
+        <li>
+          <strong className="text-slate-300">Keep my games and settings</strong> —
+          boards, settings, statistics and your sign-in stay in this browser, as
+          described above. They&apos;re on your machine.
+        </li>
+      </List>
+      <P>
+        There is no third setting for whether anything may reach our server, because
+        signing in already is that answer. Nobody signs in by accident, and asking a
+        second time would imply we might do it unasked. It leaves two separate
+        questions rather than one muddled ladder: signing in decides whether anything
+        leaves this device, and the setting above decides what stays on it. You can
+        sign in under either — at the first, the session is held in memory and ends
+        with the tab.
+      </P>
+      <P>
+        It&apos;s under Settings → Privacy, alongside the analytics answer, and choosing
+        less removes what was already there rather than merely stopping more. The one
+        thing kept at every level is your answers themselves — remembering that you
+        said no is the only way to honour it, and asking again on every load would be
+        worse for you rather than better.
+      </P>
+      <P>
+        <strong className="text-slate-300">Cookies specifically:</strong> the only
+        cookies this site sets are Google Analytics&apos;s, and only after you agree.
+        Say no and none are set; say nothing and none are set; say yes and later
+        change your mind and the ones already there are removed. If your answer
+        lapses after a year they&apos;re removed too, on the next visit, without
+        waiting for you to answer again.
+      </P>
       <P>
         Clearing this site&apos;s data in your browser erases all of it. If you have
         no account, that is genuinely everything we hold.
@@ -204,11 +252,19 @@ export function PrivacyPolicy() {
         data is retained for the period configured in our property.
       </P>
       <P>
-        Where consent is required — the EEA, the UK and Switzerland — nothing loads
-        until you agree, and declining is a single click that we remember.
-        Elsewhere it loads by default. If your browser sends a{' '}
+        We ask everyone, wherever they are, and nothing loads until you say yes.
+        That used to depend on guessing your region from your time zone — right
+        often enough, but a VPN or a holiday was enough to track someone who had
+        never been asked, and that's the only failure here that costs anything.
+        Declining is a single click, the same as accepting, and we remember it. If
+        your browser sends a{' '}
         <Ext href="https://globalprivacycontrol.org/">Global Privacy Control</Ext>{' '}
-        signal we treat that as a no, everywhere, without asking.
+        signal we treat that as a no without asking at all.
+      </P>
+      <P>
+        An answer lasts a year, then we ask again — a yes from two years ago
+        isn&apos;t really a current one. The date you answered is shown under
+        Settings → Analytics, where you can also change it.
       </P>
       <P>
         Either way you can turn it off at any time under Settings → Analytics, with

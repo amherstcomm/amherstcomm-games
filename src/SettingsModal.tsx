@@ -4,8 +4,8 @@ import KeyDiagram from '@/KeyDiagram';
 import { GA_ID, disableAnalytics, initAnalytics } from '@/analytics';
 import {
   clearAnalyticsCookies,
+  consentGivenAt,
   gpcEnabled,
-  needsConsent,
   readConsent,
   writeConsent,
   type Consent,
@@ -22,12 +22,14 @@ import {
 } from '@/storage';
 import type { DictionaryId } from '@/dictionaries';
 import type { SettingsTab } from '@/routes';
+import { level as storageLevel, setLevel, STORAGE_OPTIONS, type StorageLevel } from '@/siteStorage';
 import type { Palette, TextScale, ThemeMode } from '@/theme';
 import { useModalA11y } from '@/useModalA11y';
 
 // the nav's own names, so the switch reads like the thing it switches
 // 'mode' marks the entries that disappear when that game is hidden — pointing
 // the front door at a game you've switched off would leave nowhere to land.
+
 const START_OPTIONS: { id: StartPage; label: string; mode?: Mode }[] = [
   { id: 'home', label: 'Home page' },
   { id: 'last', label: 'Where I left off' },
@@ -235,14 +237,17 @@ export default function SettingsModal({
   // else analytics runs unless it's been turned off, which is the state this
   // control exists to make reachable.
   const gpc = gpcEnabled();
-  const [analytics, setAnalyticsState] = useState<Consent>(
-    () => readConsent() ?? (gpc || needsConsent() ? 'denied' : 'granted')
-  );
+  // Unanswered is off. Nothing loads before a yes, so the control has to show
+  // that state rather than a cheerful default.
+  const [storage, setStorageState] = useState<StorageLevel>(storageLevel);
+  const [analytics, setAnalyticsState] = useState<Consent>(() => readConsent() ?? 'denied');
+  const [answeredAt, setAnsweredAt] = useState<Date | null>(consentGivenAt);
 
   function setAnalytics(value: Consent) {
     if (gpc) return;
     writeConsent(value);
     setAnalyticsState(value);
+    setAnsweredAt(consentGivenAt());
     if (value === 'granted') {
       initAnalytics();
     } else {
@@ -287,6 +292,7 @@ export default function SettingsModal({
             [
               { id: 'site', label: 'Site' },
               { id: 'games', label: 'Games' },
+              { id: 'privacy', label: 'Privacy' },
             ] as const
           ).map(({ id, label }) => (
             <button
@@ -415,6 +421,41 @@ export default function SettingsModal({
             </p>
           </div>
 
+        </div>
+
+        {/* The two questions the banner asks, in one place — what stays on
+            this device, and what leaves it. */}
+        <div className={`space-y-6 ${tab === 'privacy' ? '' : 'hidden'}`}>
+          <div>
+            <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2.5">
+              What may be kept
+            </h3>
+            <div className="flex flex-wrap gap-1.5">
+              {STORAGE_OPTIONS.map(({ id, label }) => (
+                <button
+                  key={id}
+                  onClick={() => {
+                    // takes effect immediately, including removing what the
+                    // stricter setting no longer allows
+                    setLevel(id);
+                    setStorageState(id);
+                  }}
+                  aria-pressed={storage === id}
+                  className={`px-3 h-9 rounded-lg text-sm font-semibold transition-colors
+                    ${storage === id
+                      ? 'bg-amber-400 text-ink shadow-lg shadow-amber-500/30'
+                      : 'bg-white/5 border border-white/10 text-slate-300 hover:bg-white/10'}`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            <p className="mt-2 text-xs text-slate-500">
+              {STORAGE_OPTIONS.find((o) => o.id === storage)?.blurb} Choosing less
+              clears what was already here rather than merely stopping more.
+            </p>
+          </div>
+
           {GA_ID && (
             <div>
               <h3 className="flex items-center gap-2 text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2.5">
@@ -447,6 +488,18 @@ export default function SettingsModal({
                   ? 'Your browser sends a Global Privacy Control signal, so analytics is off and stays off.'
                   : 'Counts visits, never your letters or results. Turning it off also clears the cookies it left behind. Kept per browser, since cookies are.'}
               </p>
+              {!gpc && answeredAt && (
+                <p className="mt-1 text-xs text-slate-500">
+                  You answered on{' '}
+                  {answeredAt.toLocaleDateString(undefined, {
+                    year: 'numeric',
+                    month: 'long',
+                    day: 'numeric',
+                  })}
+                  . We ask again after a year — an answer from long ago isn&apos;t really
+                  a current one.
+                </p>
+              )}
             </div>
           )}
         </div>

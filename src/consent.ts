@@ -1,60 +1,68 @@
 // Analytics consent.
 //
-// GA4 sets cookies and hands Google an IP address, which in the EEA and the UK
-// is supposed to happen only after someone agrees to it. We have no geo-IP and
-// don't want one — asking a third party where a visitor is, in order to decide
-// whether to track them, is its own privacy problem. The browser's own time
-// zone is a good enough proxy and costs nothing.
+// GA4 sets cookies and hands Google an IP address, which is the kind of thing
+// you ask about first. We ask everyone, everywhere.
 //
-// The check errs toward asking: an over-broad guess shows a banner to someone
-// who didn't need one, while an under-broad guess tracks someone who never
-// agreed. Only one of those is a problem.
+// That used to depend on guessing the visitor's region from their time zone,
+// which was cheap and mostly right — but the failure was one-sided. Being
+// over-broad shows a banner to someone who didn't need one; being under-broad
+// tracks someone who never agreed, and a VPN or a holiday was enough to do it.
+// Asking everyone removes the guess, is a good deal less code, and gives the
+// same answer in every jurisdiction: nothing loads until yes.
 
-const CONSENT_KEY = 'anagrimoire:analytics-consent:v1';
+import { store } from '@/siteStorage';
 
-// EEA + UK + Switzerland. Europe/* also catches Moscow, Istanbul and Kyiv,
-// which aren't in scope — harmless, and those places have their own rules.
-// The Atlantic, Indian and America entries are EEA territories that don't
-// sit under a Europe/ zone.
-const OUTLYING_ZONES = new Set([
-  'Atlantic/Azores',
-  'Atlantic/Canary',
-  'Atlantic/Faroe',
-  'Atlantic/Madeira',
-  'Atlantic/Reykjavik',
-  'America/Cayenne',
-  'America/Guadeloupe',
-  'America/Martinique',
-  'America/Miquelon',
-  'Indian/Mayotte',
-  'Indian/Reunion',
-]);
+const CONSENT_KEY = 'anagrimoire:analytics-consent:v2';
 
-export function needsConsent(): boolean {
-  try {
-    const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-    if (!zone) return true;
-    return zone.startsWith('Europe/') || OUTLYING_ZONES.has(zone);
-  } catch {
-    // no Intl, or a browser that won't say — ask rather than assume
-    return true;
-  }
-}
+// Consent is meant to be current rather than perpetual — a yes from two years
+// ago is doing more work than anyone agreed to. Both answers age out: a stale
+// no is worth revisiting once as well, and re-asking annually is the common
+// reading of what's expected.
+const MAX_AGE_MS = 365 * 24 * 60 * 60 * 1000;
 
 export type Consent = 'granted' | 'denied';
 
-export function readConsent(): Consent | null {
+type Stored = { value: Consent; at: number };
+
+function read(): Stored | null {
   try {
-    const v = localStorage.getItem(CONSENT_KEY);
-    return v === 'granted' || v === 'denied' ? v : null;
+    const raw = store.getItem(CONSENT_KEY);
+    if (!raw) return null;
+    const p = JSON.parse(raw) as Partial<Stored>;
+    if (p?.value !== 'granted' && p?.value !== 'denied') return null;
+    if (typeof p.at !== 'number' || !Number.isFinite(p.at)) return null;
+    return { value: p.value, at: p.at };
   } catch {
     return null;
   }
 }
 
+/** The current answer, or null if never asked or the answer has aged out.
+ *  Null means "ask" everywhere this is consulted.
+ *
+ *  This goes through the storage gate like everything else. The gate classes
+ *  it as a privacy choice, so it's kept at every level including the
+ *  strictest — remembering a no is the only way to act on one. */
+export function readConsent(): Consent | null {
+  const s = read();
+  if (!s) return null;
+  // a clock set far ahead shouldn't lock an answer in forever, so the window
+  // is checked in both directions
+  const age = Date.now() - s.at;
+  if (age > MAX_AGE_MS || age < -MAX_AGE_MS) return null;
+  return s.value;
+}
+
+/** When the current answer was given. Shown in Settings, so the record of what
+ *  was agreed and when belongs to the visitor too, not only to us. */
+export function consentGivenAt(): Date | null {
+  const s = read();
+  return s ? new Date(s.at) : null;
+}
+
 export function writeConsent(value: Consent): void {
   try {
-    localStorage.setItem(CONSENT_KEY, value);
+    store.setItem(CONSENT_KEY, JSON.stringify({ value, at: Date.now() } satisfies Stored));
   } catch {
     // private mode — the choice holds for this page view only
   }
@@ -62,7 +70,7 @@ export function writeConsent(value: Consent): void {
 
 // Global Privacy Control — a browser-level "don't sell or share my data"
 // signal. Honouring it costs one line and means the answer is already no for
-// anyone who set it, whichever region they're in.
+// anyone who set it, without their being asked at all.
 export function gpcEnabled(): boolean {
   return (navigator as Navigator & { globalPrivacyControl?: boolean }).globalPrivacyControl === true;
 }
@@ -90,9 +98,9 @@ export function clearAnalyticsCookies(): void {
   }
 }
 
-// Whether analytics may load right now: everywhere that doesn't require
-// asking, plus everywhere that asked and got a yes.
+/** Whether analytics may load right now. One rule everywhere: an unexpired
+ *  yes, and no GPC signal. */
 export function analyticsAllowed(): boolean {
   if (gpcEnabled()) return false;
-  return needsConsent() ? readConsent() === 'granted' : true;
+  return readConsent() === 'granted';
 }

@@ -19,6 +19,7 @@ import { usePrefs } from '@/prefs';
 import { useDailySync } from '@/useDailySync';
 import { buildShare } from '@/share';
 import { recordHiveWord } from '@/stats';
+import { store as siteStore } from '@/siteStorage';
 
 export type HiveGameHandle = { pressKey: (k: string) => void };
 
@@ -99,7 +100,7 @@ function loadStore(): HiveStore {
 
 function readStore(): HiveStore {
   try {
-    const raw = localStorage.getItem(HIVE_KEY);
+    const raw = siteStore.getItem(HIVE_KEY);
     if (!raw) return DEFAULT_STORE;
     const p = JSON.parse(raw);
     return {
@@ -146,7 +147,7 @@ const HiveGame = forwardRef<
 
   useEffect(() => {
     try {
-      localStorage.setItem(HIVE_KEY, JSON.stringify(store));
+      siteStore.setItem(HIVE_KEY, JSON.stringify(store));
     } catch {
       // best-effort persistence
     }
@@ -552,7 +553,7 @@ const HiveGame = forwardRef<
                     ? { ...store, daily: { ...record, revealed: true } }
                     : { ...store, practice: { ...record, revealed: true } };
                   try {
-                    localStorage.setItem(HIVE_KEY, JSON.stringify(next));
+                    siteStore.setItem(HIVE_KEY, JSON.stringify(next));
                   } catch {
                     // best-effort persistence
                   }

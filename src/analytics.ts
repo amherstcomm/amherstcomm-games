@@ -6,7 +6,7 @@
 // analyticsAllowed() says so, which is the whole point — a script that loads
 // first and asks afterwards has already done the thing it was asking about.
 
-import { analyticsAllowed } from '@/consent';
+import { analyticsAllowed, clearAnalyticsCookies } from '@/consent';
 
 export const GA_ID = import.meta.env.VITE_GA_ID as string | undefined;
 
@@ -30,7 +30,15 @@ export function disableAnalytics(): void {
 // Safe to call more than once — the consent banner calls it again on accept.
 export function initAnalytics(): void {
   if (!GA_ID || !/^G-[A-Z0-9]+$/.test(GA_ID)) return;
-  if (!analyticsAllowed()) return;
+  if (!analyticsAllowed()) {
+    // No permission right now — and that includes consent that has quietly
+    // aged out, which is the case nothing else covers. Declining through the
+    // banner clears these cookies, but an answer expiring left the identifiers
+    // sitting there with nothing authorising them. Sweep on every load where
+    // the answer isn't yes: it costs nothing when there's nothing to remove.
+    clearAnalyticsCookies();
+    return;
+  }
   // lift an opt-out from earlier in this same visit, before the early return —
   // turning it back on has to undo the switch, not just skip reloading gtag
   (window as unknown as Record<string, boolean>)[`ga-disable-${GA_ID}`] = false;

@@ -21,6 +21,7 @@ import { usePalette } from '@/theme';
 import { recordWeaveReveal, recordWeaveSolve } from '@/stats';
 import type { NavKeys } from '@/storage';
 import { formatElapsed, useUpTimer } from '@/useUpTimer';
+import { store as siteStore } from '@/siteStorage';
 
 export type WeaveGameHandle = { pressKey: (k: string) => void };
 
@@ -105,7 +106,7 @@ function loadStore(): WeaveStore {
 
 function readStore(): WeaveStore {
   try {
-    const raw = localStorage.getItem(WEAVE_KEY);
+    const raw = siteStore.getItem(WEAVE_KEY);
     if (!raw) return DEFAULT_STORE;
     const p = JSON.parse(raw);
     return {
@@ -180,7 +181,7 @@ const WeaveGame = forwardRef<
 
   useEffect(() => {
     try {
-      localStorage.setItem(WEAVE_KEY, JSON.stringify(store));
+      siteStore.setItem(WEAVE_KEY, JSON.stringify(store));
     } catch {
       // best-effort persistence
     }

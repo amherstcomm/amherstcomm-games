@@ -1,5 +1,6 @@
 import type { DictionaryId } from '@/dictionaries';
 import type { Palette, TextScale, ThemeMode } from '@/theme';
+import { store as siteStore } from '@/siteStorage';
 
 export type Mode = 'pattern' | 'descramble' | 'bee' | 'boxed' | 'grid' | 'weave' | 'squares';
 
@@ -191,7 +192,7 @@ function clampInt(v: unknown, min: number, max: number, fallback: number): numbe
 
 export function loadState(): PersistedState {
   try {
-    const raw = localStorage.getItem(KEY);
+    const raw = siteStore.getItem(KEY);
     if (!raw) return DEFAULT_STATE;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const p: any = JSON.parse(raw);
@@ -325,7 +326,7 @@ export function loadState(): PersistedState {
 
 export function saveState(state: PersistedState): void {
   try {
-    localStorage.setItem(KEY, JSON.stringify(state));
+    siteStore.setItem(KEY, JSON.stringify(state));
   } catch {
     // storage unavailable (private mode, quota) — persistence is best-effort
   }
