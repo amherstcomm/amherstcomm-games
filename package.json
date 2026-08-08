@@ -17,7 +17,8 @@
     "lastmod": "node scripts/route-lastmod.mjs",
     "blocklist": "node scripts/blocklist.mjs",
     "word-stats": "node scripts/word-stats.mjs",
-    "name-blocklist": "node scripts/name-blocklist.mjs"
+    "name-blocklist": "node scripts/name-blocklist.mjs",
+    "build-words": "node scripts/build-words.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.111.0",
