@@ -16,7 +16,8 @@
     "typecheck": "tsc --noEmit -p tsconfig.app.json",
     "lastmod": "node scripts/route-lastmod.mjs",
     "blocklist": "node scripts/blocklist.mjs",
-    "word-stats": "node scripts/word-stats.mjs"
+    "word-stats": "node scripts/word-stats.mjs",
+    "name-blocklist": "node scripts/name-blocklist.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.111.0",

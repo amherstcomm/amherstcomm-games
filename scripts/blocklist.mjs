@@ -19,6 +19,33 @@ const OUT = 'scripts/blocked-words.json';
 const ESDB =
   'https://raw.githubusercontent.com/en-wl/wordlist/v2/data/scowl-pre.txt';
 
+// A second, cruder source. ESDB's own README says its marking "only covers the
+// worst offenders", and it does: it has nigger and coon but not kike or
+// wetback. LDNOOBW is broader and less careful, which is the right trade for a
+// list that only decides what we won't publish.
+const LDNOOBW =
+  'https://raw.githubusercontent.com/LDNOOBW/List-of-Dirty-Naughty-Obscene-and-Otherwise-Bad-Words/master/en';
+
+// Everything from LDNOOBW is generation-only, because the list contains sex,
+// sexual, intercourse, escort, snatch, scat, tit, nipple and rectum. Refusing
+// those when a player types them would be the Scunthorpe problem in plain
+// sight. These few are the exception: slurs ESDB happens to miss, treated the
+// same way ESDB's own slurs are.
+const SLURS_ESDB_MISSES = new Set([
+  'darkie',
+  'darkies',
+  'jigaboo',
+  'jigaboos',
+  'kike',
+  'kikes',
+  'spic',
+  'spics',
+  'wetback',
+  'wetbacks',
+  'faggot',
+  'faggots',
+]);
+
 // Slurs and swear words are refused both ways. The mild tier is generation
 // only: we won't hand someone "fart" as the answer, but a player typing it is
 // their business.
@@ -49,7 +76,10 @@ function parse(text) {
   const found = new Map(); // word -> note
   let last = null;
   for (const raw of text.split('\n')) {
-    const line = raw.trimEnd();
+    // Some entries carry a trailing "#! ..." note. The words stop there — left
+    // in, the note's own prose gets glued onto the last inflection and enters
+    // the list as one long invented word.
+    const line = raw.trimEnd().split(/\s#/)[0];
     if (!line) continue;
     const m = line.match(/:\s*(?:[A-Z]:\s*)?(\S+)\s*<[^>]*>\s*(\([^)]*\))?\s*(?::(.*))?$/);
     if (!m) continue;
@@ -58,14 +88,17 @@ function parse(text) {
     const tag = (note || '').match(/(offensive-1|offensive-2|vulgar-1|vulgar-3)/);
     if (!tag) continue;
     const add = (w) => {
-      const clean = w.replace(/[^A-Za-z'-]/g, '').toLowerCase();
+      // Strict rather than forgiving. Stripping punctuation out of a token
+      // turns a fragment of syntax into a plausible-looking word, which is how
+      // "v" and "shat" became "vshat".
+      const clean = w.trim().toLowerCase();
       if (!/^[a-z]{2,}$/.test(clean) || NOT_REALLY.has(clean)) return;
       // strongest note wins if a word appears twice
       if (!found.has(clean) || SCOPE_BY_NOTE[tag[1]] === 'both') found.set(clean, tag[1]);
     };
     add(head === '-' ? last || '' : head);
     if (inflections)
-      for (const part of inflections.split(/[,|]/)) add(part.replace(/^[?-]+:?/, '').trim());
+      for (const part of inflections.split(/[,|()]/)) add(part.replace(/^[?-]+:?/, '').trim());
   }
   return found;
 }
@@ -82,6 +115,21 @@ if (flagged.size < 20) {
   process.exit(1);
 }
 
+// LDNOOBW ships phrases as well as words; only single words can match ours.
+const ldRes = await fetch(LDNOOBW);
+if (!ldRes.ok) {
+  console.error(`could not fetch LDNOOBW: ${ldRes.status}`);
+  process.exit(1);
+}
+const ldnoobw = (await ldRes.text())
+  .split(/\r?\n/)
+  .map((w) => w.trim().toLowerCase())
+  .filter((w) => /^[a-z]{2,}$/.test(w));
+if (ldnoobw.length < 100) {
+  console.error(`only ${ldnoobw.length} usable LDNOOBW words — refusing a suspect list`);
+  process.exit(1);
+}
+
 // keep anything a human added
 let manual = [];
 try {
@@ -95,6 +143,19 @@ const derived = [...flagged]
   .filter(([word]) => !manualWords.has(word))
   .map(([word, note]) => ({ word, origin: `esdb:${note}`, scope: SCOPE_BY_NOTE[note] }));
 
+// ESDB first: where both sources have a word, its graded note is the better
+// answer than LDNOOBW's single bucket.
+const seen = new Set([...manualWords, ...derived.map((w) => w.word)]);
+for (const word of ldnoobw) {
+  if (seen.has(word) || NOT_REALLY.has(word)) continue;
+  seen.add(word);
+  derived.push({
+    word,
+    origin: 'ldnoobw',
+    scope: SLURS_ESDB_MISSES.has(word) ? 'both' : 'generation',
+  });
+}
+
 const words = [...derived, ...manual].sort((a, b) => a.word.localeCompare(b.word));
 
 writeFileSync(
@@ -102,7 +163,7 @@ writeFileSync(
   JSON.stringify(
     {
       _source:
-        'Derived from the English Speller Database (https://github.com/en-wl/wordlist), © 2000-2026 Kevin Atkinson. Entries marked origin "manual" are ours.',
+        'Derived from the English Speller Database (https://github.com/en-wl/wordlist), © 2000-2026 Kevin Atkinson, and the LDNOOBW list (https://github.com/LDNOOBW/List-of-Dirty-Naughty-Obscene-and-Otherwise-Bad-Words), CC BY 4.0. Entries marked origin "manual" are ours.',
       _scope:
         "'both' = never generated and not accepted from a player. 'generation' = never generated, but accepted if a player types it.",
       _regenerate: 'npm run blocklist — refreshes the esdb: entries, keeps the manual ones',
