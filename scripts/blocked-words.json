@@ -1,5 +1,5 @@
 {
-  "_source": "Derived from the English Speller Database (https://github.com/en-wl/wordlist), © 2000-2026 Kevin Atkinson. Entries marked origin \"manual\" are ours.",
+  "_source": "Derived from the English Speller Database (https://github.com/en-wl/wordlist), © 2000-2026 Kevin Atkinson, and the LDNOOBW list (https://github.com/LDNOOBW/List-of-Dirty-Naughty-Obscene-and-Otherwise-Bad-Words), CC BY 4.0. Entries marked origin \"manual\" are ours.",
   "_scope": "'both' = never generated and not accepted from a player. 'generation' = never generated, but accepted if a player types it.",
   "_regenerate": "npm run blocklist — refreshes the esdb: entries, keeps the manual ones",
   "words": [
@@ -14,16 +14,31 @@
       "scope": "both"
     },
     {
+      "word": "acrotomophilia",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
       "word": "anal",
       "origin": "manual",
       "scope": "generation",
       "note": "surfaced by LDNOOBW (CC BY 4.0) during the squares review; not an answer we would publish"
     },
     {
+      "word": "anilingus",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
       "word": "anus",
       "origin": "manual",
       "scope": "generation",
       "note": "surfaced by LDNOOBW (CC BY 4.0) during the squares review; not an answer we would publish"
+    },
+    {
+      "word": "apeshit",
+      "origin": "ldnoobw",
+      "scope": "generation"
     },
     {
       "word": "arsehole",
@@ -36,6 +51,11 @@
       "scope": "both"
     },
     {
+      "word": "ass",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
       "word": "asshole",
       "origin": "esdb:vulgar-1",
       "scope": "both"
@@ -46,10 +66,140 @@
       "scope": "both"
     },
     {
+      "word": "assmunch",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "autoerotic",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "babeland",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "bangbros",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "bangbus",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "bareback",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "barenaked",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "bastard",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "bastardo",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "bastinado",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "bbw",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "bdsm",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "beaner",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "beaners",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "beastiality",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "bestiality",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "bimbos",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "birdlock",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
       "word": "bitch",
       "origin": "manual",
       "scope": "generation",
       "note": "surfaced by LDNOOBW (CC BY 4.0) during the squares review; not an answer we would publish"
+    },
+    {
+      "word": "bitches",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "blowjob",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "blumpkin",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "bollocks",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "bondage",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "boner",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "boob",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "boobs",
+      "origin": "ldnoobw",
+      "scope": "generation"
     },
     {
       "word": "bugger",
@@ -69,6 +219,16 @@
     {
       "word": "buggers",
       "origin": "esdb:vulgar-3",
+      "scope": "generation"
+    },
+    {
+      "word": "bukkake",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "bulldyke",
+      "origin": "ldnoobw",
       "scope": "generation"
     },
     {
@@ -102,10 +262,50 @@
       "scope": "both"
     },
     {
+      "word": "bunghole",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "busty",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
       "word": "butt",
       "origin": "manual",
       "scope": "generation",
       "note": "surfaced by LDNOOBW (CC BY 4.0) during the squares review; not an answer we would publish"
+    },
+    {
+      "word": "buttcheeks",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "butthole",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "camgirl",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "camslut",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "camwhore",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "carpetmuncher",
+      "origin": "ldnoobw",
+      "scope": "generation"
     },
     {
       "word": "chickenshit",
@@ -116,6 +316,31 @@
       "word": "chickenshits",
       "origin": "esdb:vulgar-1",
       "scope": "both"
+    },
+    {
+      "word": "cialis",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "circlejerk",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "clit",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "clitoris",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "clusterfuck",
+      "origin": "ldnoobw",
+      "scope": "generation"
     },
     {
       "word": "cock",
@@ -150,6 +375,21 @@
       "scope": "both"
     },
     {
+      "word": "coprolagnia",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "coprophilia",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "cornhole",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
       "word": "crap",
       "origin": "esdb:vulgar-3",
       "scope": "generation"
@@ -175,6 +415,36 @@
       "scope": "generation"
     },
     {
+      "word": "creampie",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "cum",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "cumming",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "cumshot",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "cumshots",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "cunnilingus",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
       "word": "cunt",
       "origin": "esdb:vulgar-1",
       "scope": "both"
@@ -183,6 +453,26 @@
       "word": "cunts",
       "origin": "esdb:vulgar-1",
       "scope": "both"
+    },
+    {
+      "word": "darkie",
+      "origin": "ldnoobw",
+      "scope": "both"
+    },
+    {
+      "word": "daterape",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "deepthroat",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "dendrophilia",
+      "origin": "ldnoobw",
+      "scope": "generation"
     },
     {
       "word": "dick",
@@ -205,6 +495,96 @@
       "scope": "generation"
     },
     {
+      "word": "dildo",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "dingleberries",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "dingleberry",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "doggiestyle",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "doggystyle",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "dolcett",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "domination",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "dominatrix",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "dommes",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "dvda",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "ecchi",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "ejaculation",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "erotic",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "erotism",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "escort",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "eunuch",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "fag",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "faggot",
+      "origin": "ldnoobw",
+      "scope": "both"
+    },
+    {
       "word": "fart",
       "origin": "esdb:vulgar-3",
       "scope": "generation"
@@ -222,6 +602,61 @@
     {
       "word": "farts",
       "origin": "esdb:vulgar-3",
+      "scope": "generation"
+    },
+    {
+      "word": "fecal",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "felch",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "fellatio",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "feltch",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "femdom",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "figging",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "fingerbang",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "fingering",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "fisting",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "footjob",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "frotting",
+      "origin": "ldnoobw",
       "scope": "generation"
     },
     {
@@ -255,6 +690,11 @@
       "scope": "both"
     },
     {
+      "word": "fuckin",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
       "word": "fucking",
       "origin": "esdb:vulgar-1",
       "scope": "both"
@@ -270,10 +710,95 @@
       "scope": "both"
     },
     {
+      "word": "fucktards",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "fudgepacker",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "futanari",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "gangbang",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "genitals",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "goatcx",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "goatse",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "gokkun",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "goodpoop",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "goregasm",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
       "word": "grope",
       "origin": "manual",
       "scope": "generation",
       "note": "surfaced by LDNOOBW (CC BY 4.0) during the squares review; not an answer we would publish"
+    },
+    {
+      "word": "guro",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "handjob",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "hardcore",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "hentai",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "homoerotic",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "honkey",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "hooker",
+      "origin": "ldnoobw",
+      "scope": "generation"
     },
     {
       "word": "horny",
@@ -287,10 +812,75 @@
       "scope": "both"
     },
     {
+      "word": "humping",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "incest",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "intercourse",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "jailbait",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "jigaboo",
+      "origin": "ldnoobw",
+      "scope": "both"
+    },
+    {
+      "word": "jiggaboo",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "jiggerboo",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "jizz",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "juggs",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "kike",
+      "origin": "ldnoobw",
+      "scope": "both"
+    },
+    {
+      "word": "kinbaku",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "kinkster",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
       "word": "kinky",
       "origin": "manual",
       "scope": "generation",
       "note": "surfaced by LDNOOBW (CC BY 4.0) during the squares review; not an answer we would publish"
+    },
+    {
+      "word": "knobbing",
+      "origin": "ldnoobw",
+      "scope": "generation"
     },
     {
       "word": "kraut",
@@ -301,6 +891,46 @@
       "word": "krauts",
       "origin": "esdb:offensive-2",
       "scope": "both"
+    },
+    {
+      "word": "livesex",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "lolita",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "lovemaking",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "masturbate",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "masturbating",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "masturbation",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "milf",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "mong",
+      "origin": "ldnoobw",
+      "scope": "generation"
     },
     {
       "word": "motherfucker",
@@ -318,6 +948,31 @@
       "scope": "both"
     },
     {
+      "word": "muffdiving",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "nambla",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "nawashi",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "negro",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "neonazi",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
       "word": "nigga",
       "origin": "esdb:offensive-1",
       "scope": "both"
@@ -329,11 +984,6 @@
     },
     {
       "word": "niggaz",
-      "origin": "esdb:offensive-1",
-      "scope": "both"
-    },
-    {
-      "word": "niggazunmarkedvariantsniggas",
       "origin": "esdb:offensive-1",
       "scope": "both"
     },
@@ -393,10 +1043,65 @@
       "scope": "both"
     },
     {
+      "word": "nimphomania",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "nipple",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "nipples",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "nsfw",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
       "word": "nude",
       "origin": "manual",
       "scope": "generation",
       "note": "surfaced by LDNOOBW (CC BY 4.0) during the squares review; not an answer we would publish"
+    },
+    {
+      "word": "nudity",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "nutten",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "nympho",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "nymphomania",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "octopussy",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "omorashi",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "orgasm",
+      "origin": "ldnoobw",
+      "scope": "generation"
     },
     {
       "word": "orgy",
@@ -405,10 +1110,50 @@
       "note": "surfaced by LDNOOBW (CC BY 4.0) during the squares review; not an answer we would publish"
     },
     {
+      "word": "paedophile",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "paki",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "panties",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "panty",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "pedobear",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "pedophile",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "pegging",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
       "word": "penis",
       "origin": "manual",
       "scope": "generation",
       "note": "surfaced by LDNOOBW (CC BY 4.0) during the squares review; not an answer we would publish"
+    },
+    {
+      "word": "pikey",
+      "origin": "ldnoobw",
+      "scope": "generation"
     },
     {
       "word": "piss",
@@ -441,10 +1186,95 @@
       "scope": "generation"
     },
     {
+      "word": "pisspig",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "playboy",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "ponyplay",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "poof",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "poon",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "poontang",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "poopchute",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "porn",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "porno",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "pornography",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "pthc",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "pubes",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "punany",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
       "word": "pussy",
       "origin": "manual",
       "scope": "generation",
       "note": "surfaced by LDNOOBW (CC BY 4.0) during the squares review; not an answer we would publish"
+    },
+    {
+      "word": "queaf",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "queef",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "quim",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "raghead",
+      "origin": "ldnoobw",
+      "scope": "generation"
     },
     {
       "word": "rape",
@@ -453,10 +1283,90 @@
       "note": "surfaced by LDNOOBW (CC BY 4.0) during the squares review; not an answer we would publish"
     },
     {
+      "word": "raping",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "rapist",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "rectum",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "rimjob",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "rimming",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "sadism",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "santorum",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "scat",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "schlong",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "scissoring",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
       "word": "semen",
       "origin": "manual",
       "scope": "generation",
       "note": "surfaced by LDNOOBW (CC BY 4.0) during the squares review; not an answer we would publish"
+    },
+    {
+      "word": "sex",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "sexcam",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "sexo",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "sexual",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "sexuality",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "sexually",
+      "origin": "ldnoobw",
+      "scope": "generation"
     },
     {
       "word": "sexy",
@@ -470,9 +1380,24 @@
       "scope": "both"
     },
     {
+      "word": "shemale",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "shibari",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
       "word": "shit",
       "origin": "esdb:vulgar-1",
       "scope": "both"
+    },
+    {
+      "word": "shitblimp",
+      "origin": "ldnoobw",
+      "scope": "generation"
     },
     {
       "word": "shite",
@@ -530,6 +1455,26 @@
       "scope": "both"
     },
     {
+      "word": "shota",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "shrimping",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "skeet",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "slanteye",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
       "word": "slut",
       "origin": "manual",
       "scope": "generation",
@@ -542,10 +1487,60 @@
       "note": "surfaced by LDNOOBW (CC BY 4.0) during the squares review; not an answer we would publish"
     },
     {
+      "word": "snatch",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "snowballing",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "sodomize",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "sodomy",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "spastic",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "spic",
+      "origin": "ldnoobw",
+      "scope": "both"
+    },
+    {
+      "word": "splooge",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "spooge",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
       "word": "spunk",
       "origin": "manual",
       "scope": "generation",
       "note": "surfaced by LDNOOBW (CC BY 4.0) during the squares review; not an answer we would publish"
+    },
+    {
+      "word": "strapon",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "strappado",
+      "origin": "ldnoobw",
+      "scope": "generation"
     },
     {
       "word": "suck",
@@ -560,14 +1555,164 @@
       "note": "surfaced by LDNOOBW (CC BY 4.0) during the squares review; not an answer we would publish"
     },
     {
+      "word": "swastika",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "swinger",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "threesome",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "throating",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "thumbzilla",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "tit",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
       "word": "tits",
       "origin": "manual",
       "scope": "generation",
       "note": "surfaced by LDNOOBW (CC BY 4.0) during the squares review; not an answer we would publish"
     },
     {
-      "word": "vshat",
-      "origin": "esdb:vulgar-1",
+      "word": "titties",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "titty",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "topless",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "tosser",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "towelhead",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "tranny",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "tribadism",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "tubgirl",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "tushy",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "twat",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "twink",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "twinkie",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "undressing",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "upskirt",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "urophilia",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "vagina",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "viagra",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "vibrator",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "vorarephilia",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "voyeur",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "voyeurweb",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "voyuer",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "vulva",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "wank",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "wetback",
+      "origin": "ldnoobw",
       "scope": "both"
     },
     {
@@ -595,6 +1740,36 @@
       "word": "wops",
       "origin": "esdb:offensive-2",
       "scope": "both"
+    },
+    {
+      "word": "worldsex",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "xx",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "xxx",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "yaoi",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "yiffy",
+      "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "zoophilia",
+      "origin": "ldnoobw",
+      "scope": "generation"
     }
   ]
 }
