@@ -232,12 +232,20 @@ Two measurements worth not re-deriving: none of the flagged words are in
 `common` (they all sit at level 40+), so the filter is a no-op until generation
 moves to `standard` — and every currently published pool and daily is clean.
 
-**Prerequisite, and it's a live bug the moment generation moves.** A puzzle's
-own solution words must validate whatever tier the player picked. Guess already
-does this — `GuessGame.tsx` exempts the secret with `current !== secret`.
-Squares does not: a line is checked against the selected dictionary with no
-exemption, so a `standard` answer word reads as wrong for anyone on `common`.
-Weave needs the same. Worth fixing on its own merits before any of the above.
+**Play mode doesn't read the dictionary setting at all**, which is worth
+knowing before touching any of this. `dictionaries[mode]` is consumed in one
+place — `App.tsx`, for the *solver*. Play uses hardcoded lists: Guess validates
+guesses against `full`, every other game against `standard`. So no player
+setting can make a puzzle unsolvable today, and this is also where the ladder
+being backwards is most stark — Guess draws answers from 39k `common` while
+accepting guesses from 275k `full`, the most permissive combination available,
+for everyone, always.
+
+The consequence is that a puzzle's own solution words must be exempted from
+validation *as part of* the difficulty work, not before it: the exemption only
+matters once play-validation varies. Guess already does it
+(`current !== secret`); Squares and Weave will need it the moment their play
+dictionary stops being a constant.
 
 **Difficulty is a dimension, not a setting.** Taking it through the dailies
 means `daily_puzzles`, `daily_progress`, `game_results`, the leaderboard RPC and

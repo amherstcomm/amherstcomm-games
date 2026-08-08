@@ -65,8 +65,14 @@ function git(args) {
 // Failing loudly is right here in a way it wasn't in the build: this script
 // exists precisely to be run somewhere history is complete, so a shallow clone
 // means the job is misconfigured, not that we should shrug and emit nothing.
-if (git(['rev-parse', '--is-shallow-repository']) !== 'false') {
-  console.error('refusing to run against a shallow clone — check out with fetch-depth: 0');
+let usableHistory = false;
+try {
+  usableHistory = git(['rev-parse', '--is-shallow-repository']) === 'false';
+} catch {
+  usableHistory = false; // no git, or not a repository
+}
+if (!usableHistory) {
+  console.error('no usable git history — check out with fetch-depth: 0 before running this');
   process.exit(1);
 }
 
