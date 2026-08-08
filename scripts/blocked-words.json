@@ -14,6 +14,18 @@
       "scope": "both"
     },
     {
+      "word": "anal",
+      "origin": "manual",
+      "scope": "generation",
+      "note": "surfaced by LDNOOBW (CC BY 4.0) during the squares review; not an answer we would publish"
+    },
+    {
+      "word": "anus",
+      "origin": "manual",
+      "scope": "generation",
+      "note": "surfaced by LDNOOBW (CC BY 4.0) during the squares review; not an answer we would publish"
+    },
+    {
       "word": "arsehole",
       "origin": "esdb:vulgar-1",
       "scope": "both"
@@ -32,6 +44,12 @@
       "word": "assholes",
       "origin": "esdb:vulgar-1",
       "scope": "both"
+    },
+    {
+      "word": "bitch",
+      "origin": "manual",
+      "scope": "generation",
+      "note": "surfaced by LDNOOBW (CC BY 4.0) during the squares review; not an answer we would publish"
     },
     {
       "word": "bugger",
@@ -84,6 +102,12 @@
       "scope": "both"
     },
     {
+      "word": "butt",
+      "origin": "manual",
+      "scope": "generation",
+      "note": "surfaced by LDNOOBW (CC BY 4.0) during the squares review; not an answer we would publish"
+    },
+    {
       "word": "chickenshit",
       "origin": "esdb:vulgar-1",
       "scope": "both"
@@ -92,6 +116,18 @@
       "word": "chickenshits",
       "origin": "esdb:vulgar-1",
       "scope": "both"
+    },
+    {
+      "word": "cock",
+      "origin": "manual",
+      "scope": "generation",
+      "note": "surfaced by LDNOOBW (CC BY 4.0) during the squares review; not an answer we would publish"
+    },
+    {
+      "word": "cocks",
+      "origin": "manual",
+      "scope": "generation",
+      "note": "surfaced by LDNOOBW (CC BY 4.0) during the squares review; not an answer we would publish"
     },
     {
       "word": "cocksucker",
@@ -234,9 +270,27 @@
       "scope": "both"
     },
     {
+      "word": "grope",
+      "origin": "manual",
+      "scope": "generation",
+      "note": "surfaced by LDNOOBW (CC BY 4.0) during the squares review; not an answer we would publish"
+    },
+    {
+      "word": "horny",
+      "origin": "manual",
+      "scope": "generation",
+      "note": "surfaced by LDNOOBW (CC BY 4.0) during the squares review; not an answer we would publish"
+    },
+    {
       "word": "horseshit",
       "origin": "esdb:vulgar-1",
       "scope": "both"
+    },
+    {
+      "word": "kinky",
+      "origin": "manual",
+      "scope": "generation",
+      "note": "surfaced by LDNOOBW (CC BY 4.0) during the squares review; not an answer we would publish"
     },
     {
       "word": "kraut",
@@ -339,6 +393,24 @@
       "scope": "both"
     },
     {
+      "word": "nude",
+      "origin": "manual",
+      "scope": "generation",
+      "note": "surfaced by LDNOOBW (CC BY 4.0) during the squares review; not an answer we would publish"
+    },
+    {
+      "word": "orgy",
+      "origin": "manual",
+      "scope": "generation",
+      "note": "surfaced by LDNOOBW (CC BY 4.0) during the squares review; not an answer we would publish"
+    },
+    {
+      "word": "penis",
+      "origin": "manual",
+      "scope": "generation",
+      "note": "surfaced by LDNOOBW (CC BY 4.0) during the squares review; not an answer we would publish"
+    },
+    {
       "word": "piss",
       "origin": "esdb:vulgar-3",
       "scope": "generation"
@@ -367,6 +439,30 @@
       "word": "pissing",
       "origin": "esdb:vulgar-3",
       "scope": "generation"
+    },
+    {
+      "word": "pussy",
+      "origin": "manual",
+      "scope": "generation",
+      "note": "surfaced by LDNOOBW (CC BY 4.0) during the squares review; not an answer we would publish"
+    },
+    {
+      "word": "rape",
+      "origin": "manual",
+      "scope": "generation",
+      "note": "surfaced by LDNOOBW (CC BY 4.0) during the squares review; not an answer we would publish"
+    },
+    {
+      "word": "semen",
+      "origin": "manual",
+      "scope": "generation",
+      "note": "surfaced by LDNOOBW (CC BY 4.0) during the squares review; not an answer we would publish"
+    },
+    {
+      "word": "sexy",
+      "origin": "manual",
+      "scope": "generation",
+      "note": "surfaced by LDNOOBW (CC BY 4.0) during the squares review; not an answer we would publish"
     },
     {
       "word": "shat",
@@ -434,9 +530,51 @@
       "scope": "both"
     },
     {
+      "word": "slut",
+      "origin": "manual",
+      "scope": "generation",
+      "note": "surfaced by LDNOOBW (CC BY 4.0) during the squares review; not an answer we would publish"
+    },
+    {
+      "word": "smut",
+      "origin": "manual",
+      "scope": "generation",
+      "note": "surfaced by LDNOOBW (CC BY 4.0) during the squares review; not an answer we would publish"
+    },
+    {
+      "word": "spunk",
+      "origin": "manual",
+      "scope": "generation",
+      "note": "surfaced by LDNOOBW (CC BY 4.0) during the squares review; not an answer we would publish"
+    },
+    {
+      "word": "suck",
+      "origin": "manual",
+      "scope": "generation",
+      "note": "surfaced by LDNOOBW (CC BY 4.0) during the squares review; not an answer we would publish"
+    },
+    {
+      "word": "sucks",
+      "origin": "manual",
+      "scope": "generation",
+      "note": "surfaced by LDNOOBW (CC BY 4.0) during the squares review; not an answer we would publish"
+    },
+    {
+      "word": "tits",
+      "origin": "manual",
+      "scope": "generation",
+      "note": "surfaced by LDNOOBW (CC BY 4.0) during the squares review; not an answer we would publish"
+    },
+    {
       "word": "vshat",
       "origin": "esdb:vulgar-1",
       "scope": "both"
+    },
+    {
+      "word": "whore",
+      "origin": "manual",
+      "scope": "generation",
+      "note": "surfaced by LDNOOBW (CC BY 4.0) during the squares review; not an answer we would publish"
     },
     {
       "word": "wop",

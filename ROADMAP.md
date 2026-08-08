@@ -189,6 +189,24 @@ rejecting words that were legal below. The ladder must nest strictly.
 Generating extreme answers from the raw 275k would give unguessable
 obscurities; 10–70 is hard for the right reason.
 
+**Difficulty is the obscurity lever, which removes a job.** The worry that
+Squares publishes odd words doesn't need a second review pass: how obscure a
+word is tracks which SCOWL size it enters at, and difficulty already selects
+that. Extreme is *supposed* to reach words easy doesn't have.
+
+What it does not need is narrower bands. An earlier draft here proposed easy =
+levels 10–20 on the theory that level 35 was "where the odd words live". That
+was wrong, and worth recording so it isn't re-derived: SCOWL's sizes are 35
+small, 50 medium, 60 medium-large (the default spell-checking dictionary), 70
+large, 80 a valid word in current usage. Level 35 is ordinary vocabulary —
+aback, civic, flank, gourd, impel, nasal, pique, upend — and `adze`, the word
+that prompted the theory, is level 50 and not in `common` at all.
+
+So the three tiers above stand as written: easy is the small dictionary
+(10–35), hard the medium (10–55), extreme the large (10–70). Easy has ample
+depth at every length that survives the cap — 464 words at three letters, 1,065
+at twelve — so the tier ladder in `fetch-puzzles.mjs` has nothing to fix.
+
 **Guess caps at 12 — and so does everything else.** One puzzle per length per day means each length is its own
 stream, and on `common` the long ones are threadbare: 82 words at 15 (under
 three months before every 15-letter daily has been used), 199 at 14, 558 at 13.
@@ -207,6 +225,63 @@ threadbare. With 13–15 gone they aren't: every remaining stream clears a
 one-year cooldown on `common` alone, the thinnest being length 3 at 464 words.
 So generation stays on `common` for now, and widening becomes purely a
 difficulty feature rather than something the depth numbers demand.
+
+**One `words` table for every game.** 276,854 rows — the union of everything we
+might ever accept. Squares, Hive, Boxed and Scramble all ask anagram- or
+subset-shaped questions, so they differ by predicate rather than by table.
+
+```sql
+create table words (
+  word   text primary key,   -- 276,854 rows
+  len    smallint not null,  -- derivable, but it makes the queries read plainly
+  sorted text not null,      -- letters sorted: anagram and subset lookups
+  level  smallint,           -- SCOWL size; null = only in the large list
+  pos    text,               -- ESDB part of speech: n, v, aj, av, abbr, ...
+  lemma  text                -- the headword this inflects from; null if it is one
+);
+```
+
+**Store the SCOWL level, not a difficulty**, because generation and validation
+use different bands — a level-60 word is generatable only at extreme but
+accepted from hard, and one column can't say both:
+
+| difficulty | generates from | accepts |
+|---|---|---|
+| easy | `level <= 35` | `level <= 55` |
+| hard | `level <= 55` | `level <= 70` |
+| extreme | `level <= 70` | everything, `null` included |
+
+The ladder is then provably nested rather than nested by convention, changing a
+band is an edit to a query rather than a re-seed, and the 1,917 words that are
+in SCOWL but missing from the large list (`ok`, `cs`, `configurable`) land in
+extreme automatically — which is the bug that forced `full ∪ hard` back when
+this was three fixed lists.
+
+**`pos` and `lemma` replace a heuristic with a fact.** The generator currently
+skips plurals by suffix: ends in s, and the stem is also a word. Measured
+against ESDB's inflection data that drops 9,558 words from the common answer
+pool, of which **73 aren't inflections at all** — `brass`, `discuss`, `assess`,
+`caress`, `canvass`, `buss` — each excluded because its "stem" happens to be a
+word (`bras`, `discus`, `asses`, `cares`). It also can't see `oxen`, `mice` or
+`geese`, which sail through as lemmas. With `lemma` the rule becomes "don't set
+an inflection whose lemma is also in the pool", which is true rather than
+approximate, and `pos` gives the same handle for verb forms.
+
+Two things not to re-investigate. ESDB's mapping isn't a complete oracle —
+122,098 inflected forms against 276,854 rows — so "absent from the lemma
+column" can't be read as "not an inflection". And **proper nouns are not a
+problem**: `wordlist-english` already excludes them (`paris`, `texas`,
+`tuesday` are in no tier; the common files hold exactly four capitalised
+entries, all `OK`). An earlier pass here reported abbreviations and proper
+nouns in the pool; that was a parsing error, not a finding.
+
+**Take membership and `level` from the npm packages, `pos` and `lemma` from
+ESDB.** Membership has to match the client's bundles exactly or a generated
+answer can fail to validate — the failure that shows up on one puzzle months
+apart. And parse ESDB's database rather than `scowl-pre.txt`: POS lives on the
+entry, entries are case-sensitive, and inflections appear on their lemma's
+line. Regexing that file gave wrong answers twice in one sitting. Its
+`postgresql/` directory exists for this.
 
 **A blocked-words table, not a hardcoded list.** ESDB (the English Speller
 Database, `en-wl/wordlist` — the upstream `wordlist-english` is built from)
