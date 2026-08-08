@@ -42,7 +42,12 @@ export function visibleViews(hidden: View[]): View[] {
 // changes what's offered, not what exists — the other lengths keep their
 // daily boards and their statistics, and widening the range brings them back.
 export const MIN_WORD_LEN = 3;
-export const MAX_WORD_LEN = 15;
+// Twelve rather than fifteen. Each daily length is its own stream, and the
+// long ones are threadbare — 82 common words at fifteen letters is under three
+// months before every fifteen-letter daily has been used. Solving and practice
+// stop there too: a length the daily can't offer isn't worth a button
+// elsewhere either, and the pool thins out for the same reason.
+export const MAX_WORD_LEN = 12;
 
 export type LengthRange = { min: number; max: number };
 
@@ -220,7 +225,12 @@ export function loadState(): PersistedState {
     // pattern results are all one length; only alphabetical makes sense
     sort.pattern.key = 'alpha';
 
-    const length = clampInt(p?.pattern?.length, 3, 15, DEFAULT_STATE.pattern.length);
+    // Clamped rather than defaulted: someone who had 15 stored when the cap
+    // came down meant "long", so 12 is a better answer than 5.
+    const storedLen = p?.pattern?.length;
+    const length = Number.isInteger(storedLen)
+      ? Math.min(Math.max(storedLen as number, MIN_WORD_LEN), MAX_WORD_LEN)
+      : DEFAULT_STATE.pattern.length;
     const known = Array(length).fill('');
     if (Array.isArray(p?.pattern?.known)) {
       for (let i = 0; i < length; i++) known[i] = singleLetter(p.pattern.known[i]);

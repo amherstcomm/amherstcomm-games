@@ -189,13 +189,17 @@ rejecting words that were legal below. The ladder must nest strictly.
 Generating extreme answers from the raw 275k would give unguessable
 obscurities; 10–70 is hard for the right reason.
 
-**Guess caps at 12.** One puzzle per length per day means each length is its own
+**Guess caps at 12 — and so does everything else.** One puzzle per length per day means each length is its own
 stream, and on `common` the long ones are threadbare: 82 words at 15 (under
 three months before every 15-letter daily has been used), 199 at 14, 558 at 13.
 Cutting at 10 rather than 12 costs ~3,000 words across lengths 11–12 and buys
 nothing, because the binding constraint at either cap is length 3, not the long
 end. The requirement is a cooldown, not permanent exclusion — "don't repeat
 within a year" needs ≥365 words per length, which lengths 3–13 all clear.
+
+Solving and practice stopped at twelve as well rather than only the daily: a
+length the daily can't offer isn't worth a button elsewhere, and nobody plays
+a fourteen-letter Guess.
 
 **Done, and it removed the reason to widen.** Capping at 12 was going to come
 with a move from `common` to `standard`, because the long lengths were
