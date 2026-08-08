@@ -457,7 +457,9 @@ begin
 end;
 $$;
 
-grant execute on function public.daily_stats(text, date, text) to anon, authenticated;
+-- signature must match the function above: grant has no IF EXISTS, so a
+-- stale one fails the whole script after the drop/create has swapped it
+grant execute on function public.daily_stats(text, date, text, text) to anon, authenticated;
 
 -- ---------------------------------------------------------------------------
 -- Scoring, recomputed server-side.
@@ -778,7 +780,7 @@ begin
 end;
 $$;
 
-grant execute on function public.leaderboard(int, text) to anon, authenticated;
+grant execute on function public.leaderboard(int, text, text) to anon, authenticated;
 
 -- Adding a game means widening both of these, and `create table if not exists`
 -- leaves an existing table exactly as it was — so the constraint has to be
