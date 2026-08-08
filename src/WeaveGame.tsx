@@ -9,7 +9,12 @@ import {
 } from 'react';
 import { CalendarDays, Eye, Lightbulb, RefreshCw, Timer } from 'lucide-react';
 import { gridNeighbors } from '@/solvers';
-import { difficulty, resolveDifficulty, type Difficulty } from '@/difficulty';
+import {
+  difficulty,
+  onDifficultyChange,
+  resolveDifficulty,
+  type Difficulty,
+} from '@/difficulty';
 import { dailyDataUrl, WEAVE_POOL_URL } from '@/dailyData';
 import DailyStats from '@/DailyStats';
 import ShareButton from '@/ShareButton';
@@ -179,6 +184,10 @@ const WeaveGame = forwardRef<
   // feed generated before difficulty existed only has the easy board, and a
   // result has to be recorded as what was played rather than what was wanted.
   const [playedAt, setPlayedAt] = useState<Difficulty>(difficulty);
+  // Changing difficulty means a different board, so the feed has to be read
+  // again. A storage write re-renders nothing on its own.
+  const [difficultyTick, setDifficultyTick] = useState(0);
+  useEffect(() => onDifficultyChange(() => setDifficultyTick((n) => n + 1)), []);
   const [dailyError, setDailyError] = useState(false);
   const [flash, setFlash] = useState<{ text: string; good: boolean } | null>(null);
   const flashTimer = useRef<number | undefined>(undefined);
@@ -222,7 +231,7 @@ const WeaveGame = forwardRef<
     return () => {
       alive = false;
     };
-  }, []);
+  }, [difficultyTick]);
 
   // fetch the practice pool once
   useEffect(() => {

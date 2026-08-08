@@ -45,8 +45,24 @@ export function difficulty(): Difficulty {
   return isDifficulty(v) ? v : 'easy';
 }
 
+// Games read the difficulty once, when they fetch their board. Changing it has
+// to reach them, and a storage write doesn't re-render anything — so the games
+// listen and re-fetch. Same shape as dailyBus, and for the same reason: the
+// alternative is threading one value through every game as a prop.
+const listeners = new Set<() => void>();
+
 export function setDifficulty(next: Difficulty): void {
+  if (difficulty() === next) return;
   store.setItem(KEY, next);
+  for (const fn of listeners) fn();
+}
+
+/** Called when the difficulty changes. Returns an unsubscribe. */
+export function onDifficultyChange(fn: () => void): () => void {
+  listeners.add(fn);
+  return () => {
+    listeners.delete(fn);
+  };
 }
 
 /** Read a difficulty out of a daily feed.

@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react';
-import { BarChart3, Check, Contrast, EyeOff, Keyboard, Monitor, Moon, Sun, Type, X } from 'lucide-react';
+import { BarChart3, Check, Contrast, EyeOff, Gauge, Keyboard, Monitor, Moon, Sun, Type, X } from 'lucide-react';
 import KeyDiagram from '@/KeyDiagram';
 import { GA_ID, disableAnalytics, initAnalytics } from '@/analytics';
 import {
@@ -22,7 +22,15 @@ import {
 } from '@/storage';
 import type { DictionaryId } from '@/dictionaries';
 import type { SettingsTab } from '@/routes';
-import { level as storageLevel, setLevel, STORAGE_OPTIONS, type StorageLevel } from '@/siteStorage';
+import { level as storageLevel, setLevel as setStorageLevel, STORAGE_OPTIONS, type StorageLevel } from '@/siteStorage';
+import {
+  difficulty,
+  setDifficulty,
+  DIFFICULTIES,
+  DIFFICULTY_BLURB,
+  DIFFICULTY_LABEL,
+  type Difficulty,
+} from '@/difficulty';
 import type { Palette, TextScale, ThemeMode } from '@/theme';
 import { useModalA11y } from '@/useModalA11y';
 
@@ -240,6 +248,7 @@ export default function SettingsModal({
   // Unanswered is off. Nothing loads before a yes, so the control has to show
   // that state rather than a cheerful default.
   const [storage, setStorageState] = useState<StorageLevel>(storageLevel);
+  const [level, setLevel] = useState<Difficulty>(difficulty);
   const [analytics, setAnalyticsState] = useState<Consent>(() => readConsent() ?? 'denied');
   const [answeredAt, setAnsweredAt] = useState<Date | null>(consentGivenAt);
 
@@ -437,7 +446,7 @@ export default function SettingsModal({
                   onClick={() => {
                     // takes effect immediately, including removing what the
                     // stricter setting no longer allows
-                    setLevel(id);
+                    setStorageLevel(id);
                     setStorageState(id);
                   }}
                   aria-pressed={storage === id}
@@ -505,6 +514,39 @@ export default function SettingsModal({
         </div>
 
         <div className={`space-y-6 ${tab === 'games' ? '' : 'hidden'}`}>
+          <div>
+            <h3 className="flex items-center gap-2 text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2.5">
+              <Gauge className="w-3.5 h-3.5" />
+              Difficulty
+            </h3>
+            <div className="flex flex-wrap gap-1.5">
+              {DIFFICULTIES.map((id) => (
+                <button
+                  key={id}
+                  onClick={() => {
+                    // takes effect at once: the games re-read the feed and
+                    // swap to that difficulty's board
+                    setDifficulty(id);
+                    setLevel(id);
+                  }}
+                  aria-pressed={level === id}
+                  className={`px-3 h-9 rounded-lg text-sm font-semibold transition-colors
+                    ${level === id
+                      ? 'bg-amber-400 text-ink shadow-lg shadow-amber-500/30'
+                      : 'bg-white/5 border border-white/10 text-slate-300 hover:bg-white/10'}`}
+                >
+                  {DIFFICULTY_LABEL[id]}
+                </button>
+              ))}
+            </div>
+            <p className="mt-2 text-xs text-slate-500">
+              {DIFFICULTY_BLURB[level]} Each difficulty is its own puzzle with its
+              own board, statistics and streak, so today&apos;s hard Guess is a
+              different word from today&apos;s easy one. Word Squares keeps its two
+              sizes for now and always counts as easy.
+            </p>
+          </div>
+
           <div>
             <h3 className="flex items-center gap-2 text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2.5">
               <EyeOff className="w-3.5 h-3.5" />

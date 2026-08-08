@@ -8,7 +8,12 @@ import {
 } from 'react';
 import { CalendarDays, CornerDownLeft, Delete, Eye, LifeBuoy, RefreshCw, RotateCcw, Timer } from 'lucide-react';
 import { formatElapsed, useUpTimer } from '@/useUpTimer';
-import { difficulty, resolveDifficulty, type Difficulty } from '@/difficulty';
+import {
+  difficulty,
+  onDifficultyChange,
+  resolveDifficulty,
+  type Difficulty,
+} from '@/difficulty';
 import type { LetterState } from '@/GuessGame';
 import { dailyDataUrl } from '@/dailyData';
 import DailyStats from '@/DailyStats';
@@ -209,6 +214,10 @@ const BoxGame = forwardRef<
   // feed generated before difficulty existed only has the easy board, and a
   // result has to be recorded as what was played rather than what was wanted.
   const [playedAt, setPlayedAt] = useState<Difficulty>(difficulty);
+  // Changing difficulty means a different board, so the feed has to be read
+  // again. A storage write re-renders nothing on its own.
+  const [difficultyTick, setDifficultyTick] = useState(0);
+  useEffect(() => onDifficultyChange(() => setDifficultyTick((n) => n + 1)), []);
   const [dailyError, setDailyError] = useState(false);
   const flashTimer = useRef<number | undefined>(undefined);
 
@@ -251,7 +260,7 @@ const BoxGame = forwardRef<
     return () => {
       alive = false;
     };
-  }, []);
+  }, [difficultyTick]);
 
   // ensure a practice box exists once the dictionary is ready
   useEffect(() => {

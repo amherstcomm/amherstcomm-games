@@ -8,7 +8,12 @@ import {
 } from 'react';
 import { CalendarDays, CornerDownLeft, Delete, Flag, Play, RefreshCw, Search, Shuffle, Timer } from 'lucide-react';
 import { solveDescramble } from '@/solvers';
-import { difficulty, resolveDifficulty, type Difficulty } from '@/difficulty';
+import {
+  difficulty,
+  onDifficultyChange,
+  resolveDifficulty,
+  type Difficulty,
+} from '@/difficulty';
 import type { LetterState } from '@/GuessGame';
 import { dailyDataUrl } from '@/dailyData';
 import DailyStats from '@/DailyStats';
@@ -125,6 +130,10 @@ const ScrambleGame = forwardRef<
   // feed generated before difficulty existed only has the easy board, and a
   // result has to be recorded as what was played rather than what was wanted.
   const [playedAt, setPlayedAt] = useState<Difficulty>(difficulty);
+  // Changing difficulty means a different board, so the feed has to be read
+  // again. A storage write re-renders nothing on its own.
+  const [difficultyTick, setDifficultyTick] = useState(0);
+  useEffect(() => onDifficultyChange(() => setDifficultyTick((n) => n + 1)), []);
   const [dailyError, setDailyError] = useState(false);
   const [now, setNow] = useState(() => Date.now());
   const flashTimer = useRef<number | undefined>(undefined);
@@ -169,7 +178,7 @@ const ScrambleGame = forwardRef<
     return () => {
       alive = false;
     };
-  }, []);
+  }, [difficultyTick]);
 
   function makePracticeRack(): ScrambleRecord | null {
     if (!commonWords) return null;
