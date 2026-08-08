@@ -26,6 +26,8 @@ import { level as storageLevel, setLevel as setStorageLevel, STORAGE_OPTIONS, ty
 import {
   difficulty,
   setDifficulty,
+  difficultyMode,
+  setDifficultyMode,
   DIFFICULTIES,
   DIFFICULTY_BLURB,
   DIFFICULTY_LABEL,
@@ -249,6 +251,7 @@ export default function SettingsModal({
   // that state rather than a cheerful default.
   const [storage, setStorageState] = useState<StorageLevel>(storageLevel);
   const [level, setLevel] = useState<Difficulty>(difficulty);
+  const [diffMode, setDiffMode] = useState(difficultyMode);
   const [analytics, setAnalyticsState] = useState<Consent>(() => readConsent() ?? 'denied');
   const [answeredAt, setAnsweredAt] = useState<Date | null>(consentGivenAt);
 
@@ -544,6 +547,33 @@ export default function SettingsModal({
               own board, statistics and streak, so today&apos;s hard Guess is a
               different word from today&apos;s easy one. Word Squares keeps its two
               sizes for now and always counts as easy.
+            </p>
+
+            <div className="mt-3 flex flex-wrap gap-1.5">
+              {([
+                { id: 'all' as const, label: 'Play all three' },
+                { id: 'locked' as const, label: 'Just this one' },
+              ]).map(({ id, label }) => (
+                <button
+                  key={id}
+                  onClick={() => {
+                    setDifficultyMode(id);
+                    setDiffMode(id);
+                  }}
+                  aria-pressed={diffMode === id}
+                  className={`px-3 h-9 rounded-lg text-sm font-semibold transition-colors
+                    ${diffMode === id
+                      ? 'bg-white/15 border border-white/25 text-white'
+                      : 'bg-white/5 border border-white/10 text-slate-300 hover:bg-white/10'}`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            <p className="mt-2 text-xs text-slate-500">
+              {diffMode === 'all'
+                ? 'All three are on offer each day, with a switch above the board. Play as many as you like — they count separately.'
+                : 'One puzzle a day and no decision. The other boards still exist; this only puts the switch away.'}
             </p>
           </div>
 

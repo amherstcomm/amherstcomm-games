@@ -32,6 +32,21 @@ export const DIFFICULTY_BLURB: Record<Difficulty, string> = {
 };
 
 const KEY = 'anagrimoire:difficulty:v1';
+const MODE_KEY = 'anagrimoire:difficulty-mode:v1';
+
+/** Whether all three difficulties are on offer each day, or just one.
+ *
+ *  'all' is the point of the feature: three boards a day per game, each with
+ *  its own progress, statistics and streak, and you play as many as you like —
+ *  the same way Guess already offers a board per word length. 'locked' is for
+ *  people who want one puzzle and no decision, and it hides the switch rather
+ *  than removing the other boards, which still exist and can still be played
+ *  by unlocking. */
+export type DifficultyMode = 'all' | 'locked';
+
+export function difficultyMode(): DifficultyMode {
+  return store.getItem(MODE_KEY) === 'locked' ? 'locked' : 'all';
+}
 
 export function isDifficulty(v: unknown): v is Difficulty {
   return v === 'easy' || v === 'hard' || v === 'extreme';
@@ -55,6 +70,13 @@ export function setDifficulty(next: Difficulty): void {
   if (difficulty() === next) return;
   store.setItem(KEY, next);
   for (const fn of listeners) fn();
+}
+
+export function setDifficultyMode(next: DifficultyMode): void {
+  if (difficultyMode() === next) return;
+  store.setItem(MODE_KEY, next);
+  // Locking doesn't change which board you're on, only whether the switch is
+  // offered — so no listener fires and nothing re-fetches.
 }
 
 /** Called when the difficulty changes. Returns an unsubscribe. */

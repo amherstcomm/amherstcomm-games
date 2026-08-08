@@ -42,6 +42,14 @@ import {
   type SettingsTab,
   type StatsTab,
 } from '@/routes';
+import {
+  difficulty as currentDifficulty,
+  setDifficulty,
+  difficultyMode,
+  onDifficultyChange,
+  DIFFICULTIES,
+  DIFFICULTY_LABEL,
+} from '@/difficulty';
 import { ALL_MODES, ALL_START_PAGES, ALL_VIEWS, lengthChoices, visibleModes, visibleViews, type LengthRange, type StartPage, type View, loadState, saveState, GRID_PRESET_DIMS, WEAVE_DIMS, type GridPreset, type Mode, type NavKeys, type SortPref, type SquareSolverSize, type WeaveSize } from '@/storage';
 
 // longest rack the scramble solver accepts; word lengths come from the
@@ -853,6 +861,11 @@ function App() {
   const weaveRef = useRef<WeaveGameHandle>(null);
   const squaresRef = useRef<SquaresGameHandle>(null);
 
+  // The switch and the games both read the same stored value; this only
+  // mirrors it so the pressed state re-renders.
+  const [level, setLevel] = useState(currentDifficulty);
+  useEffect(() => onDifficultyChange(() => setLevel(currentDifficulty())), []);
+
   const patternPlayActive = mode === 'pattern' && patternPlay && !learnMode;
   const beePlayActive = mode === 'bee' && beePlay && !learnMode;
   const boxedPlayActive = mode === 'boxed' && boxedPlay && !learnMode;
@@ -862,6 +875,8 @@ function App() {
   const squaresPlayActive = mode === 'squares' && squaresPlay && !learnMode;
   const playActive =
     patternPlayActive || beePlayActive || boxedPlayActive || descramblePlayActive || gridPlayActive || weavePlayActive || squaresPlayActive;
+
+
 
   // the guess game validates against the full dictionary and picks practice
   // words from the common one; hive, box, scramble, grid play — and the
@@ -950,6 +965,20 @@ function App() {
     if (initialGame?.view === 'play') seed[modeOf(initialGame.slug)] = initialGame.daily;
     return seed;
   });
+
+  // Three boards a day, and you may play all of them — so the switch belongs
+  // beside the board rather than buried in settings.
+  //
+  // Not on practice, which has no daily to vary. Not on Grid, whose board is
+  // the same dice at every level. Not on Squares, which still ships its two
+  // sizes and counts as easy. And not when someone has asked to be left with
+  // one puzzle.
+  const showDifficultySwitch =
+    playActive &&
+    dailyByMode[mode] &&
+    mode !== 'grid' &&
+    mode !== 'squares' &&
+    difficultyMode() === 'all';
 
   useEffect(
     () =>
@@ -1930,6 +1959,29 @@ function App() {
             {DICTIONARIES.find((d) => d.id === dictionaryId)?.blurb}
           </p>
         </section>
+        )}
+
+        {showDifficultySwitch && (
+          <section className="mb-7 text-center">
+            <label className="block text-xs font-medium text-slate-400 uppercase tracking-wider mb-2.5">
+              Difficulty
+            </label>
+            <div className="inline-flex flex-wrap justify-center max-w-full rounded-xl bg-white/5 border border-white/10 p-1 gap-1">
+              {DIFFICULTIES.map((id) => (
+                <button
+                  key={id}
+                  onClick={() => setDifficulty(id)}
+                  aria-pressed={level === id}
+                  className={`px-3.5 h-9 rounded-lg text-sm font-semibold transition-colors
+                    ${level === id
+                      ? 'bg-amber-400 text-ink shadow-lg shadow-amber-500/30'
+                      : 'text-slate-300 hover:bg-white/10'}`}
+                >
+                  {DIFFICULTY_LABEL[id]}
+                </button>
+              ))}
+            </div>
+          </section>
         )}
 
         {mode === 'pattern' && (
