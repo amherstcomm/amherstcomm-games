@@ -75,13 +75,13 @@ create or replace view public.words_extreme_answers as
 --            cut MINUS slurs, and the client's published band files carry
 --            the same flags from the same build. strong and mild score;
 --            they exist so a player can choose not to be shown them.
---   domains  WordNet noun categories, pipe-joined (animal|food|plant|...).
+--   domains  WordNet noun categories as a text[] (e.g. {animal,food}).
 --            For themed generation someday, and for other projects reading
 --            the shared word-list files. Sparse: inflections inherit their
 --            lemma's domains where WordNet only knows the base form.
 alter table public.words add column if not exists flag text
   check (flag in ('slur', 'strong', 'mild'));
-alter table public.words add column if not exists domains text;
+alter table public.words add column if not exists domains text[];
 
 -- What we won't PUBLISH as an answer, with the reason each word is here.
 -- Deliberately a different thing from flag: this list can be generous

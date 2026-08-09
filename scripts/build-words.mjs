@@ -253,16 +253,19 @@ for (const w of rows) {
   const keepLemma = lm && words.has(lm) ? lm : '';
   const flag = flagOf(w);
   const dm = wnDomains.get(w) ?? (keepLemma ? wnDomains.get(keepLemma) : undefined);
-  const dmStr = dm ? [...dm].sort().join('|') : '';
+  const dmArr = dm ? [...dm].sort() : null;
+  // text[] literal for \copy; quoted because it contains commas. Lexnames
+  // are bare lowercase words, so no inner escaping can ever be needed.
+  const dmCsv = dmArr ? `"{${dmArr.join(',')}}"` : '';
   if (lv !== undefined) withLevel++;
   if (p) withPos++;
   if (keepLemma) withLemma++;
-  if (dmStr) {
+  if (dmArr) {
     withDomains++;
-    domainsOut[w] = dmStr;
+    domainsOut[w] = dmArr;
   }
   if (flag) flagCounts[flag]++;
-  csv.push(`${w},${w.length},${sorted(w)},${lv ?? ''},${p ?? ''},${keepLemma},${flag},${dmStr}`);
+  csv.push(`${w},${w.length},${sorted(w)},${lv ?? ''},${p ?? ''},${keepLemma},${flag},${dmCsv}`);
 }
 
 writeFileSync(OUT, csv.join('\n') + '\n');
