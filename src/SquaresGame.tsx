@@ -1,6 +1,12 @@
-import { forwardRef, Fragment, useEffect, useImperativeHandle, useMemo, useState } from 'react';
+import { forwardRef, Fragment, useCallback, useEffect, useImperativeHandle, useMemo, useState } from 'react';
 import { CalendarDays, Eye, RefreshCw, Timer } from 'lucide-react';
 import { dailyDataUrl, SQUARES_POOL_URL } from '@/dailyData';
+import {
+  difficulty,
+  isDifficulty,
+  onDifficultyChange,
+  type Difficulty,
+} from '@/difficulty';
 import MobileKeyInput from '@/MobileKeyInput';
 import ShareButton from '@/ShareButton';
 import { buildShare, TILE_EMOJI } from '@/share';
@@ -46,8 +52,15 @@ type SquareRecord = {
 type SquaresStore = {
   dailyMode: boolean;
   dailyDate: string;
+  /** practice only — the daily's size comes from its difficulty */
   size: SquareSize;
-  daily: Partial<Record<SquareSize, SquareRecord>>;
+  /** which difficulty the practice board was drawn for, so switching
+   *  difficulty redraws even when hard and extreme are the same size */
+  practiceAt?: Difficulty;
+  // Keyed by difficulty rather than by size, because hard and extreme are both
+  // 5x5: keying by size meant one silently replaced the other, and it was
+  // extreme that won.
+  daily: Partial<Record<Difficulty, SquareRecord>>;
   practice: SquareRecord | null;
 };
 
@@ -92,15 +105,25 @@ function readStore(): SquaresStore {
     const raw = siteStore.getItem(SQUARES_KEY);
     if (!raw) return DEFAULT_STORE;
     const p = JSON.parse(raw);
-    const daily: Partial<Record<SquareSize, SquareRecord>> = {};
-    for (const n of [4, 5] as SquareSize[]) {
-      const rec = sanitizeRecord(p?.daily?.[n]);
-      if (rec) daily[n] = rec;
+    // Boards were keyed by size before difficulty existed. 4x4 was easy and
+    // 5x5 was hard, so a half-played board carries over rather than vanishing.
+    const daily: Partial<Record<Difficulty, SquareRecord>> = {};
+    for (const [key, level] of [
+      ['easy', 'easy'],
+      ['hard', 'hard'],
+      ['extreme', 'extreme'],
+      ['4', 'easy'],
+      ['5', 'hard'],
+    ] as [string, Difficulty][]) {
+      if (daily[level]) continue;
+      const rec = sanitizeRecord(p?.daily?.[key]);
+      if (rec) daily[level] = rec;
     }
     return {
       dailyMode: p?.dailyMode !== false,
       dailyDate: typeof p?.dailyDate === 'string' ? p.dailyDate : '',
       size: p?.size === 5 ? 5 : 4,
+      practiceAt: isDifficulty(p?.practiceAt) ? p.practiceAt : undefined,
       daily,
       practice: sanitizeRecord(p?.practice),
     };
@@ -155,6 +178,22 @@ const SquaresGame = forwardRef<
   }
 >(function SquaresGame({ standardWords }, ref) {
   const [store, setStore] = useState<SquaresStore>(loadStore);
+  // The difficulty this board actually is — the one asked for, unless the feed
+  // predates difficulty and only the easy board exists.
+  const [playedAt, setPlayedAt] = useState<Difficulty>(difficulty);
+  const [difficultyTick, setDifficultyTick] = useState(0);
+  // The setting itself. `playedAt` is the difficulty of the *daily* board and
+  // is only set when that fetch resolves — practice has no daily to wait for,
+  // so keying it off playedAt left it on whatever the daily last resolved to.
+  const [level, setLevel] = useState<Difficulty>(difficulty);
+  useEffect(
+    () =>
+      onDifficultyChange(() => {
+        setLevel(difficulty());
+        setDifficultyTick((n) => n + 1);
+      }),
+    []
+  );
   const { practiceAllowed } = usePrefs();
   const palette = usePalette();
   // pinned to the daily: someone who switched practice off shouldn't be left
@@ -188,20 +227,29 @@ const SquaresGame = forwardRef<
     let alive = true;
     fetch(DAILY_SQUARES_URL, { cache: 'no-store' })
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
-      .then((d) => {
+      .then((raw) => {
         if (!alive) return;
-        if (typeof d?.date !== 'string' || !d?.boards) throw new Error('bad payload');
+        const d = raw;
+        if (typeof d?.date !== 'string') throw new Error('bad payload');
+        const want = difficulty();
+        // A feed that predates difficulty only has `boards`, keyed by size —
+        // 4x4 was easy and 5x5 was hard, so read it as that rather than
+        // showing nothing.
+        const legacy: Partial<Record<Difficulty, unknown>> = d.boards
+          ? { easy: d.boards[4], hard: d.boards[5] }
+          : {};
+        const chosen = (d.byDifficulty?.[want] ?? legacy[want]) as SquareRecord | undefined;
+        const level: Difficulty = chosen ? want : 'easy';
+        const board = chosen ?? (d.byDifficulty?.easy ?? legacy.easy);
+        if (!board) throw new Error('bad payload');
+        setPlayedAt(level);
+        const fresh = sanitizeRecord({ ...board, entries: [] });
+        if (!fresh) throw new Error('bad payload');
         setStore((prev) => {
           const daily = prev.dailyDate === d.date ? { ...prev.daily } : {};
-          for (const n of [4, 5] as SquareSize[]) {
-            const board = d.boards[n];
-            if (!board) continue;
-            const fresh = sanitizeRecord({ ...board, entries: [] });
-            if (!fresh) continue;
-            // keep progress only when it's the same board we already had
-            const held = daily[n];
-            if (!held || held.cells.join('') !== fresh.cells.join('')) daily[n] = fresh;
-          }
+          // keep progress only when it's the same board we already had
+          const held = daily[level];
+          if (!held || held.cells.join('') !== fresh.cells.join('')) daily[level] = fresh;
           return { ...prev, dailyDate: d.date, daily };
         });
       })
@@ -211,7 +259,7 @@ const SquaresGame = forwardRef<
     return () => {
       alive = false;
     };
-  }, []);
+  }, [difficultyTick]);
 
   // the practice pool, fetched once
   useEffect(() => {
@@ -219,7 +267,8 @@ const SquaresGame = forwardRef<
     fetch(POOL_URL, { cache: 'no-store' })
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
       .then((d) => {
-        if (alive && d?.pool) setPool(d.pool);
+        // byDifficulty when the feed has it, the old size keys otherwise
+        if (alive && (d?.byDifficulty || d?.pool)) setPool(d.byDifficulty ?? d.pool);
       })
       .catch(() => {
         // practice stays unavailable until the pool loads
@@ -230,7 +279,10 @@ const SquaresGame = forwardRef<
   }, []);
 
   function drawPractice(size: SquareSize, avoid?: string): SquareRecord | null {
-    const options = pool?.[String(size)];
+    // Practice follows the difficulty too — picking Extreme and then getting an
+    // easy board to practise on is the setting not meaning anything. Falls back
+    // to the size keys for a pool generated before difficulty existed.
+    const options = pool?.[level] ?? pool?.[String(size)];
     if (!options?.length) return null;
     const fresh = options.filter((p) => p.cells.join('') !== avoid);
     const from = fresh.length ? fresh : options;
@@ -240,13 +292,23 @@ const SquaresGame = forwardRef<
 
   // make sure a practice board exists once the pool is here
   useEffect(() => {
-    if (store.dailyMode || store.practice?.size === store.size || !pool) return;
-    const board = drawPractice(store.size);
-    if (board) setStore((prev) => ({ ...prev, practice: board }));
+    if (store.dailyMode || !pool) return;
+    const from = pool[level] ?? pool[String(store.size)];
+    if (!from?.length) return;
+    const want = pool[level] ? from[0].size : store.size;
+    // Stop when the board we hold is the one we want. The previous guard also
+    // required pool[playedAt] to exist, which it doesn't for a pool generated
+    // before difficulty — so it never stopped, and practice redrew on every
+    // render for ever.
+    const wrong =
+      !store.practice || store.practice.size !== want || store.practiceAt !== level;
+    if (!wrong) return;
+    const board = drawPractice(want);
+    if (board) setStore((prev) => ({ ...prev, practice: board, practiceAt: level }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [store.dailyMode, store.practice, store.size, pool]);
+  }, [store.dailyMode, store.practice, store.size, pool, level]);
 
-  const record = store.dailyMode ? store.daily[store.size] ?? null : store.practice;
+  const record = store.dailyMode ? store.daily[playedAt] ?? null : store.practice;
   // The board's own size, never store.size: that flips the instant you press
   // 5×5, while the record is still the old board until the new one arrives.
   // Rendering n² cells against the old board's bars pushed the last column off
@@ -281,16 +343,19 @@ const SquaresGame = forwardRef<
     colStates.every((s) => s === 'good');
   const done = solved || !!record?.revealed;
 
-  function update(fn: (r: SquareRecord) => SquareRecord) {
+  // Memoised because it now closes over the difficulty being played: without
+  // this the finish effect below would take a new function every render and
+  // the linter would be right to complain.
+  const update = useCallback((fn: (r: SquareRecord) => SquareRecord) => {
     setStore((prev) => {
-      const cur = prev.dailyMode ? prev.daily[prev.size] : prev.practice;
+      const cur = prev.dailyMode ? prev.daily[playedAt] : prev.practice;
       if (!cur) return prev;
       const next = fn(cur);
       return prev.dailyMode
-        ? { ...prev, daily: { ...prev.daily, [prev.size]: next } }
+        ? { ...prev, daily: { ...prev.daily, [playedAt]: next } }
         : { ...prev, practice: next };
     });
-  }
+  }, [playedAt]);
 
   useEffect(() => {
     if (!record) return;
@@ -306,9 +371,10 @@ const SquaresGame = forwardRef<
         store.dailyMode ? store.dailyDate : null
       );
     }
-  }, [solved, record, n, store.dailyMode, store.dailyDate]);
+  }, [solved, record, n, store.dailyMode, store.dailyDate, update]);
 
   useDailySync({
+    difficulty: playedAt,
     game: 'squares',
     // the 4x4 and the 5x5 are separate puzzles on the same day, so they need
     // separate rows rather than fighting over one
@@ -317,10 +383,10 @@ const SquaresGame = forwardRef<
     record: (record as unknown as Record<string, unknown>) ?? null,
     setRecord: (merged) =>
       setStore((prev) => {
-        const cur = prev.daily[prev.size];
+        const cur = prev.daily[playedAt];
         if (!cur) return prev;
         const next = sanitizeRecord({ ...cur, ...merged });
-        return next ? { ...prev, daily: { ...prev.daily, [prev.size]: next } } : prev;
+        return next ? { ...prev, daily: { ...prev.daily, [playedAt]: next } } : prev;
       }),
     summary: done
       ? { solved: !record?.revealed, size: n, timeMs: record?.elapsedMs ?? 0 }
@@ -461,8 +527,10 @@ const SquaresGame = forwardRef<
         ))}
       </div>
 
-      {/* size */}
-      <div className="mb-3 flex flex-wrap items-center justify-center gap-2">
+      {/* Hidden everywhere. Practice is the daily generated on the fly and not
+          recorded, so its size comes from the difficulty just as the daily's
+          does. The markup stays because the solver still reaches for it. */}
+      <div className="mb-3 hidden flex-wrap items-center justify-center gap-2">
         <div className="inline-flex rounded-xl bg-white/5 border border-white/10 p-1 gap-1">
           {([4, 5] as SquareSize[]).map((s) => (
             <button

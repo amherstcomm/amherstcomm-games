@@ -8,6 +8,12 @@ import {
 } from 'react';
 import { CalendarDays, CornerDownLeft, Delete, Eye, LifeBuoy, RefreshCw, Shuffle, Timer } from 'lucide-react';
 import { formatElapsed, useUpTimer } from '@/useUpTimer';
+import {
+  difficulty,
+  onDifficultyChange,
+  resolveDifficulty,
+  type Difficulty,
+} from '@/difficulty';
 import type { LetterState } from '@/GuessGame';
 import { dailyDataUrl } from '@/dailyData';
 import DailyStats from '@/DailyStats';
@@ -123,10 +129,12 @@ const HiveGame = forwardRef<
   {
     standardWords: string[] | null;
     commonWords: string[] | null;
+    /** the words this difficulty draws practice from */
+    practiceWords: string[] | null;
     onLetterStates: (states: Record<string, LetterState>) => void;
     onReveal?: (center: string, outers: string[]) => void;
   }
->(function HiveGame({ standardWords, commonWords, onLetterStates, onReveal }, ref) {
+>(function HiveGame({ standardWords, commonWords, onLetterStates, onReveal, practiceWords }, ref) {
   const [store, setStore] = useState<HiveStore>(loadStore);
   const { practiceAllowed } = usePrefs();
   // pinned to the daily: someone who switched practice off shouldn't be left
@@ -142,6 +150,26 @@ const HiveGame = forwardRef<
   );
   const [current, setCurrent] = useState('');
   const [flash, setFlash] = useState<{ text: string; good: boolean } | null>(null);
+  // The difficulty this board actually is. Usually the one asked for, but a
+  // feed generated before difficulty existed only has the easy board, and a
+  // result has to be recorded as what was played rather than what was wanted.
+  const [playedAt, setPlayedAt] = useState<Difficulty>(difficulty);
+  // Changing difficulty means a different board, so the feed has to be read
+  // again. A storage write re-renders nothing on its own.
+  const [difficultyTick, setDifficultyTick] = useState(0);
+  useEffect(() => onDifficultyChange(() => setDifficultyTick((n) => n + 1)), []);
+
+  // Clear the practice board when a new word band arrives, not when the
+  // setting changes. The setting changes first and the band loads after, so
+  // clearing on the change regenerated from the pool we were about to
+  // replace — every level drew from the one below it.
+  const practicePool = useRef<string[] | null>(null);
+  useEffect(() => {
+    if (!practiceWords || practicePool.current === practiceWords) return;
+    const first = practicePool.current === null;
+    practicePool.current = practiceWords;
+    if (!first) setStore((prev) => ({ ...prev, practice: null }));
+  }, [practiceWords]);
   const [dailyError, setDailyError] = useState(false);
   const flashTimer = useRef<number | undefined>(undefined);
 
@@ -158,8 +186,14 @@ const HiveGame = forwardRef<
     let alive = true;
     fetch(DAILY_HIVE_URL, { cache: 'no-store' })
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
-      .then((d) => {
+      .then((raw) => {
         if (!alive) return;
+        const chosen = resolveDifficulty(raw, difficulty());
+        if (!chosen.board) throw new Error('bad payload');
+        setPlayedAt(chosen.difficulty);
+        // the date lives at the top level; the board's own fields come from
+        // whichever difficulty was resolved
+        const d = { ...raw, ...chosen.board };
         const center = String(d.center).toLowerCase();
         const outers = (d.outers as string[]).map((c) => String(c).toLowerCase());
         if (!/^[a-z]$/.test(center) || outers.length !== 6) throw new Error('bad payload');
@@ -181,14 +215,17 @@ const HiveGame = forwardRef<
     return () => {
       alive = false;
     };
-  }, []);
+  }, [difficultyTick]);
 
   const commonSet = useMemo(() => (commonWords ? new Set(commonWords) : null), [commonWords]);
 
   function makePracticeHive(): HiveRecord | null {
     if (!commonWords || !commonSet) return null;
+    // The band for the difficulty being played, so practising at a level
+    // practises for it. Falls back to common while the band loads.
+    const from = practiceWords?.length ? practiceWords : commonWords;
     // no 's' in the hive (plurals would flood the answer list)
-    const bases = commonWords.filter(
+    const bases = from.filter(
       (w) => w.length >= 7 && new Set(w).size === 7 && !w.includes('s')
     );
     if (!bases.length) return null;
@@ -254,6 +291,7 @@ const HiveGame = forwardRef<
   // A hive has no finish line — every word counts, so its summary is the
   // running totals rather than something written once at the end.
   const syncing = useDailySync({
+    difficulty: playedAt,
     game: 'hive',
     date: store.dailyDate,
     record,
@@ -627,12 +665,12 @@ const HiveGame = forwardRef<
 
           {store.dailyMode && store.dailyDate && (
             <div>
-              <DailyStats game="hive" date={store.dailyDate} />
+              <DailyStats level={playedAt} game="hive" date={store.dailyDate} />
             </div>
           )}
 
           <p className="mt-5 text-xs text-slate-500">
-            Scored against our Standard dictionary — nothing is checked against any publisher&apos;s list.
+            Scored against the word list for the difficulty you&apos;re playing — nothing is checked against any publisher&apos;s list.
             {store.dailyMode && ' A fresh daily hive arrives about 15 minutes after 3:00 a.m. Eastern.'}
           </p>
         </>

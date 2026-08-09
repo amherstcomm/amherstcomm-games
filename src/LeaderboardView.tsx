@@ -9,6 +9,8 @@ import {
   type Boards,
 } from '@/leaderboard';
 import { formatElapsed } from '@/useUpTimer';
+import { difficulty, onDifficultyChange, type Difficulty } from '@/difficulty';
+import DifficultyTabs from '@/DifficultyTabs';
 
 const ICONS: Record<BoardGame, typeof Grid3x3> = {
   guess: Grid3x3,
@@ -62,6 +64,8 @@ function Board({ game, rows, me }: { game: BoardGame; rows: Boards[BoardGame]; m
 }
 
 export default function LeaderboardView({ signedIn }: { signedIn: boolean }) {
+  const [level, setLevel] = useState<Difficulty>(difficulty);
+  useEffect(() => onDifficultyChange(() => setLevel(difficulty())), []);
   const [days, setDays] = useState<number>(1);
   const [boards, setBoards] = useState<Boards | null>(null);
   const [state, setState] = useState<'loading' | 'ready' | 'error'>('loading');
@@ -70,7 +74,7 @@ export default function LeaderboardView({ signedIn }: { signedIn: boolean }) {
   useEffect(() => {
     let alive = true;
     setState('loading');
-    fetchBoards(days).then((b) => {
+    fetchBoards(days, level).then((b) => {
       if (!alive) return;
       setBoards(b);
       setState(b ? 'ready' : 'error');
@@ -78,7 +82,7 @@ export default function LeaderboardView({ signedIn }: { signedIn: boolean }) {
     return () => {
       alive = false;
     };
-  }, [days]);
+  }, [days, level]);
 
   useEffect(() => {
     if (!signedIn) return;
@@ -105,6 +109,10 @@ export default function LeaderboardView({ signedIn }: { signedIn: boolean }) {
             {w.label}
           </button>
         ))}
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2">
+        <DifficultyTabs value={level} onChange={setLevel} label="Which difficulty's boards" />
       </div>
 
       {state === 'loading' && <p className="text-sm text-slate-400 py-6 text-center">Loading…</p>}

@@ -8,6 +8,12 @@ import {
 } from 'react';
 import { CalendarDays, RefreshCw, Search, Timer, Trophy } from 'lucide-react';
 import { dailyDataUrl } from '@/dailyData';
+import {
+  difficulty,
+  onDifficultyChange,
+  resolveDifficulty,
+  type Difficulty,
+} from '@/difficulty';
 import DailyStats from '@/DailyStats';
 import MobileKeyInput from '@/MobileKeyInput';
 import ShareButton from '@/ShareButton';
@@ -104,11 +110,13 @@ const GuessGame = forwardRef<
   {
     length: number;
     commonWords: string[] | null;
+    /** the words this difficulty draws practice from */
+    practiceWords: string[] | null;
     fullWords: string[] | null;
     onLetterStates: (states: Record<string, LetterState>) => void;
     onReveal?: (clues: { length: number; known: string[]; contains: string; excluded: string }) => void;
   }
->(function GuessGame({ length, commonWords, fullWords, onLetterStates, onReveal }, ref) {
+>(function GuessGame({ length, commonWords, fullWords, onLetterStates, onReveal, practiceWords }, ref) {
   const [store, setStore] = useState<PlayStore>(loadStore);
   const { practiceAllowed } = usePrefs();
   // pinned to the daily: someone who switched practice off shouldn't be left
@@ -123,6 +131,26 @@ const GuessGame = forwardRef<
     []
   );
   const [dailyData, setDailyData] = useState<{ date: string; words: Record<string, string> } | null>(null);
+  // The difficulty this board actually is. Usually the one asked for, but a
+  // feed generated before difficulty existed only has the easy board, and a
+  // result has to be recorded as what was played rather than what was wanted.
+  const [playedAt, setPlayedAt] = useState<Difficulty>(difficulty);
+  // Changing difficulty means a different board, so the feed has to be read
+  // again. A storage write re-renders nothing on its own.
+  const [difficultyTick, setDifficultyTick] = useState(0);
+  useEffect(() => onDifficultyChange(() => setDifficultyTick((n) => n + 1)), []);
+
+  // Clear the practice board when a new word band arrives, not when the
+  // setting changes. The setting changes first and the band loads after, so
+  // clearing on the change regenerated from the pool we were about to
+  // replace — every level drew from the one below it.
+  const practicePool = useRef<string[] | null>(null);
+  useEffect(() => {
+    if (!practiceWords || practicePool.current === practiceWords) return;
+    const first = practicePool.current === null;
+    practicePool.current = practiceWords;
+    if (!first) setStore((prev) => ({ ...prev, practice: {} }));
+  }, [practiceWords]);
   const [dailyError, setDailyError] = useState(false);
   const [current, setCurrent] = useState('');
   const [flash, setFlash] = useState('');
@@ -142,8 +170,14 @@ const GuessGame = forwardRef<
     let alive = true;
     fetch(DAILY_URL, { cache: 'no-store' })
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
-      .then((d) => {
+      .then((raw) => {
         if (!alive) return;
+        const chosen = resolveDifficulty(raw, difficulty());
+        if (!chosen.board) throw new Error('bad payload');
+        setPlayedAt(chosen.difficulty);
+        // the date lives at the top level; the board's own fields come from
+        // whichever difficulty was resolved
+        const d = { ...raw, ...chosen.board };
         if (typeof d?.date !== 'string' || typeof d?.words !== 'object') throw new Error('bad payload');
         setDailyData({ date: d.date, words: d.words });
         // a new day resets all daily boards; same-day boards whose secret no
@@ -167,7 +201,7 @@ const GuessGame = forwardRef<
     return () => {
       alive = false;
     };
-  }, []);
+  }, [difficultyTick]);
 
   const commonSet = useMemo(() => (commonWords ? new Set(commonWords) : null), [commonWords]);
   const fullSetForLen = useMemo(
@@ -180,7 +214,10 @@ const GuessGame = forwardRef<
 
   function pickPracticeWord(): string | null {
     if (!commonWords || !commonSet) return null;
-    const pool = commonWords.filter(
+    // The band for the difficulty being played, so practising at a level
+    // practises for it. Falls back to common while the band loads.
+    const from = practiceWords?.length ? practiceWords : commonWords;
+    const pool = from.filter(
       (w) => w.length === length && !(w.endsWith('s') && commonSet.has(w.slice(0, -1)))
     );
     if (!pool.length) return null;
@@ -246,6 +283,7 @@ const GuessGame = forwardRef<
   // Each word length is its own board on the same date, so the length is the
   // variant that keeps today's 5- and 6-letter puzzles apart.
   const syncing = useDailySync({
+    difficulty: playedAt,
     game: 'guess',
     variant: String(length),
     date: dailyData?.date ?? '',
@@ -606,7 +644,7 @@ const GuessGame = forwardRef<
           )}
 
           {dailyMode && (won || lost) && dailyData && (
-            <DailyStats game="guess" date={dailyData.date} />
+            <DailyStats level={playedAt} game="guess" date={dailyData.date} />
           )}
         </>
       )}

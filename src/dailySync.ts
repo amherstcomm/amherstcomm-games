@@ -11,6 +11,7 @@
 // and never repeat, so there is nothing to collide.
 
 import { DAILY_ENV } from '@/dailyData';
+import type { Difficulty } from '@/difficulty';
 import { supabase } from '@/supabase';
 import { store as siteStore } from '@/siteStorage';
 
@@ -263,7 +264,11 @@ function canon(value: unknown): string {
   return JSON.stringify(norm(value ?? null));
 }
 
-const baseKey = (game: DailyGame, variant: string, date: string) => `${game}:${variant}:${date}`;
+// Difficulty joins the key for the same reason it joins the database's: the
+// easy and hard boards for one day are different puzzles, and holding one
+// reconciliation state for both would let a write to one erase the other.
+const baseKey = (game: DailyGame, variant: string, difficulty: Difficulty, date: string) =>
+  `${game}:${variant}:${difficulty}:${date}`;
 
 function saveBases(): void {
   try {
@@ -289,11 +294,12 @@ export function clearSyncBase(): void {
 export function mergeFromServer(
   game: DailyGame,
   variant: string,
+  difficulty: Difficulty,
   puzzleDate: string,
   local: Rec | null,
   row: DailyRow
 ): Rec | null {
-  const key = baseKey(game, variant, puzzleDate);
+  const key = baseKey(game, variant, difficulty, puzzleDate);
   const base = syncBase.get(key);
   const serverMoved = base === undefined || base.stamp !== row.updatedAt;
   const localDirty = base === undefined || canon(progressOf(game, local)) !== base.state;
@@ -327,11 +333,12 @@ export function mergeFromServer(
 export function noteWritten(
   game: DailyGame,
   variant: string,
+  difficulty: Difficulty,
   puzzleDate: string,
   updatedAt: string,
   state: Rec
 ): void {
-  syncBase.set(baseKey(game, variant, puzzleDate), {
+  syncBase.set(baseKey(game, variant, difficulty, puzzleDate), {
     stamp: updatedAt,
     state: canon(progressOf(game, state)),
   });
@@ -345,6 +352,7 @@ export function noteWritten(
 export async function loadDaily(
   game: DailyGame,
   variant: string,
+  difficulty: Difficulty,
   puzzleDate: string
 ): Promise<DailyRow | null> {
   if (!supabase || !puzzleDate) return null;
@@ -356,6 +364,7 @@ export async function loadDaily(
       .select('state, completed, result, updated_at')
       .eq('game', game)
       .eq('variant', variant)
+      .eq('difficulty', difficulty)
       .eq('puzzle_date', puzzleDate)
       .eq('env', DAILY_ENV)
       .maybeSingle();
@@ -379,6 +388,7 @@ const pending = new Map<string, number>();
 export function saveDaily(
   game: DailyGame,
   variant: string,
+  difficulty: Difficulty,
   puzzleDate: string,
   state: Rec,
   completed: boolean,
@@ -387,13 +397,13 @@ export function saveDaily(
   onMerged?: (merged: Rec) => void
 ): void {
   if (!supabase || !puzzleDate) return;
-  const key = `${game}:${variant}:${puzzleDate}`;
+  const key = `${game}:${variant}:${difficulty}:${puzzleDate}`;
   window.clearTimeout(pending.get(key));
   pending.set(
     key,
     window.setTimeout(() => {
       pending.delete(key);
-      void push(game, variant, puzzleDate, state, completed, result, onMerged);
+      void push(game, variant, difficulty, puzzleDate, state, completed, result, onMerged);
     }, 800)
   );
 }
@@ -401,6 +411,7 @@ export function saveDaily(
 async function push(
   game: DailyGame,
   variant: string,
+  difficulty: Difficulty,
   puzzleDate: string,
   state: Rec,
   completed: boolean,
@@ -416,7 +427,7 @@ async function push(
     // a tab that has been open since before the other device played holds a
     // stale copy, and writing that copy wholesale erases whatever the other
     // device did. Whoever writes last must fold in what's already there.
-    const current = await loadDaily(game, variant, puzzleDate);
+    const current = await loadDaily(game, variant, difficulty, puzzleDate);
     const merged = (current?.state && Object.keys(current.state).length
       ? mergeDaily(game, state, current.state, 'push')
       : state) as Rec;
@@ -430,6 +441,7 @@ async function push(
         user_id: userId,
         game,
         variant,
+        difficulty,
         puzzle_date: puzzleDate,
         env: DAILY_ENV,
         state: merged,
@@ -437,11 +449,11 @@ async function push(
         result: resultNow,
         updated_at: writtenAt,
       },
-      { onConflict: 'user_id,game,variant,puzzle_date,env' }
+      { onConflict: 'user_id,game,variant,difficulty,puzzle_date,env' }
     );
     // what we just wrote is now the server state we have reconciled with, so a
     // pull that reads it back knows it isn't news
-    if (!error) noteWritten(game, variant, puzzleDate, writtenAt, merged);
+    if (!error) noteWritten(game, variant, difficulty, puzzleDate, writtenAt, merged);
     if (error) {
       console.warn('Anagrimoire daily sync failed:', error.message);
       return;

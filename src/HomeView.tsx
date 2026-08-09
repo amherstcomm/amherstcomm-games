@@ -9,7 +9,10 @@
 import { Grid3x3, Hexagon, LayoutGrid, Puzzle, Shuffle, Square, Table2, Trophy } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { MODE_SLUG, pathOf, SLUG_NAME, type Slug } from '@/routes';
+import { difficulty, onDifficultyChange } from '@/difficulty';
 import RouteLink from '@/RouteLink';
+import DifficultyTabs from '@/DifficultyTabs';
+import type { Difficulty } from '@/difficulty';
 import { allDailyStatus, type DailyState } from '@/dailyStatus';
 import {
   boardsToShow,
@@ -41,6 +44,16 @@ const BLURB: Record<Slug, string> = {
   squares: 'Fill the grid so every row and every column spells a word.',
 };
 
+const NUMBER_WORD: Record<number, string> = {
+  1: 'One',
+  2: 'Two',
+  3: 'Three',
+  4: 'Four',
+  5: 'Five',
+  6: 'Six',
+  7: 'Seven',
+};
+
 const STATE_LABEL: Record<DailyState, string> = {
   none: 'Not started',
   started: 'In progress',
@@ -63,6 +76,9 @@ export default function HomeView({
   onOpen: (mode: Mode) => void;
   onBoards: () => void;
 }) {
+  // what's being looked at, which starts from what's being played
+  const [boardLevel, setBoardLevel] = useState<Difficulty>(difficulty);
+  useEffect(() => onDifficultyChange(() => setBoardLevel(difficulty())), []);
   const [status, setStatus] = useState<Record<string, DailyState>>({});
   const [boards, setBoards] = useState<Boards | null>(null);
   // so you can find yourself in the column; null when signed out or unnamed,
@@ -73,12 +89,12 @@ export default function HomeView({
 
   useEffect(() => {
     let alive = true;
-    fetchBoards(1).then((b) => alive && setBoards(b));
+    fetchBoards(1, boardLevel).then((b) => alive && setBoards(b));
     fetchDisplayName().then((n) => alive && setMe(n));
     return () => {
       alive = false;
     };
-  }, []);
+  }, [boardLevel]);
 
   const doneCount = modes.filter((m) => status[m] === 'done').length;
   const shownBoards = boards ? boardsToShow(boards, modes, status) : [];
@@ -87,9 +103,13 @@ export default function HomeView({
     <div className="max-w-3xl mx-auto text-left">
       <section className="mb-8">
         <p className="text-slate-300">
-          Six word games, a fresh puzzle in each one every morning, and a solver
-          behind every game for when you&apos;re properly stuck. Everything works
-          without an account and nothing you type into a solver leaves your device.
+          {/* Counted, not written down: it said six for as long as there were
+              seven, because a number in prose doesn't change when the code
+              does. It also follows what you've chosen to show. */}
+          {NUMBER_WORD[modes.length] ?? modes.length} word games, a fresh puzzle in
+          each one every morning, and a solver behind every game for when
+          you&apos;re properly stuck. Everything works without an account and
+          nothing you type into a solver leaves your device.
         </p>
       </section>
 
@@ -128,10 +148,20 @@ export default function HomeView({
         </div>
       </section>
 
-      {shownBoards.length > 0 && (
+      {/* Shown whenever the boards have loaded, not only when this difficulty
+          has entries. Hiding it took the tabs with it, so switching to a
+          difficulty nobody has played left no way back but a reload. */}
+      {boards && (
         <section>
           <h2 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">
-            On the boards today
+            <span className="flex items-center justify-between gap-3 flex-wrap">
+              <span>On the boards today</span>
+              <DifficultyTabs
+                value={boardLevel}
+                onChange={setBoardLevel}
+                label="Which difficulty's boards to show"
+              />
+            </span>
           </h2>
           <div className="grid gap-2 sm:grid-cols-2">
             {shownBoards.map((g) => {
@@ -186,6 +216,11 @@ export default function HomeView({
               );
             })}
           </div>
+          {shownBoards.length === 0 && (
+            <p className="text-sm text-slate-400">
+              Nobody has finished a puzzle at this difficulty today. Be first.
+            </p>
+          )}
           <p className="mt-2 text-xs text-slate-500">
             {me
               ? 'See all the boards, and the week and month behind them.'

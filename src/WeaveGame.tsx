@@ -9,6 +9,12 @@ import {
 } from 'react';
 import { CalendarDays, Eye, Lightbulb, RefreshCw, Timer } from 'lucide-react';
 import { gridNeighbors } from '@/solvers';
+import {
+  difficulty,
+  onDifficultyChange,
+  resolveDifficulty,
+  type Difficulty,
+} from '@/difficulty';
 import { dailyDataUrl, WEAVE_POOL_URL } from '@/dailyData';
 import DailyStats from '@/DailyStats';
 import ShareButton from '@/ShareButton';
@@ -70,12 +76,21 @@ const DEFAULT_STORE: WeaveStore = {
   practiceSize: '6x8',
 };
 
+const WEAVE_LAYOUT: Record<number, { grid: string; cell: string }> = {
+  6: { grid: 'grid-cols-6', cell: 'w-9 h-10 sm:w-11 sm:h-12 text-lg sm:text-xl' },
+  7: { grid: 'grid-cols-7', cell: 'w-8 h-9 sm:w-10 sm:h-11 text-base sm:text-lg' },
+  8: { grid: 'grid-cols-8', cell: 'w-8 h-9 sm:w-9 sm:h-10 text-base sm:text-lg' },
+};
+
 function sanitizeRecord(r: unknown): WeaveRecord | null {
   const rec = r as WeaveRecord | null;
   if (
     !rec ||
     typeof rec.clue !== 'string' ||
-    ![6, 8].includes(rec.cols) ||
+    // 6, 7 and 8 wide — easy, hard and extreme. Hard's 7-wide board was
+    // rejected here and the game kept the previous one, so switching to hard
+    // looked like the switch doing nothing at all.
+    ![6, 7, 8].includes(rec.cols) ||
     !Array.isArray(rec.board) ||
     !rec.board.every((row) => typeof row === 'string' && row.length === rec.cols) ||
     typeof rec.answersB64 !== 'string'
@@ -174,6 +189,26 @@ const WeaveGame = forwardRef<
     []
   );
   const [pool, setPool] = useState<Record<string, PuzzlePayload[]> | null>(null);
+  // The difficulty this board actually is. Usually the one asked for, but a
+  // feed generated before difficulty existed only has the easy board, and a
+  // result has to be recorded as what was played rather than what was wanted.
+  const [playedAt, setPlayedAt] = useState<Difficulty>(difficulty);
+  // Changing difficulty means a different board, so the feed has to be read
+  // again. A storage write re-renders nothing on its own.
+  const [difficultyTick, setDifficultyTick] = useState(0);
+  // the setting itself — practice has no daily fetch to learn it from
+  const [level, setLevel] = useState<Difficulty>(difficulty);
+  useEffect(
+    () =>
+      onDifficultyChange(() => {
+        setLevel(difficulty());
+        setDifficultyTick((n) => n + 1);
+        // practice is redrawn rather than kept: it's a different difficulty's
+        // board now, and practice isn't recorded
+        setStore((prev) => ({ ...prev, practice: null }));
+      }),
+    []
+  );
   const [dailyError, setDailyError] = useState(false);
   const [flash, setFlash] = useState<{ text: string; good: boolean } | null>(null);
   const flashTimer = useRef<number | undefined>(undefined);
@@ -192,8 +227,14 @@ const WeaveGame = forwardRef<
     let alive = true;
     fetch(DAILY_WEAVE_URL, { cache: 'no-store' })
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
-      .then((d) => {
+      .then((raw) => {
         if (!alive) return;
+        const chosen = resolveDifficulty(raw, difficulty());
+        if (!chosen.board) throw new Error('bad payload');
+        setPlayedAt(chosen.difficulty);
+        // the date lives at the top level; the board's own fields come from
+        // whichever difficulty was resolved
+        const d = { ...raw, ...chosen.board };
         const rec = toRecord(d);
         if (!rec || typeof d.date !== 'string') throw new Error('bad payload');
         // reset on date change or a different board (content-aware)
@@ -211,7 +252,7 @@ const WeaveGame = forwardRef<
     return () => {
       alive = false;
     };
-  }, []);
+  }, [difficultyTick]);
 
   // fetch the practice pool once
   useEffect(() => {
@@ -219,7 +260,8 @@ const WeaveGame = forwardRef<
     fetch(WEAVE_POOL_URL, { cache: 'no-store' })
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
       .then((d) => {
-        if (alive && d?.pool) setPool(d.pool);
+        // byDifficulty when the feed has it, the old size keys otherwise
+        if (alive && (d?.byDifficulty || d?.pool)) setPool(d.byDifficulty ?? d.pool);
       })
       .catch(() => {
         // practice unavailable until the pool loads
@@ -230,10 +272,13 @@ const WeaveGame = forwardRef<
   }, []);
 
   function pickPractice(size: '6x8' | '8x10', avoidBoard?: string) {
-    if (!pool?.[size]?.length) return null;
-    const options = pool[size].filter((p) => p.board.join('') !== avoidBoard);
-    const pick = (options.length ? options : pool[size])[
-      Math.floor(Math.random() * (options.length ? options.length : pool[size].length))
+    // Practice follows the difficulty, falling back to the size keys for a
+    // pool generated before difficulty existed.
+    const from = pool?.[level] ?? pool?.[size];
+    if (!from?.length) return null;
+    const options = from.filter((p) => p.board.join('') !== avoidBoard);
+    const pick = (options.length ? options : from)[
+      Math.floor(Math.random() * (options.length ? options.length : from.length))
     ];
     return toRecord(pick);
   }
@@ -283,6 +328,7 @@ const WeaveGame = forwardRef<
   const complete = solvedAll || !!record?.revealed;
 
   const syncing = useDailySync({
+    difficulty: playedAt,
     game: 'weave',
     date: store.dailyDate,
     record,
@@ -573,15 +619,13 @@ const WeaveGame = forwardRef<
     if (rec) setStore((prev) => ({ ...prev, practice: rec }));
   }
 
-  function setPracticeSize(size: '6x8' | '8x10') {
-    setStore((prev) => ({ ...prev, practiceSize: size }));
-    const rec = pickPractice(size, record?.board.join(''));
-    if (rec) setStore((prev) => ({ ...prev, practiceSize: size, practice: rec }));
-  }
-
   const loading = (store.dailyMode ? !record && !dailyError : !record) || syncing;
-  const cellSize =
-    cols === 8 ? 'w-8 h-9 sm:w-9 sm:h-10 text-base sm:text-lg' : 'w-9 h-10 sm:w-11 sm:h-12 text-lg sm:text-xl';
+  // Three widths now — 6, 7 and 8 for easy, hard and extreme. Written out per
+  // width rather than computed, because Tailwind generates classes by reading
+  // the source: a template-built `grid-cols-${n}` is a class that never exists.
+  // Cells shrink as the board widens so eight of them still fit a 320px screen.
+  const { grid: gridCols, cell: cellSize } =
+    WEAVE_LAYOUT[cols] ?? WEAVE_LAYOUT[6];
 
   return (
     <div className="text-center">
@@ -610,24 +654,9 @@ const WeaveGame = forwardRef<
         ))}
       </div>
 
-      {/* practice size */}
-      {!store.dailyMode && (
-        <div className="mb-4">
-          <span className="inline-flex rounded-lg bg-white/5 border border-white/10 p-0.5 gap-0.5">
-            {(['6x8', '8x10'] as const).map((size) => (
-              <button
-                key={size}
-                onMouseDown={(e) => e.preventDefault()}
-                onClick={() => setPracticeSize(size)}
-                className={`px-3 py-1.5 rounded-md text-sm font-semibold transition-colors
-                  ${store.practiceSize === size ? 'bg-white/15 text-white' : 'text-slate-400 hover:text-white'}`}
-              >
-                {size === '6x8' ? '6×8' : '8×10 hard'}
-              </button>
-            ))}
-          </span>
-        </div>
-      )}
+      {/* No practice size picker. Practice is the daily generated on the fly
+          and not recorded, so its shape comes from the difficulty like the
+          daily's does — a second control here would disagree with the first. */}
 
       {loading && <p className="text-sm text-slate-400 py-8">Loading…</p>}
       {store.dailyMode && dailyError && !record && (
@@ -688,7 +717,7 @@ const WeaveGame = forwardRef<
             onKeyDown={onBoardKeyDown}
             onPointerDown={onBoardPointerDown}
             onPointerMove={onBoardPointerMove}
-            className={`grid gap-1.5 touch-none select-none rounded-xl ${cols === 8 ? 'grid-cols-8' : 'grid-cols-6'}`}
+            className={`grid gap-1.5 touch-none select-none rounded-xl ${gridCols}`}
           >
             {cells.map((c, i) => {
               const lock = locked.get(i);
@@ -841,7 +870,7 @@ const WeaveGame = forwardRef<
 
           {store.dailyMode && complete && store.dailyDate && (
             <div>
-              <DailyStats game="weave" date={store.dailyDate} />
+              <DailyStats level={playedAt} game="weave" date={store.dailyDate} />
             </div>
           )}
 

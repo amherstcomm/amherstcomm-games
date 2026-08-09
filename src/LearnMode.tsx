@@ -337,7 +337,7 @@ function LearnGuess({
           items={[
             'Daily serves the same word to everyone for each length, once per day, and tracks your win streak.',
             'Practice deals unlimited random words — press New word anytime.',
-            'Answers come from the Common dictionary so they’re always fair; guesses are checked against the Full one.',
+            'Answers come from the word list one rung below what’s accepted, so the answer is always something you’d recognise while your guesses get the benefit of the doubt.',
             'Stuck? Reveal hands everything the board has taught you to the solver, which lists every word that still fits.',
           ]}
         />
@@ -645,7 +645,7 @@ function LearnHive({ dict, register }: { dict: Set<string> | null; register: Reg
           items={[
             'Daily is our own generated hive — the same one for everyone, seeded from a pangram so one always exists. It is not the NYT’s puzzle.',
             'Practice deals unlimited fresh hives; Shuffle rearranges the outer letters for a new perspective.',
-            'Words are checked against our Standard dictionary; rejected guesses collect in an amber list.',
+            'Words are checked against the list for the difficulty you’re playing; rejected guesses collect in an amber list.',
             'Reveal gives up and shows every answer in the solver.',
           ]}
         />

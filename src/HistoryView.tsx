@@ -16,6 +16,8 @@ import {
   type Series,
 } from '@/history';
 import { formatElapsed } from '@/useUpTimer';
+import { difficulty, onDifficultyChange, type Difficulty } from '@/difficulty';
+import DifficultyTabs from '@/DifficultyTabs';
 
 const GAMES: {
   id: HistoryGame;
@@ -93,6 +95,8 @@ function Distribution({ dist }: { dist: number[] }) {
   const max = Math.max(1, ...dist);
   return (
     <div className="space-y-1">
+
+
       {dist.map((n, i) => (
         <div key={i} className="flex items-center gap-2">
           <span className="w-3 text-xs text-slate-500 tabular-nums">{i + 1}</span>
@@ -213,13 +217,15 @@ function GameCard({ game, history }: { game: (typeof GAMES)[number]; history: Hi
 }
 
 export default function HistoryView({ signedIn }: { signedIn: boolean }) {
+  const [level, setLevel] = useState<Difficulty>(difficulty);
+  useEffect(() => onDifficultyChange(() => setLevel(difficulty())), []);
   const [history, setHistory] = useState<History | null>(null);
   const [state, setState] = useState<'loading' | 'ready' | 'error'>('loading');
 
   useEffect(() => {
     if (!signedIn) return;
     let alive = true;
-    fetchHistory().then((h) => {
+    fetchHistory(level).then((h) => {
       if (!alive) return;
       setHistory(h);
       setState(h ? 'ready' : 'error');
@@ -227,7 +233,7 @@ export default function HistoryView({ signedIn }: { signedIn: boolean }) {
     return () => {
       alive = false;
     };
-  }, [signedIn]);
+  }, [signedIn, level]);
 
   if (!signedIn) {
     return (
@@ -265,6 +271,16 @@ export default function HistoryView({ signedIn }: { signedIn: boolean }) {
 
   return (
     <div className="space-y-3">
+
+      {/* View-local: looking at another difficulty's record shouldn't
+          change the one you're playing. */}
+      <div className="mb-3">
+        <DifficultyTabs
+          value={level}
+          onChange={setLevel}
+          label="Which difficulty's history"
+        />
+      </div>
       {played.map((g) => (
         <GameCard key={`${g.id}${g.variant ?? ''}`} game={g} history={history} />
       ))}

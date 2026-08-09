@@ -8,6 +8,12 @@ import {
 } from 'react';
 import { CalendarDays, CornerDownLeft, Delete, Flag, Play, RefreshCw, Search, Shuffle, Timer } from 'lucide-react';
 import { solveDescramble } from '@/solvers';
+import {
+  difficulty,
+  onDifficultyChange,
+  resolveDifficulty,
+  type Difficulty,
+} from '@/difficulty';
 import type { LetterState } from '@/GuessGame';
 import { dailyDataUrl } from '@/dailyData';
 import DailyStats from '@/DailyStats';
@@ -101,10 +107,12 @@ const ScrambleGame = forwardRef<
   {
     standardWords: string[] | null;
     commonWords: string[] | null;
+    /** the words this difficulty draws practice from */
+    practiceWords: string[] | null;
     onLetterStates: (states: Record<string, LetterState>) => void;
     onReveal?: (letters: string) => void;
   }
->(function ScrambleGame({ standardWords, commonWords, onLetterStates, onReveal }, ref) {
+>(function ScrambleGame({ standardWords, commonWords, onLetterStates, onReveal, practiceWords }, ref) {
   const [store, setStore] = useState<ScrambleStore>(loadStore);
   const { practiceAllowed } = usePrefs();
   // pinned to the daily: someone who switched practice off shouldn't be left
@@ -120,6 +128,26 @@ const ScrambleGame = forwardRef<
   );
   const [current, setCurrent] = useState('');
   const [flash, setFlash] = useState<{ text: string; good: boolean } | null>(null);
+  // The difficulty this board actually is. Usually the one asked for, but a
+  // feed generated before difficulty existed only has the easy board, and a
+  // result has to be recorded as what was played rather than what was wanted.
+  const [playedAt, setPlayedAt] = useState<Difficulty>(difficulty);
+  // Changing difficulty means a different board, so the feed has to be read
+  // again. A storage write re-renders nothing on its own.
+  const [difficultyTick, setDifficultyTick] = useState(0);
+  useEffect(() => onDifficultyChange(() => setDifficultyTick((n) => n + 1)), []);
+
+  // Clear the practice board when a new word band arrives, not when the
+  // setting changes. The setting changes first and the band loads after, so
+  // clearing on the change regenerated from the pool we were about to
+  // replace — every level drew from the one below it.
+  const practicePool = useRef<string[] | null>(null);
+  useEffect(() => {
+    if (!practiceWords || practicePool.current === practiceWords) return;
+    const first = practicePool.current === null;
+    practicePool.current = practiceWords;
+    if (!first) setStore((prev) => ({ ...prev, practice: null }));
+  }, [practiceWords]);
   const [dailyError, setDailyError] = useState(false);
   const [now, setNow] = useState(() => Date.now());
   const flashTimer = useRef<number | undefined>(undefined);
@@ -137,8 +165,14 @@ const ScrambleGame = forwardRef<
     let alive = true;
     fetch(DAILY_SCRAMBLE_URL, { cache: 'no-store' })
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
-      .then((d) => {
+      .then((raw) => {
         if (!alive) return;
+        const chosen = resolveDifficulty(raw, difficulty());
+        if (!chosen.board) throw new Error('bad payload');
+        setPlayedAt(chosen.difficulty);
+        // the date lives at the top level; the board's own fields come from
+        // whichever difficulty was resolved
+        const d = { ...raw, ...chosen.board };
         const rec = sanitizeRecord({ rack: d.letters, found: [], endsAt: null, finished: false });
         if (!rec || typeof d.date !== 'string') throw new Error('bad payload');
         // reset when the date changes OR the rack differs (e.g. the daily
@@ -158,11 +192,14 @@ const ScrambleGame = forwardRef<
     return () => {
       alive = false;
     };
-  }, []);
+  }, [difficultyTick]);
 
   function makePracticeRack(): ScrambleRecord | null {
     if (!commonWords) return null;
-    const bases = commonWords.filter((w) => w.length === 7);
+    // The band for the difficulty being played, so practising at a level
+    // practises for it. Falls back to common while the band loads.
+    const from = practiceWords?.length ? practiceWords : commonWords;
+    const bases = from.filter((w) => w.length === 7);
     if (!bases.length) return null;
     const base = bases[Math.floor(Math.random() * bases.length)];
     return {
@@ -229,6 +266,7 @@ const ScrambleGame = forwardRef<
   }, [record]);
 
   const syncing = useDailySync({
+    difficulty: playedAt,
     game: 'scramble',
     date: store.dailyDate,
     record,
@@ -616,14 +654,14 @@ const ScrambleGame = forwardRef<
 
           {store.dailyMode && record.finished && store.dailyDate && (
             <div>
-              <DailyStats game="scramble" date={store.dailyDate} />
+              <DailyStats level={playedAt} game="scramble" date={store.dailyDate} />
             </div>
           )}
 
           <p className="mt-5 text-xs text-slate-500">
             Words are 3+ letters from the rack (each letter once). 3-letter words score 1,
-            longer words their length; using the whole rack is +7. Scored against our
-            Standard dictionary.
+            longer words their length; using the whole rack is +7. Scored against the
+            word list for the difficulty you&apos;re playing.
             {store.dailyMode && ' A fresh daily rack arrives about 15 minutes after 3:00 a.m. Eastern.'}
           </p>
         </>

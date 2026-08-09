@@ -20,7 +20,7 @@ import ScrambleGame, { type ScrambleGameHandle } from '@/ScrambleGame';
 import GridGame, { type GridGameHandle } from '@/GridGame';
 import WeaveGame, { type WeaveGameHandle } from '@/WeaveGame';
 import { dailyDataUrl } from '@/dailyData';
-import { DICTIONARIES, getDictionary, type DictionaryId } from '@/dictionaries';
+import { DICTIONARIES, getAcceptPool, getDictionary, getDifficultyPool } from '@/dictionaries';
 import { solvePattern, solveDescramble, solveBee, solveBoxed, solveGrid, findGridPath } from '@/solvers';
 import ConsentBanner from '@/ConsentBanner';
 import { PrivacyPolicy, Terms } from '@/LegalDocs';
@@ -42,7 +42,16 @@ import {
   type SettingsTab,
   type StatsTab,
 } from '@/routes';
-import { ALL_MODES, ALL_START_PAGES, ALL_VIEWS, lengthChoices, visibleModes, visibleViews, type LengthRange, type StartPage, type View, loadState, saveState, GRID_PRESET_DIMS, WEAVE_DIMS, type GridPreset, type Mode, type NavKeys, type SortPref, type SquareSolverSize, type WeaveSize } from '@/storage';
+import {
+  difficulty as currentDifficulty,
+  setDifficulty,
+  difficultyMode,
+  onDifficultyChange,
+  DIFFICULTIES,
+  DIFFICULTY_LABEL,
+  type Difficulty,
+} from '@/difficulty';
+import { ALL_MODES, ALL_START_PAGES, ALL_VIEWS, asDifficulty, lengthChoices, visibleModes, visibleViews, type LengthRange, type StartPage, type View, loadState, saveState, GRID_PRESET_DIMS, WEAVE_DIMS, type GridPreset, type Mode, type NavKeys, type SortPref, type SquareSolverSize, type WeaveSize } from '@/storage';
 
 // longest rack the scramble solver accepts; word lengths come from the
 // player's own range now, in storage
@@ -749,7 +758,7 @@ function App() {
           lengthRange?: LengthRange;
           practiceAllowed?: boolean;
           helpAllowed?: boolean;
-          solverDictionary?: DictionaryId | 'per-game';
+          solverDictionary?: string;
           startPage?: StartPage;
           onboarded?: boolean;
         }
@@ -763,7 +772,8 @@ function App() {
     if (s?.lengthRange) setLengthRange(s.lengthRange);
     if (typeof s?.practiceAllowed === 'boolean') setPracticeAllowed(s.practiceAllowed);
     if (typeof s?.helpAllowed === 'boolean') setHelpAllowed(s.helpAllowed);
-    if (s?.solverDictionary) setSolverDictionary(s.solverDictionary);
+    if (s?.solverDictionary)
+      setSolverDictionary(asDifficulty(s.solverDictionary) ?? 'per-game');
     if (s?.startPage && ALL_START_PAGES.includes(s.startPage)) setStartPage(s.startPage);
     if (s?.onboarded) setOnboarded(true);
     setSettingsPulled(true);
@@ -844,6 +854,7 @@ function App() {
   const [commonWordsArr, setCommonWordsArr] = useState<string[] | null>(null);
   const [fullWordsArr, setFullWordsArr] = useState<string[] | null>(null);
   const [standardWordsArr, setStandardWordsArr] = useState<string[] | null>(null);
+
   const gameRef = useRef<GuessGameHandle>(null);
   const hiveRef = useRef<HiveGameHandle>(null);
   const boxRef = useRef<BoxGameHandle>(null);
@@ -852,6 +863,26 @@ function App() {
   const learnRef = useRef<LearnModeHandle>(null);
   const weaveRef = useRef<WeaveGameHandle>(null);
   const squaresRef = useRef<SquaresGameHandle>(null);
+
+  // The switch and the games both read the same stored value; this only
+  // mirrors it so the pressed state re-renders.
+  const [level, setLevel] = useState(currentDifficulty);
+  useEffect(() => onDifficultyChange(() => setLevel(currentDifficulty())), []);
+
+  // Practice puzzles are built in the browser, so the words a difficulty means
+  // have to be here too — the same bands the daily generator draws from.
+  const [practiceWordsArr, setPracticeWordsArr] = useState<string[] | null>(null);
+  // What this difficulty accepts, one band wider than it sets from.
+  const [acceptWordsArr, setAcceptWordsArr] = useState<string[] | null>(null);
+  useEffect(() => {
+    let alive = true;
+    setPracticeWordsArr(null);
+    getDifficultyPool(level).then((ws) => alive && setPracticeWordsArr(ws));
+    getAcceptPool(level).then((ws) => alive && setAcceptWordsArr(ws));
+    return () => {
+      alive = false;
+    };
+  }, [level]);
 
   const patternPlayActive = mode === 'pattern' && patternPlay && !learnMode;
   const beePlayActive = mode === 'bee' && beePlay && !learnMode;
@@ -862,6 +893,8 @@ function App() {
   const squaresPlayActive = mode === 'squares' && squaresPlay && !learnMode;
   const playActive =
     patternPlayActive || beePlayActive || boxedPlayActive || descramblePlayActive || gridPlayActive || weavePlayActive || squaresPlayActive;
+
+
 
   // the guess game validates against the full dictionary and picks practice
   // words from the common one; hive, box, scramble, grid play — and the
@@ -897,7 +930,7 @@ function App() {
 
   // 'per-game' keeps each solver's own pick; anything else is the whole site's
   const dictionaryId = solverDictionary === 'per-game' ? dictionaries[mode] : solverDictionary;
-  const setDictionaryId = (id: DictionaryId) =>
+  const setDictionaryId = (id: Difficulty) =>
     setDictionaries((prev) => ({ ...prev, [mode]: id }));
 
   const sort = sorts[mode];
@@ -950,6 +983,17 @@ function App() {
     if (initialGame?.view === 'play') seed[modeOf(initialGame.slug)] = initialGame.daily;
     return seed;
   });
+
+  // Three boards a day, and you may play all of them — so the switch belongs
+  // beside the board rather than buried in settings.
+  //
+  // On practice as much as on the daily. Practice is the same board generated
+  // on the fly and not recorded, so it needs the same control — and since the
+  // size pickers are gone, this is the only way to choose a shape there.
+  //
+  // Grid is here too now: it varies by board size, 4x4 then 5x5. Not shown
+  // when someone has asked to be left with one puzzle.
+  const showDifficultySwitch = playActive && difficultyMode() === 'all';
 
   useEffect(
     () =>
@@ -1124,7 +1168,9 @@ function App() {
   const [words, setWords] = useState<string[]>([]);
   useEffect(() => {
     let alive = true;
-    getDictionary(dictionaryId).then((w) => {
+    // the accept pool, not the raw tier: the solver's Hard is what Hard
+    // accepts in a game, so a word the solver finds is a word that scores
+    getAcceptPool(dictionaryId).then((w) => {
       if (alive) setWords(w);
     });
     return () => {
@@ -1684,6 +1730,29 @@ function App() {
           </div>
         </section>
 
+        {showDifficultySwitch && (
+          <section className="mb-7 text-center">
+            <label className="block text-xs font-medium text-slate-400 uppercase tracking-wider mb-2.5">
+              Difficulty
+            </label>
+            <div className="inline-flex flex-wrap justify-center max-w-full rounded-xl bg-white/5 border border-white/10 p-1 gap-1">
+              {DIFFICULTIES.map((id) => (
+                <button
+                  key={id}
+                  onClick={() => setDifficulty(id)}
+                  aria-pressed={level === id}
+                  className={`px-3.5 h-9 rounded-lg text-sm font-semibold transition-colors
+                    ${level === id
+                      ? 'bg-amber-400 text-ink shadow-lg shadow-amber-500/30'
+                      : 'text-slate-300 hover:bg-white/10'}`}
+                >
+                  {DIFFICULTY_LABEL[id]}
+                </button>
+              ))}
+            </div>
+          </section>
+        )}
+
         {learnMode && (
           <div className="mb-8">
             <LearnMode
@@ -1699,13 +1768,13 @@ function App() {
         <>
         {squaresPlayActive && (
         <div className="mb-8">
-          <SquaresGame ref={squaresRef} standardWords={standardWordsArr} />
+          <SquaresGame ref={squaresRef} standardWords={acceptWordsArr ?? standardWordsArr} />
         </div>
         )}
 
         {weavePlayActive && (
         <div className="mb-8">
-          <WeaveGame ref={weaveRef} standardWords={standardWordsArr} navKeys={navKeys} />
+          <WeaveGame ref={weaveRef} standardWords={acceptWordsArr ?? standardWordsArr} navKeys={navKeys} />
         </div>
         )}
 
@@ -1908,7 +1977,7 @@ function App() {
         {!playActive && solverDictionary === 'per-game' && (
         <section className="mb-7 text-center">
           <label className="block text-xs font-medium text-slate-400 uppercase tracking-wider mb-2.5">
-            Dictionary
+            Word list
           </label>
           <div className="inline-flex flex-wrap justify-center max-w-full rounded-xl bg-white/5 border border-white/10 p-1 gap-1">
             {DICTIONARIES.map((d) => (
@@ -1921,7 +1990,7 @@ function App() {
                     ? 'bg-amber-400 text-ink shadow-lg shadow-amber-500/30'
                     : 'text-slate-300 hover:bg-white/10'}`}
               >
-                {d.id === 'common' && <BookOpen className="w-3.5 h-3.5" />}
+                {d.id === 'easy' && <BookOpen className="w-3.5 h-3.5" />}
                 {d.label}
               </button>
             ))}
@@ -1962,7 +2031,8 @@ function App() {
             ref={gameRef}
             length={length}
             commonWords={commonWordsArr}
-            fullWords={fullWordsArr}
+            practiceWords={practiceWordsArr}
+            fullWords={acceptWordsArr ?? fullWordsArr}
             onLetterStates={setLetterStates}
             onReveal={!shownViews.includes('solve') || !helpAllowed ? undefined : ({ length: len, known: k, contains, excluded }) => {
               setLength(len);
@@ -2041,8 +2111,9 @@ function App() {
         <div className="mb-8">
           <ScrambleGame
             ref={scrambleRef}
-            standardWords={standardWordsArr}
+            standardWords={acceptWordsArr ?? standardWordsArr}
             commonWords={commonWordsArr}
+            practiceWords={practiceWordsArr}
             onLetterStates={setLetterStates}
             onReveal={!shownViews.includes('solve') || !helpAllowed ? undefined : (letters) => {
               setRackStr(letters);
@@ -2118,8 +2189,9 @@ function App() {
         <div className="mb-8">
           <HiveGame
             ref={hiveRef}
-            standardWords={standardWordsArr}
+            standardWords={acceptWordsArr ?? standardWordsArr}
             commonWords={commonWordsArr}
+            practiceWords={practiceWordsArr}
             onLetterStates={setLetterStates}
             onReveal={!shownViews.includes('solve') || !helpAllowed ? undefined : (center, outers) => {
               setBeeCenter(center);
@@ -2202,7 +2274,7 @@ function App() {
         <div className="mb-8">
           <GridGame
             ref={gridRef}
-            standardWords={standardWordsArr}
+            standardWords={acceptWordsArr ?? standardWordsArr}
             onLetterStates={setLetterStates}
             onReveal={!shownViews.includes('solve') || !helpAllowed ? undefined : (cells) => {
               setGridPreset(cells.length === 9 ? '3x3' : cells.length === 25 ? '5x5' : '4x4');
@@ -2301,8 +2373,9 @@ function App() {
         <div className="mb-8">
           <BoxGame
             ref={boxRef}
-            standardWords={standardWordsArr}
+            standardWords={acceptWordsArr ?? standardWordsArr}
             commonWords={commonWordsArr}
+            practiceWords={practiceWordsArr}
             onLetterStates={setLetterStates}
             onReveal={!shownViews.includes('solve') || !helpAllowed ? undefined : (sides) => {
               setBoxedLetters(sides.flatMap((s) => s.split('')).slice(0, 12));
@@ -2679,8 +2752,9 @@ function App() {
         <footer className="mt-14 pb-24 sm:pb-4 text-center text-xs text-slate-500">
           {!playActive && !learnMode && (
             <p>
-              Searching {words.length.toLocaleString()} English words (
-              {DICTIONARIES.find((d) => d.id === dictionaryId)?.label.toLowerCase()} dictionary).
+              Searching {words.length.toLocaleString()} English words (the{' '}
+              {DICTIONARIES.find((d) => d.id === dictionaryId)?.label.toLowerCase()} word
+              list).
             </p>
           )}
           {/* wraps into centered rows rather than one overflowing line */}
@@ -3070,7 +3144,7 @@ function App() {
                 </h3>
                 <ul className="space-y-1.5 text-slate-400 list-disc list-inside">
                   <li>
-                    Common &amp; Standard dictionaries:{' '}
+                    Easy and Hard word lists:{' '}
                     <a
                       href="https://github.com/jacksonrayhamilton/wordlist-english"
                       target="_blank"
@@ -3114,7 +3188,7 @@ function App() {
                     you&apos;re allowed to type.
                   </li>
                   <li>
-                    Full dictionary:{' '}
+                    The Extreme list adds:{' '}
                     <a
                       href="https://github.com/words/an-array-of-english-words"
                       target="_blank"

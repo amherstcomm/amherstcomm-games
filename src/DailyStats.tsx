@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Users } from 'lucide-react';
 import { DAILY_ENV } from '@/dailyData';
+import { difficulty, type Difficulty } from '@/difficulty';
 import { supabase } from '@/supabase';
 import { formatElapsed } from '@/useUpTimer';
 
@@ -53,19 +54,35 @@ function parts(game: Game, s: Aggregates): string[] {
 
 // one-line "across all players" summary for a day's daily puzzle; renders
 // nothing when Supabase is unconfigured or nobody has synced a result yet
-export default function DailyStats({ game, date }: { game: Game; date: string }) {
-  const [stats, setStats] = useState<Aggregates | null>(() => cache.get(`${game}:${date}`) ?? null);
+export default function DailyStats({
+  game,
+  date,
+  level = difficulty(),
+}: {
+  game: Game;
+  date: string;
+  /** the board's own difficulty — these are per-difficulty averages, and
+   *  pooling them would compare your hard board against everyone's easy one */
+  level?: Difficulty;
+}) {
+  const [stats, setStats] = useState<Aggregates | null>(() => cache.get(`${game}:${date}:${level}`) ?? null);
 
   useEffect(() => {
     if (!supabase || !date) return;
-    const key = `${game}:${date}`;
+    const key = `${game}:${date}:${level}`;
     const cached = cache.get(key);
     if (cached) {
       setStats(cached);
       return;
     }
     let alive = true;
-    supabase.rpc('daily_stats', { p_game: game, p_date: date, p_env: DAILY_ENV }).then(({ data, error }) => {
+    supabase
+      .rpc('daily_stats', {
+        p_game: game,
+        p_date: date,
+        p_env: DAILY_ENV,
+        p_difficulty: level,
+      }).then(({ data, error }) => {
       if (!alive || error || !data) return;
       cache.set(key, data);
       setStats(data);
@@ -73,7 +90,7 @@ export default function DailyStats({ game, date }: { game: Game; date: string })
     return () => {
       alive = false;
     };
-  }, [game, date]);
+  }, [game, date, level]);
 
   if (!stats || !stats.players) return null;
 

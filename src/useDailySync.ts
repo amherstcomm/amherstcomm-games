@@ -6,6 +6,7 @@
 // until the key for this board has been marked as merged.
 
 import { useEffect, useRef, useState } from 'react';
+import type { Difficulty } from '@/difficulty';
 import {
   clearSyncBase,
   loadDaily,
@@ -23,6 +24,7 @@ const POLL_MS = 10_000;
 
 export function useDailySync({
   game,
+  difficulty,
   variant = '',
   date,
   record,
@@ -32,6 +34,9 @@ export function useDailySync({
 }: {
   game: DailyGame;
   variant?: string;
+  /** Which of the day's boards this is. Part of the puzzle's identity, so it
+   *  keys the sync the same way the game and the date do. */
+  difficulty: Difficulty;
   date: string;
   record: Rec | null;
   setRecord: (merged: Rec) => void;
@@ -104,7 +109,7 @@ export function useDailySync({
     };
   }, []);
 
-  const key = `${game}:${variant}:${date}`;
+  const key = `${game}:${variant}:${difficulty}:${date}`;
 
   // pull, once per board
   useEffect(() => {
@@ -116,11 +121,11 @@ export function useDailySync({
     // exists to fix.
     const silent = seenKeys.current.has(key);
     if (!silent) setSyncing(true);
-    loadDaily(game, variant, date)
+    loadDaily(game, variant, difficulty, date)
       .then((remote) => {
         if (!alive) return;
         if (remote?.state && Object.keys(remote.state).length) {
-          const merged = mergeFromServer(game, variant, date, record, remote);
+          const merged = mergeFromServer(game, variant, difficulty, date, record, remote);
           if (merged) {
             setRecordRef.current(merged);
             // what we just took from the row doesn't need writing straight back
@@ -139,7 +144,7 @@ export function useDailySync({
     // `record` is deliberately absent: this runs once per board, and re-running
     // it on every keystroke would re-merge the remote board over local progress.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [game, variant, date, active, key, authTick]);
+  }, [game, variant, difficulty, date, active, key, authTick]);
 
   // push, after the pull has landed
   useEffect(() => {
@@ -153,13 +158,13 @@ export function useDailySync({
     const stamp = JSON.stringify([progressOf(game, record), completed, summary]);
     if (stamp === lastPush.current) return;
     lastPush.current = stamp;
-    saveDaily(game, variant, date, record, completed, summary, (merged) => {
+    saveDaily(game, variant, difficulty, date, record, completed, summary, (merged: Rec) => {
       // the write found progress we hadn't seen; adopt it and let the next
       // push settle, rather than leaving the two copies disagreeing
       lastPush.current = '';
       setRecordRef.current(merged);
     });
-  }, [game, variant, date, active, key, record, completed, summary]);
+  }, [game, variant, difficulty, date, active, key, record, completed, summary]);
 
   return syncing;
 }

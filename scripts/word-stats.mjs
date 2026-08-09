@@ -23,14 +23,20 @@ const require = createRequire(import.meta.url);
 
 const OUT = 'src/wordStats.json';
 
-// SCOWL sizes, per its own description: 35 small, 50 medium, 60 medium-large
-// (the default spell-checking dictionary), 70 large. So the ladder is small,
-// medium, large — not "common words" through "obscure ones". Level 35 is
-// ordinary vocabulary.
-const TIERS = {
-  easy: [10, 20, 35],
-  hard: [10, 20, 35, 40, 50, 55],
-  extreme: [10, 20, 35, 40, 50, 55, 60, 70],
+// The three dictionaries the app actually offers, defined exactly as
+// src/dictionaries.ts defines them — Common and Standard from SCOWL sizes,
+// Full from a different source entirely. Getting this wrong would put a number
+// in the FAQ that disagrees with the one in the solver's own footer.
+const SCOWL = (levels) =>
+  levels.flatMap((n) => [`english-words-${n}`, `american-words-${n}`]);
+
+const COMMON = SCOWL([10, 20, 35]);
+const STANDARD = [...COMMON, ...SCOWL([40, 50, 55])];
+
+const DICTIONARIES = {
+  common: { scowl: COMMON, label: 'Common' },
+  standard: { scowl: STANDARD, label: 'Standard' },
+  full: { scowl: null, label: 'Full' }, // an-array-of-english-words
 };
 
 const DAILY_MIN = 3;
@@ -40,45 +46,42 @@ const blocked = new Set(
   require('./blocked-words.json').words.map((w) => w.word)
 );
 
-function load(levels) {
+
+const stats = { _generated: 'npm run word-stats', dictionaries: {} };
+
+for (const [name, def] of Object.entries(DICTIONARIES)) {
+  // same normalisation the app uses: lowercase, letters only, deduped
   const set = new Set();
-  for (const level of levels)
-    for (const locale of ['english', 'american'])
-      for (const raw of require(`wordlist-english/${locale}-words-${level}.json`)) {
-        const w = String(raw).toLowerCase();
-        if (/^[a-z]+$/.test(w)) set.add(w);
-      }
-  return set;
-}
+  const take = (list) => {
+    for (const raw of list) {
+      const w = String(raw).toLowerCase();
+      if (/^[a-z]+$/.test(w)) set.add(w);
+    }
+  };
+  if (def.scowl) for (const f of def.scowl) take(require(`wordlist-english/${f}.json`));
+  else take(require('an-array-of-english-words'));
 
-const stats = { _generated: 'npm run word-stats', tiers: {} };
-
-for (const [name, levels] of Object.entries(TIERS)) {
-  const set = load(levels);
   const words = [...set];
-
   const byLength = {};
   for (const w of words) byLength[w.length] = (byLength[w.length] ?? 0) + 1;
 
-  // what a daily answer could be, at each length the daily runs to
   const answers = {};
-  for (let n = DAILY_MIN; n <= DAILY_MAX; n++) {
+  for (let n = DAILY_MIN; n <= DAILY_MAX; n++)
     answers[n] = words.filter(
       (w) =>
         w.length === n && !blocked.has(w) && !(w.endsWith('s') && set.has(w.slice(0, -1)))
     ).length;
-  }
 
   const shorter = words.filter((w) => w.length < DAILY_MIN).length;
   const longer = words.filter((w) => w.length > DAILY_MAX).length;
 
-  stats.tiers[name] = {
-    scowlLevels: levels,
+  stats.dictionaries[name] = {
+    label: def.label,
     dictionary: words.length,
     shorterThanDaily: shorter,
     longerThanDaily: longer,
     withinDailyLengths: words.length - shorter - longer,
-    longestWord: Math.max(...words.map((w) => w.length)),
+    longestWord: words.reduce((n, w) => (w.length > n ? w.length : n), 0),
     byLength,
     answers,
     answerTotal: Object.values(answers).reduce((a, b) => a + b, 0),
@@ -90,7 +93,7 @@ writeFileSync(OUT, JSON.stringify(stats, null, 2) + '\n');
 console.log(`wrote ${OUT}`);
 console.log();
 console.log('tier      dictionary   <3     3-12      >12   answers 3-12');
-for (const [name, t] of Object.entries(stats.tiers)) {
+for (const [name, t] of Object.entries(stats.dictionaries)) {
   console.log(
     '  ' + name.padEnd(8),
     String(t.dictionary.toLocaleString()).padStart(9),

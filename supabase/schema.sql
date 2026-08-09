@@ -232,6 +232,16 @@ create table if not exists public.game_results (
   created_at timestamptz not null default now()
 );
 
+-- Which difficulty this result was played at. Defaulted to 'easy' because
+-- every result that predates difficulty was drawn from the common tier, which
+-- is what easy now means — so the default is a statement of fact, not a guess.
+alter table public.game_results
+  add column if not exists difficulty text not null default 'easy';
+alter table public.game_results drop constraint if exists game_results_difficulty_check;
+alter table public.game_results
+  add constraint game_results_difficulty_check
+  check (difficulty in ('easy', 'hard', 'extreme'));
+
 create index if not exists game_results_user_idx
   on public.game_results (user_id, game, created_at desc);
 create index if not exists game_results_daily_idx
@@ -276,8 +286,32 @@ create table if not exists public.daily_progress (
   primary key (user_id, game, variant, puzzle_date, env)
 );
 
+-- Difficulty separates boards the same way `variant` does: the easy and hard
+-- Guess for a given day are different puzzles with different answers, and a
+-- player may do both. So it belongs in the key, not beside it.
+--
+-- Existing rows default to 'easy', which is true rather than convenient —
+-- every daily generated before this was drawn from the common tier.
+alter table public.daily_progress
+  add column if not exists difficulty text not null default 'easy';
+alter table public.daily_progress drop constraint if exists daily_progress_difficulty_check;
+alter table public.daily_progress
+  add constraint daily_progress_difficulty_check
+  check (difficulty in ('easy', 'hard', 'extreme'));
+
+-- Widen the key. Safe to re-run, and safe on existing data: every row has the
+-- same difficulty, so no two rows can collide as the column joins the key.
+alter table public.daily_progress drop constraint if exists daily_progress_pkey;
+alter table public.daily_progress
+  add constraint daily_progress_pkey
+  primary key (user_id, game, variant, difficulty, puzzle_date, env);
+
 create index if not exists daily_progress_lookup_idx
   on public.daily_progress (game, puzzle_date, env)
+  where completed;
+-- The boards read one difficulty at a time.
+create index if not exists daily_progress_board_idx
+  on public.daily_progress (game, difficulty, puzzle_date, env)
   where completed;
 
 alter table public.daily_progress enable row level security;
@@ -330,7 +364,7 @@ group by
   case when game = 'guess' then coalesce(payload->>'length', '') else '' end,
   puzzle_date,
   coalesce(payload->>'env', 'prod')
-on conflict (user_id, game, variant, puzzle_date, env) do nothing;
+on conflict (user_id, game, variant, difficulty, puzzle_date, env) do nothing;
 
 -- ---------------------------------------------------------------------------
 -- daily_stats: cross-player aggregates for one day's daily puzzle. Security
@@ -342,7 +376,19 @@ on conflict (user_id, game, variant, puzzle_date, env) do nothing;
 -- ---------------------------------------------------------------------------
 drop function if exists public.daily_stats(text, date);
 
-create or replace function public.daily_stats(p_game text, p_date date, p_env text default 'prod')
+-- Adding p_difficulty changes the signature, and `create or replace function`
+-- would leave the old three-argument version behind as an overload rather than
+-- replacing it. PostgREST then has two candidates for the same call and
+-- refuses to pick, which breaks the live site. Drop it by its exact signature
+-- first. Harmless before the column exists, and harmless on a re-run.
+drop function if exists public.daily_stats(text, date, text);
+
+create or replace function public.daily_stats(
+  p_game text,
+  p_date date,
+  p_env text default 'prod',
+  p_difficulty text default 'easy'
+)
 returns jsonb
 language plpgsql
 security definer
@@ -363,7 +409,7 @@ begin
       'avgGuesses', round(avg((dp.result->>'guesses')::numeric) filter (where (dp.result->>'won')::boolean), 1)
     ) into out_json
     from public.daily_progress dp
-    where game = 'guess' and completed and puzzle_date = p_date and env = p_env;
+    where game = 'guess' and completed and puzzle_date = p_date and env = p_env and difficulty = p_difficulty;
 
   elsif p_game = 'hive' then
     select jsonb_build_object(
@@ -373,7 +419,7 @@ begin
       'queenBee', count(*) filter (where (dp.result->>'queenBee')::boolean)
     ) into out_json
     from public.daily_progress dp
-    where game = 'hive' and completed and puzzle_date = p_date and env = p_env;
+    where game = 'hive' and completed and puzzle_date = p_date and env = p_env and difficulty = p_difficulty;
 
   elsif p_game in ('scramble', 'grid') then
     select jsonb_build_object(
@@ -382,7 +428,7 @@ begin
       'topScore', max((dp.result->>'score')::numeric)
     ) into out_json
     from public.daily_progress dp
-    where game = p_game and completed and puzzle_date = p_date and env = p_env;
+    where game = p_game and completed and puzzle_date = p_date and env = p_env and difficulty = p_difficulty;
 
   elsif p_game = 'box' then
     select jsonb_build_object(
@@ -391,7 +437,7 @@ begin
       'fewestWords', min((dp.result->>'words')::int)
     ) into out_json
     from public.daily_progress dp
-    where game = 'box' and completed and puzzle_date = p_date and env = p_env;
+    where game = 'box' and completed and puzzle_date = p_date and env = p_env and difficulty = p_difficulty;
 
   elsif p_game = 'weave' then
     select jsonb_build_object(
@@ -401,7 +447,7 @@ begin
       'avgHints', round(avg((dp.result->>'hints')::numeric), 1)
     ) into out_json
     from public.daily_progress dp
-    where game = 'weave' and completed and puzzle_date = p_date and env = p_env;
+    where game = 'weave' and completed and puzzle_date = p_date and env = p_env and difficulty = p_difficulty;
 
   else
     return null;
@@ -411,7 +457,9 @@ begin
 end;
 $$;
 
-grant execute on function public.daily_stats(text, date, text) to anon, authenticated;
+-- signature must match the function above: grant has no IF EXISTS, so a
+-- stale one fails the whole script after the drop/create has swapped it
+grant execute on function public.daily_stats(text, date, text, text) to anon, authenticated;
 
 -- ---------------------------------------------------------------------------
 -- Scoring, recomputed server-side.
@@ -571,7 +619,16 @@ revoke all on public.suspect_daily_results from public, anon, authenticated;
 -- Multi-day windows rank on how much you played as well as how well, so the
 -- boards reward turning up rather than one lucky morning months ago.
 -- ---------------------------------------------------------------------------
-create or replace function public.leaderboard(p_days int default 1, p_env text default 'prod')
+-- One board per difficulty rather than one board with three kinds of result
+-- mixed in: a time on easy and a time on extreme are not the same event, and
+-- ranking them together would be a category error.
+drop function if exists public.leaderboard(int, text);
+
+create or replace function public.leaderboard(
+  p_days int default 1,
+  p_env text default 'prod',
+  p_difficulty text default 'easy'
+)
 returns jsonb
 language plpgsql
 security definer
@@ -595,7 +652,7 @@ begin
              sum((dp.result->>'timeMs')::numeric) as tiebreak
       from public.daily_progress dp
       join public.profiles p on p.id = dp.user_id
-      where dp.game = 'guess' and dp.completed and dp.env = p_env and dp.puzzle_date >= since
+      where dp.game = 'guess' and dp.completed and dp.env = p_env and dp.difficulty = p_difficulty and dp.puzzle_date >= since
         and p.display_name is not null
         and public.result_is_plausible('guess', dp.state, dp.result)
       group by p.display_name
@@ -626,7 +683,7 @@ begin
              row_number() over (order by sum((dp.result->>'score')::numeric) desc, count(*) desc) as rk
       from public.daily_progress dp
       join public.profiles p on p.id = dp.user_id
-      where dp.game = g.game and dp.completed and dp.env = p_env and dp.puzzle_date >= since
+      where dp.game = g.game and dp.completed and dp.env = p_env and dp.difficulty = p_difficulty and dp.puzzle_date >= since
         and p.display_name is not null
         and public.result_is_plausible(g.game, dp.state, dp.result)
       group by p.display_name
@@ -646,7 +703,7 @@ begin
       select p.display_name as name, count(*) as value, min((dp.result->>'words')::int) as detail
       from public.daily_progress dp
       join public.profiles p on p.id = dp.user_id
-      where dp.game = 'box' and dp.completed and dp.env = p_env and dp.puzzle_date >= since
+      where dp.game = 'box' and dp.completed and dp.env = p_env and dp.difficulty = p_difficulty and dp.puzzle_date >= since
         and p.display_name is not null
         and public.result_is_plausible('box', dp.state, dp.result)
       group by p.display_name
@@ -669,7 +726,7 @@ begin
              ) as detail
       from public.daily_progress dp
       join public.profiles p on p.id = dp.user_id
-      where dp.game = 'weave' and dp.completed and dp.env = p_env and dp.puzzle_date >= since
+      where dp.game = 'weave' and dp.completed and dp.env = p_env and dp.difficulty = p_difficulty and dp.puzzle_date >= since
         and p.display_name is not null
         and public.result_is_plausible('weave', dp.state, dp.result)
       group by p.display_name
@@ -708,7 +765,7 @@ begin
       from public.daily_progress dp
       join public.profiles p on p.id = dp.user_id
       where dp.game = 'squares' and dp.variant = v.variant and dp.completed
-        and dp.env = p_env and dp.puzzle_date >= since
+        and dp.env = p_env and dp.difficulty = p_difficulty and dp.puzzle_date >= since
         and p.display_name is not null
         and public.result_is_plausible('squares', dp.state, dp.result)
       group by p.display_name
@@ -723,7 +780,7 @@ begin
 end;
 $$;
 
-grant execute on function public.leaderboard(int, text) to anon, authenticated;
+grant execute on function public.leaderboard(int, text, text) to anon, authenticated;
 
 -- Adding a game means widening both of these, and `create table if not exists`
 -- leaves an existing table exactly as it was — so the constraint has to be

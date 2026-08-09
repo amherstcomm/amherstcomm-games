@@ -9,6 +9,12 @@ import {
 } from 'react';
 import { CalendarDays, ChevronDown, CornerDownLeft, Delete, Flag, Play, RefreshCw, Search, Timer } from 'lucide-react';
 import { findGridPath, gridNeighbors, solveGrid } from '@/solvers';
+import {
+  difficulty,
+  onDifficultyChange,
+  resolveDifficulty,
+  type Difficulty,
+} from '@/difficulty';
 import type { LetterState } from '@/GuessGame';
 import { dailyDataUrl } from '@/dailyData';
 import DailyStats from '@/DailyStats';
@@ -37,6 +43,10 @@ const GRID_DICE_4 = [
 ];
 
 // Big Boggle's twenty-five dice for 5x5 grids
+/** Board size per difficulty. Three by three was measured and dropped — a
+ *  median of 19 findable words, and a worst board of four. */
+const GRID_SHAPE: Record<string, number> = { easy: 4, hard: 5, extreme: 5 };
+
 const GRID_DICE_5 = [
   'aaafrs', 'aaeeee', 'aafirs', 'adennn', 'aeeeem',
   'aeegmu', 'aegmnn', 'afirsy', 'bjkqxz', 'ccnstw',
@@ -132,6 +142,17 @@ const GridGame = forwardRef<
   }
 >(function GridGame({ standardWords, onLetterStates, onReveal }, ref) {
   const [store, setStore] = useState<GridStore>(loadStore);
+  const [playedAt, setPlayedAt] = useState<Difficulty>(difficulty);
+  const [difficultyTick, setDifficultyTick] = useState(0);
+  useEffect(
+    () =>
+      onDifficultyChange(() => {
+        setDifficultyTick((n) => n + 1);
+        // a different size now, and practice isn't recorded
+        setStore((prev) => ({ ...prev, practice: null }));
+      }),
+    []
+  );
   const { practiceAllowed } = usePrefs();
   // pinned to the daily: someone who switched practice off shouldn't be left
   // looking at a practice board they can no longer leave
@@ -193,8 +214,12 @@ const GridGame = forwardRef<
     let alive = true;
     fetch(DAILY_GRID_URL, { cache: 'no-store' })
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
-      .then((d) => {
+      .then((raw) => {
         if (!alive) return;
+        const chosen = resolveDifficulty(raw, difficulty());
+        if (!chosen.board) throw new Error('bad payload');
+        setPlayedAt(chosen.difficulty);
+        const d = { ...raw, ...chosen.board };
         const rec = sanitizeRecord({ cells: d.cells, found: [], endsAt: null, finished: false });
         if (!rec || typeof d.date !== 'string') throw new Error('bad payload');
         // reset when the date changes OR the cells differ (e.g. the daily
@@ -213,9 +238,9 @@ const GridGame = forwardRef<
     return () => {
       alive = false;
     };
-  }, []);
+  }, [difficultyTick]);
 
-  function rollPracticeGrid(size = 4): GridRecord {
+  function rollPracticeGrid(size = GRID_SHAPE[difficulty()]): GridRecord {
     const cells = diceFor(size)
       .map((d) => d[Math.floor(Math.random() * 6)])
       .sort(() => Math.random() - 0.5);
@@ -278,6 +303,7 @@ const GridGame = forwardRef<
   );
 
   const syncing = useDailySync({
+    difficulty: playedAt,
     game: 'grid',
     date: store.dailyDate,
     record,
@@ -507,26 +533,8 @@ const GridGame = forwardRef<
       </div>
 
       {/* practice grid size */}
-      {!store.dailyMode && record && (
-        <div className="mb-4">
-          <span className="inline-flex rounded-lg bg-white/5 border border-white/10 p-0.5 gap-0.5">
-            {[3, 4, 5].map((n) => (
-              <button
-                key={n}
-                onMouseDown={(e) => e.preventDefault()}
-                onClick={() => newPracticeGrid(n)}
-                title={running ? 'Abandons the current grid' : undefined}
-                className={`px-3 py-1.5 rounded-md text-sm font-semibold transition-colors
-                  ${Math.round(Math.sqrt(record.cells.length)) === n
-                    ? 'bg-white/15 text-white'
-                    : 'text-slate-400 hover:text-white'}`}
-              >
-                {n}×{n}
-              </button>
-            ))}
-          </span>
-        </div>
-      )}
+      {/* No size buttons. Practice is the daily generated on the fly, so its
+          board comes from the difficulty like the daily's does. */}
 
       {loading && <p className="text-sm text-slate-400 py-8">Loading…</p>}
       {store.dailyMode && dailyError && !record && (
@@ -801,14 +809,14 @@ const GridGame = forwardRef<
 
           {store.dailyMode && record.finished && store.dailyDate && (
             <div>
-              <DailyStats game="grid" date={store.dailyDate} />
+              <DailyStats level={playedAt} game="grid" date={store.dailyDate} />
             </div>
           )}
 
           <p className="mt-5 text-xs text-slate-500">
             Words are 3+ letters traced through adjacent cells (diagonals count), using each
             cell once. Scoring: 3–4 letters 1&nbsp;pt, 5 letters 2, 6 letters 3, 7 letters 5,
-            8+ letters 11. Scored against our Standard dictionary.
+            8+ letters 11. Scored against the word list for the difficulty you&apos;re playing.
             {store.dailyMode && ' A fresh daily grid arrives about 15 minutes after 3:00 a.m. Eastern.'}
           </p>
         </>

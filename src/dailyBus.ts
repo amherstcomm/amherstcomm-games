@@ -3,7 +3,7 @@
 // a link — or the Back button — has to be able to ask for the other one.
 //
 // This is that conversation, and nothing else. The alternative was a prop and
-// an imperative handle threaded through all six games so App could reach in,
+// an imperative handle threaded through every game so App could reach in,
 // which is a lot of plumbing for one boolean.
 
 import type { Mode } from '@/storage';

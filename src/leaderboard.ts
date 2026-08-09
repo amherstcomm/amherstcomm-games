@@ -9,6 +9,7 @@ import { DAILY_ENV } from '@/dailyData';
 import { supabase } from '@/supabase';
 import type { DailyState } from '@/dailyStatus';
 import type { Mode } from '@/storage';
+import { difficulty, type Difficulty } from '@/difficulty';
 
 // squares fields one board per size — see the note in leaderboard()
 export type BoardGame =
@@ -53,10 +54,15 @@ const MODE_BOARDS: Record<Mode, BoardGame[]> = {
  *  Having played is what makes a board mean anything: a column of strangers'
  *  scores is a table, the same column with your morning in it is a result. If
  *  you haven't played yet there's no such reading, so we fall back to the
- *  busiest board as a taste of what's going on. */
+ *  busiest board as a taste of what's going on.
+ *
+ *  Played, not finished. Hive and Weave have no finish line we can see from
+ *  here — a hive is over when you say it is — so they report "started" for
+ *  ever and asking for "done" left them off the page permanently, however well
+ *  you'd scored. Their rows were on the board the whole time. */
 export function boardsToShow(boards: Boards, modes: Mode[], status: Record<string, DailyState>): BoardGame[] {
   const mine = modes
-    .filter((m) => status[m] === 'done')
+    .filter((m) => status[m] === 'done' || status[m] === 'started')
     .flatMap((m) => MODE_BOARDS[m] ?? [])
     .filter((g) => boards[g]?.length);
   if (mine.length) return mine;
@@ -70,12 +76,18 @@ export function emptyBoards(): Boards {
   return { guess: [], hive: [], scramble: [], grid: [], box: [], weave: [], squares4: [], squares5: [] };
 }
 
-export async function fetchBoards(days: number): Promise<Boards | null> {
+/** One board per difficulty. A time on easy and a time on extreme aren't the
+ *  same event, so they're never ranked together. */
+export async function fetchBoards(
+  days: number,
+  level: Difficulty = difficulty()
+): Promise<Boards | null> {
   if (!supabase) return null;
   try {
     const { data, error } = await supabase.rpc('leaderboard', {
       p_days: days,
       p_env: DAILY_ENV,
+      p_difficulty: level,
     });
     if (error) throw error;
     const out = emptyBoards();

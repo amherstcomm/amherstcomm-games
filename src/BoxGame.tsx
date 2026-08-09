@@ -8,6 +8,12 @@ import {
 } from 'react';
 import { CalendarDays, CornerDownLeft, Delete, Eye, LifeBuoy, RefreshCw, RotateCcw, Timer } from 'lucide-react';
 import { formatElapsed, useUpTimer } from '@/useUpTimer';
+import {
+  difficulty,
+  onDifficultyChange,
+  resolveDifficulty,
+  type Difficulty,
+} from '@/difficulty';
 import type { LetterState } from '@/GuessGame';
 import { dailyDataUrl } from '@/dailyData';
 import DailyStats from '@/DailyStats';
@@ -185,10 +191,12 @@ const BoxGame = forwardRef<
   {
     standardWords: string[] | null;
     commonWords: string[] | null;
+    /** the words this difficulty draws practice from */
+    practiceWords: string[] | null;
     onLetterStates: (states: Record<string, LetterState>) => void;
     onReveal?: (sides: string[]) => void;
   }
->(function BoxGame({ standardWords, commonWords, onLetterStates, onReveal }, ref) {
+>(function BoxGame({ standardWords, commonWords, onLetterStates, onReveal, practiceWords }, ref) {
   const [store, setStore] = useState<BoxStore>(loadStore);
   const { practiceAllowed } = usePrefs();
   // pinned to the daily: someone who switched practice off shouldn't be left
@@ -204,6 +212,26 @@ const BoxGame = forwardRef<
   );
   const [current, setCurrent] = useState('');
   const [flash, setFlash] = useState<{ text: string; good: boolean } | null>(null);
+  // The difficulty this board actually is. Usually the one asked for, but a
+  // feed generated before difficulty existed only has the easy board, and a
+  // result has to be recorded as what was played rather than what was wanted.
+  const [playedAt, setPlayedAt] = useState<Difficulty>(difficulty);
+  // Changing difficulty means a different board, so the feed has to be read
+  // again. A storage write re-renders nothing on its own.
+  const [difficultyTick, setDifficultyTick] = useState(0);
+  useEffect(() => onDifficultyChange(() => setDifficultyTick((n) => n + 1)), []);
+
+  // Clear the practice board when a new word band arrives, not when the
+  // setting changes. The setting changes first and the band loads after, so
+  // clearing on the change regenerated from the pool we were about to
+  // replace — every level drew from the one below it.
+  const practicePool = useRef<string[] | null>(null);
+  useEffect(() => {
+    if (!practiceWords || practicePool.current === practiceWords) return;
+    const first = practicePool.current === null;
+    practicePool.current = practiceWords;
+    if (!first) setStore((prev) => ({ ...prev, practice: null }));
+  }, [practiceWords]);
   const [dailyError, setDailyError] = useState(false);
   const flashTimer = useRef<number | undefined>(undefined);
 
@@ -220,8 +248,14 @@ const BoxGame = forwardRef<
     let alive = true;
     fetch(DAILY_BOX_URL, { cache: 'no-store' })
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
-      .then((d) => {
+      .then((raw) => {
         if (!alive) return;
+        const chosen = resolveDifficulty(raw, difficulty());
+        if (!chosen.board) throw new Error('bad payload');
+        setPlayedAt(chosen.difficulty);
+        // the date lives at the top level; the board's own fields come from
+        // whichever difficulty was resolved
+        const d = { ...raw, ...chosen.board };
         const rec = sanitizeRecord({ sides: d.sides, chain: [] });
         if (!rec || typeof d.date !== 'string') throw new Error('bad payload');
         // reset when the date changes OR the sides differ (e.g. the daily
@@ -240,14 +274,14 @@ const BoxGame = forwardRef<
     return () => {
       alive = false;
     };
-  }, []);
+  }, [difficultyTick]);
 
   // ensure a practice box exists once the dictionary is ready
   useEffect(() => {
     if (store.dailyMode || store.practice || !commonWords) return;
-    const box = generateBox(commonWords);
+    const box = generateBox(practiceWords?.length ? practiceWords : commonWords);
     if (box) setStore((prev) => (prev.practice ? prev : { ...prev, practice: box }));
-  }, [store.dailyMode, store.practice, commonWords]);
+  }, [store.dailyMode, store.practice, commonWords, practiceWords]);
 
   const record = store.dailyMode ? store.daily : store.practice;
 
@@ -274,6 +308,7 @@ const BoxGame = forwardRef<
   const done = solved || !!record?.revealed;
 
   const syncing = useDailySync({
+    difficulty: playedAt,
     game: 'box',
     date: store.dailyDate,
     record,
@@ -449,7 +484,7 @@ const BoxGame = forwardRef<
 
   function newPracticeBox() {
     if (!commonWords) return;
-    const box = generateBox(commonWords);
+    const box = generateBox(practiceWords?.length ? practiceWords : commonWords);
     if (!box) return;
     setCurrent('');
     setStore((prev) => ({ ...prev, practice: box }));
@@ -737,7 +772,7 @@ const BoxGame = forwardRef<
 
           {store.dailyMode && done && store.dailyDate && (
             <div>
-              <DailyStats game="box" date={store.dailyDate} />
+              <DailyStats level={playedAt} game="box" date={store.dailyDate} />
             </div>
           )}
 

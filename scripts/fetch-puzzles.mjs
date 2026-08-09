@@ -304,6 +304,21 @@ const GRID_DICE = [
   'eiosst', 'elrtty', 'himnuq', 'hlnnrz',
 ];
 
+// The twenty-five-die set, matching src/GridGame.tsx. Grid varies by board
+// size — 4x4 then 5x5 — and by the list it's scored against, which is the
+// dial that separates hard from extreme since both are 5x5. Three by three was
+// measured and dropped: a median of 19 findable words and a worst board of 4,
+// which isn't a hard puzzle but an empty one.
+const GRID_DICE_5 = [
+  'aaafrs', 'aaeeee', 'aafirs', 'adennn', 'aeeeem',
+  'aeegmu', 'aegmnn', 'afirsy', 'bjkqxz', 'ccnstw',
+  'ceiilt', 'ceilpt', 'ceipst', 'ddlnor', 'dhhlor',
+  'dhhnot', 'dhlnor', 'eiiitt', 'emottt', 'ensssu',
+  'fiprsy', 'gorrvw', 'hiprry', 'nootuw', 'ooottu',
+];
+
+const GRID_SHAPE = { easy: 4, hard: 5, extreme: 5 };
+
 // Two independent daily sets: production, and a dev-salted set for
 // dev.anagrimoire.com/localhost so testing never spoils the production
 // puzzles. Everything stays deterministic per Eastern date.
@@ -485,12 +500,33 @@ for (const variant of ['', 'dev']) {
 
   // 4x4 grid from the classic dice (q treated as a plain letter)
   const gridRng = mulberry32(xmur3(`anagrimoire-grid-${etDate}${salt}`)());
-  const gridCells = GRID_DICE.map((d) => d[Math.floor(gridRng() * 6)]).sort(() => gridRng() - 0.5);
+  const gridByDifficulty = {};
+  for (const difficulty of DIFFICULTIES) {
+    const gridRng = mulberry32(
+      xmur3(`anagrimoire-grid-${etDate}${salt}${diffSalt(difficulty)}`)()
+    );
+    const dice = GRID_SHAPE[difficulty] === 5 ? GRID_DICE_5 : GRID_DICE;
+    gridByDifficulty[difficulty] = {
+      cells: dice.map((d) => d[Math.floor(gridRng() * 6)]).sort(() => gridRng() - 0.5),
+    };
+  }
   await writeFile(
     `data/${prefix}daily-grid.json`,
-    JSON.stringify({ date: etDate, cells: gridCells, fetchedAt: stamp }, null, 2) + '\n'
+    JSON.stringify(
+      {
+        date: etDate,
+        ...gridByDifficulty.easy,
+        byDifficulty: gridByDifficulty,
+        fetchedAt: stamp,
+      },
+      null,
+      2
+    ) + '\n'
   );
-  console.log(`Wrote data/${prefix}daily-grid.json: ${gridCells.join('')}`);
+  console.log(
+    `Wrote data/${prefix}daily-grid.json: ` +
+      DIFFICULTIES.map((d) => `${Math.round(Math.sqrt(gridByDifficulty[d].cells.length))}x`).join(' ')
+  );
 
   // weave: themed 6x8 tiling puzzle (Strands-style); answers ship base64d
   // to avoid casual spoilers
@@ -563,8 +599,12 @@ for (const variant of ['', 'dev']) {
       answer: Buffer.from(JSON.stringify({ rows: sq.rows })).toString('base64'),
     };
     squaresByDifficulty[difficulty] = board;
-    // the legacy shape, keyed by size, for clients that predate difficulty
-    squareBoards[n] = board;
+    // The legacy shape is keyed by size, and hard and extreme are both 5x5 —
+    // so writing every difficulty here let extreme overwrite hard, and a
+    // client reading boards[5] got the 6-given board while hard became
+    // unreachable. Sizes keep meaning what they always meant: 4x4 easy,
+    // 5x5 hard.
+    if (difficulty !== 'extreme') squareBoards[n] = board;
   }
   await writeFile(
     `data/${prefix}daily-squares.json`,
@@ -588,8 +628,14 @@ for (const variant of ['', 'dev']) {
 // held out so practice never spoils a daily puzzle.
 const poolRng = mulberry32(xmur3(`anagrimoire-weave-pool-${etDate}`)());
 const poolThemes = THEMES.filter((t) => !dailyWeaveClues.has(t.clue));
-const pool = { '6x8': [], '8x10': [] };
-for (const [key, cols, rows, count] of [['6x8', 6, 8, 20], ['8x10', 8, 10, 20]]) {
+// Keyed by difficulty, and by the shape that difficulty means, so a player on
+// hard gets hard practice. The old size keys ride along for a client that
+// predates difficulty — 6x8 was what practice always drew.
+const pool = { '6x8': [], '7x9': [], '8x10': [] };
+const weavePoolByDifficulty = { easy: [], hard: [], extreme: [] };
+for (const [difficulty, count] of [['easy', 20], ['hard', 20], ['extreme', 20]]) {
+  const [cols, rows] = WEAVE_SHAPE[difficulty];
+  const key = `${cols}x${rows}`;
   const used = new Set();
   for (let i = 0; i < count; i++) {
     // prefer themes not yet in this size's pool for variety
@@ -599,45 +645,75 @@ for (const [key, cols, rows, count] of [['6x8', 6, 8, 20], ['8x10', 8, 10, 20]])
       generateWeave(poolRng, cols, rows, poolThemes);
     if (!p) throw new Error(`Could not generate pool weave ${key} #${i}`);
     used.add(p.clue);
-    pool[key].push({ clue: p.clue, cols, board: p.board, answers: encodeAnswers(p) });
+    const board = { clue: p.clue, cols, board: p.board, answers: encodeAnswers(p) };
+    pool[key].push(board);
+    weavePoolByDifficulty[difficulty].push(board);
   }
 }
 await writeFile(
   'data/weave-pool.json',
-  JSON.stringify({ date: etDate, pool, fetchedAt: new Date().toISOString() }, null, 2) + '\n'
+  JSON.stringify(
+    {
+      date: etDate,
+      pool,
+      byDifficulty: weavePoolByDifficulty,
+      fetchedAt: new Date().toISOString(),
+    },
+    null,
+    2
+  ) + '\n'
 );
-console.log(`Wrote data/weave-pool.json (${pool['6x8'].length} + ${pool['8x10'].length} puzzles)`);
+console.log(
+  `Wrote data/weave-pool.json: ` +
+    DIFFICULTIES.map((d) => `${d} ${weavePoolByDifficulty[d].length}`).join(', ')
+);
 
 // shared practice pool for squares, same idea: pre-generated boards in both
 // sizes so the browser never has to run the search itself.
 const sqPoolRng = mulberry32(xmur3(`anagrimoire-squares-pool-${etDate}`)());
+// Same shapes the daily uses, so practice at a difficulty is practice for it.
+// The size keys stay for a client that predates difficulty.
 const squaresPool = { 4: [], 5: [] };
-for (const [n, count] of [[4, 20], [5, 12]]) {
+const squaresPoolByDifficulty = { easy: [], hard: [], extreme: [] };
+for (const [difficulty, count] of [['easy', 20], ['hard', 12], ['extreme', 12]]) {
+  const { size: n, given } = SQUARE_SHAPE[difficulty];
   const seen = new Set();
   for (let i = 0; i < count; i++) {
-    // practice pools keep the old sizes and given counts for now; difficulty
-    // reaches the dailies first, and these are unscored
     const sq = generateSquare(
       sqPoolRng,
       n,
       [...poolsFor('easy').answers],
       [...uniquenessWords()],
-      GIVEN_TARGET[n]
+      given
     );
     if (!sq) throw new Error(`Could not generate pool square ${n}x${n} #${i}`);
     const key = sq.rows.join('/');
     if (seen.has(key)) continue;
     seen.add(key);
     const flat = sq.rows.join('').split('');
-    squaresPool[n].push({
+    const board = {
       size: n,
       cells: flat.map((ch, j) => (sq.given.includes(j) ? ch : null)),
       answer: Buffer.from(JSON.stringify({ rows: sq.rows })).toString('base64'),
-    });
+    };
+    squaresPool[n].push(board);
+    squaresPoolByDifficulty[difficulty].push(board);
   }
 }
 await writeFile(
   'data/squares-pool.json',
-  JSON.stringify({ date: etDate, pool: squaresPool, fetchedAt: new Date().toISOString() }, null, 2) + '\n'
+  JSON.stringify(
+    {
+      date: etDate,
+      pool: squaresPool,
+      byDifficulty: squaresPoolByDifficulty,
+      fetchedAt: new Date().toISOString(),
+    },
+    null,
+    2
+  ) + '\n'
 );
-console.log(`Wrote data/squares-pool.json (${squaresPool[4].length} + ${squaresPool[5].length} puzzles)`);
+console.log(
+  `Wrote data/squares-pool.json: ` +
+    DIFFICULTIES.map((d) => `${d} ${squaresPoolByDifficulty[d].length}`).join(', ')
+);

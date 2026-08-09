@@ -333,12 +333,109 @@ matters once play-validation varies. Guess already does it
 (`current !== secret`); Squares and Weave will need it the moment their play
 dictionary stops being a constant.
 
+**What difficulty means, per game.** It isn't one thing. Four games vary by
+word tier, one by what it accepts, and two by shape — because a tier is
+meaningless for a dice grid and for hand-curated themes.
+
+| game | easy | hard | extreme |
+|---|---|---|---|
+| Guess | answer from easy tier | hard tier | extreme tier |
+| Hive | pangram base, easy tier | hard | extreme |
+| Boxed | chain words, easy tier | hard | extreme |
+| Scramble | rack from easy tier | hard | extreme |
+| Grid | accepts easy tier | hard | extreme |
+| Squares | 4×4, 8 given | 5×5, 10 given | 5×5, 6 given |
+| Weave | 6×8 | 7×9 | 8×10 |
+
+Grid earns its place despite the board being dice-generated: it scores against
+the maximum achievable, so a wider dictionary moves the target.
+
+Two sizes that looked obvious don't exist, both measured rather than assumed:
+
+- **Squares 6×6 is not buildable.** 0/5 from the easy tier, 0/5 from hard, and
+  0/3 against all 22,418 six-letter words in the large list. Order-6 double
+  word squares are genuinely scarce, and the generator also rejects symmetric
+  ones. So extreme keeps the 5×5 grid and takes letters away instead.
+- **Weave 10×12 is not fillable.** A theme carries 69–105 letters (median 91)
+  and 120 cells need 120. Only 21 of 60 themes even have a spangram long
+  enough to span ten columns. 6×8, 7×9 and 8×10 all build 40/40.
+
+**Squares' given count is also its distribution.** At today's 10 givens the
+spread is uneven — of 25 puzzles, 10 had a line with 4 givens and one had all
+5, which is an entire word handed over. Asking for 6 instead brings the worst
+line down to 2.2 on average without needing an explicit per-line cap: the
+count and the spread are the same dial. Note `target` is a floor the chooser
+removes down to, not a ceiling — asking 6 yields 6–8, averaging 6.6.
+
+**Cost to watch:** an extreme square takes ~20s to generate against 0.2s for
+easy. Across three difficulties, two environments and the practice pools, that
+is where the daily workflow could get slow.
+
 **Difficulty is a dimension, not a setting.** Taking it through the dailies
 means `daily_puzzles`, `daily_progress`, `game_results`, the leaderboard RPC and
 its boards, streaks and share cards all carry it. A streak has to be
 per-difficulty or dropping to easy for a day quietly protects one earned on
 hard. Boards currently hold about one entry per game per day, so splitting them
 three ways will look thin before it looks rich.
+
+### A test suite worth having
+Difficulty took a day and produced roughly a dozen bugs. Every one was found
+by playing the site or by a throwaway script, and several looked fine right up
+until someone typed something. That's the argument: not coverage for its own
+sake, but the specific shapes of thing that got through.
+
+**What the throwaway harnesses already proved works.** Fixtures compiled with
+esbuild and run under node caught the storage-gate rules, the board selector,
+the difficulty resolution, and an ESDB parse that was wrong twice. They cost
+minutes and they were right. The only reason they aren't a suite is that
+nothing collects them — each was written for one bug and thrown away. Give
+them a runner (vitest reads the existing tsconfig paths) and they become
+regressions instead of anecdotes.
+
+**What fixtures could never have caught**, and therefore what needs a rendered
+component or a real request:
+
+- Weave's grid class was `cols === 8 ? 'grid-cols-8' : 'grid-cols-6'`, so a
+  7-wide board wrapped into six columns. The data was right; the CSS was not.
+- Weave's validator accepted boards 6 or 8 wide, so hard was silently rejected
+  and the game kept the previous board. Nothing threw.
+- Squares' legacy `boards` map is keyed by size, and hard and extreme are both
+  5x5 — so extreme overwrote hard and one difficulty vanished from the feed.
+- Practice only drew a board when it hadn't got one, so changing difficulty
+  left the old one on screen and the setting looked inert.
+- Clearing that board on the *setting* change rebuilt it from the word band
+  about to be replaced, so every level drew from the one below. The words
+  changed, which is why it looked like it worked.
+
+**What to assert on.** Prefer stored state and returned data over rendered
+text. Two of the day's false negatives came from matching DOM strings — a
+filter for buttons labelled `4` and `5` when they read `4×4` and `5×5`, and a
+component that had unmounted between steps. A check that can quietly pass is
+worse than no check.
+
+**A generator contract test** is the cheapest high-value piece, because the
+feed is the interface between two halves that deploy separately:
+
+- every game has all three difficulties, and they're distinct boards
+- the legacy top-level keys equal the easy board, so an old client is unaffected
+- no blocked word appears anywhere, in plain text or base64
+- every hive board clears its floor; every square is uniquely solvable
+- guess covers exactly lengths 3–12
+
+**A handful of end-to-end paths**, and only a handful: pick a difficulty and
+see the board change, in each game; play a daily and see it recorded at that
+difficulty; a board that predates difficulty still plays. Playwright against
+the dev server, not against production.
+
+**Read through the API, not the CDN.** Three times in one day a fresh publish
+looked stale — `raw.githubusercontent.com` caches for 300 seconds and Render
+sits behind Cloudflare with `s-maxage=300`, and `cache: 'no-store'` governs
+the browser's cache, not a shared one. A test that fetches published data
+should use the GitHub contents API or bust the cache deliberately.
+
+**Where it pays off twice**: the same suite is what makes the puzzle pipeline
+safe to move into Postgres, since the contract tests describe the feed rather
+than the file.
 
 ### Admin portal — much later
 Everything owner-facing is SQL-editor-only today: clearing a display name,
@@ -457,6 +554,42 @@ Still to build: pipeline wiring (`daily-squares.json`, prod + dev salts), the
 game component, a solver, a Learn demo, stats/sync/share/routes/settings/home
 card. Deliberately *not* wired into `fetch-puzzles.mjs` yet — a bug there
 breaks the daily run for all six existing games.
+
+### Cryptogram
+A short passage under a substitution cipher; work out the mapping and the text
+falls out. Deduction rather than vocabulary, which is a different muscle from
+anything else here, and the solver practically exists already — deducing a
+word from its pattern and known letters is what Guess's solver does, applied
+to twenty words at once instead of one.
+
+**The text is the whole problem.** Cryptograms are traditionally famous
+quotations, and famous quotations are somebody's copyright. The site's word
+lists are deliberately its own; the passages would have to be too. Options,
+roughly in order of how well they'd read:
+
+- **Public-domain sources.** Gutenberg, proverbs, older verse. Real sentences,
+  no licence worry, but they need choosing — a passage nobody can parse
+  undeciphered is no fun deciphered either.
+- **Generated sentences** from our own word lists. Free, endless, deterministic
+  per date — and almost certainly flat. A cryptogram's reward is the sentence
+  meaning something at the end.
+
+Worth prototyping the generated version first: if it doesn't read well, the
+curation cost of the public-domain route is the real cost of the game.
+
+**Difficulty maps cleanly**, better than most games here: how many letters
+start revealed, how long the passage is, and whether the cipher preserves word
+boundaries. No second dial needed.
+
+**It reuses more than it adds.** Deterministic per Eastern date like the rest;
+`daily_progress` stores the partial mapping so a half-solved puzzle follows you
+between devices; verification is exact rather than statistical, since the
+server can simply compare the decoded text — the one game here where
+`result_is_plausible` could be certain rather than persuaded.
+
+**The catch:** it isn't a word game so much as a logic game about letters, and
+Wordoku above carries the same caveat. Two of those and the site is something
+else.
 
 ### Crossword
 Blocked on something that isn't code: **clues**. Grid construction is

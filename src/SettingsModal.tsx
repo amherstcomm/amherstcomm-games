@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react';
-import { BarChart3, Check, Contrast, EyeOff, Keyboard, Monitor, Moon, Sun, Type, X } from 'lucide-react';
+import { BarChart3, Check, Contrast, EyeOff, Gauge, Keyboard, Monitor, Moon, Sun, Type, X } from 'lucide-react';
 import KeyDiagram from '@/KeyDiagram';
 import { GA_ID, disableAnalytics, initAnalytics } from '@/analytics';
 import {
@@ -20,9 +20,19 @@ import {
   type StartPage,
   type View,
 } from '@/storage';
-import type { DictionaryId } from '@/dictionaries';
+import { DICTIONARIES } from '@/dictionaries';
 import type { SettingsTab } from '@/routes';
-import { level as storageLevel, setLevel, STORAGE_OPTIONS, type StorageLevel } from '@/siteStorage';
+import { level as storageLevel, setLevel as setStorageLevel, STORAGE_OPTIONS, type StorageLevel } from '@/siteStorage';
+import {
+  difficulty,
+  setDifficulty,
+  difficultyMode,
+  setDifficultyMode,
+  DIFFICULTIES,
+  DIFFICULTY_BLURB,
+  DIFFICULTY_LABEL,
+  type Difficulty,
+} from '@/difficulty';
 import type { Palette, TextScale, ThemeMode } from '@/theme';
 import { useModalA11y } from '@/useModalA11y';
 
@@ -56,12 +66,6 @@ const VIEW_LABELS: { id: View; label: string }[] = [
   { id: 'solve', label: 'Solve' },
   { id: 'play', label: 'Play' },
   { id: 'learn', label: 'Learn' },
-];
-
-const DICTIONARY_LABELS: { id: DictionaryId; label: string }[] = [
-  { id: 'common', label: 'Common' },
-  { id: 'standard', label: 'Standard' },
-  { id: 'full', label: 'Full' },
 ];
 
 const THEME_OPTIONS: { id: ThemeMode; label: string; Icon: typeof Sun }[] = [
@@ -209,7 +213,7 @@ export default function SettingsModal({
   lengthRange: LengthRange;
   practiceAllowed: boolean;
   helpAllowed: boolean;
-  solverDictionary: DictionaryId | 'per-game';
+  solverDictionary: Difficulty | 'per-game';
   signedIn: boolean;
   onTheme: (t: ThemeMode) => void;
   onPalette: (p: Palette) => void;
@@ -220,7 +224,7 @@ export default function SettingsModal({
   onLengthRange: (r: LengthRange) => void;
   onPracticeAllowed: (v: boolean) => void;
   onHelpAllowed: (v: boolean) => void;
-  onSolverDictionary: (d: DictionaryId | 'per-game') => void;
+  onSolverDictionary: (d: Difficulty | 'per-game') => void;
   startPage: StartPage;
   onStartPage: (s: StartPage) => void;
   /** the open tab, held by App so it can live in the address bar */
@@ -240,6 +244,8 @@ export default function SettingsModal({
   // Unanswered is off. Nothing loads before a yes, so the control has to show
   // that state rather than a cheerful default.
   const [storage, setStorageState] = useState<StorageLevel>(storageLevel);
+  const [level, setLevel] = useState<Difficulty>(difficulty);
+  const [diffMode, setDiffMode] = useState(difficultyMode);
   const [analytics, setAnalyticsState] = useState<Consent>(() => readConsent() ?? 'denied');
   const [answeredAt, setAnsweredAt] = useState<Date | null>(consentGivenAt);
 
@@ -437,7 +443,7 @@ export default function SettingsModal({
                   onClick={() => {
                     // takes effect immediately, including removing what the
                     // stricter setting no longer allows
-                    setLevel(id);
+                    setStorageLevel(id);
                     setStorageState(id);
                   }}
                   aria-pressed={storage === id}
@@ -507,6 +513,66 @@ export default function SettingsModal({
         <div className={`space-y-6 ${tab === 'games' ? '' : 'hidden'}`}>
           <div>
             <h3 className="flex items-center gap-2 text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2.5">
+              <Gauge className="w-3.5 h-3.5" />
+              Difficulty
+            </h3>
+            <div className="flex flex-wrap gap-1.5">
+              {DIFFICULTIES.map((id) => (
+                <button
+                  key={id}
+                  onClick={() => {
+                    // takes effect at once: the games re-read the feed and
+                    // swap to that difficulty's board
+                    setDifficulty(id);
+                    setLevel(id);
+                  }}
+                  aria-pressed={level === id}
+                  className={`px-3 h-9 rounded-lg text-sm font-semibold transition-colors
+                    ${level === id
+                      ? 'bg-amber-400 text-ink shadow-lg shadow-amber-500/30'
+                      : 'bg-white/5 border border-white/10 text-slate-300 hover:bg-white/10'}`}
+                >
+                  {DIFFICULTY_LABEL[id]}
+                </button>
+              ))}
+            </div>
+            <p className="mt-2 text-xs text-slate-500">
+              {DIFFICULTY_BLURB[level]} Each difficulty is its own puzzle with its
+              own board, statistics and streak, so today&apos;s hard Guess is a
+              different word from today&apos;s easy one. Word Squares keeps its two
+              sizes for now and always counts as easy.
+            </p>
+
+            <div className="mt-3 flex flex-wrap gap-1.5">
+              {([
+                { id: 'all' as const, label: 'Play all three' },
+                { id: 'locked' as const, label: 'Just this one' },
+              ]).map(({ id, label }) => (
+                <button
+                  key={id}
+                  onClick={() => {
+                    setDifficultyMode(id);
+                    setDiffMode(id);
+                  }}
+                  aria-pressed={diffMode === id}
+                  className={`px-3 h-9 rounded-lg text-sm font-semibold transition-colors
+                    ${diffMode === id
+                      ? 'bg-white/15 border border-white/25 text-white'
+                      : 'bg-white/5 border border-white/10 text-slate-300 hover:bg-white/10'}`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            <p className="mt-2 text-xs text-slate-500">
+              {diffMode === 'all'
+                ? 'All three are on offer each day, with a switch above the board. Play as many as you like — they count separately.'
+                : 'One puzzle a day and no decision. The other boards still exist; this only puts the switch away.'}
+            </p>
+          </div>
+
+          <div>
+            <h3 className="flex items-center gap-2 text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2.5">
               <EyeOff className="w-3.5 h-3.5" />
               Show
             </h3>
@@ -573,20 +639,20 @@ export default function SettingsModal({
           {!hiddenViews.includes('solve') && (
             <div>
               <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2.5">
-                Solver dictionary
+                Solver word list
               </h3>
                 <select
-                  aria-label="Solver dictionary"
+                  aria-label="Solver word list"
                   value={solverDictionary}
                   onChange={(e) =>
-                    onSolverDictionary(e.target.value as DictionaryId | 'per-game')
+                    onSolverDictionary(e.target.value as Difficulty | 'per-game')
                   }
                   className="h-9 px-2 rounded-lg bg-white/5 border border-white/10 text-slate-200 text-sm font-semibold"
                 >
                   <option value="per-game" className="bg-slate-900">
                     Per game
                   </option>
-                  {DICTIONARY_LABELS.map(({ id, label }) => (
+                  {DICTIONARIES.map(({ id, label }) => (
                     <option key={id} value={id} className="bg-slate-900">
                       {label}
                     </option>
