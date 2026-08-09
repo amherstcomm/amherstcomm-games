@@ -11,6 +11,13 @@ import { THEMES } from './themes.mjs';
 
 const require = createRequire(import.meta.url);
 
+// Seams for the test suite, invisible to the scheduled run: a pinned date so
+// a contract test is deterministic, a redirected output directory so it never
+// touches real data, and a switch to skip the NYT solver fetches so CI doesn't
+// depend on nytimes.com being up.
+const DATA_DIR = process.env.PUZZLES_DATA_DIR || 'data';
+const SKIP_SOLVER_DATA = process.env.SKIP_SOLVER_DATA === '1';
+
 const encodeAnswers = (p) =>
   Buffer.from(JSON.stringify({ spangram: p.spangram, words: p.words })).toString('base64');
 
@@ -29,8 +36,9 @@ async function fetchGameData(url) {
   return JSON.parse(match[1]);
 }
 
-await mkdir('data', { recursive: true });
+await mkdir(DATA_DIR, { recursive: true });
 
+if (!SKIP_SOLVER_DATA) {
 // Letter Boxed
 const lb = await fetchGameData('https://www.nytimes.com/puzzles/letter-boxed');
 if (!Array.isArray(lb.sides) || lb.sides.length !== 4) {
@@ -42,8 +50,8 @@ const lbOut = {
   par: lb.par ?? null,
   fetchedAt: new Date().toISOString(),
 };
-await writeFile('data/letterboxed.json', JSON.stringify(lbOut, null, 2) + '\n');
-console.log('Wrote data/letterboxed.json:', JSON.stringify(lbOut));
+await writeFile(`${DATA_DIR}/letterboxed.json`, JSON.stringify(lbOut, null, 2) + '\n');
+console.log('Wrote letterboxed.json:', JSON.stringify(lbOut));
 
 // Spelling Bee (letters only — no answers or pangrams)
 const sb = await fetchGameData('https://www.nytimes.com/puzzles/spelling-bee');
@@ -57,8 +65,8 @@ const sbOut = {
   outers: today.outerLetters.map((c) => String(c).toLowerCase()),
   fetchedAt: new Date().toISOString(),
 };
-await writeFile('data/spellingbee.json', JSON.stringify(sbOut, null, 2) + '\n');
-console.log('Wrote data/spellingbee.json:', JSON.stringify(sbOut));
+await writeFile(`${DATA_DIR}/spellingbee.json`, JSON.stringify(sbOut, null, 2) + '\n');
+console.log('Wrote spellingbee.json:', JSON.stringify(sbOut));
 
 // NYT Strands (board letters and theme clue only — no answers)
 const strandsRes = await fetch(`https://www.nytimes.com/svc/strands/v2/${
@@ -79,8 +87,9 @@ const strandsOut = {
   board: strands.startingBoard.map((r) => String(r).toLowerCase()),
   fetchedAt: new Date().toISOString(),
 };
-await writeFile('data/strands.json', JSON.stringify(strandsOut, null, 2) + '\n');
-console.log('Wrote data/strands.json:', JSON.stringify(strandsOut));
+await writeFile(`${DATA_DIR}/strands.json`, JSON.stringify(strandsOut, null, 2) + '\n');
+console.log('Wrote strands.json:', JSON.stringify(strandsOut));
+}
 
 // Daily guess-game words: one per length 3-15, deterministic for the Eastern
 // date so both scheduled runs pick identical words. Words are base64-encoded
@@ -136,7 +145,9 @@ function loadTierSet(files) {
 const COMMON_FILES = ['english-words-10', 'english-words-20', 'english-words-35', 'american-words-10', 'american-words-20', 'american-words-35'];
 const STANDARD_FILES = [...COMMON_FILES, 'english-words-40', 'english-words-50', 'english-words-55', 'american-words-40', 'american-words-50', 'american-words-55'];
 
-const etDate = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York' }).format(new Date());
+const etDate =
+  process.env.PUZZLES_DATE ||
+  new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York' }).format(new Date());
 
 // Three difficulties, and they don't all mean the same thing. Guess, Hive,
 // Boxed and Scramble vary by word tier; Grid varies only by what it accepts,
@@ -369,7 +380,7 @@ for (const variant of ['', 'dev']) {
     guessByDifficulty[difficulty] = { words };
   }
   await writeFile(
-    `data/${prefix}daily-words.json`,
+    `${DATA_DIR}/${prefix}daily-words.json`,
     JSON.stringify(
       {
         date: etDate,
@@ -422,7 +433,7 @@ for (const variant of ['', 'dev']) {
     hiveByDifficulty[difficulty].words = picked.count;
   }
   await writeFile(
-    `data/${prefix}daily-hive.json`,
+    `${DATA_DIR}/${prefix}daily-hive.json`,
     JSON.stringify(
       { date: etDate, ...hiveByDifficulty.easy, byDifficulty: hiveByDifficulty, fetchedAt: stamp },
       null,
@@ -456,7 +467,7 @@ for (const variant of ['', 'dev']) {
     boxByDifficulty[difficulty] = { sides: boxSides, par: 2 };
   }
   await writeFile(
-    `data/${prefix}daily-box.json`,
+    `${DATA_DIR}/${prefix}daily-box.json`,
     JSON.stringify(
       { date: etDate, ...boxByDifficulty.easy, byDifficulty: boxByDifficulty, fetchedAt: stamp },
       null,
@@ -481,7 +492,7 @@ for (const variant of ['', 'dev']) {
     };
   }
   await writeFile(
-    `data/${prefix}daily-scramble.json`,
+    `${DATA_DIR}/${prefix}daily-scramble.json`,
     JSON.stringify(
       {
         date: etDate,
@@ -511,7 +522,7 @@ for (const variant of ['', 'dev']) {
     };
   }
   await writeFile(
-    `data/${prefix}daily-grid.json`,
+    `${DATA_DIR}/${prefix}daily-grid.json`,
     JSON.stringify(
       {
         date: etDate,
@@ -549,7 +560,7 @@ for (const variant of ['', 'dev']) {
     };
   }
   await writeFile(
-    `data/${prefix}daily-weave.json`,
+    `${DATA_DIR}/${prefix}daily-weave.json`,
     JSON.stringify(
       {
         date: etDate,
@@ -607,7 +618,7 @@ for (const variant of ['', 'dev']) {
     if (difficulty !== 'extreme') squareBoards[n] = board;
   }
   await writeFile(
-    `data/${prefix}daily-squares.json`,
+    `${DATA_DIR}/${prefix}daily-squares.json`,
     JSON.stringify(
       { date: etDate, boards: squareBoards, byDifficulty: squaresByDifficulty, fetchedAt: stamp },
       null,
@@ -651,7 +662,7 @@ for (const [difficulty, count] of [['easy', 20], ['hard', 20], ['extreme', 20]])
   }
 }
 await writeFile(
-  'data/weave-pool.json',
+  `${DATA_DIR}/weave-pool.json`,
   JSON.stringify(
     {
       date: etDate,
@@ -701,7 +712,7 @@ for (const [difficulty, count] of [['easy', 20], ['hard', 12], ['extreme', 12]])
   }
 }
 await writeFile(
-  'data/squares-pool.json',
+  `${DATA_DIR}/squares-pool.json`,
   JSON.stringify(
     {
       date: etDate,
