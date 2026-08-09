@@ -1,6 +1,6 @@
 import { forwardRef, Fragment, useCallback, useEffect, useImperativeHandle, useMemo, useState } from 'react';
 import { CalendarDays, Eye, RefreshCw, Timer } from 'lucide-react';
-import { dailyDataUrl, SQUARES_POOL_URL } from '@/dailyData';
+import { fetchDailyData, fetchPool } from '@/dailyData';
 import {
   difficulty,
   isDifficulty,
@@ -31,9 +31,7 @@ export type SquaresGameHandle = { pressKey: (k: string) => void };
 export type SquareSize = 4 | 5;
 
 const SQUARES_KEY = 'anagrimoire:squares:v1';
-const DAILY_SQUARES_URL = dailyDataUrl('daily-squares');
 // the pool is shared by both sites, so it takes no dev- prefix
-const POOL_URL = SQUARES_POOL_URL;
 
 /** A board as it ships: `cells` holds the letters shown at the start and null
  *  everywhere the player types. `entries` is what they've typed. */
@@ -225,8 +223,7 @@ const SquaresGame = forwardRef<
   // today's boards
   useEffect(() => {
     let alive = true;
-    fetch(DAILY_SQUARES_URL, { cache: 'no-store' })
-      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
+    fetchDailyData('daily-squares')
       .then((raw) => {
         if (!alive) return;
         const d = raw;
@@ -264,8 +261,7 @@ const SquaresGame = forwardRef<
   // the practice pool, fetched once
   useEffect(() => {
     let alive = true;
-    fetch(POOL_URL, { cache: 'no-store' })
-      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
+    fetchPool('squares-pool')
       .then((d) => {
         // byDifficulty when the feed has it, the old size keys otherwise
         if (alive && (d?.byDifficulty || d?.pool)) setPool(d.byDifficulty ?? d.pool);

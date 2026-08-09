@@ -15,7 +15,7 @@ import {
   type Difficulty,
 } from '@/difficulty';
 import type { LetterState } from '@/GuessGame';
-import { dailyDataUrl } from '@/dailyData';
+import { fetchDailyData } from '@/dailyData';
 import DailyStats from '@/DailyStats';
 import MobileKeyInput from '@/MobileKeyInput';
 import ShareButton from '@/ShareButton';
@@ -30,7 +30,6 @@ import { store as siteStore } from '@/siteStorage';
 export type HiveGameHandle = { pressKey: (k: string) => void };
 
 const HIVE_KEY = 'anagrimoire:hive:v1';
-const DAILY_HIVE_URL = dailyDataUrl('daily-hive');
 
 // outer hive cells, clockwise from the top, as [left%, top%] of the container
 const POSITIONS: [number, number][] = [
@@ -184,8 +183,7 @@ const HiveGame = forwardRef<
   // fetch today's generated hive once
   useEffect(() => {
     let alive = true;
-    fetch(DAILY_HIVE_URL, { cache: 'no-store' })
-      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
+    fetchDailyData('daily-hive')
       .then((raw) => {
         if (!alive) return;
         const chosen = resolveDifficulty(raw, difficulty());

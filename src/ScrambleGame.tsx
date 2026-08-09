@@ -15,7 +15,7 @@ import {
   type Difficulty,
 } from '@/difficulty';
 import type { LetterState } from '@/GuessGame';
-import { dailyDataUrl } from '@/dailyData';
+import { fetchDailyData } from '@/dailyData';
 import DailyStats from '@/DailyStats';
 import MobileKeyInput from '@/MobileKeyInput';
 import ShareButton from '@/ShareButton';
@@ -30,7 +30,6 @@ import { store as siteStore } from '@/siteStorage';
 export type ScrambleGameHandle = { pressKey: (k: string) => void };
 
 const SCRAMBLE_KEY = 'anagrimoire:scramble:v1';
-const DAILY_SCRAMBLE_URL = dailyDataUrl('daily-scramble');
 const DURATION_MS = 3 * 60 * 1000;
 
 type ScrambleRecord = {
@@ -163,8 +162,7 @@ const ScrambleGame = forwardRef<
   // fetch today's rack once
   useEffect(() => {
     let alive = true;
-    fetch(DAILY_SCRAMBLE_URL, { cache: 'no-store' })
-      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
+    fetchDailyData('daily-scramble')
       .then((raw) => {
         if (!alive) return;
         const chosen = resolveDifficulty(raw, difficulty());

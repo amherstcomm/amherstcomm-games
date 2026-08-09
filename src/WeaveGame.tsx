@@ -15,7 +15,7 @@ import {
   resolveDifficulty,
   type Difficulty,
 } from '@/difficulty';
-import { dailyDataUrl, WEAVE_POOL_URL } from '@/dailyData';
+import { fetchDailyData, fetchPool } from '@/dailyData';
 import DailyStats from '@/DailyStats';
 import ShareButton from '@/ShareButton';
 import { dailyIntent } from '@/routes';
@@ -44,7 +44,6 @@ const WASD_DIRS: Record<string, [number, number]> = {
 };
 
 const WEAVE_KEY = 'anagrimoire:weave:v1';
-const DAILY_WEAVE_URL = dailyDataUrl('daily-weave');
 const HINT_COST = 3;
 
 type Answers = { spangram: { w: string; path: number[] }; words: { w: string; path: number[] }[] };
@@ -225,8 +224,7 @@ const WeaveGame = forwardRef<
   // fetch today's puzzle once
   useEffect(() => {
     let alive = true;
-    fetch(DAILY_WEAVE_URL, { cache: 'no-store' })
-      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
+    fetchDailyData('daily-weave')
       .then((raw) => {
         if (!alive) return;
         const chosen = resolveDifficulty(raw, difficulty());
@@ -257,8 +255,7 @@ const WeaveGame = forwardRef<
   // fetch the practice pool once
   useEffect(() => {
     let alive = true;
-    fetch(WEAVE_POOL_URL, { cache: 'no-store' })
-      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
+    fetchPool('weave-pool')
       .then((d) => {
         // byDifficulty when the feed has it, the old size keys otherwise
         if (alive && (d?.byDifficulty || d?.pool)) setPool(d.byDifficulty ?? d.pool);

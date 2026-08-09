@@ -7,7 +7,7 @@ import {
   useState,
 } from 'react';
 import { CalendarDays, RefreshCw, Search, Timer, Trophy } from 'lucide-react';
-import { dailyDataUrl } from '@/dailyData';
+import { fetchDailyData } from '@/dailyData';
 import {
   difficulty,
   onDifficultyChange,
@@ -32,7 +32,6 @@ export type GuessGameHandle = { pressKey: (k: string) => void };
 
 const MAX_GUESSES = 6;
 const PLAY_KEY = 'anagrimoire:play:v1';
-const DAILY_URL = dailyDataUrl('daily-words');
 
 type GameRecord = { secret: string; guesses: string[]; elapsedMs?: number }; // secret is base64
 type Stats = { played: number; won: number; streak: number; lastWinDate: string };
@@ -168,8 +167,7 @@ const GuessGame = forwardRef<
   // fetch today's daily words once
   useEffect(() => {
     let alive = true;
-    fetch(DAILY_URL, { cache: 'no-store' })
-      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
+    fetchDailyData('daily-words')
       .then((raw) => {
         if (!alive) return;
         const chosen = resolveDifficulty(raw, difficulty());
