@@ -3,6 +3,7 @@ import { CalendarDays, Eye, RefreshCw, Timer } from 'lucide-react';
 import { dailyDataUrl, SQUARES_POOL_URL } from '@/dailyData';
 import {
   difficulty,
+  isDifficulty,
   onDifficultyChange,
   type Difficulty,
 } from '@/difficulty';
@@ -53,6 +54,9 @@ type SquaresStore = {
   dailyDate: string;
   /** practice only — the daily's size comes from its difficulty */
   size: SquareSize;
+  /** which difficulty the practice board was drawn for, so switching
+   *  difficulty redraws even when hard and extreme are the same size */
+  practiceAt?: Difficulty;
   // Keyed by difficulty rather than by size, because hard and extreme are both
   // 5x5: keying by size meant one silently replaced the other, and it was
   // extreme that won.
@@ -119,6 +123,7 @@ function readStore(): SquaresStore {
       dailyMode: p?.dailyMode !== false,
       dailyDate: typeof p?.dailyDate === 'string' ? p.dailyDate : '',
       size: p?.size === 5 ? 5 : 4,
+      practiceAt: isDifficulty(p?.practiceAt) ? p.practiceAt : undefined,
       daily,
       practice: sanitizeRecord(p?.practice),
     };
@@ -277,11 +282,18 @@ const SquaresGame = forwardRef<
   // make sure a practice board exists once the pool is here
   useEffect(() => {
     if (store.dailyMode || !pool) return;
-    // the size a difficulty means, so switching difficulty redraws
-    const want = pool[playedAt]?.[0]?.size ?? store.size;
-    if (store.practice?.size === want && pool[playedAt]) return;
+    const from = pool[playedAt] ?? pool[String(store.size)];
+    if (!from?.length) return;
+    const want = pool[playedAt] ? from[0].size : store.size;
+    // Stop when the board we hold is the one we want. The previous guard also
+    // required pool[playedAt] to exist, which it doesn't for a pool generated
+    // before difficulty — so it never stopped, and practice redrew on every
+    // render for ever.
+    const wrong =
+      !store.practice || store.practice.size !== want || store.practiceAt !== playedAt;
+    if (!wrong) return;
     const board = drawPractice(want);
-    if (board) setStore((prev) => ({ ...prev, practice: board }));
+    if (board) setStore((prev) => ({ ...prev, practice: board, practiceAt: playedAt }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [store.dailyMode, store.practice, store.size, pool, playedAt]);
 
