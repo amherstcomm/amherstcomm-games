@@ -379,6 +379,15 @@ hard. Boards currently hold about one entry per game per day, so splitting them
 three ways will look thin before it looks rich.
 
 ### A test suite worth having
+**Built** (August 2026): `.github/workflows/ci.yml` runs five gates on every
+push — typecheck, lint, unit (vitest, `tests/unit/`), the feed contract
+(`tests/contract/`, which runs the real generator for a pinned date with the
+NYT fetches skipped), and Playwright with axe (`e2e/`, WCAG A/AA on six
+routes, every network stubbed). What remains from the notes below: the
+uniqueness check on squares runs only in the generator, and axe covers the
+mechanical half of WCAG — reading order and alt-text quality still need a
+human pass.
+
 Difficulty took a day and produced roughly a dozen bugs. Every one was found
 by playing the site or by a throwaway script, and several looked fine right up
 until someone typed something. That's the argument: not coverage for its own

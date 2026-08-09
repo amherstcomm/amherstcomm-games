@@ -24,5 +24,14 @@ export default tseslint.config(
         { allowConstantExport: true },
       ],
     },
+  },
+  {
+    // Playwright fixtures use `use` as a callback and `{}` as an intentional
+    // empty dependency pattern; neither is a React hook or a mistake there.
+    files: ['e2e/**/*.ts', 'tests/**/*.ts'],
+    rules: {
+      'react-hooks/rules-of-hooks': 'off',
+      'no-empty-pattern': 'off',
+    },
   }
 );
