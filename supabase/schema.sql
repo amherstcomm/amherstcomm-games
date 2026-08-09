@@ -889,3 +889,44 @@ $$;
 
 revoke execute on function public.delete_account() from public, anon;
 grant execute on function public.delete_account() to authenticated;
+
+-- ---------------------------------------------------------------------------
+-- Daily puzzles as rows (applied 2026-08-09 as migration daily_puzzles_table).
+--
+-- Two goals that fought on GitHub stop fighting here: rows for future days
+-- can sit ready (outage insurance) while the RPC takes no date parameter, so
+-- nothing can ask for tomorrow. The generator workflow writes with the
+-- service role; RLS is on with zero policies, so no web role reads the table
+-- itself — daily_puzzle() is the only door in.
+create table if not exists public.daily_puzzles (
+  puzzle_date date not null,
+  env text not null check (env in ('prod', 'dev', 'shared')),
+  game text not null,
+  payload jsonb not null,
+  written_at timestamptz not null default now(),
+  primary key (puzzle_date, env, game)
+);
+
+alter table public.daily_puzzles enable row level security;
+revoke all on public.daily_puzzles from anon, authenticated;
+
+-- Latest row at or before today Eastern — before the morning write it serves
+-- yesterday, exactly as the file feed does.
+create or replace function public.daily_puzzle(p_game text, p_env text default 'prod')
+returns jsonb
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select payload
+  from public.daily_puzzles
+  where game = p_game
+    and env = p_env
+    and puzzle_date <= (now() at time zone 'America/New_York')::date
+  order by puzzle_date desc
+  limit 1
+$$;
+
+revoke all on function public.daily_puzzle(text, text) from public;
+grant execute on function public.daily_puzzle(text, text) to anon, authenticated;

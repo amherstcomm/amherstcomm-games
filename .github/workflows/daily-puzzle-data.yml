@@ -26,6 +26,18 @@ jobs:
           node-version: 20
       - run: npm ci --ignore-scripts
       - run: node scripts/fetch-puzzles.mjs
+      - name: Publish to Postgres
+        # second home for the same data: rows behind an RPC that never serves
+        # tomorrow. Skips politely until the secret exists, and a failure here
+        # must not stop the branch publish below — that's today's live feed.
+        env:
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: |
+          if [ -z "$SUPABASE_SERVICE_ROLE_KEY" ]; then
+            echo "SUPABASE_SERVICE_ROLE_KEY not set; skipping Postgres publish"
+          else
+            node scripts/publish-puzzles.mjs || echo "::warning::Postgres publish failed; file feed unaffected"
+          fi
       - name: Publish to puzzle-data branch
         # orphan branch holding only the data files — keeping workflow files
         # out of it so the default GITHUB_TOKEN can always push
