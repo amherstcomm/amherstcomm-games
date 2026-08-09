@@ -20,7 +20,7 @@ import ScrambleGame, { type ScrambleGameHandle } from '@/ScrambleGame';
 import GridGame, { type GridGameHandle } from '@/GridGame';
 import WeaveGame, { type WeaveGameHandle } from '@/WeaveGame';
 import { dailyDataUrl } from '@/dailyData';
-import { DICTIONARIES, getDictionary, getDifficultyPool, type DictionaryId } from '@/dictionaries';
+import { DICTIONARIES, getAcceptPool, getDictionary, getDifficultyPool, type DictionaryId } from '@/dictionaries';
 import { solvePattern, solveDescramble, solveBee, solveBoxed, solveGrid, findGridPath } from '@/solvers';
 import ConsentBanner from '@/ConsentBanner';
 import { PrivacyPolicy, Terms } from '@/LegalDocs';
@@ -870,10 +870,13 @@ function App() {
   // Practice puzzles are built in the browser, so the words a difficulty means
   // have to be here too — the same bands the daily generator draws from.
   const [practiceWordsArr, setPracticeWordsArr] = useState<string[] | null>(null);
+  // What this difficulty accepts, one band wider than it sets from.
+  const [acceptWordsArr, setAcceptWordsArr] = useState<string[] | null>(null);
   useEffect(() => {
     let alive = true;
     setPracticeWordsArr(null);
     getDifficultyPool(level).then((ws) => alive && setPracticeWordsArr(ws));
+    getAcceptPool(level).then((ws) => alive && setAcceptWordsArr(ws));
     return () => {
       alive = false;
     };
@@ -1761,13 +1764,13 @@ function App() {
         <>
         {squaresPlayActive && (
         <div className="mb-8">
-          <SquaresGame ref={squaresRef} standardWords={standardWordsArr} />
+          <SquaresGame ref={squaresRef} standardWords={acceptWordsArr ?? standardWordsArr} />
         </div>
         )}
 
         {weavePlayActive && (
         <div className="mb-8">
-          <WeaveGame ref={weaveRef} standardWords={standardWordsArr} navKeys={navKeys} />
+          <WeaveGame ref={weaveRef} standardWords={acceptWordsArr ?? standardWordsArr} navKeys={navKeys} />
         </div>
         )}
 
@@ -2025,7 +2028,7 @@ function App() {
             length={length}
             commonWords={commonWordsArr}
             practiceWords={practiceWordsArr}
-            fullWords={fullWordsArr}
+            fullWords={acceptWordsArr ?? fullWordsArr}
             onLetterStates={setLetterStates}
             onReveal={!shownViews.includes('solve') || !helpAllowed ? undefined : ({ length: len, known: k, contains, excluded }) => {
               setLength(len);
@@ -2104,7 +2107,7 @@ function App() {
         <div className="mb-8">
           <ScrambleGame
             ref={scrambleRef}
-            standardWords={standardWordsArr}
+            standardWords={acceptWordsArr ?? standardWordsArr}
             commonWords={commonWordsArr}
             practiceWords={practiceWordsArr}
             onLetterStates={setLetterStates}
@@ -2182,7 +2185,7 @@ function App() {
         <div className="mb-8">
           <HiveGame
             ref={hiveRef}
-            standardWords={standardWordsArr}
+            standardWords={acceptWordsArr ?? standardWordsArr}
             commonWords={commonWordsArr}
             practiceWords={practiceWordsArr}
             onLetterStates={setLetterStates}
@@ -2267,7 +2270,7 @@ function App() {
         <div className="mb-8">
           <GridGame
             ref={gridRef}
-            standardWords={standardWordsArr}
+            standardWords={acceptWordsArr ?? standardWordsArr}
             onLetterStates={setLetterStates}
             onReveal={!shownViews.includes('solve') || !helpAllowed ? undefined : (cells) => {
               setGridPreset(cells.length === 9 ? '3x3' : cells.length === 25 ? '5x5' : '4x4');
@@ -2366,7 +2369,7 @@ function App() {
         <div className="mb-8">
           <BoxGame
             ref={boxRef}
-            standardWords={standardWordsArr}
+            standardWords={acceptWordsArr ?? standardWordsArr}
             commonWords={commonWordsArr}
             practiceWords={practiceWordsArr}
             onLetterStates={setLetterStates}
