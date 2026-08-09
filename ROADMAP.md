@@ -378,6 +378,65 @@ per-difficulty or dropping to easy for a day quietly protects one earned on
 hard. Boards currently hold about one entry per game per day, so splitting them
 three ways will look thin before it looks rich.
 
+### A test suite worth having
+Difficulty took a day and produced roughly a dozen bugs. Every one was found
+by playing the site or by a throwaway script, and several looked fine right up
+until someone typed something. That's the argument: not coverage for its own
+sake, but the specific shapes of thing that got through.
+
+**What the throwaway harnesses already proved works.** Fixtures compiled with
+esbuild and run under node caught the storage-gate rules, the board selector,
+the difficulty resolution, and an ESDB parse that was wrong twice. They cost
+minutes and they were right. The only reason they aren't a suite is that
+nothing collects them — each was written for one bug and thrown away. Give
+them a runner (vitest reads the existing tsconfig paths) and they become
+regressions instead of anecdotes.
+
+**What fixtures could never have caught**, and therefore what needs a rendered
+component or a real request:
+
+- Weave's grid class was `cols === 8 ? 'grid-cols-8' : 'grid-cols-6'`, so a
+  7-wide board wrapped into six columns. The data was right; the CSS was not.
+- Weave's validator accepted boards 6 or 8 wide, so hard was silently rejected
+  and the game kept the previous board. Nothing threw.
+- Squares' legacy `boards` map is keyed by size, and hard and extreme are both
+  5x5 — so extreme overwrote hard and one difficulty vanished from the feed.
+- Practice only drew a board when it hadn't got one, so changing difficulty
+  left the old one on screen and the setting looked inert.
+- Clearing that board on the *setting* change rebuilt it from the word band
+  about to be replaced, so every level drew from the one below. The words
+  changed, which is why it looked like it worked.
+
+**What to assert on.** Prefer stored state and returned data over rendered
+text. Two of the day's false negatives came from matching DOM strings — a
+filter for buttons labelled `4` and `5` when they read `4×4` and `5×5`, and a
+component that had unmounted between steps. A check that can quietly pass is
+worse than no check.
+
+**A generator contract test** is the cheapest high-value piece, because the
+feed is the interface between two halves that deploy separately:
+
+- every game has all three difficulties, and they're distinct boards
+- the legacy top-level keys equal the easy board, so an old client is unaffected
+- no blocked word appears anywhere, in plain text or base64
+- every hive board clears its floor; every square is uniquely solvable
+- guess covers exactly lengths 3–12
+
+**A handful of end-to-end paths**, and only a handful: pick a difficulty and
+see the board change, in each game; play a daily and see it recorded at that
+difficulty; a board that predates difficulty still plays. Playwright against
+the dev server, not against production.
+
+**Read through the API, not the CDN.** Three times in one day a fresh publish
+looked stale — `raw.githubusercontent.com` caches for 300 seconds and Render
+sits behind Cloudflare with `s-maxage=300`, and `cache: 'no-store'` governs
+the browser's cache, not a shared one. A test that fetches published data
+should use the GitHub contents API or bust the cache deliberately.
+
+**Where it pays off twice**: the same suite is what makes the puzzle pipeline
+safe to move into Postgres, since the contract tests describe the feed rather
+than the file.
+
 ### Admin portal — much later
 Everything owner-facing is SQL-editor-only today: clearing a display name,
 adding blocklist entries, reading `suspect_daily_results`. That's fine, and
