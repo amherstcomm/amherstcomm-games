@@ -18,6 +18,14 @@ const require = createRequire(import.meta.url);
 const DATA_DIR = process.env.PUZZLES_DATA_DIR || 'data';
 const SKIP_SOLVER_DATA = process.env.SKIP_SOLVER_DATA === '1';
 
+// Mixed into every seed. The generator is public and the date is the only
+// input, so without this, every future board is computable by anyone with a
+// clone — the whole anti-transparency motive for the Postgres move. With it,
+// determinism survives where it matters (the two scheduled runs agree, and a
+// re-run reproduces the day) while outside reproduction dies. Empty string
+// when unset, which is bit-for-bit the historical behaviour.
+const SEED_SALT = process.env.PUZZLES_SEED_SALT || '';
+
 const encodeAnswers = (p) =>
   Buffer.from(JSON.stringify({ spangram: p.spangram, words: p.words })).toString('base64');
 
@@ -356,7 +364,7 @@ for (const variant of ['', 'dev']) {
     // Salted per difficulty. Without it the same seed draws the same index
     // from three nested pools and lands on the same word more often than
     // chance would.
-    const rng = mulberry32(xmur3(`anagrimoire-guess-${etDate}${salt}${diffSalt(difficulty)}`)());
+    const rng = mulberry32(xmur3(`${SEED_SALT}anagrimoire-guess-${etDate}${salt}${diffSalt(difficulty)}`)());
     const { answers, cumulative } = poolsFor(difficulty);
     const words = {};
     for (let len = 3; len <= 12; len++) {
@@ -399,7 +407,7 @@ for (const variant of ['', 'dev']) {
   // hive: seeded from a pangram so it is always completable
   const hiveByDifficulty = {};
   for (const difficulty of DIFFICULTIES) {
-    const hiveRng = mulberry32(xmur3(`anagrimoire-hive-${etDate}${salt}${diffSalt(difficulty)}`)());
+    const hiveRng = mulberry32(xmur3(`${SEED_SALT}anagrimoire-hive-${etDate}${salt}${diffSalt(difficulty)}`)());
     const { hiveBases } = poolsFor(difficulty);
     // Keep looking until the board is worth playing. The centre matters as
     // much as the letters — the same seven letters can yield 9 words with one
@@ -451,7 +459,7 @@ for (const variant of ['', 'dev']) {
   // box: two chainable words covering exactly 12 distinct letters
   const boxByDifficulty = {};
   for (const difficulty of DIFFICULTIES) {
-    const boxRng = mulberry32(xmur3(`anagrimoire-box-${etDate}${salt}${diffSalt(difficulty)}`)());
+    const boxRng = mulberry32(xmur3(`${SEED_SALT}anagrimoire-box-${etDate}${salt}${diffSalt(difficulty)}`)());
     const { boxWords, boxByFirst } = poolsFor(difficulty);
     let boxSides = null;
     for (let attempt = 0; attempt < 2000 && !boxSides; attempt++) {
@@ -483,7 +491,7 @@ for (const variant of ['', 'dev']) {
   const scrambleByDifficulty = {};
   for (const difficulty of DIFFICULTIES) {
     const scrambleRng = mulberry32(
-      xmur3(`anagrimoire-scramble-${etDate}${salt}${diffSalt(difficulty)}`)()
+      xmur3(`${SEED_SALT}anagrimoire-scramble-${etDate}${salt}${diffSalt(difficulty)}`)()
     );
     const { rackBases } = poolsFor(difficulty);
     const rackBase = rackBases[Math.floor(scrambleRng() * rackBases.length)];
@@ -510,11 +518,11 @@ for (const variant of ['', 'dev']) {
   );
 
   // 4x4 grid from the classic dice (q treated as a plain letter)
-  const gridRng = mulberry32(xmur3(`anagrimoire-grid-${etDate}${salt}`)());
+  const gridRng = mulberry32(xmur3(`${SEED_SALT}anagrimoire-grid-${etDate}${salt}`)());
   const gridByDifficulty = {};
   for (const difficulty of DIFFICULTIES) {
     const gridRng = mulberry32(
-      xmur3(`anagrimoire-grid-${etDate}${salt}${diffSalt(difficulty)}`)()
+      xmur3(`${SEED_SALT}anagrimoire-grid-${etDate}${salt}${diffSalt(difficulty)}`)()
     );
     const dice = GRID_SHAPE[difficulty] === 5 ? GRID_DICE_5 : GRID_DICE;
     gridByDifficulty[difficulty] = {
@@ -548,7 +556,7 @@ for (const variant of ['', 'dev']) {
   const weaveByDifficulty = {};
   for (const difficulty of DIFFICULTIES) {
     const [cols, rows] = WEAVE_SHAPE[difficulty];
-    const weaveRng = mulberry32(xmur3(`anagrimoire-weave-${etDate}${salt}${diffSalt(difficulty)}`)());
+    const weaveRng = mulberry32(xmur3(`${SEED_SALT}anagrimoire-weave-${etDate}${salt}${diffSalt(difficulty)}`)());
     const weave = generateWeave(weaveRng, cols, rows, THEMES);
     if (!weave) throw new Error(`Could not generate a ${difficulty} daily weave`);
     dailyWeaveClues.add(weave.clue);
@@ -591,7 +599,7 @@ for (const variant of ['', 'dev']) {
   for (const difficulty of DIFFICULTIES) {
     const { size: n, given } = SQUARE_SHAPE[difficulty];
     const sqRng = mulberry32(
-      xmur3(`anagrimoire-squares-${etDate}${salt}${diffSalt(difficulty)}`)()
+      xmur3(`${SEED_SALT}anagrimoire-squares-${etDate}${salt}${diffSalt(difficulty)}`)()
     );
     // built from the easy tier at every difficulty: these words are the answer
     // and have to be guessable, whatever the shape asks of you
@@ -637,7 +645,7 @@ for (const variant of ['', 'dev']) {
 // shared practice pool for weave: pre-generated boards in both sizes,
 // refreshed daily, used by both sites. Both variants' daily themes are
 // held out so practice never spoils a daily puzzle.
-const poolRng = mulberry32(xmur3(`anagrimoire-weave-pool-${etDate}`)());
+const poolRng = mulberry32(xmur3(`${SEED_SALT}anagrimoire-weave-pool-${etDate}`)());
 const poolThemes = THEMES.filter((t) => !dailyWeaveClues.has(t.clue));
 // Keyed by difficulty, and by the shape that difficulty means, so a player on
 // hard gets hard practice. The old size keys ride along for a client that
@@ -681,7 +689,7 @@ console.log(
 
 // shared practice pool for squares, same idea: pre-generated boards in both
 // sizes so the browser never has to run the search itself.
-const sqPoolRng = mulberry32(xmur3(`anagrimoire-squares-pool-${etDate}`)());
+const sqPoolRng = mulberry32(xmur3(`${SEED_SALT}anagrimoire-squares-pool-${etDate}`)());
 // Same shapes the daily uses, so practice at a difficulty is practice for it.
 // The size keys stay for a client that predates difficulty.
 const squaresPool = { 4: [], 5: [] };

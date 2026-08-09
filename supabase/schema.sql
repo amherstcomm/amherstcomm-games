@@ -910,8 +910,12 @@ create table if not exists public.daily_puzzles (
 alter table public.daily_puzzles enable row level security;
 revoke all on public.daily_puzzles from anon, authenticated;
 
--- Latest row at or before today Eastern — before the morning write it serves
--- yesterday, exactly as the file feed does.
+-- The daily rolls at 3:15 a.m. Eastern — the workflow's schedule, the file
+-- feed's behaviour, and the site's promise. With future rows present (the
+-- rolling window), a plain calendar-date gate would serve the new day at
+-- midnight, three hours early; backing the clock up 3h15m before taking the
+-- date makes each row appear exactly when its file used to.
+-- (Amended by migration daily_puzzle_gate_at_3am.)
 create or replace function public.daily_puzzle(p_game text, p_env text default 'prod')
 returns jsonb
 language sql
@@ -923,7 +927,7 @@ as $$
   from public.daily_puzzles
   where game = p_game
     and env = p_env
-    and puzzle_date <= (now() at time zone 'America/New_York')::date
+    and puzzle_date <= (now() at time zone 'America/New_York' - interval '3 hours 15 minutes')::date
   order by puzzle_date desc
   limit 1
 $$;
