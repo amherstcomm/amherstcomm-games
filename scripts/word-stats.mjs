@@ -36,7 +36,7 @@ const STANDARD = [...COMMON, ...SCOWL([40, 50, 55])];
 const DICTIONARIES = {
   common: { scowl: COMMON, label: 'Common' },
   standard: { scowl: STANDARD, label: 'Standard' },
-  full: { scowl: null, label: 'Full' }, // an-array-of-english-words
+
 };
 
 const DAILY_MIN = 3;
@@ -59,7 +59,7 @@ for (const [name, def] of Object.entries(DICTIONARIES)) {
     }
   };
   if (def.scowl) for (const f of def.scowl) take(require(`wordlist-english/${f}.json`));
-  else take(require('an-array-of-english-words'));
+  else throw new Error('unknown tier');
 
   const words = [...set];
   const byLength = {};

@@ -44,7 +44,7 @@ When accounts are configured, each daily also shows a one-line **global summary*
 
 ### Word lists
 
-One published, versioned artifact ([src/wordbands/](src/wordbands/)), built by `npm run build-words` from SCOWL (via wordlist-english) and an-array-of-english-words: four exclusive bands that every pool is a union of — generation is one band, acceptance is the bands up to a cut. The same build seeds the Postgres `words` table, so the client and the database cannot disagree by construction. In production the bands come from jsDelivr at a pinned tag (`words-v1`) with the bundled copies as fallback; the solver's **Easy / Hard / Extreme** lists are exactly the difficulties' accept tiers, so a word the solver finds is a word that scores.
+One published, versioned artifact ([src/wordbands/](src/wordbands/)), built by `npm run build-words` from SCOWL and nothing else — via wordlist-english up to size 70, and SCOWL's own "huge" (80) list, vendored in [scripts/scowl/](scripts/scowl/), for the top tier: four exclusive bands that every pool is a union of. Generation is one band, acceptance is the bands up to a cut (55 / 70 / 80), and every tier is a size SCOWL itself defined. The same build seeds the Postgres `words` table, so the client and the database cannot disagree by construction. In production the bands come from jsDelivr at a pinned tag (`words-v1`) with the bundled copies as fallback; the solver's **Easy / Hard / Extreme** lists are exactly the difficulties' accept tiers, so a word the solver finds is a word that scores.
 
 Words carry content flags: **slur** never scores and is never shown, at any difficulty under any setting; **strong** and **mild** score, and a Settings control lets a player hide them from solver results and missed-word lists — display only, so everyone on a board plays the same rules. A separate generation blocklist (in the repo and in Postgres, each entry with its reason) governs what we'll publish as an answer, which is a different question from what a player may type. WordNet noun categories for ~75k words ride along in a shared `domains.json` for other projects and, someday, themed generation.
 
@@ -96,7 +96,6 @@ CI runs five gates on every push and pull request ([ci.yml](.github/workflows/ci
 - [Tailwind CSS](https://tailwindcss.com/) for styling
 - [Lucide](https://lucide.dev/) icons
 - [wordlist-english](https://github.com/jacksonrayhamilton/wordlist-english) (MIT), built from [SCOWL](http://wordlist.aspell.net/) by Kevin Atkinson — the source of every word list band and every puzzle answer
-- [an-array-of-english-words](https://github.com/words/an-array-of-english-words) (MIT), derived from the [Letterpress word list](https://github.com/lorenbrichter/Words) (CC0/public domain) — widens what Extreme accepts, never what a puzzle asks
 - [WordNet](https://wordnet.princeton.edu/) (via wordnet-db) for noun categories in the shared word-list files
 - [Vitest](https://vitest.dev/) and [Playwright](https://playwright.dev/) (+ [axe-core](https://github.com/dequelabs/axe-core)) for the test suite
 

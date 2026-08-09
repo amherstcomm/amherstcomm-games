@@ -11,7 +11,7 @@ test('descramble finds words, and the word list changes what it searches', async
   await expect(footer).toHaveText(/67,141/); // easy is the default here
 
   await page.getByRole('button', { name: 'Extreme', exact: true }).click();
-  await expect(footer).toHaveText(/276,790/);
+  await expect(footer).toHaveText(/242,602/);
 
   await page.getByRole('button', { name: 'Hard', exact: true }).click();
   await expect(footer).toHaveText(/111,370/);

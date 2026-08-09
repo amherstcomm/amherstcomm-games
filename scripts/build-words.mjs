@@ -111,13 +111,22 @@ for (const size of LEVELS)
       if (/^[a-z]+$/.test(w) && !level.has(w)) level.set(w, size);
     }
 
-// Everything else we accept, which the large list has and SCOWL doesn't. No
-// level: they're extreme-only by definition.
+// SCOWL's own 80 ("huge") tier, vendored from upstream (scripts/scowl/) —
+// wordlist-english stops at 70. Same english+american pair, same
+// normalization; latin1 because the final lists carry accented entries the
+// a-z filter drops anyway. This is what Extreme accepts up to: one lineage,
+// every tier a size SCOWL itself defined, and nothing from the "insane" 95.
+for (const f of ['english-words.80', 'american-words.80'])
+  for (const raw of readFileSync(`scripts/scowl/${f}`, 'latin1').split('\n')) {
+    const w = raw.trim().toLowerCase();
+    if (/^[a-z]+$/.test(w) && !level.has(w)) level.set(w, 80);
+  }
+
+// SCOWL is the whole list. an-array-of-english-words used to widen the top
+// tier and is gone entirely — it turned out to be mostly British-variant
+// spellings and machine plurals, a different dialect smuggled in at one
+// difficulty. Every word here has a SCOWL size.
 const words = new Set(level.keys());
-for (const raw of require('an-array-of-english-words')) {
-  const w = String(raw).toLowerCase();
-  if (/^[a-z]+$/.test(w)) words.add(w);
-}
 
 // ---- ESDB: part of speech and lemma ----------------------------------------
 const res = await fetch(ESDB);
@@ -266,12 +275,12 @@ writeFileSync(OUT, csv.join('\n') + '\n');
 // the client and the table cannot disagree by construction.
 const WORDS_VERSION = process.env.WORDS_VERSION || 'words-v1';
 mkdirSync(BANDS_DIR, { recursive: true });
-const bandOf = (lv) => (lv === undefined ? 'band-rest' : lv <= 35 ? 'band-35' : lv <= 55 ? 'band-55' : 'band-70');
+const bandOf = (lv) => (lv <= 35 ? 'band-35' : lv <= 55 ? 'band-55' : lv <= 70 ? 'band-70' : 'band-80');
 const bands = {
   'band-35': { words: [], flags: {} },
   'band-55': { words: [], flags: {} },
   'band-70': { words: [], flags: {} },
-  'band-rest': { words: [], flags: {} },
+  'band-80': { words: [], flags: {} },
 };
 for (const w of rows) {
   const band = bands[bandOf(level.get(w))];
@@ -305,9 +314,9 @@ const accepts = { easy: 0, hard: 0, extreme: 0 };
 for (const w of rows) {
   if (flagOf(w) === 'slur') continue;
   const lv = level.get(w);
-  if (lv !== undefined && lv <= 55) accepts.easy++;
-  if (lv !== undefined && lv <= 70) accepts.hard++;
-  accepts.extreme++;
+  if (lv <= 55) accepts.easy++;
+  if (lv <= 70) accepts.hard++;
+  if (lv <= 80) accepts.extreme++;
 }
 console.log(
   `  accept tiers       : easy ${accepts.easy.toLocaleString()}, hard ${accepts.hard.toLocaleString()}, extreme ${accepts.extreme.toLocaleString()}`
@@ -319,5 +328,5 @@ for (const w of rows) {
 }
 console.log(
   '  by level           :',
-  [...LEVELS, 'none'].map((l) => `${l}:${(byLevel[l] ?? 0).toLocaleString()}`).join('  ')
+  [...LEVELS, 80].map((l) => `${l}:${(byLevel[l] ?? 0).toLocaleString()}`).join('  ')
 );

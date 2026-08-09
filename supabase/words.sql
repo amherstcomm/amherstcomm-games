@@ -57,7 +57,8 @@ create policy words_read on public.words for select to anon, authenticated using
 --
 --   easy     generates from level <= 35   accepts level <= 55
 --   hard     generates from level <= 55   accepts level <= 70
---   extreme  generates from level <= 70   accepts everything, null included
+--   extreme  generates from level <= 70   accepts level <= 80
+-- Every row has a level: SCOWL is the whole list.
 create or replace view public.words_easy_answers as
   select * from public.words where level <= 35;
 create or replace view public.words_hard_answers as

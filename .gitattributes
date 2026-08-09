@@ -3,6 +3,9 @@
 # multi-line text can't match across an ending it didn't expect.
 * text=auto eol=lf
 
+# vendored upstream word lists stay byte-exact
+scripts/scowl/*.80 -text
+
 # binaries stay binary
 *.png binary
 *.jpg binary
