@@ -16,7 +16,7 @@ import {
   type Difficulty,
 } from '@/difficulty';
 import type { LetterState } from '@/GuessGame';
-import { dailyDataUrl } from '@/dailyData';
+import { fetchDailyData } from '@/dailyData';
 import DailyStats from '@/DailyStats';
 import MobileKeyInput from '@/MobileKeyInput';
 import ShareButton from '@/ShareButton';
@@ -31,7 +31,6 @@ import { store as siteStore } from '@/siteStorage';
 export type GridGameHandle = { pressKey: (k: string) => void };
 
 const GRID_KEY = 'anagrimoire:grid:v1';
-const DAILY_GRID_URL = dailyDataUrl('daily-grid');
 const DURATION_MS = 3 * 60 * 1000;
 
 // classic sixteen-dice letter distributions (q treated as a plain letter)
@@ -212,8 +211,7 @@ const GridGame = forwardRef<
   // fetch today's grid once
   useEffect(() => {
     let alive = true;
-    fetch(DAILY_GRID_URL, { cache: 'no-store' })
-      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
+    fetchDailyData('daily-grid')
       .then((raw) => {
         if (!alive) return;
         const chosen = resolveDifficulty(raw, difficulty());

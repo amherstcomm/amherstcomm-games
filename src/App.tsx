@@ -19,7 +19,7 @@ import BoxGame, { type BoxGameHandle } from '@/BoxGame';
 import ScrambleGame, { type ScrambleGameHandle } from '@/ScrambleGame';
 import GridGame, { type GridGameHandle } from '@/GridGame';
 import WeaveGame, { type WeaveGameHandle } from '@/WeaveGame';
-import { dailyDataUrl } from '@/dailyData';
+import { fetchDailyData } from '@/dailyData';
 import { DICTIONARIES, getAcceptPool, getDictionary, getDifficultyPool } from '@/dictionaries';
 import { solvePattern, solveDescramble, solveBee, solveBoxed, solveGrid, findGridPath } from '@/solvers';
 import ConsentBanner from '@/ConsentBanner';
@@ -542,9 +542,7 @@ function App() {
   async function fillTodaysWeave() {
     setTodayStatus('loading');
     try {
-      const r = await fetch(dailyDataUrl('daily-weave'), { cache: 'no-store' });
-      if (!r.ok) throw new Error(String(r.status));
-      const d = await r.json();
+      const d = await fetchDailyData('daily-weave');
       const board = d.board as string[];
       if (!Array.isArray(board) || board.length !== 8 || !board.every((row) => /^[a-z]{6}$/.test(row))) {
         throw new Error('bad payload');
@@ -1313,9 +1311,7 @@ function App() {
   async function fillDailyHive() {
     setTodayStatus('loading');
     try {
-      const r = await fetch(dailyDataUrl('daily-hive'), { cache: 'no-store' });
-      if (!r.ok) throw new Error(String(r.status));
-      const d = await r.json();
+      const d = await fetchDailyData('daily-hive');
       const center = String(d.center).toLowerCase();
       const outers = (d.outers as string[]).map((c) => String(c).toLowerCase());
       if (!/^[a-z]$/.test(center) || outers.length !== 6 || !outers.every((c) => /^[a-z]$/.test(c))) {
@@ -1332,9 +1328,7 @@ function App() {
   async function fillDailyBox() {
     setTodayStatus('loading');
     try {
-      const r = await fetch(dailyDataUrl('daily-box'), { cache: 'no-store' });
-      if (!r.ok) throw new Error(String(r.status));
-      const d = await r.json();
+      const d = await fetchDailyData('daily-box');
       const letters = (d.sides as string[])
         .flatMap((s) => String(s).toLowerCase().replace(/[^a-z]/g, '').split(''))
         .slice(0, 12);
@@ -1349,9 +1343,7 @@ function App() {
   async function fillDailyGrid() {
     setTodayStatus('loading');
     try {
-      const r = await fetch(dailyDataUrl('daily-grid'), { cache: 'no-store' });
-      if (!r.ok) throw new Error(String(r.status));
-      const d = await r.json();
+      const d = await fetchDailyData('daily-grid');
       const cells = (d.cells as string[]).map((c) => String(c).toLowerCase());
       if (cells.length !== 16 || !cells.every((c) => /^[a-z]$/.test(c))) {
         throw new Error('bad payload');
@@ -1367,9 +1359,7 @@ function App() {
   async function fillDailyRack() {
     setTodayStatus('loading');
     try {
-      const r = await fetch(dailyDataUrl('daily-scramble'), { cache: 'no-store' });
-      if (!r.ok) throw new Error(String(r.status));
-      const d = await r.json();
+      const d = await fetchDailyData('daily-scramble');
       const letters = (d.letters as string[]).map((c) => String(c).toLowerCase());
       if (letters.length !== 7 || !letters.every((c) => /^[a-z]$/.test(c))) {
         throw new Error('bad payload');

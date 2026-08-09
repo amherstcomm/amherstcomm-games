@@ -15,7 +15,7 @@ import {
   type Difficulty,
 } from '@/difficulty';
 import type { LetterState } from '@/GuessGame';
-import { dailyDataUrl } from '@/dailyData';
+import { fetchDailyData } from '@/dailyData';
 import DailyStats from '@/DailyStats';
 import MobileKeyInput from '@/MobileKeyInput';
 import ShareButton from '@/ShareButton';
@@ -30,7 +30,6 @@ import { store as siteStore } from '@/siteStorage';
 export type BoxGameHandle = { pressKey: (k: string) => void };
 
 const BOX_KEY = 'anagrimoire:box:v1';
-const DAILY_BOX_URL = dailyDataUrl('daily-box');
 
 type BoxRecord = {
   sides: string[];
@@ -246,8 +245,7 @@ const BoxGame = forwardRef<
   // fetch today's generated box once
   useEffect(() => {
     let alive = true;
-    fetch(DAILY_BOX_URL, { cache: 'no-store' })
-      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
+    fetchDailyData('daily-box')
       .then((raw) => {
         if (!alive) return;
         const chosen = resolveDifficulty(raw, difficulty());
