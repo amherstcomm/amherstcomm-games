@@ -28,3 +28,22 @@ test('pattern solver narrows by known letters', async ({ page }) => {
   await inputs.nth(0).fill('q');
   await expect(page.getByRole('main').getByText('quiet', { exact: true })).toBeVisible();
 });
+
+test('the coarse-word filter hides strong words from solver results', async ({ page }) => {
+  // the letters F U C K descramble to exactly one strong word
+  await page.goto('/solve/scramble');
+  await page.getByLabel('Letters to descramble').fill('fuck');
+  await expect(page.getByRole('button', { name: 'fuck', exact: true })).toBeVisible();
+
+  // same rack with the filter on: the word is gone from display — and only
+  // from display; acceptance is a different code path entirely
+  await page.addInitScript(() => {
+    localStorage.setItem(
+      'anagrimoire:v1',
+      JSON.stringify({ onboarded: true, wordFilter: 'strong' })
+    );
+  });
+  await page.goto('/solve/scramble');
+  await page.getByLabel('Letters to descramble').fill('fuck');
+  await expect(page.getByRole('button', { name: 'fuck', exact: true })).not.toBeVisible();
+});

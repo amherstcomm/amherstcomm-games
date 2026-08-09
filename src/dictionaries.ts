@@ -143,6 +143,23 @@ export function getDifficultyPool(difficulty: Difficulty): Promise<string[]> {
   );
 }
 
+/** A predicate for the display filter: true means show the word. 'none'
+ *  short-circuits without loading the flags at all. Display only — this
+ *  never touches an accept pool, so what scores is identical for every
+ *  player on a board; slurs are absent from those pools before any of this
+ *  runs. */
+export async function getDisplayFilter(
+  level: 'none' | 'strong' | 'all'
+): Promise<(word: string) => boolean> {
+  if (level === 'none') return () => true;
+  const flags = await getWordFlags();
+  return (word) => {
+    const f = flags.get(word);
+    if (!f) return true;
+    return f === 'mild' && level === 'strong';
+  };
+}
+
 /** Every flagged word across the lists, for the display filter: slur is
  *  always hidden; strong and mild are the player's choice. */
 export function getWordFlags(): Promise<Map<string, WordFlag>> {

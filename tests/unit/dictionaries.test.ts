@@ -88,3 +88,29 @@ describe('generation bands', () => {
     for (const w of easy) if (!c.has(w)) throw new Error(`"${w}" is not a common word`);
   });
 });
+
+describe('the display filter', () => {
+  it("'none' shows everything", async () => {
+    const { getDisplayFilter } = await import('@/dictionaries');
+    const show = await getDisplayFilter('none');
+    for (const w of ['fuck', 'crap', 'sex', 'mouse']) expect(show(w)).toBe(true);
+  });
+
+  it("'strong' hides the strong tier and keeps mild and ordinary English", async () => {
+    const { getDisplayFilter } = await import('@/dictionaries');
+    const show = await getDisplayFilter('strong');
+    expect(show('fuck')).toBe(false);
+    expect(show('crap')).toBe(true); // mild survives this level
+    expect(show('sex')).toBe(true); // unflagged on purpose — ordinary English
+    expect(show('mouse')).toBe(true);
+  });
+
+  it("'all' hides mild too, and still never touches ordinary words", async () => {
+    const { getDisplayFilter } = await import('@/dictionaries');
+    const show = await getDisplayFilter('all');
+    expect(show('fuck')).toBe(false);
+    expect(show('crap')).toBe(false);
+    expect(show('sex')).toBe(true);
+    expect(show('escort')).toBe(true);
+  });
+});

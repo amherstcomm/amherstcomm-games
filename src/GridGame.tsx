@@ -136,10 +136,12 @@ const GridGame = forwardRef<
   GridGameHandle,
   {
     standardWords: string[] | null;
+    /** display filter: false hides a word from the missed list, nothing else */
+    displayWord?: (w: string) => boolean;
     onLetterStates: (states: Record<string, LetterState>) => void;
     onReveal?: (cells: string[]) => void;
   }
->(function GridGame({ standardWords, onLetterStates, onReveal }, ref) {
+>(function GridGame({ standardWords, displayWord, onLetterStates, onReveal }, ref) {
   const [store, setStore] = useState<GridStore>(loadStore);
   const [playedAt, setPlayedAt] = useState<Difficulty>(difficulty);
   const [difficultyTick, setDifficultyTick] = useState(0);
@@ -773,8 +775,14 @@ const GridGame = forwardRef<
             </div>
           )}
 
-          {/* missed words, revealed after time is up */}
-          {record.finished && answers && answers.length > record.found.length && (
+          {/* missed words, revealed after time is up — through the display
+              filter, which is the only place it applies in this game: your own
+              found words are your own */}
+          {record.finished && answers && (() => {
+            const missed = answers.filter(
+              (w) => !record.found.includes(w) && (displayWord?.(w) ?? true)
+            );
+            return missed.length > 0 && (
             <div className="mt-4 max-w-md mx-auto">
               <button
                 onMouseDown={(e) => e.preventDefault()}
@@ -784,13 +792,11 @@ const GridGame = forwardRef<
                 <ChevronDown
                   className={`w-3.5 h-3.5 transition-transform ${showMissed ? 'rotate-180' : ''}`}
                 />
-                Missed words · {answers.length - record.found.length}
+                Missed words · {missed.length}
               </button>
               {showMissed && (
                 <div className="mt-2.5 flex flex-wrap justify-center gap-1.5 max-h-64 overflow-y-auto">
-                  {answers
-                    .filter((w) => !record.found.includes(w))
-                    .map((w) => (
+                  {missed.map((w) => (
                       <span
                         key={w}
                         {...traceHandlers(w)}
@@ -803,7 +809,8 @@ const GridGame = forwardRef<
                 </div>
               )}
             </div>
-          )}
+          );
+          })()}
 
           {store.dailyMode && record.finished && store.dailyDate && (
             <div>

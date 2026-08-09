@@ -19,6 +19,7 @@ import {
   type NavKeys,
   type StartPage,
   type View,
+  type WordFilterLevel,
 } from '@/storage';
 import { DICTIONARIES } from '@/dictionaries';
 import type { SettingsTab } from '@/routes';
@@ -187,6 +188,7 @@ export default function SettingsModal({
   practiceAllowed,
   helpAllowed,
   solverDictionary,
+  wordFilter,
   signedIn,
   onTheme,
   onPalette,
@@ -198,6 +200,7 @@ export default function SettingsModal({
   onPracticeAllowed,
   onHelpAllowed,
   onSolverDictionary,
+  onWordFilter,
   startPage,
   onStartPage,
   tab,
@@ -214,6 +217,7 @@ export default function SettingsModal({
   practiceAllowed: boolean;
   helpAllowed: boolean;
   solverDictionary: Difficulty | 'per-game';
+  wordFilter: WordFilterLevel;
   signedIn: boolean;
   onTheme: (t: ThemeMode) => void;
   onPalette: (p: Palette) => void;
@@ -225,6 +229,7 @@ export default function SettingsModal({
   onPracticeAllowed: (v: boolean) => void;
   onHelpAllowed: (v: boolean) => void;
   onSolverDictionary: (d: Difficulty | 'per-game') => void;
+  onWordFilter: (w: WordFilterLevel) => void;
   startPage: StartPage;
   onStartPage: (s: StartPage) => void;
   /** the open tab, held by App so it can live in the address bar */
@@ -665,6 +670,40 @@ export default function SettingsModal({
                 </p>
             </div>
           )}
+
+          <div>
+            <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2.5">
+              Coarse words
+            </h3>
+            <div className="inline-flex flex-wrap rounded-lg bg-white/5 border border-white/10 p-0.5 gap-0.5">
+              {(
+                [
+                  ['none', 'Show everything'],
+                  ['strong', 'Hide the strong ones'],
+                  ['all', 'Hide mild ones too'],
+                ] as const
+              ).map(([id, label]) => (
+                <button
+                  key={id}
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => onWordFilter(id)}
+                  aria-pressed={wordFilter === id}
+                  className={`px-2.5 py-1.5 rounded-md text-xs font-semibold transition-colors
+                    ${wordFilter === id
+                      ? 'bg-white/15 text-white'
+                      : 'text-slate-400 hover:text-white hover:bg-white/10'}`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            <p className="mt-2 text-xs text-slate-500">
+              Hides swearing and crude words from solver results and missed-word
+              lists. Display only: what scores never changes, so everyone on a
+              board plays the same rules — and slurs are never shown or scored,
+              whatever is chosen here.
+            </p>
+          </div>
 
           {!hiddenModes.includes('pattern') && (
             <div>

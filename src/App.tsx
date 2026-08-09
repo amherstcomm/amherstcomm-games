@@ -20,7 +20,7 @@ import ScrambleGame, { type ScrambleGameHandle } from '@/ScrambleGame';
 import GridGame, { type GridGameHandle } from '@/GridGame';
 import WeaveGame, { type WeaveGameHandle } from '@/WeaveGame';
 import { fetchDailyData } from '@/dailyData';
-import { DICTIONARIES, getAcceptPool, getDictionary, getDifficultyPool } from '@/dictionaries';
+import { DICTIONARIES, getAcceptPool, getDictionary, getDifficultyPool, getDisplayFilter } from '@/dictionaries';
 import { solvePattern, solveDescramble, solveBee, solveBoxed, solveGrid, findGridPath } from '@/solvers';
 import ConsentBanner from '@/ConsentBanner';
 import { PrivacyPolicy, Terms } from '@/LegalDocs';
@@ -704,6 +704,17 @@ function App() {
   const [practiceAllowed, setPracticeAllowed] = useState(initial.practiceAllowed);
   const [helpAllowed, setHelpAllowed] = useState(initial.helpAllowed);
   const [solverDictionary, setSolverDictionary] = useState(initial.solverDictionary);
+  const [wordFilter, setWordFilter] = useState(initial.wordFilter);
+  // the display-filter predicate, shared by Grid's missed-words list; the
+  // solver filters its own list where it loads
+  const [showWord, setShowWord] = useState<(w: string) => boolean>(() => () => true);
+  useEffect(() => {
+    let alive = true;
+    getDisplayFilter(wordFilter).then((f) => alive && setShowWord(() => f));
+    return () => {
+      alive = false;
+    };
+  }, [wordFilter]);
   const [onboarded, setOnboarded] = useState(initial.onboarded);
   const [session, setSession] = useState<Session | null>(null);
 
@@ -757,6 +768,7 @@ function App() {
           practiceAllowed?: boolean;
           helpAllowed?: boolean;
           solverDictionary?: string;
+          wordFilter?: string;
           startPage?: StartPage;
           onboarded?: boolean;
         }
@@ -772,6 +784,8 @@ function App() {
     if (typeof s?.helpAllowed === 'boolean') setHelpAllowed(s.helpAllowed);
     if (s?.solverDictionary)
       setSolverDictionary(asDifficulty(s.solverDictionary) ?? 'per-game');
+    if (s?.wordFilter === 'none' || s?.wordFilter === 'strong' || s?.wordFilter === 'all')
+      setWordFilter(s.wordFilter);
     if (s?.startPage && ALL_START_PAGES.includes(s.startPage)) setStartPage(s.startPage);
     if (s?.onboarded) setOnboarded(true);
     setSettingsPulled(true);
@@ -802,7 +816,7 @@ function App() {
     if (!supabase || !session || !settingsPulled) return;
     pushPending.current = true;
     const id = window.setTimeout(async () => {
-      const settings = { theme, palette, navKeys, textScale, hiddenModes, hiddenViews, lengthRange, practiceAllowed, helpAllowed, solverDictionary, startPage, onboarded };
+      const settings = { theme, palette, navKeys, textScale, hiddenModes, hiddenViews, lengthRange, practiceAllowed, helpAllowed, solverDictionary, wordFilter, startPage, onboarded };
       // update first — it needs only the update policy, which every install
       // has. `select` reveals whether a row actually matched.
       const { data, error } = await supabase!
@@ -830,7 +844,7 @@ function App() {
       window.clearTimeout(id);
       pushPending.current = false;
     };
-  }, [session, settingsPulled, theme, palette, navKeys, textScale, hiddenModes, hiddenViews, lengthRange, practiceAllowed, helpAllowed, solverDictionary, startPage, onboarded]);
+  }, [session, settingsPulled, theme, palette, navKeys, textScale, hiddenModes, hiddenViews, lengthRange, practiceAllowed, helpAllowed, solverDictionary, wordFilter, startPage, onboarded]);
 
   // surface auth errors that come back in the redirect URL (expired or
   // already-used magic links land here with no other visible sign)
@@ -1132,6 +1146,7 @@ function App() {
       practiceAllowed,
       helpAllowed,
       solverDictionary,
+      wordFilter,
       startPage,
       onboarded,
       patternPlay,
@@ -1149,7 +1164,7 @@ function App() {
       weavePlay,
       squaresPlay,
     });
-  }, [mode, dictionaries, sorts, kbOpen, theme, palette, textScale, navKeys, hiddenModes, hiddenViews, lengthRange, practiceAllowed, helpAllowed, solverDictionary, startPage, onboarded, patternPlay, beePlay, boxedPlay, descramblePlay, gridPlay, length, known, containsStr, excludedStr, rackStr, useAll, minLength, beeCenter, beeOuters, boxedLetters, solutionWords, gridLetters, gridPreset, weaveLetters, weaveSize, weavePlay, squaresPlay, squaresLetters, squaresSize]);
+  }, [mode, dictionaries, sorts, kbOpen, theme, palette, textScale, navKeys, hiddenModes, hiddenViews, lengthRange, practiceAllowed, helpAllowed, solverDictionary, wordFilter, startPage, onboarded, patternPlay, beePlay, boxedPlay, descramblePlay, gridPlay, length, known, containsStr, excludedStr, rackStr, useAll, minLength, beeCenter, beeOuters, boxedLetters, solutionWords, gridLetters, gridPreset, weaveLetters, weaveSize, weavePlay, squaresPlay, squaresLetters, squaresSize]);
 
   // keep known array sized to length
   useEffect(() => {
@@ -1166,15 +1181,19 @@ function App() {
   const [words, setWords] = useState<string[]>([]);
   useEffect(() => {
     let alive = true;
-    // the accept pool, not the raw tier: the solver's Hard is what Hard
-    // accepts in a game, so a word the solver finds is a word that scores
-    getAcceptPool(dictionaryId).then((w) => {
-      if (alive) setWords(w);
-    });
+    // The accept pool, not the raw tier: the solver's Hard is what Hard
+    // accepts in a game, so a word the solver finds is a word that scores.
+    // The display filter then hides what this player asked not to be shown —
+    // display only, so two players on one board still play the same rules.
+    Promise.all([getAcceptPool(dictionaryId), getDisplayFilter(wordFilter)]).then(
+      ([w, show]) => {
+        if (alive) setWords(wordFilter === 'none' ? w : w.filter(show));
+      }
+    );
     return () => {
       alive = false;
     };
-  }, [dictionaryId]);
+  }, [dictionaryId, wordFilter]);
 
   const rackLetters = useMemo(
     () => rackStr.toLowerCase().replace(/[^a-z]/g, '').split('').filter(Boolean),
@@ -2265,6 +2284,7 @@ function App() {
           <GridGame
             ref={gridRef}
             standardWords={acceptWordsArr ?? standardWordsArr}
+            displayWord={showWord}
             onLetterStates={setLetterStates}
             onReveal={!shownViews.includes('solve') || !helpAllowed ? undefined : (cells) => {
               setGridPreset(cells.length === 9 ? '3x3' : cells.length === 25 ? '5x5' : '4x4');
@@ -2892,6 +2912,8 @@ function App() {
           onPracticeAllowed={setPracticeAllowed}
           onHelpAllowed={setHelpAllowed}
           onSolverDictionary={setSolverDictionary}
+          wordFilter={wordFilter}
+          onWordFilter={setWordFilter}
           onToggleView={(v) =>
             setHiddenViews((prev) =>
               prev.includes(v) ? prev.filter((x) => x !== v) : [...prev, v]
