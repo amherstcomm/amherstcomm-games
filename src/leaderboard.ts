@@ -54,10 +54,15 @@ const MODE_BOARDS: Record<Mode, BoardGame[]> = {
  *  Having played is what makes a board mean anything: a column of strangers'
  *  scores is a table, the same column with your morning in it is a result. If
  *  you haven't played yet there's no such reading, so we fall back to the
- *  busiest board as a taste of what's going on. */
+ *  busiest board as a taste of what's going on.
+ *
+ *  Played, not finished. Hive and Weave have no finish line we can see from
+ *  here — a hive is over when you say it is — so they report "started" for
+ *  ever and asking for "done" left them off the page permanently, however well
+ *  you'd scored. Their rows were on the board the whole time. */
 export function boardsToShow(boards: Boards, modes: Mode[], status: Record<string, DailyState>): BoardGame[] {
   const mine = modes
-    .filter((m) => status[m] === 'done')
+    .filter((m) => status[m] === 'done' || status[m] === 'started')
     .flatMap((m) => MODE_BOARDS[m] ?? [])
     .filter((g) => boards[g]?.length);
   if (mine.length) return mine;
