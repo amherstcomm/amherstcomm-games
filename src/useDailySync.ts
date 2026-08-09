@@ -15,6 +15,7 @@ import {
   saveDaily,
   type DailyGame,
 } from '@/dailySync';
+import { onDoorbell, realtimeUp } from '@/realtimeSync';
 import { supabase } from '@/supabase';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -76,16 +77,17 @@ export function useDailySync({
   // focus events — only one of them is focused, and the other just sits there
   // looking stale — so a board that is visible checks back on its own.
   //
-  // Ten seconds. The case this exists for — two windows open at once — is
-  // mostly a testing shape; the real one is a phone in the morning and a
-  // laptop at lunch, which the pull on open already covers. Ten still reads as
-  // live if you are watching, at a request per open board per interval for
-  // every signed-in player. Realtime would replace it with a subscription if
-  // it ever needs to be instant.
+  // The doorbell below is the primary delivery now; this timer is the fallback
+  // for a dropped socket. While the subscription is up it steps back to a slow
+  // sweep — once a minute rather than never, because a socket can go quiet
+  // without ever reporting itself down.
   useEffect(() => {
     if (!supabase || !active || !date) return;
+    let ticks = 0;
     const id = window.setInterval(() => {
       if (document.visibilityState !== 'visible') return;
+      ticks += 1;
+      if (realtimeUp() && ticks % 6 !== 0) return;
       syncedKey.current = null;
       setAuthTick((n) => n + 1);
     }, POLL_MS);
@@ -110,6 +112,20 @@ export function useDailySync({
   }, []);
 
   const key = `${game}:${variant}:${difficulty}:${date}`;
+
+  // The doorbell: a realtime event on one of this user's rows triggers the
+  // same pull the poll would, and nothing else — the payload only says which
+  // board moved. A null key means the event couldn't say, so everyone checks.
+  useEffect(() => {
+    if (!supabase || !active || !date) return;
+    return onDoorbell((ringed) => {
+      if (ringed !== null && ringed !== key) return;
+      // a hidden tab can stay stale; the visibilitychange recheck catches it up
+      if (document.visibilityState !== 'visible') return;
+      syncedKey.current = null;
+      setAuthTick((n) => n + 1);
+    });
+  }, [active, date, key]);
 
   // pull, once per board
   useEffect(() => {
