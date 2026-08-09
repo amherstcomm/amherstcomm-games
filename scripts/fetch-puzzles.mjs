@@ -304,6 +304,21 @@ const GRID_DICE = [
   'eiosst', 'elrtty', 'himnuq', 'hlnnrz',
 ];
 
+// The twenty-five-die set, matching src/GridGame.tsx. Grid varies by board
+// size — 4x4 then 5x5 — and by the list it's scored against, which is the
+// dial that separates hard from extreme since both are 5x5. Three by three was
+// measured and dropped: a median of 19 findable words and a worst board of 4,
+// which isn't a hard puzzle but an empty one.
+const GRID_DICE_5 = [
+  'aaafrs', 'aaeeee', 'aafirs', 'adennn', 'aeeeem',
+  'aeegmu', 'aegmnn', 'afirsy', 'bjkqxz', 'ccnstw',
+  'ceiilt', 'ceilpt', 'ceipst', 'ddlnor', 'dhhlor',
+  'dhhnot', 'dhlnor', 'eiiitt', 'emottt', 'ensssu',
+  'fiprsy', 'gorrvw', 'hiprry', 'nootuw', 'ooottu',
+];
+
+const GRID_SHAPE = { easy: 4, hard: 5, extreme: 5 };
+
 // Two independent daily sets: production, and a dev-salted set for
 // dev.anagrimoire.com/localhost so testing never spoils the production
 // puzzles. Everything stays deterministic per Eastern date.
@@ -485,12 +500,33 @@ for (const variant of ['', 'dev']) {
 
   // 4x4 grid from the classic dice (q treated as a plain letter)
   const gridRng = mulberry32(xmur3(`anagrimoire-grid-${etDate}${salt}`)());
-  const gridCells = GRID_DICE.map((d) => d[Math.floor(gridRng() * 6)]).sort(() => gridRng() - 0.5);
+  const gridByDifficulty = {};
+  for (const difficulty of DIFFICULTIES) {
+    const gridRng = mulberry32(
+      xmur3(`anagrimoire-grid-${etDate}${salt}${diffSalt(difficulty)}`)()
+    );
+    const dice = GRID_SHAPE[difficulty] === 5 ? GRID_DICE_5 : GRID_DICE;
+    gridByDifficulty[difficulty] = {
+      cells: dice.map((d) => d[Math.floor(gridRng() * 6)]).sort(() => gridRng() - 0.5),
+    };
+  }
   await writeFile(
     `data/${prefix}daily-grid.json`,
-    JSON.stringify({ date: etDate, cells: gridCells, fetchedAt: stamp }, null, 2) + '\n'
+    JSON.stringify(
+      {
+        date: etDate,
+        ...gridByDifficulty.easy,
+        byDifficulty: gridByDifficulty,
+        fetchedAt: stamp,
+      },
+      null,
+      2
+    ) + '\n'
   );
-  console.log(`Wrote data/${prefix}daily-grid.json: ${gridCells.join('')}`);
+  console.log(
+    `Wrote data/${prefix}daily-grid.json: ` +
+      DIFFICULTIES.map((d) => `${Math.round(Math.sqrt(gridByDifficulty[d].cells.length))}x`).join(' ')
+  );
 
   // weave: themed 6x8 tiling puzzle (Strands-style); answers ship base64d
   // to avoid casual spoilers

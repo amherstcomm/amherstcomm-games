@@ -986,12 +986,9 @@ function App() {
   // on the fly and not recorded, so it needs the same control — and since the
   // size pickers are gone, this is the only way to choose a shape there.
   //
-  // Not on Grid, whose board is the same dice at every level, and not when
-  // someone has asked to be left with one puzzle.
-  const showDifficultySwitch =
-    playActive &&
-    mode !== 'grid' &&
-    difficultyMode() === 'all';
+  // Grid is here too now: it varies by board size, 4x4 then 5x5. Not shown
+  // when someone has asked to be left with one puzzle.
+  const showDifficultySwitch = playActive && difficultyMode() === 'all';
 
   useEffect(
     () =>
