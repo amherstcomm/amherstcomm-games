@@ -251,7 +251,8 @@ const SquaresGame = forwardRef<
     fetch(POOL_URL, { cache: 'no-store' })
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
       .then((d) => {
-        if (alive && d?.pool) setPool(d.pool);
+        // byDifficulty when the feed has it, the old size keys otherwise
+        if (alive && (d?.byDifficulty || d?.pool)) setPool(d.byDifficulty ?? d.pool);
       })
       .catch(() => {
         // practice stays unavailable until the pool loads
@@ -262,7 +263,10 @@ const SquaresGame = forwardRef<
   }, []);
 
   function drawPractice(size: SquareSize, avoid?: string): SquareRecord | null {
-    const options = pool?.[String(size)];
+    // Practice follows the difficulty too — picking Extreme and then getting an
+    // easy board to practise on is the setting not meaning anything. Falls back
+    // to the size keys for a pool generated before difficulty existed.
+    const options = pool?.[playedAt] ?? pool?.[String(size)];
     if (!options?.length) return null;
     const fresh = options.filter((p) => p.cells.join('') !== avoid);
     const from = fresh.length ? fresh : options;
@@ -272,11 +276,14 @@ const SquaresGame = forwardRef<
 
   // make sure a practice board exists once the pool is here
   useEffect(() => {
-    if (store.dailyMode || store.practice?.size === store.size || !pool) return;
-    const board = drawPractice(store.size);
+    if (store.dailyMode || !pool) return;
+    // the size a difficulty means, so switching difficulty redraws
+    const want = pool[playedAt]?.[0]?.size ?? store.size;
+    if (store.practice?.size === want && pool[playedAt]) return;
+    const board = drawPractice(want);
     if (board) setStore((prev) => ({ ...prev, practice: board }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [store.dailyMode, store.practice, store.size, pool]);
+  }, [store.dailyMode, store.practice, store.size, pool, playedAt]);
 
   const record = store.dailyMode ? store.daily[playedAt] ?? null : store.practice;
   // The board's own size, never store.size: that flips the instant you press

@@ -248,7 +248,8 @@ const WeaveGame = forwardRef<
     fetch(WEAVE_POOL_URL, { cache: 'no-store' })
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
       .then((d) => {
-        if (alive && d?.pool) setPool(d.pool);
+        // byDifficulty when the feed has it, the old size keys otherwise
+        if (alive && (d?.byDifficulty || d?.pool)) setPool(d.byDifficulty ?? d.pool);
       })
       .catch(() => {
         // practice unavailable until the pool loads
@@ -259,10 +260,13 @@ const WeaveGame = forwardRef<
   }, []);
 
   function pickPractice(size: '6x8' | '8x10', avoidBoard?: string) {
-    if (!pool?.[size]?.length) return null;
-    const options = pool[size].filter((p) => p.board.join('') !== avoidBoard);
-    const pick = (options.length ? options : pool[size])[
-      Math.floor(Math.random() * (options.length ? options.length : pool[size].length))
+    // Practice follows the difficulty, falling back to the size keys for a
+    // pool generated before difficulty existed.
+    const from = pool?.[playedAt] ?? pool?.[size];
+    if (!from?.length) return null;
+    const options = from.filter((p) => p.board.join('') !== avoidBoard);
+    const pick = (options.length ? options : from)[
+      Math.floor(Math.random() * (options.length ? options.length : from.length))
     ];
     return toRecord(pick);
   }
