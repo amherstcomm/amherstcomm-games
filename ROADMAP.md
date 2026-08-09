@@ -110,6 +110,17 @@ endpoint the moment somebody edits one uuid in the network tab.
   supply. Dropping the `_ga` cookies is the honest whole of what we can do.
 
 ### Verified results — a word list in the database
+**Built** (August 2026): `result_is_plausible` grew from arithmetic-only to
+three layers — arithmetic always; dictionary membership at the row's
+difficulty cut (55/70/80, slurs excluded) for rows dated 2026-08-10 on; and
+answer verification wherever `daily_puzzles` holds the puzzle, which
+superseded the hash plan below — a Guess win must end on the actual answer,
+Squares must reconstruct the actual grid, Weave's finds must be actual theme
+words, Hive/Box words must fit the actual board. Not security definer and
+revoked from web roles, because a public function over the answers table
+would be an oracle. Verified on migration day: every honest row unchanged
+(leaderboard fingerprints identical), eight classes of fabrication caught.
+The original analysis follows.
 `result_is_plausible()` recomputes each score from the words the client says it
 found. That catches a score disagreeing with its own evidence, but the database
 has no dictionary, so ten invented words score exactly like ten real ones.
