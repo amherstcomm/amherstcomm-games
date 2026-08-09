@@ -15,7 +15,7 @@ import type { Difficulty } from '@/difficulty';
 /** Bump together with the git tag when the lists are rebuilt. The tagged CDN
  *  URL is immutable, so caching is safe forever; the bundled fallback ships
  *  in the same commit, so the two can never disagree about a version. */
-export const WORDS_VERSION = 'words-v1';
+export const WORDS_VERSION = 'words-v2';
 
 /** slur never scores and is never shown, anywhere, under any setting.
  *  strong and mild score; they exist so a player can choose not to be
@@ -24,7 +24,7 @@ export type WordFlag = 'slur' | 'strong' | 'mild';
 
 type Band = { version: string; words: string[]; flags: Record<string, WordFlag> };
 
-const BAND_NAMES = ['band-35', 'band-55', 'band-70', 'band-rest'] as const;
+const BAND_NAMES = ['band-35', 'band-55', 'band-70', 'band-80'] as const;
 type BandName = (typeof BAND_NAMES)[number];
 
 // lazy imports so a band is only ever loaded once, and only when needed
@@ -96,7 +96,7 @@ export type DictionaryId = 'common' | 'standard' | 'full';
 const DICT_BANDS: Record<DictionaryId, BandName[]> = {
   common: ['band-35'],
   standard: ['band-35', 'band-55'],
-  full: ['band-35', 'band-55', 'band-70', 'band-rest'],
+  full: ['band-35', 'band-55', 'band-70', 'band-80'],
 };
 
 export function getDictionary(id: DictionaryId): Promise<string[]> {
@@ -111,10 +111,12 @@ export const DICTIONARIES: { id: Difficulty; label: string; blurb: string }[] = 
   { id: 'extreme', label: 'Extreme', blurb: 'Every word in the dictionary, obscurities included' },
 ];
 
+// Acceptance is SCOWL and nothing else: 55, 70, 80 — every tier a size
+// SCOWL itself defined.
 const ACCEPT_BANDS: Record<Difficulty, BandName[]> = {
   easy: ['band-35', 'band-55'],
   hard: ['band-35', 'band-55', 'band-70'],
-  extreme: ['band-35', 'band-55', 'band-70', 'band-rest'],
+  extreme: ['band-35', 'band-55', 'band-70', 'band-80'],
 };
 
 /** What a difficulty accepts — one band wider than it generates from, minus

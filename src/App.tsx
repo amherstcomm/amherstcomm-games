@@ -3215,7 +3215,7 @@ function App() {
                     >
                       wordlist-english
                     </a>{' '}
-                    (MIT), packaged from{' '}
+                    (MIT) and, for the largest tier, from{' '}
                     <a
                       href="http://wordlist.aspell.net/"
                       target="_blank"
@@ -3224,9 +3224,9 @@ function App() {
                     >
                       SCOWL
                     </a>{' '}
-                    © Kevin Atkinson — each difficulty cuts deeper into SCOWL&apos;s
-                    frequency tiers, and every puzzle answer at every difficulty comes
-                    from these.
+                    itself © Kevin Atkinson — each difficulty cuts deeper into
+                    SCOWL&apos;s frequency sizes (55, 70, 80), and every word a game
+                    asks or accepts comes from these.
                   </li>
                   <li>
                     Words we won&apos;t use as puzzle answers are drawn from the{' '}
@@ -3249,29 +3249,30 @@ function App() {
                       LDNOOBW list
                     </a>{' '}
                     (CC BY 4.0). They filter what we publish, never what
-                    you&apos;re allowed to type.
+                    you&apos;re allowed to type — though the word lists
+                    themselves contain no slurs, at any tier.
                   </li>
                   <li>
-                    What Extreme <em>accepts</em> is additionally widened by{' '}
+                    Word categories in our shared data files come from{' '}
                     <a
-                      href="https://github.com/words/an-array-of-english-words"
+                      href="https://wordnet.princeton.edu/"
                       target="_blank"
                       rel="noopener noreferrer"
                       className="text-amber-300/90 hover:text-amber-200 underline underline-offset-2"
                     >
-                      an-array-of-english-words
-                    </a>{' '}
-                    (MIT), derived from the{' '}
+                      WordNet
+                    </a>
+                    &reg; © Princeton University, used under the{' '}
                     <a
-                      href="https://github.com/lorenbrichter/Words"
+                      href="https://wordnet.princeton.edu/license-and-commercial-use"
                       target="_blank"
                       rel="noopener noreferrer"
                       className="text-amber-300/90 hover:text-amber-200 underline underline-offset-2"
                     >
-                      Letterpress word list
-                    </a>{' '}
-                    (CC0, public domain) — it broadens what scores, never what a
-                    puzzle asks.
+                      WordNet License
+                    </a>
+                    . They label words (animal, food, plant&hellip;) and never
+                    decide what a puzzle asks or accepts.
                   </li>
                 </ul>
                 <p className="mt-2 text-xs text-slate-500">

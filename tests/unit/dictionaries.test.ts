@@ -9,13 +9,14 @@ import { getAcceptPool, getDictionary, getDifficultyPool, getWordFlags } from '@
 
 describe('accept tiers', () => {
   it('matches the words table in Postgres, tier for tier', async () => {
-    // easy is level <= 55, hard is level <= 70, extreme is every row — each
+    // easy is level <= 55, hard is level <= 70, extreme is level <= 80 —
+    // SCOWL sizes all the way up, nothing from any other dictionary — each
     // minus the slurs. If one of these moves, rebuild the table and band
     // files together (npm run build-words) in the same change, or the server
     // will call honest players liars.
     expect((await getAcceptPool('easy')).length).toBe(67_141);
     expect((await getAcceptPool('hard')).length).toBe(111_370);
-    expect((await getAcceptPool('extreme')).length).toBe(276_790);
+    expect((await getAcceptPool('extreme')).length).toBe(242_602);
   });
 
   it('each tier contains the one below it', async () => {
