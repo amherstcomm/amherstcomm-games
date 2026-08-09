@@ -514,28 +514,92 @@ $$;
 -- — rows folded in from the old event log carry no state — we fall back to
 -- bounds, because punishing a result for predating the feature would be worse
 -- than the forgery it prevents.
-create or replace function public.result_is_plausible(p_game text, p_state jsonb, p_result jsonb)
-returns boolean language plpgsql immutable as $$
+-- ---------------------------------------------------------------------------
+-- result_is_plausible: does the evidence support the claim?
+--
+-- Three layers, each engaging only when its ground truth exists:
+--   1. Arithmetic (always): the score must equal what the claimed words are
+--      worth, counts must match, times must be humanly possible.
+--   2. Dictionary (rows dated 2026-08-10 on): every claimed word must exist
+--      in `words` at the row's difficulty cut (55/70/80) and not be a slur.
+--      Older rows were validated under a different acceptance era and are
+--      grandfathered rather than retried under laws passed since.
+--   3. Answers (whenever daily_puzzles holds the row's puzzle): a Guess win
+--      must end on the actual answer, Squares must reconstruct the actual
+--      grid, Weave's finds must be actual theme words, Hive's words must be
+--      spellable from the actual seven letters, Box's chain must fit the
+--      actual sides. A missing or malformed puzzle row skips this layer —
+--      a bad puzzle byte must not zero every board.
+--
+-- Not security definer, and not executable by web roles: with the answers
+-- table behind it, a public function would be an oracle ("is X today's
+-- word?"). It runs only inside the security-definer aggregates and the
+-- owner's view.
+create or replace function public.result_is_plausible(
+  p_game text,
+  p_state jsonb,
+  p_result jsonb,
+  p_difficulty text default 'easy',
+  p_variant text default '',
+  p_date date default null,
+  p_env text default 'prod'
+)
+returns boolean language plpgsql stable as $$
 declare
-  words text[];
+  cut int := case p_difficulty when 'easy' then 55 when 'hard' then 70 else 80 end;
+  dict_since constant date := date '2026-08-10';
+  use_dict boolean := p_date is not null and p_date >= dict_since;
+  board jsonb; -- this puzzle at this difficulty, when the table has it
+  claimed text[];
+  answer_words text[];
+  bad boolean;
+  expected numeric;
+  s text;
+  n int;
+  i int;
   has_state boolean := p_state is not null and p_state <> '{}'::jsonb;
 begin
   if p_result is null then return false; end if;
 
+  -- the puzzle itself, if we hold it (guess publishes under 'words')
+  begin
+    select dp.payload -> 'byDifficulty' -> p_difficulty into board
+    from public.daily_puzzles dp
+    where dp.game = case when p_game = 'guess' then 'words' else p_game end
+      and dp.env = p_env and dp.puzzle_date = p_date;
+  exception when others then board := null;
+  end;
+
   if p_game = 'squares' then
-    -- Shape only, and deliberately so: the database holds no dictionary, so it
-    -- cannot tell a real word from a plausible-looking one. That is true of
-    -- every game here — hive and the sprints re-add the score from whatever
-    -- words the client claims — so squares is no weaker than the rest. See the
-    -- roadmap entry on putting a word list in Postgres.
     if coalesce((p_result->>'size')::int, 0) not in (4, 5) then return false; end if;
     -- a reveal is a legitimate result; it just isn't a solve
     if coalesce((p_result->>'solved')::boolean, false) is not true then return true; end if;
     -- nobody fills a grid this size in under five seconds
     if coalesce((p_result->>'timeMs')::numeric, 0) < 5000 then return false; end if;
     if has_state and p_state ? 'entries' then
-      return jsonb_array_length(p_state->'entries')
-             = (p_result->>'size')::int * (p_result->>'size')::int;
+      if jsonb_array_length(p_state->'entries')
+         <> (p_result->>'size')::int * (p_result->>'size')::int then
+        return false;
+      end if;
+      -- a claimed solve must be the actual solution: given cells from the
+      -- puzzle, typed cells from the player, together spelling the answer
+      if board is not null and (board->>'size')::int = (p_result->>'size')::int then
+        begin
+          s := ''; -- the answer, flattened
+          select string_agg(r, '' order by ord) into s
+          from jsonb_array_elements_text(
+            convert_from(decode(board->>'answer', 'base64'), 'UTF8')::jsonb->'rows'
+          ) with ordinality as t(r, ord);
+          n := (p_result->>'size')::int;
+          for i in 0 .. (n * n - 1) loop
+            if coalesce(board->'cells'->>i, p_state->'entries'->>i, '')
+               is distinct from substr(s, i + 1, 1) then
+              return false;
+            end if;
+          end loop;
+        exception when others then null; -- malformed puzzle row: skip layer 3
+        end;
+      end if;
     end if;
     return true;
 
@@ -544,7 +608,31 @@ begin
     -- nobody reads, thinks and types a word in under two seconds
     if coalesce((p_result->>'timeMs')::numeric, 0) < 2000 then return false; end if;
     if has_state and p_state ? 'guesses' then
-      return jsonb_array_length(p_state->'guesses') = (p_result->>'guesses')::int;
+      if jsonb_array_length(p_state->'guesses') <> (p_result->>'guesses')::int then
+        return false;
+      end if;
+      claimed := array(select jsonb_array_elements_text(p_state->'guesses'));
+      -- every guess is a word we accept at this difficulty
+      if use_dict then
+        select bool_or(
+          g !~ '^[a-z]+$'
+          or not exists (
+            select 1 from public.words w
+            where w.word = g and w.level <= cut and w.flag is distinct from 'slur'
+          )
+        ) into bad from unnest(claimed) g;
+        if coalesce(bad, false) then return false; end if;
+      end if;
+      -- a win ends on the actual answer
+      if board is not null and coalesce((p_result->>'won')::boolean, false) then
+        begin
+          s := lower(convert_from(decode(board->'words'->>p_variant, 'base64'), 'UTF8'));
+          if s is not null and claimed[array_length(claimed, 1)] is distinct from s then
+            return false;
+          end if;
+        exception when others then null;
+        end;
+      end if;
     end if;
     return true;
 
@@ -552,40 +640,131 @@ begin
     if not has_state or not (p_state ? 'found') then
       return coalesce((p_result->>'score')::numeric, -1) >= 0;
     end if;
-    select array_agg(w) into words
-    from jsonb_array_elements_text(p_state->'found') as w;
-    if (p_result->>'words')::int is distinct from coalesce(array_length(words, 1), 0) then
+    claimed := array(select jsonb_array_elements_text(p_state->'found'));
+    if (p_result->>'words')::int is distinct from coalesce(array_length(claimed, 1), 0) then
       return false;
     end if;
-    return (p_result->>'score')::numeric = case p_game
-      when 'hive' then public.hive_score(words)
-      when 'scramble' then public.scramble_score(words, 7)
-      else public.grid_score(words)
+    -- assigned first because plpgsql reads an IF condition up to the first
+    -- THEN, and a CASE expression carries THENs of its own
+    expected := case p_game
+      when 'hive' then public.hive_score(claimed)
+      when 'scramble' then public.scramble_score(claimed, 7)
+      else public.grid_score(claimed)
     end;
+    if (p_result->>'score')::numeric <> expected then
+      return false;
+    end if;
+    if use_dict and claimed is not null then
+      select bool_or(
+        f !~ '^[a-z]+$'
+        or not exists (
+          select 1 from public.words w
+          where w.word = f and w.level <= cut and w.flag is distinct from 'slur'
+        )
+      ) into bad from unnest(claimed) f;
+      if coalesce(bad, false) then return false; end if;
+    end if;
+    -- the words must also be playable on the actual board
+    if board is not null and claimed is not null then
+      begin
+        if p_game = 'hive' then
+          s := regexp_replace(
+            (board->>'center') || (select string_agg(o, '') from jsonb_array_elements_text(board->'outers') o),
+            '[^a-z]', '', 'g');
+          select bool_or(
+            char_length(f) < 4
+            or f !~ ('^[' || s || ']+$')
+            or position((board->>'center') in f) = 0
+          ) into bad from unnest(claimed) f;
+        elsif p_game = 'scramble' then
+          s := regexp_replace(
+            (select string_agg(l, '') from jsonb_array_elements_text(board->'letters') l),
+            '[^a-z]', '', 'g');
+          select bool_or(
+            char_length(f) < 3 or char_length(f) > 7 or f !~ ('^[' || s || ']+$')
+          ) into bad from unnest(claimed) f;
+        else
+          s := regexp_replace(
+            (select string_agg(c, '') from jsonb_array_elements_text(board->'cells') c),
+            '[^a-z]', '', 'g');
+          select bool_or(
+            char_length(f) < 3 or f !~ ('^[' || s || ']+$')
+          ) into bad from unnest(claimed) f;
+        end if;
+        if coalesce(bad, false) then return false; end if;
+      exception when others then null;
+      end;
+    end if;
+    return true;
 
   elsif p_game = 'box' then
-    -- only a recorded time can be too fast; an absent or zero one means the
-    -- clock never ran, which is not the same as a three-second solve
     if coalesce((p_result->>'timeMs')::numeric, 0) > 0
        and (p_result->>'timeMs')::numeric < 3000 then
       return false;
     end if;
-    -- Prefer the chain stored with the result. Boxed is the one game you can
-    -- restart after finishing, and the row keeps its result when you do, so
-    -- the live board stops being evidence — checking against it flagged
-    -- perfectly good solves.
     if p_result ? 'chain' then
-      return (p_result->>'words')::int = jsonb_array_length(p_result->'chain');
+      claimed := array(select jsonb_array_elements_text(p_result->'chain'));
+    elsif has_state and jsonb_array_length(coalesce(p_state->'chain', '[]'::jsonb)) > 0 then
+      claimed := array(select jsonb_array_elements_text(p_state->'chain'));
+    else
+      return (p_result->>'words')::int >= 1;
     end if;
-    if has_state and jsonb_array_length(coalesce(p_state->'chain', '[]'::jsonb)) > 0 then
-      return (p_result->>'words')::int = jsonb_array_length(p_state->'chain');
+    if (p_result->>'words')::int <> coalesce(array_length(claimed, 1), 0) then
+      return false;
     end if;
-    return (p_result->>'words')::int >= 1;
+    -- each word starts where the last one ended
+    if array_length(claimed, 1) > 1 then
+      for i in 2 .. array_length(claimed, 1) loop
+        if left(claimed[i], 1) <> right(claimed[i - 1], 1) then return false; end if;
+      end loop;
+    end if;
+    if use_dict then
+      select bool_or(
+        c !~ '^[a-z]+$'
+        or not exists (
+          select 1 from public.words w
+          where w.word = c and w.level <= cut and w.flag is distinct from 'slur'
+        )
+      ) into bad from unnest(claimed) c;
+      if coalesce(bad, false) then return false; end if;
+    end if;
+    if board is not null then
+      begin
+        s := regexp_replace(
+          (select string_agg(sd, '') from jsonb_array_elements_text(board->'sides') sd),
+          '[^a-z]', '', 'g');
+        select bool_or(char_length(c) < 3 or c !~ ('^[' || s || ']+$'))
+          into bad from unnest(claimed) c;
+        if coalesce(bad, false) then return false; end if;
+      exception when others then null;
+      end;
+    end if;
+    return true;
 
   elsif p_game = 'weave' then
     -- a whole board traced by hand takes longer than this
     if (p_result->>'solved')::boolean and coalesce((p_result->>'timeMs')::numeric, 0) < 10000 then
       return false;
+    end if;
+    -- found words must be the puzzle's actual theme words
+    if board is not null and has_state and p_state ? 'found' then
+      begin
+        claimed := array(select jsonb_array_elements_text(p_state->'found'));
+        select array_agg(w) into answer_words
+        from (
+          select convert_from(decode(board->>'answers', 'base64'), 'UTF8')::jsonb
+                 #>> '{spangram,w}' as w
+          union all
+          select jsonb_array_elements(
+                   convert_from(decode(board->>'answers', 'base64'), 'UTF8')::jsonb->'words'
+                 ) ->> 'w'
+        ) t;
+        if claimed is not null and answer_words is not null then
+          select bool_or(not (f = any (answer_words))) into bad from unnest(claimed) f;
+          if coalesce(bad, false) then return false; end if;
+        end if;
+      exception when others then null;
+      end;
     end if;
     return true;
   end if;
@@ -594,6 +773,8 @@ begin
 end;
 $$;
 
+-- see the header: with answers behind it, public execution would be an oracle
+revoke all on function public.result_is_plausible(text, jsonb, jsonb, text, text, date, text) from public, anon, authenticated;
 -- Everything the boards throw away, for occasional inspection. No grants: only
 -- the owner, through the SQL editor. A moderation queue nobody works is worse
 -- than none, so this is a place to look rather than a job to do.
@@ -601,7 +782,7 @@ create or replace view public.suspect_daily_results as
   select dp.user_id, p.display_name, dp.game, dp.puzzle_date, dp.env, dp.result, dp.state
   from public.daily_progress dp
   left join public.profiles p on p.id = dp.user_id
-  where dp.completed and not public.result_is_plausible(dp.game, dp.state, dp.result);
+  where dp.completed and not public.result_is_plausible(dp.game, dp.state, dp.result, dp.difficulty, dp.variant, dp.puzzle_date, dp.env);
 
 -- A view runs with its owner's rights, so this one reads straight past the
 -- row-level security on the tables underneath — and Supabase grants table
@@ -654,7 +835,7 @@ begin
       join public.profiles p on p.id = dp.user_id
       where dp.game = 'guess' and dp.completed and dp.env = p_env and dp.difficulty = p_difficulty and dp.puzzle_date >= since
         and p.display_name is not null
-        and public.result_is_plausible('guess', dp.state, dp.result)
+        and public.result_is_plausible('guess', dp.state, dp.result, dp.difficulty, dp.variant, dp.puzzle_date, dp.env)
       group by p.display_name
       having count(*) filter (where (dp.result->>'won')::boolean) > 0
     ) a
@@ -685,7 +866,7 @@ begin
       join public.profiles p on p.id = dp.user_id
       where dp.game = g.game and dp.completed and dp.env = p_env and dp.difficulty = p_difficulty and dp.puzzle_date >= since
         and p.display_name is not null
-        and public.result_is_plausible(g.game, dp.state, dp.result)
+        and public.result_is_plausible(g.game, dp.state, dp.result, dp.difficulty, dp.variant, dp.puzzle_date, dp.env)
       group by p.display_name
       order by value desc, detail desc
       limit 10
@@ -705,7 +886,7 @@ begin
       join public.profiles p on p.id = dp.user_id
       where dp.game = 'box' and dp.completed and dp.env = p_env and dp.difficulty = p_difficulty and dp.puzzle_date >= since
         and p.display_name is not null
-        and public.result_is_plausible('box', dp.state, dp.result)
+        and public.result_is_plausible('box', dp.state, dp.result, dp.difficulty, dp.variant, dp.puzzle_date, dp.env)
       group by p.display_name
     ) a
     order by rk
@@ -728,7 +909,7 @@ begin
       join public.profiles p on p.id = dp.user_id
       where dp.game = 'weave' and dp.completed and dp.env = p_env and dp.difficulty = p_difficulty and dp.puzzle_date >= since
         and p.display_name is not null
-        and public.result_is_plausible('weave', dp.state, dp.result)
+        and public.result_is_plausible('weave', dp.state, dp.result, dp.difficulty, dp.variant, dp.puzzle_date, dp.env)
       group by p.display_name
       having count(*) filter (where (dp.result->>'solved')::boolean) > 0
     ) a
@@ -767,7 +948,7 @@ begin
       where dp.game = 'squares' and dp.variant = v.variant and dp.completed
         and dp.env = p_env and dp.difficulty = p_difficulty and dp.puzzle_date >= since
         and p.display_name is not null
-        and public.result_is_plausible('squares', dp.state, dp.result)
+        and public.result_is_plausible('squares', dp.state, dp.result, dp.difficulty, dp.variant, dp.puzzle_date, dp.env)
       group by p.display_name
       having count(*) filter (where (dp.result->>'solved')::boolean) > 0
       limit 10
