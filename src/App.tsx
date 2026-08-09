@@ -2930,7 +2930,7 @@ function App() {
 
             <div className="space-y-5 text-sm text-slate-300">
               <p>
-                Anagrimoire is a free companion for word games: solvers for six kinds of
+                Anagrimoire is a free companion for word games: solvers for seven kinds of
                 puzzles, our own daily and practice versions of each to play, and
                 interactive guides to learn them.
               </p>
@@ -2962,6 +2962,56 @@ function App() {
                       playing never spoils (or copies) anyone else&apos;s puzzle. The solvers
                       can load today&apos;s NYT Spelling Bee, Letter Boxed, and Strands where
                       noted.
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-slate-300 font-medium">
+                      What do Easy, Hard and Extreme change?
+                    </p>
+                    <p>
+                      They&apos;re three separate puzzles each day, not one puzzle with a
+                      setting — each difficulty keeps its own progress, statistics,
+                      streaks and leaderboards, and you can play all three. What changes
+                      depends on the game: Guess, Scramble, Hive and Boxed draw their
+                      answers from progressively less common words; Squares and Weave
+                      grow their boards; Grid keeps its dice and widens what scores.
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-slate-300 font-medium">Which words count?</p>
+                    <p>
+                      Each difficulty is scored against its own word list — Easy is
+                      everyday English, Hard adds the less common words, Extreme takes
+                      nearly everything. What a puzzle <em>accepts</em> is deliberately
+                      one size more generous than the list its <em>answers</em> come
+                      from, so the answer is always something you might recognise while
+                      your long shots get the benefit of the doubt. The solvers use the
+                      same three lists under the same names, so a word the solver finds
+                      at Hard is a word Hard accepts.
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-slate-300 font-medium">
+                      Why was my word rejected?
+                    </p>
+                    <p>
+                      The lists are built from open dictionaries (SCOWL and friends —
+                      see Legal for credits), lowercase letters only: no proper nouns,
+                      no hyphens or apostrophes, no accents. Nothing is checked against
+                      any publisher&apos;s list, so our Hive and the NYT&apos;s bee will
+                      disagree at the margins. If a real word is missing, open an issue
+                      — the lists do get amended.
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-slate-300 font-medium">
+                      Do you filter offensive words?
+                    </p>
+                    <p>
+                      From what we publish, yes: no puzzle will hand you a slur as its
+                      answer. From what you type, no — refusing to publish a word and
+                      refusing to accept one you played are different things, and only
+                      the first is ours to decide.
                     </p>
                   </div>
                   <div>
