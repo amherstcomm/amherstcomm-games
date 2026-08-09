@@ -27,7 +27,16 @@ dates rather than kept in a counter. Reads `daily_progress`, which is the only
 place a day-by-day series exists — the event log has timestamps but no puzzle
 identity, and hive wrote a row per word.
 
-### Realtime instead of polling
+### ~~Realtime instead of polling~~ — done
+**Built** (August 2026): `daily_progress` joined the `supabase_realtime`
+publication, and one channel per signed-in session (`src/realtimeSync.ts`)
+listens to that user's rows. Exactly the doorbell described below — an event
+triggers the same authenticated read and merge the poll performed, and the
+payload is only ever used to say *which* board moved, never as data. The poll
+survives as the fallback: ten seconds while the socket is down, a
+once-a-minute sweep while it's up, because a socket can go quiet without
+reporting itself down. The original analysis follows.
+
 A visible board re-reads `daily_progress` every ten seconds so two windows
 stay in step. That mostly serves side-by-side testing; the real case is a
 phone in the morning and a laptop at lunch, which the pull on open already
@@ -554,14 +563,17 @@ many cells are revealed.
 **Caveat:** it's a logic puzzle wearing letters — the dictionary does almost
 no work.
 
-### Word squares — generator done, game not built
+### ~~Word squares~~ — done
 An N×N grid where every row *and* column is a real word, some letters given
-and the rest to fill in. Two sizes, like Guess's word-length picker: 4×4 and
-5×5. `scripts/squares.mjs` generates and verifies them; nothing is wired into
-the pipeline or the UI yet.
+and the rest to fill in. `scripts/squares.mjs` generates and verifies them;
+the game shipped with the difficulty work — 4×4 with 8 givens on easy, 5×5
+with 10 on hard and 6 on extreme — and is wired through the pipeline, stats,
+sync, share, leaderboards and Learn like the rest. Verified results check a
+submitted grid against the actual answer grid, the strongest check any game
+here has.
 
 It needed none of Weave's packer — plain backtracking with prefix pruning is
-enough. What the probes settled:
+enough. What the probes settled, kept so it isn't re-derived:
 
 - **Sizes stop at five.** 4×4 solves on every seed in milliseconds, 5×5 on
   about four seeds in five. 6×6 falls off a cliff (1 in 5, and the words it
@@ -579,10 +591,8 @@ enough. What the probes settled:
   than to the player. Using `standard` rather than `common` barely moved the
   numbers, so there's no reason to be stingy.
 
-Still to build: pipeline wiring (`daily-squares.json`, prod + dev salts), the
-game component, a solver, a Learn demo, stats/sync/share/routes/settings/home
-card. Deliberately *not* wired into `fetch-puzzles.mjs` yet — a bug there
-breaks the daily run for all six existing games.
+One check that never left the generator: uniqueness is verified at build time
+only, which is the same gap the test-suite entry records.
 
 ### Cryptogram
 A short passage under a substitution cipher; work out the mapping and the text
