@@ -46,15 +46,15 @@ When accounts are configured, each daily also shows a one-line **global summary*
 
 One published, versioned artifact ([src/wordbands/](src/wordbands/)), built by `npm run build-words` from SCOWL and nothing else — via wordlist-english up to size 70, and SCOWL's own "huge" (80) list, vendored in [scripts/scowl/](scripts/scowl/), for the top tier: four exclusive bands that every pool is a union of. Generation is one band, acceptance is the bands up to a cut (55 / 70 / 80), and every tier is a size SCOWL itself defined. The same build seeds the Postgres `words` table, so the client and the database cannot disagree by construction. In production the bands come from jsDelivr at a pinned tag with the bundled copies as fallback; the solver's **Easy / Hard / Extreme** lists are exactly the difficulties' accept tiers, so a word the solver finds is a word that scores.
 
-The files are a public release channel — anyone can read them (the version segment tracks `WORDS_VERSION` in [src/dictionaries.ts](src/dictionaries.ts); a new release is a new tag, and tagged URLs never change content):
+The files are a public release channel — anyone can read them (these track `main` and update within hours of a release; pin a tag instead — `@words-v3` — if you need URLs whose content never changes (`WORDS_VERSION` in [src/dictionaries.ts](src/dictionaries.ts) names the current one)):
 
 | File | Contents |
 |---|---|
-| [band-35.json](https://cdn.jsdelivr.net/gh/rptetzloff/anagrimoire@words-v3/src/wordbands/band-35.json) | SCOWL ≤ 35 — 39,098 everyday words |
-| [band-55.json](https://cdn.jsdelivr.net/gh/rptetzloff/anagrimoire@words-v3/src/wordbands/band-55.json) | 35 < level ≤ 55 — 28,072 words |
-| [band-70.json](https://cdn.jsdelivr.net/gh/rptetzloff/anagrimoire@words-v3/src/wordbands/band-70.json) | 55 < level ≤ 70 — 44,236 words |
-| [band-80.json](https://cdn.jsdelivr.net/gh/rptetzloff/anagrimoire@words-v3/src/wordbands/band-80.json) | 70 < level ≤ 80 — 131,250 words |
-| [domains.json](https://cdn.jsdelivr.net/gh/rptetzloff/anagrimoire@words-v3/src/wordbands/domains.json) | WordNet noun categories for 73,031 words, as arrays |
+| [band-35.json](https://cdn.jsdelivr.net/gh/rptetzloff/anagrimoire@main/src/wordbands/band-35.json) | SCOWL ≤ 35 — 39,098 everyday words |
+| [band-55.json](https://cdn.jsdelivr.net/gh/rptetzloff/anagrimoire@main/src/wordbands/band-55.json) | 35 < level ≤ 55 — 28,072 words |
+| [band-70.json](https://cdn.jsdelivr.net/gh/rptetzloff/anagrimoire@main/src/wordbands/band-70.json) | 55 < level ≤ 70 — 44,236 words |
+| [band-80.json](https://cdn.jsdelivr.net/gh/rptetzloff/anagrimoire@main/src/wordbands/band-80.json) | 70 < level ≤ 80 — 131,250 words |
+| [domains.json](https://cdn.jsdelivr.net/gh/rptetzloff/anagrimoire@main/src/wordbands/domains.json) | WordNet noun categories for 73,031 words, as arrays |
 
 Each band is `{ version, words, flags }` — words alphabetical, flags a sparse map (`slur` / `strong` / `mild`) present only for flagged words.
 
