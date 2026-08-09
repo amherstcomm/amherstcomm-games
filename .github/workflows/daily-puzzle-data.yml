@@ -26,17 +26,23 @@ jobs:
           node-version: 20
       - run: npm ci --ignore-scripts
       - run: node scripts/fetch-puzzles.mjs
-      - name: Publish to Postgres
-        # second home for the same data: rows behind an RPC that never serves
-        # tomorrow. Skips politely until the secret exists, and a failure here
-        # must not stop the branch publish below — that's today's live feed.
+        env:
+          # the same salt the window publish uses, so today's files and
+          # today's rows are the same boards
+          PUZZLES_SEED_SALT: ${{ secrets.PUZZLES_SEED_SALT }}
+      - name: Publish a fortnight of rows to Postgres
+        # rows for today through +13, behind an RPC that never serves past
+        # today — outage insurance nobody can ask for. Skips politely until
+        # the secret exists, and a failure here must not stop the branch
+        # publish below — that's today's live feed.
         env:
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          PUZZLES_SEED_SALT: ${{ secrets.PUZZLES_SEED_SALT }}
         run: |
           if [ -z "$SUPABASE_SERVICE_ROLE_KEY" ]; then
             echo "SUPABASE_SERVICE_ROLE_KEY not set; skipping Postgres publish"
           else
-            node scripts/publish-puzzles.mjs || echo "::warning::Postgres publish failed; file feed unaffected"
+            node scripts/publish-window.mjs || echo "::warning::Postgres publish failed; file feed unaffected"
           fi
       - name: Publish to puzzle-data branch
         # orphan branch holding only the data files — keeping workflow files
