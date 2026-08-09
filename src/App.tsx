@@ -3273,6 +3273,28 @@ function App() {
                     (CC0, public domain) — it broadens what scores, never what a
                     puzzle asks.
                   </li>
+                  <li>
+                    Word categories in our shared data files come from{' '}
+                    <a
+                      href="https://wordnet.princeton.edu/"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-amber-300/90 hover:text-amber-200 underline underline-offset-2"
+                    >
+                      WordNet
+                    </a>
+                    &reg; © Princeton University, used under the{' '}
+                    <a
+                      href="https://wordnet.princeton.edu/license-and-commercial-use"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-amber-300/90 hover:text-amber-200 underline underline-offset-2"
+                    >
+                      WordNet License
+                    </a>
+                    . They label words (animal, food, plant&hellip;) and never
+                    decide what a puzzle asks or accepts.
+                  </li>
                 </ul>
                 <p className="mt-2 text-xs text-slate-500">
                   No word list is guaranteed to match any game&apos;s official dictionary.
