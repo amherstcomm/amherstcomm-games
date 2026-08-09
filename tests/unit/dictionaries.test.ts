@@ -7,9 +7,16 @@ import { describe, expect, it } from 'vitest';
 import { getAcceptPool, getDictionary, getDifficultyPool } from '@/dictionaries';
 
 describe('accept tiers', () => {
-  it('easy accepts the standard list', async () => {
-    const easy = await getAcceptPool('easy');
-    expect(easy.length).toBe(67_170);
+  it('matches the words table in Postgres, tier for tier', async () => {
+    // The database's words table is built from the same npm packages
+    // (scripts/build-words.mjs), and server-side verification will one day
+    // check membership against it. These counts are the contract: easy is
+    // level <= 55, hard is level <= 70, extreme is every row. If one of
+    // these moves, rebuild the table (npm run build-words) in the same
+    // change, or the server will call honest players liars.
+    expect((await getAcceptPool('easy')).length).toBe(67_170);
+    expect((await getAcceptPool('hard')).length).toBe(111_406);
+    expect((await getAcceptPool('extreme')).length).toBe(276_854);
   });
 
   it('each tier contains the one below it', async () => {
