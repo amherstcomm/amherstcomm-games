@@ -8,10 +8,11 @@
 import { useEffect, useRef, useState } from 'react';
 import type { Difficulty } from '@/difficulty';
 import {
-  clearSyncBase,
+  accountChanged,
   loadDaily,
   mergeFromServer,
   progressOf,
+  sameProgress,
   saveDaily,
   type DailyGame,
 } from '@/dailySync';
@@ -64,10 +65,14 @@ export function useDailySync({
 
   useEffect(() => {
     if (!supabase) return;
-    const { data } = supabase.auth.onAuthStateChange(() => {
+    const { data } = supabase.auth.onAuthStateChange((_event, session) => {
+      // Re-pull on any auth event — INITIAL_SESSION is how the first pull
+      // learns the session is ready. But only wipe the reconciliation bases
+      // when the account actually changed: INITIAL_SESSION fires on every
+      // mount, and a device stripped of its bases reads every difference as a
+      // conflict, where a deletion can never win.
+      if (accountChanged(session?.user.id ?? null)) lastPush.current = '';
       syncedKey.current = null;
-      lastPush.current = '';
-      clearSyncBase();
       setAuthTick((n) => n + 1);
     });
     return () => data.subscription.unsubscribe();
@@ -144,8 +149,14 @@ export function useDailySync({
           const merged = mergeFromServer(game, variant, difficulty, date, record, remote);
           if (merged) {
             setRecordRef.current(merged);
-            // what we just took from the row doesn't need writing straight back
-            lastPush.current = JSON.stringify([progressOf(game, merged), completed, summary]);
+            if (sameProgress(game, merged, remote.state)) {
+              // what we just took from the row doesn't need writing straight back
+              lastPush.current = JSON.stringify([progressOf(game, merged), completed, summary]);
+            }
+            // otherwise the merge resolved a conflict the server hasn't seen;
+            // leaving lastPush alone lets the push effect write the resolution
+            // back, instead of this device and the row quietly disagreeing
+            // forever
           }
         }
         syncedKey.current = key;
