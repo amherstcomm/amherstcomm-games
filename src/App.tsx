@@ -3184,7 +3184,7 @@ function App() {
                 </h3>
                 <ul className="space-y-1.5 text-slate-400 list-disc list-inside">
                   <li>
-                    Easy and Hard word lists:{' '}
+                    All three word lists — Easy, Hard and Extreme — are built from{' '}
                     <a
                       href="https://github.com/jacksonrayhamilton/wordlist-english"
                       target="_blank"
@@ -3193,7 +3193,7 @@ function App() {
                     >
                       wordlist-english
                     </a>{' '}
-                    (MIT), built from{' '}
+                    (MIT), packaged from{' '}
                     <a
                       href="http://wordlist.aspell.net/"
                       target="_blank"
@@ -3202,7 +3202,9 @@ function App() {
                     >
                       SCOWL
                     </a>{' '}
-                    © Kevin Atkinson.
+                    © Kevin Atkinson — each difficulty cuts deeper into SCOWL&apos;s
+                    frequency tiers, and every puzzle answer at every difficulty comes
+                    from these.
                   </li>
                   <li>
                     Words we won&apos;t use as puzzle answers are drawn from the{' '}
@@ -3228,7 +3230,7 @@ function App() {
                     you&apos;re allowed to type.
                   </li>
                   <li>
-                    The Extreme list adds:{' '}
+                    What Extreme <em>accepts</em> is additionally widened by{' '}
                     <a
                       href="https://github.com/words/an-array-of-english-words"
                       target="_blank"
@@ -3246,7 +3248,8 @@ function App() {
                     >
                       Letterpress word list
                     </a>{' '}
-                    (CC0, public domain).
+                    (CC0, public domain) — it broadens what scores, never what a
+                    puzzle asks.
                   </li>
                 </ul>
                 <p className="mt-2 text-xs text-slate-500">
