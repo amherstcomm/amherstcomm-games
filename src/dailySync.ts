@@ -289,6 +289,36 @@ export function clearSyncBase(): void {
   saveBases();
 }
 
+// A fresh account must not inherit the previous one's reconciliation marks —
+// but "an auth event happened" is not "the account changed". supabase-js
+// fires INITIAL_SESSION every time a component subscribes and TOKEN_REFRESHED
+// on a timer, and clearing the bases on those left every device baseless most
+// of the time. A baseless device treats every difference as a conflict, and a
+// deletion can never win a conflict — which is how a word removed on one
+// browser stayed alive on the other. So the uid is persisted beside the bases
+// and the wipe happens only when it actually changes.
+const UID_STORE = 'anagrimoire:syncuser:v1';
+
+export function accountChanged(uid: string | null): boolean {
+  const next = uid ?? '';
+  try {
+    const prev = siteStore.getItem(UID_STORE);
+    if (prev === next) return false;
+    siteStore.setItem(UID_STORE, next);
+  } catch {
+    // storage unavailable — treat every event as a change, which is the old
+    // behaviour: over-clearing is recoverable, inheriting another account's
+    // bases is not
+  }
+  clearSyncBase();
+  return true;
+}
+
+/** whether two records agree on everything a player actually changes */
+export function sameProgress(game: DailyGame, a: Rec | null, b: Rec | null): boolean {
+  return canon(progressOf(game, a)) === canon(progressOf(game, b));
+}
+
 // Merge a freshly-read row into the local board, using the base to decide
 // whether this is a real conflict or just our own change coming back.
 export function mergeFromServer(

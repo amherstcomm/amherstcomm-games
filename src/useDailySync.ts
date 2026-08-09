@@ -8,13 +8,15 @@
 import { useEffect, useRef, useState } from 'react';
 import type { Difficulty } from '@/difficulty';
 import {
-  clearSyncBase,
+  accountChanged,
   loadDaily,
   mergeFromServer,
   progressOf,
+  sameProgress,
   saveDaily,
   type DailyGame,
 } from '@/dailySync';
+import { onDoorbell, realtimeUp } from '@/realtimeSync';
 import { supabase } from '@/supabase';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -63,10 +65,14 @@ export function useDailySync({
 
   useEffect(() => {
     if (!supabase) return;
-    const { data } = supabase.auth.onAuthStateChange(() => {
+    const { data } = supabase.auth.onAuthStateChange((_event, session) => {
+      // Re-pull on any auth event — INITIAL_SESSION is how the first pull
+      // learns the session is ready. But only wipe the reconciliation bases
+      // when the account actually changed: INITIAL_SESSION fires on every
+      // mount, and a device stripped of its bases reads every difference as a
+      // conflict, where a deletion can never win.
+      if (accountChanged(session?.user.id ?? null)) lastPush.current = '';
       syncedKey.current = null;
-      lastPush.current = '';
-      clearSyncBase();
       setAuthTick((n) => n + 1);
     });
     return () => data.subscription.unsubscribe();
@@ -76,16 +82,17 @@ export function useDailySync({
   // focus events — only one of them is focused, and the other just sits there
   // looking stale — so a board that is visible checks back on its own.
   //
-  // Ten seconds. The case this exists for — two windows open at once — is
-  // mostly a testing shape; the real one is a phone in the morning and a
-  // laptop at lunch, which the pull on open already covers. Ten still reads as
-  // live if you are watching, at a request per open board per interval for
-  // every signed-in player. Realtime would replace it with a subscription if
-  // it ever needs to be instant.
+  // The doorbell below is the primary delivery now; this timer is the fallback
+  // for a dropped socket. While the subscription is up it steps back to a slow
+  // sweep — once a minute rather than never, because a socket can go quiet
+  // without ever reporting itself down.
   useEffect(() => {
     if (!supabase || !active || !date) return;
+    let ticks = 0;
     const id = window.setInterval(() => {
       if (document.visibilityState !== 'visible') return;
+      ticks += 1;
+      if (realtimeUp() && ticks % 6 !== 0) return;
       syncedKey.current = null;
       setAuthTick((n) => n + 1);
     }, POLL_MS);
@@ -111,6 +118,20 @@ export function useDailySync({
 
   const key = `${game}:${variant}:${difficulty}:${date}`;
 
+  // The doorbell: a realtime event on one of this user's rows triggers the
+  // same pull the poll would, and nothing else — the payload only says which
+  // board moved. A null key means the event couldn't say, so everyone checks.
+  useEffect(() => {
+    if (!supabase || !active || !date) return;
+    return onDoorbell((ringed) => {
+      if (ringed !== null && ringed !== key) return;
+      // a hidden tab can stay stale; the visibilitychange recheck catches it up
+      if (document.visibilityState !== 'visible') return;
+      syncedKey.current = null;
+      setAuthTick((n) => n + 1);
+    });
+  }, [active, date, key]);
+
   // pull, once per board
   useEffect(() => {
     if (!supabase || !active || !date || syncedKey.current === key) return;
@@ -128,8 +149,14 @@ export function useDailySync({
           const merged = mergeFromServer(game, variant, difficulty, date, record, remote);
           if (merged) {
             setRecordRef.current(merged);
-            // what we just took from the row doesn't need writing straight back
-            lastPush.current = JSON.stringify([progressOf(game, merged), completed, summary]);
+            if (sameProgress(game, merged, remote.state)) {
+              // what we just took from the row doesn't need writing straight back
+              lastPush.current = JSON.stringify([progressOf(game, merged), completed, summary]);
+            }
+            // otherwise the merge resolved a conflict the server hasn't seen;
+            // leaving lastPush alone lets the push effect write the resolution
+            // back, instead of this device and the row quietly disagreeing
+            // forever
           }
         }
         syncedKey.current = key;

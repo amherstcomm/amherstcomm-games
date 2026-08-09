@@ -332,6 +332,23 @@ create policy "update own progress"
   using ((select auth.uid()) = user_id)
   with check ((select auth.uid()) = user_id);
 
+-- Realtime. The client subscribes to its own rows and treats each event as a
+-- doorbell — the payload is never merged, it just triggers the same
+-- authenticated read the poll performs, so there is one set of merge rules.
+-- RLS applies to realtime delivery, so a subscription can only ever be sent
+-- this user's rows; the client-side user_id filter is an efficiency on top.
+do $$
+begin
+  if not exists (
+    select 1 from pg_publication_tables
+    where pubname = 'supabase_realtime'
+      and schemaname = 'public'
+      and tablename = 'daily_progress'
+  ) then
+    alter publication supabase_realtime add table public.daily_progress;
+  end if;
+end $$;
+
 -- Fold the daily rows already in game_results into the new table, so nobody
 -- loses the days they played before the cutover. Hive is the one that needs
 -- collapsing: its many per-word rows become a single summary. Everything else
