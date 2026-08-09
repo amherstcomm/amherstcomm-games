@@ -9,8 +9,10 @@
 import { Grid3x3, Hexagon, LayoutGrid, Puzzle, Shuffle, Square, Table2, Trophy } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { MODE_SLUG, pathOf, SLUG_NAME, type Slug } from '@/routes';
-import { difficulty, onDifficultyChange, DIFFICULTY_LABEL } from '@/difficulty';
+import { difficulty, onDifficultyChange } from '@/difficulty';
 import RouteLink from '@/RouteLink';
+import DifficultyTabs from '@/DifficultyTabs';
+import type { Difficulty } from '@/difficulty';
 import { allDailyStatus, type DailyState } from '@/dailyStatus';
 import {
   boardsToShow,
@@ -74,8 +76,9 @@ export default function HomeView({
   onOpen: (mode: Mode) => void;
   onBoards: () => void;
 }) {
-  const [difficultyTick, setDifficultyTick] = useState(0);
-  useEffect(() => onDifficultyChange(() => setDifficultyTick((n) => n + 1)), []);
+  // what's being looked at, which starts from what's being played
+  const [boardLevel, setBoardLevel] = useState<Difficulty>(difficulty);
+  useEffect(() => onDifficultyChange(() => setBoardLevel(difficulty())), []);
   const [status, setStatus] = useState<Record<string, DailyState>>({});
   const [boards, setBoards] = useState<Boards | null>(null);
   // so you can find yourself in the column; null when signed out or unnamed,
@@ -86,12 +89,12 @@ export default function HomeView({
 
   useEffect(() => {
     let alive = true;
-    fetchBoards(1).then((b) => alive && setBoards(b));
+    fetchBoards(1, boardLevel).then((b) => alive && setBoards(b));
     fetchDisplayName().then((n) => alive && setMe(n));
     return () => {
       alive = false;
     };
-  }, [difficultyTick]);
+  }, [boardLevel]);
 
   const doneCount = modes.filter((m) => status[m] === 'done').length;
   const shownBoards = boards ? boardsToShow(boards, modes, status) : [];
@@ -145,12 +148,19 @@ export default function HomeView({
         </div>
       </section>
 
-      {shownBoards.length > 0 && (
+      {/* Shown whenever the boards have loaded, not only when this difficulty
+          has entries. Hiding it took the tabs with it, so switching to a
+          difficulty nobody has played left no way back but a reload. */}
+      {boards && (
         <section>
           <h2 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">
-            On the boards today
-            <span className="ml-2 normal-case tracking-normal font-normal text-slate-500">
-              {DIFFICULTY_LABEL[difficulty()]}
+            <span className="flex items-center justify-between gap-3 flex-wrap">
+              <span>On the boards today</span>
+              <DifficultyTabs
+                value={boardLevel}
+                onChange={setBoardLevel}
+                label="Which difficulty's boards to show"
+              />
             </span>
           </h2>
           <div className="grid gap-2 sm:grid-cols-2">
@@ -206,6 +216,11 @@ export default function HomeView({
               );
             })}
           </div>
+          {shownBoards.length === 0 && (
+            <p className="text-sm text-slate-400">
+              Nobody has finished a puzzle at this difficulty today. Be first.
+            </p>
+          )}
           <p className="mt-2 text-xs text-slate-500">
             {me
               ? 'See all the boards, and the week and month behind them.'

@@ -16,7 +16,8 @@ import {
   type Series,
 } from '@/history';
 import { formatElapsed } from '@/useUpTimer';
-import { difficulty, onDifficultyChange, DIFFICULTY_LABEL } from '@/difficulty';
+import { difficulty, onDifficultyChange, type Difficulty } from '@/difficulty';
+import DifficultyTabs from '@/DifficultyTabs';
 
 const GAMES: {
   id: HistoryGame;
@@ -95,12 +96,7 @@ function Distribution({ dist }: { dist: number[] }) {
   return (
     <div className="space-y-1">
 
-      {/* History is per difficulty: the easy and hard boards for a date
-          are different puzzles, so pooling them would inflate every total
-          and let one difficulty hold a streak the other broke. */}
-      <p className="text-xs text-slate-500">
-        Your {DIFFICULTY_LABEL[difficulty()].toLowerCase()} record.
-      </p>
+
       {dist.map((n, i) => (
         <div key={i} className="flex items-center gap-2">
           <span className="w-3 text-xs text-slate-500 tabular-nums">{i + 1}</span>
@@ -221,15 +217,15 @@ function GameCard({ game, history }: { game: (typeof GAMES)[number]; history: Hi
 }
 
 export default function HistoryView({ signedIn }: { signedIn: boolean }) {
-  const [difficultyTick, setDifficultyTick] = useState(0);
-  useEffect(() => onDifficultyChange(() => setDifficultyTick((n) => n + 1)), []);
+  const [level, setLevel] = useState<Difficulty>(difficulty);
+  useEffect(() => onDifficultyChange(() => setLevel(difficulty())), []);
   const [history, setHistory] = useState<History | null>(null);
   const [state, setState] = useState<'loading' | 'ready' | 'error'>('loading');
 
   useEffect(() => {
     if (!signedIn) return;
     let alive = true;
-    fetchHistory().then((h) => {
+    fetchHistory(level).then((h) => {
       if (!alive) return;
       setHistory(h);
       setState(h ? 'ready' : 'error');
@@ -237,7 +233,7 @@ export default function HistoryView({ signedIn }: { signedIn: boolean }) {
     return () => {
       alive = false;
     };
-  }, [signedIn, difficultyTick]);
+  }, [signedIn, level]);
 
   if (!signedIn) {
     return (
@@ -275,6 +271,16 @@ export default function HistoryView({ signedIn }: { signedIn: boolean }) {
 
   return (
     <div className="space-y-3">
+
+      {/* View-local: looking at another difficulty's record shouldn't
+          change the one you're playing. */}
+      <div className="mb-3">
+        <DifficultyTabs
+          value={level}
+          onChange={setLevel}
+          label="Which difficulty's history"
+        />
+      </div>
       {played.map((g) => (
         <GameCard key={`${g.id}${g.variant ?? ''}`} game={g} history={history} />
       ))}
