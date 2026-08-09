@@ -64,3 +64,35 @@ create or replace view public.words_hard_answers as
   select * from public.words where level <= 55;
 create or replace view public.words_extreme_answers as
   select * from public.words where level <= 70;
+
+-- ---------------------------------------------------------------------------
+-- Content columns and the blocklist (applied 2026-08-09 as migration
+-- word_content_columns_and_blocklist).
+--
+--   flag     slur | strong | mild. A slur never scores and is never shown,
+--            at any difficulty under any setting — acceptance is the level
+--            cut MINUS slurs, and the client's published band files carry
+--            the same flags from the same build. strong and mild score;
+--            they exist so a player can choose not to be shown them.
+--   domains  WordNet noun categories, pipe-joined (animal|food|plant|...).
+--            For themed generation someday, and for other projects reading
+--            the shared word-list files. Sparse: inflections inherit their
+--            lemma's domains where WordNet only knows the base form.
+alter table public.words add column if not exists flag text
+  check (flag in ('slur', 'strong', 'mild'));
+alter table public.words add column if not exists domains text;
+
+-- What we won't PUBLISH as an answer, with the reason each word is here.
+-- Deliberately a different thing from flag: this list can be generous
+-- (LDNOOBW's breadth is fine when it only governs generation), while flag
+-- must stay narrow because refusing a typed word is where Scunthorpe bites.
+-- scope 'both' additionally keeps a word out of hand-written content.
+-- Mirrors scripts/blocked-words.json; the rebuild workflow keeps them in
+-- step. No web role reads it — it is the generator's business.
+create table if not exists public.blocked_words (
+  word text primary key,
+  scope text not null check (scope in ('both', 'generation')),
+  origin text not null
+);
+alter table public.blocked_words enable row level security;
+revoke all on public.blocked_words from anon, authenticated;

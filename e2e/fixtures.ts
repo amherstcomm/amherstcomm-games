@@ -36,6 +36,10 @@ export const test = base.extend<{ rpcCalls: { fn: string; args: Record<string, u
   page: async ({ page, rpcCalls }, use) => {
     const calls = rpcCalls;
 
+    // the word-band CDN is a production-only path (dev builds always use the
+    // bundle), but if that gate ever loosens, tests must not reach a real CDN
+    await page.route('https://cdn.jsdelivr.net/**', (route) => route.abort());
+
     await page.route('https://raw.githubusercontent.com/**', async (route) => {
       const name = route.request().url().split('/').pop()!;
       try {

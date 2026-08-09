@@ -1,142 +1,161 @@
-import english10 from 'wordlist-english/english-words-10.json';
-import english20 from 'wordlist-english/english-words-20.json';
-import english35 from 'wordlist-english/english-words-35.json';
-import american10 from 'wordlist-english/american-words-10.json';
-import american20 from 'wordlist-english/american-words-20.json';
-import american35 from 'wordlist-english/american-words-35.json';
-
+// The word lists, consumed as published artifacts rather than derived here.
+//
+// scripts/build-words.mjs cuts SCOWL and the large open list into four bands
+// and seeds the Postgres words table from the same rows, so the client and
+// the database cannot disagree by construction. Every pool below is a union
+// of bands: generation is one band, acceptance is the bands up to a cut.
+//
+// In production the bands come from a CDN at a pinned tag — a shared,
+// versioned artifact other projects read too — with the copies bundled into
+// this app as the fallback, code-split so they cost nothing while the CDN
+// answers. Dev and tests always use the bundle: deterministic, offline, and
+// the CDN path stays a production concern.
 import type { Difficulty } from '@/difficulty';
 
-/** The raw SCOWL tiers the lists are built from — an implementation detail of
- *  the bands below, not something anyone picks. */
+/** Bump together with the git tag when the lists are rebuilt. The tagged CDN
+ *  URL is immutable, so caching is safe forever; the bundled fallback ships
+ *  in the same commit, so the two can never disagree about a version. */
+export const WORDS_VERSION = 'words-v1';
+
+/** slur never scores and is never shown, anywhere, under any setting.
+ *  strong and mild score; they exist so a player can choose not to be
+ *  shown them. */
+export type WordFlag = 'slur' | 'strong' | 'mild';
+
+type Band = { version: string; words: string[]; flags: Record<string, WordFlag> };
+
+const BAND_NAMES = ['band-35', 'band-55', 'band-70', 'band-rest'] as const;
+type BandName = (typeof BAND_NAMES)[number];
+
+// lazy imports so a band is only ever loaded once, and only when needed
+const bundled = import.meta.glob('./wordbands/band-*.json');
+
+async function loadBand(name: BandName): Promise<Band> {
+  if (import.meta.env.PROD) {
+    try {
+      const ctl = new AbortController();
+      const timer = setTimeout(() => ctl.abort(), 4000);
+      const r = await fetch(
+        `https://cdn.jsdelivr.net/gh/rptetzloff/anagrimoire@${WORDS_VERSION}/src/wordbands/${name}.json`,
+        { signal: ctl.signal }
+      );
+      clearTimeout(timer);
+      if (r.ok) {
+        const band = (await r.json()) as Band;
+        // a wrong version means a stale cache or a bad deploy — the bundle is
+        // the same data and always the right version
+        if (band?.version === WORDS_VERSION && Array.isArray(band.words)) return band;
+      }
+    } catch {
+      // CDN down or slow — the bundle serves
+    }
+  }
+  return ((await bundled[`./wordbands/${name}.json`]()) as { default: Band }).default;
+}
+
+const bandCache = new Map<BandName, Promise<Band>>();
+
+function band(name: BandName): Promise<Band> {
+  let p = bandCache.get(name);
+  if (!p) {
+    p = loadBand(name);
+    bandCache.set(name, p);
+  }
+  return p;
+}
+
+/** Union of bands, sorted, optionally dropping flagged words. Bands are
+ *  disjoint by construction, so concat-and-sort is a true union. */
+async function union(names: BandName[], drop?: (flag: WordFlag | undefined) => boolean): Promise<string[]> {
+  const bands = await Promise.all(names.map(band));
+  const out: string[] = [];
+  for (const b of bands) {
+    for (const w of b.words) {
+      if (drop && drop(b.flags[w])) continue;
+      out.push(w);
+    }
+  }
+  return out.sort();
+}
+
+const poolCache = new Map<string, Promise<string[]>>();
+
+function pooled(key: string, make: () => Promise<string[]>): Promise<string[]> {
+  let p = poolCache.get(key);
+  if (!p) {
+    p = make();
+    poolCache.set(key, p);
+  }
+  return p;
+}
+
+/** The raw SCOWL cuts, kept under their historical names for the code paths
+ *  that predate difficulty (Learn mode, pattern play's letter statistics). */
 export type DictionaryId = 'common' | 'standard' | 'full';
 
+const DICT_BANDS: Record<DictionaryId, BandName[]> = {
+  common: ['band-35'],
+  standard: ['band-35', 'band-55'],
+  full: ['band-35', 'band-55', 'band-70', 'band-rest'],
+};
+
+export function getDictionary(id: DictionaryId): Promise<string[]> {
+  return pooled(`dict:${id}`, () => union(DICT_BANDS[id]));
+}
+
 /** The solver's lists are the difficulties' accept tiers, under the same
- *  names, so "Hard" in the solver finds exactly what Hard accepts in a game.
- *
- *  Widening a search isn't really difficulty — a bigger list makes solving
- *  easier, if anything. But one vocabulary that fits loosely beats two that
- *  each fit their half and leave you converting between them. `DictionaryId`
- *  below stays the raw SCOWL tiers; these are what you pick from. */
+ *  names, so "Hard" in the solver means exactly what Hard accepts in play. */
 export const DICTIONARIES: { id: Difficulty; label: string; blurb: string }[] = [
   { id: 'easy', label: 'Easy', blurb: 'Everyday words — best for Wordle-style puzzles' },
   { id: 'hard', label: 'Hard', blurb: 'Adds the less common words the harder puzzles accept' },
   { id: 'extreme', label: 'Extreme', blurb: 'Every word in the dictionary, obscurities included' },
 ];
 
-// SCOWL lists include capitalized entries ("OK") and apostrophes ("aren't");
-// the solver only understands lowercase a-z.
-function normalize(lists: string[][]): string[] {
-  const seen = new Set<string>();
-  for (const list of lists) {
-    for (const raw of list) {
-      const w = raw.toLowerCase();
-      if (/^[a-z]+$/.test(w)) seen.add(w);
-    }
-  }
-  return [...seen].sort();
-}
-
-const COMMON_TIERS = [english10, english20, english35, american10, american20, american35];
-
-// Common ships in the main bundle; the larger tiers are fetched only when selected.
-const loaders: Record<DictionaryId, () => Promise<string[]>> = {
-  common: async () => normalize(COMMON_TIERS),
-  standard: async () => {
-    const extras = await Promise.all([
-      import('wordlist-english/english-words-40.json'),
-      import('wordlist-english/english-words-50.json'),
-      import('wordlist-english/english-words-55.json'),
-      import('wordlist-english/american-words-40.json'),
-      import('wordlist-english/american-words-50.json'),
-      import('wordlist-english/american-words-55.json'),
-    ]);
-    return normalize([...COMMON_TIERS, ...extras.map((m) => m.default)]);
-  },
-  full: async () => (await import('an-array-of-english-words')).default,
+const ACCEPT_BANDS: Record<Difficulty, BandName[]> = {
+  easy: ['band-35', 'band-55'],
+  hard: ['band-35', 'band-55', 'band-70'],
+  extreme: ['band-35', 'band-55', 'band-70', 'band-rest'],
 };
 
-/** What a difficulty accepts — one band wider than it generates from.
- *
- *  Answers should be recognisable at your level while what's accepted stays
- *  generous: easy sets from common and takes standard, hard sets from standard
- *  and takes SCOWL's large list, extreme sets from that and takes everything.
- *  It also gives Grid its third rung, which board size alone couldn't — the
- *  score you're chasing is measured against this, so at extreme the obscure
- *  finds are what get you there.
- */
-const acceptCache = new Map<string, Promise<string[]>>();
-
+/** What a difficulty accepts — one band wider than it generates from, minus
+ *  the slurs, which never score anywhere under any setting. Answers should
+ *  be recognisable at your level while what's accepted stays generous. */
 export function getAcceptPool(difficulty: Difficulty): Promise<string[]> {
-  const hit = acceptCache.get(difficulty);
-  if (hit) return hit;
-  const load = (async () => {
-    if (difficulty === 'easy') return getDictionary('standard');
-    const wide = await getDifficultyPool('extreme'); // the 60-70 band
-    const standard = await getDictionary('standard');
-    if (difficulty === 'hard') return [...standard, ...wide].sort();
-    const full = await getDictionary('full');
-    // union rather than `full` alone: 521 words are in standard and missing
-    // from the large list, and moving up a difficulty must never start
-    // rejecting a word that was legal below it
-    const seen = new Set(full);
-    return [...full, ...standard.filter((w) => !seen.has(w)), ...wide.filter((w) => !seen.has(w))].sort();
-  })();
-  acceptCache.set(difficulty, load);
-  return load;
+  return pooled(`accept:${difficulty}`, () =>
+    union(ACCEPT_BANDS[difficulty], (flag) => flag === 'slur')
+  );
 }
 
-const bandCache = new Map<string, Promise<string[]>>();
+const GENERATION_BAND: Record<Difficulty, BandName> = {
+  easy: 'band-35',
+  hard: 'band-55',
+  extreme: 'band-70',
+};
 
-/** The words a difficulty draws its practice puzzles from.
- *
- *  The same bands the daily generator uses, so practising at a difficulty
- *  practises for it: each level draws from what it *adds*, not from everything
- *  up to it. Drawing from the whole nested pool would make extreme practice a
- *  third easy words, which is exactly the mistake the generator made first.
- *
- *  Loaded on demand and cached — extreme pulls two more SCOWL sizes that
- *  nothing else needs.
- */
+/** The words a difficulty draws its practice puzzles from: the band it alone
+ *  adds, so practising at a difficulty practises for it. Flagged words are
+ *  left out entirely — the daily generator filters its answers through the
+ *  blocklist, and practice handing anyone a rack it wouldn't would be the
+ *  same mistake with a different clock. */
 export function getDifficultyPool(difficulty: Difficulty): Promise<string[]> {
-  const hit = bandCache.get(difficulty);
-  if (hit) return hit;
-  const load = (async () => {
-    if (difficulty === 'easy') return getDictionary('common');
-    if (difficulty === 'hard') {
-      const [common, standard] = await Promise.all([
-        getDictionary('common'),
-        getDictionary('standard'),
-      ]);
-      const seen = new Set(common);
-      return standard.filter((w) => !seen.has(w));
-    }
-    const [standard, wider] = await Promise.all([
-      getDictionary('standard'),
-      (async () => {
-        const extras = await Promise.all([
-          import('wordlist-english/english-words-60.json'),
-          import('wordlist-english/english-words-70.json'),
-          import('wordlist-english/american-words-60.json'),
-          import('wordlist-english/american-words-70.json'),
-        ]);
-        return normalize(extras.map((m) => m.default));
-      })(),
-    ]);
-    const seen = new Set(standard);
-    return wider.filter((w) => !seen.has(w));
-  })();
-  bandCache.set(difficulty, load);
-  return load;
+  return pooled(`band:${difficulty}`, () =>
+    union([GENERATION_BAND[difficulty]], (flag) => flag !== undefined)
+  );
 }
 
-const cache = new Map<DictionaryId, Promise<string[]>>();
-
-export function getDictionary(id: DictionaryId): Promise<string[]> {
-  let promise = cache.get(id);
-  if (!promise) {
-    promise = loaders[id]();
-    cache.set(id, promise);
+/** Every flagged word across the lists, for the display filter: slur is
+ *  always hidden; strong and mild are the player's choice. */
+export function getWordFlags(): Promise<Map<string, WordFlag>> {
+  let p = flagsCache;
+  if (!p) {
+    p = (async () => {
+      const bands = await Promise.all(BAND_NAMES.map(band));
+      const map = new Map<string, WordFlag>();
+      for (const b of bands) for (const [w, f] of Object.entries(b.flags)) map.set(w, f);
+      return map;
+    })();
+    flagsCache = p;
   }
-  return promise;
+  return p;
 }
+let flagsCache: Promise<Map<string, WordFlag>> | null = null;
