@@ -563,8 +563,12 @@ for (const variant of ['', 'dev']) {
       answer: Buffer.from(JSON.stringify({ rows: sq.rows })).toString('base64'),
     };
     squaresByDifficulty[difficulty] = board;
-    // the legacy shape, keyed by size, for clients that predate difficulty
-    squareBoards[n] = board;
+    // The legacy shape is keyed by size, and hard and extreme are both 5x5 —
+    // so writing every difficulty here let extreme overwrite hard, and a
+    // client reading boards[5] got the 6-given board while hard became
+    // unreachable. Sizes keep meaning what they always meant: 4x4 easy,
+    // 5x5 hard.
+    if (difficulty !== 'extreme') squareBoards[n] = board;
   }
   await writeFile(
     `data/${prefix}daily-squares.json`,

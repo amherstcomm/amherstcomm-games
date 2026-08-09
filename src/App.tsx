@@ -969,15 +969,15 @@ function App() {
   // Three boards a day, and you may play all of them — so the switch belongs
   // beside the board rather than buried in settings.
   //
-  // Not on practice, which has no daily to vary. Not on Grid, whose board is
-  // the same dice at every level. Not on Squares, which still ships its two
-  // sizes and counts as easy. And not when someone has asked to be left with
-  // one puzzle.
+  // Not on practice, which has no daily to vary; not on Grid, whose board is
+  // the same dice at every level; and not when someone has asked to be left
+  // with one puzzle. Squares is here too — on the daily its size *is* the
+  // difficulty, so this switch replaces its 4x4/5x5 buttons rather than
+  // sitting beside them.
   const showDifficultySwitch =
     playActive &&
     dailyByMode[mode] &&
     mode !== 'grid' &&
-    mode !== 'squares' &&
     difficultyMode() === 'all';
 
   useEffect(
