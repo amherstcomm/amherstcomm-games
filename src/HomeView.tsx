@@ -9,6 +9,7 @@
 import { Grid3x3, Hexagon, LayoutGrid, Puzzle, Shuffle, Square, Table2, Trophy } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { MODE_SLUG, pathOf, SLUG_NAME, type Slug } from '@/routes';
+import { difficulty, onDifficultyChange, DIFFICULTY_LABEL } from '@/difficulty';
 import RouteLink from '@/RouteLink';
 import { allDailyStatus, type DailyState } from '@/dailyStatus';
 import {
@@ -73,6 +74,8 @@ export default function HomeView({
   onOpen: (mode: Mode) => void;
   onBoards: () => void;
 }) {
+  const [difficultyTick, setDifficultyTick] = useState(0);
+  useEffect(() => onDifficultyChange(() => setDifficultyTick((n) => n + 1)), []);
   const [status, setStatus] = useState<Record<string, DailyState>>({});
   const [boards, setBoards] = useState<Boards | null>(null);
   // so you can find yourself in the column; null when signed out or unnamed,
@@ -88,7 +91,7 @@ export default function HomeView({
     return () => {
       alive = false;
     };
-  }, []);
+  }, [difficultyTick]);
 
   const doneCount = modes.filter((m) => status[m] === 'done').length;
   const shownBoards = boards ? boardsToShow(boards, modes, status) : [];
@@ -146,6 +149,9 @@ export default function HomeView({
         <section>
           <h2 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">
             On the boards today
+            <span className="ml-2 normal-case tracking-normal font-normal text-slate-500">
+              {DIFFICULTY_LABEL[difficulty()]}
+            </span>
           </h2>
           <div className="grid gap-2 sm:grid-cols-2">
             {shownBoards.map((g) => {

@@ -644,7 +644,7 @@ const GuessGame = forwardRef<
           )}
 
           {dailyMode && (won || lost) && dailyData && (
-            <DailyStats game="guess" date={dailyData.date} />
+            <DailyStats level={playedAt} game="guess" date={dailyData.date} />
           )}
         </>
       )}

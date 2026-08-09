@@ -654,7 +654,7 @@ const ScrambleGame = forwardRef<
 
           {store.dailyMode && record.finished && store.dailyDate && (
             <div>
-              <DailyStats game="scramble" date={store.dailyDate} />
+              <DailyStats level={playedAt} game="scramble" date={store.dailyDate} />
             </div>
           )}
 

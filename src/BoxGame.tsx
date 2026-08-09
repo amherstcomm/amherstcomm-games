@@ -772,7 +772,7 @@ const BoxGame = forwardRef<
 
           {store.dailyMode && done && store.dailyDate && (
             <div>
-              <DailyStats game="box" date={store.dailyDate} />
+              <DailyStats level={playedAt} game="box" date={store.dailyDate} />
             </div>
           )}
 

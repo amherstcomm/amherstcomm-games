@@ -809,7 +809,7 @@ const GridGame = forwardRef<
 
           {store.dailyMode && record.finished && store.dailyDate && (
             <div>
-              <DailyStats game="grid" date={store.dailyDate} />
+              <DailyStats level={playedAt} game="grid" date={store.dailyDate} />
             </div>
           )}
 

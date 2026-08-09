@@ -665,7 +665,7 @@ const HiveGame = forwardRef<
 
           {store.dailyMode && store.dailyDate && (
             <div>
-              <DailyStats game="hive" date={store.dailyDate} />
+              <DailyStats level={playedAt} game="hive" date={store.dailyDate} />
             </div>
           )}
 

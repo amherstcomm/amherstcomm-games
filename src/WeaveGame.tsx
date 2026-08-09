@@ -870,7 +870,7 @@ const WeaveGame = forwardRef<
 
           {store.dailyMode && complete && store.dailyDate && (
             <div>
-              <DailyStats game="weave" date={store.dailyDate} />
+              <DailyStats level={playedAt} game="weave" date={store.dailyDate} />
             </div>
           )}
 

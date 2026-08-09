@@ -9,6 +9,7 @@ import { DAILY_ENV } from '@/dailyData';
 import { supabase } from '@/supabase';
 import type { DailyState } from '@/dailyStatus';
 import type { Mode } from '@/storage';
+import { difficulty, type Difficulty } from '@/difficulty';
 
 // squares fields one board per size — see the note in leaderboard()
 export type BoardGame =
@@ -70,12 +71,18 @@ export function emptyBoards(): Boards {
   return { guess: [], hive: [], scramble: [], grid: [], box: [], weave: [], squares4: [], squares5: [] };
 }
 
-export async function fetchBoards(days: number): Promise<Boards | null> {
+/** One board per difficulty. A time on easy and a time on extreme aren't the
+ *  same event, so they're never ranked together. */
+export async function fetchBoards(
+  days: number,
+  level: Difficulty = difficulty()
+): Promise<Boards | null> {
   if (!supabase) return null;
   try {
     const { data, error } = await supabase.rpc('leaderboard', {
       p_days: days,
       p_env: DAILY_ENV,
+      p_difficulty: level,
     });
     if (error) throw error;
     const out = emptyBoards();

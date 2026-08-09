@@ -8,6 +8,7 @@
 // and no dates at all, so there is no series to draw.
 
 import { DAILY_ENV } from '@/dailyData';
+import { difficulty, type Difficulty } from '@/difficulty';
 import { supabase } from '@/supabase';
 
 export type HistoryGame = 'guess' | 'hive' | 'scramble' | 'grid' | 'box' | 'weave' | 'squares';
@@ -28,7 +29,14 @@ export function emptyHistory(): History {
   return { guess: [], hive: [], scramble: [], grid: [], box: [], weave: [], squares: [] };
 }
 
-export async function fetchHistory(): Promise<History | null> {
+/** Your record at one difficulty.
+ *
+ *  Filtered rather than pooled: the easy and hard boards for a date are
+ *  different puzzles, so counting both would inflate every total and let one
+ *  difficulty hold a streak the other broke. */
+export async function fetchHistory(
+  level: Difficulty = difficulty()
+): Promise<History | null> {
   if (!supabase) return null;
   try {
     const { data: sess } = await supabase.auth.getSession();
@@ -38,6 +46,7 @@ export async function fetchHistory(): Promise<History | null> {
       .select('game, variant, puzzle_date, result')
       .eq('completed', true)
       .eq('env', DAILY_ENV)
+      .eq('difficulty', level)
       .order('puzzle_date', { ascending: true });
     if (error) throw error;
 
