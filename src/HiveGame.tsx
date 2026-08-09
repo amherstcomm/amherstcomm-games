@@ -670,7 +670,7 @@ const HiveGame = forwardRef<
           )}
 
           <p className="mt-5 text-xs text-slate-500">
-            Scored against our Standard dictionary — nothing is checked against any publisher&apos;s list.
+            Scored against the word list for the difficulty you&apos;re playing — nothing is checked against any publisher&apos;s list.
             {store.dailyMode && ' A fresh daily hive arrives about 15 minutes after 3:00 a.m. Eastern.'}
           </p>
         </>

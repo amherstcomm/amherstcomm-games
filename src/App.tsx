@@ -20,7 +20,7 @@ import ScrambleGame, { type ScrambleGameHandle } from '@/ScrambleGame';
 import GridGame, { type GridGameHandle } from '@/GridGame';
 import WeaveGame, { type WeaveGameHandle } from '@/WeaveGame';
 import { dailyDataUrl } from '@/dailyData';
-import { DICTIONARIES, getAcceptPool, getDictionary, getDifficultyPool, type DictionaryId } from '@/dictionaries';
+import { DICTIONARIES, getAcceptPool, getDictionary, getDifficultyPool } from '@/dictionaries';
 import { solvePattern, solveDescramble, solveBee, solveBoxed, solveGrid, findGridPath } from '@/solvers';
 import ConsentBanner from '@/ConsentBanner';
 import { PrivacyPolicy, Terms } from '@/LegalDocs';
@@ -49,8 +49,9 @@ import {
   onDifficultyChange,
   DIFFICULTIES,
   DIFFICULTY_LABEL,
+  type Difficulty,
 } from '@/difficulty';
-import { ALL_MODES, ALL_START_PAGES, ALL_VIEWS, lengthChoices, visibleModes, visibleViews, type LengthRange, type StartPage, type View, loadState, saveState, GRID_PRESET_DIMS, WEAVE_DIMS, type GridPreset, type Mode, type NavKeys, type SortPref, type SquareSolverSize, type WeaveSize } from '@/storage';
+import { ALL_MODES, ALL_START_PAGES, ALL_VIEWS, asDifficulty, lengthChoices, visibleModes, visibleViews, type LengthRange, type StartPage, type View, loadState, saveState, GRID_PRESET_DIMS, WEAVE_DIMS, type GridPreset, type Mode, type NavKeys, type SortPref, type SquareSolverSize, type WeaveSize } from '@/storage';
 
 // longest rack the scramble solver accepts; word lengths come from the
 // player's own range now, in storage
@@ -757,7 +758,7 @@ function App() {
           lengthRange?: LengthRange;
           practiceAllowed?: boolean;
           helpAllowed?: boolean;
-          solverDictionary?: DictionaryId | 'per-game';
+          solverDictionary?: string;
           startPage?: StartPage;
           onboarded?: boolean;
         }
@@ -771,7 +772,8 @@ function App() {
     if (s?.lengthRange) setLengthRange(s.lengthRange);
     if (typeof s?.practiceAllowed === 'boolean') setPracticeAllowed(s.practiceAllowed);
     if (typeof s?.helpAllowed === 'boolean') setHelpAllowed(s.helpAllowed);
-    if (s?.solverDictionary) setSolverDictionary(s.solverDictionary);
+    if (s?.solverDictionary)
+      setSolverDictionary(asDifficulty(s.solverDictionary) ?? 'per-game');
     if (s?.startPage && ALL_START_PAGES.includes(s.startPage)) setStartPage(s.startPage);
     if (s?.onboarded) setOnboarded(true);
     setSettingsPulled(true);
@@ -928,7 +930,7 @@ function App() {
 
   // 'per-game' keeps each solver's own pick; anything else is the whole site's
   const dictionaryId = solverDictionary === 'per-game' ? dictionaries[mode] : solverDictionary;
-  const setDictionaryId = (id: DictionaryId) =>
+  const setDictionaryId = (id: Difficulty) =>
     setDictionaries((prev) => ({ ...prev, [mode]: id }));
 
   const sort = sorts[mode];
@@ -1166,7 +1168,9 @@ function App() {
   const [words, setWords] = useState<string[]>([]);
   useEffect(() => {
     let alive = true;
-    getDictionary(dictionaryId).then((w) => {
+    // the accept pool, not the raw tier: the solver's Hard is what Hard
+    // accepts in a game, so a word the solver finds is a word that scores
+    getAcceptPool(dictionaryId).then((w) => {
       if (alive) setWords(w);
     });
     return () => {
@@ -1973,7 +1977,7 @@ function App() {
         {!playActive && solverDictionary === 'per-game' && (
         <section className="mb-7 text-center">
           <label className="block text-xs font-medium text-slate-400 uppercase tracking-wider mb-2.5">
-            Dictionary
+            Word list
           </label>
           <div className="inline-flex flex-wrap justify-center max-w-full rounded-xl bg-white/5 border border-white/10 p-1 gap-1">
             {DICTIONARIES.map((d) => (
@@ -1986,7 +1990,7 @@ function App() {
                     ? 'bg-amber-400 text-ink shadow-lg shadow-amber-500/30'
                     : 'text-slate-300 hover:bg-white/10'}`}
               >
-                {d.id === 'common' && <BookOpen className="w-3.5 h-3.5" />}
+                {d.id === 'easy' && <BookOpen className="w-3.5 h-3.5" />}
                 {d.label}
               </button>
             ))}
@@ -2748,8 +2752,9 @@ function App() {
         <footer className="mt-14 pb-24 sm:pb-4 text-center text-xs text-slate-500">
           {!playActive && !learnMode && (
             <p>
-              Searching {words.length.toLocaleString()} English words (
-              {DICTIONARIES.find((d) => d.id === dictionaryId)?.label.toLowerCase()} dictionary).
+              Searching {words.length.toLocaleString()} English words (the{' '}
+              {DICTIONARIES.find((d) => d.id === dictionaryId)?.label.toLowerCase()} word
+              list).
             </p>
           )}
           {/* wraps into centered rows rather than one overflowing line */}
@@ -3139,7 +3144,7 @@ function App() {
                 </h3>
                 <ul className="space-y-1.5 text-slate-400 list-disc list-inside">
                   <li>
-                    Common &amp; Standard dictionaries:{' '}
+                    Easy and Hard word lists:{' '}
                     <a
                       href="https://github.com/jacksonrayhamilton/wordlist-english"
                       target="_blank"
@@ -3183,7 +3188,7 @@ function App() {
                     you&apos;re allowed to type.
                   </li>
                   <li>
-                    Full dictionary:{' '}
+                    The Extreme list adds:{' '}
                     <a
                       href="https://github.com/words/an-array-of-english-words"
                       target="_blank"

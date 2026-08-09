@@ -816,7 +816,7 @@ const GridGame = forwardRef<
           <p className="mt-5 text-xs text-slate-500">
             Words are 3+ letters traced through adjacent cells (diagonals count), using each
             cell once. Scoring: 3–4 letters 1&nbsp;pt, 5 letters 2, 6 letters 3, 7 letters 5,
-            8+ letters 11. Scored against our Standard dictionary.
+            8+ letters 11. Scored against the word list for the difficulty you&apos;re playing.
             {store.dailyMode && ' A fresh daily grid arrives about 15 minutes after 3:00 a.m. Eastern.'}
           </p>
         </>

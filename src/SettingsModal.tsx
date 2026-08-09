@@ -20,7 +20,7 @@ import {
   type StartPage,
   type View,
 } from '@/storage';
-import type { DictionaryId } from '@/dictionaries';
+import { DICTIONARIES } from '@/dictionaries';
 import type { SettingsTab } from '@/routes';
 import { level as storageLevel, setLevel as setStorageLevel, STORAGE_OPTIONS, type StorageLevel } from '@/siteStorage';
 import {
@@ -66,12 +66,6 @@ const VIEW_LABELS: { id: View; label: string }[] = [
   { id: 'solve', label: 'Solve' },
   { id: 'play', label: 'Play' },
   { id: 'learn', label: 'Learn' },
-];
-
-const DICTIONARY_LABELS: { id: DictionaryId; label: string }[] = [
-  { id: 'common', label: 'Common' },
-  { id: 'standard', label: 'Standard' },
-  { id: 'full', label: 'Full' },
 ];
 
 const THEME_OPTIONS: { id: ThemeMode; label: string; Icon: typeof Sun }[] = [
@@ -219,7 +213,7 @@ export default function SettingsModal({
   lengthRange: LengthRange;
   practiceAllowed: boolean;
   helpAllowed: boolean;
-  solverDictionary: DictionaryId | 'per-game';
+  solverDictionary: Difficulty | 'per-game';
   signedIn: boolean;
   onTheme: (t: ThemeMode) => void;
   onPalette: (p: Palette) => void;
@@ -230,7 +224,7 @@ export default function SettingsModal({
   onLengthRange: (r: LengthRange) => void;
   onPracticeAllowed: (v: boolean) => void;
   onHelpAllowed: (v: boolean) => void;
-  onSolverDictionary: (d: DictionaryId | 'per-game') => void;
+  onSolverDictionary: (d: Difficulty | 'per-game') => void;
   startPage: StartPage;
   onStartPage: (s: StartPage) => void;
   /** the open tab, held by App so it can live in the address bar */
@@ -645,20 +639,20 @@ export default function SettingsModal({
           {!hiddenViews.includes('solve') && (
             <div>
               <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2.5">
-                Solver dictionary
+                Solver word list
               </h3>
                 <select
-                  aria-label="Solver dictionary"
+                  aria-label="Solver word list"
                   value={solverDictionary}
                   onChange={(e) =>
-                    onSolverDictionary(e.target.value as DictionaryId | 'per-game')
+                    onSolverDictionary(e.target.value as Difficulty | 'per-game')
                   }
                   className="h-9 px-2 rounded-lg bg-white/5 border border-white/10 text-slate-200 text-sm font-semibold"
                 >
                   <option value="per-game" className="bg-slate-900">
                     Per game
                   </option>
-                  {DICTIONARY_LABELS.map(({ id, label }) => (
+                  {DICTIONARIES.map(({ id, label }) => (
                     <option key={id} value={id} className="bg-slate-900">
                       {label}
                     </option>

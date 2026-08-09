@@ -5,12 +5,23 @@ import american10 from 'wordlist-english/american-words-10.json';
 import american20 from 'wordlist-english/american-words-20.json';
 import american35 from 'wordlist-english/american-words-35.json';
 
+import type { Difficulty } from '@/difficulty';
+
+/** The raw SCOWL tiers the lists are built from — an implementation detail of
+ *  the bands below, not something anyone picks. */
 export type DictionaryId = 'common' | 'standard' | 'full';
 
-export const DICTIONARIES: { id: DictionaryId; label: string; blurb: string }[] = [
-  { id: 'common', label: 'Common', blurb: 'Everyday words — best for Wordle-style puzzles' },
-  { id: 'standard', label: 'Standard', blurb: 'Common plus less frequent words' },
-  { id: 'full', label: 'Full', blurb: 'Every word in the dictionary, obscurities included' },
+/** The solver's lists are the difficulties' accept tiers, under the same
+ *  names, so "Hard" in the solver finds exactly what Hard accepts in a game.
+ *
+ *  Widening a search isn't really difficulty — a bigger list makes solving
+ *  easier, if anything. But one vocabulary that fits loosely beats two that
+ *  each fit their half and leave you converting between them. `DictionaryId`
+ *  below stays the raw SCOWL tiers; these are what you pick from. */
+export const DICTIONARIES: { id: Difficulty; label: string; blurb: string }[] = [
+  { id: 'easy', label: 'Easy', blurb: 'Everyday words — best for Wordle-style puzzles' },
+  { id: 'hard', label: 'Hard', blurb: 'Adds the less common words the harder puzzles accept' },
+  { id: 'extreme', label: 'Extreme', blurb: 'Every word in the dictionary, obscurities included' },
 ];
 
 // SCOWL lists include capitalized entries ("OK") and apostrophes ("aren't");
@@ -45,16 +56,6 @@ const loaders: Record<DictionaryId, () => Promise<string[]>> = {
   full: async () => (await import('an-array-of-english-words')).default,
 };
 
-/** The words a difficulty draws its practice puzzles from.
- *
- *  The same bands the daily generator uses, so practising at a difficulty
- *  practises for it: each level draws from what it *adds*, not from everything
- *  up to it. Drawing from the whole nested pool would make extreme practice a
- *  third easy words, which is exactly the mistake the generator made first.
- *
- *  Loaded on demand and cached — extreme pulls two more SCOWL sizes that
- *  nothing else needs.
- */
 /** What a difficulty accepts — one band wider than it generates from.
  *
  *  Answers should be recognisable at your level while what's accepted stays
@@ -66,7 +67,7 @@ const loaders: Record<DictionaryId, () => Promise<string[]>> = {
  */
 const acceptCache = new Map<string, Promise<string[]>>();
 
-export function getAcceptPool(difficulty: 'easy' | 'hard' | 'extreme'): Promise<string[]> {
+export function getAcceptPool(difficulty: Difficulty): Promise<string[]> {
   const hit = acceptCache.get(difficulty);
   if (hit) return hit;
   const load = (async () => {
@@ -87,7 +88,17 @@ export function getAcceptPool(difficulty: 'easy' | 'hard' | 'extreme'): Promise<
 
 const bandCache = new Map<string, Promise<string[]>>();
 
-export function getDifficultyPool(difficulty: 'easy' | 'hard' | 'extreme'): Promise<string[]> {
+/** The words a difficulty draws its practice puzzles from.
+ *
+ *  The same bands the daily generator uses, so practising at a difficulty
+ *  practises for it: each level draws from what it *adds*, not from everything
+ *  up to it. Drawing from the whole nested pool would make extreme practice a
+ *  third easy words, which is exactly the mistake the generator made first.
+ *
+ *  Loaded on demand and cached — extreme pulls two more SCOWL sizes that
+ *  nothing else needs.
+ */
+export function getDifficultyPool(difficulty: Difficulty): Promise<string[]> {
   const hit = bandCache.get(difficulty);
   if (hit) return hit;
   const load = (async () => {

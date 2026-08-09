@@ -1,4 +1,4 @@
-import type { DictionaryId } from '@/dictionaries';
+import { DIFFICULTIES, type Difficulty } from '@/difficulty';
 import type { Palette, TextScale, ThemeMode } from '@/theme';
 import { store as siteStore } from '@/siteStorage';
 
@@ -13,7 +13,20 @@ const KEY = 'anagrimoire:v1';
 
 export const ALL_MODES: Mode[] = ['pattern', 'descramble', 'bee', 'boxed', 'grid', 'weave', 'squares'];
 export const ALL_START_PAGES: StartPage[] = ['home', 'last', ...ALL_MODES];
-const ALL_DICTS: DictionaryId[] = ['common', 'standard', 'full'];
+/** The solver's lists were Common/Standard/Full before they became the
+ *  difficulties' accept tiers. Stored choices carry over rather than reset —
+ *  the same three rungs in the same order, under the names play uses. */
+const LEGACY_DICTS: Record<string, Difficulty> = {
+  common: 'easy',
+  standard: 'hard',
+  full: 'extreme',
+};
+
+export function asDifficulty(v: unknown): Difficulty | null {
+  if (typeof v !== 'string') return null;
+  if (DIFFICULTIES.includes(v as Difficulty)) return v as Difficulty;
+  return LEGACY_DICTS[v] ?? null;
+}
 
 // The three tabs a game can be shown in. Someone who only wants to play the
 // dailies shouldn't have to walk past a solver to get to them.
@@ -78,7 +91,7 @@ export type SortPref = { key: SortKey; dir: SortDir };
 
 export type PersistedState = {
   mode: Mode;
-  dictionaries: Record<Mode, DictionaryId>;
+  dictionaries: Record<Mode, Difficulty>;
   sort: Record<Mode, SortPref>;
   keyboard: boolean;
   theme: ThemeMode;
@@ -90,7 +103,7 @@ export type PersistedState = {
   lengthRange: LengthRange;
   practiceAllowed: boolean;
   helpAllowed: boolean;
-  solverDictionary: DictionaryId | 'per-game';
+  solverDictionary: Difficulty | 'per-game';
   /** what the front door opens onto: the home page, the game you last had
    *  open, or one particular game for people who only ever want the one */
   startPage: StartPage;
@@ -131,7 +144,7 @@ export const WEAVE_DIMS: Record<WeaveSize, { rows: number; cols: number }> = {
 
 export const DEFAULT_STATE: PersistedState = {
   mode: 'pattern',
-  dictionaries: { pattern: 'common', descramble: 'common', bee: 'common', boxed: 'common', grid: 'common', weave: 'standard', squares: 'standard' },
+  dictionaries: { pattern: 'easy', descramble: 'easy', bee: 'easy', boxed: 'easy', grid: 'easy', weave: 'hard', squares: 'hard' },
   sort: {
     pattern: { key: 'alpha', dir: 'asc' },
     descramble: { key: 'length', dir: 'desc' },
@@ -204,8 +217,8 @@ export function loadState(): PersistedState {
 
     const dictionaries = { ...DEFAULT_STATE.dictionaries };
     for (const m of ALL_MODES) {
-      const d = p?.dictionaries?.[m];
-      if (ALL_DICTS.includes(d)) dictionaries[m] = d;
+      const d = asDifficulty(p?.dictionaries?.[m]);
+      if (d) dictionaries[m] = d;
     }
 
     const sort: Record<Mode, SortPref> = {
@@ -291,7 +304,7 @@ export function loadState(): PersistedState {
       lengthRange: sanitizeRange(p?.lengthRange),
       practiceAllowed: p?.practiceAllowed !== false,
       helpAllowed: p?.helpAllowed !== false,
-      solverDictionary: ALL_DICTS.includes(p?.solverDictionary) ? p.solverDictionary : 'per-game',
+      solverDictionary: asDifficulty(p?.solverDictionary) ?? 'per-game',
       startPage: ALL_START_PAGES.includes(p?.startPage) ? p.startPage : 'home',
       // A stored blob means this browser has been here before, so anyone
       // arriving from a version without the flag has already used the site

@@ -660,8 +660,8 @@ const ScrambleGame = forwardRef<
 
           <p className="mt-5 text-xs text-slate-500">
             Words are 3+ letters from the rack (each letter once). 3-letter words score 1,
-            longer words their length; using the whole rack is +7. Scored against our
-            Standard dictionary.
+            longer words their length; using the whole rack is +7. Scored against the
+            word list for the difficulty you&apos;re playing.
             {store.dailyMode && ' A fresh daily rack arrives about 15 minutes after 3:00 a.m. Eastern.'}
           </p>
         </>
