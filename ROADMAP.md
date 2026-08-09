@@ -555,6 +555,42 @@ game component, a solver, a Learn demo, stats/sync/share/routes/settings/home
 card. Deliberately *not* wired into `fetch-puzzles.mjs` yet — a bug there
 breaks the daily run for all six existing games.
 
+### Cryptogram
+A short passage under a substitution cipher; work out the mapping and the text
+falls out. Deduction rather than vocabulary, which is a different muscle from
+anything else here, and the solver practically exists already — deducing a
+word from its pattern and known letters is what Guess's solver does, applied
+to twenty words at once instead of one.
+
+**The text is the whole problem.** Cryptograms are traditionally famous
+quotations, and famous quotations are somebody's copyright. The site's word
+lists are deliberately its own; the passages would have to be too. Options,
+roughly in order of how well they'd read:
+
+- **Public-domain sources.** Gutenberg, proverbs, older verse. Real sentences,
+  no licence worry, but they need choosing — a passage nobody can parse
+  undeciphered is no fun deciphered either.
+- **Generated sentences** from our own word lists. Free, endless, deterministic
+  per date — and almost certainly flat. A cryptogram's reward is the sentence
+  meaning something at the end.
+
+Worth prototyping the generated version first: if it doesn't read well, the
+curation cost of the public-domain route is the real cost of the game.
+
+**Difficulty maps cleanly**, better than most games here: how many letters
+start revealed, how long the passage is, and whether the cipher preserves word
+boundaries. No second dial needed.
+
+**It reuses more than it adds.** Deterministic per Eastern date like the rest;
+`daily_progress` stores the partial mapping so a half-solved puzzle follows you
+between devices; verification is exact rather than statistical, since the
+server can simply compare the decoded text — the one game here where
+`result_is_plausible` could be certain rather than persuaded.
+
+**The catch:** it isn't a word game so much as a logic game about letters, and
+Wordoku above carries the same caveat. Two of those and the site is something
+else.
+
 ### Crossword
 Blocked on something that isn't code: **clues**. Grid construction is
 generatable; good clues need human authoring or a licensed corpus. The
