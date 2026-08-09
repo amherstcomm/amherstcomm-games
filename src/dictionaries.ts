@@ -15,7 +15,7 @@ import type { Difficulty } from '@/difficulty';
 /** Bump together with the git tag when the lists are rebuilt. The tagged CDN
  *  URL is immutable, so caching is safe forever; the bundled fallback ships
  *  in the same commit, so the two can never disagree about a version. */
-export const WORDS_VERSION = 'words-v3';
+export const WORDS_VERSION = 'words-v4';
 
 /** slur never scores and is never shown, anywhere, under any setting.
  *  strong and mild score; they exist so a player can choose not to be
