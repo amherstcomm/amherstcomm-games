@@ -191,10 +191,12 @@ const BoxGame = forwardRef<
   {
     standardWords: string[] | null;
     commonWords: string[] | null;
+    /** the words this difficulty draws practice from */
+    practiceWords: string[] | null;
     onLetterStates: (states: Record<string, LetterState>) => void;
     onReveal?: (sides: string[]) => void;
   }
->(function BoxGame({ standardWords, commonWords, onLetterStates, onReveal }, ref) {
+>(function BoxGame({ standardWords, commonWords, onLetterStates, onReveal, practiceWords }, ref) {
   const [store, setStore] = useState<BoxStore>(loadStore);
   const { practiceAllowed } = usePrefs();
   // pinned to the daily: someone who switched practice off shouldn't be left
@@ -265,9 +267,9 @@ const BoxGame = forwardRef<
   // ensure a practice box exists once the dictionary is ready
   useEffect(() => {
     if (store.dailyMode || store.practice || !commonWords) return;
-    const box = generateBox(commonWords);
+    const box = generateBox(practiceWords?.length ? practiceWords : commonWords);
     if (box) setStore((prev) => (prev.practice ? prev : { ...prev, practice: box }));
-  }, [store.dailyMode, store.practice, commonWords]);
+  }, [store.dailyMode, store.practice, commonWords, practiceWords]);
 
   const record = store.dailyMode ? store.daily : store.practice;
 
@@ -470,7 +472,7 @@ const BoxGame = forwardRef<
 
   function newPracticeBox() {
     if (!commonWords) return;
-    const box = generateBox(commonWords);
+    const box = generateBox(practiceWords?.length ? practiceWords : commonWords);
     if (!box) return;
     setCurrent('');
     setStore((prev) => ({ ...prev, practice: box }));

@@ -107,10 +107,12 @@ const ScrambleGame = forwardRef<
   {
     standardWords: string[] | null;
     commonWords: string[] | null;
+    /** the words this difficulty draws practice from */
+    practiceWords: string[] | null;
     onLetterStates: (states: Record<string, LetterState>) => void;
     onReveal?: (letters: string) => void;
   }
->(function ScrambleGame({ standardWords, commonWords, onLetterStates, onReveal }, ref) {
+>(function ScrambleGame({ standardWords, commonWords, onLetterStates, onReveal, practiceWords }, ref) {
   const [store, setStore] = useState<ScrambleStore>(loadStore);
   const { practiceAllowed } = usePrefs();
   // pinned to the daily: someone who switched practice off shouldn't be left
@@ -182,7 +184,10 @@ const ScrambleGame = forwardRef<
 
   function makePracticeRack(): ScrambleRecord | null {
     if (!commonWords) return null;
-    const bases = commonWords.filter((w) => w.length === 7);
+    // The band for the difficulty being played, so practising at a level
+    // practises for it. Falls back to common while the band loads.
+    const from = practiceWords?.length ? practiceWords : commonWords;
+    const bases = from.filter((w) => w.length === 7);
     if (!bases.length) return null;
     const base = bases[Math.floor(Math.random() * bases.length)];
     return {

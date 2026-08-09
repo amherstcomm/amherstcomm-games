@@ -41,6 +41,16 @@ const BLURB: Record<Slug, string> = {
   squares: 'Fill the grid so every row and every column spells a word.',
 };
 
+const NUMBER_WORD: Record<number, string> = {
+  1: 'One',
+  2: 'Two',
+  3: 'Three',
+  4: 'Four',
+  5: 'Five',
+  6: 'Six',
+  7: 'Seven',
+};
+
 const STATE_LABEL: Record<DailyState, string> = {
   none: 'Not started',
   started: 'In progress',
@@ -87,9 +97,13 @@ export default function HomeView({
     <div className="max-w-3xl mx-auto text-left">
       <section className="mb-8">
         <p className="text-slate-300">
-          Six word games, a fresh puzzle in each one every morning, and a solver
-          behind every game for when you&apos;re properly stuck. Everything works
-          without an account and nothing you type into a solver leaves your device.
+          {/* Counted, not written down: it said six for as long as there were
+              seven, because a number in prose doesn't change when the code
+              does. It also follows what you've chosen to show. */}
+          {NUMBER_WORD[modes.length] ?? modes.length} word games, a fresh puzzle in
+          each one every morning, and a solver behind every game for when
+          you&apos;re properly stuck. Everything works without an account and
+          nothing you type into a solver leaves your device.
         </p>
       </section>
 

@@ -110,11 +110,13 @@ const GuessGame = forwardRef<
   {
     length: number;
     commonWords: string[] | null;
+    /** the words this difficulty draws practice from */
+    practiceWords: string[] | null;
     fullWords: string[] | null;
     onLetterStates: (states: Record<string, LetterState>) => void;
     onReveal?: (clues: { length: number; known: string[]; contains: string; excluded: string }) => void;
   }
->(function GuessGame({ length, commonWords, fullWords, onLetterStates, onReveal }, ref) {
+>(function GuessGame({ length, commonWords, fullWords, onLetterStates, onReveal, practiceWords }, ref) {
   const [store, setStore] = useState<PlayStore>(loadStore);
   const { practiceAllowed } = usePrefs();
   // pinned to the daily: someone who switched practice off shouldn't be left
@@ -200,7 +202,10 @@ const GuessGame = forwardRef<
 
   function pickPracticeWord(): string | null {
     if (!commonWords || !commonSet) return null;
-    const pool = commonWords.filter(
+    // The band for the difficulty being played, so practising at a level
+    // practises for it. Falls back to common while the band loads.
+    const from = practiceWords?.length ? practiceWords : commonWords;
+    const pool = from.filter(
       (w) => w.length === length && !(w.endsWith('s') && commonSet.has(w.slice(0, -1)))
     );
     if (!pool.length) return null;

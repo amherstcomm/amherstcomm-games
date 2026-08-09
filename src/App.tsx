@@ -20,7 +20,7 @@ import ScrambleGame, { type ScrambleGameHandle } from '@/ScrambleGame';
 import GridGame, { type GridGameHandle } from '@/GridGame';
 import WeaveGame, { type WeaveGameHandle } from '@/WeaveGame';
 import { dailyDataUrl } from '@/dailyData';
-import { DICTIONARIES, getDictionary, type DictionaryId } from '@/dictionaries';
+import { DICTIONARIES, getDictionary, getDifficultyPool, type DictionaryId } from '@/dictionaries';
 import { solvePattern, solveDescramble, solveBee, solveBoxed, solveGrid, findGridPath } from '@/solvers';
 import ConsentBanner from '@/ConsentBanner';
 import { PrivacyPolicy, Terms } from '@/LegalDocs';
@@ -852,6 +852,7 @@ function App() {
   const [commonWordsArr, setCommonWordsArr] = useState<string[] | null>(null);
   const [fullWordsArr, setFullWordsArr] = useState<string[] | null>(null);
   const [standardWordsArr, setStandardWordsArr] = useState<string[] | null>(null);
+
   const gameRef = useRef<GuessGameHandle>(null);
   const hiveRef = useRef<HiveGameHandle>(null);
   const boxRef = useRef<BoxGameHandle>(null);
@@ -865,6 +866,18 @@ function App() {
   // mirrors it so the pressed state re-renders.
   const [level, setLevel] = useState(currentDifficulty);
   useEffect(() => onDifficultyChange(() => setLevel(currentDifficulty())), []);
+
+  // Practice puzzles are built in the browser, so the words a difficulty means
+  // have to be here too — the same bands the daily generator draws from.
+  const [practiceWordsArr, setPracticeWordsArr] = useState<string[] | null>(null);
+  useEffect(() => {
+    let alive = true;
+    setPracticeWordsArr(null);
+    getDifficultyPool(level).then((ws) => alive && setPracticeWordsArr(ws));
+    return () => {
+      alive = false;
+    };
+  }, [level]);
 
   const patternPlayActive = mode === 'pattern' && patternPlay && !learnMode;
   const beePlayActive = mode === 'bee' && beePlay && !learnMode;
@@ -2014,6 +2027,7 @@ function App() {
             ref={gameRef}
             length={length}
             commonWords={commonWordsArr}
+            practiceWords={practiceWordsArr}
             fullWords={fullWordsArr}
             onLetterStates={setLetterStates}
             onReveal={!shownViews.includes('solve') || !helpAllowed ? undefined : ({ length: len, known: k, contains, excluded }) => {
@@ -2095,6 +2109,7 @@ function App() {
             ref={scrambleRef}
             standardWords={standardWordsArr}
             commonWords={commonWordsArr}
+            practiceWords={practiceWordsArr}
             onLetterStates={setLetterStates}
             onReveal={!shownViews.includes('solve') || !helpAllowed ? undefined : (letters) => {
               setRackStr(letters);
@@ -2172,6 +2187,7 @@ function App() {
             ref={hiveRef}
             standardWords={standardWordsArr}
             commonWords={commonWordsArr}
+            practiceWords={practiceWordsArr}
             onLetterStates={setLetterStates}
             onReveal={!shownViews.includes('solve') || !helpAllowed ? undefined : (center, outers) => {
               setBeeCenter(center);
@@ -2355,6 +2371,7 @@ function App() {
             ref={boxRef}
             standardWords={standardWordsArr}
             commonWords={commonWordsArr}
+            practiceWords={practiceWordsArr}
             onLetterStates={setLetterStates}
             onReveal={!shownViews.includes('solve') || !helpAllowed ? undefined : (sides) => {
               setBoxedLetters(sides.flatMap((s) => s.split('')).slice(0, 12));

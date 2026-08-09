@@ -129,10 +129,12 @@ const HiveGame = forwardRef<
   {
     standardWords: string[] | null;
     commonWords: string[] | null;
+    /** the words this difficulty draws practice from */
+    practiceWords: string[] | null;
     onLetterStates: (states: Record<string, LetterState>) => void;
     onReveal?: (center: string, outers: string[]) => void;
   }
->(function HiveGame({ standardWords, commonWords, onLetterStates, onReveal }, ref) {
+>(function HiveGame({ standardWords, commonWords, onLetterStates, onReveal, practiceWords }, ref) {
   const [store, setStore] = useState<HiveStore>(loadStore);
   const { practiceAllowed } = usePrefs();
   // pinned to the daily: someone who switched practice off shouldn't be left
@@ -207,8 +209,11 @@ const HiveGame = forwardRef<
 
   function makePracticeHive(): HiveRecord | null {
     if (!commonWords || !commonSet) return null;
+    // The band for the difficulty being played, so practising at a level
+    // practises for it. Falls back to common while the band loads.
+    const from = practiceWords?.length ? practiceWords : commonWords;
     // no 's' in the hive (plurals would flood the answer list)
-    const bases = commonWords.filter(
+    const bases = from.filter(
       (w) => w.length >= 7 && new Set(w).size === 7 && !w.includes('s')
     );
     if (!bases.length) return null;
