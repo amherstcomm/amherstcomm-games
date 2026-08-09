@@ -139,6 +139,18 @@ const GuessGame = forwardRef<
   // again. A storage write re-renders nothing on its own.
   const [difficultyTick, setDifficultyTick] = useState(0);
   useEffect(() => onDifficultyChange(() => setDifficultyTick((n) => n + 1)), []);
+
+  // Clear the practice board when a new word band arrives, not when the
+  // setting changes. The setting changes first and the band loads after, so
+  // clearing on the change regenerated from the pool we were about to
+  // replace — every level drew from the one below it.
+  const practicePool = useRef<string[] | null>(null);
+  useEffect(() => {
+    if (!practiceWords || practicePool.current === practiceWords) return;
+    const first = practicePool.current === null;
+    practicePool.current = practiceWords;
+    if (!first) setStore((prev) => ({ ...prev, practice: {} }));
+  }, [practiceWords]);
   const [dailyError, setDailyError] = useState(false);
   const [current, setCurrent] = useState('');
   const [flash, setFlash] = useState('');

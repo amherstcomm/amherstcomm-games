@@ -203,6 +203,9 @@ const WeaveGame = forwardRef<
       onDifficultyChange(() => {
         setLevel(difficulty());
         setDifficultyTick((n) => n + 1);
+        // practice is redrawn rather than kept: it's a different difficulty's
+        // board now, and practice isn't recorded
+        setStore((prev) => ({ ...prev, practice: null }));
       }),
     []
   );
@@ -616,12 +619,6 @@ const WeaveGame = forwardRef<
     if (rec) setStore((prev) => ({ ...prev, practice: rec }));
   }
 
-  function setPracticeSize(size: '6x8' | '8x10') {
-    setStore((prev) => ({ ...prev, practiceSize: size }));
-    const rec = pickPractice(size, record?.board.join(''));
-    if (rec) setStore((prev) => ({ ...prev, practiceSize: size, practice: rec }));
-  }
-
   const loading = (store.dailyMode ? !record && !dailyError : !record) || syncing;
   // Three widths now — 6, 7 and 8 for easy, hard and extreme. Written out per
   // width rather than computed, because Tailwind generates classes by reading
@@ -657,24 +654,9 @@ const WeaveGame = forwardRef<
         ))}
       </div>
 
-      {/* practice size */}
-      {!store.dailyMode && (
-        <div className="mb-4">
-          <span className="inline-flex rounded-lg bg-white/5 border border-white/10 p-0.5 gap-0.5">
-            {(['6x8', '8x10'] as const).map((size) => (
-              <button
-                key={size}
-                onMouseDown={(e) => e.preventDefault()}
-                onClick={() => setPracticeSize(size)}
-                className={`px-3 py-1.5 rounded-md text-sm font-semibold transition-colors
-                  ${store.practiceSize === size ? 'bg-white/15 text-white' : 'text-slate-400 hover:text-white'}`}
-              >
-                {size === '6x8' ? '6×8' : '8×10 hard'}
-              </button>
-            ))}
-          </span>
-        </div>
-      )}
+      {/* No practice size picker. Practice is the daily generated on the fly
+          and not recorded, so its shape comes from the difficulty like the
+          daily's does — a second control here would disagree with the first. */}
 
       {loading && <p className="text-sm text-slate-400 py-8">Loading…</p>}
       {store.dailyMode && dailyError && !record && (

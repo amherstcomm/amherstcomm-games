@@ -527,14 +527,10 @@ const SquaresGame = forwardRef<
         ))}
       </div>
 
-      {/* Size, for practice only. On the daily the size comes from the
-          difficulty — 4x4 easy, 5x5 hard and extreme — so offering both here
-          would be two controls fighting over one thing. */}
-      <div
-        className={`mb-3 flex-wrap items-center justify-center gap-2 ${
-          store.dailyMode ? 'hidden' : 'flex'
-        }`}
-      >
+      {/* Hidden everywhere. Practice is the daily generated on the fly and not
+          recorded, so its size comes from the difficulty just as the daily's
+          does. The markup stays because the solver still reaches for it. */}
+      <div className="mb-3 hidden flex-wrap items-center justify-center gap-2">
         <div className="inline-flex rounded-xl bg-white/5 border border-white/10 p-1 gap-1">
           {([4, 5] as SquareSize[]).map((s) => (
             <button
