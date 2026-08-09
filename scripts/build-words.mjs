@@ -74,7 +74,7 @@ const STRONG = new Set([
   'nympho', 'nymphos', 'poon', 'poontang', 'porn', 'porno', 'pornos', 'pubes',
   'punany', 'quim', 'rimming', 'schlong', 'schlongs', 'smut', 'smutty',
   'sodomize', 'sodomized', 'sodomizes', 'sodomizing', 'sodomy', 'spunk',
-  'tit', 'tits', 'titties', 'titty', 'twerk',
+  'tit', 'tits', 'titties', 'titty', 'twerk', 'jizzes',
   'tribadism', 'zoophilia', 'bestiality', 'coprophilia',
   // not slurs, but nobody filtering should meet them on a score list
   'rape', 'raped', 'rapes', 'raping', 'rapist', 'rapists',
@@ -84,11 +84,23 @@ const STRONG = new Set([
 
 const MILD = new Set(['boob', 'boobs', 'boner', 'boners', 'tushy', 'horny', 'kinky']);
 
+// Compounds the per-word lists can't keep up with — SCOWL 80 alone brought
+// fistfuck, fuckface, dipshit and friends. Any word containing these is
+// strong unless exempted below. Only substrings with no innocent carriers
+// qualify: 'twat' is inside wristwatch, 'wank' inside swanky, 'tits' inside
+// bushtits — those stay per-word.
+const SUBSTRING_STRONG = ['fuck', 'shit'];
+
 // ESDB flags these for their roots rather than themselves — craps is a dice
 // game, dickens an exclamation, dicker to haggle. Same exemptions as the
 // generator blocklist, for the same reason.
 const NOT_FLAGGED = new Set([
   'craps', 'dickens', 'dickenses', 'dicker', 'dickered', 'dickering', 'dickers',
+  // innocent carriers of a flagged substring: golf, a mushroom spelling,
+  // and the acacia wood of scripture
+  'mishit', 'mishits', 'mishitting',
+  'shitake', 'shitakes',
+  'shittah', 'shittahs', 'shittim', 'shittims', 'shittimwood', 'shittimwoods',
 ]);
 
 const NOTE_FLAG = {
@@ -232,6 +244,7 @@ function flagOf(w) {
   if (SLURS.has(w)) return 'slur';
   let f = esdbFlag.get(w) ?? '';
   if (STRONG.has(w) && (!f || RANK.strong > RANK[f])) f = 'strong';
+  if (!f && SUBSTRING_STRONG.some((sub) => w.includes(sub))) f = 'strong';
   if (MILD.has(w) && !f) f = 'mild';
   return f;
 }

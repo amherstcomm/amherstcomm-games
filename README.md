@@ -56,7 +56,7 @@ The files are a public release channel — anyone can read them (these track `ma
 | [band-80.json](https://cdn.jsdelivr.net/gh/rptetzloff/anagrimoire@main/src/wordbands/band-80.json) | 70 < level ≤ 80 — 131,250 words |
 | [domains.json](https://cdn.jsdelivr.net/gh/rptetzloff/anagrimoire@main/src/wordbands/domains.json) | WordNet noun categories for 73,031 words, as arrays |
 
-Each band is `{ version, words, flags }` — words alphabetical, flags a sparse map (`slur` / `strong` / `mild`) present only for flagged words.
+Each band is `{ version, words, flags }` — words alphabetical, flags a sparse map (`slur` / `strong` / `mild`) present only for flagged words. **Use them for anything** — no permission needed; they carry SCOWL's and WordNet's permissive notices ([scripts/scowl/Copyright.txt](scripts/scowl/Copyright.txt), and the credits in the site's Legal page), and our packaging is MIT like the rest of the repo.
 
 Words carry content flags: **slur** never scores and is never shown, at any difficulty under any setting; **strong** and **mild** score, and a Settings control lets a player hide them from solver results and missed-word lists — display only, so everyone on a board plays the same rules. A separate generation blocklist (in the repo and in Postgres, each entry with its reason) governs what we'll publish as an answer, which is a different question from what a player may type. WordNet noun categories for ~75k words ride along in a shared `domains.json` for other projects and, someday, themed generation.
 
