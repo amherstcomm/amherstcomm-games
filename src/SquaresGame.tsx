@@ -182,7 +182,18 @@ const SquaresGame = forwardRef<
   // predates difficulty and only the easy board exists.
   const [playedAt, setPlayedAt] = useState<Difficulty>(difficulty);
   const [difficultyTick, setDifficultyTick] = useState(0);
-  useEffect(() => onDifficultyChange(() => setDifficultyTick((n) => n + 1)), []);
+  // The setting itself. `playedAt` is the difficulty of the *daily* board and
+  // is only set when that fetch resolves — practice has no daily to wait for,
+  // so keying it off playedAt left it on whatever the daily last resolved to.
+  const [level, setLevel] = useState<Difficulty>(difficulty);
+  useEffect(
+    () =>
+      onDifficultyChange(() => {
+        setLevel(difficulty());
+        setDifficultyTick((n) => n + 1);
+      }),
+    []
+  );
   const { practiceAllowed } = usePrefs();
   const palette = usePalette();
   // pinned to the daily: someone who switched practice off shouldn't be left
@@ -271,7 +282,7 @@ const SquaresGame = forwardRef<
     // Practice follows the difficulty too — picking Extreme and then getting an
     // easy board to practise on is the setting not meaning anything. Falls back
     // to the size keys for a pool generated before difficulty existed.
-    const options = pool?.[playedAt] ?? pool?.[String(size)];
+    const options = pool?.[level] ?? pool?.[String(size)];
     if (!options?.length) return null;
     const fresh = options.filter((p) => p.cells.join('') !== avoid);
     const from = fresh.length ? fresh : options;
@@ -282,20 +293,20 @@ const SquaresGame = forwardRef<
   // make sure a practice board exists once the pool is here
   useEffect(() => {
     if (store.dailyMode || !pool) return;
-    const from = pool[playedAt] ?? pool[String(store.size)];
+    const from = pool[level] ?? pool[String(store.size)];
     if (!from?.length) return;
-    const want = pool[playedAt] ? from[0].size : store.size;
+    const want = pool[level] ? from[0].size : store.size;
     // Stop when the board we hold is the one we want. The previous guard also
     // required pool[playedAt] to exist, which it doesn't for a pool generated
     // before difficulty — so it never stopped, and practice redrew on every
     // render for ever.
     const wrong =
-      !store.practice || store.practice.size !== want || store.practiceAt !== playedAt;
+      !store.practice || store.practice.size !== want || store.practiceAt !== level;
     if (!wrong) return;
     const board = drawPractice(want);
-    if (board) setStore((prev) => ({ ...prev, practice: board, practiceAt: playedAt }));
+    if (board) setStore((prev) => ({ ...prev, practice: board, practiceAt: level }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [store.dailyMode, store.practice, store.size, pool, playedAt]);
+  }, [store.dailyMode, store.practice, store.size, pool, level]);
 
   const record = store.dailyMode ? store.daily[playedAt] ?? null : store.practice;
   // The board's own size, never store.size: that flips the instant you press

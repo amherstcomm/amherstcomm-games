@@ -196,7 +196,16 @@ const WeaveGame = forwardRef<
   // Changing difficulty means a different board, so the feed has to be read
   // again. A storage write re-renders nothing on its own.
   const [difficultyTick, setDifficultyTick] = useState(0);
-  useEffect(() => onDifficultyChange(() => setDifficultyTick((n) => n + 1)), []);
+  // the setting itself — practice has no daily fetch to learn it from
+  const [level, setLevel] = useState<Difficulty>(difficulty);
+  useEffect(
+    () =>
+      onDifficultyChange(() => {
+        setLevel(difficulty());
+        setDifficultyTick((n) => n + 1);
+      }),
+    []
+  );
   const [dailyError, setDailyError] = useState(false);
   const [flash, setFlash] = useState<{ text: string; good: boolean } | null>(null);
   const flashTimer = useRef<number | undefined>(undefined);
@@ -262,7 +271,7 @@ const WeaveGame = forwardRef<
   function pickPractice(size: '6x8' | '8x10', avoidBoard?: string) {
     // Practice follows the difficulty, falling back to the size keys for a
     // pool generated before difficulty existed.
-    const from = pool?.[playedAt] ?? pool?.[size];
+    const from = pool?.[level] ?? pool?.[size];
     if (!from?.length) return null;
     const options = from.filter((p) => p.board.join('') !== avoidBoard);
     const pick = (options.length ? options : from)[
