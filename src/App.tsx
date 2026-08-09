@@ -20,7 +20,7 @@ import ScrambleGame, { type ScrambleGameHandle } from '@/ScrambleGame';
 import GridGame, { type GridGameHandle } from '@/GridGame';
 import WeaveGame, { type WeaveGameHandle } from '@/WeaveGame';
 import { fetchDailyData } from '@/dailyData';
-import { DICTIONARIES, getAcceptPool, getDictionary, getDifficultyPool } from '@/dictionaries';
+import { DICTIONARIES, getAcceptPool, getDictionary, getDifficultyPool, getDisplayFilter } from '@/dictionaries';
 import { solvePattern, solveDescramble, solveBee, solveBoxed, solveGrid, findGridPath } from '@/solvers';
 import ConsentBanner from '@/ConsentBanner';
 import { PrivacyPolicy, Terms } from '@/LegalDocs';
@@ -704,6 +704,17 @@ function App() {
   const [practiceAllowed, setPracticeAllowed] = useState(initial.practiceAllowed);
   const [helpAllowed, setHelpAllowed] = useState(initial.helpAllowed);
   const [solverDictionary, setSolverDictionary] = useState(initial.solverDictionary);
+  const [wordFilter, setWordFilter] = useState(initial.wordFilter);
+  // the display-filter predicate, shared by Grid's missed-words list; the
+  // solver filters its own list where it loads
+  const [showWord, setShowWord] = useState<(w: string) => boolean>(() => () => true);
+  useEffect(() => {
+    let alive = true;
+    getDisplayFilter(wordFilter).then((f) => alive && setShowWord(() => f));
+    return () => {
+      alive = false;
+    };
+  }, [wordFilter]);
   const [onboarded, setOnboarded] = useState(initial.onboarded);
   const [session, setSession] = useState<Session | null>(null);
 
@@ -757,6 +768,7 @@ function App() {
           practiceAllowed?: boolean;
           helpAllowed?: boolean;
           solverDictionary?: string;
+          wordFilter?: string;
           startPage?: StartPage;
           onboarded?: boolean;
         }
@@ -772,6 +784,8 @@ function App() {
     if (typeof s?.helpAllowed === 'boolean') setHelpAllowed(s.helpAllowed);
     if (s?.solverDictionary)
       setSolverDictionary(asDifficulty(s.solverDictionary) ?? 'per-game');
+    if (s?.wordFilter === 'none' || s?.wordFilter === 'strong' || s?.wordFilter === 'all')
+      setWordFilter(s.wordFilter);
     if (s?.startPage && ALL_START_PAGES.includes(s.startPage)) setStartPage(s.startPage);
     if (s?.onboarded) setOnboarded(true);
     setSettingsPulled(true);
@@ -802,7 +816,7 @@ function App() {
     if (!supabase || !session || !settingsPulled) return;
     pushPending.current = true;
     const id = window.setTimeout(async () => {
-      const settings = { theme, palette, navKeys, textScale, hiddenModes, hiddenViews, lengthRange, practiceAllowed, helpAllowed, solverDictionary, startPage, onboarded };
+      const settings = { theme, palette, navKeys, textScale, hiddenModes, hiddenViews, lengthRange, practiceAllowed, helpAllowed, solverDictionary, wordFilter, startPage, onboarded };
       // update first — it needs only the update policy, which every install
       // has. `select` reveals whether a row actually matched.
       const { data, error } = await supabase!
@@ -830,7 +844,7 @@ function App() {
       window.clearTimeout(id);
       pushPending.current = false;
     };
-  }, [session, settingsPulled, theme, palette, navKeys, textScale, hiddenModes, hiddenViews, lengthRange, practiceAllowed, helpAllowed, solverDictionary, startPage, onboarded]);
+  }, [session, settingsPulled, theme, palette, navKeys, textScale, hiddenModes, hiddenViews, lengthRange, practiceAllowed, helpAllowed, solverDictionary, wordFilter, startPage, onboarded]);
 
   // surface auth errors that come back in the redirect URL (expired or
   // already-used magic links land here with no other visible sign)
@@ -1132,6 +1146,7 @@ function App() {
       practiceAllowed,
       helpAllowed,
       solverDictionary,
+      wordFilter,
       startPage,
       onboarded,
       patternPlay,
@@ -1149,7 +1164,7 @@ function App() {
       weavePlay,
       squaresPlay,
     });
-  }, [mode, dictionaries, sorts, kbOpen, theme, palette, textScale, navKeys, hiddenModes, hiddenViews, lengthRange, practiceAllowed, helpAllowed, solverDictionary, startPage, onboarded, patternPlay, beePlay, boxedPlay, descramblePlay, gridPlay, length, known, containsStr, excludedStr, rackStr, useAll, minLength, beeCenter, beeOuters, boxedLetters, solutionWords, gridLetters, gridPreset, weaveLetters, weaveSize, weavePlay, squaresPlay, squaresLetters, squaresSize]);
+  }, [mode, dictionaries, sorts, kbOpen, theme, palette, textScale, navKeys, hiddenModes, hiddenViews, lengthRange, practiceAllowed, helpAllowed, solverDictionary, wordFilter, startPage, onboarded, patternPlay, beePlay, boxedPlay, descramblePlay, gridPlay, length, known, containsStr, excludedStr, rackStr, useAll, minLength, beeCenter, beeOuters, boxedLetters, solutionWords, gridLetters, gridPreset, weaveLetters, weaveSize, weavePlay, squaresPlay, squaresLetters, squaresSize]);
 
   // keep known array sized to length
   useEffect(() => {
@@ -1166,15 +1181,19 @@ function App() {
   const [words, setWords] = useState<string[]>([]);
   useEffect(() => {
     let alive = true;
-    // the accept pool, not the raw tier: the solver's Hard is what Hard
-    // accepts in a game, so a word the solver finds is a word that scores
-    getAcceptPool(dictionaryId).then((w) => {
-      if (alive) setWords(w);
-    });
+    // The accept pool, not the raw tier: the solver's Hard is what Hard
+    // accepts in a game, so a word the solver finds is a word that scores.
+    // The display filter then hides what this player asked not to be shown —
+    // display only, so two players on one board still play the same rules.
+    Promise.all([getAcceptPool(dictionaryId), getDisplayFilter(wordFilter)]).then(
+      ([w, show]) => {
+        if (alive) setWords(wordFilter === 'none' ? w : w.filter(show));
+      }
+    );
     return () => {
       alive = false;
     };
-  }, [dictionaryId]);
+  }, [dictionaryId, wordFilter]);
 
   const rackLetters = useMemo(
     () => rackStr.toLowerCase().replace(/[^a-z]/g, '').split('').filter(Boolean),
@@ -2265,6 +2284,7 @@ function App() {
           <GridGame
             ref={gridRef}
             standardWords={acceptWordsArr ?? standardWordsArr}
+            displayWord={showWord}
             onLetterStates={setLetterStates}
             onReveal={!shownViews.includes('solve') || !helpAllowed ? undefined : (cells) => {
               setGridPreset(cells.length === 9 ? '3x3' : cells.length === 25 ? '5x5' : '4x4');
@@ -2892,6 +2912,8 @@ function App() {
           onPracticeAllowed={setPracticeAllowed}
           onHelpAllowed={setHelpAllowed}
           onSolverDictionary={setSolverDictionary}
+          wordFilter={wordFilter}
+          onWordFilter={setWordFilter}
           onToggleView={(v) =>
             setHiddenViews((prev) =>
               prev.includes(v) ? prev.filter((x) => x !== v) : [...prev, v]
@@ -2930,7 +2952,7 @@ function App() {
 
             <div className="space-y-5 text-sm text-slate-300">
               <p>
-                Anagrimoire is a free companion for word games: solvers for six kinds of
+                Anagrimoire is a free companion for word games: solvers for seven kinds of
                 puzzles, our own daily and practice versions of each to play, and
                 interactive guides to learn them.
               </p>
@@ -2962,6 +2984,56 @@ function App() {
                       playing never spoils (or copies) anyone else&apos;s puzzle. The solvers
                       can load today&apos;s NYT Spelling Bee, Letter Boxed, and Strands where
                       noted.
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-slate-300 font-medium">
+                      What do Easy, Hard and Extreme change?
+                    </p>
+                    <p>
+                      They&apos;re three separate puzzles each day, not one puzzle with a
+                      setting — each difficulty keeps its own progress, statistics,
+                      streaks and leaderboards, and you can play all three. What changes
+                      depends on the game: Guess, Scramble, Hive and Boxed draw their
+                      answers from progressively less common words; Squares and Weave
+                      grow their boards; Grid keeps its dice and widens what scores.
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-slate-300 font-medium">Which words count?</p>
+                    <p>
+                      Each difficulty is scored against its own word list — Easy is
+                      everyday English, Hard adds the less common words, Extreme takes
+                      nearly everything. What a puzzle <em>accepts</em> is deliberately
+                      one size more generous than the list its <em>answers</em> come
+                      from, so the answer is always something you might recognise while
+                      your long shots get the benefit of the doubt. The solvers use the
+                      same three lists under the same names, so a word the solver finds
+                      at Hard is a word Hard accepts.
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-slate-300 font-medium">
+                      Why was my word rejected?
+                    </p>
+                    <p>
+                      The lists are built from open dictionaries (SCOWL and friends —
+                      see Legal for credits), lowercase letters only: no proper nouns,
+                      no hyphens or apostrophes, no accents. Nothing is checked against
+                      any publisher&apos;s list, so our Hive and the NYT&apos;s bee will
+                      disagree at the margins. If a real word is missing, open an issue
+                      — the lists do get amended.
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-slate-300 font-medium">
+                      Do you filter offensive words?
+                    </p>
+                    <p>
+                      From what we publish, yes: no puzzle will hand you a slur as its
+                      answer. From what you type, no — refusing to publish a word and
+                      refusing to accept one you played are different things, and only
+                      the first is ours to decide.
                     </p>
                   </div>
                   <div>
@@ -3134,7 +3206,7 @@ function App() {
                 </h3>
                 <ul className="space-y-1.5 text-slate-400 list-disc list-inside">
                   <li>
-                    Easy and Hard word lists:{' '}
+                    All three word lists — Easy, Hard and Extreme — are built from{' '}
                     <a
                       href="https://github.com/jacksonrayhamilton/wordlist-english"
                       target="_blank"
@@ -3143,7 +3215,7 @@ function App() {
                     >
                       wordlist-english
                     </a>{' '}
-                    (MIT), built from{' '}
+                    (MIT), packaged from{' '}
                     <a
                       href="http://wordlist.aspell.net/"
                       target="_blank"
@@ -3152,7 +3224,9 @@ function App() {
                     >
                       SCOWL
                     </a>{' '}
-                    © Kevin Atkinson.
+                    © Kevin Atkinson — each difficulty cuts deeper into SCOWL&apos;s
+                    frequency tiers, and every puzzle answer at every difficulty comes
+                    from these.
                   </li>
                   <li>
                     Words we won&apos;t use as puzzle answers are drawn from the{' '}
@@ -3178,7 +3252,7 @@ function App() {
                     you&apos;re allowed to type.
                   </li>
                   <li>
-                    The Extreme list adds:{' '}
+                    What Extreme <em>accepts</em> is additionally widened by{' '}
                     <a
                       href="https://github.com/words/an-array-of-english-words"
                       target="_blank"
@@ -3196,7 +3270,8 @@ function App() {
                     >
                       Letterpress word list
                     </a>{' '}
-                    (CC0, public domain).
+                    (CC0, public domain) — it broadens what scores, never what a
+                    puzzle asks.
                   </li>
                 </ul>
                 <p className="mt-2 text-xs text-slate-500">

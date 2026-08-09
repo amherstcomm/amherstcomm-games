@@ -1,0 +1,10 @@
+# LF everywhere, on every machine, regardless of core.autocrlf. Mixed endings
+# cost a day of phantom edit failures on Windows — tooling that matches
+# multi-line text can't match across an ending it didn't expect.
+* text=auto eol=lf
+
+# binaries stay binary
+*.png binary
+*.jpg binary
+*.ico binary
+*.woff2 binary

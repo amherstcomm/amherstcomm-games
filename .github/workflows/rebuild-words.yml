@@ -1,0 +1,75 @@
+# Rebuilds the word lists end to end: band files, domains map, CSV, and the
+# Postgres words table, all from one derivation, so no consumer can drift
+# from another. Dispatch it after amending a flag list or bumping a source
+# package; it commits whatever changed to the branch it ran on.
+#
+# The database load needs SUPABASE_DB_URL (the session-pooler connection
+# string, Dashboard -> Connect) as a repo secret; without it the workflow
+# still rebuilds and commits the files and says what it skipped.
+name: Rebuild word lists
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version tag for the band files (e.g. words-v2). Also created as a git tag.'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  rebuild:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Build lists, bands and CSV
+        env:
+          WORDS_VERSION: ${{ inputs.version }}
+        run: node scripts/build-words.mjs
+      - name: Refresh the blocklist too — same sources, same run
+        run: node scripts/blocklist.mjs
+      - name: Load Postgres
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          if [ -z "$SUPABASE_DB_URL" ]; then
+            echo "::warning::SUPABASE_DB_URL not set; files rebuilt but the database was not reloaded"
+            exit 0
+          fi
+          node -e "
+            const j = require('./scripts/blocked-words.json');
+            const esc = (s) => String(s).replace(/'/g, \"''\");
+            const vals = j.words.map((w) => \`('\${esc(w.word)}','\${esc(w.scope)}','\${esc(w.origin)}')\`).join(',');
+            console.log(\`insert into public.blocked_words (word, scope, origin) values \${vals};\`);
+          " > /tmp/blocked-insert.sql
+          # one session, one transaction: either the whole reload lands or
+          # none of it does — a half-truncated words table would fail every
+          # membership check on the site
+          psql "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 <<'SQL'
+          begin;
+          truncate public.words;
+          \copy public.words (word, len, sorted, level, pos, lemma, flag, domains) from 'scripts/words.csv' with (format csv, header true, null '')
+          truncate public.blocked_words;
+          \i /tmp/blocked-insert.sql
+          commit;
+          SQL
+      - name: Commit and tag
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add src/wordbands scripts/blocked-words.json
+          if git diff --cached --quiet; then
+            echo "nothing changed"
+          else
+            git commit -m "Rebuild word lists (${{ inputs.version }})"
+            git push
+          fi
+          git tag -f "${{ inputs.version }}"
+          git push -f origin "refs/tags/${{ inputs.version }}"

@@ -51,6 +51,7 @@
     "typescript": "^5.5.3",
     "typescript-eslint": "^8.3.0",
     "vite": "^5.4.2",
-    "vitest": "^3.2.7"
+    "vitest": "^3.2.7",
+    "wordnet-db": "^3.1.14"
   }
 }

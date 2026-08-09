@@ -85,6 +85,13 @@ function sanitizeRange(value: unknown): LengthRange {
 // (q w e / a d / z s x)
 export type NavKeys = 'numpad' | 'wasd';
 
+/** Which flagged words to hide from solver results and reveal lists. Display
+ *  only — what scores never changes, and slurs are never shown regardless of
+ *  this. 'none' hides nothing; 'strong' hides the strong tier; 'all' hides
+ *  mild too. */
+export type WordFilterLevel = 'none' | 'strong' | 'all';
+const WORD_FILTERS: WordFilterLevel[] = ['none', 'strong', 'all'];
+
 export type SortKey = 'alpha' | 'length';
 export type SortDir = 'asc' | 'desc';
 export type SortPref = { key: SortKey; dir: SortDir };
@@ -104,6 +111,7 @@ export type PersistedState = {
   practiceAllowed: boolean;
   helpAllowed: boolean;
   solverDictionary: Difficulty | 'per-game';
+  wordFilter: WordFilterLevel;
   /** what the front door opens onto: the home page, the game you last had
    *  open, or one particular game for people who only ever want the one */
   startPage: StartPage;
@@ -165,6 +173,7 @@ export const DEFAULT_STATE: PersistedState = {
   practiceAllowed: true,
   helpAllowed: true,
   solverDictionary: 'per-game',
+  wordFilter: 'none',
   startPage: 'home',
   onboarded: false,
   patternPlay: false,
@@ -305,6 +314,7 @@ export function loadState(): PersistedState {
       practiceAllowed: p?.practiceAllowed !== false,
       helpAllowed: p?.helpAllowed !== false,
       solverDictionary: asDifficulty(p?.solverDictionary) ?? 'per-game',
+      wordFilter: WORD_FILTERS.includes(p?.wordFilter) ? p.wordFilter : 'none',
       startPage: ALL_START_PAGES.includes(p?.startPage) ? p.startPage : 'home',
       // A stored blob means this browser has been here before, so anyone
       // arriving from a version without the flag has already used the site

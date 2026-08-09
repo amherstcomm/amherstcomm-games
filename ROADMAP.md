@@ -142,7 +142,16 @@ so nobody can claim more solves than there are days, unlike an unbounded score.
 Doing it for Squares alone would leave one trustworthy board among seven.
 
 ### Puzzles in Postgres, and difficulty instead of dictionary size
-Three things that turned out to be one thing. Agreed in full; not started.
+**Built** (August 2026), in three stages: the daily workflow publishes a
+rolling fortnight of rows to `daily_puzzles` (RLS on, zero policies; the only
+read is `daily_puzzle()`, a security-definer RPC with no date parameter and a
+3:15 a.m. Eastern gate); the client reads the RPC first with the file feed as
+fallback, pinned by e2e tests; and `PUZZLES_SEED_SALT` mixes into every seed,
+so the public repo no longer predicts future boards. Remaining, stage four:
+retire the puzzle-data branch and the legacy feed keys once the rows have
+carried a quiet week. The original analysis follows.
+
+Three things that turned out to be one thing.
 
 **Why move the puzzle data off GitHub.** Delivery isn't the problem —
 `raw.githubusercontent.com` is Fastly-fronted and answers in under 100ms.

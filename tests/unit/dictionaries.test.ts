@@ -1,15 +1,21 @@
-// The word-list bands and accept tiers. The sizes are the measured facts the
-// difficulty design was built on; the subset rules are the promises — moving
-// up a difficulty must never start rejecting a word that was legal below it,
-// and a practice band must not contain the band below (that bug made every
-// level draw from the one beneath while appearing to work).
+// The word-list bands and accept tiers, as consumed from the published
+// artifacts. The counts are the contract with the Postgres words table —
+// both sides are built from the same rows by scripts/build-words.mjs — and
+// the subset rules are the promises: moving up a difficulty must never start
+// rejecting a word that was legal below it, a slur never scores anywhere,
+// and a practice band must not contain the band below.
 import { describe, expect, it } from 'vitest';
-import { getAcceptPool, getDictionary, getDifficultyPool } from '@/dictionaries';
+import { getAcceptPool, getDictionary, getDifficultyPool, getWordFlags } from '@/dictionaries';
 
 describe('accept tiers', () => {
-  it('easy accepts the standard list', async () => {
-    const easy = await getAcceptPool('easy');
-    expect(easy.length).toBe(67_170);
+  it('matches the words table in Postgres, tier for tier', async () => {
+    // easy is level <= 55, hard is level <= 70, extreme is every row — each
+    // minus the slurs. If one of these moves, rebuild the table and band
+    // files together (npm run build-words) in the same change, or the server
+    // will call honest players liars.
+    expect((await getAcceptPool('easy')).length).toBe(67_141);
+    expect((await getAcceptPool('hard')).length).toBe(111_370);
+    expect((await getAcceptPool('extreme')).length).toBe(276_790);
   });
 
   it('each tier contains the one below it', async () => {
@@ -18,12 +24,29 @@ describe('accept tiers', () => {
       getAcceptPool('hard'),
       getAcceptPool('extreme'),
     ]);
-    expect(hard.length).toBeGreaterThan(easy.length);
-    expect(extreme.length).toBeGreaterThan(hard.length);
     const h = new Set(hard);
     const x = new Set(extreme);
     for (const w of easy) if (!h.has(w)) throw new Error(`hard rejects "${w}" that easy accepted`);
     for (const w of hard) if (!x.has(w)) throw new Error(`extreme rejects "${w}" that hard accepted`);
+  });
+
+  it('a slur never scores, at any difficulty', async () => {
+    const flags = await getWordFlags();
+    const slurs = [...flags.entries()].filter(([, f]) => f === 'slur').map(([w]) => w);
+    expect(slurs.length).toBeGreaterThan(0);
+    for (const d of ['easy', 'hard', 'extreme'] as const) {
+      const pool = new Set(await getAcceptPool(d));
+      for (const s of slurs) {
+        if (pool.has(s)) throw new Error(`${d} accepts a slur`);
+      }
+    }
+  });
+
+  it('everyday swears score — the ruling was slurs, not swearing', async () => {
+    const easy = new Set(await getAcceptPool('easy'));
+    for (const w of ['fuck', 'shit', 'crap', 'fart']) {
+      expect(easy.has(w), `easy accepts "${w}"`).toBe(true);
+    }
   });
 
   it('a tier is sorted and free of duplicates — binary-search callers assume it', async () => {
@@ -47,8 +70,47 @@ describe('generation bands', () => {
     for (const w of extreme) if (s.has(w)) throw new Error(`"${w}" is in extreme and a band below`);
   });
 
-  it('easy generates from the common tier', async () => {
+  it('practice never deals a flagged word — same manners as the daily generator', async () => {
+    const flags = await getWordFlags();
+    for (const d of ['easy', 'hard', 'extreme'] as const) {
+      for (const w of await getDifficultyPool(d)) {
+        if (flags.has(w)) throw new Error(`${d} practice pool contains flagged "${w}"`);
+      }
+    }
+  });
+
+  it('easy generates from the common tier, minus only the flagged words', async () => {
     const [easy, common] = await Promise.all([getDifficultyPool('easy'), getDictionary('common')]);
-    expect(easy.length).toBe(common.length);
+    const flags = await getWordFlags();
+    const flaggedInCommon = common.filter((w) => flags.has(w)).length;
+    expect(easy.length).toBe(common.length - flaggedInCommon);
+    const c = new Set(common);
+    for (const w of easy) if (!c.has(w)) throw new Error(`"${w}" is not a common word`);
+  });
+});
+
+describe('the display filter', () => {
+  it("'none' shows everything", async () => {
+    const { getDisplayFilter } = await import('@/dictionaries');
+    const show = await getDisplayFilter('none');
+    for (const w of ['fuck', 'crap', 'sex', 'mouse']) expect(show(w)).toBe(true);
+  });
+
+  it("'strong' hides the strong tier and keeps mild and ordinary English", async () => {
+    const { getDisplayFilter } = await import('@/dictionaries');
+    const show = await getDisplayFilter('strong');
+    expect(show('fuck')).toBe(false);
+    expect(show('crap')).toBe(true); // mild survives this level
+    expect(show('sex')).toBe(true); // unflagged on purpose — ordinary English
+    expect(show('mouse')).toBe(true);
+  });
+
+  it("'all' hides mild too, and still never touches ordinary words", async () => {
+    const { getDisplayFilter } = await import('@/dictionaries');
+    const show = await getDisplayFilter('all');
+    expect(show('fuck')).toBe(false);
+    expect(show('crap')).toBe(false);
+    expect(show('sex')).toBe(true);
+    expect(show('escort')).toBe(true);
   });
 });
