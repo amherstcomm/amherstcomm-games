@@ -414,10 +414,12 @@ push — typecheck, lint, unit (vitest, `tests/unit/`), the feed contract
 NYT fetches skipped), and Playwright with axe (`e2e/`, WCAG A/AA on six
 routes, every network stubbed). Squares uniqueness is re-checked in the
 contract suite (August 2026) — a verified-results requirement, since a board
-with a second legal fill would flag its honest solver as a fabricator. What
-remains from the notes below: axe covers the mechanical half of WCAG, and the
-ear-test — does the narration make sense in a screen reader — still needs a
-human pass.
+with a second legal fill would flag its honest solver as a fabricator. The
+ear-test axe can't do was walked by hand with NVDA (August 2026): the games,
+the account tabs, the invite flow and modal focus all narrate sensibly. It
+found what automation couldn't — the leaderboard cards were static text in a
+dialog, spoken on hover but unreachable by Tab, and now take focus. Worth
+re-walking after any new surface; axe still covers only the mechanical half.
 
 Difficulty took a day and produced roughly a dozen bugs. Every one was found
 by playing the site or by a throwaway script, and several looked fine right up
