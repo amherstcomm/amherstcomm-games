@@ -412,9 +412,11 @@ three ways will look thin before it looks rich.
 push — typecheck, lint, unit (vitest, `tests/unit/`), the feed contract
 (`tests/contract/`, which runs the real generator for a pinned date with the
 NYT fetches skipped), and Playwright with axe (`e2e/`, WCAG A/AA on six
-routes, every network stubbed). What remains from the notes below: the
-uniqueness check on squares runs only in the generator, and axe covers the
-mechanical half of WCAG — reading order and alt-text quality still need a
+routes, every network stubbed). Squares uniqueness is re-checked in the
+contract suite (August 2026) — a verified-results requirement, since a board
+with a second legal fill would flag its honest solver as a fabricator. What
+remains from the notes below: axe covers the mechanical half of WCAG, and the
+ear-test — does the narration make sense in a screen reader — still needs a
 human pass.
 
 Difficulty took a day and produced roughly a dozen bugs. Every one was found

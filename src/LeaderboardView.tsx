@@ -124,12 +124,17 @@ export default function LeaderboardView({ signedIn }: { signedIn: boolean }) {
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap gap-2">
-        <div className="inline-flex flex-wrap justify-center max-w-full rounded-lg bg-white/5 border border-white/10 p-0.5 gap-0.5">
+        <div
+          role="group"
+          aria-label="How many days the boards cover"
+          className="inline-flex flex-wrap justify-center max-w-full rounded-lg bg-white/5 border border-white/10 p-0.5 gap-0.5"
+        >
           {WINDOWS.map((w) => (
             <button
               key={w.days}
               onMouseDown={(e) => e.preventDefault()}
               onClick={() => setDays(w.days)}
+              aria-pressed={days === w.days}
               className={`px-3 py-1.5 rounded-md text-sm font-semibold transition-colors
                 ${days === w.days ? 'bg-emerald-400/15 text-emerald-300' : 'text-slate-400 hover:text-white'}`}
             >
@@ -140,12 +145,17 @@ export default function LeaderboardView({ signedIn }: { signedIn: boolean }) {
 
         {/* the friends scope needs someone to be — signed out, there's only one board */}
         {signedIn && (
-          <div className="inline-flex rounded-lg bg-white/5 border border-white/10 p-0.5 gap-0.5">
+          <div
+            role="group"
+            aria-label="Whose results the boards show"
+            className="inline-flex rounded-lg bg-white/5 border border-white/10 p-0.5 gap-0.5"
+          >
             {(['global', 'friends'] as const).map((s) => (
               <button
                 key={s}
                 onMouseDown={(e) => e.preventDefault()}
                 onClick={() => setScope(s)}
+                aria-pressed={scope === s}
                 className={`px-3 py-1.5 rounded-md text-sm font-semibold transition-colors
                   ${scope === s ? 'bg-emerald-400/15 text-emerald-300' : 'text-slate-400 hover:text-white'}`}
               >
