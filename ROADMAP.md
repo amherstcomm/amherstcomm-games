@@ -521,8 +521,8 @@ Both original blockers landed differently than expected:
   solving, so the two legitimately diverge — verifying one against the other
   flagged real solves until the result started carrying its own evidence.
 
-### Friends / competition
-**Built** (August 2026), pending live two-account testing. The jump turned out
+### ~~Friends / competition~~ — done
+**Built** (August 2026). The jump turned out
 smaller than feared, because the crossing stayed narrow: table RLS is still
 "own rows only" everywhere — the three new tables (`friendships`,
 `friend_blocks`, `friend_invites`) have zero policies and revoked grants — and
