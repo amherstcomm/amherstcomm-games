@@ -399,7 +399,9 @@ export default function AccountModal({
                 </p>
               )}
 
-              <div className="mb-2 flex flex-wrap gap-2 items-center">
+              {/* polite, so the link (and the Copied confirmation) get read out
+                  when they appear rather than needing to be found */}
+              <div className="mb-2 flex flex-wrap gap-2 items-center" aria-live="polite">
                 {inviteLink ? (
                   <>
                     <code className="flex-1 min-w-[12rem] px-3 py-2 rounded-lg bg-black/30 border border-white/15 text-xs text-slate-200 break-all select-all">
@@ -440,12 +442,14 @@ export default function AccountModal({
                           <span className="flex-1 min-w-0 truncate font-medium">{f.name}</span>
                           <button
                             onClick={() => circleAction(removeFriend, f.name)}
+                            aria-label={`Remove ${f.name}`}
                             className="text-xs text-slate-500 hover:text-white transition-colors"
                           >
                             Remove
                           </button>
                           <button
                             onClick={() => circleAction(blockFriend, f.name)}
+                            aria-label={`Block ${f.name}`}
                             className="text-xs text-slate-500 hover:text-rose-300 transition-colors"
                           >
                             Block
@@ -471,6 +475,7 @@ export default function AccountModal({
                             <span className="flex-1 min-w-0 truncate">{n}</span>
                             <button
                               onClick={() => circleAction(unblockFriend, n)}
+                              aria-label={`Unblock ${n}`}
                               className="text-xs text-slate-500 hover:text-white transition-colors"
                             >
                               Unblock

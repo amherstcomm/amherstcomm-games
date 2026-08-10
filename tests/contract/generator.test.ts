@@ -5,10 +5,14 @@
 // skipped, and then asserts every promise the client relies on.
 import { execFile } from 'node:child_process';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+// the real generator's own solver, so the check and the puzzle can't drift
+// @ts-expect-error plain-JS module without a declaration file
+import { countSolutions, indexWords } from '../../scripts/squares.mjs';
 
 const run = promisify(execFile);
 
@@ -211,6 +215,54 @@ describe('squares', () => {
           }
         });
       }
+    }
+  });
+
+  // Uniqueness, re-checked at the seam rather than trusted to the generator.
+  // This is a verified-results requirement, not puzzle aesthetics: a Squares
+  // win must reconstruct THE answer grid to pass result_is_plausible, so a
+  // board with a second legal fill flags an honest solver as a fabricator.
+  // Checked against the same standard tier the game accepts typing against —
+  // unfiltered, as the generator's own check is, because a square with a rude
+  // second solution is still a square with two solutions.
+  it('every published board has exactly one legal fill, and it is the published answer', () => {
+    const require = createRequire(import.meta.url);
+    const standard = new Set<string>();
+    for (const f of [
+      'english-words-10', 'english-words-20', 'english-words-35',
+      'english-words-40', 'english-words-50', 'english-words-55',
+      'american-words-10', 'american-words-20', 'american-words-35',
+      'american-words-40', 'american-words-50', 'american-words-55',
+    ]) {
+      for (const raw of require(`wordlist-english/${f}.json`)) {
+        const w = String(raw).toLowerCase();
+        if (/^[a-z]+$/.test(w)) standard.add(w);
+      }
+    }
+    const words = [...standard];
+    const index = { 4: indexWords(words, 4), 5: indexWords(words, 5) };
+
+    const check = (board: Feed, where: string) => {
+      const size = board.size as 4 | 5;
+      const rows = decode(board.answer).rows as string[];
+      // the answer must itself be legal in the accepted list — otherwise the
+      // "one" solution the search finds would be some other grid entirely
+      for (const r of rows) expect(standard.has(r), `${where}: row "${r}"`).toBe(true);
+      for (let c = 0; c < size; c++) {
+        const col = rows.map((r) => r[c]).join('');
+        expect(standard.has(col), `${where}: column "${col}"`).toBe(true);
+      }
+      expect(countSolutions(index[size], board.cells, size), `${where}: fills`).toBe(1);
+    };
+
+    for (const variant of VARIANTS) {
+      for (const d of DIFFICULTIES) {
+        check(feed(variant, 'squares').byDifficulty[d], `${variant}squares ${d}`);
+      }
+    }
+    const pool = feeds.get('squares-pool')!;
+    for (const d of DIFFICULTIES) {
+      (pool.byDifficulty[d] as Feed[]).forEach((b, i) => check(b, `squares pool ${d} #${i}`));
     }
   });
 });

@@ -412,10 +412,14 @@ three ways will look thin before it looks rich.
 push — typecheck, lint, unit (vitest, `tests/unit/`), the feed contract
 (`tests/contract/`, which runs the real generator for a pinned date with the
 NYT fetches skipped), and Playwright with axe (`e2e/`, WCAG A/AA on six
-routes, every network stubbed). What remains from the notes below: the
-uniqueness check on squares runs only in the generator, and axe covers the
-mechanical half of WCAG — reading order and alt-text quality still need a
-human pass.
+routes, every network stubbed). Squares uniqueness is re-checked in the
+contract suite (August 2026) — a verified-results requirement, since a board
+with a second legal fill would flag its honest solver as a fabricator. The
+ear-test axe can't do was walked by hand with NVDA (August 2026): the games,
+the account tabs, the invite flow and modal focus all narrate sensibly. It
+found what automation couldn't — the leaderboard cards were static text in a
+dialog, spoken on hover but unreachable by Tab, and now take focus. Worth
+re-walking after any new surface; axe still covers only the mechanical half.
 
 Difficulty took a day and produced roughly a dozen bugs. Every one was found
 by playing the site or by a throwaway script, and several looked fine right up
@@ -521,8 +525,8 @@ Both original blockers landed differently than expected:
   solving, so the two legitimately diverge — verifying one against the other
   flagged real solves until the result started carrying its own evidence.
 
-### Friends / competition
-**Built** (August 2026), pending live two-account testing. The jump turned out
+### ~~Friends / competition~~ — done
+**Built** (August 2026). The jump turned out
 smaller than feared, because the crossing stayed narrow: table RLS is still
 "own rows only" everywhere — the three new tables (`friendships`,
 `friend_blocks`, `friend_invites`) have zero policies and revoked grants — and

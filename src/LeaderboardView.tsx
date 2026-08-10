@@ -42,7 +42,14 @@ function Board({
   const { label, value, detail } = BOARD_LABELS[game];
   const Icon = ICONS[game];
   return (
-    <div className="rounded-xl bg-white/5 border border-white/10 p-4">
+    // Focusable on purpose, though nothing here is clickable: inside a dialog
+    // a screen reader speaks what focus lands on, and static text is where
+    // focus never lands — Tab went from the toggles straight past every
+    // result. No aria-label, so focus reads the card's actual contents.
+    <div
+      tabIndex={0}
+      className="rounded-xl bg-white/5 border border-white/10 p-4 focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400/70"
+    >
       <h4 className="flex items-center gap-2 text-sm font-semibold text-white mb-2">
         <Icon className="w-3.5 h-3.5 text-accent" />
         {label}
@@ -124,12 +131,17 @@ export default function LeaderboardView({ signedIn }: { signedIn: boolean }) {
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap gap-2">
-        <div className="inline-flex flex-wrap justify-center max-w-full rounded-lg bg-white/5 border border-white/10 p-0.5 gap-0.5">
+        <div
+          role="group"
+          aria-label="How many days the boards cover"
+          className="inline-flex flex-wrap justify-center max-w-full rounded-lg bg-white/5 border border-white/10 p-0.5 gap-0.5"
+        >
           {WINDOWS.map((w) => (
             <button
               key={w.days}
               onMouseDown={(e) => e.preventDefault()}
               onClick={() => setDays(w.days)}
+              aria-pressed={days === w.days}
               className={`px-3 py-1.5 rounded-md text-sm font-semibold transition-colors
                 ${days === w.days ? 'bg-emerald-400/15 text-emerald-300' : 'text-slate-400 hover:text-white'}`}
             >
@@ -140,12 +152,17 @@ export default function LeaderboardView({ signedIn }: { signedIn: boolean }) {
 
         {/* the friends scope needs someone to be — signed out, there's only one board */}
         {signedIn && (
-          <div className="inline-flex rounded-lg bg-white/5 border border-white/10 p-0.5 gap-0.5">
+          <div
+            role="group"
+            aria-label="Whose results the boards show"
+            className="inline-flex rounded-lg bg-white/5 border border-white/10 p-0.5 gap-0.5"
+          >
             {(['global', 'friends'] as const).map((s) => (
               <button
                 key={s}
                 onMouseDown={(e) => e.preventDefault()}
                 onClick={() => setScope(s)}
+                aria-pressed={scope === s}
                 className={`px-3 py-1.5 rounded-md text-sm font-semibold transition-colors
                   ${scope === s ? 'bg-emerald-400/15 text-emerald-300' : 'text-slate-400 hover:text-white'}`}
               >
