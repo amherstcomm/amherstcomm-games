@@ -651,6 +651,20 @@ roughly in order of how well they'd read:
 Worth prototyping the generated version first: if it doesn't read well, the
 curation cost of the public-domain route is the real cost of the game.
 
+**Probed** (August 2026), and the public-domain route is cheap, which moots
+the generated-sentences prototype. Bartlett's Familiar Quotations 10th ed.
+(1919, Project Gutenberg #27889) parsed to 6,840 entries;
+`scripts/cryptogram-harvest.mjs` filters them to **1,642 candidates** — ASCII,
+50–100 letters, every word in the shipped dictionary (which drops archaic
+spellings), no proper-noun usage, enough letter repetition to give the cipher
+a way in, blocklist, dedupe. The two big cuts are length (6,803→2,731) and
+dictionary membership (→1,900). What remains before the pool is real: a human
+skim for mid-thought verse fragments, which the filters can't judge. Sourcing
+rules worth keeping: quote *collections*, not books; Gutenberg only, so
+translations are old enough to be public domain themselves; Wikiquote is
+CC BY-SA and never a source. Case is irrelevant in-cipher, so verse
+capitalisation artifacts only matter on the reveal.
+
 **Difficulty maps cleanly**, better than most games here: how many letters
 start revealed, how long the passage is, and whether the cipher preserves word
 boundaries. No second dial needed.
