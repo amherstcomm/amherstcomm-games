@@ -26,6 +26,23 @@ describe('the /friend route', () => {
   });
 });
 
+describe('the account tabs', () => {
+  it('names the tab, and the bare form settles onto the first', () => {
+    expect(parsePath('/account')).toEqual({ kind: 'account', tab: 'personal' });
+    expect(parsePath('/account/personal')).toEqual({ kind: 'account', tab: 'personal' });
+    expect(parsePath('/account/friends')).toEqual({ kind: 'account', tab: 'friends' });
+    expect(pathOf({ kind: 'account', tab: 'friends' })).toBe('/account/friends');
+  });
+
+  it('a tab that does not exist is not an address', () => {
+    expect(parsePath('/account/enemies')).toBeNull();
+  });
+
+  it('/sign-in is still the account panel wearing its other face', () => {
+    expect(parsePath('/sign-in')).toEqual({ kind: 'account', tab: 'personal' });
+  });
+});
+
 describe('the pending stash', () => {
   it('holds a code across reads until cleared', async () => {
     const m = await freshFriends();

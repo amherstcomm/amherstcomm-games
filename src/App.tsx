@@ -38,6 +38,7 @@ import {
   parsePath,
   pathOf,
   titleOf,
+  type AccountTab,
   type Panel,
   type Route,
   type SettingsTab,
@@ -475,7 +476,7 @@ function initialPlay(mode: Mode, stored: boolean): boolean {
 
 // Panels and legal documents are addresses too, so arriving at one opens it.
 const panelAtLoad = (p: Panel) => initialRoute.kind === 'panel' && initialRoute.panel === p;
-const isOverlay = (r: Route) => r.kind === 'panel' || r.kind === 'legal';
+const isOverlay = (r: Route) => r.kind === 'panel' || r.kind === 'account' || r.kind === 'legal';
 
 // An invite link stashes its code before anything else happens: accepting may
 // need a sign-in first, and OAuth leaves the page entirely — the stash is what
@@ -695,7 +696,15 @@ function App() {
   );
   const [learnMode, setLearnMode] = useState(initialGame?.view === 'learn');
   const [accountOpen, setAccountOpen] = useState(
-    panelAtLoad('account') || initialRoute.kind === 'friend'
+    initialRoute.kind === 'account' || initialRoute.kind === 'friend'
+  );
+  // an invite link goes straight to the tab it's about
+  const [accountTab, setAccountTab] = useState<AccountTab>(
+    initialRoute.kind === 'account'
+      ? initialRoute.tab
+      : initialRoute.kind === 'friend'
+        ? 'friends'
+        : 'personal'
   );
   const [settingsOpen, setSettingsOpen] = useState(initialRoute.kind === 'settings');
   const [settingsTab, setSettingsTab] = useState<SettingsTab>(
@@ -1028,11 +1037,12 @@ function App() {
     if (legalOpen) return { kind: 'legal', doc: legalTab };
     if (statsOpen) return { kind: 'stats', tab: statsTab };
     if (settingsOpen) return { kind: 'settings', tab: settingsTab };
-    const panel: Panel | null = keysOpen ? 'keys' : accountOpen ? 'account' : aboutOpen ? 'about' : null;
+    if (accountOpen) return { kind: 'account', tab: accountTab };
+    const panel: Panel | null = keysOpen ? 'keys' : aboutOpen ? 'about' : null;
     if (panel) return { kind: 'panel', panel };
     if (atHome) return { kind: 'home' };
     return { kind: 'game', view: currentView, slug: MODE_SLUG[mode], daily: dailyByMode[mode] };
-  }, [legalOpen, legalTab, statsOpen, statsTab, settingsOpen, settingsTab, keysOpen, accountOpen, aboutOpen, atHome, currentView, mode, dailyByMode]);
+  }, [legalOpen, legalTab, statsOpen, statsTab, settingsOpen, settingsTab, keysOpen, accountOpen, accountTab, aboutOpen, atHome, currentView, mode, dailyByMode]);
 
   // Did we put the panel in the history ourselves? Closing one we pushed is a
   // step back rather than a new address, so Back doesn't reopen what was just
@@ -1086,7 +1096,9 @@ function App() {
     setAboutOpen(r.kind === 'panel' && r.panel === 'about');
     setKeysOpen(r.kind === 'panel' && r.panel === 'keys');
     if (r.kind === 'friend') stashInvite(r.code);
-    setAccountOpen((r.kind === 'panel' && r.panel === 'account') || r.kind === 'friend');
+    setAccountOpen(r.kind === 'account' || r.kind === 'friend');
+    if (r.kind === 'account') setAccountTab(r.tab);
+    if (r.kind === 'friend') setAccountTab('friends');
     setStatsOpen(r.kind === 'stats');
     setSettingsOpen(r.kind === 'settings');
     setLegalOpen(r.kind === 'legal');
@@ -2874,7 +2886,14 @@ function App() {
         />
       )}
 
-      {accountOpen && <AccountModal session={session} onClose={() => setAccountOpen(false)} />}
+      {accountOpen && (
+        <AccountModal
+          session={session}
+          tab={accountTab}
+          onTab={setAccountTab}
+          onClose={() => setAccountOpen(false)}
+        />
+      )}
 
       <ConsentBanner
         onReadPolicy={() => {

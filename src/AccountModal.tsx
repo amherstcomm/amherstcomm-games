@@ -24,9 +24,10 @@ import {
   type InviteFailure,
 } from '@/friends';
 import { useModalA11y } from '@/useModalA11y';
+import type { AccountTab } from '@/routes';
 
 const INVITE_MESSAGES: Record<Exclude<InviteFailure, 'not signed in'>, string> = {
-  'name required': 'Set a display name first — friends see you by it.',
+  'name required': 'Set a display name on the Personal tab first — friends see you by it.',
   'too many': 'Ten links are already out there. Each lasts a week; one of them can be shared again.',
   error: 'Couldn’t create a link just now — try again in a moment.',
 };
@@ -51,9 +52,14 @@ function newCode(): string {
 
 export default function AccountModal({
   session,
+  tab,
+  onTab,
   onClose,
 }: {
   session: Session | null;
+  /** the open tab, held by App so it can live in the address bar */
+  tab: AccountTab;
+  onTab: (t: AccountTab) => void;
   onClose: () => void;
 }) {
   const [email, setEmail] = useState('');
@@ -104,9 +110,6 @@ export default function AccountModal({
 
   // ---- Friends -------------------------------------------------------------
   const [circle, setCircle] = useState<Circle | null>(null);
-  // the lists live behind one button — a circle that grows for years should
-  // cost the panel one row, not one row per friend
-  const [manageOpen, setManageOpen] = useState(false);
   const [inviteLink, setInviteLink] = useState<string | null>(null);
   const [inviteMsg, setInviteMsg] = useState('');
   const [minting, setMinting] = useState(false);
@@ -137,7 +140,9 @@ export default function AccountModal({
         setAcceptMsg(`You and ${r.name} are friends now.`);
         fetchCircle().then((c) => alive && setCircle(c));
       } else if (r.reason === 'name required') {
-        setAcceptMsg('You have a friend invite waiting — set a display name above and it goes through.');
+        setAcceptMsg(
+          'You have a friend invite waiting — set a display name on the Personal tab and it goes through.'
+        );
       } else if (r.reason === 'error' || r.reason === 'not signed in') {
         setAcceptMsg('Couldn’t reach the server to accept the invite — it will be retried here.');
       } else {
@@ -323,7 +328,28 @@ export default function AccountModal({
             <p className="text-sm text-slate-400 mb-5">
               Signed in as <span className="text-slate-200">{session.user.email}</span>
             </p>
-            <div className="mb-6">
+
+            {/* Two halves here too: who you are, and who you play against. */}
+            <div className="inline-flex flex-wrap rounded-xl bg-white/5 border border-white/10 p-1 gap-1 mb-5">
+              {(
+                [
+                  { id: 'personal', label: 'Personal' },
+                  { id: 'friends', label: 'Friends' },
+                ] as const
+              ).map(({ id, label }) => (
+                <button
+                  key={id}
+                  onClick={() => onTab(id)}
+                  aria-current={tab === id ? 'page' : undefined}
+                  className={`px-4 h-9 rounded-lg text-sm font-semibold transition-colors
+                    ${tab === id ? 'bg-emerald-400 text-ink' : 'text-slate-300 hover:bg-white/10'}`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+
+            <div className={`mb-6 ${tab === 'personal' ? '' : 'hidden'}`}>
               <label
                 htmlFor="display-name"
                 className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2"
@@ -361,7 +387,7 @@ export default function AccountModal({
               </p>
             </div>
 
-            <div className="mb-6">
+            <div className={`mb-6 ${tab === 'friends' ? '' : 'hidden'}`}>
               <h3 className="flex items-center gap-1.5 text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">
                 <Users className="w-3.5 h-3.5 text-accent" />
                 Friends
@@ -395,17 +421,6 @@ export default function AccountModal({
                     {minting ? 'Creating…' : 'Invite a friend'}
                   </button>
                 )}
-                {circle && (circle.friends.length > 0 || circle.blocked.length > 0) && (
-                  <button
-                    onClick={() => setManageOpen((v) => !v)}
-                    aria-expanded={manageOpen}
-                    className="inline-flex items-center px-4 h-10 rounded-lg text-sm font-semibold bg-white/5 border border-white/10 text-slate-300 hover:bg-white/10 hover:text-white transition-colors"
-                  >
-                    {manageOpen
-                      ? 'Done'
-                      : `Manage · ${circle.friends.length} friend${circle.friends.length === 1 ? '' : 's'}`}
-                  </button>
-                )}
               </div>
               {inviteMsg && (
                 <p className="mb-2 text-xs text-amber-300" role="status">
@@ -413,7 +428,7 @@ export default function AccountModal({
                 </p>
               )}
 
-              {manageOpen && circle && (
+              {circle && (circle.friends.length > 0 || circle.blocked.length > 0) && (
                 <div className="mb-2 rounded-xl bg-white/5 border border-white/10 p-3">
                   {circle.friends.length > 0 ? (
                     <ul className="space-y-1 max-h-64 overflow-y-auto pr-1">
@@ -478,13 +493,13 @@ export default function AccountModal({
 
             <button
               onClick={signOut}
-              className="inline-flex items-center gap-1.5 px-4 h-10 rounded-lg text-sm font-semibold bg-white/5 border border-white/10 text-slate-300 hover:bg-white/10 hover:text-white transition-colors"
+              className={`${tab === 'personal' ? 'inline-flex' : 'hidden'} items-center gap-1.5 px-4 h-10 rounded-lg text-sm font-semibold bg-white/5 border border-white/10 text-slate-300 hover:bg-white/10 hover:text-white transition-colors`}
             >
               <LogOut className="w-4 h-4" />
               Sign out
             </button>
 
-            <div className="mt-6 pt-5 border-t border-white/10">
+            <div className={`mt-6 pt-5 border-t border-white/10 ${tab === 'personal' ? '' : 'hidden'}`}>
               <h3 className="flex items-center gap-1.5 text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">
                 <AlertTriangle className="w-3.5 h-3.5 text-danger" />
                 Leaving
