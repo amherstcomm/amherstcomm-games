@@ -7,10 +7,12 @@ import {
   WINDOWS,
   type BoardGame,
   type Boards,
+  type BoardScope,
 } from '@/leaderboard';
 import { formatElapsed } from '@/useUpTimer';
 import { difficulty, onDifficultyChange, type Difficulty } from '@/difficulty';
 import DifficultyTabs from '@/DifficultyTabs';
+import { fetchFriendNames } from '@/friends';
 
 const ICONS: Record<BoardGame, typeof Grid3x3> = {
   guess: Grid3x3,
@@ -25,7 +27,17 @@ const ICONS: Record<BoardGame, typeof Grid3x3> = {
 
 const ORDER: BoardGame[] = ['guess', 'scramble', 'hive', 'grid', 'box', 'weave', 'squares4', 'squares5'];
 
-function Board({ game, rows, me }: { game: BoardGame; rows: Boards[BoardGame]; me: string | null }) {
+function Board({
+  game,
+  rows,
+  me,
+  friends,
+}: {
+  game: BoardGame;
+  rows: Boards[BoardGame];
+  me: string | null;
+  friends: Set<string>;
+}) {
   if (!rows.length) return null;
   const { label, value, detail } = BOARD_LABELS[game];
   const Icon = ICONS[game];
@@ -38,15 +50,24 @@ function Board({ game, rows, me }: { game: BoardGame; rows: Boards[BoardGame]; m
       <ol className="space-y-1">
         {rows.map((r, i) => {
           const mine = me !== null && r.name.toLowerCase() === me.toLowerCase();
+          // a word beside the colour, so the distinction survives any palette
+          const friend = !mine && friends.has(r.name.toLowerCase());
           return (
             <li
               key={r.name}
               className={`flex items-baseline gap-2 text-sm rounded-md px-2 py-1 ${
-                mine ? 'bg-amber-400/10 text-amber-100' : 'text-slate-300'
+                mine
+                  ? 'bg-amber-400/10 text-amber-100'
+                  : friend
+                    ? 'bg-sky-400/10 text-sky-200'
+                    : 'text-slate-300'
               }`}
             >
               <span className="w-5 shrink-0 text-xs text-slate-500 tabular-nums">{i + 1}</span>
-              <span className="flex-1 min-w-0 truncate font-medium">{r.name}</span>
+              <span className="flex-1 min-w-0 truncate font-medium">
+                {r.name}
+                {friend && <span className="text-xs font-normal text-sky-300/80"> (friend)</span>}
+              </span>
               <span className="tabular-nums shrink-0">{value(r.value)}</span>
               {r.detail !== null && (
                 <span className="text-xs text-slate-500 tabular-nums shrink-0 hidden sm:inline">
@@ -67,6 +88,7 @@ export default function LeaderboardView({ signedIn }: { signedIn: boolean }) {
   const [level, setLevel] = useState<Difficulty>(difficulty);
   useEffect(() => onDifficultyChange(() => setLevel(difficulty())), []);
   const [days, setDays] = useState<number>(1);
+  const [scope, setScope] = useState<BoardScope>('global');
   const [boards, setBoards] = useState<Boards | null>(null);
   const [state, setState] = useState<'loading' | 'ready' | 'error'>('loading');
   const [me, setMe] = useState<string | null>(null);
@@ -74,7 +96,7 @@ export default function LeaderboardView({ signedIn }: { signedIn: boolean }) {
   useEffect(() => {
     let alive = true;
     setState('loading');
-    fetchBoards(days, level).then((b) => {
+    fetchBoards(days, level, scope).then((b) => {
       if (!alive) return;
       setBoards(b);
       setState(b ? 'ready' : 'error');
@@ -82,12 +104,16 @@ export default function LeaderboardView({ signedIn }: { signedIn: boolean }) {
     return () => {
       alive = false;
     };
-  }, [days, level]);
+  }, [days, level, scope]);
+
+  // who counts as a friend on these boards; empty when signed out
+  const [friends, setFriends] = useState<Set<string>>(() => new Set());
 
   useEffect(() => {
     if (!signedIn) return;
     let alive = true;
     fetchDisplayName().then((n) => alive && setMe(n));
+    fetchFriendNames().then((f) => alive && setFriends(f));
     return () => {
       alive = false;
     };
@@ -97,18 +123,37 @@ export default function LeaderboardView({ signedIn }: { signedIn: boolean }) {
 
   return (
     <div className="space-y-3">
-      <div className="inline-flex flex-wrap justify-center max-w-full rounded-lg bg-white/5 border border-white/10 p-0.5 gap-0.5">
-        {WINDOWS.map((w) => (
-          <button
-            key={w.days}
-            onMouseDown={(e) => e.preventDefault()}
-            onClick={() => setDays(w.days)}
-            className={`px-3 py-1.5 rounded-md text-sm font-semibold transition-colors
-              ${days === w.days ? 'bg-emerald-400/15 text-emerald-300' : 'text-slate-400 hover:text-white'}`}
-          >
-            {w.label}
-          </button>
-        ))}
+      <div className="flex flex-wrap gap-2">
+        <div className="inline-flex flex-wrap justify-center max-w-full rounded-lg bg-white/5 border border-white/10 p-0.5 gap-0.5">
+          {WINDOWS.map((w) => (
+            <button
+              key={w.days}
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => setDays(w.days)}
+              className={`px-3 py-1.5 rounded-md text-sm font-semibold transition-colors
+                ${days === w.days ? 'bg-emerald-400/15 text-emerald-300' : 'text-slate-400 hover:text-white'}`}
+            >
+              {w.label}
+            </button>
+          ))}
+        </div>
+
+        {/* the friends scope needs someone to be — signed out, there's only one board */}
+        {signedIn && (
+          <div className="inline-flex rounded-lg bg-white/5 border border-white/10 p-0.5 gap-0.5">
+            {(['global', 'friends'] as const).map((s) => (
+              <button
+                key={s}
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => setScope(s)}
+                className={`px-3 py-1.5 rounded-md text-sm font-semibold transition-colors
+                  ${scope === s ? 'bg-emerald-400/15 text-emerald-300' : 'text-slate-400 hover:text-white'}`}
+              >
+                {s === 'global' ? 'Everyone' : 'Friends'}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
@@ -121,17 +166,19 @@ export default function LeaderboardView({ signedIn }: { signedIn: boolean }) {
       )}
       {state === 'ready' && !played.length && (
         <p className="text-sm text-slate-400 py-6 text-center">
-          Nothing here yet for this stretch. Boards only count players who&apos;ve set a
-          display name.
+          {scope === 'friends'
+            ? 'Nothing from your circle for this stretch. Invite links live under Account — and your own dailies count here too.'
+            : 'Nothing here yet for this stretch. Boards only count players who’ve set a display name.'}
         </p>
       )}
 
       {state === 'ready' && played.map((g) => (
-        <Board key={g} game={g} rows={boards![g]} me={me} />
+        <Board key={g} game={g} rows={boards![g]} me={me} friends={friends} />
       ))}
 
       <p className="text-xs text-slate-500 pt-1">
-        Dailies only, top ten. {me === null
+        {scope === 'friends' ? 'Dailies only, just your circle.' : 'Dailies only, top ten.'}{' '}
+        {me === null
           ? 'Set a display name under Account to take part — without one you don’t appear.'
           : `You appear as ${me}.`}{' '}
         Multi-day boards count how often you played as well as how well, so turning up

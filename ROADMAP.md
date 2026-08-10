@@ -522,7 +522,38 @@ Both original blockers landed differently than expected:
   flagged real solves until the result started carrying its own evidence.
 
 ### Friends / competition
-The biggest architectural jump. Everything so far is "you can only read your
+**Built** (August 2026), pending live two-account testing. The jump turned out
+smaller than feared, because the crossing stayed narrow: table RLS is still
+"own rows only" everywhere — the three new tables (`friendships`,
+`friend_blocks`, `friend_invites`) have zero policies and revoked grants — and
+the only path across is definer RPCs returning names and numbers. The
+decisions, as made:
+
+- **Invite links, not search.** A definer function mints a week-long
+  multi-use code; `/friend/<code>` opens the account panel and the code is
+  stashed in storage so it survives the OAuth round trip. Nobody is
+  discoverable who didn't hand someone a link — a name-search endpoint would
+  have been the enumeration oracle the display-name work refused to build.
+- **No pending state.** Minting and sharing a link is the requester's
+  consent; accepting is the other's. One unordered row per pair
+  (`user_a < user_b`), which deleted the whole request state machine.
+- **Display names required on both ends** — the existing opt-in, reused.
+- **Blocks are unilateral and silent.** They survive unfriending, kill
+  accepts in both directions, and every dead end an outsider can probe —
+  missing code, expired, blocked — reads identically as 'invalid'.
+- **One set of board queries.** `leaderboard()` was refactored into a shared
+  `boards_for(..., p_users)` core; the friends board is the same five queries
+  scoped to your circle plus yourself, so a rank means the same thing on
+  either scope. The Stats → Boards view grew an Everyone/Friends toggle.
+- Rate limits live in the definer functions (ten live codes, hundred
+  friends); the account-deletion cascade stays list-free because every new
+  table references `auth.users on delete cascade`.
+
+Verified in SQL with fabricated JWT claims: the full invite → accept → list →
+scoped-board → block → unblock → remove machine, plus revoke probes as both
+web roles.
+
+The original note follows. Everything so far is "you can only read your
 own rows"; friends means mutual relationships, invitations, and RLS that lets
 a friend read *some* of your results, plus blocking and removal. Build after
 display names exist and after leaderboards prove the aggregate pattern.

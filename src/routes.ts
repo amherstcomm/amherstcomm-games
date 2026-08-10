@@ -18,10 +18,11 @@ import type { Mode } from '@/storage';
 
 export type View = 'solve' | 'play' | 'learn';
 export type Slug = 'guess' | 'scramble' | 'hive' | 'grid' | 'boxed' | 'weave' | 'squares';
-export type Panel = 'keys' | 'account' | 'about';
+export type Panel = 'keys' | 'about';
 export type LegalDoc = 'notices' | 'privacy' | 'terms';
 export type StatsTab = 'overall' | 'daily' | 'practice' | 'history' | 'boards';
 export type SettingsTab = 'site' | 'games' | 'privacy';
+export type AccountTab = 'personal' | 'friends';
 
 // the slug is what a person reads; the mode id is what storage is keyed on,
 // so they don't have to match and 'pattern' stays put internally
@@ -52,10 +53,11 @@ export const SLUG_NAME: Record<Slug, string> = {
 };
 
 const VIEWS: View[] = ['solve', 'play', 'learn'];
-const PANELS: Panel[] = ['keys', 'account', 'about'];
+const PANELS: Panel[] = ['keys', 'about'];
 const DOCS: LegalDoc[] = ['notices', 'privacy', 'terms'];
 const STATS_TABS: StatsTab[] = ['overall', 'daily', 'practice', 'history', 'boards'];
 const SETTINGS_TABS: SettingsTab[] = ['site', 'games', 'privacy'];
+const ACCOUNT_TABS: AccountTab[] = ['personal', 'friends'];
 
 // A panel with tabs names the tab, always — /stats/overall rather than a bare
 // /stats that means the same thing. One state, one address, no exceptions to
@@ -63,6 +65,7 @@ const SETTINGS_TABS: SettingsTab[] = ['site', 'games', 'privacy'];
 const DEFAULT_STATS: StatsTab = 'overall';
 const DEFAULT_SETTINGS: SettingsTab = 'site';
 const DEFAULT_DOC: LegalDoc = 'notices';
+const DEFAULT_ACCOUNT: AccountTab = 'personal';
 
 // Share from dev and the link points at dev; www is folded into the apex so
 // shared text reads the way the site is canonically named.
@@ -83,7 +86,11 @@ export type Route =
   | { kind: 'panel'; panel: Panel }
   | { kind: 'stats'; tab: StatsTab }
   | { kind: 'settings'; tab: SettingsTab }
-  | { kind: 'legal'; doc: LegalDoc };
+  // account grew tabs when friends moved in, so it names them like the others
+  | { kind: 'account'; tab: AccountTab }
+  | { kind: 'legal'; doc: LegalDoc }
+  // a friend invite landing: opens the account panel on its friends tab
+  | { kind: 'friend'; code: string };
 
 export function pathOf(route: Route): string {
   switch (route.kind) {
@@ -98,8 +105,12 @@ export function pathOf(route: Route): string {
       return `/stats/${route.tab}`;
     case 'settings':
       return `/settings/${route.tab}`;
+    case 'account':
+      return `/account/${route.tab}`;
     case 'legal':
       return `/legal/${route.doc}`;
+    case 'friend':
+      return `/friend/${route.code}`;
   }
 }
 
@@ -122,10 +133,14 @@ export function titleOf(route: Route): string {
       return `Statistics${suffix}`;
     case 'settings':
       return `Settings${suffix}`;
+    case 'account':
+      return `Account${suffix}`;
     case 'legal':
       return `${route.doc === 'privacy' ? 'Privacy policy' : route.doc === 'terms' ? 'Terms' : 'Notices'}${suffix}`;
     case 'panel':
-      return `${route.panel === 'about' ? 'About & FAQ' : route.panel === 'account' ? 'Account' : 'Keyboard controls'}${suffix}`;
+      return `${route.panel === 'about' ? 'About & FAQ' : 'Keyboard controls'}${suffix}`;
+    case 'friend':
+      return `Friend invite${suffix}`;
   }
 }
 
@@ -159,8 +174,21 @@ export function parsePath(pathname: string): Route | null {
       : null;
   }
 
+  // An invite link. The code is hex from the minting side, so the lowercasing
+  // above can't damage it.
+  if (first === 'friend') {
+    return second ? { kind: 'friend', code: second } : null;
+  }
+
+  if (first === 'account') {
+    if (second === undefined) return { kind: 'account', tab: DEFAULT_ACCOUNT };
+    return ACCOUNT_TABS.includes(second as AccountTab)
+      ? { kind: 'account', tab: second as AccountTab }
+      : null;
+  }
+
   // /sign-in and /account are the same panel wearing whichever face fits
-  if (first === 'sign-in' || first === 'signin') return { kind: 'panel', panel: 'account' };
+  if (first === 'sign-in' || first === 'signin') return { kind: 'account', tab: DEFAULT_ACCOUNT };
   if (PANELS.includes(first as Panel)) return { kind: 'panel', panel: first as Panel };
 
   if (first === 'daily' || VIEWS.includes(first as View)) {

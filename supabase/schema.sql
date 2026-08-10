@@ -822,14 +822,20 @@ revoke all on public.suspect_daily_results from public, anon, authenticated;
 -- ranking them together would be a category error.
 drop function if exists public.leaderboard(int, text);
 
-create or replace function public.leaderboard(
-  p_days int default 1,
-  p_env text default 'prod',
-  p_difficulty text default 'easy'
+-- The board queries themselves, shared by the global and friends boards so
+-- the ranking rules can't drift apart. `p_users` is the scope: null means
+-- everyone, an array means only those accounts. Not security definer — it
+-- runs with its callers' rights, and its callers are the two definer wrappers
+-- below — and not executable by web roles, which would otherwise get to pass
+-- any user list they liked.
+create or replace function public.boards_for(
+  p_days int,
+  p_env text,
+  p_difficulty text,
+  p_users uuid[]
 )
 returns jsonb
 language plpgsql
-security definer
 set search_path = ''
 stable
 as $$
@@ -851,6 +857,7 @@ begin
       from public.daily_progress dp
       join public.profiles p on p.id = dp.user_id
       where dp.game = 'guess' and dp.completed and dp.env = p_env and dp.difficulty = p_difficulty and dp.puzzle_date >= since
+        and (p_users is null or dp.user_id = any(p_users))
         and p.display_name is not null
         and public.result_is_plausible('guess', dp.state, dp.result, dp.difficulty, dp.variant, dp.puzzle_date, dp.env)
       group by p.display_name
@@ -882,6 +889,7 @@ begin
       from public.daily_progress dp
       join public.profiles p on p.id = dp.user_id
       where dp.game = g.game and dp.completed and dp.env = p_env and dp.difficulty = p_difficulty and dp.puzzle_date >= since
+        and (p_users is null or dp.user_id = any(p_users))
         and p.display_name is not null
         and public.result_is_plausible(g.game, dp.state, dp.result, dp.difficulty, dp.variant, dp.puzzle_date, dp.env)
       group by p.display_name
@@ -902,6 +910,7 @@ begin
       from public.daily_progress dp
       join public.profiles p on p.id = dp.user_id
       where dp.game = 'box' and dp.completed and dp.env = p_env and dp.difficulty = p_difficulty and dp.puzzle_date >= since
+        and (p_users is null or dp.user_id = any(p_users))
         and p.display_name is not null
         and public.result_is_plausible('box', dp.state, dp.result, dp.difficulty, dp.variant, dp.puzzle_date, dp.env)
       group by p.display_name
@@ -925,6 +934,7 @@ begin
       from public.daily_progress dp
       join public.profiles p on p.id = dp.user_id
       where dp.game = 'weave' and dp.completed and dp.env = p_env and dp.difficulty = p_difficulty and dp.puzzle_date >= since
+        and (p_users is null or dp.user_id = any(p_users))
         and p.display_name is not null
         and public.result_is_plausible('weave', dp.state, dp.result, dp.difficulty, dp.variant, dp.puzzle_date, dp.env)
       group by p.display_name
@@ -964,6 +974,7 @@ begin
       join public.profiles p on p.id = dp.user_id
       where dp.game = 'squares' and dp.variant = v.variant and dp.completed
         and dp.env = p_env and dp.difficulty = p_difficulty and dp.puzzle_date >= since
+        and (p_users is null or dp.user_id = any(p_users))
         and p.display_name is not null
         and public.result_is_plausible('squares', dp.state, dp.result, dp.difficulty, dp.variant, dp.puzzle_date, dp.env)
       group by p.display_name
@@ -978,7 +989,325 @@ begin
 end;
 $$;
 
+revoke execute on function public.boards_for(int, text, text, uuid[]) from public, anon, authenticated;
+
+create or replace function public.leaderboard(
+  p_days int default 1,
+  p_env text default 'prod',
+  p_difficulty text default 'easy'
+)
+returns jsonb
+language sql
+security definer
+set search_path = ''
+stable
+as $$
+  select public.boards_for(p_days, p_env, p_difficulty, null);
+$$;
+
 grant execute on function public.leaderboard(int, text, text) to anon, authenticated;
+
+-- ---------------------------------------------------------------------------
+-- Friends. The first feature where someone other than you legitimately reads
+-- anything of yours, so the crossing is kept as narrow as it will go: table
+-- row-level security stays "own rows only" everywhere (these three tables
+-- have no policies at all), and the only path across is the definer functions
+-- below — which return names and numbers, never a row, an id, or any state.
+--
+-- Nobody is discoverable. There is no search; a friendship starts with an
+-- invite code handed over as a link, so the only people who can name you are
+-- people you gave the code to. Display names are required on both ends —
+-- they're the existing opt-in, and a nameless friend couldn't be rendered
+-- anyway.
+-- ---------------------------------------------------------------------------
+
+-- One row per pair, ordered so a pair can exist once. Direction would only
+-- matter for a pending request, and there is no pending state: minting and
+-- sharing a link is the requester's consent, accepting it is the other's.
+create table if not exists public.friendships (
+  user_a uuid not null references auth.users (id) on delete cascade,
+  user_b uuid not null references auth.users (id) on delete cascade,
+  since timestamptz not null default now(),
+  primary key (user_a, user_b),
+  constraint friendships_ordered check (user_a < user_b)
+);
+create index if not exists friendships_b_idx on public.friendships (user_b);
+alter table public.friendships enable row level security;
+
+-- A block is unilateral, survives unfriending, and works on someone who was
+-- never a friend. It ends the friendship, silently kills their invites in
+-- both directions, and is invisible to the blocked side.
+create table if not exists public.friend_blocks (
+  blocker uuid not null references auth.users (id) on delete cascade,
+  blocked uuid not null references auth.users (id) on delete cascade,
+  created_at timestamptz not null default now(),
+  primary key (blocker, blocked),
+  constraint friend_blocks_not_self check (blocker <> blocked)
+);
+alter table public.friend_blocks enable row level security;
+
+create table if not exists public.friend_invites (
+  code text primary key,
+  user_id uuid not null references auth.users (id) on delete cascade,
+  created_at timestamptz not null default now(),
+  expires_at timestamptz not null
+);
+create index if not exists friend_invites_user_idx on public.friend_invites (user_id);
+alter table public.friend_invites enable row level security;
+
+-- No policies is not enough on its own: Supabase grants table privileges to
+-- the web roles by default, and a future policy on any of these would open
+-- exactly the hole the design avoids. Take the grants away outright.
+revoke all on public.friendships, public.friend_blocks, public.friend_invites
+  from public, anon, authenticated;
+
+-- Mint an invite code, good for a week, usable by anyone it's handed to.
+-- Multi-use on purpose — a link pasted into a group chat should work for the
+-- group — which is also why there's no pending state to manage. At most ten
+-- live codes per account, which is the rate limit.
+create or replace function public.friend_invite()
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  uid uuid := (select auth.uid());
+  new_code text;
+begin
+  if uid is null then
+    return jsonb_build_object('ok', false, 'reason', 'not signed in');
+  end if;
+  if not exists (select 1 from public.profiles where id = uid and display_name is not null) then
+    return jsonb_build_object('ok', false, 'reason', 'name required');
+  end if;
+
+  -- expired codes are dead weight; clear them on the way through
+  delete from public.friend_invites where expires_at < now();
+
+  if (select count(*) from public.friend_invites where user_id = uid) >= 10 then
+    return jsonb_build_object('ok', false, 'reason', 'too many');
+  end if;
+
+  new_code := left(replace(gen_random_uuid()::text, '-', ''), 12);
+  insert into public.friend_invites (code, user_id, expires_at)
+  values (new_code, uid, now() + interval '7 days');
+  return jsonb_build_object('ok', true, 'code', new_code);
+end;
+$$;
+
+revoke execute on function public.friend_invite() from public, anon;
+grant execute on function public.friend_invite() to authenticated;
+
+-- Accept a code. Every dead end that could leak something — no such code, an
+-- expired one, a block in either direction — reads identically from outside:
+-- 'invalid'. A block telling its target it exists would be a way of finding
+-- out, which is the one thing a block must not be.
+create or replace function public.friend_accept(p_code text)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  uid uuid := (select auth.uid());
+  inviter uuid;
+  inviter_name text;
+begin
+  if uid is null then
+    return jsonb_build_object('ok', false, 'reason', 'not signed in');
+  end if;
+  if not exists (select 1 from public.profiles where id = uid and display_name is not null) then
+    return jsonb_build_object('ok', false, 'reason', 'name required');
+  end if;
+
+  select fi.user_id into inviter
+  from public.friend_invites fi
+  where fi.code = trim(coalesce(p_code, '')) and fi.expires_at >= now();
+
+  if inviter = uid then
+    -- your own link is the one failure worth naming: it leaks nothing you
+    -- don't already know, and "invalid" would read as a broken feature
+    return jsonb_build_object('ok', false, 'reason', 'self');
+  end if;
+  if inviter is null
+     or exists (
+       select 1 from public.friend_blocks b
+       where (b.blocker = inviter and b.blocked = uid)
+          or (b.blocker = uid and b.blocked = inviter)
+     )
+  then
+    return jsonb_build_object('ok', false, 'reason', 'invalid');
+  end if;
+
+  select p.display_name into inviter_name from public.profiles p where p.id = inviter;
+  if inviter_name is null then
+    -- the inviter cleared their name since minting; without one they can't
+    -- appear anywhere, so the invite is dead too
+    return jsonb_build_object('ok', false, 'reason', 'invalid');
+  end if;
+
+  if exists (
+    select 1 from public.friendships f
+    where f.user_a = least(uid, inviter) and f.user_b = greatest(uid, inviter)
+  ) then
+    return jsonb_build_object('ok', true, 'name', inviter_name);
+  end if;
+
+  if (select count(*) from public.friendships f where f.user_a = uid or f.user_b = uid) >= 100
+     or (select count(*) from public.friendships f where f.user_a = inviter or f.user_b = inviter) >= 100
+  then
+    return jsonb_build_object('ok', false, 'reason', 'full');
+  end if;
+
+  insert into public.friendships (user_a, user_b)
+  values (least(uid, inviter), greatest(uid, inviter))
+  on conflict do nothing;
+  return jsonb_build_object('ok', true, 'name', inviter_name);
+end;
+$$;
+
+revoke execute on function public.friend_accept(text) from public, anon;
+grant execute on function public.friend_accept(text) to authenticated;
+
+-- The caller's own circle: friends by name, plus who they've blocked. A
+-- friend who has since cleared their display name is skipped rather than
+-- shown blank — with no name they appear on no board either, so hiding them
+-- here keeps the two views telling the same story.
+create or replace function public.friends()
+returns jsonb
+language sql
+security definer
+set search_path = ''
+stable
+as $$
+  select jsonb_build_object(
+    'friends', coalesce((
+      select jsonb_agg(jsonb_build_object('name', p.display_name, 'since', f.since)
+                       order by lower(p.display_name))
+      from public.friendships f
+      join public.profiles p
+        on p.id = case when f.user_a = (select auth.uid()) then f.user_b else f.user_a end
+      where ((select auth.uid()) in (f.user_a, f.user_b))
+        and p.display_name is not null
+    ), '[]'::jsonb),
+    'blocked', coalesce((
+      select jsonb_agg(p.display_name order by lower(p.display_name))
+      from public.friend_blocks b
+      join public.profiles p on p.id = b.blocked
+      where b.blocker = (select auth.uid()) and p.display_name is not null
+    ), '[]'::jsonb)
+  );
+$$;
+
+revoke execute on function public.friends() from public, anon;
+grant execute on function public.friends() to authenticated;
+
+-- Remove and block take a display name rather than a user id: names are what
+-- the client ever sees, and every mutation here is anchored on auth.uid() —
+-- the caller can only ever edit relationships they are one side of.
+create or replace function public.friend_remove(p_name text)
+returns boolean
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  uid uuid := (select auth.uid());
+  target uuid;
+begin
+  if uid is null then return false; end if;
+  select id into target from public.profiles
+  where lower(display_name) = lower(trim(coalesce(p_name, '')));
+  if target is null then return false; end if;
+  delete from public.friendships
+  where user_a = least(uid, target) and user_b = greatest(uid, target);
+  return found;
+end;
+$$;
+
+revoke execute on function public.friend_remove(text) from public, anon;
+grant execute on function public.friend_remove(text) to authenticated;
+
+create or replace function public.friend_block(p_name text)
+returns boolean
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  uid uuid := (select auth.uid());
+  target uuid;
+begin
+  if uid is null then return false; end if;
+  select id into target from public.profiles
+  where lower(display_name) = lower(trim(coalesce(p_name, '')));
+  if target is null or target = uid then return false; end if;
+  insert into public.friend_blocks (blocker, blocked)
+  values (uid, target)
+  on conflict do nothing;
+  delete from public.friendships
+  where user_a = least(uid, target) and user_b = greatest(uid, target);
+  return true;
+end;
+$$;
+
+revoke execute on function public.friend_block(text) from public, anon;
+grant execute on function public.friend_block(text) to authenticated;
+
+create or replace function public.friend_unblock(p_name text)
+returns boolean
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  uid uuid := (select auth.uid());
+begin
+  if uid is null then return false; end if;
+  delete from public.friend_blocks b
+  using public.profiles p
+  where b.blocker = uid and b.blocked = p.id
+    and lower(p.display_name) = lower(trim(coalesce(p_name, '')));
+  return found;
+end;
+$$;
+
+revoke execute on function public.friend_unblock(text) from public, anon;
+grant execute on function public.friend_unblock(text) to authenticated;
+
+-- The friends leaderboard: the same five boards as the global one — same
+-- queries, same verification, via boards_for — scoped to the caller's circle.
+-- You are always on your own board; a board you can't find yourself on reads
+-- as broken.
+create or replace function public.friends_board(
+  p_days int default 1,
+  p_env text default 'prod',
+  p_difficulty text default 'easy'
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+stable
+as $$
+declare
+  uid uuid := (select auth.uid());
+  ids uuid[];
+begin
+  if uid is null then
+    return '{}'::jsonb;
+  end if;
+  select array_agg(case when f.user_a = uid then f.user_b else f.user_a end)
+    into ids
+  from public.friendships f
+  where uid in (f.user_a, f.user_b);
+  return public.boards_for(p_days, p_env, p_difficulty, coalesce(ids, '{}'::uuid[]) || uid);
+end;
+$$;
+
+revoke execute on function public.friends_board(int, text, text) from public, anon;
+grant execute on function public.friends_board(int, text, text) to authenticated;
 
 -- Adding a game means widening both of these, and `create table if not exists`
 -- leaves an existing table exactly as it was — so the constraint has to be

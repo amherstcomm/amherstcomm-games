@@ -14,6 +14,7 @@ import RouteLink from '@/RouteLink';
 import DifficultyTabs from '@/DifficultyTabs';
 import type { Difficulty } from '@/difficulty';
 import { allDailyStatus, type DailyState } from '@/dailyStatus';
+import { fetchFriendNames } from '@/friends';
 import {
   boardsToShow,
   fetchBoards,
@@ -84,6 +85,8 @@ export default function HomeView({
   // so you can find yourself in the column; null when signed out or unnamed,
   // which is most people, and the boards read fine without it
   const [me, setMe] = useState<string | null>(null);
+  // and your friends in theirs; empty for everyone else
+  const [friends, setFriends] = useState<Set<string>>(() => new Set());
 
   useEffect(() => setStatus(allDailyStatus(modes)), [modes]);
 
@@ -91,6 +94,7 @@ export default function HomeView({
     let alive = true;
     fetchBoards(1, boardLevel).then((b) => alive && setBoards(b));
     fetchDisplayName().then((n) => alive && setMe(n));
+    fetchFriendNames().then((f) => alive && setFriends(f));
     return () => {
       alive = false;
     };
@@ -182,23 +186,32 @@ export default function HomeView({
                     {label.label}
                   </span>
                   <ol className="space-y-1">
-                    {rows.slice(0, 3).map((r, i) => (
-                      <li
-                        key={r.name}
-                        className={`flex items-baseline gap-2 text-sm ${
-                          i === myIndex ? 'text-emerald-300 font-semibold' : 'text-slate-300'
-                        }`}
-                      >
-                        <span className="w-4 shrink-0 text-xs text-slate-500 tabular-nums">
-                          {i + 1}
-                        </span>
-                        <span className="flex-1 min-w-0 truncate">
-                          {r.name}
-                          {i === myIndex && <span className="text-xs font-normal"> (you)</span>}
-                        </span>
-                        <span className="tabular-nums shrink-0">{label.value(r.value)}</span>
-                      </li>
-                    ))}
+                    {rows.slice(0, 3).map((r, i) => {
+                      // a word beside the colour, same as the (you) marker
+                      const friend = i !== myIndex && friends.has(r.name.toLowerCase());
+                      return (
+                        <li
+                          key={r.name}
+                          className={`flex items-baseline gap-2 text-sm ${
+                            i === myIndex
+                              ? 'text-emerald-300 font-semibold'
+                              : friend
+                                ? 'text-sky-300'
+                                : 'text-slate-300'
+                          }`}
+                        >
+                          <span className="w-4 shrink-0 text-xs text-slate-500 tabular-nums">
+                            {i + 1}
+                          </span>
+                          <span className="flex-1 min-w-0 truncate">
+                            {r.name}
+                            {i === myIndex && <span className="text-xs font-normal"> (you)</span>}
+                            {friend && <span className="text-xs font-normal"> (friend)</span>}
+                          </span>
+                          <span className="tabular-nums shrink-0">{label.value(r.value)}</span>
+                        </li>
+                      );
+                    })}
                     {below && (
                       <li className="flex items-baseline gap-2 text-sm text-emerald-300 font-semibold border-t border-white/10 pt-1 mt-1">
                         <span className="w-4 shrink-0 text-xs text-slate-500 tabular-nums">

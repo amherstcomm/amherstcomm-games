@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { Session } from '@supabase/supabase-js';
-import { AlertTriangle, Github, LogOut, Mail, X } from 'lucide-react';
+import { AlertTriangle, Github, LogOut, Mail, Users, X } from 'lucide-react';
 import { supabase } from '@/supabase';
 import { clearMyStats, deleteAccount } from '@/account';
 import {
@@ -9,7 +9,34 @@ import {
   NAME_MESSAGES,
   type NameResult,
 } from '@/leaderboard';
+import {
+  acceptInvite,
+  blockFriend,
+  clearPendingInvite,
+  fetchCircle,
+  inviteUrl,
+  mintInvite,
+  pendingInvite,
+  removeFriend,
+  unblockFriend,
+  type AcceptFailure,
+  type Circle,
+  type InviteFailure,
+} from '@/friends';
 import { useModalA11y } from '@/useModalA11y';
+import type { AccountTab } from '@/routes';
+
+const INVITE_MESSAGES: Record<Exclude<InviteFailure, 'not signed in'>, string> = {
+  'name required': 'Set a display name on the Personal tab first — friends see you by it.',
+  'too many': 'Ten links are already out there. Each lasts a week; one of them can be shared again.',
+  error: 'Couldn’t create a link just now — try again in a moment.',
+};
+
+const ACCEPT_MESSAGES: Record<Exclude<AcceptFailure, 'not signed in' | 'name required' | 'error'>, string> = {
+  invalid: 'That invite link isn’t valid any more — ask your friend for a fresh one.',
+  self: 'That’s your own invite link — it’s for sending to someone else.',
+  full: 'One of you has a full friends list, so this invite can’t go through.',
+};
 
 // A different word per action, so a hand that has learned one doesn't finish
 // the other on autopilot, and a fresh code beside it — a phrase you can type
@@ -25,9 +52,14 @@ function newCode(): string {
 
 export default function AccountModal({
   session,
+  tab,
+  onTab,
   onClose,
 }: {
   session: Session | null;
+  /** the open tab, held by App so it can live in the address bar */
+  tab: AccountTab;
+  onTab: (t: AccountTab) => void;
   onClose: () => void;
 }) {
   const [email, setEmail] = useState('');
@@ -74,6 +106,84 @@ export default function AccountModal({
     } else {
       setNameState(result);
     }
+  }
+
+  // ---- Friends -------------------------------------------------------------
+  const [circle, setCircle] = useState<Circle | null>(null);
+  const [inviteLink, setInviteLink] = useState<string | null>(null);
+  const [inviteMsg, setInviteMsg] = useState('');
+  const [minting, setMinting] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const [acceptMsg, setAcceptMsg] = useState('');
+  const [pending, setPending] = useState<string | null>(pendingInvite);
+
+  useEffect(() => {
+    if (!session) return;
+    let alive = true;
+    fetchCircle().then((c) => alive && setCircle(c));
+    return () => {
+      alive = false;
+    };
+  }, [session]);
+
+  // A stashed invite gets its chance whenever there's a session to accept it
+  // as. `name` is a dependency on purpose: 'name required' keeps the stash,
+  // and saving a name is what un-sticks it.
+  useEffect(() => {
+    if (!session || !pending) return;
+    let alive = true;
+    acceptInvite(pending).then((r) => {
+      if (!alive) return;
+      if (r.ok) {
+        clearPendingInvite();
+        setPending(null);
+        setAcceptMsg(`You and ${r.name} are friends now.`);
+        fetchCircle().then((c) => alive && setCircle(c));
+      } else if (r.reason === 'name required') {
+        setAcceptMsg(
+          'You have a friend invite waiting — set a display name on the Personal tab and it goes through.'
+        );
+      } else if (r.reason === 'error' || r.reason === 'not signed in') {
+        setAcceptMsg('Couldn’t reach the server to accept the invite — it will be retried here.');
+      } else {
+        // a dead code stays dead; keeping it would repeat this message forever
+        clearPendingInvite();
+        setPending(null);
+        setAcceptMsg(ACCEPT_MESSAGES[r.reason]);
+      }
+    });
+    return () => {
+      alive = false;
+    };
+  }, [session, pending, name]);
+
+  async function makeInvite() {
+    if (minting) return;
+    setMinting(true);
+    setInviteMsg('');
+    setCopied(false);
+    const r = await mintInvite();
+    setMinting(false);
+    if (r.ok) {
+      setInviteLink(inviteUrl(r.code));
+    } else if (r.reason !== 'not signed in') {
+      setInviteLink(null);
+      setInviteMsg(INVITE_MESSAGES[r.reason]);
+    }
+  }
+
+  async function copyInvite() {
+    if (!inviteLink) return;
+    try {
+      await navigator.clipboard.writeText(inviteLink);
+      setCopied(true);
+    } catch {
+      // the link is on screen; selecting it by hand still works
+    }
+  }
+
+  async function circleAction(action: (name: string) => Promise<boolean>, who: string) {
+    if (await action(who)) setCircle(await fetchCircle());
   }
 
   async function sendMagicLink(e: React.FormEvent) {
@@ -218,7 +328,28 @@ export default function AccountModal({
             <p className="text-sm text-slate-400 mb-5">
               Signed in as <span className="text-slate-200">{session.user.email}</span>
             </p>
-            <div className="mb-6">
+
+            {/* Two halves here too: who you are, and who you play against. */}
+            <div className="inline-flex flex-wrap rounded-xl bg-white/5 border border-white/10 p-1 gap-1 mb-5">
+              {(
+                [
+                  { id: 'personal', label: 'Personal' },
+                  { id: 'friends', label: 'Friends' },
+                ] as const
+              ).map(({ id, label }) => (
+                <button
+                  key={id}
+                  onClick={() => onTab(id)}
+                  aria-current={tab === id ? 'page' : undefined}
+                  className={`px-4 h-9 rounded-lg text-sm font-semibold transition-colors
+                    ${tab === id ? 'bg-emerald-400 text-ink' : 'text-slate-300 hover:bg-white/10'}`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+
+            <div className={`mb-6 ${tab === 'personal' ? '' : 'hidden'}`}>
               <label
                 htmlFor="display-name"
                 className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2"
@@ -256,15 +387,119 @@ export default function AccountModal({
               </p>
             </div>
 
+            <div className={`mb-6 ${tab === 'friends' ? '' : 'hidden'}`}>
+              <h3 className="flex items-center gap-1.5 text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">
+                <Users className="w-3.5 h-3.5 text-accent" />
+                Friends
+              </h3>
+
+              {acceptMsg && (
+                <p className="mb-3 text-xs text-emerald-300" role="status">
+                  {acceptMsg}
+                </p>
+              )}
+
+              <div className="mb-2 flex flex-wrap gap-2 items-center">
+                {inviteLink ? (
+                  <>
+                    <code className="flex-1 min-w-[12rem] px-3 py-2 rounded-lg bg-black/30 border border-white/15 text-xs text-slate-200 break-all select-all">
+                      {inviteLink}
+                    </code>
+                    <button
+                      onClick={copyInvite}
+                      className="inline-flex items-center px-3 h-9 rounded-lg text-xs font-semibold bg-white/5 border border-white/10 text-slate-300 hover:bg-white/10 hover:text-white transition-colors"
+                    >
+                      {copied ? 'Copied' : 'Copy'}
+                    </button>
+                  </>
+                ) : (
+                  <button
+                    onClick={makeInvite}
+                    disabled={minting}
+                    className="inline-flex items-center px-4 h-10 rounded-lg text-sm font-semibold bg-white/5 border border-white/10 text-slate-300 hover:bg-white/10 hover:text-white transition-colors disabled:opacity-40"
+                  >
+                    {minting ? 'Creating…' : 'Invite a friend'}
+                  </button>
+                )}
+              </div>
+              {inviteMsg && (
+                <p className="mb-2 text-xs text-amber-300" role="status">
+                  {inviteMsg}
+                </p>
+              )}
+
+              {circle && (circle.friends.length > 0 || circle.blocked.length > 0) && (
+                <div className="mb-2 rounded-xl bg-white/5 border border-white/10 p-3">
+                  {circle.friends.length > 0 ? (
+                    <ul className="space-y-1 max-h-64 overflow-y-auto pr-1">
+                      {circle.friends.map((f) => (
+                        <li
+                          key={f.name}
+                          className="flex items-center gap-2 text-sm text-slate-300 rounded-md bg-white/5 px-3 py-1.5"
+                        >
+                          <span className="flex-1 min-w-0 truncate font-medium">{f.name}</span>
+                          <button
+                            onClick={() => circleAction(removeFriend, f.name)}
+                            className="text-xs text-slate-500 hover:text-white transition-colors"
+                          >
+                            Remove
+                          </button>
+                          <button
+                            onClick={() => circleAction(blockFriend, f.name)}
+                            className="text-xs text-slate-500 hover:text-rose-300 transition-colors"
+                          >
+                            Block
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="text-xs text-slate-500">No friends yet — the invite link is how that changes.</p>
+                  )}
+
+                  {circle.blocked.length > 0 && (
+                    <div className="mt-3">
+                      <p className="text-xs text-slate-500 mb-1">
+                        Blocked — they can&apos;t re-add you, and they weren&apos;t told:
+                      </p>
+                      <ul className="space-y-1 max-h-32 overflow-y-auto pr-1">
+                        {circle.blocked.map((n) => (
+                          <li
+                            key={n}
+                            className="flex items-center gap-2 text-sm text-slate-400 rounded-md bg-white/5 px-3 py-1.5"
+                          >
+                            <span className="flex-1 min-w-0 truncate">{n}</span>
+                            <button
+                              onClick={() => circleAction(unblockFriend, n)}
+                              className="text-xs text-slate-500 hover:text-white transition-colors"
+                            >
+                              Unblock
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              <p className="text-xs text-slate-500">
+                Friends see each other on a private leaderboard — names and scores,
+                nothing else. The link is how someone becomes a friend: there&apos;s no
+                search, so nobody you didn&apos;t hand it to can find you. It works for a
+                week, for anyone holding it.
+              </p>
+            </div>
+
             <button
               onClick={signOut}
-              className="inline-flex items-center gap-1.5 px-4 h-10 rounded-lg text-sm font-semibold bg-white/5 border border-white/10 text-slate-300 hover:bg-white/10 hover:text-white transition-colors"
+              className={`${tab === 'personal' ? 'inline-flex' : 'hidden'} items-center gap-1.5 px-4 h-10 rounded-lg text-sm font-semibold bg-white/5 border border-white/10 text-slate-300 hover:bg-white/10 hover:text-white transition-colors`}
             >
               <LogOut className="w-4 h-4" />
               Sign out
             </button>
 
-            <div className="mt-6 pt-5 border-t border-white/10">
+            <div className={`mt-6 pt-5 border-t border-white/10 ${tab === 'personal' ? '' : 'hidden'}`}>
               <h3 className="flex items-center gap-1.5 text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">
                 <AlertTriangle className="w-3.5 h-3.5 text-danger" />
                 Leaving
