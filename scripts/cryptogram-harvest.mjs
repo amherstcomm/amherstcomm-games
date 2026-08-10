@@ -1,42 +1,65 @@
-// Harvest cryptogram passages from Bartlett's Familiar Quotations (10th ed.,
-// 1919 — Project Gutenberg #27889, public domain). The Victorian editor did
-// the curation; this does the filtering.
+// Harvest cryptogram passages from public-domain sources. The filters are
+// one shared funnel; each source only needs a front end that turns its file
+// into { text, author } pairs.
 //
-//   node scripts/cryptogram-harvest.mjs path/to/bartletts.txt out.json
+//   node scripts/cryptogram-harvest.mjs out.json \
+//     bartletts=path/pg27889.txt inaugurals=path/pg4938.txt proverbs=path/pg39281.txt
+//
+// Sources, all Project Gutenberg:
+//   bartletts   #27889 — Familiar Quotations, 10th ed. (1919). The Victorian
+//               editor did the curation; entries are quote blocks under
+//               ALL-CAPS author headers, with FOOTNOTES sections of
+//               cross-references that are skipped wholesale.
+//   inaugurals  #4938 — U.S. Presidential Inaugural Addresses. Works of the
+//               federal government carry no copyright regardless of date, so
+//               this is the one legitimately *modern* vein. Speeches are
+//               prose, not aphorisms, so sentences are extracted and the
+//               context-dangling ones (starting "And", "It", "This"...)
+//               dropped before the funnel sees them.
+//   proverbs    #39281 — A Dictionary of English Proverbs (Ray's 1670
+//               collection and successors). Proverbs have no author and no
+//               copyright; entries read "N. HEADWORD. text".
 //
 // A passage survives when a modern player could actually deduce it: every
-// word in the dictionary (archaic spellings out), no proper nouns beyond
-// dictionary words (SHAKESPEARE can't be deduced from letter patterns), a
-// length band that fits a board, and enough letter repetition to give the
-// cipher a way in. Each filter reports what it cut, so the funnel is visible.
+// word in the dictionary (archaic spellings out), no proper-noun usage
+// (SHAKESPEARE can't be deduced from letter patterns), a length band that
+// fits a board, and enough letter repetition to give the cipher a way in.
+// Duplicates keep their first source's attribution, so run Bartlett's first —
+// a named author beats "English proverb" for the same line.
 
 import { readFileSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
 
-const [, , inPath, outPath] = process.argv;
-if (!inPath || !outPath) {
-  console.error('usage: node scripts/cryptogram-harvest.mjs <bartletts.txt> <out.json>');
+const [, , outPath, ...sourceArgs] = process.argv;
+const sources = Object.fromEntries(sourceArgs.map((a) => a.split('=')));
+if (!outPath || !Object.keys(sources).length) {
+  console.error(
+    'usage: node scripts/cryptogram-harvest.mjs <out.json> bartletts=<txt> [inaugurals=<txt>] [proverbs=<txt>]'
+  );
   process.exit(1);
 }
 
+// strip the Gutenberg boilerplate so licence text can't be mistaken for content
+function gutenbergBody(path) {
+  const text = readFileSync(path, 'latin1');
+  const start = text.search(/\*\*\* ?START OF .*?\*\*\*/);
+  const end = text.search(/\*\*\* ?END OF .*?\*\*\*/);
+  return text.slice(start >= 0 ? text.indexOf('\n', start) : 0, end >= 0 ? end : undefined);
+}
+
 // ---------------------------------------------------------------------------
-// The dictionary a player deduces against: every SCOWL band we ship, both
-// spellings. A quote whose words are all here reads as English to the person
-// solving it; "fallyng" and "queult" do not.
+// The dictionary a player deduces against: every SCOWL band we ship, three
+// spelling varieties — Bartlett's and the proverbs are British at heart.
 // ---------------------------------------------------------------------------
-const DICT_FILES = [];
+const dictionary = new Set();
 for (const variety of ['english', 'american', 'british']) {
   for (const level of [10, 20, 35, 40, 50, 55, 60, 70]) {
-    DICT_FILES.push(`${variety}-words-${level}`);
-  }
-}
-const dictionary = new Set();
-for (const f of DICT_FILES) {
-  for (const raw of require(`wordlist-english/${f}.json`)) {
-    const w = String(raw).toLowerCase();
-    if (/^[a-z]+$/.test(w)) dictionary.add(w);
+    for (const raw of require(`wordlist-english/${variety}-words-${level}.json`)) {
+      const w = String(raw).toLowerCase();
+      if (/^[a-z]+$/.test(w)) dictionary.add(w);
+    }
   }
 }
 
@@ -46,113 +69,169 @@ const blocked = new Set(
   )
 );
 
-// a token is "in the dictionary" if it is, or if it's a common contraction
-// or possessive of something that is ('t is, wouldst thou — the archaic ones
-// fall out on their own because their stems aren't words either)
 function knownWord(token) {
   const t = token.toLowerCase();
   if (dictionary.has(t)) return true;
   for (const suffix of ["'s", "'ll", "'d", "'ve", "'re", "'m", "n't"]) {
     if (t.endsWith(suffix) && dictionary.has(t.slice(0, -suffix.length))) return true;
   }
-  // Bartlett's spaces some contractions: "'t is", "there 's" — the bare 't/'s
+  // Bartlett's spaces some contractions: "'t is", "there 's"
   if (t === "'t" || t === "'s") return true;
   return false;
 }
 
 // ---------------------------------------------------------------------------
-// Parse: author headers are ALL-CAPS lines with a date range; quotes are the
-// indented blocks that follow, each closed by an italic _source_ line; the
-// FOOTNOTES sections are cross-references, not primary quotes, and are
-// skipped wholesale.
+// Front ends
 // ---------------------------------------------------------------------------
-const text = readFileSync(inPath, 'latin1');
-const lines = text.split(/\r?\n/);
 
-const AUTHOR = /^([A-Z][A-Z .,'&()-]{2,60}?)\.?\s+(?:_?Circa_?\s+)?\d{3,4}[-–]?\d{0,4}\.?\s*$/;
+function parseBartletts(path) {
+  const lines = gutenbergBody(path).split(/\r?\n/);
+  const AUTHOR = /^([A-Z][A-Z .,'&()-]{2,60}?)\.?\s+(?:_?Circa_?\s+)?\d{3,4}[-–]?\d{0,4}\.?\s*$/;
+  const out = [];
+  let author = null;
+  let inFootnotes = false;
+  let block = [];
 
-function titleCase(caps) {
-  return caps
-    .toLowerCase()
-    .replace(/\b[a-z]/g, (c) => c.toUpperCase())
-    .replace(/\b(De|La|Le|Von|Van|Of|The)\b/g, (m) => m.toLowerCase())
-    .trim();
-}
-
-const raw = [];
-let author = null;
-let inFootnotes = false;
-let block = [];
-
-function flushBlock() {
-  if (!author || !block.length) {
+  const flush = () => {
+    if (author && block.length) {
+      const quote = block.join(' ').replace(/\[\d+-\d+\]/g, '').replace(/\s+/g, ' ').trim();
+      if (quote) out.push({ text: quote, author });
+    }
     block = [];
-    return;
+  };
+
+  for (const line of lines) {
+    const m = line.match(AUTHOR);
+    if (m) {
+      flush();
+      author = m[1]
+        .toLowerCase()
+        .replace(/\b[a-z]/g, (c) => c.toUpperCase())
+        .replace(/\b(De|La|Le|Von|Van|Of|The)\b/g, (w) => w.toLowerCase())
+        .trim();
+      inFootnotes = false;
+      continue;
+    }
+    if (/^FOOTNOTES:\s*$/.test(line)) {
+      flush();
+      inFootnotes = true;
+      continue;
+    }
+    if (inFootnotes) continue;
+    if (/^\s{2,}\S/.test(line)) block.push(line.trim());
+    else flush();
   }
-  const quote = block
-    .join(' ')
-    .replace(/\[\d+-\d+\]/g, '') // footnote markers
-    .replace(/\s+/g, ' ')
-    .trim();
-  block = [];
-  if (quote) raw.push({ text: quote, author });
+  flush();
+  return out;
 }
 
-for (const line of lines) {
-  const m = line.match(AUTHOR);
-  if (m) {
-    flushBlock();
-    author = titleCase(m[1]);
-    inFootnotes = false;
-    continue;
+function parseInaugurals(path) {
+  const lines = gutenbergBody(path).split(/\r?\n/);
+  const HEADER =
+    /^(.{3,60}?)\s+(?:First|Second|Third|Fourth)?\s*Inaugural Address\s+(?:Mon|Tues|Wednes|Thurs|Fri|Satur|Sun)day,.*\b(\d{4})\s*$/;
+  // a sentence that leans on its neighbours reads as a fragment once alone
+  const DANGLING =
+    /^(And|But|Or|Nor|Yet|So|For|That|This|These|Those|It|Its|They|Their|He|His|She|Her|There(fore)?|Thus|Hence|Moreover|Nevertheless|Instead|Finally|Second|Third)\b/;
+  const out = [];
+  let author = null;
+  let paragraph = [];
+
+  const flush = () => {
+    if (author && paragraph.length) {
+      const prose = paragraph.join(' ').replace(/\s+/g, ' ').trim();
+      for (const s of prose.split(/(?<=[.!?]["']?)\s+/)) {
+        const sentence = s.trim();
+        if (sentence && !DANGLING.test(sentence)) out.push({ text: sentence, author });
+      }
+    }
+    paragraph = [];
+  };
+
+  for (const line of lines) {
+    const m = line.match(HEADER);
+    if (m && /^\S/.test(line)) {
+      flush();
+      author = m[1].trim();
+      continue;
+    }
+    if (/^\s*$/.test(line)) flush();
+    else if (author) paragraph.push(line.trim());
   }
-  if (/^FOOTNOTES:\s*$/.test(line)) {
-    flushBlock();
-    inFootnotes = true;
-    continue;
-  }
-  if (inFootnotes) continue;
-  if (/^\s{2,}\S/.test(line)) {
-    block.push(line.trim());
-  } else {
-    // a non-indented line ends the quote; the _source_ line is simply dropped
-    flushBlock();
-  }
+  flush();
+  return out;
 }
-flushBlock();
+
+function parseProverbs(path) {
+  const lines = gutenbergBody(path).split(/\r?\n/);
+  const ENTRY = /^\d+\.\s+([A-Z][A-Z' ()-]*)\.\s*(.*)$/;
+  const out = [];
+  let current = null;
+
+  const flush = () => {
+    if (current) {
+      const text = current.join(' ').replace(/\s+/g, ' ').trim();
+      if (text) out.push({ text, author: 'English proverb' });
+    }
+    current = null;
+  };
+
+  for (const line of lines) {
+    const m = line.match(ENTRY);
+    if (m) {
+      flush();
+      current = m[2] ? [m[2]] : [];
+      continue;
+    }
+    if (current === null) continue;
+    if (/^\s*$/.test(line)) continue; // verse entries resume after a blank
+    if (/^[A-Z][A-Za-z ]+\.?\s*$/.test(line) && !/^\s/.test(line)) {
+      // a section heading (INDEX and friends) ends the entries
+      flush();
+      current = null;
+      continue;
+    }
+    current.push(line.trim());
+  }
+  flush();
+  return out;
+}
 
 // ---------------------------------------------------------------------------
-// The funnel. Order matters only for the readout: each stage sees what the
-// previous one let through, so the counts say which rule does the work.
+// One funnel for everything, with per-source accounting
 // ---------------------------------------------------------------------------
-const funnel = [['parsed', raw.length]];
-let pool = raw;
+const PARSERS = { bartletts: parseBartletts, inaugurals: parseInaugurals, proverbs: parseProverbs };
+const ORDER = ['bartletts', 'proverbs', 'inaugurals'];
 
+let pool = [];
+for (const name of ORDER) {
+  if (!sources[name]) continue;
+  const parsed = PARSERS[name](sources[name]).map((q) => ({ ...q, source: name }));
+  console.log(`${name}: parsed ${parsed.length}`);
+  pool = pool.concat(parsed);
+}
+
+const funnel = [['all sources', pool.length]];
 function stage(name, keep) {
   pool = pool.filter(keep);
   funnel.push([name, pool.length]);
 }
 
-// plain ASCII: accents mean an untranslated fragment or a French proverb
 stage('ascii only', (q) => /^[\x20-\x7e]+$/.test(q.text));
 
-// one prose sentence reads best under a cipher; verse line-joins survive fine
-// but multi-sentence passages run long and solve slow
+// digits can't be enciphered, and a sentence ending in a colon is a
+// salutation or a list opener, not a thought
+stage('no digits, ends like a sentence', (q) => !/\d/.test(q.text) && /[.!?]['"]?$/.test(q.text));
+
 stage('50–100 letters', (q) => {
   const letters = q.text.replace(/[^A-Za-z]/g, '').length;
   return letters >= 50 && letters <= 100;
 });
 
-// every word deducible: dictionary members only, which also drops archaic
-// spellings and any proper noun that isn't an ordinary word
 stage('every word in the dictionary', (q) => {
   const tokens = q.text.match(/[A-Za-z']+/g) ?? [];
   return tokens.length > 0 && tokens.every(knownWord);
 });
 
-// no capitalised word mid-sentence unless it's the pronoun I — dictionary
-// membership already allowed "God" and "Nature" through as lowercase words,
-// but a quote that NEEDS the capital (a name used as a name) is unfair
 stage('no proper-noun usage', (q) => {
   const words = q.text.split(/\s+/);
   let sentenceStart = true;
@@ -168,8 +247,6 @@ stage('no proper-noun usage', (q) => {
   return true;
 });
 
-// enough repetition for the cipher to have a way in: at least 8 distinct
-// letters, and an average of 3+ uses each
 stage('letter stats', (q) => {
   const letters = q.text.toLowerCase().replace(/[^a-z]/g, '');
   const distinct = new Set(letters).size;
@@ -181,8 +258,6 @@ stage('blocklist', (q) => {
   return tokens.every((t) => !blocked.has(t.replace(/'/g, '')));
 });
 
-// duplicates: Bartlett's traces sayings across authors, so the same line
-// appears more than once — first attribution wins
 const seen = new Set();
 stage('deduplicated', (q) => {
   const key = q.text.toLowerCase().replace(/[^a-z]/g, '');
@@ -192,13 +267,19 @@ stage('deduplicated', (q) => {
 });
 
 for (const [name, count] of funnel) console.log(`${name.padEnd(32)} ${count}`);
+console.log('');
+for (const name of ORDER) {
+  if (sources[name]) console.log(`${name.padEnd(12)} kept ${pool.filter((q) => q.source === name).length}`);
+}
 
-writeFileSync(outPath, JSON.stringify({ source: 'bartletts-10th-1919', quotes: pool }, null, 1));
+writeFileSync(outPath, JSON.stringify({ quotes: pool }, null, 1));
 console.log(`\nwrote ${pool.length} candidates to ${outPath}`);
 
-// a taste of what survived, spread across the file rather than the top
-const step = Math.max(1, Math.floor(pool.length / 12));
-for (let i = 0; i < pool.length; i += step) {
-  const q = pool[i];
-  console.log(`\n"${q.text}"\n    — ${q.author}`);
+// a taste from each source
+for (const name of ORDER) {
+  const from = pool.filter((q) => q.source === name);
+  const step = Math.max(1, Math.floor(from.length / 4));
+  for (let i = 0; i < from.length && i < step * 4; i += step) {
+    console.log(`\n"${from[i].text}"\n    — ${from[i].author} [${name}]`);
+  }
 }

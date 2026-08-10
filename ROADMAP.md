@@ -652,18 +652,34 @@ Worth prototyping the generated version first: if it doesn't read well, the
 curation cost of the public-domain route is the real cost of the game.
 
 **Probed** (August 2026), and the public-domain route is cheap, which moots
-the generated-sentences prototype. Bartlett's Familiar Quotations 10th ed.
-(1919, Project Gutenberg #27889) parsed to 6,840 entries;
-`scripts/cryptogram-harvest.mjs` filters them to **1,642 candidates** — ASCII,
-50–100 letters, every word in the shipped dictionary (which drops archaic
-spellings), no proper-noun usage, enough letter repetition to give the cipher
-a way in, blocklist, dedupe. The two big cuts are length (6,803→2,731) and
-dictionary membership (→1,900). What remains before the pool is real: a human
-skim for mid-thought verse fragments, which the filters can't judge. Sourcing
-rules worth keeping: quote *collections*, not books; Gutenberg only, so
-translations are old enough to be public domain themselves; Wikiquote is
-CC BY-SA and never a source. Case is irrelevant in-cipher, so verse
-capitalisation artifacts only matter on the reveal.
+the generated-sentences prototype. `scripts/cryptogram-harvest.mjs` runs
+three Gutenberg sources through one filter funnel — ASCII, no digits, ends
+like a sentence, 50–100 letters, every word in the shipped dictionary (which
+drops archaic spellings), no proper-noun usage, enough letter repetition to
+give the cipher a way in, blocklist, dedupe — and keeps **2,674 candidates**:
+
+- Bartlett's Familiar Quotations 10th ed. (1919, #27889): 6,840 parsed,
+  **1,641 kept** — the backbone, and the best per-entry quality.
+- U.S. Presidential Inaugural Addresses (#4938): federal government works
+  carry no copyright at any date, which makes this the one legitimately
+  modern vein. 3,850 sentences extracted, **950 kept** — but speeches are
+  prose, not aphorisms, so this source carries the most chaff and wants the
+  harshest skim.
+- A Dictionary of English Proverbs (#39281): 1,880 parsed, only **83 kept**,
+  because most proverbs fall under the 50-letter floor. Short proverbs are
+  *harder* cryptograms, not easier (fewer letters, less repetition), so the
+  cut stock is a ready-made hard tier if passage length becomes the
+  difficulty dial the entry above suggests.
+
+Duplicates keep their first source's attribution, so Bartlett's named
+authors beat "English proverb" for the same line. What remains before the
+pool is real: a human skim — mid-thought verse fragments and inaugural
+policy-speak are things no mechanical filter can judge. Sourcing rules worth
+keeping: quote *collections*, not books; Gutenberg only, so translations are
+old enough to be public domain themselves; Wikiquote is CC BY-SA and never a
+source, and MIT-licensed quote datasets are copyright-washing. Case is
+irrelevant in-cipher, so verse capitalisation artifacts only matter on the
+reveal.
 
 **Difficulty maps cleanly**, better than most games here: how many letters
 start revealed, how long the passage is, and whether the cipher preserves word
