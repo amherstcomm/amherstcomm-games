@@ -7,6 +7,7 @@ import {
   WINDOWS,
   type BoardGame,
   type Boards,
+  type BoardScope,
 } from '@/leaderboard';
 import { formatElapsed } from '@/useUpTimer';
 import { difficulty, onDifficultyChange, type Difficulty } from '@/difficulty';
@@ -67,6 +68,7 @@ export default function LeaderboardView({ signedIn }: { signedIn: boolean }) {
   const [level, setLevel] = useState<Difficulty>(difficulty);
   useEffect(() => onDifficultyChange(() => setLevel(difficulty())), []);
   const [days, setDays] = useState<number>(1);
+  const [scope, setScope] = useState<BoardScope>('global');
   const [boards, setBoards] = useState<Boards | null>(null);
   const [state, setState] = useState<'loading' | 'ready' | 'error'>('loading');
   const [me, setMe] = useState<string | null>(null);
@@ -74,7 +76,7 @@ export default function LeaderboardView({ signedIn }: { signedIn: boolean }) {
   useEffect(() => {
     let alive = true;
     setState('loading');
-    fetchBoards(days, level).then((b) => {
+    fetchBoards(days, level, scope).then((b) => {
       if (!alive) return;
       setBoards(b);
       setState(b ? 'ready' : 'error');
@@ -82,7 +84,7 @@ export default function LeaderboardView({ signedIn }: { signedIn: boolean }) {
     return () => {
       alive = false;
     };
-  }, [days, level]);
+  }, [days, level, scope]);
 
   useEffect(() => {
     if (!signedIn) return;
@@ -97,18 +99,37 @@ export default function LeaderboardView({ signedIn }: { signedIn: boolean }) {
 
   return (
     <div className="space-y-3">
-      <div className="inline-flex flex-wrap justify-center max-w-full rounded-lg bg-white/5 border border-white/10 p-0.5 gap-0.5">
-        {WINDOWS.map((w) => (
-          <button
-            key={w.days}
-            onMouseDown={(e) => e.preventDefault()}
-            onClick={() => setDays(w.days)}
-            className={`px-3 py-1.5 rounded-md text-sm font-semibold transition-colors
-              ${days === w.days ? 'bg-emerald-400/15 text-emerald-300' : 'text-slate-400 hover:text-white'}`}
-          >
-            {w.label}
-          </button>
-        ))}
+      <div className="flex flex-wrap gap-2">
+        <div className="inline-flex flex-wrap justify-center max-w-full rounded-lg bg-white/5 border border-white/10 p-0.5 gap-0.5">
+          {WINDOWS.map((w) => (
+            <button
+              key={w.days}
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => setDays(w.days)}
+              className={`px-3 py-1.5 rounded-md text-sm font-semibold transition-colors
+                ${days === w.days ? 'bg-emerald-400/15 text-emerald-300' : 'text-slate-400 hover:text-white'}`}
+            >
+              {w.label}
+            </button>
+          ))}
+        </div>
+
+        {/* the friends scope needs someone to be — signed out, there's only one board */}
+        {signedIn && (
+          <div className="inline-flex rounded-lg bg-white/5 border border-white/10 p-0.5 gap-0.5">
+            {(['global', 'friends'] as const).map((s) => (
+              <button
+                key={s}
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => setScope(s)}
+                className={`px-3 py-1.5 rounded-md text-sm font-semibold transition-colors
+                  ${scope === s ? 'bg-emerald-400/15 text-emerald-300' : 'text-slate-400 hover:text-white'}`}
+              >
+                {s === 'global' ? 'Everyone' : 'Friends'}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
@@ -121,8 +142,9 @@ export default function LeaderboardView({ signedIn }: { signedIn: boolean }) {
       )}
       {state === 'ready' && !played.length && (
         <p className="text-sm text-slate-400 py-6 text-center">
-          Nothing here yet for this stretch. Boards only count players who&apos;ve set a
-          display name.
+          {scope === 'friends'
+            ? 'Nothing from your circle for this stretch. Invite links live under Account — and your own dailies count here too.'
+            : 'Nothing here yet for this stretch. Boards only count players who’ve set a display name.'}
         </p>
       )}
 
@@ -131,7 +153,8 @@ export default function LeaderboardView({ signedIn }: { signedIn: boolean }) {
       ))}
 
       <p className="text-xs text-slate-500 pt-1">
-        Dailies only, top ten. {me === null
+        {scope === 'friends' ? 'Dailies only, just your circle.' : 'Dailies only, top ten.'}{' '}
+        {me === null
           ? 'Set a display name under Account to take part — without one you don’t appear.'
           : `You appear as ${me}.`}{' '}
         Multi-day boards count how often you played as well as how well, so turning up

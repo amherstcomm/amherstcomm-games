@@ -83,7 +83,9 @@ export type Route =
   | { kind: 'panel'; panel: Panel }
   | { kind: 'stats'; tab: StatsTab }
   | { kind: 'settings'; tab: SettingsTab }
-  | { kind: 'legal'; doc: LegalDoc };
+  | { kind: 'legal'; doc: LegalDoc }
+  // a friend invite landing: opens the account panel with the code in hand
+  | { kind: 'friend'; code: string };
 
 export function pathOf(route: Route): string {
   switch (route.kind) {
@@ -100,6 +102,8 @@ export function pathOf(route: Route): string {
       return `/settings/${route.tab}`;
     case 'legal':
       return `/legal/${route.doc}`;
+    case 'friend':
+      return `/friend/${route.code}`;
   }
 }
 
@@ -126,6 +130,8 @@ export function titleOf(route: Route): string {
       return `${route.doc === 'privacy' ? 'Privacy policy' : route.doc === 'terms' ? 'Terms' : 'Notices'}${suffix}`;
     case 'panel':
       return `${route.panel === 'about' ? 'About & FAQ' : route.panel === 'account' ? 'Account' : 'Keyboard controls'}${suffix}`;
+    case 'friend':
+      return `Friend invite${suffix}`;
   }
 }
 
@@ -157,6 +163,12 @@ export function parsePath(pathname: string): Route | null {
     return SETTINGS_TABS.includes(second as SettingsTab)
       ? { kind: 'settings', tab: second as SettingsTab }
       : null;
+  }
+
+  // An invite link. The code is hex from the minting side, so the lowercasing
+  // above can't damage it.
+  if (first === 'friend') {
+    return second ? { kind: 'friend', code: second } : null;
   }
 
   // /sign-in and /account are the same panel wearing whichever face fits

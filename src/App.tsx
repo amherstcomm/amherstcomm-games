@@ -4,6 +4,7 @@ import LearnMode, { type LearnModeHandle } from '@/LearnMode';
 import type { Session } from '@supabase/supabase-js';
 import StatsModal from '@/StatsModal';
 import AccountModal from '@/AccountModal';
+import { stashInvite } from '@/friends';
 import { OskContext } from '@/MobileKeyInput';
 import SettingsModal from '@/SettingsModal';
 import KeyboardHelp from '@/KeyboardHelp';
@@ -476,6 +477,11 @@ function initialPlay(mode: Mode, stored: boolean): boolean {
 const panelAtLoad = (p: Panel) => initialRoute.kind === 'panel' && initialRoute.panel === p;
 const isOverlay = (r: Route) => r.kind === 'panel' || r.kind === 'legal';
 
+// An invite link stashes its code before anything else happens: accepting may
+// need a sign-in first, and OAuth leaves the page entirely — the stash is what
+// survives the round trip. The account panel picks it up from there.
+if (initialRoute.kind === 'friend') stashInvite(initialRoute.code);
+
 function App() {
   const [mode, setMode] = useState<Mode>(linkMode ?? initial.mode);
   const [dictionaries, setDictionaries] = useState(initial.dictionaries);
@@ -688,7 +694,9 @@ function App() {
     initialRoute.kind === 'stats' ? initialRoute.tab : 'overall'
   );
   const [learnMode, setLearnMode] = useState(initialGame?.view === 'learn');
-  const [accountOpen, setAccountOpen] = useState(panelAtLoad('account'));
+  const [accountOpen, setAccountOpen] = useState(
+    panelAtLoad('account') || initialRoute.kind === 'friend'
+  );
   const [settingsOpen, setSettingsOpen] = useState(initialRoute.kind === 'settings');
   const [settingsTab, setSettingsTab] = useState<SettingsTab>(
     initialRoute.kind === 'settings' ? initialRoute.tab : 'site'
@@ -1077,7 +1085,8 @@ function App() {
   function applyRoute(r: Route) {
     setAboutOpen(r.kind === 'panel' && r.panel === 'about');
     setKeysOpen(r.kind === 'panel' && r.panel === 'keys');
-    setAccountOpen(r.kind === 'panel' && r.panel === 'account');
+    if (r.kind === 'friend') stashInvite(r.code);
+    setAccountOpen((r.kind === 'panel' && r.panel === 'account') || r.kind === 'friend');
     setStatsOpen(r.kind === 'stats');
     setSettingsOpen(r.kind === 'settings');
     setLegalOpen(r.kind === 'legal');

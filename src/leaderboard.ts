@@ -76,15 +76,20 @@ export function emptyBoards(): Boards {
   return { guess: [], hive: [], scramble: [], grid: [], box: [], weave: [], squares4: [], squares5: [] };
 }
 
+/** Global, or just your circle. The two run the same queries server-side, so
+ *  a rank means the same thing on either — the scope only decides who's in. */
+export type BoardScope = 'global' | 'friends';
+
 /** One board per difficulty. A time on easy and a time on extreme aren't the
  *  same event, so they're never ranked together. */
 export async function fetchBoards(
   days: number,
-  level: Difficulty = difficulty()
+  level: Difficulty = difficulty(),
+  scope: BoardScope = 'global'
 ): Promise<Boards | null> {
   if (!supabase) return null;
   try {
-    const { data, error } = await supabase.rpc('leaderboard', {
+    const { data, error } = await supabase.rpc(scope === 'friends' ? 'friends_board' : 'leaderboard', {
       p_days: days,
       p_env: DAILY_ENV,
       p_difficulty: level,
