@@ -104,6 +104,9 @@ export default function AccountModal({
 
   // ---- Friends -------------------------------------------------------------
   const [circle, setCircle] = useState<Circle | null>(null);
+  // the lists live behind one button — a circle that grows for years should
+  // cost the panel one row, not one row per friend
+  const [manageOpen, setManageOpen] = useState(false);
   const [inviteLink, setInviteLink] = useState<string | null>(null);
   const [inviteMsg, setInviteMsg] = useState('');
   const [minting, setMinting] = useState(false);
@@ -370,56 +373,99 @@ export default function AccountModal({
                 </p>
               )}
 
-              {circle && circle.friends.length > 0 && (
-                <ul className="mb-3 space-y-1">
-                  {circle.friends.map((f) => (
-                    <li
-                      key={f.name}
-                      className="flex items-center gap-2 text-sm text-slate-300 rounded-md bg-white/5 px-3 py-1.5"
+              <div className="mb-2 flex flex-wrap gap-2 items-center">
+                {inviteLink ? (
+                  <>
+                    <code className="flex-1 min-w-[12rem] px-3 py-2 rounded-lg bg-black/30 border border-white/15 text-xs text-slate-200 break-all select-all">
+                      {inviteLink}
+                    </code>
+                    <button
+                      onClick={copyInvite}
+                      className="inline-flex items-center px-3 h-9 rounded-lg text-xs font-semibold bg-white/5 border border-white/10 text-slate-300 hover:bg-white/10 hover:text-white transition-colors"
                     >
-                      <span className="flex-1 min-w-0 truncate font-medium">{f.name}</span>
-                      <button
-                        onClick={() => circleAction(removeFriend, f.name)}
-                        className="text-xs text-slate-500 hover:text-white transition-colors"
-                      >
-                        Remove
-                      </button>
-                      <button
-                        onClick={() => circleAction(blockFriend, f.name)}
-                        className="text-xs text-slate-500 hover:text-rose-300 transition-colors"
-                      >
-                        Block
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              )}
-
-              {inviteLink ? (
-                <div className="mb-2 flex flex-wrap gap-2 items-center">
-                  <code className="flex-1 min-w-[12rem] px-3 py-2 rounded-lg bg-black/30 border border-white/15 text-xs text-slate-200 break-all select-all">
-                    {inviteLink}
-                  </code>
+                      {copied ? 'Copied' : 'Copy'}
+                    </button>
+                  </>
+                ) : (
                   <button
-                    onClick={copyInvite}
-                    className="inline-flex items-center px-3 h-9 rounded-lg text-xs font-semibold bg-white/5 border border-white/10 text-slate-300 hover:bg-white/10 hover:text-white transition-colors"
+                    onClick={makeInvite}
+                    disabled={minting}
+                    className="inline-flex items-center px-4 h-10 rounded-lg text-sm font-semibold bg-white/5 border border-white/10 text-slate-300 hover:bg-white/10 hover:text-white transition-colors disabled:opacity-40"
                   >
-                    {copied ? 'Copied' : 'Copy'}
+                    {minting ? 'Creating…' : 'Invite a friend'}
                   </button>
-                </div>
-              ) : (
-                <button
-                  onClick={makeInvite}
-                  disabled={minting}
-                  className="mb-2 inline-flex items-center px-4 h-10 rounded-lg text-sm font-semibold bg-white/5 border border-white/10 text-slate-300 hover:bg-white/10 hover:text-white transition-colors disabled:opacity-40"
-                >
-                  {minting ? 'Creating…' : 'Invite a friend'}
-                </button>
-              )}
+                )}
+                {circle && (circle.friends.length > 0 || circle.blocked.length > 0) && (
+                  <button
+                    onClick={() => setManageOpen((v) => !v)}
+                    aria-expanded={manageOpen}
+                    className="inline-flex items-center px-4 h-10 rounded-lg text-sm font-semibold bg-white/5 border border-white/10 text-slate-300 hover:bg-white/10 hover:text-white transition-colors"
+                  >
+                    {manageOpen
+                      ? 'Done'
+                      : `Manage · ${circle.friends.length} friend${circle.friends.length === 1 ? '' : 's'}`}
+                  </button>
+                )}
+              </div>
               {inviteMsg && (
                 <p className="mb-2 text-xs text-amber-300" role="status">
                   {inviteMsg}
                 </p>
+              )}
+
+              {manageOpen && circle && (
+                <div className="mb-2 rounded-xl bg-white/5 border border-white/10 p-3">
+                  {circle.friends.length > 0 ? (
+                    <ul className="space-y-1 max-h-64 overflow-y-auto pr-1">
+                      {circle.friends.map((f) => (
+                        <li
+                          key={f.name}
+                          className="flex items-center gap-2 text-sm text-slate-300 rounded-md bg-white/5 px-3 py-1.5"
+                        >
+                          <span className="flex-1 min-w-0 truncate font-medium">{f.name}</span>
+                          <button
+                            onClick={() => circleAction(removeFriend, f.name)}
+                            className="text-xs text-slate-500 hover:text-white transition-colors"
+                          >
+                            Remove
+                          </button>
+                          <button
+                            onClick={() => circleAction(blockFriend, f.name)}
+                            className="text-xs text-slate-500 hover:text-rose-300 transition-colors"
+                          >
+                            Block
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="text-xs text-slate-500">No friends yet — the invite link is how that changes.</p>
+                  )}
+
+                  {circle.blocked.length > 0 && (
+                    <div className="mt-3">
+                      <p className="text-xs text-slate-500 mb-1">
+                        Blocked — they can&apos;t re-add you, and they weren&apos;t told:
+                      </p>
+                      <ul className="space-y-1 max-h-32 overflow-y-auto pr-1">
+                        {circle.blocked.map((n) => (
+                          <li
+                            key={n}
+                            className="flex items-center gap-2 text-sm text-slate-400 rounded-md bg-white/5 px-3 py-1.5"
+                          >
+                            <span className="flex-1 min-w-0 truncate">{n}</span>
+                            <button
+                              onClick={() => circleAction(unblockFriend, n)}
+                              className="text-xs text-slate-500 hover:text-white transition-colors"
+                            >
+                              Unblock
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </div>
               )}
 
               <p className="text-xs text-slate-500">
@@ -428,28 +474,6 @@ export default function AccountModal({
                 search, so nobody you didn&apos;t hand it to can find you. It works for a
                 week, for anyone holding it.
               </p>
-
-              {circle && circle.blocked.length > 0 && (
-                <div className="mt-3">
-                  <p className="text-xs text-slate-500 mb-1">Blocked — they can&apos;t re-add you, and they weren&apos;t told:</p>
-                  <ul className="space-y-1">
-                    {circle.blocked.map((n) => (
-                      <li
-                        key={n}
-                        className="flex items-center gap-2 text-sm text-slate-400 rounded-md bg-white/5 px-3 py-1.5"
-                      >
-                        <span className="flex-1 min-w-0 truncate">{n}</span>
-                        <button
-                          onClick={() => circleAction(unblockFriend, n)}
-                          className="text-xs text-slate-500 hover:text-white transition-colors"
-                        >
-                          Unblock
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
             </div>
 
             <button

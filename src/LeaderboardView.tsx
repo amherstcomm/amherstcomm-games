@@ -12,6 +12,7 @@ import {
 import { formatElapsed } from '@/useUpTimer';
 import { difficulty, onDifficultyChange, type Difficulty } from '@/difficulty';
 import DifficultyTabs from '@/DifficultyTabs';
+import { fetchFriendNames } from '@/friends';
 
 const ICONS: Record<BoardGame, typeof Grid3x3> = {
   guess: Grid3x3,
@@ -26,7 +27,17 @@ const ICONS: Record<BoardGame, typeof Grid3x3> = {
 
 const ORDER: BoardGame[] = ['guess', 'scramble', 'hive', 'grid', 'box', 'weave', 'squares4', 'squares5'];
 
-function Board({ game, rows, me }: { game: BoardGame; rows: Boards[BoardGame]; me: string | null }) {
+function Board({
+  game,
+  rows,
+  me,
+  friends,
+}: {
+  game: BoardGame;
+  rows: Boards[BoardGame];
+  me: string | null;
+  friends: Set<string>;
+}) {
   if (!rows.length) return null;
   const { label, value, detail } = BOARD_LABELS[game];
   const Icon = ICONS[game];
@@ -39,15 +50,24 @@ function Board({ game, rows, me }: { game: BoardGame; rows: Boards[BoardGame]; m
       <ol className="space-y-1">
         {rows.map((r, i) => {
           const mine = me !== null && r.name.toLowerCase() === me.toLowerCase();
+          // a word beside the colour, so the distinction survives any palette
+          const friend = !mine && friends.has(r.name.toLowerCase());
           return (
             <li
               key={r.name}
               className={`flex items-baseline gap-2 text-sm rounded-md px-2 py-1 ${
-                mine ? 'bg-amber-400/10 text-amber-100' : 'text-slate-300'
+                mine
+                  ? 'bg-amber-400/10 text-amber-100'
+                  : friend
+                    ? 'bg-sky-400/10 text-sky-200'
+                    : 'text-slate-300'
               }`}
             >
               <span className="w-5 shrink-0 text-xs text-slate-500 tabular-nums">{i + 1}</span>
-              <span className="flex-1 min-w-0 truncate font-medium">{r.name}</span>
+              <span className="flex-1 min-w-0 truncate font-medium">
+                {r.name}
+                {friend && <span className="text-xs font-normal text-sky-300/80"> (friend)</span>}
+              </span>
               <span className="tabular-nums shrink-0">{value(r.value)}</span>
               {r.detail !== null && (
                 <span className="text-xs text-slate-500 tabular-nums shrink-0 hidden sm:inline">
@@ -86,10 +106,14 @@ export default function LeaderboardView({ signedIn }: { signedIn: boolean }) {
     };
   }, [days, level, scope]);
 
+  // who counts as a friend on these boards; empty when signed out
+  const [friends, setFriends] = useState<Set<string>>(() => new Set());
+
   useEffect(() => {
     if (!signedIn) return;
     let alive = true;
     fetchDisplayName().then((n) => alive && setMe(n));
+    fetchFriendNames().then((f) => alive && setFriends(f));
     return () => {
       alive = false;
     };
@@ -149,7 +173,7 @@ export default function LeaderboardView({ signedIn }: { signedIn: boolean }) {
       )}
 
       {state === 'ready' && played.map((g) => (
-        <Board key={g} game={g} rows={boards![g]} me={me} />
+        <Board key={g} game={g} rows={boards![g]} me={me} friends={friends} />
       ))}
 
       <p className="text-xs text-slate-500 pt-1">

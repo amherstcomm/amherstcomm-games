@@ -55,6 +55,10 @@ export async function acceptInvite(code: string): Promise<AcceptResult> {
 export async function fetchCircle(): Promise<Circle | null> {
   if (!supabase) return null;
   try {
+    // signed out there is no circle, and the function is revoked from anon —
+    // asking anyway is a guaranteed 401 on every signed-out page view
+    const { data: sess } = await supabase.auth.getSession();
+    if (!sess.session) return null;
     const { data, error } = await supabase.rpc('friends');
     if (error) return null;
     const r = data as { friends?: unknown; blocked?: unknown } | null;
@@ -83,6 +87,14 @@ async function nameAction(fn: 'friend_remove' | 'friend_block' | 'friend_unblock
 export const removeFriend = (name: string) => nameAction('friend_remove', name);
 export const blockFriend = (name: string) => nameAction('friend_block', name);
 export const unblockFriend = (name: string) => nameAction('friend_unblock', name);
+
+/** Friend names, lowercased for matching against board rows — names are
+ *  unique on their lowercased form, so this is the same key the database
+ *  enforces. Empty when signed out; the boards read fine without it. */
+export async function fetchFriendNames(): Promise<Set<string>> {
+  const circle = await fetchCircle();
+  return new Set((circle?.friends ?? []).map((f) => f.name.toLowerCase()));
+}
 
 // ---------------------------------------------------------------------------
 // The invite that arrived before it could be used
