@@ -42,7 +42,14 @@ function Board({
   const { label, value, detail } = BOARD_LABELS[game];
   const Icon = ICONS[game];
   return (
-    <div className="rounded-xl bg-white/5 border border-white/10 p-4">
+    // Focusable on purpose, though nothing here is clickable: inside a dialog
+    // a screen reader speaks what focus lands on, and static text is where
+    // focus never lands — Tab went from the toggles straight past every
+    // result. No aria-label, so focus reads the card's actual contents.
+    <div
+      tabIndex={0}
+      className="rounded-xl bg-white/5 border border-white/10 p-4 focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400/70"
+    >
       <h4 className="flex items-center gap-2 text-sm font-semibold text-white mb-2">
         <Icon className="w-3.5 h-3.5 text-accent" />
         {label}
