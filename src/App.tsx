@@ -31,7 +31,6 @@ import HomeView from '@/HomeView';
 import RouteLink from '@/RouteLink';
 import SquaresGame, { type SquaresGameHandle } from '@/SquaresGame';
 import CryptogramGame, { type CryptogramGameHandle } from '@/CryptogramGame';
-import { buildPatternIndex, solveCryptogram, type SolveOutcome } from '@/cryptogramSolver';
 import {
   MODE_SLUG,
   initialGame,
@@ -135,7 +134,7 @@ const MODES: { id: Mode; label: string; blurb: string; description: string; play
     label: 'Cryptogram',
     blurb: 'A passage in code — work out which letter is which',
     description:
-      'Play the daily cipher, or paste one into Solve and let the shapes of the words crack it.',
+      'Play the daily cipher. The solver is still being built: it has to offer the readings that fit rather than guess one, which is a different thing from the word solvers.',
     playDescription:
       'Every letter stands for another one, the same way throughout. Work out the passage.',
   },
@@ -521,8 +520,6 @@ function App() {
   const [cryptogramPlay, setCryptogramPlay] = useState(
     initialPlay('cryptogram', initial.cryptogramPlay)
   );
-  const [cryptogramInput, setCryptogramInput] = useState('');
-  const [cryptogramSolve, setCryptogramSolve] = useState<SolveOutcome | null>(null);
 
   const weaveDims = WEAVE_DIMS[weaveSize];
 
@@ -996,30 +993,12 @@ function App() {
 
   const shownViews = useMemo(() => {
     const vis = visibleViews(hiddenViews);
-    return ALL_VIEWS.filter((v) => vis.includes(v) || v === initialGame?.view);
-  }, [hiddenViews]);
-
-  // Words grouped by shape, built once and only when the cryptogram solver is
-  // actually on screen — it is a pass over the whole dictionary, and no other
-  // mode has any use for it. Common words sort to the front of each shape, so
-  // the first reading found is the likely one rather than merely a legal one.
-  const patternIndex = useMemo(() => {
-    if (mode !== 'cryptogram' || cryptogramPlay) return null;
-    const words = acceptWordsArr ?? standardWordsArr;
-    if (!words) return null;
-    return buildPatternIndex(words, commonWordsArr ? new Set(commonWordsArr) : undefined);
-  }, [mode, cryptogramPlay, acceptWordsArr, standardWordsArr, commonWordsArr]);
-
-  function runCryptogramSolve() {
-    if (!patternIndex) return;
-    setCryptogramSolve(
-      solveCryptogram(
-        cryptogramInput,
-        patternIndex,
-        commonWordsArr ? new Set(commonWordsArr) : undefined
-      )
-    );
-  }
+    const shown = ALL_VIEWS.filter((v) => vis.includes(v) || v === initialGame?.view);
+    // Cryptogram has no solver yet, and a tab that only ever explains its own
+    // absence is worse than no tab. The effect below moves anyone standing on
+    // Solve when they arrive here, the same way hiding a game does.
+    return mode === 'cryptogram' ? shown.filter((v) => v !== 'solve') : shown;
+  }, [hiddenViews, mode]);
 
   const playFlags: Record<Mode, [boolean, (v: boolean) => void]> = {
     pattern: [patternPlay, setPatternPlay],
@@ -1856,77 +1835,19 @@ function App() {
         </div>
         )}
 
+        {/* Deliberately not shipping the search-based solver that was here:
+            it commits to one reading and can be confidently wrong, which is
+            the worst thing a solver can be on this particular puzzle. The
+            propagation core it will be rebuilt on lives in cryptogramSolver.ts
+            and is already under test. */}
         {mode === 'cryptogram' && !cryptogramPlay && (
-        <div className="mb-8 max-w-2xl mx-auto">
-          <label htmlFor="cryptogram-input" className="block text-sm text-slate-300 mb-2">
-            Paste a cryptogram. Every letter has to stand for the same letter throughout, and
-            the words have to be separated — the shapes of the words are what this searches on.
-          </label>
-          <textarea
-            id="cryptogram-input"
-            value={cryptogramInput}
-            onChange={(e) => setCryptogramInput(e.target.value)}
-            rows={3}
-            spellCheck={false}
-            placeholder="WKH TXLFN EURZQ IRA"
-            className="w-full px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-slate-200 placeholder:text-slate-600 text-sm font-mono"
-          />
-          <div className="mt-3 flex flex-wrap items-center gap-2">
-            <button
-              onClick={runCryptogramSolve}
-              disabled={!cryptogramInput.trim() || !patternIndex}
-              className="inline-flex items-center gap-1.5 px-4 h-10 rounded-lg text-sm font-semibold bg-emerald-400 text-ink hover:bg-emerald-300 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-            >
-              <Search className="w-4 h-4" />
-              {patternIndex ? 'Solve' : 'Loading words…'}
-            </button>
-            {cryptogramInput && (
-              <button
-                onClick={() => {
-                  setCryptogramInput('');
-                  setCryptogramSolve(null);
-                }}
-                className="inline-flex items-center gap-1.5 px-4 h-10 rounded-lg text-sm font-semibold bg-white/5 border border-white/10 text-slate-300 hover:bg-white/10 hover:text-white transition-colors"
-              >
-                <Eraser className="w-4 h-4" />
-                Clear
-              </button>
-            )}
-          </div>
-
-          {cryptogramSolve && (
-            <div className="mt-5" aria-live="polite">
-              {cryptogramSolve.ok ? (
-                <>
-                  <p className="text-lg text-white leading-relaxed">{cryptogramSolve.result.text}</p>
-                  {/* The recovered alphabet, which is the other half of the
-                      answer: it says what to write in the squares, not just
-                      what the passage was. */}
-                  <p className="mt-3 text-xs text-slate-500 font-mono break-words">
-                    {Object.entries(cryptogramSolve.result.mapping)
-                      .sort(([a], [b]) => a.localeCompare(b))
-                      .map(([c, p]) => `${c.toUpperCase()}→${p}`)
-                      .join('  ')}
-                  </p>
-                  <p className="mt-3 text-xs text-slate-500">
-                    {cryptogramSolve.result.readings <= 1
-                      ? 'The only reading where every word is a word, so this is almost certainly it.'
-                      : `Picked from ${cryptogramSolve.result.readings} readings where every word is a word. Word shapes cannot tell those apart on their own — if this looks like nonsense, that is why.`}
-                  </p>
-                </>
-              ) : (
-                <p className="text-sm text-slate-400">
-                  {cryptogramSolve.reason === 'no divisions'
-                    ? 'This has no word divisions, so there are no word shapes to match. Cracking that kind needs letter frequencies rather than a dictionary, which this solver does not do.'
-                    : cryptogramSolve.reason === 'no words'
-                      ? 'No letters in there to work on.'
-                      : cryptogramSolve.reason === 'gave up'
-                        ? 'Searched as far as is worth searching without finding a reading. If a letter or two is already known, filling them in by hand narrows it enormously.'
-                        : 'No reading where every word is a word. Check for typos, or that this really is a simple substitution.'}
-                </p>
-              )}
-            </div>
-          )}
+        <div className="mb-8 text-center">
+          <p className="text-sm text-slate-400 max-w-lg mx-auto">
+            The cryptogram solver isn&apos;t here yet. The word solvers can hand you a list
+            because a word either fits or it doesn&apos;t; a passage can have several readings
+            where every word is real, so this one has to show you the choices rather than
+            pick one. Play is where this game lives for now.
+          </p>
         </div>
         )}
 
