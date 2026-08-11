@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Grid3x3, Hexagon, LayoutGrid, Puzzle, Shuffle, Square, Table2, X } from 'lucide-react';
+import { Grid3x3, Hexagon, KeyRound, LayoutGrid, Puzzle, Shuffle, Square, Table2, X } from 'lucide-react';
 import {
   combineStats,
   fetchSyncedStats,
@@ -125,7 +125,9 @@ export default function StatsModal({
       SQUARE_STAT_SIZES.reduce(
         (t, k) => t + stats.squares[k].solved + stats.squares[k].revealed,
         0
-      ) >
+      ) +
+      stats.cryptogram.solved +
+      stats.cryptogram.revealed >
     0;
 
   return (
@@ -301,6 +303,26 @@ export default function StatsModal({
                 <Stat label="Revealed" value={stats.weave.revealed} />
                 <Stat label="Best time" value={time(stats.weave.bestTimeMs)} />
                 <Stat label="Hints used" value={stats.weave.hintsUsed} />
+              </div>
+            </Section>
+
+            <Section Icon={KeyRound} title="Cryptogram">
+              {/* no streak tile: a streak is counted off puzzle dates, which
+                  only the history view has */}
+              <div className="grid grid-cols-4 gap-2">
+                <Stat label="Solved" value={stats.cryptogram.solved} />
+                <Stat label="Revealed" value={stats.cryptogram.revealed} />
+                <Stat label="Best time" value={time(stats.cryptogram.bestTimeMs)} />
+                <Stat
+                  label="Avg time"
+                  value={
+                    stats.cryptogram.solved > 0
+                      ? formatElapsed(
+                          Math.round(stats.cryptogram.totalTimeMs / stats.cryptogram.solved)
+                        )
+                      : '—'
+                  }
+                />
               </div>
             </Section>
           </div>

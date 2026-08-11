@@ -2,7 +2,7 @@
 // already heavy, and a sparkline is a polyline.
 
 import { useEffect, useMemo, useState } from 'react';
-import { Grid3x3, Hexagon, LayoutGrid, Puzzle, Shuffle, Square, Table2 } from 'lucide-react';
+import { Grid3x3, Hexagon, KeyRound, LayoutGrid, Puzzle, Shuffle, Square, Table2 } from 'lucide-react';
 import {
   fetchHistory,
   guessByLength,
@@ -36,6 +36,7 @@ const GAMES: {
   { id: 'weave', label: 'Weave', Icon: Puzzle, unit: 'time', lowerIsBetter: true },
   { id: 'squares', label: 'Word squares (4×4)', Icon: Table2, unit: 'time', lowerIsBetter: true, variant: '4' },
   { id: 'squares', label: 'Word squares (5×5)', Icon: Table2, unit: 'time', lowerIsBetter: true, variant: '5' },
+  { id: 'cryptogram', label: 'Cryptogram', Icon: KeyRound, unit: 'time', lowerIsBetter: true },
 ];
 
 function todayEt(): string {

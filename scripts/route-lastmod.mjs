@@ -22,7 +22,7 @@ const OUT = 'scripts/route-lastmod.json';
 
 // Kept in step with SITEMAP_PATHS in vite.config.ts by hand. Drift is not
 // silent: the build warns about any page it can't find a date for.
-const GAME_SLUGS = ['guess', 'scramble', 'hive', 'grid', 'boxed', 'weave', 'squares'];
+const GAME_SLUGS = ['guess', 'scramble', 'hive', 'grid', 'boxed', 'weave', 'squares', 'cryptogram'];
 
 const GAME_FILES = {
   guess: 'src/GuessGame.tsx',
@@ -32,6 +32,7 @@ const GAME_FILES = {
   boxed: 'src/BoxGame.tsx',
   weave: 'src/WeaveGame.tsx',
   squares: 'src/SquaresGame.tsx',
+  cryptogram: 'src/CryptogramGame.tsx',
 };
 
 /** Which source files decide what a given page says. */

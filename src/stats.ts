@@ -43,6 +43,12 @@ export type LifetimeStats = {
     bestTimeMs: number | null;
     totalTimeMs: number;
   };
+  cryptogram: {
+    solved: number;
+    revealed: number;
+    bestTimeMs: number | null;
+    totalTimeMs: number;
+  };
   /** kept per board size: a 4×4 and a 5×5 are different puzzles, and pooling
    *  their times makes an average that describes neither */
   squares: Record<SquareStatSize, SquaresStat>;
@@ -69,7 +75,8 @@ export type GameEvent =
   | { game: 'scramble' | 'grid'; payload: { score: number; words: number } }
   | { game: 'box'; payload: { words: number; timeMs: number } }
   | { game: 'weave'; payload: { solved: boolean; timeMs: number; hints: number } }
-  | { game: 'squares'; payload: { solved: boolean; size: number; timeMs: number } };
+  | { game: 'squares'; payload: { solved: boolean; size: number; timeMs: number } }
+  | { game: 'cryptogram'; payload: { solved: boolean; timeMs: number } };
 
 function num(v: unknown): number {
   return typeof v === 'number' && Number.isFinite(v) && v >= 0 ? v : 0;
@@ -121,6 +128,12 @@ function sanitizeBucket(p: any): LifetimeStats {
       hintsUsed: num(p?.weave?.hintsUsed),
       bestTimeMs: numOrNull(p?.weave?.bestTimeMs),
       totalTimeMs: num(p?.weave?.totalTimeMs),
+    },
+    cryptogram: {
+      solved: num(p?.cryptogram?.solved),
+      revealed: num(p?.cryptogram?.revealed),
+      bestTimeMs: numOrNull(p?.cryptogram?.bestTimeMs),
+      totalTimeMs: num(p?.cryptogram?.totalTimeMs),
     },
     squares: Object.fromEntries(
       SQUARE_STAT_SIZES.map((k) => [
@@ -219,6 +232,19 @@ export function applyEvent(s: LifetimeStats, e: GameEvent): void {
       }
       break;
     }
+    case 'cryptogram': {
+      const { solved, timeMs } = e.payload;
+      if (solved) {
+        s.cryptogram.solved += 1;
+        s.cryptogram.totalTimeMs += num(timeMs);
+        if (s.cryptogram.bestTimeMs === null || timeMs < s.cryptogram.bestTimeMs) {
+          s.cryptogram.bestTimeMs = num(timeMs);
+        }
+      } else {
+        s.cryptogram.revealed += 1;
+      }
+      break;
+    }
     case 'squares': {
       const { solved, size, timeMs } = e.payload;
       const b = s.squares[String(size) as SquareStatSize];
@@ -285,6 +311,15 @@ export function applyDailySummary(s: LifetimeStats, game: string, p: any): void 
         s.weave.revealed += 1;
       }
       break;
+    case 'cryptogram':
+      if (p?.solved) {
+        s.cryptogram.solved += 1;
+        s.cryptogram.totalTimeMs += num(p?.timeMs);
+        s.cryptogram.bestTimeMs = minNullable(s.cryptogram.bestTimeMs, num(p?.timeMs));
+      } else {
+        s.cryptogram.revealed += 1;
+      }
+      break;
     case 'squares': {
       const sq = s.squares[String(p?.size) as SquareStatSize];
       if (!sq) break;
@@ -348,6 +383,12 @@ export function combineStats(a: LifetimeStats, b: LifetimeStats): LifetimeStats 
       hintsUsed: a.weave.hintsUsed + b.weave.hintsUsed,
       bestTimeMs: minNullable(a.weave.bestTimeMs, b.weave.bestTimeMs),
       totalTimeMs: a.weave.totalTimeMs + b.weave.totalTimeMs,
+    },
+    cryptogram: {
+      solved: a.cryptogram.solved + b.cryptogram.solved,
+      revealed: a.cryptogram.revealed + b.cryptogram.revealed,
+      bestTimeMs: minNullable(a.cryptogram.bestTimeMs, b.cryptogram.bestTimeMs),
+      totalTimeMs: a.cryptogram.totalTimeMs + b.cryptogram.totalTimeMs,
     },
     squares: Object.fromEntries(
       SQUARE_STAT_SIZES.map((k) => [
@@ -469,6 +510,18 @@ export function recordWeaveReveal(
   record(daily, { game: 'weave', payload: { solved: false, timeMs: 0, hints } }, puzzleDate);
 }
 
+/** Same shape as a squares finish: a passage is worked out or given up on,
+ *  once either way. There is no size to carry — every cryptogram is one
+ *  passage, and difficulty is how much of it you were handed. */
+export function recordCryptogramFinish(
+  daily: boolean,
+  solved: boolean,
+  timeMs: number,
+  puzzleDate: string | null = null
+): void {
+  record(daily, { game: 'cryptogram', payload: { solved, timeMs } }, puzzleDate);
+}
+
 /** A squares board is over exactly once — solved or given up on — so both
  *  outcomes are one event, and `size` rides along because the 4x4 and the 5x5
  *  are separate puzzles on the same day. */
@@ -531,6 +584,7 @@ const KNOWN_GAMES = new Set<GameEvent['game']>([
   'box',
   'weave',
   'squares',
+  'cryptogram',
 ]);
 
 // sum of all device baselines + full event-log replay -> the account's

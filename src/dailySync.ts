@@ -15,7 +15,15 @@ import type { Difficulty } from '@/difficulty';
 import { supabase } from '@/supabase';
 import { store as siteStore } from '@/siteStorage';
 
-export type DailyGame = 'guess' | 'hive' | 'scramble' | 'grid' | 'box' | 'weave' | 'squares';
+export type DailyGame =
+  | 'guess'
+  | 'hive'
+  | 'scramble'
+  | 'grid'
+  | 'box'
+  | 'weave'
+  | 'squares'
+  | 'cryptogram';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Rec = Record<string, any>;
@@ -161,6 +169,33 @@ export function mergeDaily(
         elapsedMs: maxNum(local.elapsedMs, remote.elapsedMs),
       };
     }
+    case 'cryptogram': {
+      const mine = (local.mapping ?? {}) as Record<string, string>;
+      const theirs = (remote.mapping ?? {}) as Record<string, string>;
+      const localDone = !!local.revealed || (local.solved ?? false);
+      const remoteDone = !!remote.revealed || (remote.solved ?? false);
+      // A mapping can't be merged key by key. It's a bijection — two devices
+      // that each assigned 'e' to a different cipher letter would union into
+      // a reading no cipher could produce, and worse, one the player never
+      // typed. So one side wins whole, the same way Boxed's chain and
+      // Squares' grid do: mine when I'm saving an edit, so un-assigning a
+      // letter survives; otherwise the finished board, else the further on.
+      const mapping =
+        mode === 'push'
+          ? mine
+          : remoteDone && !localDone
+            ? theirs
+            : Object.keys(theirs).length > Object.keys(mine).length
+              ? theirs
+              : mine;
+      return {
+        ...local,
+        mapping,
+        solved: !!(local.solved || remote.solved),
+        revealed: !!(local.revealed || remote.revealed),
+        elapsedMs: maxNum(local.elapsedMs, remote.elapsedMs),
+      };
+    }
     case 'weave':
       return {
         ...local,
@@ -239,6 +274,8 @@ const PROGRESS_FIELDS: Record<DailyGame, string[]> = {
   // state every second would leave no device ever looking "clean", which is
   // what lets a merge take the other side's deletions.
   squares: ['entries', 'solved', 'revealed'],
+  // `mapping` is the play; ciphertext, reveals and answer are the puzzle.
+  cryptogram: ['mapping', 'solved', 'revealed'],
 };
 
 export function progressOf(game: DailyGame, state: Rec | null): Rec {

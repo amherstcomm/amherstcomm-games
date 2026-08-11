@@ -2,7 +2,7 @@ import { DIFFICULTIES, type Difficulty } from '@/difficulty';
 import type { Palette, TextScale, ThemeMode } from '@/theme';
 import { store as siteStore } from '@/siteStorage';
 
-export type Mode = 'pattern' | 'descramble' | 'bee' | 'boxed' | 'grid' | 'weave' | 'squares';
+export type Mode = 'pattern' | 'descramble' | 'bee' | 'boxed' | 'grid' | 'weave' | 'squares' | 'cryptogram';
 
 /** 'home' is the front page, 'last' is wherever you left off, and a Mode is
  *  that game's daily — for people who came for one game and mean to keep
@@ -11,7 +11,7 @@ export type StartPage = 'home' | 'last' | Mode;
 
 const KEY = 'anagrimoire:v1';
 
-export const ALL_MODES: Mode[] = ['pattern', 'descramble', 'bee', 'boxed', 'grid', 'weave', 'squares'];
+export const ALL_MODES: Mode[] = ['pattern', 'descramble', 'bee', 'boxed', 'grid', 'weave', 'squares', 'cryptogram'];
 export const ALL_START_PAGES: StartPage[] = ['home', 'last', ...ALL_MODES];
 /** The solver's lists were Common/Standard/Full before they became the
  *  difficulties' accept tiers. Stored choices carry over rather than reset —
@@ -133,6 +133,10 @@ export type PersistedState = {
    *  down and back doesn't lose what was typed */
   squares: { letters: string[]; size: SquareSolverSize };
   squaresPlay: boolean;
+  /** the cryptogram solver's own ciphertext, kept so leaving the tab and
+   *  coming back doesn't lose what was typed in */
+  cryptogram: { cipher: string };
+  cryptogramPlay: boolean;
 };
 
 export type GridPreset = '3x3' | '4x4' | '5x5';
@@ -152,7 +156,7 @@ export const WEAVE_DIMS: Record<WeaveSize, { rows: number; cols: number }> = {
 
 export const DEFAULT_STATE: PersistedState = {
   mode: 'pattern',
-  dictionaries: { pattern: 'easy', descramble: 'easy', bee: 'easy', boxed: 'easy', grid: 'easy', weave: 'hard', squares: 'hard' },
+  dictionaries: { pattern: 'easy', descramble: 'easy', bee: 'easy', boxed: 'easy', grid: 'easy', weave: 'hard', squares: 'hard', cryptogram: 'hard' },
   sort: {
     pattern: { key: 'alpha', dir: 'asc' },
     descramble: { key: 'length', dir: 'desc' },
@@ -161,6 +165,7 @@ export const DEFAULT_STATE: PersistedState = {
     grid: { key: 'length', dir: 'desc' },
     weave: { key: 'length', dir: 'desc' },
     squares: { key: 'length', dir: 'desc' },
+    cryptogram: { key: 'length', dir: 'desc' },
   },
   keyboard: false,
   theme: 'system',
@@ -190,6 +195,8 @@ export const DEFAULT_STATE: PersistedState = {
   weavePlay: true,
   squares: { letters: Array(25).fill(''), size: 4 },
   squaresPlay: true,
+  cryptogram: { cipher: '' },
+  cryptogramPlay: true,
 };
 
 function singleLetter(v: unknown): string {
@@ -238,6 +245,7 @@ export function loadState(): PersistedState {
       grid: { ...DEFAULT_STATE.sort.grid },
       weave: { ...DEFAULT_STATE.sort.weave },
       squares: { ...DEFAULT_STATE.sort.squares },
+      cryptogram: { ...DEFAULT_STATE.sort.cryptogram },
     };
     for (const m of ALL_MODES) {
       const s = p?.sort?.[m];
@@ -275,6 +283,11 @@ export function loadState(): PersistedState {
         squaresLetters[i] = singleLetter(p.squares.letters[i]);
       }
     }
+
+    // a passage, not a rack: the spaces and punctuation are half of what makes
+    // a cipher readable, so only the length is capped
+    const cryptogramCipher =
+      typeof p?.cryptogram?.cipher === 'string' ? p.cryptogram.cipher.slice(0, 300) : '';
 
     const gridPreset: GridPreset = Object.keys(GRID_PRESET_DIMS).includes(p?.grid?.preset)
       ? p.grid.preset
@@ -349,8 +362,10 @@ export function loadState(): PersistedState {
       grid: { letters: gridLetters, preset: gridPreset },
       weave: { letters: weaveLetters, size: weaveSize },
       squares: { letters: squaresLetters, size: squaresSize },
+      cryptogram: { cipher: cryptogramCipher },
       weavePlay: p?.weavePlay !== false,
       squaresPlay: p?.squaresPlay !== false,
+      cryptogramPlay: p?.cryptogramPlay !== false,
     };
   } catch {
     return DEFAULT_STATE;

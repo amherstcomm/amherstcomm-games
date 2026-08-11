@@ -8,6 +8,13 @@ import { createRequire } from 'node:module';
 import { generateWeave } from './weave.mjs';
 import { generateSquare, GIVEN_TARGET } from './squares.mjs';
 import { THEMES } from './themes.mjs';
+import {
+  CRYPTOGRAM_REVEALS,
+  cycleOf,
+  generateCryptogram,
+  livePassages,
+  permutedIndex,
+} from './cryptogram.mjs';
 
 const require = createRequire(import.meta.url);
 
@@ -156,6 +163,15 @@ const STANDARD_FILES = [...COMMON_FILES, 'english-words-40', 'english-words-50',
 const etDate =
   process.env.PUZZLES_DATE ||
   new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York' }).format(new Date());
+
+// the cryptogram walks its pool by day number, so the date becomes one
+const epochDay = Math.floor(Date.parse(`${etDate}T12:00:00Z`) / 86_400_000);
+
+// The curated passage pool, human holds excluded. Loaded whole: 2,590
+// passages is a word list, not a corpus.
+const passagePool = livePassages(
+  JSON.parse(readFileSync(new URL('./cryptogram-passages.json', import.meta.url), 'utf8'))
+);
 
 // Three difficulties, and they don't all mean the same thing. Guess, Hive,
 // Boxed and Scramble vary by word tier; Grid varies only by what it accepts,
@@ -348,6 +364,7 @@ const GRID_SHAPE = { easy: 4, hard: 5, extreme: 5 };
 const diffSalt = (d) => (d === 'easy' ? '' : `-${d}`);
 
 const dailyWeaveClues = new Set();
+const dailyCryptogramTexts = new Set();
 for (const variant of ['', 'dev']) {
   const salt = variant ? `-${variant}` : '';
   const prefix = variant ? 'dev-' : '';
@@ -640,6 +657,49 @@ for (const variant of ['', 'dev']) {
         return `${d} ${b.size}x${b.size} ${b.cells.filter(Boolean).length} given`;
       }).join(', ')
   );
+
+  // cryptogram: a passage per difficulty under a fresh substitution cipher.
+  // The passage pick walks ONE permutation per cycle with the difficulties
+  // offset a third of the pool apart — same-day difficulties can never
+  // collide, and no difficulty repeats a passage inside a pool-sized window
+  // (seven years). The cipher and reveals are then seeded per date and
+  // difficulty like every other game.
+  const cryptogramByDifficulty = {};
+  DIFFICULTIES.forEach((difficulty, di) => {
+    const position = epochDay + di * Math.floor(passagePool.length / 3);
+    const cycle = cycleOf(position, passagePool.length);
+    // seeded by the cycle, not the date: every day in a cycle must deal the
+    // same permutation or the no-repeat walk is just random picks again
+    const cycleRng = mulberry32(
+      xmur3(`${SEED_SALT}anagrimoire-cryptogram-cycle-${cycle}${salt}`)()
+    );
+    const passage = passagePool[permutedIndex(cycleRng, passagePool.length, position)];
+    dailyCryptogramTexts.add(passage.text);
+    const rng = mulberry32(
+      xmur3(`${SEED_SALT}anagrimoire-cryptogram-${etDate}${salt}${diffSalt(difficulty)}`)()
+    );
+    cryptogramByDifficulty[difficulty] = generateCryptogram(
+      passage,
+      rng,
+      CRYPTOGRAM_REVEALS[difficulty]
+    );
+  });
+  await writeFile(
+    `${DATA_DIR}/${prefix}daily-cryptogram.json`,
+    JSON.stringify(
+      { date: etDate, byDifficulty: cryptogramByDifficulty, fetchedAt: stamp },
+      null,
+      2
+    ) + '\n'
+  );
+  console.log(
+    `Wrote data/${prefix}daily-cryptogram.json: ` +
+      DIFFICULTIES.map(
+        (d) =>
+          `${d} ${cryptogramByDifficulty[d].ciphertext.replace(/[^A-Z]/g, '').length} letters, ` +
+          `${Object.keys(cryptogramByDifficulty[d].reveals).length} revealed`
+      ).join(' | ')
+  );
 }
 
 // shared practice pool for weave: pre-generated boards in both sizes,
@@ -735,4 +795,39 @@ await writeFile(
 console.log(
   `Wrote data/squares-pool.json: ` +
     DIFFICULTIES.map((d) => `${d} ${squaresPoolByDifficulty[d].length}`).join(', ')
+);
+
+// shared practice pool for cryptogram: both variants' daily passages are held
+// out so practice never spoils a daily, same as weave's themes.
+const cgPoolRng = mulberry32(xmur3(`${SEED_SALT}anagrimoire-cryptogram-pool-${etDate}`)());
+const cgPoolPassages = passagePool.filter((p) => !dailyCryptogramTexts.has(p.text));
+const cryptogramPoolByDifficulty = { easy: [], hard: [], extreme: [] };
+for (const difficulty of DIFFICULTIES) {
+  const used = new Set();
+  for (let i = 0; i < 10; i++) {
+    let p;
+    do {
+      p = cgPoolPassages[Math.floor(cgPoolRng() * cgPoolPassages.length)];
+    } while (used.has(p.text));
+    used.add(p.text);
+    cryptogramPoolByDifficulty[difficulty].push(
+      generateCryptogram(p, cgPoolRng, CRYPTOGRAM_REVEALS[difficulty])
+    );
+  }
+}
+await writeFile(
+  `${DATA_DIR}/cryptogram-pool.json`,
+  JSON.stringify(
+    {
+      date: etDate,
+      byDifficulty: cryptogramPoolByDifficulty,
+      fetchedAt: new Date().toISOString(),
+    },
+    null,
+    2
+  ) + '\n'
+);
+console.log(
+  `Wrote data/cryptogram-pool.json: ` +
+    DIFFICULTIES.map((d) => `${d} ${cryptogramPoolByDifficulty[d].length}`).join(', ')
 );

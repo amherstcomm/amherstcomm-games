@@ -9,7 +9,7 @@ import { readFileSync } from 'node:fs';
 // advertise production's card, which is a 404 until the branch merges.
 const SITE_ORIGIN = process.env.VITE_SITE_ORIGIN || 'https://anagrimoire.com';
 
-const GAME_SLUGS = ['guess', 'scramble', 'hive', 'grid', 'boxed', 'weave', 'squares'];
+const GAME_SLUGS = ['guess', 'scramble', 'hive', 'grid', 'boxed', 'weave', 'squares', 'cryptogram'];
 
 // Panels that need an account — /stats, /settings, /account — are left out on
 // purpose: real addresses, but nothing on them to index.

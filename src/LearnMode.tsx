@@ -1,6 +1,7 @@
 import {
   forwardRef,
   Fragment,
+  useCallback,
   useEffect,
   useImperativeHandle,
   useLayoutEffect,
@@ -1591,6 +1592,92 @@ function LearnWeave({ dict, colors }: { dict: Set<string> | null; colors: ColorW
 }
 
 // ---------------------------------------------------------------------------
+// ---------------------------------------------------------------------------
+// cryptogram
+// ---------------------------------------------------------------------------
+
+// Taught with a Caesar shift rather than the real thing: every letter moves the
+// same distance, so the whole mapping falls out of one deduction. That teaches
+// the mechanic — letters stand for letters, consistently — in about fifteen
+// seconds, and the daily's full substitution stops looking impenetrable.
+const LEARN_PLAIN = 'time flies';
+const LEARN_SHIFT = 5;
+const shiftLetter = (c: string) =>
+  /[a-z]/.test(c)
+    ? String.fromCharCode(((c.charCodeAt(0) - 97 + LEARN_SHIFT) % 26) + 97).toUpperCase()
+    : c;
+
+function LearnCryptogram({ register }: { register: RegisterKeys }) {
+  const cipher = useMemo(() => Array.from(LEARN_PLAIN, shiftLetter).join(''), []);
+  const [mapping, setMapping] = useState<Record<string, string>>({});
+  const [selected, setSelected] = useState<string>(cipher[0]);
+
+  const solved =
+    Array.from(cipher, (c) => (/[A-Z]/.test(c) ? mapping[c] ?? ' ' : c)).join('') === LEARN_PLAIN;
+
+  const press = useCallback(
+    (k: string) => {
+      if (!/^[a-z]$/.test(k) || !selected) return;
+      setMapping((prev) => {
+        const next = { ...prev };
+        for (const [cl, pl] of Object.entries(next)) if (pl === k) delete next[cl];
+        next[selected] = k;
+        return next;
+      });
+    },
+    [selected]
+  );
+  useEffect(() => register(press), [register, press]);
+
+  return (
+    <div className="max-w-lg mx-auto">
+      <p className="text-sm text-slate-300 mb-4">
+        Every letter has been swapped for another one, the same way all the way
+        through. Tap a letter, then type what you think it stands for.
+      </p>
+
+      <div className="flex flex-wrap justify-center gap-x-3 gap-y-3 mb-4">
+        {cipher.split(' ').map((word, wi, all) => (
+          <span key={wi} className="inline-flex">
+            {Array.from(word, (ch, ci) => {
+              const i = all.slice(0, wi).reduce((n, w) => n + w.length + 1, 0) + ci;
+              const shown = mapping[ch];
+              return (
+                <button
+                  key={i}
+                  onClick={() => setSelected(ch)}
+                  aria-label={`cipher letter ${ch}${shown ? `, solved as ${shown}` : ''}`}
+                  className={`inline-flex flex-col items-center w-6 rounded-md ${
+                    ch === selected ? 'bg-amber-400/20' : 'hover:bg-white/10'
+                  }`}
+                >
+                  <span
+                    className={`h-7 flex items-center justify-center w-5 text-lg font-bold uppercase border-b-2 ${
+                      shown ? 'text-accent border-white/40' : 'text-transparent border-white/25'
+                    }`}
+                  >
+                    {shown ?? ' '}
+                  </span>
+                  <span className="h-4 text-[0.625rem] font-semibold tracking-wider text-slate-500">
+                    {ch}
+                  </span>
+                </button>
+              );
+            })}
+          </span>
+        ))}
+      </div>
+
+      <p className="text-sm text-slate-400" aria-live="polite">
+        {solved
+          ? 'That’s it. Every letter here moved five places along the alphabet — the daily uses a jumbled alphabet instead, so you work it out from the shape of the words.'
+          : 'A two-letter word, a repeated letter, an apostrophe: those are the ways in.'}
+      </p>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // shell
 // ---------------------------------------------------------------------------
 
@@ -1602,6 +1689,7 @@ const TITLES: Record<Mode, string> = {
   boxed: 'Boxed',
   weave: 'Weave',
   squares: 'Word Squares',
+  cryptogram: 'Cryptogram',
 };
 
 const LearnMode = forwardRef<
@@ -1633,6 +1721,7 @@ const LearnMode = forwardRef<
       {mode === 'boxed' && <LearnBoxed dict={dict} register={register} />}
       {mode === 'weave' && <LearnWeave dict={dict} colors={colors} />}
       {mode === 'squares' && <LearnSquares dict={dict} register={register} />}
+      {mode === 'cryptogram' && <LearnCryptogram register={register} />}
 
       <p className="mt-2 text-xs text-slate-500 border-t border-white/10 pt-5 max-w-lg mx-auto">
         Daily puzzles refresh about 15 minutes after 3:00&nbsp;a.m. Eastern. Progress and stats
