@@ -26,6 +26,11 @@
 // fits a board, and enough letter repetition to give the cipher a way in.
 // Duplicates keep their first source's attribution, so run Bartlett's first —
 // a named author beats "English proverb" for the same line.
+//
+// The CURATED pool lives in scripts/cryptogram-passages.json — this script's
+// output plus the human review, where `review: true` means held out of play.
+// Those flags are hand-made judgments a re-run cannot reproduce: merge fresh
+// harvests into that file, never overwrite it.
 
 import { readFileSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';

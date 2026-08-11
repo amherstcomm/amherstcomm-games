@@ -672,9 +672,12 @@ give the cipher a way in, blocklist, dedupe — and keeps **2,674 candidates**:
   difficulty dial the entry above suggests.
 
 Duplicates keep their first source's attribution, so Bartlett's named
-authors beat "English proverb" for the same line. What remains before the
-pool is real: a human skim — mid-thought verse fragments and inaugural
-policy-speak are things no mechanical filter can judge. Sourcing rules worth
+authors beat "English proverb" for the same line. **The skim happened**
+(August 2026): the reviewed pool is `scripts/cryptogram-passages.json`,
+where `review: true` means held out of play — kept in the data so a change
+of heart is an unflag, not a re-harvest. **2,590 passages live** (1,584
+Bartlett's, 932 inaugurals, 74 proverbs), 84 held out. That's seven years of
+dailies before a repeat. Sourcing rules worth
 keeping: quote *collections*, not books; Gutenberg only, so translations are
 old enough to be public domain themselves; Wikiquote is CC BY-SA and never a
 source, and MIT-licensed quote datasets are copyright-washing. Case is
