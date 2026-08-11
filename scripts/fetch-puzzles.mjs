@@ -9,11 +9,11 @@ import { generateWeave } from './weave.mjs';
 import { generateSquare, GIVEN_TARGET } from './squares.mjs';
 import { THEMES } from './themes.mjs';
 import {
-  CRYPTOGRAM_REVEALS,
   cycleOf,
   generateCryptogram,
   livePassages,
   permutedIndex,
+  TIER_VARIANTS,
 } from './cryptogram.mjs';
 
 const require = createRequire(import.meta.url);
@@ -678,11 +678,11 @@ for (const variant of ['', 'dev']) {
     const rng = mulberry32(
       xmur3(`${SEED_SALT}anagrimoire-cryptogram-${etDate}${salt}${diffSalt(difficulty)}`)()
     );
-    cryptogramByDifficulty[difficulty] = generateCryptogram(
-      passage,
-      rng,
-      CRYPTOGRAM_REVEALS[difficulty]
-    );
+    // which cipher today is, drawn from the tier's own pool — the board
+    // announces it, so the variety is something a player can learn to use
+    const options = TIER_VARIANTS[difficulty];
+    const variant = options[Math.floor(rng() * options.length)];
+    cryptogramByDifficulty[difficulty] = generateCryptogram(passage, rng, variant);
   });
   await writeFile(
     `${DATA_DIR}/${prefix}daily-cryptogram.json`,
@@ -694,11 +694,10 @@ for (const variant of ['', 'dev']) {
   );
   console.log(
     `Wrote data/${prefix}daily-cryptogram.json: ` +
-      DIFFICULTIES.map(
-        (d) =>
-          `${d} ${cryptogramByDifficulty[d].ciphertext.replace(/[^A-Z]/g, '').length} letters, ` +
-          `${Object.keys(cryptogramByDifficulty[d].reveals).length} revealed`
-      ).join(' | ')
+      DIFFICULTIES.map((d) => {
+        const b = cryptogramByDifficulty[d];
+        return `${d} ${b.label}, ${b.tokens.length} tokens, ${Object.keys(b.reveals).length} revealed`;
+      }).join(' | ')
   );
 }
 
@@ -804,14 +803,17 @@ const cgPoolPassages = passagePool.filter((p) => !dailyCryptogramTexts.has(p.tex
 const cryptogramPoolByDifficulty = { easy: [], hard: [], extreme: [] };
 for (const difficulty of DIFFICULTIES) {
   const used = new Set();
+  const options = TIER_VARIANTS[difficulty];
   for (let i = 0; i < 10; i++) {
     let p;
     do {
       p = cgPoolPassages[Math.floor(cgPoolRng() * cgPoolPassages.length)];
     } while (used.has(p.text));
     used.add(p.text);
+    // walk the tier's variants in turn rather than drawing at random, so a
+    // practice pool of ten always covers every cipher the tier can serve
     cryptogramPoolByDifficulty[difficulty].push(
-      generateCryptogram(p, cgPoolRng, CRYPTOGRAM_REVEALS[difficulty])
+      generateCryptogram(p, cgPoolRng, options[i % options.length])
     );
   }
 }
