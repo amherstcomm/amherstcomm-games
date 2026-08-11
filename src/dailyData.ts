@@ -20,6 +20,7 @@ export function dailyDataUrl(
     | 'daily-grid'
     | 'daily-weave'
     | 'daily-squares'
+    | 'daily-cryptogram'
 ): string {
   return `${BASE}/${IS_DEV_SITE ? 'dev-' : ''}${name}.json`;
 }
@@ -27,6 +28,7 @@ export function dailyDataUrl(
 // practice puzzles are pre-generated server-side and shared by both sites
 export const WEAVE_POOL_URL = `${BASE}/weave-pool.json`;
 export const SQUARES_POOL_URL = `${BASE}/squares-pool.json`;
+export const CRYPTOGRAM_POOL_URL = `${BASE}/cryptogram-pool.json`;
 
 // which daily set this site plays — synced results are tagged with it so
 // dev-site testing never pollutes production's global daily stats
@@ -78,9 +80,15 @@ export async function fetchDailyData(name: Parameters<typeof dailyDataUrl>[0]): 
   return db ?? viaFile(dailyDataUrl(name));
 }
 
-export async function fetchPool(pool: 'weave-pool' | 'squares-pool'): Promise<any> {
+const POOL_URL = {
+  'weave-pool': WEAVE_POOL_URL,
+  'squares-pool': SQUARES_POOL_URL,
+  'cryptogram-pool': CRYPTOGRAM_POOL_URL,
+};
+
+export async function fetchPool(pool: keyof typeof POOL_URL): Promise<any> {
   const db = await viaRpc(pool, 'shared');
-  return db ?? viaFile(pool === 'weave-pool' ? WEAVE_POOL_URL : SQUARES_POOL_URL);
+  return db ?? viaFile(POOL_URL[pool]);
 }
 
 /* eslint-enable @typescript-eslint/no-explicit-any */

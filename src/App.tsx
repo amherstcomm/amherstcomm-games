@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState, useEffect, useLayoutEffect, useRef, type ButtonHTMLAttributes, type ReactNode } from 'react';
-import { Search, Eraser, ArrowDown, ArrowUp, X, BookOpen, Grid3x3, Shuffle, Hexagon, Check, Keyboard, Delete, Github, Info, Square, CalendarDays, Star, Gamepad2, CornerDownLeft, LayoutGrid, Puzzle, BarChart3, UserRound, Scale, Settings, Home, Table2 } from 'lucide-react';
+import { Search, Eraser, ArrowDown, ArrowUp, X, BookOpen, Grid3x3, Shuffle, Hexagon, Check, Keyboard, Delete, Github, Info, Square, CalendarDays, Star, Gamepad2, CornerDownLeft, LayoutGrid, Puzzle, BarChart3, UserRound, Scale, Settings, Home, Table2, KeyRound } from 'lucide-react';
 import LearnMode, { type LearnModeHandle } from '@/LearnMode';
 import type { Session } from '@supabase/supabase-js';
 import StatsModal from '@/StatsModal';
@@ -30,6 +30,7 @@ import { solveSquare } from '@/squares';
 import HomeView from '@/HomeView';
 import RouteLink from '@/RouteLink';
 import SquaresGame, { type SquaresGameHandle } from '@/SquaresGame';
+import CryptogramGame, { type CryptogramGameHandle } from '@/CryptogramGame';
 import {
   MODE_SLUG,
   initialGame,
@@ -128,6 +129,15 @@ const MODES: { id: Mode; label: string; blurb: string; description: string; play
     playDescription:
       'Find the themed words that tile the whole board, plus the one that spans it corner to corner.',
   },
+  {
+    id: 'cryptogram',
+    label: 'Cryptogram',
+    blurb: 'A passage in code — work out which letter is which',
+    description:
+      'Play the daily cipher. There is no solver here yet: deducing a whole passage is a different search from the word ones, and it deserves building properly.',
+    playDescription:
+      'Every letter stands for another one, the same way throughout. Work out the passage.',
+  },
 ];
 
 const MODE_ICONS: Record<Mode, typeof Grid3x3> = {
@@ -138,6 +148,7 @@ const MODE_ICONS: Record<Mode, typeof Grid3x3> = {
   boxed: Square,
   weave: Puzzle,
   squares: Table2,
+  cryptogram: KeyRound,
 };
 
 function normalizeLetters(s: string): string[] {
@@ -506,6 +517,9 @@ function App() {
   const [weaveSize, setWeaveSize] = useState<WeaveSize>(initial.weave.size);
   const [weavePlay, setWeavePlay] = useState(initialPlay('weave', initial.weavePlay));
   const [squaresPlay, setSquaresPlay] = useState(initialPlay('squares', initial.squaresPlay));
+  const [cryptogramPlay, setCryptogramPlay] = useState(
+    initialPlay('cryptogram', initial.cryptogramPlay)
+  );
 
   const weaveDims = WEAVE_DIMS[weaveSize];
 
@@ -892,6 +906,7 @@ function App() {
   const learnRef = useRef<LearnModeHandle>(null);
   const weaveRef = useRef<WeaveGameHandle>(null);
   const squaresRef = useRef<SquaresGameHandle>(null);
+  const cryptogramRef = useRef<CryptogramGameHandle>(null);
 
   // The switch and the games both read the same stored value; this only
   // mirrors it so the pressed state re-renders.
@@ -920,8 +935,9 @@ function App() {
   const gridPlayActive = mode === 'grid' && gridPlay && !learnMode;
   const weavePlayActive = mode === 'weave' && weavePlay && !learnMode;
   const squaresPlayActive = mode === 'squares' && squaresPlay && !learnMode;
+  const cryptogramPlayActive = mode === 'cryptogram' && cryptogramPlay && !learnMode;
   const playActive =
-    patternPlayActive || beePlayActive || boxedPlayActive || descramblePlayActive || gridPlayActive || weavePlayActive || squaresPlayActive;
+    patternPlayActive || beePlayActive || boxedPlayActive || descramblePlayActive || gridPlayActive || weavePlayActive || squaresPlayActive || cryptogramPlayActive;
 
 
 
@@ -988,6 +1004,7 @@ function App() {
     grid: [gridPlay, setGridPlay],
     weave: [weavePlay, setWeavePlay],
     squares: [squaresPlay, setSquaresPlay],
+    cryptogram: [cryptogramPlay, setCryptogramPlay],
   };
 
   const prefs = useMemo(() => ({ practiceAllowed }), [practiceAllowed]);
@@ -1184,8 +1201,10 @@ function App() {
       weave: { letters: weaveLetters, size: weaveSize },
       weavePlay,
       squaresPlay,
+      cryptogram: { cipher: '' },
+      cryptogramPlay,
     });
-  }, [mode, dictionaries, sorts, kbOpen, theme, palette, textScale, navKeys, hiddenModes, hiddenViews, lengthRange, practiceAllowed, helpAllowed, solverDictionary, wordFilter, startPage, onboarded, patternPlay, beePlay, boxedPlay, descramblePlay, gridPlay, length, known, containsStr, excludedStr, rackStr, useAll, minLength, beeCenter, beeOuters, boxedLetters, solutionWords, gridLetters, gridPreset, weaveLetters, weaveSize, weavePlay, squaresPlay, squaresLetters, squaresSize]);
+  }, [mode, dictionaries, sorts, kbOpen, theme, palette, textScale, navKeys, hiddenModes, hiddenViews, lengthRange, practiceAllowed, helpAllowed, solverDictionary, wordFilter, startPage, onboarded, patternPlay, beePlay, boxedPlay, descramblePlay, gridPlay, length, known, containsStr, excludedStr, rackStr, useAll, minLength, beeCenter, beeOuters, boxedLetters, solutionWords, gridLetters, gridPreset, weaveLetters, weaveSize, weavePlay, squaresPlay, squaresLetters, squaresSize, cryptogramPlay]);
 
   // keep known array sized to length
   useEffect(() => {
@@ -1498,6 +1517,10 @@ function App() {
       squaresRef.current?.pressKey(k);
       return;
     }
+    if (cryptogramPlayActive) {
+      cryptogramRef.current?.pressKey(k);
+      return;
+    }
     if (patternPlayActive) {
       gameRef.current?.pressKey(k);
       return;
@@ -1799,6 +1822,24 @@ function App() {
         {squaresPlayActive && (
         <div className="mb-8">
           <SquaresGame ref={squaresRef} standardWords={acceptWordsArr ?? standardWordsArr} />
+        </div>
+        )}
+
+        {cryptogramPlayActive && (
+        <div className="mb-8">
+          <CryptogramGame ref={cryptogramRef} />
+        </div>
+        )}
+
+        {/* No solver yet. Deducing a passage is a different search from the
+            word ones — closer to Guess's pattern work applied twenty words at
+            once — and a stub that listed candidate words would be worse than
+            saying so. */}
+        {mode === 'cryptogram' && !cryptogramPlay && (
+        <div className="mb-8 text-center">
+          <p className="text-sm text-slate-400">
+            There&apos;s no cryptogram solver yet. Play is where this one lives for now.
+          </p>
         </div>
         )}
 
@@ -2529,7 +2570,7 @@ function App() {
           );
         })()}
 
-        {!playActive && mode !== 'squares' && (
+        {!playActive && mode !== 'squares' && mode !== 'cryptogram' && (
         <>
         {/* results header */}
         <div className="flex items-center justify-between mb-4 flex-wrap gap-y-3">

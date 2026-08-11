@@ -20,7 +20,8 @@ export type BoardGame =
   | 'box'
   | 'weave'
   | 'squares4'
-  | 'squares5';
+  | 'squares5'
+  | 'cryptogram';
 
 export type BoardRow = { name: string; value: number; detail: number | null };
 export type Boards = Record<BoardGame, BoardRow[]>;
@@ -42,6 +43,7 @@ const MODE_BOARDS: Record<Mode, BoardGame[]> = {
   boxed: ['box'],
   weave: ['weave'],
   squares: ['squares4', 'squares5'],
+  cryptogram: ['cryptogram'],
 };
 
 /** The boards worth showing: the ones for games you finished today.
@@ -73,7 +75,7 @@ export function boardsToShow(boards: Boards, modes: Mode[], status: Record<strin
 }
 
 export function emptyBoards(): Boards {
-  return { guess: [], hive: [], scramble: [], grid: [], box: [], weave: [], squares4: [], squares5: [] };
+  return { guess: [], hive: [], scramble: [], grid: [], box: [], weave: [], squares4: [], squares5: [], cryptogram: [] };
 }
 
 /** Global, or just your circle. The two run the same queries server-side, so
@@ -148,6 +150,7 @@ export const BOARD_LABELS: Record<
     value: (n) => `${n} solved`,
     detail: () => '',
   },
+  cryptogram: { label: 'Cryptogram', value: (n) => `${n} solved`, detail: () => '' },
 };
 
 // ---------------------------------------------------------------------------

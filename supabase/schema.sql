@@ -225,7 +225,7 @@ revoke execute on function public.would_block(text) from public, anon, authentic
 create table if not exists public.game_results (
   id bigint generated always as identity primary key,
   user_id uuid not null references auth.users (id) on delete cascade,
-  game text not null check (game in ('guess', 'hive', 'scramble', 'grid', 'box', 'weave', 'squares')),
+  game text not null check (game in ('guess', 'hive', 'scramble', 'grid', 'box', 'weave', 'squares', 'cryptogram')),
   daily boolean not null,
   puzzle_date date, -- Eastern-time date of the daily puzzle; null for practice
   payload jsonb not null default '{}'::jsonb,
@@ -275,7 +275,7 @@ create policy "read own results"
 -- ---------------------------------------------------------------------------
 create table if not exists public.daily_progress (
   user_id uuid not null references auth.users (id) on delete cascade,
-  game text not null check (game in ('guess', 'hive', 'scramble', 'grid', 'box', 'weave', 'squares')),
+  game text not null check (game in ('guess', 'hive', 'scramble', 'grid', 'box', 'weave', 'squares', 'cryptogram')),
   variant text not null default '',
   puzzle_date date not null,
   env text not null default 'prod',
@@ -784,6 +784,41 @@ begin
       end;
     end if;
     return true;
+
+  elsif p_game = 'cryptogram' then
+    -- a reveal is a legitimate result; it just isn't a solve
+    if coalesce((p_result->>'solved')::boolean, false) is not true then return true; end if;
+    -- nobody works out a substitution in under fifteen seconds
+    if coalesce((p_result->>'timeMs')::numeric, 0) < 15000 then return false; end if;
+    -- The one game here that can be checked rather than judged: apply the
+    -- claimed mapping to the puzzle's own ciphertext and see whether the
+    -- passage comes out. Exact, not persuasive — the server holds the answer
+    -- and the cipher is a function, so there is nothing to estimate.
+    if board is not null and has_state and p_state ? 'mapping' then
+      begin
+        s := board->>'ciphertext';
+        -- reveals are ours, so a client that "forgot" them can't dodge the
+        -- check by leaving those letters out of its mapping
+        select string_agg(
+                 case
+                   when ch ~ '[A-Z]' then coalesce(
+                     board->'reveals'->>ch,
+                     p_state->'mapping'->>ch,
+                     ' '
+                   )
+                   else ch
+                 end, '' order by ord)
+          into s
+        from regexp_split_to_table(s, '') with ordinality as t(ch, ord);
+        if lower(s) is distinct from lower(
+             convert_from(decode(board->>'answer', 'base64'), 'UTF8')::jsonb->>'text'
+           ) then
+          return false;
+        end if;
+      exception when others then null;
+      end;
+    end if;
+    return true;
   end if;
 
   return false;
@@ -944,6 +979,32 @@ begin
     limit 10
   ) s;
   out_json := jsonb_set(out_json, '{weave}', part);
+
+  -- cryptogram: days solved, then the fastest — weave's shape exactly, since
+  -- a passage is one puzzle with one outcome and a clock
+  select coalesce(jsonb_agg(jsonb_build_object('name', name, 'value', value, 'detail', detail) order by rk), '[]'::jsonb)
+    into part
+  from (
+    select *, row_number() over (order by value desc, detail asc) as rk
+    from (
+      select p.display_name as name,
+             count(*) filter (where (dp.result->>'solved')::boolean) as value,
+             min((dp.result->>'timeMs')::numeric) filter (
+               where (dp.result->>'solved')::boolean and (dp.result->>'timeMs')::numeric > 0
+             ) as detail
+      from public.daily_progress dp
+      join public.profiles p on p.id = dp.user_id
+      where dp.game = 'cryptogram' and dp.completed and dp.env = p_env and dp.difficulty = p_difficulty and dp.puzzle_date >= since
+        and (p_users is null or dp.user_id = any(p_users))
+        and p.display_name is not null
+        and public.result_is_plausible('cryptogram', dp.state, dp.result, dp.difficulty, dp.variant, dp.puzzle_date, dp.env)
+      group by p.display_name
+      having count(*) filter (where (dp.result->>'solved')::boolean) > 0
+    ) a
+    order by rk
+    limit 10
+  ) s;
+  out_json := jsonb_set(out_json, '{cryptogram}', part);
 
   -- squares: one board per size. A 4×4 and a 5×5 aren't the same puzzle, and a
   -- combined ranking would quietly reward whoever played more of the easier
@@ -1316,12 +1377,12 @@ grant execute on function public.friends_board(int, text, text) to authenticated
 alter table public.game_results drop constraint if exists game_results_game_check;
 alter table public.game_results
   add constraint game_results_game_check
-  check (game in ('guess', 'hive', 'scramble', 'grid', 'box', 'weave', 'squares'));
+  check (game in ('guess', 'hive', 'scramble', 'grid', 'box', 'weave', 'squares', 'cryptogram'));
 
 alter table public.daily_progress drop constraint if exists daily_progress_game_check;
 alter table public.daily_progress
   add constraint daily_progress_game_check
-  check (game in ('guess', 'hive', 'scramble', 'grid', 'box', 'weave', 'squares'));
+  check (game in ('guess', 'hive', 'scramble', 'grid', 'box', 'weave', 'squares', 'cryptogram'));
 
 -- ---------------------------------------------------------------------------
 -- stats_baselines: one-time import of the lifetime stats a browser

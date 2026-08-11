@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Grid3x3, Hexagon, LayoutGrid, Puzzle, Shuffle, Square, Table2 } from 'lucide-react';
+import { Grid3x3, Hexagon, KeyRound, LayoutGrid, Puzzle, Shuffle, Square, Table2 } from 'lucide-react';
 import {
   BOARD_LABELS,
   fetchBoards,
@@ -23,9 +23,10 @@ const ICONS: Record<BoardGame, typeof Grid3x3> = {
   weave: Puzzle,
   squares4: Table2,
   squares5: Table2,
+  cryptogram: KeyRound,
 };
 
-const ORDER: BoardGame[] = ['guess', 'scramble', 'hive', 'grid', 'box', 'weave', 'squares4', 'squares5'];
+const ORDER: BoardGame[] = ['guess', 'scramble', 'hive', 'grid', 'box', 'weave', 'squares4', 'squares5', 'cryptogram'];
 
 function Board({
   game,
@@ -78,7 +79,10 @@ function Board({
               <span className="tabular-nums shrink-0">{value(r.value)}</span>
               {r.detail !== null && (
                 <span className="text-xs text-slate-500 tabular-nums shrink-0 hidden sm:inline">
-                  {game === 'weave' || game === 'squares4' || game === 'squares5'
+                  {game === 'weave' ||
+                  game === 'squares4' ||
+                  game === 'squares5' ||
+                  game === 'cryptogram'
                     ? formatElapsed(r.detail)
                     : detail(r.detail)}
                 </span>

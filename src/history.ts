@@ -11,7 +11,7 @@ import { DAILY_ENV } from '@/dailyData';
 import { difficulty, type Difficulty } from '@/difficulty';
 import { supabase } from '@/supabase';
 
-export type HistoryGame = 'guess' | 'hive' | 'scramble' | 'grid' | 'box' | 'weave' | 'squares';
+export type HistoryGame = 'guess' | 'hive' | 'scramble' | 'grid' | 'box' | 'weave' | 'squares' | 'cryptogram';
 
 export type HistoryEntry = {
   date: string; // the puzzle's Eastern-time date, not when it was played
@@ -23,10 +23,10 @@ export type HistoryEntry = {
 
 export type History = Record<HistoryGame, HistoryEntry[]>;
 
-const GAMES: HistoryGame[] = ['guess', 'hive', 'scramble', 'grid', 'box', 'weave', 'squares'];
+const GAMES: HistoryGame[] = ['guess', 'hive', 'scramble', 'grid', 'box', 'weave', 'squares', 'cryptogram'];
 
 export function emptyHistory(): History {
-  return { guess: [], hive: [], scramble: [], grid: [], box: [], weave: [], squares: [] };
+  return { guess: [], hive: [], scramble: [], grid: [], box: [], weave: [], squares: [], cryptogram: [] };
 }
 
 /** Your record at one difficulty.
@@ -127,6 +127,7 @@ export const STREAK_RULE: Record<HistoryGame, (e: HistoryEntry) => boolean> = {
   weave: (e) => !!e.result.solved,
   // giving up doesn't keep a streak alive, same as Guess and Weave
   squares: (e) => !!e.result.solved,
+  cryptogram: (e) => !!e.result.solved,
 };
 
 // ---------------------------------------------------------------------------
@@ -144,6 +145,7 @@ export const SERIES_VALUE: Record<HistoryGame, (e: HistoryEntry) => number | nul
   box: (e) => Number(e.result.words) || null,
   weave: (e) => (e.result.solved ? Number(e.result.timeMs) || null : null),
   squares: (e) => (e.result.solved ? Number(e.result.timeMs) || null : null),
+  cryptogram: (e) => (e.result.solved ? Number(e.result.timeMs) || null : null),
 };
 
 export function series(entries: HistoryEntry[], game: HistoryGame): Series {
