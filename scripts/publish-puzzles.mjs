@@ -17,7 +17,7 @@ if (!KEY) {
   throw new Error('SUPABASE_SERVICE_ROLE_KEY is not set');
 }
 
-const GAMES = ['words', 'hive', 'box', 'scramble', 'grid', 'weave', 'squares'];
+const GAMES = ['words', 'hive', 'box', 'scramble', 'grid', 'weave', 'squares', 'cryptogram'];
 
 const rows = [];
 
@@ -34,6 +34,7 @@ for (const game of GAMES) {
 // the practice pools are shared by both sites
 add('weave-pool.json', 'shared', 'weave-pool');
 add('squares-pool.json', 'shared', 'squares-pool');
+add('cryptogram-pool.json', 'shared', 'cryptogram-pool');
 
 const res = await fetch(`${SUPABASE_URL}/rest/v1/daily_puzzles`, {
   method: 'POST',
@@ -53,5 +54,5 @@ if (!res.ok) {
 
 console.log(
   `Published ${rows.length} rows for ${rows[0].puzzle_date}: ` +
-    `${GAMES.length} games x prod+dev, 2 shared pools`
+    `${GAMES.length} games x prod+dev, 3 shared pools`
 );

@@ -19,7 +19,7 @@ const run = promisify(execFile);
 const DATE = '2026-01-15'; // pinned: same date, same feed, every run
 const DIFFICULTIES = ['easy', 'hard', 'extreme'] as const;
 const VARIANTS = ['', 'dev-'] as const;
-const GAMES = ['words', 'hive', 'box', 'scramble', 'grid', 'weave', 'squares'] as const;
+const GAMES = ['words', 'hive', 'box', 'scramble', 'grid', 'weave', 'squares', 'cryptogram'] as const;
 
 // Feeds are checked by assertion, not by type; typing them would restate the tests.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -48,7 +48,7 @@ beforeAll(async () => {
       feeds.set(`${variant}${game}`, JSON.parse(raw));
     }
   }
-  for (const pool of ['weave-pool', 'squares-pool']) {
+  for (const pool of ['weave-pool', 'squares-pool', 'cryptogram-pool']) {
     feeds.set(pool, JSON.parse(await readFile(join(dir, `${pool}.json`), 'utf8')));
   }
 });
@@ -263,6 +263,124 @@ describe('squares', () => {
     const pool = feeds.get('squares-pool')!;
     for (const d of DIFFICULTIES) {
       (pool.byDifficulty[d] as Feed[]).forEach((b, i) => check(b, `squares pool ${d} #${i}`));
+    }
+  });
+});
+
+describe('cryptogram', () => {
+  const REVEALS = { easy: 3, hard: 1, extreme: 0 };
+
+  // The cipher is the whole puzzle, so these check it the only way that
+  // means anything: re-derive the substitution from answer vs ciphertext and
+  // insist it is a function, a derangement, and letters-only.
+  it('enciphers its answer consistently, with no letter standing for itself', () => {
+    for (const variant of VARIANTS) {
+      for (const d of DIFFICULTIES) {
+        const b = feed(variant, 'cryptogram').byDifficulty[d];
+        const answer = decode(b.answer).text as string;
+        const where = `${variant}cryptogram ${d}`;
+        expect(b.ciphertext, where).toHaveLength(answer.length);
+
+        const map = new Map<string, string>();
+        const used = new Map<string, string>();
+        for (let i = 0; i < answer.length; i++) {
+          const plain = answer[i].toLowerCase();
+          const cipher = b.ciphertext[i];
+          if (/[a-z]/.test(plain)) {
+            expect(cipher, `${where}: letter ${i} stays a letter`).toMatch(/[A-Z]/);
+            const c = cipher.toLowerCase();
+            expect(c, `${where}: "${plain}" stands for itself`).not.toBe(plain);
+            // one plain letter, one cipher letter, both ways round
+            if (map.has(plain)) expect(map.get(plain), `${where}: "${plain}" is inconsistent`).toBe(c);
+            if (used.has(c)) expect(used.get(c), `${where}: "${c}" is overloaded`).toBe(plain);
+            map.set(plain, c);
+            used.set(c, plain);
+          } else {
+            // spacing and punctuation pass through: word boundaries are kept
+            expect(cipher, `${where}: char ${i} passes through`).toBe(answer[i]);
+          }
+        }
+      }
+    }
+  });
+
+  it('reveals the design count, and every reveal is true to the cipher', () => {
+    for (const variant of VARIANTS) {
+      for (const d of DIFFICULTIES) {
+        const b = feed(variant, 'cryptogram').byDifficulty[d];
+        const answer = decode(b.answer).text as string;
+        const where = `${variant}cryptogram ${d}`;
+        expect(Object.keys(b.reveals), where).toHaveLength(REVEALS[d]);
+        for (const [cipherLetter, plain] of Object.entries(b.reveals)) {
+          expect(cipherLetter, `${where}: reveal key`).toMatch(/^[A-Z]$/);
+          // wherever that cipher letter appears, the answer must hold the
+          // plain letter it claims
+          for (let i = 0; i < answer.length; i++) {
+            if (b.ciphertext[i] === cipherLetter) {
+              expect(answer[i].toLowerCase(), `${where}: reveal "${cipherLetter}"`).toBe(plain);
+            }
+          }
+        }
+      }
+    }
+  });
+
+  it('gives each difficulty a different passage, and dev its own', () => {
+    for (const variant of VARIANTS) {
+      const texts = DIFFICULTIES.map(
+        (d) => decode(feed(variant, 'cryptogram').byDifficulty[d].answer).text
+      );
+      expect(new Set(texts).size, `${variant}cryptogram`).toBe(3);
+    }
+    expect(decode(feed('', 'cryptogram').byDifficulty.easy.answer).text).not.toEqual(
+      decode(feed('dev-', 'cryptogram').byDifficulty.easy.answer).text
+    );
+  });
+
+  it('never ships the passage in the clear — the encoded answer is the only copy', () => {
+    for (const variant of VARIANTS) {
+      const raw = JSON.stringify(feed(variant, 'cryptogram'));
+      for (const d of DIFFICULTIES) {
+        const { text, author } = decode(feed(variant, 'cryptogram').byDifficulty[d].answer);
+        // strip the base64 answers first, or they'd match themselves
+        const visible = raw.replace(/"answer":"[^"]*"/g, '');
+        expect(visible.includes(text), `${variant}cryptogram ${d}: plaintext`).toBe(false);
+        expect(visible.includes(author), `${variant}cryptogram ${d}: author`).toBe(false);
+      }
+    }
+  });
+
+  it('holds back every passage the review flagged', async () => {
+    const pool = JSON.parse(await readFile('scripts/cryptogram-passages.json', 'utf8'));
+    const held = new Set(
+      pool.quotes.filter((q: Feed) => q.review).map((q: Feed) => q.text as string)
+    );
+    expect(held.size, 'the review flags survived the harvest').toBeGreaterThan(0);
+    const published = [
+      ...VARIANTS.flatMap((v) =>
+        DIFFICULTIES.map((d) => decode(feed(v, 'cryptogram').byDifficulty[d].answer).text)
+      ),
+      ...DIFFICULTIES.flatMap((d) =>
+        (feeds.get('cryptogram-pool')!.byDifficulty[d] as Feed[]).map(
+          (b) => decode(b.answer).text as string
+        )
+      ),
+    ];
+    for (const text of published) expect(held.has(text), `held-out passage published`).toBe(false);
+  });
+
+  it('keeps the practice pool clear of both sites’ dailies', () => {
+    const dailies = new Set(
+      VARIANTS.flatMap((v) =>
+        DIFFICULTIES.map((d) => decode(feed(v, 'cryptogram').byDifficulty[d].answer).text as string)
+      )
+    );
+    for (const d of DIFFICULTIES) {
+      const boards = feeds.get('cryptogram-pool')!.byDifficulty[d] as Feed[];
+      expect(boards.length, `cryptogram pool ${d}`).toBeGreaterThanOrEqual(10);
+      const texts = boards.map((b) => decode(b.answer).text as string);
+      expect(new Set(texts).size, `cryptogram pool ${d} repeats itself`).toBe(texts.length);
+      for (const t of texts) expect(dailies.has(t), `pool ${d} spoils a daily`).toBe(false);
     }
   });
 });
