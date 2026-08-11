@@ -791,28 +791,31 @@ begin
     -- nobody works out a substitution in under fifteen seconds
     if coalesce((p_result->>'timeMs')::numeric, 0) < 15000 then return false; end if;
     -- The one game here that can be checked rather than judged: apply the
-    -- claimed mapping to the puzzle's own ciphertext and see whether the
-    -- passage comes out. Exact, not persuasive — the server holds the answer
-    -- and the cipher is a function, so there is nothing to estimate.
+    -- claimed mapping to the puzzle's own tokens and see whether the passage
+    -- comes out. Exact, not persuasive — the server holds the answer and the
+    -- cipher is a function, so there is nothing to estimate.
+    --
+    -- Compared letters-only on both sides. The board's punctuation is ours
+    -- rather than the player's, and a grouped board has none at all, so
+    -- position-by-position comparison would only be checking our own work.
     if board is not null and has_state and p_state ? 'mapping' then
       begin
-        s := board->>'ciphertext';
-        -- reveals are ours, so a client that "forgot" them can't dodge the
-        -- check by leaving those letters out of its mapping
         select string_agg(
-                 case
-                   when ch ~ '[A-Z]' then coalesce(
-                     board->'reveals'->>ch,
-                     p_state->'mapping'->>ch,
-                     ' '
-                   )
-                   else ch
-                 end, '' order by ord)
+                 -- reveals are ours, so a client that "forgot" them can't
+                 -- dodge the check by leaving those tokens out of its mapping
+                 coalesce(board->'reveals'->>tok, p_state->'mapping'->>tok, ' '),
+                 '' order by ord)
           into s
-        from regexp_split_to_table(s, '') with ordinality as t(ch, ord);
-        if lower(s) is distinct from lower(
-             convert_from(decode(board->>'answer', 'base64'), 'UTF8')::jsonb->>'text'
-           ) then
+        from jsonb_array_elements_text(board->'tokens') with ordinality as t(tok, ord)
+        -- only the cipher's own marks decode; the rest is the passage's
+        -- punctuation, which carries no claim
+        where board->'alphabet' ? tok;
+
+        if lower(regexp_replace(coalesce(s, ''), '[^a-zA-Z]', '', 'g')) is distinct from
+           lower(regexp_replace(
+             convert_from(decode(board->>'answer', 'base64'), 'UTF8')::jsonb->>'text',
+             '[^a-zA-Z]', '', 'g'
+           )) then
           return false;
         end if;
       exception when others then null;

@@ -13,6 +13,9 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 // the real generator's own solver, so the check and the puzzle can't drift
 // @ts-expect-error plain-JS module without a declaration file
 import { countSolutions, indexWords } from '../../scripts/squares.mjs';
+// the tier's own variant list, so the contract can't drift from the generator
+// @ts-expect-error plain-JS module without a declaration file
+import { TIER_VARIANTS } from '../../scripts/cryptogram.mjs';
 
 const run = promisify(execFile);
 
@@ -268,60 +271,108 @@ describe('squares', () => {
 });
 
 describe('cryptogram', () => {
-  const REVEALS = { easy: 3, hard: 1, extreme: 0 };
+  type Difficulty = (typeof DIFFICULTIES)[number];
 
-  // The cipher is the whole puzzle, so these check it the only way that
-  // means anything: re-derive the substitution from answer vs ciphertext and
-  // insist it is a function, a derangement, and letters-only.
-  it('enciphers its answer consistently, with no letter standing for itself', () => {
-    for (const variant of VARIANTS) {
-      for (const d of DIFFICULTIES) {
-        const b = feed(variant, 'cryptogram').byDifficulty[d];
-        const answer = decode(b.answer).text as string;
-        const where = `${variant}cryptogram ${d}`;
-        expect(b.ciphertext, where).toHaveLength(answer.length);
+  // Every board that ships — both sites' dailies and the practice pool. The
+  // cipher is the whole puzzle, so nothing below is checked on the dailies
+  // only; a pool board is as published as a daily one.
+  const boards = (): { b: Feed; d: Difficulty; where: string }[] => [
+    ...VARIANTS.flatMap((v) =>
+      DIFFICULTIES.map((d) => ({
+        b: feed(v, 'cryptogram').byDifficulty[d] as Feed,
+        d,
+        where: `${v}cryptogram ${d}`,
+      }))
+    ),
+    ...DIFFICULTIES.flatMap((d) =>
+      (feeds.get('cryptogram-pool')!.byDifficulty[d] as Feed[]).map((b, i) => ({
+        b,
+        d,
+        where: `cryptogram pool ${d} #${i}`,
+      }))
+    ),
+  ];
 
-        const map = new Map<string, string>();
-        const used = new Map<string, string>();
-        for (let i = 0; i < answer.length; i++) {
-          const plain = answer[i].toLowerCase();
-          const cipher = b.ciphertext[i];
-          if (/[a-z]/.test(plain)) {
-            expect(cipher, `${where}: letter ${i} stays a letter`).toMatch(/[A-Z]/);
-            const c = cipher.toLowerCase();
-            expect(c, `${where}: "${plain}" stands for itself`).not.toBe(plain);
-            // one plain letter, one cipher letter, both ways round
-            if (map.has(plain)) expect(map.get(plain), `${where}: "${plain}" is inconsistent`).toBe(c);
-            if (used.has(c)) expect(used.get(c), `${where}: "${c}" is overloaded`).toBe(plain);
-            map.set(plain, c);
-            used.set(c, plain);
-          } else {
-            // spacing and punctuation pass through: word boundaries are kept
-            expect(cipher, `${where}: char ${i} passes through`).toBe(answer[i]);
-          }
-        }
+  // Re-derive the substitution from the board alone, the only check that means
+  // anything: walk the cipher tokens against the answer's letters and see what
+  // each token must stand for. `alphabet` is what separates a cipher token from
+  // the passage's own punctuation — with symbols nothing else could, since "★"
+  // and "," are both one non-alphanumeric character.
+  const solve = (b: Feed) => {
+    const alphabet = new Set(b.alphabet as string[]);
+    const cipher = (b.tokens as string[]).filter((t) => alphabet.has(t));
+    const letters = (decode(b.answer).text as string).toLowerCase().replace(/[^a-z]/g, '');
+    const means = new Map<string, string>();
+    cipher.forEach((t, i) => {
+      if (!means.has(t)) means.set(t, letters[i]);
+    });
+    return { alphabet, cipher, letters, means };
+  };
+
+  it('enciphers the whole passage, one meaning per token, and decodes back to it', () => {
+    for (const { b, where } of boards()) {
+      const { cipher, letters, means } = solve(b);
+      expect(cipher.length, `${where}: a token for every letter`).toBe(letters.length);
+      cipher.forEach((t, i) => {
+        expect(means.get(t), `${where}: token "${t}" at ${i} means two letters`).toBe(letters[i]);
+      });
+      expect(cipher.map((t) => means.get(t)).join(''), `${where}: decodes`).toBe(letters);
+    }
+  });
+
+  it('reveals only what the cipher actually says', () => {
+    for (const { b, where } of boards()) {
+      const { alphabet, means } = solve(b);
+      for (const [token, plain] of Object.entries(b.reveals)) {
+        expect(alphabet.has(token), `${where}: reveal "${token}" is a cipher token`).toBe(true);
+        expect(means.get(token), `${where}: reveal "${token}"`).toBe(plain);
       }
     }
   });
 
-  it('reveals the design count, and every reveal is true to the cipher', () => {
-    for (const variant of VARIANTS) {
-      for (const d of DIFFICULTIES) {
-        const b = feed(variant, 'cryptogram').byDifficulty[d];
-        const answer = decode(b.answer).text as string;
-        const where = `${variant}cryptogram ${d}`;
-        expect(Object.keys(b.reveals), where).toHaveLength(REVEALS[d]);
-        for (const [cipherLetter, plain] of Object.entries(b.reveals)) {
-          expect(cipherLetter, `${where}: reveal key`).toMatch(/^[A-Z]$/);
-          // wherever that cipher letter appears, the answer must hold the
-          // plain letter it claims
-          for (let i = 0; i < answer.length; i++) {
-            if (b.ciphertext[i] === cipherLetter) {
-              expect(answer[i].toLowerCase(), `${where}: reveal "${cipherLetter}"`).toBe(plain);
-            }
-          }
-        }
+  it('spends one token per letter unless it announces itself homophonic', () => {
+    for (const { b, where } of boards()) {
+      if (b.homophonic) continue;
+      const meanings = [...solve(b).means.values()];
+      expect(new Set(meanings).size, `${where}: two tokens mean one letter`).toBe(meanings.length);
+    }
+  });
+
+  // A fixed point is only meaningful when the board shows letters: against
+  // numbers, coordinates or symbols there is no "itself" to stand for.
+  it('never stands a letter for itself, on the boards where that means anything', () => {
+    for (const { b, where } of boards()) {
+      const { alphabet, means } = solve(b);
+      if (![...alphabet].every((t) => /^[A-Z]$/.test(t))) continue;
+      for (const [token, plain] of means) {
+        expect(token.toLowerCase(), `${where}: "${token}" stands for itself`).not.toBe(plain);
       }
+    }
+  });
+
+  it('strips the word divisions when grouped, and keeps them exactly when not', () => {
+    for (const { b, where } of boards()) {
+      const { alphabet } = solve(b);
+      const text = decode(b.answer).text as string;
+      if (b.grouped) {
+        // boundaries are most of a solver's traction, so a grouped board must
+        // hand over nothing but cipher
+        for (const t of b.tokens as string[]) {
+          expect(alphabet.has(t), `${where}: "${t}" is not cipher`).toBe(true);
+        }
+      } else {
+        expect(b.tokens, `${where}: one token per character`).toHaveLength(text.length);
+        [...text].forEach((ch, i) => {
+          if (!/[A-Za-z]/.test(ch)) expect(b.tokens[i], `${where}: char ${i}`).toBe(ch);
+        });
+      }
+    }
+  });
+
+  it('draws its cipher from its own tier, and announces which', () => {
+    for (const { b, d, where } of boards()) {
+      expect(TIER_VARIANTS[d], `${where}: type "${b.type}"`).toContain(b.type);
+      expect(b.label, `${where}: label`).toEqual(expect.any(String));
     }
   });
 
@@ -381,6 +432,17 @@ describe('cryptogram', () => {
       const texts = boards.map((b) => decode(b.answer).text as string);
       expect(new Set(texts).size, `cryptogram pool ${d} repeats itself`).toBe(texts.length);
       for (const t of texts) expect(dailies.has(t), `pool ${d} spoils a daily`).toBe(false);
+    }
+  });
+
+  // The pool walks the tier's variants in turn rather than drawing at random,
+  // so ten boards always cover every cipher the tier can serve — practice is
+  // where a player meets the variant before a daily hands it to them.
+  it('serves every one of a tier’s ciphers somewhere in that tier’s practice pool', () => {
+    for (const d of DIFFICULTIES) {
+      const boards = feeds.get('cryptogram-pool')!.byDifficulty[d] as Feed[];
+      const types = new Set(boards.map((b) => b.type as string));
+      expect([...types].sort(), `cryptogram pool ${d}`).toEqual([...TIER_VARIANTS[d]].sort());
     }
   });
 });
