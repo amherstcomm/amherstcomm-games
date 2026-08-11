@@ -15,12 +15,15 @@
 
 /** A word's shape, with the letters thrown away: 'happy' and 'motto' both
  *  become 0,1,2,2,3. Two words can stand for each other only if these match. */
-export function patternOf(word: string): string {
+export function patternOf(word: string | string[]): string {
+  // A string is walked a character at a time and an array a token at a time,
+  // which is the same question asked of a dictionary word and of a board
+  // marked in numbers: "17 42 42" has the shape of "see".
   const seen = new Map<string, number>();
   const out: number[] = [];
-  for (const c of word) {
-    if (!seen.has(c)) seen.set(c, seen.size);
-    out.push(seen.get(c)!);
+  for (const unit of word) {
+    if (!seen.has(unit)) seen.set(unit, seen.size);
+    out.push(seen.get(unit)!);
   }
   return out.join(',');
 }
@@ -49,6 +52,111 @@ export function buildPatternIndex(words: string[], common?: Set<string>): Map<st
     }
   }
   return index;
+}
+
+// ---------------------------------------------------------------------------
+// Reading a pasted cryptogram
+// ---------------------------------------------------------------------------
+// Any cipher, not just ours, and any alphabet, not just letters. A board can
+// be marked in letters, numbers, grid coordinates or symbols, so the solver
+// takes tokens and only needs to know where one ends.
+
+export type InputMode = 'letters' | 'tokens';
+
+/** Cipher words, each a list of tokens.
+ *
+ *  In `letters` mode every letter is its own token and anything else divides
+ *  words, which is how a newspaper cryptogram is written. In `tokens` mode the
+ *  marks are multi-character — 17, 42, a glyph — so they're separated by
+ *  spaces and the words by a slash, since nothing about "17 42" says whether
+ *  that is one word or two. */
+export function parseCryptogram(input: string, mode: InputMode): string[][] {
+  if (mode === 'letters') {
+    return (input.toLowerCase().match(/[a-z]+/g) ?? []).map((w) => [...w]);
+  }
+  return input
+    .split(/[/\n]+/)
+    .map((word) => word.split(/[\s,]+/).filter(Boolean))
+    .filter((w) => w.length);
+}
+
+/** Every reading still open for each word, and every letter already forced.
+ *
+ *  This is propagation rather than search: a word whose candidate list has
+ *  come down to one is settled, its letters go into the mapping, and every
+ *  other list is filtered again — repeat until nothing more falls out. It
+ *  cannot guess, so it cannot be wrong; where it stops is exactly what the
+ *  word shapes are able to prove. */
+export type Analysis = {
+  /** the distinct cipher words, in the order first seen */
+  words: { tokens: string[]; candidates: string[] }[];
+  /** cipher token -> plaintext letter, forced or pinned by hand */
+  mapping: Record<string, string>;
+  /** a word whose candidates all died: the pins can't all be true */
+  contradiction: boolean;
+};
+
+export function analyse(
+  words: string[][],
+  index: Map<string, string[]>,
+  pinned: Record<string, string> = {}
+): Analysis {
+  const mapping: Record<string, string> = { ...pinned };
+  const distinct = new Map<string, string[]>();
+  // keyed with a separator: "1 74" and "17 4" are different words, and
+  // joining them bare would make them the same key
+  for (const w of words) distinct.set(w.join(' '), w);
+
+  const readable = (tokens: string[], plain: string): boolean => {
+    if (tokens.length !== plain.length) return false;
+    const local: Record<string, string> = {};
+    const used: Record<string, string> = {};
+    for (let i = 0; i < tokens.length; i++) {
+      const t = tokens[i];
+      const p = plain[i];
+      const fixed = mapping[t] ?? local[t];
+      if (fixed !== undefined && fixed !== p) return false;
+      const owner = used[p];
+      if (owner !== undefined && owner !== t) return false;
+      local[t] = p;
+      used[p] = t;
+    }
+    // a letter already spoken for elsewhere can't be borrowed here
+    for (const [t, p] of Object.entries(local)) {
+      for (const [ot, op] of Object.entries(mapping)) {
+        if (op === p && ot !== t) return false;
+      }
+    }
+    return true;
+  };
+
+  let contradiction = false;
+  const lists = new Map<string, string[]>();
+  for (let pass = 0; pass < 26; pass++) {
+    let settled = false;
+    for (const [key, tokens] of distinct) {
+      const all = index.get(patternOf(tokens)) ?? [];
+      const fits = all.filter((w) => readable(tokens, w));
+      lists.set(key, fits);
+      if (!fits.length) contradiction = true;
+      if (fits.length === 1) {
+        // one reading left is a deduction, not a choice
+        tokens.forEach((t, i) => {
+          if (mapping[t] === undefined) {
+            mapping[t] = fits[0][i];
+            settled = true;
+          }
+        });
+      }
+    }
+    if (!settled) break;
+  }
+
+  return {
+    words: [...distinct].map(([key, tokens]) => ({ tokens, candidates: lists.get(key) ?? [] })),
+    mapping,
+    contradiction,
+  };
 }
 
 export type Cracked = {

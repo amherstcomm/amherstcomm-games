@@ -2,7 +2,13 @@
 // than guessed at. A small dictionary keeps the fixtures readable: the search
 // is the thing under test, not the word list.
 import { describe, expect, it } from 'vitest';
-import { buildPatternIndex, patternOf, solveCryptogram } from '@/cryptogramSolver';
+import {
+  analyse,
+  buildPatternIndex,
+  parseCryptogram,
+  patternOf,
+  solveCryptogram,
+} from '@/cryptogramSolver';
 
 const WORDS = [
   'the', 'quick', 'brown', 'fox', 'jumps', 'over', 'lazy', 'dog',
@@ -35,6 +41,75 @@ describe('patternOf', () => {
   it('is about repetition, not letters', () => {
     expect(patternOf('abc')).toBe('0,1,2');
     expect(patternOf('aab')).toBe('0,0,1');
+  });
+});
+
+describe('patternOf on tokens', () => {
+  it('asks the same question of numbers as of letters', () => {
+    // "17 42 42" has the shape of "see", so a board marked in numbers can be
+    // looked up in exactly the same index
+    expect(patternOf(['17', '42', '42'])).toBe(patternOf('see'));
+    expect(patternOf(['17', '4', '17'])).toBe(patternOf('aba'));
+    // two distinct marks are two distinct marks however they are written, so
+    // these share a shape — it's the word key that has to keep them apart,
+    // which is why analyse joins tokens with a separator
+    expect(patternOf(['1', '74'])).toBe(patternOf(['17', '4']));
+  });
+});
+
+describe('parseCryptogram', () => {
+  it('reads a newspaper cryptogram a letter at a time', () => {
+    expect(parseCryptogram('WKH TXLFN!', 'letters')).toEqual([
+      ['w', 'k', 'h'],
+      ['t', 'x', 'l', 'f', 'n'],
+    ]);
+  });
+
+  it('reads multi-character marks, with the slash dividing words', () => {
+    expect(parseCryptogram('17 42 42 / 8 9', 'tokens')).toEqual([
+      ['17', '42', '42'],
+      ['8', '9'],
+    ]);
+  });
+});
+
+describe('analyse', () => {
+  it('deduces the letters a single candidate forces, and stops there', () => {
+    // 'having' is the only word of its shape in the dictionary, so every one
+    // of its letters is settled without any guessing
+    const words = parseCryptogram('ODULQJ', 'letters');
+    const out = analyse(words, index);
+    expect(out.contradiction).toBe(false);
+    expect(out.words[0].candidates).toEqual(['having']);
+    expect(out.mapping.o).toBe('h');
+    expect(out.mapping.j).toBe('g');
+  });
+
+  it('offers the choice rather than picking, when the shape allows several', () => {
+    const out = analyse(parseCryptogram('ABC', 'letters'), index);
+    expect(out.words[0].candidates.length).toBeGreaterThan(1);
+    // nothing forced, because nothing is proven
+    expect(Object.keys(out.mapping)).toHaveLength(0);
+  });
+
+  it('takes a pinned letter and narrows everything by it', () => {
+    const words = parseCryptogram('ABC', 'letters');
+    const loose = analyse(words, index).words[0].candidates.length;
+    const tight = analyse(words, index, { a: 't' }).words[0].candidates;
+    expect(tight.length).toBeLessThan(loose);
+    for (const w of tight) expect(w[0]).toBe('t');
+  });
+
+  it('reports a contradiction rather than an empty answer', () => {
+    // nothing of that shape can start with both t and q
+    const out = analyse(parseCryptogram('ABC', 'letters'), index, { a: 'q', b: 'q' });
+    expect(out.contradiction).toBe(true);
+  });
+
+  it('works the same on a board marked in numbers', () => {
+    const out = analyse(parseCryptogram('15 1 22 9 13 7', 'tokens'), index);
+    expect(out.words[0].candidates).toEqual(['having']);
+    expect(out.mapping['15']).toBe('h');
   });
 });
 
