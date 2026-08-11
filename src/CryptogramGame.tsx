@@ -564,8 +564,8 @@ const CryptogramGame = forwardRef<CryptogramGameHandle, object>(
                       );
                     }
                     return (
+                      <span key={i} className="relative inline-flex">
                       <button
-                        key={i}
                         onClick={() => !given && !done && setSelected(token)}
                         aria-label={`${spoken(token)}${
                           shown ? `, solved as ${shown}` : ', unsolved'
@@ -601,6 +601,13 @@ const CryptogramGame = forwardRef<CryptogramGameHandle, object>(
                           {token}
                         </span>
                       </button>
+                      {/* The tap target for the phone's keyboard, on the
+                          selected token and nowhere else. It is an invisible
+                          input filling its positioned parent, so it must have
+                          one — mounted loose it covers the whole board and
+                          swallows every click. */}
+                      {active && <MobileKeyInput onKey={pressKey} label="Type a letter" />}
+                      </span>
                     );
                   })}
                 </span>
@@ -683,7 +690,6 @@ const CryptogramGame = forwardRef<CryptogramGameHandle, object>(
               )}
             </div>
 
-            {!done && selected && <MobileKeyInput onKey={pressKey} label="Type a letter" />}
           </>
         )}
       </div>
