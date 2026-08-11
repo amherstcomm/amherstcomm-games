@@ -1615,19 +1615,30 @@ function LearnCryptogram({ register }: { register: RegisterKeys }) {
   const solved =
     Array.from(cipher, (c) => (/[A-Z]/.test(c) ? mapping[c] ?? ' ' : c)).join('') === LEARN_PLAIN;
 
+  // the distinct cipher letters, in the order they appear — what the cursor
+  // walks, since a letter solved once is solved everywhere
+  const letters = useMemo(() => [...new Set(cipher.replace(/[^A-Z]/g, ''))], [cipher]);
+
   const press = useCallback(
     (k: string) => {
       if (!/^[a-z]$/.test(k) || !selected) return;
-      setMapping((prev) => {
-        const next = { ...prev };
-        for (const [cl, pl] of Object.entries(next)) if (pl === k) delete next[cl];
-        next[selected] = k;
-        return next;
-      });
+      const next = { ...mapping };
+      for (const [cl, pl] of Object.entries(next)) if (pl === k) delete next[cl];
+      next[selected] = k;
+      setMapping(next);
+      // Move on, or every keystroke lands on the same letter and quietly
+      // replaces the last — which reads as typing doing nothing at all.
+      const from = letters.indexOf(selected);
+      const after =
+        letters.slice(from + 1).find((l) => next[l] === undefined) ??
+        letters.find((l) => next[l] === undefined);
+      if (after) setSelected(after);
     },
-    [selected]
+    [selected, mapping, letters]
   );
-  useEffect(() => register(press), [register, press]);
+  // the shared hook, not a bare register(): it also puts the document keydown
+  // listener in place, which is the only thing a physical keyboard reaches
+  useDemoKeys(register, press);
 
   return (
     <div className="max-w-lg mx-auto">
