@@ -30,12 +30,12 @@ jobs:
     steps:
       # full history: the script computes dates from it and refuses to run
       # against a shallow clone, which is the whole reason this job exists
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 0
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
-          node-version: 20
+          node-version: 22
       - run: node scripts/route-lastmod.mjs
       - name: Commit if the dates moved
         run: |
