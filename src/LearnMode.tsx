@@ -1631,9 +1631,16 @@ function LearnCryptogram({ register }: { register: RegisterKeys }) {
 
   return (
     <div className="max-w-lg mx-auto">
-      <p className="text-sm text-slate-300 mb-4">
+      <p className="text-sm text-slate-300 mb-3">
         Every letter has been swapped for another one, the same way all the way
         through. Tap a letter, then type what you think it stands for.
+      </p>
+      {/* A first cryptogram with no way in is a wall. The clue gives the
+          learner somewhere to push, the way Weave's theme does — and the
+          daily has none, which is the point of saying so here. */}
+      <p className="text-sm text-slate-400 mb-4">
+        <span className="text-slate-500">Clue:</span> two words about how quickly
+        the hours go. The dailies come with no clue — by then you won&apos;t need one.
       </p>
 
       <div className="flex flex-wrap justify-center gap-x-3 gap-y-3 mb-4">

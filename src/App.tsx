@@ -1012,7 +1012,13 @@ function App() {
 
   function runCryptogramSolve() {
     if (!patternIndex) return;
-    setCryptogramSolve(solveCryptogram(cryptogramInput, patternIndex));
+    setCryptogramSolve(
+      solveCryptogram(
+        cryptogramInput,
+        patternIndex,
+        commonWordsArr ? new Set(commonWordsArr) : undefined
+      )
+    );
   }
 
   const playFlags: Record<Mode, [boolean, (v: boolean) => void]> = {
@@ -1903,9 +1909,9 @@ function App() {
                       .join('  ')}
                   </p>
                   <p className="mt-3 text-xs text-slate-500">
-                    A cryptogram can have more than one reading where every word is a real
-                    word. This is the likeliest, not the only one — if it looks like nonsense,
-                    that is why.
+                    {cryptogramSolve.result.readings <= 1
+                      ? 'The only reading where every word is a word, so this is almost certainly it.'
+                      : `Picked from ${cryptogramSolve.result.readings} readings where every word is a word. Word shapes cannot tell those apart on their own — if this looks like nonsense, that is why.`}
                   </p>
                 </>
               ) : (

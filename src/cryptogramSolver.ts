@@ -56,6 +56,9 @@ export type Cracked = {
   mapping: Record<string, string>;
   /** the passage, with the original punctuation and spacing kept */
   text: string;
+  /** how many complete readings were found before the search stopped, so the
+   *  answer can say whether it was the only one or the pick of several */
+  readings: number;
 };
 
 export type SolveOutcome =
@@ -67,13 +70,20 @@ export type SolveOutcome =
 // five seconds before admitting defeat. A solver that gives up in well under a
 // second is worth more than one that might answer eventually.
 const NODE_BUDGET = 60_000;
+// Enough readings to have something to choose between without letting a very
+// ambiguous passage run away. The best is almost always in the first handful.
+const READING_CAP = 300;
 
 /**
  * @param ciphertext what the board shows — case and punctuation are kept for
  *                   the answer, but only letters take part in the search
  * @param index      dictionary grouped by pattern, from buildPatternIndex
  */
-export function solveCryptogram(ciphertext: string, index: Map<string, string[]>): SolveOutcome {
+export function solveCryptogram(
+  ciphertext: string,
+  index: Map<string, string[]>,
+  common?: Set<string>
+): SolveOutcome {
   const raw = ciphertext.toLowerCase();
   const cipherWords = [...new Set(raw.match(/[a-z]+/g) ?? [])];
   if (!cipherWords.length) return { ok: false, reason: 'no words' };
@@ -110,14 +120,43 @@ export function solveCryptogram(ciphertext: string, index: Map<string, string[]>
     return true;
   }
 
-  function place(depth: number): boolean {
-    if (depth === order.length) return true;
+  // Every word being a word is a weak test: a long passage often has a second
+  // reading that passes it and means nothing. So the search doesn't stop at
+  // the first one — it keeps going and weighs what it finds. A reading built
+  // from ordinary words beats one that needs obscure ones, which is the
+  // difference the first-answer version couldn't see.
+  //
+  // Longer words count for more. Agreeing on a nine-letter word is far more
+  // evidence than agreeing on "an", and the rare-word penalty is flat so one
+  // oddity doesn't sink an otherwise ordinary reading.
+  function scoreOf(): number {
+    if (!common) return 0;
+    let score = 0;
+    for (const cipher of order) {
+      let plain = '';
+      for (const c of cipher) plain += toPlain[c];
+      score += common.has(plain) ? plain.length : -2;
+    }
+    return score;
+  }
+
+  let best: { mapping: Record<string, string>; score: number } | null = null;
+  let readings = 0;
+
+  function place(depth: number): void {
+    if (depth === order.length) {
+      readings++;
+      const score = scoreOf();
+      if (!best || score > best.score) best = { mapping: { ...toPlain }, score };
+      return;
+    }
     if (++nodes > NODE_BUDGET) {
       gaveUp = true;
-      return false;
+      return;
     }
     const cipher = order[depth];
     for (const plain of candidates.get(cipher)!) {
+      if (gaveUp || readings >= READING_CAP) return;
       if (!fits(cipher, plain)) continue;
       // remember only what this word actually adds, so undoing is exact
       const added: string[] = [];
@@ -128,17 +167,19 @@ export function solveCryptogram(ciphertext: string, index: Map<string, string[]>
           added.push(cipher[i]);
         }
       }
-      if (place(depth + 1)) return true;
+      place(depth + 1);
       for (const c of added) {
         delete toCipher[toPlain[c]];
         delete toPlain[c];
       }
-      if (gaveUp) return false;
     }
-    return false;
   }
 
-  if (!place(0)) return { ok: false, reason: gaveUp ? 'gave up' : 'not found' };
+  place(0);
+  if (!best) return { ok: false, reason: gaveUp ? 'gave up' : 'not found' };
+  // the winner, rather than whatever the mapping happened to hold when the
+  // search unwound
+  Object.assign(toPlain, (best as { mapping: Record<string, string> }).mapping);
 
   const text = ciphertext.replace(/[A-Za-z]/g, (c) => {
     const plain = toPlain[c.toLowerCase()];
@@ -148,5 +189,5 @@ export function solveCryptogram(ciphertext: string, index: Map<string, string[]>
     return plain;
   });
 
-  return { ok: true, result: { mapping: { ...toPlain }, text } };
+  return { ok: true, result: { mapping: { ...toPlain }, text, readings } };
 }
