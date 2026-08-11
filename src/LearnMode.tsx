@@ -1673,9 +1673,102 @@ function LearnCryptogram({ register }: { register: RegisterKeys }) {
           ? 'That’s it. Every letter here moved five places along the alphabet — the daily uses a jumbled alphabet instead, so you work it out from the shape of the words.'
           : 'A two-letter word, a repeated letter, an apostrophe: those are the ways in.'}
       </p>
+
+      <div className="mt-8 text-left">
+        <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">
+          Ways in
+        </h3>
+        <p className="text-sm text-slate-300 mb-6">
+          A one-letter word is <span className="text-accent">a</span> or{' '}
+          <span className="text-accent">I</span>. The letter after an apostrophe is almost
+          always <span className="text-accent">s</span> or <span className="text-accent">t</span>.
+          The commonest three-letter word is <span className="text-accent">the</span>, and the
+          commonest letter is <span className="text-accent">e</span>. Everything else follows
+          from those.
+        </p>
+
+        <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">
+          The ciphers
+        </h3>
+        <p className="text-sm text-slate-400 mb-4">
+          Every board says which one it is, because knowing changes how you start. They all
+          share a rule: one letter always stands for the same thing, the whole way through.
+        </p>
+
+        {/* Written out rather than generated from the pool: the generator is a
+            build script and never reaches the browser. If a cipher joins or
+            leaves VARIANTS in scripts/cryptogram.mjs, this list is what has to
+            be brought back into step. */}
+        <dl className="space-y-3">
+          {CIPHER_GUIDE.map(({ tier, name, what }) => (
+            <div key={name} className="rounded-lg bg-white/5 border border-white/10 px-3 py-2">
+              <dt className="flex items-baseline gap-2 text-sm font-semibold text-white">
+                {name}
+                <span className="text-[0.625rem] font-normal uppercase tracking-wider text-slate-500">
+                  {tier}
+                </span>
+              </dt>
+              <dd className="text-sm text-slate-400">{what}</dd>
+            </div>
+          ))}
+        </dl>
+      </div>
     </div>
   );
 }
+
+const CIPHER_GUIDE = [
+  {
+    name: 'Shift',
+    tier: 'easy',
+    what: 'Every letter moves the same distance along the alphabet. Work out one and you have all twenty-six.',
+  },
+  {
+    name: 'Affine',
+    tier: 'easy',
+    what: 'The alphabet is stepped through at a fixed stride. Structured like a shift, but one letter is not enough to unlock it — two are.',
+  },
+  {
+    name: 'Numbers',
+    tier: 'easy',
+    what: 'A shift wearing digits instead of letters. Nothing about the puzzle changes, but nothing on the board looks like the answer either.',
+  },
+  {
+    name: 'Keyword',
+    tier: 'hard',
+    what: 'The cipher alphabet starts jumbled and then runs alphabetically to the end. Once you have a few letters, the tail tends to fall out in order.',
+  },
+  {
+    name: 'Mixed',
+    tier: 'hard',
+    what: 'A fully shuffled alphabet, with no pattern to find. The plain cryptogram: only word shapes and letter frequencies will do it.',
+  },
+  {
+    name: 'Symbols',
+    tier: 'hard',
+    what: 'A mixed alphabet drawn as shapes. Exactly as hard as Mixed, and easier to think in — no symbol pretends to be a letter it is not.',
+  },
+  {
+    name: 'Mixed, grouped',
+    tier: 'extreme',
+    what: 'A mixed alphabet with the word divisions taken away, printed in blocks of five. You have to find where the words are before you can solve them.',
+  },
+  {
+    name: 'Keyword, grouped',
+    tier: 'extreme',
+    what: 'The same, but the alphabet keeps its ordered tail — so the endgame collapses quickly once the words appear.',
+  },
+  {
+    name: 'Polybius',
+    tier: 'extreme',
+    what: 'Each letter becomes two digits: a row and a column in a grid. Noticing that the board reads in pairs is the first thing to solve.',
+  },
+  {
+    name: 'Homophonic',
+    tier: 'extreme',
+    what: 'Several numbers stand for the same letter, and the commonest letters get the most. Counting how often a mark appears stops telling you anything.',
+  },
+];
 
 // ---------------------------------------------------------------------------
 // shell
