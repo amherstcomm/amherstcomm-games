@@ -1607,21 +1607,39 @@ const shiftLetter = (c: string) =>
     ? String.fromCharCode(((c.charCodeAt(0) - 97 + LEARN_SHIFT) % 26) + 97).toUpperCase()
     : c;
 
+// The letter the demo hands over, the way a daily does: the commonest one in
+// the passage, which is the same opening a frequency table would suggest.
+const LEARN_GIVEN = 'e';
+
 function LearnCryptogram({ register }: { register: RegisterKeys }) {
   const cipher = useMemo(() => Array.from(LEARN_PLAIN, shiftLetter).join(''), []);
+  const given = useMemo(() => shiftLetter(LEARN_GIVEN), []);
   const [mapping, setMapping] = useState<Record<string, string>>({});
-  const [selected, setSelected] = useState<string>(cipher[0]);
+  const [selected, setSelected] = useState<string>(() =>
+    Array.from(cipher).find((c) => /[A-Z]/.test(c) && c !== shiftLetter(LEARN_GIVEN)) ?? cipher[0]
+  );
 
+  // the given letter is part of the reading, and can't be changed
+  const solution = useMemo(
+    () => ({ ...mapping, [given]: LEARN_GIVEN }),
+    [mapping, given]
+  );
   const solved =
-    Array.from(cipher, (c) => (/[A-Z]/.test(c) ? mapping[c] ?? ' ' : c)).join('') === LEARN_PLAIN;
+    Array.from(cipher, (c) => (/[A-Z]/.test(c) ? solution[c] ?? ' ' : c)).join('') === LEARN_PLAIN;
 
   // the distinct cipher letters, in the order they appear — what the cursor
   // walks, since a letter solved once is solved everywhere
-  const letters = useMemo(() => [...new Set(cipher.replace(/[^A-Z]/g, ''))], [cipher]);
+  const letters = useMemo(
+    () => [...new Set(cipher.replace(/[^A-Z]/g, ''))].filter((l) => l !== given),
+    [cipher, given]
+  );
 
   const press = useCallback(
     (k: string) => {
-      if (!/^[a-z]$/.test(k) || !selected) return;
+      if (!/^[a-z]$/.test(k) || !selected || selected === given) return;
+      // the given letter is not ours to take back, so typing its letter
+      // elsewhere is simply refused rather than quietly stealing it
+      if (k === LEARN_GIVEN) return;
       const next = { ...mapping };
       for (const [cl, pl] of Object.entries(next)) if (pl === k) delete next[cl];
       next[selected] = k;
@@ -1634,7 +1652,7 @@ function LearnCryptogram({ register }: { register: RegisterKeys }) {
         letters.find((l) => next[l] === undefined);
       if (after) setSelected(after);
     },
-    [selected, mapping, letters]
+    [selected, mapping, letters, given]
   );
   // the shared hook, not a bare register(): it also puts the document keydown
   // listener in place, which is the only thing a physical keyboard reaches
@@ -1646,12 +1664,12 @@ function LearnCryptogram({ register }: { register: RegisterKeys }) {
         Every letter has been swapped for another one, the same way all the way
         through. Tap a letter, then type what you think it stands for.
       </p>
-      {/* A first cryptogram with no way in is a wall. The clue gives the
-          learner somewhere to push, the way Weave's theme does — and the
-          daily has none, which is the point of saying so here. */}
+      {/* A first cryptogram with no way in is a wall, so one letter is given —
+          the same head start an easy daily hands over, and an example of the
+          thing being asked for. */}
       <p className="text-sm text-slate-400 mb-4">
-        <span className="text-slate-500">Clue:</span> two words about how quickly
-        the hours go. The dailies come with no clue — by then you won&apos;t need one.
+        One letter is filled in already. The daily does the same: easy gives you its
+        three commonest letters, hard gives one, extreme gives none.
       </p>
 
       <div className="flex flex-wrap justify-center gap-x-3 gap-y-3 mb-4">
@@ -1659,19 +1677,26 @@ function LearnCryptogram({ register }: { register: RegisterKeys }) {
           <span key={wi} className="inline-flex">
             {Array.from(word, (ch, ci) => {
               const i = all.slice(0, wi).reduce((n, w) => n + w.length + 1, 0) + ci;
-              const shown = mapping[ch];
+              const isGiven = ch === given;
+              const shown = solution[ch];
               return (
                 <button
                   key={i}
-                  onClick={() => setSelected(ch)}
-                  aria-label={`cipher letter ${ch}${shown ? `, solved as ${shown}` : ''}`}
+                  onClick={() => !isGiven && setSelected(ch)}
+                  aria-label={`cipher letter ${ch}${shown ? `, solved as ${shown}` : ''}${
+                    isGiven ? ', given' : ''
+                  }`}
                   className={`inline-flex flex-col items-center w-6 rounded-md ${
-                    ch === selected ? 'bg-amber-400/20' : 'hover:bg-white/10'
+                    isGiven ? '' : ch === selected ? 'bg-amber-400/20' : 'hover:bg-white/10'
                   }`}
                 >
                   <span
                     className={`h-7 flex items-center justify-center w-5 text-lg font-bold uppercase border-b-2 ${
-                      shown ? 'text-accent border-white/40' : 'text-transparent border-white/25'
+                      isGiven
+                        ? 'text-white border-white/50'
+                        : shown
+                          ? 'text-accent border-white/40'
+                          : 'text-transparent border-white/25'
                     }`}
                   >
                     {shown ?? ' '}
