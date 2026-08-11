@@ -266,6 +266,15 @@ stage('deduplicated', (q) => {
   return true;
 });
 
+// The blocklist catches vulgarity; it cannot catch a period attitude spelled
+// in innocent words. These terms don't remove a quote — Congreve's "savage
+// breast" and Shylock's "Hath not a Jew eyes" are keepers — they mark it for
+// the front of the human skim, where the judgment actually lives.
+const REVIEW =
+  /\b(slaves?|slavery|savages?|heathens?|negro(es)?|jew(s|ish)?|indians?|pagans?|barbarians?|g[iy]psy|gipsies|gypsies|conquest|wife|wives|wom[ae]n|races?)\b/i;
+for (const q of pool) if (REVIEW.test(q.text)) q.review = true;
+funnel.push(['flagged for review', pool.filter((q) => q.review).length]);
+
 for (const [name, count] of funnel) console.log(`${name.padEnd(32)} ${count}`);
 console.log('');
 for (const name of ORDER) {
