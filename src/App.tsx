@@ -162,9 +162,13 @@ const MODE_ICONS: Record<Mode, typeof Grid3x3> = {
  *
  *  Its own logo is a filled blue tile with the key knocked out in white,
  *  which beside a row of monochrome line icons reads as a sticker rather than
- *  a link. This is the same geometry — the rounded frame, the bow, the shaft
- *  and its two teeth — traced as strokes in currentColor, so it sits in the
- *  row and follows the theme like everything next to it. */
+ *  a link. The key is traced instead — the bow, the shaft and its two teeth —
+ *  as strokes in currentColor, so it follows the theme and the text colour
+ *  like everything next to it.
+ *
+ *  The logo's surrounding tile is dropped on purpose: at fourteen pixels the
+ *  frame crowds the key it contains, and none of the icons beside it are
+ *  boxed either. The key alone is the recognisable part. */
 function WordLockMark() {
   return (
     <svg
@@ -177,11 +181,10 @@ function WordLockMark() {
       strokeLinejoin="round"
       aria-hidden="true"
     >
-      <rect x="2" y="2" width="20" height="20" rx="5" />
-      <circle cx="8.4" cy="11" r="2.6" />
-      <path d="M11 11h7.2" />
-      <path d="M13.4 11v2.4" />
-      <path d="M16 11v1.7" />
+      <circle cx="7" cy="12" r="4" />
+      <path d="M11 12h10" />
+      <path d="M15 12v4" />
+      <path d="M18.5 12v3" />
     </svg>
   );
 }
