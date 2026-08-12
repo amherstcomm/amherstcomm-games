@@ -158,6 +158,34 @@ const MODE_ICONS: Record<Mode, typeof Grid3x3> = {
   cryptogram: KeyRound,
 };
 
+/** WordLock's mark, drawn the way the footer's other icons are drawn.
+ *
+ *  Its own logo is a filled blue tile with the key knocked out in white,
+ *  which beside a row of monochrome line icons reads as a sticker rather than
+ *  a link. This is the same geometry — the rounded frame, the bow, the shaft
+ *  and its two teeth — traced as strokes in currentColor, so it sits in the
+ *  row and follows the theme like everything next to it. */
+function WordLockMark() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      className="w-3.5 h-3.5"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <rect x="2" y="2" width="20" height="20" rx="5" />
+      <circle cx="8.4" cy="11" r="2.6" />
+      <path d="M11 11h7.2" />
+      <path d="M13.4 11v2.4" />
+      <path d="M16 11v1.7" />
+    </svg>
+  );
+}
+
 function normalizeLetters(s: string): string[] {
   return s.toLowerCase().replace(/[^a-z]/g, '').split('');
 }
@@ -3130,6 +3158,21 @@ function App() {
             >
               <Github className="w-3.5 h-3.5" />
               GitHub
+            </a>
+            {/* The other site, by name rather than by domain — it sits among
+                nav links, and "wordlock.net" would read as an address dropped
+                into a row of destinations. Its own mark, served from here
+                rather than hotlinked: the footer of a site that promises
+                nothing leaves your device shouldn't quietly fetch an image
+                from somewhere else. */}
+            <a
+              href="https://wordlock.net"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 hover:text-slate-300 transition-colors"
+            >
+              <WordLockMark />
+              WordLock
             </a>
             <RouteLink
               to="/stats/overall"
