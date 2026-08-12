@@ -89,21 +89,17 @@ export function onDifficultyChange(fn: () => void): () => void {
 
 /** Read a difficulty out of a daily feed.
  *
- *  The feed carries `byDifficulty` alongside the keys it has always had, and
- *  those legacy keys hold the easy board. So this falls back to the payload
- *  itself, which keeps working against a feed generated before difficulty
- *  existed — including the one currently in production, since the generator
- *  ships ahead of the workflow that runs it. */
+ *  `byDifficulty` is the whole shape now. The feed used to repeat the easy
+ *  board at the top level for clients that predated difficulty, and this fell
+ *  back to the payload itself to read those — that duplication is gone from
+ *  the generator, and with it the fallback. A feed missing the difficulty
+ *  asked for simply doesn't have it. */
 export function pickDifficulty<T extends object>(
   payload: (T & { byDifficulty?: Partial<Record<Difficulty, unknown>> }) | null,
   want: Difficulty
 ): T | null {
-  if (!payload) return null;
-  const variant = payload.byDifficulty?.[want];
-  if (variant && typeof variant === 'object') return variant as T;
-  // No such difficulty in this feed. Easy is the legacy shape and always
-  // present; anything else genuinely isn't there yet.
-  return want === 'easy' ? payload : null;
+  const variant = payload?.byDifficulty?.[want];
+  return variant && typeof variant === 'object' ? (variant as T) : null;
 }
 
 /** The board to play, and the difficulty it actually is.

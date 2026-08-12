@@ -229,15 +229,11 @@ const SquaresGame = forwardRef<
         const d = raw;
         if (typeof d?.date !== 'string') throw new Error('bad payload');
         const want = difficulty();
-        // A feed that predates difficulty only has `boards`, keyed by size —
-        // 4x4 was easy and 5x5 was hard, so read it as that rather than
-        // showing nothing.
-        const legacy: Partial<Record<Difficulty, unknown>> = d.boards
-          ? { easy: d.boards[4], hard: d.boards[5] }
-          : {};
-        const chosen = (d.byDifficulty?.[want] ?? legacy[want]) as SquareRecord | undefined;
+        // `boards`, keyed by size, was the shape before difficulty existed and
+        // the generator no longer writes it. byDifficulty is all there is.
+        const chosen = d.byDifficulty?.[want] as SquareRecord | undefined;
         const level: Difficulty = chosen ? want : 'easy';
-        const board = chosen ?? (d.byDifficulty?.easy ?? legacy.easy);
+        const board = chosen ?? d.byDifficulty?.easy;
         if (!board) throw new Error('bad payload');
         setPlayedAt(level);
         const fresh = sanitizeRecord({ ...board, entries: [] });

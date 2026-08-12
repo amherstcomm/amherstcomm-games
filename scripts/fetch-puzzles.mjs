@@ -409,9 +409,6 @@ for (const variant of ['', 'dev']) {
     JSON.stringify(
       {
         date: etDate,
-        // The easy board repeated at the top level, so a client that predates
-        // difficulty keeps working. Removed once none do.
-        words: guessByDifficulty.easy.words,
         byDifficulty: guessByDifficulty,
         fetchedAt: stamp,
       },
@@ -460,7 +457,7 @@ for (const variant of ['', 'dev']) {
   await writeFile(
     `${DATA_DIR}/${prefix}daily-hive.json`,
     JSON.stringify(
-      { date: etDate, ...hiveByDifficulty.easy, byDifficulty: hiveByDifficulty, fetchedAt: stamp },
+      { date: etDate, byDifficulty: hiveByDifficulty, fetchedAt: stamp },
       null,
       2
     ) + '\n'
@@ -494,7 +491,7 @@ for (const variant of ['', 'dev']) {
   await writeFile(
     `${DATA_DIR}/${prefix}daily-box.json`,
     JSON.stringify(
-      { date: etDate, ...boxByDifficulty.easy, byDifficulty: boxByDifficulty, fetchedAt: stamp },
+      { date: etDate, byDifficulty: boxByDifficulty, fetchedAt: stamp },
       null,
       2
     ) + '\n'
@@ -521,7 +518,6 @@ for (const variant of ['', 'dev']) {
     JSON.stringify(
       {
         date: etDate,
-        ...scrambleByDifficulty.easy,
         byDifficulty: scrambleByDifficulty,
         fetchedAt: stamp,
       },
@@ -551,7 +547,6 @@ for (const variant of ['', 'dev']) {
     JSON.stringify(
       {
         date: etDate,
-        ...gridByDifficulty.easy,
         byDifficulty: gridByDifficulty,
         fetchedAt: stamp,
       },
@@ -589,7 +584,6 @@ for (const variant of ['', 'dev']) {
     JSON.stringify(
       {
         date: etDate,
-        ...weaveByDifficulty.easy,
         byDifficulty: weaveByDifficulty,
         fetchedAt: stamp,
       },
@@ -645,7 +639,7 @@ for (const variant of ['', 'dev']) {
   await writeFile(
     `${DATA_DIR}/${prefix}daily-squares.json`,
     JSON.stringify(
-      { date: etDate, boards: squareBoards, byDifficulty: squaresByDifficulty, fetchedAt: stamp },
+      { date: etDate, byDifficulty: squaresByDifficulty, fetchedAt: stamp },
       null,
       2
     ) + '\n'
