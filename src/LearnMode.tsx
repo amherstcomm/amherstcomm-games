@@ -1667,9 +1667,14 @@ function LearnCryptogram({ register }: { register: RegisterKeys }) {
       {/* A first cryptogram with no way in is a wall, so one letter is given —
           the same head start an easy daily hands over, and an example of the
           thing being asked for. */}
-      <p className="text-sm text-slate-400 mb-4">
+      <p className="text-sm text-slate-400 mb-2">
         One letter is filled in already. The daily does the same: easy gives you its
         three commonest letters, hard gives one, extreme gives none.
+      </p>
+      <p className="text-sm text-slate-400 mb-4">
+        Picking a mark lights up every other copy of it, so you don&apos;t have to hunt
+        for the repeats. If you would rather do that yourself, it turns off under
+        Settings.
       </p>
 
       <div className="flex flex-wrap justify-center gap-x-3 gap-y-3 mb-4">

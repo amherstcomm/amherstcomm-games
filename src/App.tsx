@@ -733,6 +733,7 @@ function App() {
   const [hiddenViews, setHiddenViews] = useState<View[]>(initial.hiddenViews);
   const [lengthRange, setLengthRange] = useState<LengthRange>(initial.lengthRange);
   const [practiceAllowed, setPracticeAllowed] = useState(initial.practiceAllowed);
+  const [highlightMatches, setHighlightMatches] = useState(initial.highlightMatches);
   const [helpAllowed, setHelpAllowed] = useState(initial.helpAllowed);
   const [solverDictionary, setSolverDictionary] = useState(initial.solverDictionary);
   const [wordFilter, setWordFilter] = useState(initial.wordFilter);
@@ -797,6 +798,7 @@ function App() {
           hiddenViews?: View[];
           lengthRange?: LengthRange;
           practiceAllowed?: boolean;
+          highlightMatches?: boolean;
           helpAllowed?: boolean;
           solverDictionary?: string;
           wordFilter?: string;
@@ -812,6 +814,7 @@ function App() {
     if (Array.isArray(s?.hiddenViews)) setHiddenViews(s.hiddenViews.filter((v) => ALL_VIEWS.includes(v)));
     if (s?.lengthRange) setLengthRange(s.lengthRange);
     if (typeof s?.practiceAllowed === 'boolean') setPracticeAllowed(s.practiceAllowed);
+    if (typeof s?.highlightMatches === 'boolean') setHighlightMatches(s.highlightMatches);
     if (typeof s?.helpAllowed === 'boolean') setHelpAllowed(s.helpAllowed);
     if (s?.solverDictionary)
       setSolverDictionary(asDifficulty(s.solverDictionary) ?? 'per-game');
@@ -847,7 +850,7 @@ function App() {
     if (!supabase || !session || !settingsPulled) return;
     pushPending.current = true;
     const id = window.setTimeout(async () => {
-      const settings = { theme, palette, navKeys, textScale, hiddenModes, hiddenViews, lengthRange, practiceAllowed, helpAllowed, solverDictionary, wordFilter, startPage, onboarded };
+      const settings = { theme, palette, navKeys, textScale, hiddenModes, hiddenViews, lengthRange, practiceAllowed, highlightMatches, helpAllowed, solverDictionary, wordFilter, startPage, onboarded };
       // update first — it needs only the update policy, which every install
       // has. `select` reveals whether a row actually matched.
       const { data, error } = await supabase!
@@ -875,7 +878,7 @@ function App() {
       window.clearTimeout(id);
       pushPending.current = false;
     };
-  }, [session, settingsPulled, theme, palette, navKeys, textScale, hiddenModes, hiddenViews, lengthRange, practiceAllowed, helpAllowed, solverDictionary, wordFilter, startPage, onboarded]);
+  }, [session, settingsPulled, theme, palette, navKeys, textScale, hiddenModes, hiddenViews, lengthRange, practiceAllowed, highlightMatches, helpAllowed, solverDictionary, wordFilter, startPage, onboarded]);
 
   // surface auth errors that come back in the redirect URL (expired or
   // already-used magic links land here with no other visible sign)
@@ -1011,7 +1014,10 @@ function App() {
     cryptogram: [cryptogramPlay, setCryptogramPlay],
   };
 
-  const prefs = useMemo(() => ({ practiceAllowed }), [practiceAllowed]);
+  const prefs = useMemo(
+    () => ({ practiceAllowed, highlightMatches }),
+    [practiceAllowed, highlightMatches]
+  );
 
   const currentView: View = learnMode ? 'learn' : playFlags[mode][0] ? 'play' : 'solve';
 
@@ -1186,6 +1192,7 @@ function App() {
       hiddenViews,
       lengthRange,
       practiceAllowed,
+      highlightMatches,
       helpAllowed,
       solverDictionary,
       wordFilter,
@@ -1208,7 +1215,7 @@ function App() {
       cryptogram: { cipher: '' },
       cryptogramPlay,
     });
-  }, [mode, dictionaries, sorts, kbOpen, theme, palette, textScale, navKeys, hiddenModes, hiddenViews, lengthRange, practiceAllowed, helpAllowed, solverDictionary, wordFilter, startPage, onboarded, patternPlay, beePlay, boxedPlay, descramblePlay, gridPlay, length, known, containsStr, excludedStr, rackStr, useAll, minLength, beeCenter, beeOuters, boxedLetters, solutionWords, gridLetters, gridPreset, weaveLetters, weaveSize, weavePlay, squaresPlay, squaresLetters, squaresSize, cryptogramPlay]);
+  }, [mode, dictionaries, sorts, kbOpen, theme, palette, textScale, navKeys, hiddenModes, hiddenViews, lengthRange, practiceAllowed, highlightMatches, helpAllowed, solverDictionary, wordFilter, startPage, onboarded, patternPlay, beePlay, boxedPlay, descramblePlay, gridPlay, length, known, containsStr, excludedStr, rackStr, useAll, minLength, beeCenter, beeOuters, boxedLetters, solutionWords, gridLetters, gridPreset, weaveLetters, weaveSize, weavePlay, squaresPlay, squaresLetters, squaresSize, cryptogramPlay]);
 
   // keep known array sized to length
   useEffect(() => {
@@ -2973,6 +2980,7 @@ function App() {
           hiddenViews={hiddenViews}
           lengthRange={lengthRange}
           practiceAllowed={practiceAllowed}
+          highlightMatches={highlightMatches}
           helpAllowed={helpAllowed}
           solverDictionary={solverDictionary}
           signedIn={!!session}
@@ -2987,6 +2995,7 @@ function App() {
           }
           onLengthRange={setLengthRange}
           onPracticeAllowed={setPracticeAllowed}
+          onHighlightMatches={setHighlightMatches}
           onHelpAllowed={setHelpAllowed}
           onSolverDictionary={setSolverDictionary}
           wordFilter={wordFilter}

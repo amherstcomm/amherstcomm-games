@@ -188,6 +188,7 @@ export default function SettingsModal({
   hiddenViews,
   lengthRange,
   practiceAllowed,
+  highlightMatches,
   helpAllowed,
   solverDictionary,
   wordFilter,
@@ -200,6 +201,7 @@ export default function SettingsModal({
   onToggleView,
   onLengthRange,
   onPracticeAllowed,
+  onHighlightMatches,
   onHelpAllowed,
   onSolverDictionary,
   onWordFilter,
@@ -217,6 +219,7 @@ export default function SettingsModal({
   hiddenViews: View[];
   lengthRange: LengthRange;
   practiceAllowed: boolean;
+  highlightMatches: boolean;
   helpAllowed: boolean;
   solverDictionary: Difficulty | 'per-game';
   wordFilter: WordFilterLevel;
@@ -229,6 +232,7 @@ export default function SettingsModal({
   onToggleView: (v: View) => void;
   onLengthRange: (r: LengthRange) => void;
   onPracticeAllowed: (v: boolean) => void;
+  onHighlightMatches: (v: boolean) => void;
   onHelpAllowed: (v: boolean) => void;
   onSolverDictionary: (d: Difficulty | 'per-game') => void;
   onWordFilter: (w: WordFilterLevel) => void;
@@ -710,7 +714,7 @@ export default function SettingsModal({
           {!hiddenModes.includes('pattern') && (
             <div>
               <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2.5">
-                Pattern word lengths
+                Guess the Word lengths
               </h3>
                 <div className="flex items-center gap-2 text-sm">
                   <LengthPicker
@@ -732,8 +736,32 @@ export default function SettingsModal({
                 <p className="mt-2 text-xs text-slate-500">
                   {lengthRange.min === lengthRange.max
                     ? `Only ${lengthRange.min}-letter words, and the length row disappears.`
-                    : 'Narrows the row of lengths Pattern offers. The rest keep their dailies and statistics.'}
+                    : 'Narrows the row of lengths Guess the Word offers. The rest keep their dailies and statistics.'}
                 </p>
+            </div>
+          )}
+
+          {/* steers the cryptogram board and nothing else, so it goes with the
+              cryptogram — and sits with the other per-game settings rather
+              than among the show/hide pills, which are a different question */}
+          {!hiddenModes.includes('cryptogram') && (
+            <div>
+              <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2.5">
+                Cryptogram marks
+              </h3>
+              <div className="flex flex-wrap gap-1.5">
+                <Pill
+                  on={highlightMatches}
+                  onClick={() => onHighlightMatches(!highlightMatches)}
+                  tone="emerald"
+                >
+                  Highlight matching
+                </Pill>
+              </div>
+              <p className="mt-2 text-xs text-slate-500">
+                Picking a mark lights up every other copy of it. Off leaves the repeats
+                for you to find, which some solvers prefer.
+              </p>
             </div>
           )}
 

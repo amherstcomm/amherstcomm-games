@@ -205,7 +205,7 @@ const CryptogramGame = forwardRef<CryptogramGameHandle, object>(
         }),
       []
     );
-    const { practiceAllowed } = usePrefs();
+    const { practiceAllowed, highlightMatches } = usePrefs();
 
     useEffect(() => {
       if (!practiceAllowed && !store.dailyMode) setStore((prev) => ({ ...prev, dailyMode: true }));
@@ -217,7 +217,11 @@ const CryptogramGame = forwardRef<CryptogramGameHandle, object>(
     );
 
     /** which cipher letter the keyboard is aimed at */
-    const [selected, setSelected] = useState<string | null>(null);
+    // The *position* the player is on, not just which mark. A mark repeats,
+    // and tapping its third copy has to leave the cursor on the third copy —
+    // deriving the position from the mark always found the first one, which
+    // made a tap somewhere else jump the cursor across the board.
+    const [cursorAt, setCursorAt] = useState(-1);
     const [dailyError, setDailyError] = useState(false);
     const [pool, setPool] = useState<Record<string, CryptogramRecord[]> | null>(null);
 
@@ -296,6 +300,15 @@ const CryptogramGame = forwardRef<CryptogramGameHandle, object>(
     const record = store.dailyMode ? store.daily[playedAt] ?? null : store.practice;
     const answer = useMemo(() => (record ? answerOf(record) : null), [record]);
     const cipherTokens = useMemo(() => (record ? usedTokens(record) : []), [record]);
+    /** which mark the keyboard is aimed at, from where the cursor sits */
+    const selected = record && cursorAt >= 0 ? (record.tokens[cursorAt] ?? null) : null;
+
+    /** move to a mark, landing on its first copy — what the keyboard does when
+     *  it advances, since there's no better copy to prefer */
+    const seat = useCallback(
+      (token: string | null) => setCursorAt(token && record ? record.tokens.indexOf(token) : -1),
+      [record]
+    );
 
     // Solved when the passage reads as the answer. Case-blind, because a
     // cipher has no case to get right — the capitals are ours.
@@ -310,7 +323,7 @@ const CryptogramGame = forwardRef<CryptogramGameHandle, object>(
     useEffect(() => {
       if (!record) return;
       const first = cipherTokens.find((t: string) => !record.reveals[t]);
-      setSelected(first ?? null);
+      seat(first ?? null);
       // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [record?.tokens]);
 
@@ -406,10 +419,10 @@ const CryptogramGame = forwardRef<CryptogramGameHandle, object>(
             mapping[selected] = k;
             return { ...r, mapping };
           });
-          setSelected((s) => step(s, 1));
+          seat(step(selected, 1));
         }
       },
-      [record, done, selected, update, step]
+      [record, done, selected, update, step, seat]
     );
 
     useImperativeHandle(ref, () => ({ pressKey }));
@@ -421,14 +434,14 @@ const CryptogramGame = forwardRef<CryptogramGameHandle, object>(
         if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
         if (e.key === 'Backspace') pressKey('backspace');
         else if (/^[a-zA-Z]$/.test(e.key)) pressKey(e.key.toLowerCase());
-        else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') setSelected((s) => step(s, -1));
-        else if (e.key === 'ArrowRight' || e.key === 'ArrowDown') setSelected((s) => step(s, 1));
+        else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') seat(step(selected, -1));
+        else if (e.key === 'ArrowRight' || e.key === 'ArrowDown') seat(step(selected, 1));
         else return;
         e.preventDefault();
       };
       window.addEventListener('keydown', onKey);
       return () => window.removeEventListener('keydown', onKey);
-    }, [pressKey, step]);
+    }, [pressKey, step, seat, selected]);
 
     function reveal() {
       if (!record || !answer) return;
@@ -551,7 +564,17 @@ const CryptogramGame = forwardRef<CryptogramGameHandle, object>(
                     const cipher = isCipherToken(record, token);
                     const given = cipher && !!record.reveals[token];
                     const shown = decodedAt(record, i);
-                    const active = cipher && token === selected && !done;
+                    const picked = cipher && token === selected && !done;
+                    // One cell carries the cursor and the key overlay even
+                    // though a mark repeats: mounting an invisible input over
+                    // every copy would stack five of them on one board.
+                    const here = picked && i === cursorAt;
+                    // Lighting up the other copies is the setting. The marks
+                    // are printed either way, so this spares the scanning
+                    // rather than telling you anything — but a mark's spread
+                    // at a glance is part of frequency work, which is why it
+                    // is a choice.
+                    const active = highlightMatches ? picked : here;
                     if (!cipher) {
                       return (
                         <span
@@ -566,7 +589,7 @@ const CryptogramGame = forwardRef<CryptogramGameHandle, object>(
                     return (
                       <span key={i} className="relative inline-flex">
                       <button
-                        onClick={() => !given && !done && setSelected(token)}
+                        onClick={() => !given && !done && setCursorAt(i)}
                         aria-label={`${spoken(token)}${
                           shown ? `, solved as ${shown}` : ', unsolved'
                         }${given ? ', given' : ''}`}
@@ -606,7 +629,7 @@ const CryptogramGame = forwardRef<CryptogramGameHandle, object>(
                           input filling its positioned parent, so it must have
                           one — mounted loose it covers the whole board and
                           swallows every click. */}
-                      {active && <MobileKeyInput onKey={pressKey} label="Type a letter" />}
+                      {here && <MobileKeyInput onKey={pressKey} label="Type a letter" />}
                       </span>
                     );
                   })}
