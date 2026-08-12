@@ -34,6 +34,7 @@ import CryptogramGame, { type CryptogramGameHandle } from '@/CryptogramGame';
 import {
   analyse,
   buildPatternIndex,
+  hunches,
   parseCryptogram,
   type InputMode,
 } from '@/cryptogramSolver';
@@ -1046,6 +1047,23 @@ function App() {
     [patternIndex, cryptoWords, cryptoPins]
   );
 
+  const cryptoHunches = useMemo(
+    () =>
+      cryptoAnalysis
+        ? hunches(cryptoAnalysis, commonWordsArr ? new Set(commonWordsArr) : undefined)
+            // Half the surviving readings agreeing is the floor for saying
+            // anything. Measured on a cold start, where every word still has
+            // thousands of readings and the tally is drawn from an
+            // unrepresentative few, the top guess came in at 41% and was
+            // wrong — as were the five below it. A row of confident-looking
+            // noise is worse than an empty one, so the suggestions only speak
+            // once the evidence does.
+            .filter((h) => h.share >= 0.5)
+            .slice(0, 6)
+        : [],
+    [cryptoAnalysis, commonWordsArr]
+  );
+
   /** settle a word on one reading, which propagation then spreads. Choosing
    *  again for the same word replaces that choice rather than stacking a
    *  second one on top of it. */
@@ -1979,17 +1997,27 @@ function App() {
                   ? 'No reading fits — one of your picks can’t be right. Undo them and try another.'
                   : `${Object.keys(cryptoAnalysis.mapping).length} marks settled. A dot is a mark the shapes can’t pin yet.`}
               </p>
-              {!cryptoAnalysis.contradiction &&
-                !cryptoAnalysis.words.some(
-                  (w) => w.candidates.length > 1 && w.candidates.length <= 40
-                ) &&
-                cryptoAnalysis.words.some((w) => w.candidates.length > 40) && (
-                  <p className="mt-2 text-xs text-slate-500">
-                    Nothing is narrow enough to choose from yet — every word still has
-                    hundreds of readings. Pick a word below, or come back once you have a
-                    letter or two of your own.
-                  </p>
-                )}
+              {/* Guesses, and dressed as guesses. Everything above this line is
+                  proven; these are counted off the readings still standing, so
+                  they belong in their own row with their odds showing. */}
+              {!cryptoAnalysis.contradiction && cryptoHunches.length > 0 && (
+                <div className="mt-3 flex flex-wrap items-center gap-2">
+                  <span className="text-xs text-slate-500">Probably:</span>
+                  {cryptoHunches.map((h) => (
+                    <button
+                      key={h.token}
+                      onClick={() => pinWord([h.token], h.plain)}
+                      className="inline-flex items-baseline gap-1 px-2 py-0.5 rounded-md text-sm bg-white/5 border border-dashed border-white/25 text-slate-300 hover:bg-amber-400/15 hover:text-accent transition-colors"
+                    >
+                      <span className="font-mono text-xs text-slate-500">{h.token}</span>
+                      <span>= {h.plain}</span>
+                      <span className="text-[0.625rem] text-slate-500">
+                        {Math.round(h.share * 100)}%
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              )}
 
               {/* Most-constrained first, and only words narrow enough to act
                   on. A five-letter word with three thousand readings is not a

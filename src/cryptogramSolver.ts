@@ -159,6 +159,62 @@ export function analyse(
   };
 }
 
+/** A mark the shapes can't settle, and what it probably stands for. */
+export type Hunch = { token: string; plain: string; share: number };
+
+/** What each unsettled mark most likely means, counted off the readings that
+ *  are still alive.
+ *
+ *  Not a frequency table. The classic move — commonest mark is 'e', then 't' —
+ *  is about English in general, and a sixty-letter passage deviates from
+ *  English in general quite happily. This counts instead over the candidate
+ *  lists propagation already produced: for every word a mark appears in, and
+ *  every reading still standing for that word, tally the letter sitting at
+ *  that position. That is evidence from this puzzle's own shapes and this
+ *  dictionary, and it sharpens on its own as picks narrow the lists.
+ *
+ *  A guess even so, and kept separate from `mapping` for exactly that reason:
+ *  what makes the rest of this solver worth trusting is that a blank means
+ *  genuinely unknown. `common` weights readings built from ordinary words
+ *  above ones that need obscure ones.
+ */
+export function hunches(analysis: Analysis, common?: Set<string>, cap = 400): Hunch[] {
+  const tally = new Map<string, Map<string, number>>();
+
+  for (const { tokens, candidates } of analysis.words) {
+    // A word with thousands of readings says almost nothing about any one
+    // mark, and would drown out a word with four. Skip it rather than let
+    // volume stand in for evidence.
+    if (candidates.length > cap) continue;
+    for (const reading of candidates) {
+      const weight = !common || common.has(reading) ? 1 : 0.25;
+      tokens.forEach((t, i) => {
+        if (analysis.mapping[t] !== undefined) return; // already settled
+        const forToken = tally.get(t) ?? new Map<string, number>();
+        forToken.set(reading[i], (forToken.get(reading[i]) ?? 0) + weight);
+        tally.set(t, forToken);
+      });
+    }
+  }
+
+  const out: Hunch[] = [];
+  for (const [token, letters] of tally) {
+    let total = 0;
+    for (const n of letters.values()) total += n;
+    let best = '';
+    let bestN = 0;
+    for (const [letter, n] of letters) {
+      if (n > bestN) {
+        best = letter;
+        bestN = n;
+      }
+    }
+    if (best && total > 0) out.push({ token, plain: best, share: bestN / total });
+  }
+  // strongest first: the mark we are surest about is the one worth acting on
+  return out.sort((a, b) => b.share - a.share);
+}
+
 export type Cracked = {
   /** cipher letter -> plaintext letter, for the letters that appear */
   mapping: Record<string, string>;

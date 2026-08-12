@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest';
 import {
   analyse,
   buildPatternIndex,
+  hunches,
   parseCryptogram,
   patternOf,
   solveCryptogram,
@@ -110,6 +111,50 @@ describe('analyse', () => {
     const out = analyse(parseCryptogram('15 1 22 9 13 7', 'tokens'), index);
     expect(out.words[0].candidates).toEqual(['having']);
     expect(out.mapping['15']).toBe('h');
+  });
+});
+
+describe('hunches', () => {
+  it('names what a mark probably means when nothing forces it', () => {
+    // 'abc' has several readings in this dictionary, so nothing is settled —
+    // but the surviving readings still lean somewhere
+    const out = hunches(analyse(parseCryptogram('ABC', 'letters'), index));
+    expect(out.length).toBeGreaterThan(0);
+    for (const h of out) {
+      expect(h.plain).toMatch(/^[a-z]$/);
+      expect(h.share).toBeGreaterThan(0);
+      expect(h.share).toBeLessThanOrEqual(1);
+    }
+  });
+
+  it('says nothing about a mark already settled — a guess there is noise', () => {
+    // 'having' is the only word of its shape, so every mark in it is proven
+    const out = hunches(analyse(parseCryptogram('ODULQJ', 'letters'), index));
+    expect(out).toEqual([]);
+  });
+
+  it('reports a coin flip as a coin flip', () => {
+    // pinning f leaves 'fox' and 'fun', which disagree about both remaining
+    // marks — 0.5 is the honest number, and a solver that rounded it up to a
+    // confident guess would be the thing this whole design avoids
+    const out = hunches(analyse(parseCryptogram('ABC', 'letters'), index, { a: 'f' }));
+    expect(out.length).toBe(2);
+    for (const h of out) expect(h.share).toBe(0.5);
+  });
+
+  it('goes quiet where deduction has already done the work', () => {
+    // two pins leave only 'fox', so propagation settles the last mark outright
+    // — and a hunch about a proven letter would be noise dressed as evidence.
+    // The two halves never speak at once.
+    const settled = analyse(parseCryptogram('ABC', 'letters'), index, { a: 'f', b: 'o' });
+    expect(settled.mapping.c).toBe('x');
+    expect(hunches(settled)).toEqual([]);
+  });
+
+  it('sorts the surest first, since that is the one worth acting on', () => {
+    const out = hunches(analyse(parseCryptogram('ABC DEF', 'letters'), index));
+    const shares = out.map((h) => h.share);
+    expect([...shares].sort((a, b) => b - a)).toEqual(shares);
   });
 });
 
