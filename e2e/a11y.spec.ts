@@ -5,13 +5,25 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test } from './fixtures';
 
+// Every game's daily, not a sample of them. The sweep used to walk six fixed
+// routes, which left boxed, grid, squares and cryptogram — four of eight
+// games — outside the only automated accessibility check we have. A board
+// nobody scans is a board where a missing label lives for ever.
 const PAGES = [
   ['home', '/'],
   ['daily guess', '/daily/guess'],
+  ['daily scramble', '/daily/scramble'],
+  ['daily hive', '/daily/hive'],
+  ['daily grid', '/daily/grid'],
+  ['daily boxed', '/daily/boxed'],
   ['daily weave', '/daily/weave'],
+  ['daily squares', '/daily/squares'],
+  ['daily cryptogram', '/daily/cryptogram'],
   ['descramble solver', '/solve/scramble'],
+  ['cryptogram solver', '/solve/cryptogram'],
   ['settings', '/settings/site'],
   ['learn hive', '/learn/hive'],
+  ['learn cryptogram', '/learn/cryptogram'],
 ] as const;
 
 for (const [name, path] of PAGES) {

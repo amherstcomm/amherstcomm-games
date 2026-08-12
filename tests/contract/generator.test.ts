@@ -73,36 +73,30 @@ describe('every feed', () => {
     }
   });
 
-  it('keeps the legacy top-level keys equal to the easy board, so an old client is unaffected', () => {
+  // The easy board used to be repeated at the top level — `words`, `sides`,
+  // `cells`, squares' `boards` map — so a client from before difficulty kept
+  // working. Nothing reads those now, and carrying them meant every feed
+  // shipped its easy board twice. This asserts they are gone rather than
+  // merely unused, since a stray duplicate is how the squares map once let
+  // extreme overwrite hard.
+  it('carries no top-level duplicate of the easy board', () => {
     for (const variant of VARIANTS) {
-      const w = feed(variant, 'words');
-      expect(w.words).toEqual(w.byDifficulty.easy.words);
-      const h = feed(variant, 'hive');
-      expect({ center: h.center, outers: h.outers }).toEqual({
-        center: h.byDifficulty.easy.center,
-        outers: h.byDifficulty.easy.outers,
-      });
-      const b = feed(variant, 'box');
-      expect(b.sides).toEqual(b.byDifficulty.easy.sides);
-      expect(feed(variant, 'scramble').letters).toEqual(
-        feed(variant, 'scramble').byDifficulty.easy.letters
-      );
-      expect(feed(variant, 'grid').cells).toEqual(feed(variant, 'grid').byDifficulty.easy.cells);
-      const v = feed(variant, 'weave');
-      expect(v.board).toEqual(v.byDifficulty.easy.board);
-    }
-  });
-
-  it('keys the legacy squares map by size with hard at 5 — extreme overwrote it once', () => {
-    for (const variant of VARIANTS) {
-      const s = feed(variant, 'squares');
-      expect(s.boards['4']).toEqual(s.byDifficulty.easy);
-      expect(s.boards['5']).toEqual(s.byDifficulty.hard);
+      for (const game of GAMES) {
+        expect(Object.keys(feed(variant, game)).sort(), `${variant}${game}`).toEqual([
+          'byDifficulty',
+          'date',
+          'fetchedAt',
+        ]);
+      }
     }
   });
 
   it('gives dev its own puzzles, so testing there never spoils production', () => {
-    expect(feed('', 'words').words).not.toEqual(feed('dev-', 'words').words);
+    // read through byDifficulty: the top-level copy this used to compare is
+    // gone, and two undefineds would have matched each other for ever
+    expect(feed('', 'words').byDifficulty.easy.words).not.toEqual(
+      feed('dev-', 'words').byDifficulty.easy.words
+    );
   });
 });
 

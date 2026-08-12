@@ -53,9 +53,12 @@ describe('the setting', () => {
 });
 
 describe('reading a difficulty out of a feed', () => {
-  const legacy = { words: { 5: 'abc' } }; // a feed from before difficulty existed
+  // A feed with no byDifficulty at all. This used to be the pre-difficulty
+  // shape, whose top-level keys held the easy board, and pickDifficulty read
+  // them. The generator stopped writing that duplicate, so there is nothing
+  // there to read and such a payload now yields nothing at any difficulty.
+  const bare = { words: { 5: 'abc' } };
   const modern = {
-    words: { 5: 'abc' }, // legacy keys hold the easy board
     byDifficulty: {
       easy: { words: { 5: 'abc' } },
       hard: { words: { 5: 'def' } },
@@ -69,20 +72,18 @@ describe('reading a difficulty out of a feed', () => {
     expect(m.pickDifficulty(modern, 'extreme')).toEqual({ words: { 5: 'ghi' } });
   });
 
-  it('a legacy feed serves easy from its top-level keys', async () => {
+  it('a feed without byDifficulty has no board at any difficulty', async () => {
     const m = await fresh();
-    expect(m.pickDifficulty(legacy, 'easy')).toBe(legacy);
-  });
-
-  it('a legacy feed genuinely has no hard board', async () => {
-    const m = await fresh();
-    expect(m.pickDifficulty(legacy, 'hard')).toBeNull();
+    expect(m.pickDifficulty(bare, 'easy')).toBeNull();
+    expect(m.pickDifficulty(bare, 'hard')).toBeNull();
   });
 
   it('resolveDifficulty falls back to easy AND says so — recording the fallback as hard would put a board nobody played at hard onto its leaderboard', async () => {
     const m = await fresh();
-    const r = m.resolveDifficulty(legacy, 'hard');
-    expect(r.board).toBe(legacy);
+    // a feed carrying only easy, which is what a game with one board looks like
+    const easyOnly = { byDifficulty: { easy: { words: { 5: 'abc' } } } };
+    const r = m.resolveDifficulty(easyOnly, 'hard');
+    expect(r.board).toEqual({ words: { 5: 'abc' } });
     expect(r.difficulty).toBe('easy');
   });
 

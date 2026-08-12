@@ -167,9 +167,25 @@ rolling fortnight of rows to `daily_puzzles` (RLS on, zero policies; the only
 read is `daily_puzzle()`, a security-definer RPC with no date parameter and a
 3:15 a.m. Eastern gate); the client reads the RPC first with the file feed as
 fallback, pinned by e2e tests; and `PUZZLES_SEED_SALT` mixes into every seed,
-so the public repo no longer predicts future boards. Remaining, stage four:
-retire the puzzle-data branch and the legacy feed keys once the rows have
-carried a quiet week. The original analysis follows.
+so the public repo no longer predicts future boards.
+
+**Stage four, half done** (August 2026). The legacy feed keys are gone: every
+feed repeated its easy board at the top level — `words`, `sides`, `cells`,
+squares' `boards` map — for clients predating difficulty, and nothing has
+read them for weeks. A contract test now asserts a feed carries only `date`,
+`byDifficulty` and `fetchedAt`, because a stray duplicate is how squares once
+let extreme overwrite hard.
+
+**Retiring the puzzle-data branch is deliberately not done, and the reason
+has changed.** The motive was that a public branch of deterministic output
+let anyone compute every future puzzle — `PUZZLES_SEED_SALT` already fixed
+that. What removal would buy now is one less delivery path; what it costs is
+the outage insurance this entry itself warned about: today a Supabase outage
+costs accounts and sync while the dailies still play, and afterwards it costs
+both. A last-good client copy covers a player mid-session but not someone
+arriving during an outage, which is exactly what the files cover. Worth
+keeping until there's a better reason than tidiness. The original analysis
+follows.
 
 Three things that turned out to be one thing.
 
