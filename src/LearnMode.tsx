@@ -1607,33 +1607,74 @@ const shiftLetter = (c: string) =>
     ? String.fromCharCode(((c.charCodeAt(0) - 97 + LEARN_SHIFT) % 26) + 97).toUpperCase()
     : c;
 
+// The letter the demo hands over, the way a daily does: the commonest one in
+// the passage, which is the same opening a frequency table would suggest.
+const LEARN_GIVEN = 'e';
+
 function LearnCryptogram({ register }: { register: RegisterKeys }) {
   const cipher = useMemo(() => Array.from(LEARN_PLAIN, shiftLetter).join(''), []);
+  const given = useMemo(() => shiftLetter(LEARN_GIVEN), []);
   const [mapping, setMapping] = useState<Record<string, string>>({});
-  const [selected, setSelected] = useState<string>(cipher[0]);
+  const [selected, setSelected] = useState<string>(() =>
+    Array.from(cipher).find((c) => /[A-Z]/.test(c) && c !== shiftLetter(LEARN_GIVEN)) ?? cipher[0]
+  );
 
+  // the given letter is part of the reading, and can't be changed
+  const solution = useMemo(
+    () => ({ ...mapping, [given]: LEARN_GIVEN }),
+    [mapping, given]
+  );
   const solved =
-    Array.from(cipher, (c) => (/[A-Z]/.test(c) ? mapping[c] ?? ' ' : c)).join('') === LEARN_PLAIN;
+    Array.from(cipher, (c) => (/[A-Z]/.test(c) ? solution[c] ?? ' ' : c)).join('') === LEARN_PLAIN;
+
+  // the distinct cipher letters, in the order they appear — what the cursor
+  // walks, since a letter solved once is solved everywhere
+  const letters = useMemo(
+    () => [...new Set(cipher.replace(/[^A-Z]/g, ''))].filter((l) => l !== given),
+    [cipher, given]
+  );
 
   const press = useCallback(
     (k: string) => {
-      if (!/^[a-z]$/.test(k) || !selected) return;
-      setMapping((prev) => {
-        const next = { ...prev };
-        for (const [cl, pl] of Object.entries(next)) if (pl === k) delete next[cl];
-        next[selected] = k;
-        return next;
-      });
+      if (!/^[a-z]$/.test(k) || !selected || selected === given) return;
+      // the given letter is not ours to take back, so typing its letter
+      // elsewhere is simply refused rather than quietly stealing it
+      if (k === LEARN_GIVEN) return;
+      const next = { ...mapping };
+      for (const [cl, pl] of Object.entries(next)) if (pl === k) delete next[cl];
+      next[selected] = k;
+      setMapping(next);
+      // Move on, or every keystroke lands on the same letter and quietly
+      // replaces the last — which reads as typing doing nothing at all.
+      const from = letters.indexOf(selected);
+      const after =
+        letters.slice(from + 1).find((l) => next[l] === undefined) ??
+        letters.find((l) => next[l] === undefined);
+      if (after) setSelected(after);
     },
-    [selected]
+    [selected, mapping, letters, given]
   );
-  useEffect(() => register(press), [register, press]);
+  // the shared hook, not a bare register(): it also puts the document keydown
+  // listener in place, which is the only thing a physical keyboard reaches
+  useDemoKeys(register, press);
 
   return (
     <div className="max-w-lg mx-auto">
-      <p className="text-sm text-slate-300 mb-4">
+      <p className="text-sm text-slate-300 mb-3">
         Every letter has been swapped for another one, the same way all the way
         through. Tap a letter, then type what you think it stands for.
+      </p>
+      {/* A first cryptogram with no way in is a wall, so one letter is given —
+          the same head start an easy daily hands over, and an example of the
+          thing being asked for. */}
+      <p className="text-sm text-slate-400 mb-2">
+        One letter is filled in already. The daily does the same: easy gives you its
+        three commonest letters, hard gives one, extreme gives none.
+      </p>
+      <p className="text-sm text-slate-400 mb-4">
+        Picking a mark lights up every other copy of it, so you don&apos;t have to hunt
+        for the repeats. If you would rather do that yourself, it turns off under
+        Settings.
       </p>
 
       <div className="flex flex-wrap justify-center gap-x-3 gap-y-3 mb-4">
@@ -1641,19 +1682,26 @@ function LearnCryptogram({ register }: { register: RegisterKeys }) {
           <span key={wi} className="inline-flex">
             {Array.from(word, (ch, ci) => {
               const i = all.slice(0, wi).reduce((n, w) => n + w.length + 1, 0) + ci;
-              const shown = mapping[ch];
+              const isGiven = ch === given;
+              const shown = solution[ch];
               return (
                 <button
                   key={i}
-                  onClick={() => setSelected(ch)}
-                  aria-label={`cipher letter ${ch}${shown ? `, solved as ${shown}` : ''}`}
+                  onClick={() => !isGiven && setSelected(ch)}
+                  aria-label={`cipher letter ${ch}${shown ? `, solved as ${shown}` : ''}${
+                    isGiven ? ', given' : ''
+                  }`}
                   className={`inline-flex flex-col items-center w-6 rounded-md ${
-                    ch === selected ? 'bg-amber-400/20' : 'hover:bg-white/10'
+                    isGiven ? '' : ch === selected ? 'bg-amber-400/20' : 'hover:bg-white/10'
                   }`}
                 >
                   <span
                     className={`h-7 flex items-center justify-center w-5 text-lg font-bold uppercase border-b-2 ${
-                      shown ? 'text-accent border-white/40' : 'text-transparent border-white/25'
+                      isGiven
+                        ? 'text-white border-white/50'
+                        : shown
+                          ? 'text-accent border-white/40'
+                          : 'text-transparent border-white/25'
                     }`}
                   >
                     {shown ?? ' '}
@@ -1673,9 +1721,102 @@ function LearnCryptogram({ register }: { register: RegisterKeys }) {
           ? 'That’s it. Every letter here moved five places along the alphabet — the daily uses a jumbled alphabet instead, so you work it out from the shape of the words.'
           : 'A two-letter word, a repeated letter, an apostrophe: those are the ways in.'}
       </p>
+
+      <div className="mt-8 text-left">
+        <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">
+          Ways in
+        </h3>
+        <p className="text-sm text-slate-300 mb-6">
+          A one-letter word is <span className="text-accent">a</span> or{' '}
+          <span className="text-accent">I</span>. The letter after an apostrophe is almost
+          always <span className="text-accent">s</span> or <span className="text-accent">t</span>.
+          The commonest three-letter word is <span className="text-accent">the</span>, and the
+          commonest letter is <span className="text-accent">e</span>. Everything else follows
+          from those.
+        </p>
+
+        <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">
+          The ciphers
+        </h3>
+        <p className="text-sm text-slate-400 mb-4">
+          Every board says which one it is, because knowing changes how you start. They all
+          share a rule: one letter always stands for the same thing, the whole way through.
+        </p>
+
+        {/* Written out rather than generated from the pool: the generator is a
+            build script and never reaches the browser. If a cipher joins or
+            leaves VARIANTS in scripts/cryptogram.mjs, this list is what has to
+            be brought back into step. */}
+        <dl className="space-y-3">
+          {CIPHER_GUIDE.map(({ tier, name, what }) => (
+            <div key={name} className="rounded-lg bg-white/5 border border-white/10 px-3 py-2">
+              <dt className="flex items-baseline gap-2 text-sm font-semibold text-white">
+                {name}
+                <span className="text-[0.625rem] font-normal uppercase tracking-wider text-slate-500">
+                  {tier}
+                </span>
+              </dt>
+              <dd className="text-sm text-slate-400">{what}</dd>
+            </div>
+          ))}
+        </dl>
+      </div>
     </div>
   );
 }
+
+const CIPHER_GUIDE = [
+  {
+    name: 'Shift',
+    tier: 'easy',
+    what: 'Every letter moves the same distance along the alphabet. Work out one and you have all twenty-six.',
+  },
+  {
+    name: 'Affine',
+    tier: 'easy',
+    what: 'The alphabet is stepped through at a fixed stride. Structured like a shift, but one letter is not enough to unlock it — two are.',
+  },
+  {
+    name: 'Numbers',
+    tier: 'easy',
+    what: 'A shift wearing digits instead of letters. Nothing about the puzzle changes, but nothing on the board looks like the answer either.',
+  },
+  {
+    name: 'Keyword',
+    tier: 'hard',
+    what: 'The cipher alphabet starts jumbled and then runs alphabetically to the end. Once you have a few letters, the tail tends to fall out in order.',
+  },
+  {
+    name: 'Mixed',
+    tier: 'hard',
+    what: 'A fully shuffled alphabet, with no pattern to find. The plain cryptogram: only word shapes and letter frequencies will do it.',
+  },
+  {
+    name: 'Symbols',
+    tier: 'hard',
+    what: 'A mixed alphabet drawn as shapes. Exactly as hard as Mixed, and easier to think in — no symbol pretends to be a letter it is not.',
+  },
+  {
+    name: 'Mixed, grouped',
+    tier: 'extreme',
+    what: 'A mixed alphabet with the word divisions taken away, printed in blocks of five. You have to find where the words are before you can solve them.',
+  },
+  {
+    name: 'Keyword, grouped',
+    tier: 'extreme',
+    what: 'The same, but the alphabet keeps its ordered tail — so the endgame collapses quickly once the words appear.',
+  },
+  {
+    name: 'Polybius',
+    tier: 'extreme',
+    what: 'Each letter becomes two digits: a row and a column in a grid. Noticing that the board reads in pairs is the first thing to solve.',
+  },
+  {
+    name: 'Homophonic',
+    tier: 'extreme',
+    what: 'Several numbers stand for the same letter, and the commonest letters get the most. Counting how often a mark appears stops telling you anything.',
+  },
+];
 
 // ---------------------------------------------------------------------------
 // shell

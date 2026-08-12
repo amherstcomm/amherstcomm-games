@@ -109,6 +109,7 @@ export type PersistedState = {
   hiddenViews: View[];
   lengthRange: LengthRange;
   practiceAllowed: boolean;
+  highlightMatches: boolean;
   helpAllowed: boolean;
   solverDictionary: Difficulty | 'per-game';
   wordFilter: WordFilterLevel;
@@ -176,6 +177,7 @@ export const DEFAULT_STATE: PersistedState = {
   hiddenViews: [],
   lengthRange: { min: MIN_WORD_LEN, max: MAX_WORD_LEN },
   practiceAllowed: true,
+  highlightMatches: true,
   helpAllowed: true,
   solverDictionary: 'per-game',
   wordFilter: 'none',
@@ -325,6 +327,7 @@ export function loadState(): PersistedState {
       hiddenViews: sanitizeHidden(p?.hiddenViews, ALL_VIEWS),
       lengthRange: sanitizeRange(p?.lengthRange),
       practiceAllowed: p?.practiceAllowed !== false,
+      highlightMatches: p?.highlightMatches !== false,
       helpAllowed: p?.helpAllowed !== false,
       solverDictionary: asDifficulty(p?.solverDictionary) ?? 'per-game',
       wordFilter: WORD_FILTERS.includes(p?.wordFilter) ? p.wordFilter : 'none',

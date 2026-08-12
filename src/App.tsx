@@ -134,7 +134,7 @@ const MODES: { id: Mode; label: string; blurb: string; description: string; play
     label: 'Cryptogram',
     blurb: 'A passage in code — work out which letter is which',
     description:
-      'Play the daily cipher. There is no solver here yet: deducing a whole passage is a different search from the word ones, and it deserves building properly.',
+      'Play the daily cipher. The solver is still being built: it has to offer the readings that fit rather than guess one, which is a different thing from the word solvers.',
     playDescription:
       'Every letter stands for another one, the same way throughout. Work out the passage.',
   },
@@ -733,6 +733,7 @@ function App() {
   const [hiddenViews, setHiddenViews] = useState<View[]>(initial.hiddenViews);
   const [lengthRange, setLengthRange] = useState<LengthRange>(initial.lengthRange);
   const [practiceAllowed, setPracticeAllowed] = useState(initial.practiceAllowed);
+  const [highlightMatches, setHighlightMatches] = useState(initial.highlightMatches);
   const [helpAllowed, setHelpAllowed] = useState(initial.helpAllowed);
   const [solverDictionary, setSolverDictionary] = useState(initial.solverDictionary);
   const [wordFilter, setWordFilter] = useState(initial.wordFilter);
@@ -797,6 +798,7 @@ function App() {
           hiddenViews?: View[];
           lengthRange?: LengthRange;
           practiceAllowed?: boolean;
+          highlightMatches?: boolean;
           helpAllowed?: boolean;
           solverDictionary?: string;
           wordFilter?: string;
@@ -812,6 +814,7 @@ function App() {
     if (Array.isArray(s?.hiddenViews)) setHiddenViews(s.hiddenViews.filter((v) => ALL_VIEWS.includes(v)));
     if (s?.lengthRange) setLengthRange(s.lengthRange);
     if (typeof s?.practiceAllowed === 'boolean') setPracticeAllowed(s.practiceAllowed);
+    if (typeof s?.highlightMatches === 'boolean') setHighlightMatches(s.highlightMatches);
     if (typeof s?.helpAllowed === 'boolean') setHelpAllowed(s.helpAllowed);
     if (s?.solverDictionary)
       setSolverDictionary(asDifficulty(s.solverDictionary) ?? 'per-game');
@@ -847,7 +850,7 @@ function App() {
     if (!supabase || !session || !settingsPulled) return;
     pushPending.current = true;
     const id = window.setTimeout(async () => {
-      const settings = { theme, palette, navKeys, textScale, hiddenModes, hiddenViews, lengthRange, practiceAllowed, helpAllowed, solverDictionary, wordFilter, startPage, onboarded };
+      const settings = { theme, palette, navKeys, textScale, hiddenModes, hiddenViews, lengthRange, practiceAllowed, highlightMatches, helpAllowed, solverDictionary, wordFilter, startPage, onboarded };
       // update first — it needs only the update policy, which every install
       // has. `select` reveals whether a row actually matched.
       const { data, error } = await supabase!
@@ -875,7 +878,7 @@ function App() {
       window.clearTimeout(id);
       pushPending.current = false;
     };
-  }, [session, settingsPulled, theme, palette, navKeys, textScale, hiddenModes, hiddenViews, lengthRange, practiceAllowed, helpAllowed, solverDictionary, wordFilter, startPage, onboarded]);
+  }, [session, settingsPulled, theme, palette, navKeys, textScale, hiddenModes, hiddenViews, lengthRange, practiceAllowed, highlightMatches, helpAllowed, solverDictionary, wordFilter, startPage, onboarded]);
 
   // surface auth errors that come back in the redirect URL (expired or
   // already-used magic links land here with no other visible sign)
@@ -993,8 +996,12 @@ function App() {
 
   const shownViews = useMemo(() => {
     const vis = visibleViews(hiddenViews);
-    return ALL_VIEWS.filter((v) => vis.includes(v) || v === initialGame?.view);
-  }, [hiddenViews]);
+    const shown = ALL_VIEWS.filter((v) => vis.includes(v) || v === initialGame?.view);
+    // Cryptogram has no solver yet, and a tab that only ever explains its own
+    // absence is worse than no tab. The effect below moves anyone standing on
+    // Solve when they arrive here, the same way hiding a game does.
+    return mode === 'cryptogram' ? shown.filter((v) => v !== 'solve') : shown;
+  }, [hiddenViews, mode]);
 
   const playFlags: Record<Mode, [boolean, (v: boolean) => void]> = {
     pattern: [patternPlay, setPatternPlay],
@@ -1007,7 +1014,10 @@ function App() {
     cryptogram: [cryptogramPlay, setCryptogramPlay],
   };
 
-  const prefs = useMemo(() => ({ practiceAllowed }), [practiceAllowed]);
+  const prefs = useMemo(
+    () => ({ practiceAllowed, highlightMatches }),
+    [practiceAllowed, highlightMatches]
+  );
 
   const currentView: View = learnMode ? 'learn' : playFlags[mode][0] ? 'play' : 'solve';
 
@@ -1182,6 +1192,7 @@ function App() {
       hiddenViews,
       lengthRange,
       practiceAllowed,
+      highlightMatches,
       helpAllowed,
       solverDictionary,
       wordFilter,
@@ -1204,7 +1215,7 @@ function App() {
       cryptogram: { cipher: '' },
       cryptogramPlay,
     });
-  }, [mode, dictionaries, sorts, kbOpen, theme, palette, textScale, navKeys, hiddenModes, hiddenViews, lengthRange, practiceAllowed, helpAllowed, solverDictionary, wordFilter, startPage, onboarded, patternPlay, beePlay, boxedPlay, descramblePlay, gridPlay, length, known, containsStr, excludedStr, rackStr, useAll, minLength, beeCenter, beeOuters, boxedLetters, solutionWords, gridLetters, gridPreset, weaveLetters, weaveSize, weavePlay, squaresPlay, squaresLetters, squaresSize, cryptogramPlay]);
+  }, [mode, dictionaries, sorts, kbOpen, theme, palette, textScale, navKeys, hiddenModes, hiddenViews, lengthRange, practiceAllowed, highlightMatches, helpAllowed, solverDictionary, wordFilter, startPage, onboarded, patternPlay, beePlay, boxedPlay, descramblePlay, gridPlay, length, known, containsStr, excludedStr, rackStr, useAll, minLength, beeCenter, beeOuters, boxedLetters, solutionWords, gridLetters, gridPreset, weaveLetters, weaveSize, weavePlay, squaresPlay, squaresLetters, squaresSize, cryptogramPlay]);
 
   // keep known array sized to length
   useEffect(() => {
@@ -1831,14 +1842,18 @@ function App() {
         </div>
         )}
 
-        {/* No solver yet. Deducing a passage is a different search from the
-            word ones — closer to Guess's pattern work applied twenty words at
-            once — and a stub that listed candidate words would be worse than
-            saying so. */}
+        {/* Deliberately not shipping the search-based solver that was here:
+            it commits to one reading and can be confidently wrong, which is
+            the worst thing a solver can be on this particular puzzle. The
+            propagation core it will be rebuilt on lives in cryptogramSolver.ts
+            and is already under test. */}
         {mode === 'cryptogram' && !cryptogramPlay && (
         <div className="mb-8 text-center">
-          <p className="text-sm text-slate-400">
-            There&apos;s no cryptogram solver yet. Play is where this one lives for now.
+          <p className="text-sm text-slate-400 max-w-lg mx-auto">
+            The cryptogram solver isn&apos;t here yet. The word solvers can hand you a list
+            because a word either fits or it doesn&apos;t; a passage can have several readings
+            where every word is real, so this one has to show you the choices rather than
+            pick one. Play is where this game lives for now.
           </p>
         </div>
         )}
@@ -2965,6 +2980,7 @@ function App() {
           hiddenViews={hiddenViews}
           lengthRange={lengthRange}
           practiceAllowed={practiceAllowed}
+          highlightMatches={highlightMatches}
           helpAllowed={helpAllowed}
           solverDictionary={solverDictionary}
           signedIn={!!session}
@@ -2979,6 +2995,7 @@ function App() {
           }
           onLengthRange={setLengthRange}
           onPracticeAllowed={setPracticeAllowed}
+          onHighlightMatches={setHighlightMatches}
           onHelpAllowed={setHelpAllowed}
           onSolverDictionary={setSolverDictionary}
           wordFilter={wordFilter}
