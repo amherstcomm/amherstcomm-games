@@ -33,11 +33,16 @@ export function patternOf(word: string | string[]): string {
  *  the answer gets looked up more than once.
  *
  *  `common` decides what each bucket offers first, and it matters more than it
- *  looks. Pattern matching alone asks only "is every word a word", and against
- *  a hundred thousand of them a passage often has a second reading where every
- *  word is real and the whole is nonsense. Trying ordinary words before
- *  obscure ones makes the first answer found the likely one rather than
- *  merely a legal one. */
+ *  looks: a list of ten readings is only useful if they are the ten a person
+ *  would consider.
+ *
+ *  It is also weaker than it sounds, which is worth knowing before trusting
+ *  it. Membership of the common tier is nearly forty thousand words, so `dye`,
+ *  `ego` and `era` all pass it and the sort barely discriminates. The word
+ *  files themselves are ordered by SCOWL band, which is roughly frequency
+ *  order and sorts far better — so a list that arrives alphabetised has
+ *  already lost the signal this cannot put back. Ranking properly wants a
+ *  frequency-ordered list, not a membership test. */
 export function buildPatternIndex(words: string[], common?: Set<string>): Map<string, string[]> {
   const index = new Map<string, string[]>();
   for (const w of words) {
