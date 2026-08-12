@@ -3458,12 +3458,12 @@ function App() {
               <p>
                 Also by me:{' '}
                 <a
-                  href="https://getrandompassword.net"
+                  href="https://wordlock.net"
                   target="_blank"
                   rel="noopener noreferrer"
                   className="text-amber-300 hover:text-amber-200 underline underline-offset-2"
                 >
-                  getrandompassword.net
+                  wordlock.net
                 </a>
                 , a password generator.
               </p>
