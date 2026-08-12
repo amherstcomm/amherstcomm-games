@@ -24,6 +24,7 @@ export const LEADERBOARD = {
   weave: [],
   squares4: [],
   squares5: [],
+  cryptogram: [],
 };
 
 export const test = base.extend<{ rpcCalls: { fn: string; args: Record<string, unknown> }[] }>({
