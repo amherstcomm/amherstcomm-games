@@ -184,12 +184,12 @@ function alphabetFor(kind, rng) {
 // substitution solved the slow way, and the variety is invisible.
 
 export const VARIANTS = {
-  shift: { label: 'Shift', key: 'shift', alphabet: 'letters', grouped: false, reveals: 3 },
-  affine: { label: 'Affine', key: 'affine', alphabet: 'letters', grouped: false, reveals: 3 },
-  numbers: { label: 'Numbers', key: 'shift', alphabet: 'digits', grouped: false, reveals: 3 },
-  keyword: { label: 'Keyword', key: 'keyword', alphabet: 'letters', grouped: false, reveals: 1 },
-  mixed: { label: 'Mixed', key: 'random', alphabet: 'letters', grouped: false, reveals: 1 },
-  symbols: { label: 'Symbols', key: 'random', alphabet: 'symbols', grouped: false, reveals: 1 },
+  shift: { label: 'Shift', key: 'shift', alphabet: 'letters', grouped: false, reveals: 3, band: 5 },
+  affine: { label: 'Affine', key: 'affine', alphabet: 'letters', grouped: false, reveals: 3, band: 5 },
+  numbers: { label: 'Numbers', key: 'shift', alphabet: 'digits', grouped: false, reveals: 3, band: 5 },
+  keyword: { label: 'Keyword', key: 'keyword', alphabet: 'letters', grouped: false, reveals: 1, band: 3 },
+  mixed: { label: 'Mixed', key: 'random', alphabet: 'letters', grouped: false, reveals: 1, band: 3 },
+  symbols: { label: 'Symbols', key: 'random', alphabet: 'symbols', grouped: false, reveals: 1, band: 3 },
   keywordGrouped: {
     label: 'Keyword, grouped',
     key: 'keyword',
@@ -226,16 +226,30 @@ export const TIER_VARIANTS = {
 // Enciphering
 // ---------------------------------------------------------------------------
 
-/** Which tokens to give away: the most frequent letters of this passage, so a
- *  reveal is the opening a frequency table would suggest rather than the
- *  answer. Homophonic boards reveal nothing — one of four tokens for 'e'
- *  would be a hint about the cipher rather than about the passage. */
-function revealsFor(text, tokenFor, count) {
+/** Which tokens to give away: frequent letters of this passage, so a reveal is
+ *  the opening a frequency table would suggest rather than the answer.
+ *
+ *  Drawn from a band rather than taken straight off the top. Handing over
+ *  exactly the three commonest letters every time means every easy board opens
+ *  the same way, and it tells a regular player something extra: that anything
+ *  unrevealed is *not* top-three. Picking three of the top five leaves the help
+ *  comparable while making the opening different day to day, and leaves that
+ *  inference unavailable.
+ *
+ *  Homophonic boards reveal nothing — one of four tokens for 'e' would be a
+ *  hint about the cipher rather than about the passage. */
+function revealsFor(text, tokenFor, count, band, rng) {
   const freq = {};
   for (const c of text.toLowerCase()) if (/[a-z]/.test(c)) freq[c] = (freq[c] ?? 0) + 1;
   const byFrequency = Object.keys(freq).sort((a, b) => freq[b] - freq[a] || a.localeCompare(b));
+  const pool = byFrequency.slice(0, Math.max(band, count));
+  // shuffle the band, then take from the front
+  for (let i = pool.length - 1; i > 0; i--) {
+    const j = Math.floor(rng() * (i + 1));
+    [pool[i], pool[j]] = [pool[j], pool[i]];
+  }
   const out = {};
-  for (const plain of byFrequency.slice(0, count)) {
+  for (const plain of pool.slice(0, count)) {
     const tokens = tokenFor(plain);
     if (tokens.length === 1) out[tokens[0]] = plain;
   }
@@ -278,7 +292,10 @@ export function generateCryptogram(passage, rng, variantName) {
     // gives the board something to list as still-unassigned, which is what
     // the A-Z strip does for a letter cipher.
     alphabet: [...new Set(alphabet.flat())].sort(),
-    reveals: v.alphabet === 'homophonic' ? {} : revealsFor(passage.text, tokensFor, v.reveals),
+    reveals:
+      v.alphabet === 'homophonic'
+        ? {}
+        : revealsFor(passage.text, tokensFor, v.reveals, v.band ?? v.reveals, rng),
     answer: Buffer.from(JSON.stringify({ text: passage.text, author: passage.author })).toString(
       'base64'
     ),
