@@ -1027,9 +1027,19 @@ function App() {
   // screen — it is a pass over the whole dictionary and no other mode wants it.
   const patternIndex = useMemo(() => {
     if (mode !== 'cryptogram' || cryptogramPlay) return null;
+    // Search wide, rank narrow — and the two must not be confused.
+    //
+    // Searching the common tier alone was tried and is a trap. It deduces far
+    // more, and some of what it deduces is wrong: propagation is only sound
+    // while the candidate lists are complete, so a passage using any word the
+    // tier lacks lets the intersection eliminate the true letter and "prove" a
+    // false one. On a real cryptogram it settled i as a. A solver that is
+    // confidently wrong is the thing this whole design exists to avoid.
+    //
+    // So the search stays over everything, which keeps every deduction sound,
+    // and the common tier only decides what each list offers first — which was
+    // the actual complaint: the was buried behind dye and ecu.
     const words = acceptWordsArr ?? standardWordsArr;
-    // ordinary words first inside each shape, so a short list is a list of
-    // plausible readings rather than whatever happens to sort first
     return words
       ? buildPatternIndex(words, commonWordsArr ? new Set(commonWordsArr) : undefined)
       : null;

@@ -138,19 +138,29 @@ export function analyse(
 
   let contradiction = false;
 
-  // Words we can say nothing about: contractions, because the dictionary holds
-  // no apostrophes. They contribute no constraint rather than a false one —
-  // the marks inside them still get solved by the words around them.
+  // Words we can say nothing about, which contribute no constraint rather
+  // than a false one — the marks inside them still get solved by their
+  // neighbours. Two kinds:
+  //
+  //   contractions, because the dictionary holds no apostrophes; and
+  //   anything the dictionary simply doesn't have.
+  //
+  // The second matters because this searches a *common* word list. A short
+  // list is the whole point — against a hundred thousand words a three-letter
+  // shape offers dye, ecu and ego, which is noise wearing the costume of a
+  // choice — but it means a passage using an uncommon word would otherwise
+  // come back "no reading fits" and take the rest of the board down with it.
+  // Absent from the list is not the same as impossible.
   const mute = new Set<string>();
-  for (const [key, tokens] of distinct) if (tokens.includes("'")) mute.add(key);
-
-  // Start from every reading of the right shape that the pins allow.
   const lists = new Map<string, string[]>();
   for (const [key, tokens] of distinct) {
-    lists.set(
-      key,
-      mute.has(key) ? [] : (index.get(patternOf(tokens)) ?? []).filter((w) => readable(tokens, w))
-    );
+    const shaped = index.get(patternOf(tokens)) ?? [];
+    if (tokens.includes("'") || !shaped.length) {
+      mute.add(key);
+      lists.set(key, []);
+    } else {
+      lists.set(key, shaped.filter((w) => readable(tokens, w)));
+    }
   }
 
   // Arc consistency, rather than "wait for a word to collapse to one reading".
