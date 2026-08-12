@@ -43,7 +43,10 @@ export function patternOf(word: string | string[]): string {
  *  order and sorts far better — so a list that arrives alphabetised has
  *  already lost the signal this cannot put back. Ranking properly wants a
  *  frequency-ordered list, not a membership test. */
-export function buildPatternIndex(words: string[], common?: Set<string>): Map<string, string[]> {
+export function buildPatternIndex(
+  words: string[],
+  rank?: Map<string, number>
+): Map<string, string[]> {
   const index = new Map<string, string[]>();
   for (const w of words) {
     const key = patternOf(w);
@@ -51,9 +54,12 @@ export function buildPatternIndex(words: string[], common?: Set<string>): Map<st
     if (bucket) bucket.push(w);
     else index.set(key, [w]);
   }
-  if (common) {
+  if (rank) {
+    // commonest band first, alphabetical inside a band so the order is stable
     for (const bucket of index.values()) {
-      bucket.sort((a, b) => Number(common.has(b)) - Number(common.has(a)));
+      bucket.sort(
+        (a, b) => (rank.get(a) ?? 99) - (rank.get(b) ?? 99) || (a < b ? -1 : a > b ? 1 : 0)
+      );
     }
   }
   return index;

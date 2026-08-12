@@ -128,6 +128,29 @@ export function getAcceptPool(difficulty: Difficulty): Promise<string[]> {
   );
 }
 
+/** How ordinary a word is, as the band it first appears in: 0 for the
+ *  commonest, 3 for the obscure.
+ *
+ *  The bands already know this and `union` throws it away — it sorts, because
+ *  every other caller wants a sorted list. The cryptogram solver is the one
+ *  consumer that needs the opposite: when it offers ten readings of a shape,
+ *  they have to be the ten a person would actually consider, and alphabetical
+ *  puts "dye" and "ego" ahead of "the". Membership of a tier can't recover it
+ *  — the common tier holds forty thousand words and "dye" is one of them —
+ *  so the rank has to come from the bands themselves. */
+export function getWordRank(): Promise<Map<string, number>> {
+  return rankCache ??= (async () => {
+    const bands = await Promise.all(BAND_NAMES.map(band));
+    const rank = new Map<string, number>();
+    bands.forEach((b, i) => {
+      for (const w of b.words) if (!rank.has(w)) rank.set(w, i);
+    });
+    return rank;
+  })();
+}
+
+let rankCache: Promise<Map<string, number>> | null = null;
+
 const GENERATION_BAND: Record<Difficulty, BandName> = {
   easy: 'band-35',
   hard: 'band-55',

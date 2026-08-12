@@ -21,7 +21,7 @@ import ScrambleGame, { type ScrambleGameHandle } from '@/ScrambleGame';
 import GridGame, { type GridGameHandle } from '@/GridGame';
 import WeaveGame, { type WeaveGameHandle } from '@/WeaveGame';
 import { fetchDailyData } from '@/dailyData';
-import { DICTIONARIES, getAcceptPool, getDictionary, getDifficultyPool, getDisplayFilter } from '@/dictionaries';
+import { DICTIONARIES, getAcceptPool, getDictionary, getDifficultyPool, getDisplayFilter, getWordRank } from '@/dictionaries';
 import { solvePattern, solveDescramble, solveBee, solveBoxed, solveGrid, findGridPath } from '@/solvers';
 import ConsentBanner from '@/ConsentBanner';
 import { PrivacyPolicy, Terms } from '@/LegalDocs';
@@ -941,6 +941,7 @@ function App() {
   const [practiceWordsArr, setPracticeWordsArr] = useState<string[] | null>(null);
   // What this difficulty accepts, one band wider than it sets from.
   const [acceptWordsArr, setAcceptWordsArr] = useState<string[] | null>(null);
+  const [wordRank, setWordRank] = useState<Map<string, number> | null>(null);
   useEffect(() => {
     let alive = true;
     setPracticeWordsArr(null);
@@ -973,6 +974,9 @@ function App() {
     // readings come back alphabetically and "the" sits behind "dye" and "ecu".
     const cryptoSolve = mode === 'cryptogram' && !cryptogramPlay && !learnMode;
     if (!playActive && !learnMode && !cryptoSolve) return;
+    // how ordinary each word is, so the solver's candidate lists lead with the
+    // readings a person would actually consider
+    if (cryptoSolve && !wordRank) getWordRank().then(setWordRank);
     if (!commonWordsArr) getDictionary('common').then(setCommonWordsArr);
     if (patternPlayActive && !fullWordsArr) getDictionary('full').then(setFullWordsArr);
     if (
@@ -981,7 +985,7 @@ function App() {
     ) {
       getDictionary('standard').then(setStandardWordsArr);
     }
-  }, [playActive, learnMode, mode, cryptogramPlay, patternPlayActive, beePlayActive, boxedPlayActive, descramblePlayActive, gridPlayActive, weavePlayActive, squaresPlayActive, commonWordsArr, fullWordsArr, standardWordsArr]);
+  }, [playActive, learnMode, mode, cryptogramPlay, patternPlayActive, beePlayActive, boxedPlayActive, descramblePlayActive, gridPlayActive, weavePlayActive, squaresPlayActive, commonWordsArr, fullWordsArr, standardWordsArr, wordRank]);
 
   const aboutRef = useRef<HTMLDivElement>(null);
   const legalRef = useRef<HTMLDivElement>(null);
@@ -1040,10 +1044,8 @@ function App() {
     // and the common tier only decides what each list offers first — which was
     // the actual complaint: the was buried behind dye and ecu.
     const words = acceptWordsArr ?? standardWordsArr;
-    return words
-      ? buildPatternIndex(words, commonWordsArr ? new Set(commonWordsArr) : undefined)
-      : null;
-  }, [mode, cryptogramPlay, acceptWordsArr, standardWordsArr, commonWordsArr]);
+    return words ? buildPatternIndex(words, wordRank ?? undefined) : null;
+  }, [mode, cryptogramPlay, acceptWordsArr, standardWordsArr, wordRank]);
 
   const cryptoWords = useMemo(
     () => (cryptoText.trim() ? parseCryptogram(cryptoText, cryptoMode) : []),
