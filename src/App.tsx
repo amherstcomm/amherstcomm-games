@@ -968,7 +968,11 @@ function App() {
   // words from the common one; hive, box, scramble, grid play — and the
   // Learn demos — use standard
   useEffect(() => {
-    if (!playActive && !learnMode) return;
+    // the cryptogram solver wants the common list too — not to search with,
+    // but to decide what a candidate list offers first. Without it the
+    // readings come back alphabetically and "the" sits behind "dye" and "ecu".
+    const cryptoSolve = mode === 'cryptogram' && !cryptogramPlay && !learnMode;
+    if (!playActive && !learnMode && !cryptoSolve) return;
     if (!commonWordsArr) getDictionary('common').then(setCommonWordsArr);
     if (patternPlayActive && !fullWordsArr) getDictionary('full').then(setFullWordsArr);
     if (
@@ -977,7 +981,7 @@ function App() {
     ) {
       getDictionary('standard').then(setStandardWordsArr);
     }
-  }, [playActive, learnMode, patternPlayActive, beePlayActive, boxedPlayActive, descramblePlayActive, gridPlayActive, weavePlayActive, squaresPlayActive, commonWordsArr, fullWordsArr, standardWordsArr]);
+  }, [playActive, learnMode, mode, cryptogramPlay, patternPlayActive, beePlayActive, boxedPlayActive, descramblePlayActive, gridPlayActive, weavePlayActive, squaresPlayActive, commonWordsArr, fullWordsArr, standardWordsArr]);
 
   const aboutRef = useRef<HTMLDivElement>(null);
   const legalRef = useRef<HTMLDivElement>(null);
@@ -1957,6 +1961,33 @@ function App() {
                 Undo all
               </button>
             )}
+          </div>
+
+          {/* The way in when nothing is offered. On a cold start every word
+              can still be thousands of readings, so there is nothing to click
+              and nothing worth suggesting — but the person asking usually
+              knows a letter already, and one is enough to start the cascade.
+              Typed here it becomes an ordinary pick, undoable like the rest. */}
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <label htmlFor="crypto-known" className="text-xs text-slate-500">
+              Know one already?
+            </label>
+            <input
+              id="crypto-known"
+              defaultValue=""
+              placeholder={cryptoMode === 'letters' ? 'K=e' : '17=e'}
+              spellCheck={false}
+              onKeyDown={(e) => {
+                if (e.key !== 'Enter') return;
+                const raw = (e.target as HTMLInputElement).value;
+                const m = raw.match(/^\s*(\S+)\s*=\s*([A-Za-z])\s*$/);
+                if (!m) return;
+                pinWord([cryptoMode === 'letters' ? m[1].toLowerCase() : m[1]], m[2].toLowerCase());
+                (e.target as HTMLInputElement).value = '';
+              }}
+              className="w-24 px-2 h-8 rounded-lg bg-white/5 border border-white/10 text-slate-200 placeholder:text-slate-600 text-sm font-mono"
+            />
+            <span className="text-xs text-slate-600">then Enter</span>
           </div>
 
           {/* Each choice on its own, so a wrong turn costs one click rather

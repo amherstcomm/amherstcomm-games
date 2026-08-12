@@ -72,7 +72,13 @@ export type InputMode = 'letters' | 'tokens';
  *  that is one word or two. */
 export function parseCryptogram(input: string, mode: InputMode): string[][] {
   if (mode === 'letters') {
-    return (input.toLowerCase().match(/[a-z]+/g) ?? []).map((w) => [...w]);
+    // Contractions stay whole. Splitting "SOI'N" into "soi" and "n" invents a
+    // one-letter word, and a one-letter word can only be "a" or "i" — so the
+    // mark standing for T gets forced to a vowel, and every "the" on the board
+    // stops being readable. The apostrophe rides along as a token and
+    // `analyse` leaves such words alone rather than trusting a dictionary that
+    // has no contractions in it.
+    return (input.toLowerCase().match(/[a-z]+(?:'[a-z]+)*/g) ?? []).map((w) => [...w]);
   }
   return input
     .split(/[/\n]+/)
@@ -132,10 +138,19 @@ export function analyse(
 
   let contradiction = false;
 
+  // Words we can say nothing about: contractions, because the dictionary holds
+  // no apostrophes. They contribute no constraint rather than a false one —
+  // the marks inside them still get solved by the words around them.
+  const mute = new Set<string>();
+  for (const [key, tokens] of distinct) if (tokens.includes("'")) mute.add(key);
+
   // Start from every reading of the right shape that the pins allow.
   const lists = new Map<string, string[]>();
   for (const [key, tokens] of distinct) {
-    lists.set(key, (index.get(patternOf(tokens)) ?? []).filter((w) => readable(tokens, w)));
+    lists.set(
+      key,
+      mute.has(key) ? [] : (index.get(patternOf(tokens)) ?? []).filter((w) => readable(tokens, w))
+    );
   }
 
   // Arc consistency, rather than "wait for a word to collapse to one reading".
@@ -158,6 +173,7 @@ export function analyse(
     // what each mark could still be, intersected over every word using it
     const possible = new Map<string, Set<string>>();
     for (const [key, tokens] of distinct) {
+      if (mute.has(key)) continue;
       const cands = lists.get(key)!;
       tokens.forEach((t, i) => {
         const here = new Set<string>();
@@ -190,6 +206,7 @@ export function analyse(
 
     // drop readings that need a letter their mark can no longer be
     for (const [key, tokens] of distinct) {
+      if (mute.has(key)) continue;
       const before = lists.get(key)!;
       const after = before.filter((c) => tokens.every((t, i) => possible.get(t)?.has(c[i])));
       if (after.length !== before.length) {
