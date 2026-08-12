@@ -530,7 +530,15 @@ function App() {
   const [cryptoMode, setCryptoMode] = useState<InputMode>('letters');
   // marks the player has settled by picking a reading; propagation takes these
   // as fixed and narrows everything else against them
-  const [cryptoPins, setCryptoPins] = useState<Record<string, string>>({});
+  // Kept as the choices made, not as the letters they imply: a pick has to be
+  // undoable on its own, and a flat token->letter map has forgotten which
+  // choice put each letter there.
+  const [cryptoPicks, setCryptoPicks] = useState<
+    { key: string; tokens: string[]; plain: string }[]
+  >([]);
+  // words whose full candidate list the player has asked to see; keyed the way
+  // analyse keys them, so a word keeps its state as the lists narrow
+  const [cryptoOpen, setCryptoOpen] = useState<string[]>([]);
 
   const weaveDims = WEAVE_DIMS[weaveSize];
 
@@ -1027,20 +1035,23 @@ function App() {
     [cryptoText, cryptoMode]
   );
 
+  const cryptoPins = useMemo(() => {
+    const pins: Record<string, string> = {};
+    for (const p of cryptoPicks) p.tokens.forEach((t, i) => (pins[t] = p.plain[i]));
+    return pins;
+  }, [cryptoPicks]);
+
   const cryptoAnalysis = useMemo(
     () => (patternIndex && cryptoWords.length ? analyse(cryptoWords, patternIndex, cryptoPins) : null),
     [patternIndex, cryptoWords, cryptoPins]
   );
 
-  /** settle a word on one reading, which propagation then spreads */
+  /** settle a word on one reading, which propagation then spreads. Choosing
+   *  again for the same word replaces that choice rather than stacking a
+   *  second one on top of it. */
   function pinWord(tokens: string[], plain: string) {
-    setCryptoPins((prev) => {
-      const next = { ...prev };
-      tokens.forEach((t, i) => {
-        next[t] = plain[i];
-      });
-      return next;
-    });
+    const key = tokens.join(' ');
+    setCryptoPicks((prev) => [...prev.filter((p) => p.key !== key), { key, tokens, plain }]);
   }
 
   const playFlags: Record<Mode, [boolean, (v: boolean) => void]> = {
@@ -1896,7 +1907,8 @@ function App() {
             value={cryptoText}
             onChange={(e) => {
               setCryptoText(e.target.value);
-              setCryptoPins({});
+              setCryptoPicks([]);
+              setCryptoOpen([]);
             }}
             rows={3}
             spellCheck={false}
@@ -1909,7 +1921,7 @@ function App() {
               {([['letters', 'Letters'], ['tokens', 'Numbers or symbols']] as const).map(([id, label]) => (
                 <button
                   key={id}
-                  onClick={() => { setCryptoMode(id); setCryptoPins({}); }}
+                  onClick={() => { setCryptoMode(id); setCryptoPicks([]); setCryptoOpen([]); }}
                   aria-pressed={cryptoMode === id}
                   className={`px-3 py-1.5 rounded-md text-sm font-semibold transition-colors
                     ${cryptoMode === id ? 'bg-emerald-400/15 text-emerald-300' : 'text-slate-400 hover:text-white'}`}
@@ -1918,16 +1930,35 @@ function App() {
                 </button>
               ))}
             </div>
-            {Object.keys(cryptoPins).length > 0 && (
+            {cryptoPicks.length > 1 && (
               <button
-                onClick={() => setCryptoPins({})}
+                onClick={() => setCryptoPicks([])}
                 className="inline-flex items-center gap-1.5 px-3 h-9 rounded-lg text-sm font-semibold bg-white/5 border border-white/10 text-slate-300 hover:bg-white/10 hover:text-white transition-colors"
               >
                 <Eraser className="w-4 h-4" />
-                Undo my picks
+                Undo all
               </button>
             )}
           </div>
+
+          {/* Each choice on its own, so a wrong turn costs one click rather
+              than the whole session. */}
+          {cryptoPicks.length > 0 && (
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <span className="text-xs text-slate-500">Your picks:</span>
+              {cryptoPicks.map((p) => (
+                <button
+                  key={p.key}
+                  onClick={() => setCryptoPicks((prev) => prev.filter((q) => q.key !== p.key))}
+                  aria-label={`Undo ${p.plain}`}
+                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-sm bg-emerald-400/15 text-emerald-300 hover:bg-rose-400/15 hover:text-rose-300 transition-colors"
+                >
+                  {p.plain}
+                  <X className="w-3 h-3" />
+                </button>
+              ))}
+            </div>
+          )}
 
           {cryptoMode === 'tokens' && (
             <p className="mt-2 text-xs text-slate-500">
@@ -1969,27 +2000,41 @@ function App() {
                   .filter((w) => w.candidates.length > 1 && w.candidates.length <= 40)
                   .sort((a, b) => a.candidates.length - b.candidates.length)
                   .slice(0, 12)
-                  .map((w) => (
-                    <div key={w.tokens.join(' ')} className="flex flex-wrap items-baseline gap-2">
-                      <span className="text-xs font-mono text-slate-500 shrink-0">
-                        {w.tokens.join(cryptoMode === 'letters' ? '' : ' ')}
-                      </span>
-                      {w.candidates.slice(0, 10).map((c) => (
-                        <button
-                          key={c}
-                          onClick={() => pinWord(w.tokens, c)}
-                          className="px-2 py-0.5 rounded-md text-sm bg-white/5 border border-white/10 text-slate-300 hover:bg-emerald-400/15 hover:text-emerald-300 transition-colors"
-                        >
-                          {c}
-                        </button>
-                      ))}
-                      {w.candidates.length > 10 && (
-                        <span className="text-xs text-slate-600">
-                          +{w.candidates.length - 10} more
+                  .map((w) => {
+                    const key = w.tokens.join(' ');
+                    const open = cryptoOpen.includes(key);
+                    // ten is enough to scan; the rest are a click away rather
+                    // than a number you can only look at
+                    const shown = open ? w.candidates : w.candidates.slice(0, 10);
+                    return (
+                      <div key={key} className="flex flex-wrap items-baseline gap-2">
+                        <span className="text-xs font-mono text-slate-500 shrink-0">
+                          {w.tokens.join(cryptoMode === 'letters' ? '' : ' ')}
                         </span>
-                      )}
-                    </div>
-                  ))}
+                        {shown.map((c) => (
+                          <button
+                            key={c}
+                            onClick={() => pinWord(w.tokens, c)}
+                            className="px-2 py-0.5 rounded-md text-sm bg-white/5 border border-white/10 text-slate-300 hover:bg-emerald-400/15 hover:text-emerald-300 transition-colors"
+                          >
+                            {c}
+                          </button>
+                        ))}
+                        {w.candidates.length > 10 && (
+                          <button
+                            onClick={() =>
+                              setCryptoOpen((prev) =>
+                                open ? prev.filter((k) => k !== key) : [...prev, key]
+                              )
+                            }
+                            className="px-2 py-0.5 rounded-md text-xs text-slate-500 hover:text-white hover:bg-white/10 transition-colors"
+                          >
+                            {open ? 'fewer' : `+${w.candidates.length - 10} more`}
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })}
               </div>
 
               {!cryptoAnalysis.contradiction &&
