@@ -33,12 +33,20 @@ export function patternOf(word: string | string[]): string {
  *  the answer gets looked up more than once.
  *
  *  `common` decides what each bucket offers first, and it matters more than it
- *  looks. Pattern matching alone asks only "is every word a word", and against
- *  a hundred thousand of them a passage often has a second reading where every
- *  word is real and the whole is nonsense. Trying ordinary words before
- *  obscure ones makes the first answer found the likely one rather than
- *  merely a legal one. */
-export function buildPatternIndex(words: string[], common?: Set<string>): Map<string, string[]> {
+ *  looks: a list of ten readings is only useful if they are the ten a person
+ *  would consider.
+ *
+ *  It is also weaker than it sounds, which is worth knowing before trusting
+ *  it. Membership of the common tier is nearly forty thousand words, so `dye`,
+ *  `ego` and `era` all pass it and the sort barely discriminates. The word
+ *  files themselves are ordered by SCOWL band, which is roughly frequency
+ *  order and sorts far better — so a list that arrives alphabetised has
+ *  already lost the signal this cannot put back. Ranking properly wants a
+ *  frequency-ordered list, not a membership test. */
+export function buildPatternIndex(
+  words: string[],
+  rank?: Map<string, number>
+): Map<string, string[]> {
   const index = new Map<string, string[]>();
   for (const w of words) {
     const key = patternOf(w);
@@ -46,9 +54,12 @@ export function buildPatternIndex(words: string[], common?: Set<string>): Map<st
     if (bucket) bucket.push(w);
     else index.set(key, [w]);
   }
-  if (common) {
+  if (rank) {
+    // commonest band first, alphabetical inside a band so the order is stable
     for (const bucket of index.values()) {
-      bucket.sort((a, b) => Number(common.has(b)) - Number(common.has(a)));
+      bucket.sort(
+        (a, b) => (rank.get(a) ?? 99) - (rank.get(b) ?? 99) || (a < b ? -1 : a > b ? 1 : 0)
+      );
     }
   }
   return index;
@@ -72,7 +83,13 @@ export type InputMode = 'letters' | 'tokens';
  *  that is one word or two. */
 export function parseCryptogram(input: string, mode: InputMode): string[][] {
   if (mode === 'letters') {
-    return (input.toLowerCase().match(/[a-z]+/g) ?? []).map((w) => [...w]);
+    // Contractions stay whole. Splitting "SOI'N" into "soi" and "n" invents a
+    // one-letter word, and a one-letter word can only be "a" or "i" — so the
+    // mark standing for T gets forced to a vowel, and every "the" on the board
+    // stops being readable. The apostrophe rides along as a token and
+    // `analyse` leaves such words alone rather than trusting a dictionary that
+    // has no contractions in it.
+    return (input.toLowerCase().match(/[a-z]+(?:'[a-z]+)*/g) ?? []).map((w) => [...w]);
   }
   return input
     .split(/[/\n]+/)
@@ -131,25 +148,96 @@ export function analyse(
   };
 
   let contradiction = false;
+
+  // Words we can say nothing about, which contribute no constraint rather
+  // than a false one — the marks inside them still get solved by their
+  // neighbours. Two kinds:
+  //
+  //   contractions, because the dictionary holds no apostrophes; and
+  //   anything the dictionary simply doesn't have.
+  //
+  // The second matters because this searches a *common* word list. A short
+  // list is the whole point — against a hundred thousand words a three-letter
+  // shape offers dye, ecu and ego, which is noise wearing the costume of a
+  // choice — but it means a passage using an uncommon word would otherwise
+  // come back "no reading fits" and take the rest of the board down with it.
+  // Absent from the list is not the same as impossible.
+  const mute = new Set<string>();
   const lists = new Map<string, string[]>();
-  for (let pass = 0; pass < 26; pass++) {
-    let settled = false;
+  for (const [key, tokens] of distinct) {
+    const shaped = index.get(patternOf(tokens)) ?? [];
+    if (tokens.includes("'") || !shaped.length) {
+      mute.add(key);
+      lists.set(key, []);
+    } else {
+      lists.set(key, shaped.filter((w) => readable(tokens, w)));
+    }
+  }
+
+  // Arc consistency, rather than "wait for a word to collapse to one reading".
+  //
+  // Waiting is the shallow version and it deduces almost nothing: a word has
+  // to be uniquely shaped before it says anything at all. The pruning that
+  // matters is between words. Every mark has a set of letters it could be —
+  // gathered from the surviving readings of each word it appears in, and
+  // *intersected* across those words, because the mark has to be one letter in
+  // all of them at once. "K is e or a here, a or o there" leaves a, proven,
+  // with no word having collapsed. Then readings using a letter no longer
+  // possible at their position die, which shrinks the sets again, and round it
+  // goes until nothing moves.
+  //
+  // It only ever removes the impossible, so the contract holds: it still
+  // cannot be wrong, it can only stop early.
+  for (let pass = 0; pass < 40; pass++) {
+    let changed = false;
+
+    // what each mark could still be, intersected over every word using it
+    const possible = new Map<string, Set<string>>();
     for (const [key, tokens] of distinct) {
-      const all = index.get(patternOf(tokens)) ?? [];
-      const fits = all.filter((w) => readable(tokens, w));
-      lists.set(key, fits);
-      if (!fits.length) contradiction = true;
-      if (fits.length === 1) {
-        // one reading left is a deduction, not a choice
-        tokens.forEach((t, i) => {
-          if (mapping[t] === undefined) {
-            mapping[t] = fits[0][i];
-            settled = true;
-          }
-        });
+      if (mute.has(key)) continue;
+      const cands = lists.get(key)!;
+      tokens.forEach((t, i) => {
+        const here = new Set<string>();
+        for (const c of cands) here.add(c[i]);
+        const known = possible.get(t);
+        if (!known) possible.set(t, here);
+        else for (const letter of [...known]) if (!here.has(letter)) known.delete(letter);
+      });
+    }
+    for (const [t, letter] of Object.entries(mapping)) possible.set(t, new Set([letter]));
+
+    // a mark with one letter left is proven, not chosen
+    for (const [t, set] of possible) {
+      if (set.size === 0) contradiction = true;
+      if (set.size === 1) {
+        const only = [...set][0];
+        if (mapping[t] !== only) {
+          mapping[t] = only;
+          changed = true;
+        }
       }
     }
-    if (!settled) break;
+
+    // the cipher is a bijection, so a letter spoken for belongs to no one else
+    for (const [t, letter] of Object.entries(mapping)) {
+      for (const [other, set] of possible) {
+        if (other !== t && set.delete(letter)) changed = true;
+      }
+    }
+
+    // drop readings that need a letter their mark can no longer be
+    for (const [key, tokens] of distinct) {
+      if (mute.has(key)) continue;
+      const before = lists.get(key)!;
+      const after = before.filter((c) => tokens.every((t, i) => possible.get(t)?.has(c[i])));
+      if (after.length !== before.length) {
+        lists.set(key, after);
+        changed = true;
+      }
+      if (!after.length) contradiction = true;
+    }
+
+    if (!changed) break;
   }
 
   return {
@@ -157,6 +245,62 @@ export function analyse(
     mapping,
     contradiction,
   };
+}
+
+/** A mark the shapes can't settle, and what it probably stands for. */
+export type Hunch = { token: string; plain: string; share: number };
+
+/** What each unsettled mark most likely means, counted off the readings that
+ *  are still alive.
+ *
+ *  Not a frequency table. The classic move — commonest mark is 'e', then 't' —
+ *  is about English in general, and a sixty-letter passage deviates from
+ *  English in general quite happily. This counts instead over the candidate
+ *  lists propagation already produced: for every word a mark appears in, and
+ *  every reading still standing for that word, tally the letter sitting at
+ *  that position. That is evidence from this puzzle's own shapes and this
+ *  dictionary, and it sharpens on its own as picks narrow the lists.
+ *
+ *  A guess even so, and kept separate from `mapping` for exactly that reason:
+ *  what makes the rest of this solver worth trusting is that a blank means
+ *  genuinely unknown. `common` weights readings built from ordinary words
+ *  above ones that need obscure ones.
+ */
+export function hunches(analysis: Analysis, common?: Set<string>, cap = 400): Hunch[] {
+  const tally = new Map<string, Map<string, number>>();
+
+  for (const { tokens, candidates } of analysis.words) {
+    // A word with thousands of readings says almost nothing about any one
+    // mark, and would drown out a word with four. Skip it rather than let
+    // volume stand in for evidence.
+    if (candidates.length > cap) continue;
+    for (const reading of candidates) {
+      const weight = !common || common.has(reading) ? 1 : 0.25;
+      tokens.forEach((t, i) => {
+        if (analysis.mapping[t] !== undefined) return; // already settled
+        const forToken = tally.get(t) ?? new Map<string, number>();
+        forToken.set(reading[i], (forToken.get(reading[i]) ?? 0) + weight);
+        tally.set(t, forToken);
+      });
+    }
+  }
+
+  const out: Hunch[] = [];
+  for (const [token, letters] of tally) {
+    let total = 0;
+    for (const n of letters.values()) total += n;
+    let best = '';
+    let bestN = 0;
+    for (const [letter, n] of letters) {
+      if (n > bestN) {
+        best = letter;
+        bestN = n;
+      }
+    }
+    if (best && total > 0) out.push({ token, plain: best, share: bestN / total });
+  }
+  // strongest first: the mark we are surest about is the one worth acting on
+  return out.sort((a, b) => b.share - a.share);
 }
 
 export type Cracked = {
