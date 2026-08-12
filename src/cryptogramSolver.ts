@@ -131,25 +131,75 @@ export function analyse(
   };
 
   let contradiction = false;
+
+  // Start from every reading of the right shape that the pins allow.
   const lists = new Map<string, string[]>();
-  for (let pass = 0; pass < 26; pass++) {
-    let settled = false;
+  for (const [key, tokens] of distinct) {
+    lists.set(key, (index.get(patternOf(tokens)) ?? []).filter((w) => readable(tokens, w)));
+  }
+
+  // Arc consistency, rather than "wait for a word to collapse to one reading".
+  //
+  // Waiting is the shallow version and it deduces almost nothing: a word has
+  // to be uniquely shaped before it says anything at all. The pruning that
+  // matters is between words. Every mark has a set of letters it could be —
+  // gathered from the surviving readings of each word it appears in, and
+  // *intersected* across those words, because the mark has to be one letter in
+  // all of them at once. "K is e or a here, a or o there" leaves a, proven,
+  // with no word having collapsed. Then readings using a letter no longer
+  // possible at their position die, which shrinks the sets again, and round it
+  // goes until nothing moves.
+  //
+  // It only ever removes the impossible, so the contract holds: it still
+  // cannot be wrong, it can only stop early.
+  for (let pass = 0; pass < 40; pass++) {
+    let changed = false;
+
+    // what each mark could still be, intersected over every word using it
+    const possible = new Map<string, Set<string>>();
     for (const [key, tokens] of distinct) {
-      const all = index.get(patternOf(tokens)) ?? [];
-      const fits = all.filter((w) => readable(tokens, w));
-      lists.set(key, fits);
-      if (!fits.length) contradiction = true;
-      if (fits.length === 1) {
-        // one reading left is a deduction, not a choice
-        tokens.forEach((t, i) => {
-          if (mapping[t] === undefined) {
-            mapping[t] = fits[0][i];
-            settled = true;
-          }
-        });
+      const cands = lists.get(key)!;
+      tokens.forEach((t, i) => {
+        const here = new Set<string>();
+        for (const c of cands) here.add(c[i]);
+        const known = possible.get(t);
+        if (!known) possible.set(t, here);
+        else for (const letter of [...known]) if (!here.has(letter)) known.delete(letter);
+      });
+    }
+    for (const [t, letter] of Object.entries(mapping)) possible.set(t, new Set([letter]));
+
+    // a mark with one letter left is proven, not chosen
+    for (const [t, set] of possible) {
+      if (set.size === 0) contradiction = true;
+      if (set.size === 1) {
+        const only = [...set][0];
+        if (mapping[t] !== only) {
+          mapping[t] = only;
+          changed = true;
+        }
       }
     }
-    if (!settled) break;
+
+    // the cipher is a bijection, so a letter spoken for belongs to no one else
+    for (const [t, letter] of Object.entries(mapping)) {
+      for (const [other, set] of possible) {
+        if (other !== t && set.delete(letter)) changed = true;
+      }
+    }
+
+    // drop readings that need a letter their mark can no longer be
+    for (const [key, tokens] of distinct) {
+      const before = lists.get(key)!;
+      const after = before.filter((c) => tokens.every((t, i) => possible.get(t)?.has(c[i])));
+      if (after.length !== before.length) {
+        lists.set(key, after);
+        changed = true;
+      }
+      if (!after.length) contradiction = true;
+    }
+
+    if (!changed) break;
   }
 
   return {
