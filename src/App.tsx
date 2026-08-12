@@ -32,6 +32,12 @@ import RouteLink from '@/RouteLink';
 import SquaresGame, { type SquaresGameHandle } from '@/SquaresGame';
 import CryptogramGame, { type CryptogramGameHandle } from '@/CryptogramGame';
 import {
+  analyse,
+  buildPatternIndex,
+  parseCryptogram,
+  type InputMode,
+} from '@/cryptogramSolver';
+import {
   MODE_SLUG,
   initialGame,
   initialRoute,
@@ -520,6 +526,11 @@ function App() {
   const [cryptogramPlay, setCryptogramPlay] = useState(
     initialPlay('cryptogram', initial.cryptogramPlay)
   );
+  const [cryptoText, setCryptoText] = useState('');
+  const [cryptoMode, setCryptoMode] = useState<InputMode>('letters');
+  // marks the player has settled by picking a reading; propagation takes these
+  // as fixed and narrows everything else against them
+  const [cryptoPins, setCryptoPins] = useState<Record<string, string>>({});
 
   const weaveDims = WEAVE_DIMS[weaveSize];
 
@@ -996,12 +1007,41 @@ function App() {
 
   const shownViews = useMemo(() => {
     const vis = visibleViews(hiddenViews);
-    const shown = ALL_VIEWS.filter((v) => vis.includes(v) || v === initialGame?.view);
-    // Cryptogram has no solver yet, and a tab that only ever explains its own
-    // absence is worse than no tab. The effect below moves anyone standing on
-    // Solve when they arrive here, the same way hiding a game does.
-    return mode === 'cryptogram' ? shown.filter((v) => v !== 'solve') : shown;
-  }, [hiddenViews, mode]);
+    return ALL_VIEWS.filter((v) => vis.includes(v) || v === initialGame?.view);
+  }, [hiddenViews]);
+
+  // Words grouped by shape, built only while the cryptogram solver is on
+  // screen — it is a pass over the whole dictionary and no other mode wants it.
+  const patternIndex = useMemo(() => {
+    if (mode !== 'cryptogram' || cryptogramPlay) return null;
+    const words = acceptWordsArr ?? standardWordsArr;
+    // ordinary words first inside each shape, so a short list is a list of
+    // plausible readings rather than whatever happens to sort first
+    return words
+      ? buildPatternIndex(words, commonWordsArr ? new Set(commonWordsArr) : undefined)
+      : null;
+  }, [mode, cryptogramPlay, acceptWordsArr, standardWordsArr, commonWordsArr]);
+
+  const cryptoWords = useMemo(
+    () => (cryptoText.trim() ? parseCryptogram(cryptoText, cryptoMode) : []),
+    [cryptoText, cryptoMode]
+  );
+
+  const cryptoAnalysis = useMemo(
+    () => (patternIndex && cryptoWords.length ? analyse(cryptoWords, patternIndex, cryptoPins) : null),
+    [patternIndex, cryptoWords, cryptoPins]
+  );
+
+  /** settle a word on one reading, which propagation then spreads */
+  function pinWord(tokens: string[], plain: string) {
+    setCryptoPins((prev) => {
+      const next = { ...prev };
+      tokens.forEach((t, i) => {
+        next[t] = plain[i];
+      });
+      return next;
+    });
+  }
 
   const playFlags: Record<Mode, [boolean, (v: boolean) => void]> = {
     pattern: [patternPlay, setPatternPlay],
@@ -1842,19 +1882,124 @@ function App() {
         </div>
         )}
 
-        {/* Deliberately not shipping the search-based solver that was here:
-            it commits to one reading and can be confidently wrong, which is
-            the worst thing a solver can be on this particular puzzle. The
-            propagation core it will be rebuilt on lives in cryptogramSolver.ts
-            and is already under test. */}
+        {/* Deduce, then offer. This never picks a reading: it settles what the
+            word shapes force and hands back the choices for what they don't,
+            because a passage can have several readings where every word is
+            real and only a person can tell which one means anything. */}
         {mode === 'cryptogram' && !cryptogramPlay && (
-        <div className="mb-8 text-center">
-          <p className="text-sm text-slate-400 max-w-lg mx-auto">
-            The cryptogram solver isn&apos;t here yet. The word solvers can hand you a list
-            because a word either fits or it doesn&apos;t; a passage can have several readings
-            where every word is real, so this one has to show you the choices rather than
-            pick one. Play is where this game lives for now.
-          </p>
+        <div className="mb-8 max-w-2xl mx-auto">
+          <label htmlFor="crypto-in" className="block text-sm text-slate-300 mb-2">
+            Paste a cryptogram. Every mark has to stand for the same letter throughout.
+          </label>
+          <textarea
+            id="crypto-in"
+            value={cryptoText}
+            onChange={(e) => {
+              setCryptoText(e.target.value);
+              setCryptoPins({});
+            }}
+            rows={3}
+            spellCheck={false}
+            placeholder={cryptoMode === 'letters' ? 'WKH TXLFN EURZQ IRA' : '17 42 42 / 8 9 3'}
+            className="w-full px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-slate-200 placeholder:text-slate-600 text-sm font-mono"
+          />
+
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <div role="group" aria-label="How the marks are written" className="inline-flex rounded-lg bg-white/5 border border-white/10 p-0.5 gap-0.5">
+              {([['letters', 'Letters'], ['tokens', 'Numbers or symbols']] as const).map(([id, label]) => (
+                <button
+                  key={id}
+                  onClick={() => { setCryptoMode(id); setCryptoPins({}); }}
+                  aria-pressed={cryptoMode === id}
+                  className={`px-3 py-1.5 rounded-md text-sm font-semibold transition-colors
+                    ${cryptoMode === id ? 'bg-emerald-400/15 text-emerald-300' : 'text-slate-400 hover:text-white'}`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            {Object.keys(cryptoPins).length > 0 && (
+              <button
+                onClick={() => setCryptoPins({})}
+                className="inline-flex items-center gap-1.5 px-3 h-9 rounded-lg text-sm font-semibold bg-white/5 border border-white/10 text-slate-300 hover:bg-white/10 hover:text-white transition-colors"
+              >
+                <Eraser className="w-4 h-4" />
+                Undo my picks
+              </button>
+            )}
+          </div>
+
+          {cryptoMode === 'tokens' && (
+            <p className="mt-2 text-xs text-slate-500">
+              Marks separated by spaces, words by a slash — nothing about &ldquo;17 42&rdquo;
+              says whether that is one word or two.
+            </p>
+          )}
+
+          {cryptoAnalysis && (
+            <div className="mt-5" aria-live="polite">
+              <p className="text-lg text-white leading-relaxed font-mono break-words">
+                {cryptoWords
+                  .map((w) => w.map((t) => cryptoAnalysis.mapping[t] ?? '·').join(''))
+                  .join(' ')}
+              </p>
+              <p className="mt-2 text-xs text-slate-500">
+                {cryptoAnalysis.contradiction
+                  ? 'No reading fits — one of your picks can’t be right. Undo them and try another.'
+                  : `${Object.keys(cryptoAnalysis.mapping).length} marks settled. A dot is a mark the shapes can’t pin yet.`}
+              </p>
+              {!cryptoAnalysis.contradiction &&
+                !cryptoAnalysis.words.some(
+                  (w) => w.candidates.length > 1 && w.candidates.length <= 40
+                ) &&
+                cryptoAnalysis.words.some((w) => w.candidates.length > 40) && (
+                  <p className="mt-2 text-xs text-slate-500">
+                    Nothing is narrow enough to choose from yet — every word still has
+                    hundreds of readings. Pick a word below, or come back once you have a
+                    letter or two of your own.
+                  </p>
+                )}
+
+              {/* Most-constrained first, and only words narrow enough to act
+                  on. A five-letter word with three thousand readings is not a
+                  choice, it is a wall — and listing it buries the word with
+                  four, which is where the deduction actually is. */}
+              <div className="mt-4 space-y-2">
+                {cryptoAnalysis.words
+                  .filter((w) => w.candidates.length > 1 && w.candidates.length <= 40)
+                  .sort((a, b) => a.candidates.length - b.candidates.length)
+                  .slice(0, 12)
+                  .map((w) => (
+                    <div key={w.tokens.join(' ')} className="flex flex-wrap items-baseline gap-2">
+                      <span className="text-xs font-mono text-slate-500 shrink-0">
+                        {w.tokens.join(cryptoMode === 'letters' ? '' : ' ')}
+                      </span>
+                      {w.candidates.slice(0, 10).map((c) => (
+                        <button
+                          key={c}
+                          onClick={() => pinWord(w.tokens, c)}
+                          className="px-2 py-0.5 rounded-md text-sm bg-white/5 border border-white/10 text-slate-300 hover:bg-emerald-400/15 hover:text-emerald-300 transition-colors"
+                        >
+                          {c}
+                        </button>
+                      ))}
+                      {w.candidates.length > 10 && (
+                        <span className="text-xs text-slate-600">
+                          +{w.candidates.length - 10} more
+                        </span>
+                      )}
+                    </div>
+                  ))}
+              </div>
+
+              {!cryptoAnalysis.contradiction &&
+                cryptoAnalysis.words.every((w) => w.candidates.length === 1) && (
+                  <p className="mt-3 text-xs text-emerald-300">
+                    Every word has one reading left, so that is the answer.
+                  </p>
+                )}
+            </div>
+          )}
         </div>
         )}
 
