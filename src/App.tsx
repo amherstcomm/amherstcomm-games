@@ -2032,7 +2032,14 @@ function App() {
             <div className="mt-5" aria-live="polite">
               <p className="text-lg text-white leading-relaxed font-mono break-words">
                 {cryptoWords
-                  .map((w) => w.map((t) => cryptoAnalysis.mapping[t] ?? '·').join(''))
+                  .map((w) =>
+                    w
+                      // the apostrophe inside a contraction is the passage's
+                      // own punctuation, not a mark waiting to be solved, so
+                      // it reads through rather than showing as a blank
+                      .map((t) => (t === "'" ? "'" : (cryptoAnalysis.mapping[t] ?? '·')))
+                      .join('')
+                  )
                   .join(' ')}
               </p>
               <p className="mt-2 text-xs text-slate-500">
