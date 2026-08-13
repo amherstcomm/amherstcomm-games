@@ -11,6 +11,7 @@ import { THEMES } from './themes.mjs';
 import {
   cycleOf,
   generateCryptogram,
+  generatePlayable,
   livePassages,
   permutedIndex,
   TIER_BAND,
@@ -690,8 +691,16 @@ for (const variant of ['', 'dev']) {
     // which cipher today is, drawn from the tier's own pool — the board
     // announces it, so the variety is something a player can learn to use
     const options = TIER_VARIANTS[difficulty];
-    const variant = options[Math.floor(rng() * options.length)];
-    cryptogramByDifficulty[difficulty] = generateCryptogram(passage, rng, variant);
+    const chosen = Math.floor(rng() * options.length);
+    // The day's passage is fixed by the walk, so when a cipher cannot make a
+    // board worth solving out of it the only thing left to change is the
+    // cipher. generatePlayable re-deals first, so this is rare — two passages
+    // in the short band, and none anywhere else.
+    let board = null;
+    for (let i = 0; i < options.length && !board; i++) {
+      board = generatePlayable(passage, rng, options[(chosen + i) % options.length]);
+    }
+    cryptogramByDifficulty[difficulty] = board ?? generateCryptogram(passage, rng, options[chosen]);
   });
   await writeFile(
     `${DATA_DIR}/${prefix}daily-cryptogram.json`,
@@ -816,16 +825,23 @@ for (const difficulty of DIFFICULTIES) {
   const used = new Set();
   const options = TIER_VARIANTS[difficulty];
   for (let i = 0; i < 10; i++) {
-    let p;
-    do {
-      p = cgPoolPassages[Math.floor(cgPoolRng() * cgPoolPassages.length)];
-    } while (used.has(p.text));
-    used.add(p.text);
     // walk the tier's variants in turn rather than drawing at random, so a
     // practice pool of ten always covers every cipher the tier can serve
-    cryptogramPoolByDifficulty[difficulty].push(
-      generateCryptogram(p, cgPoolRng, options[i % options.length])
-    );
+    const variant = options[i % options.length];
+    let board = null;
+    while (!board) {
+      let p;
+      do {
+        p = cgPoolPassages[Math.floor(cgPoolRng() * cgPoolPassages.length)];
+      } while (used.has(p.text));
+      used.add(p.text);
+      // Practice, unlike the daily, is not tied to one passage — so when a
+      // cipher cannot make a board out of this one, draw another passage
+      // rather than another cipher. Changing the cipher here would quietly
+      // drop it from the pool, and covering every cipher is the point.
+      board = generatePlayable(p, cgPoolRng, variant);
+    }
+    cryptogramPoolByDifficulty[difficulty].push(board);
   }
 }
 await writeFile(

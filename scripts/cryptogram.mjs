@@ -275,6 +275,52 @@ function revealsFor(text, tokenFor, count, band, rng) {
   return out;
 }
 
+/** The share of distinct marks that appear more than once.
+ *
+ *  Repetition is what a solver grips. Where one mark means one letter this is
+ *  a property of the passage and the harvest already guarantees it — measured
+ *  across the pools, every such cipher bottoms out at 55% on the standard band
+ *  and 47% on the short one. Homophonic is the exception, because it spends
+ *  several marks on the same letter: it can put 37 letters onto 25 marks with
+ *  only 7 of them repeating, which leaves frequency saying nothing and word
+ *  shapes lying, since a shape only holds when a mark means one letter. */
+export function markRepetition(board) {
+  const alphabet = new Set(board.alphabet);
+  const counts = new Map();
+  for (const t of board.tokens) if (alphabet.has(t)) counts.set(t, (counts.get(t) ?? 0) + 1);
+  const seen = [...counts.values()];
+  return seen.length ? seen.filter((v) => v > 1).length / seen.length : 0;
+}
+
+/** Below this a board is not hard, it is arbitrary. Set where it is because
+ *  every cipher other than homophonic clears it always, at both bands, so the
+ *  floor only ever bites the one that can fail. */
+export const REPETITION_FLOOR = 0.4;
+const REDEALS = 8;
+
+/** A board with something to grip, or null if this passage and cipher cannot
+ *  make one.
+ *
+ *  Homophonic picks which of a letter's marks to spend on each occurrence, so
+ *  a thin board is usually an unlucky deal rather than a doomed pairing —
+ *  re-dealing fixes 141 of the 143 short passages that fail at first ask, 93
+ *  of them on the first retry. Retrying keeps the cipher the day announced,
+ *  which switching ciphers would not. A board that passes first time consumes
+ *  the generator exactly as it did before this existed, so nothing that was
+ *  already playable changes. */
+export function generatePlayable(passage, rng, variantName) {
+  let best = null;
+  for (let attempt = 0; attempt <= REDEALS; attempt++) {
+    const board = generateCryptogram(passage, rng, variantName);
+    const grip = markRepetition(board);
+    if (grip >= REPETITION_FLOOR) return board;
+    if (!best || grip > best.grip) best = { board, grip };
+    // only homophonic re-deals differently; anything else would loop for nothing
+    if (!board.homophonic) break;
+  }
+  return null;
+}
+
 /** One board. `tokens` is what the player sees, one entry per position:
  *  cipher tokens for letters, and the punctuation itself where the passage had
  *  punctuation — except on a grouped board, which keeps only the letters. */
