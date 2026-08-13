@@ -37,19 +37,27 @@ test('typing a letter fills every copy of that mark, not just the one tapped', a
   const all = marks(page);
   await expect(all.first()).toBeVisible();
 
-  // find a mark that appears more than once, by its label's leading name
-  const labels = await all.evaluateAll((els) =>
-    els.map((e) => e.getAttribute('aria-label')!.split(',')[0])
+  // Find a mark that appears more than once, by its label's leading name —
+  // and that isn't already given. Easy boards reveal their three commonest
+  // letters, and a revealed mark is locked, so typing over it does nothing:
+  // pick one of those and this asserts on a square that was never going to
+  // change. Which mark comes first is the generator's business and moves
+  // whenever the board does.
+  const cells = await all.evaluateAll((els) =>
+    els.map((e) => {
+      const label = e.getAttribute('aria-label')!;
+      return { mark: label.split(',')[0], given: !/unsolved/.test(label) };
+    })
   );
   const counts = new Map<string, number>();
-  for (const l of labels) counts.set(l, (counts.get(l) ?? 0) + 1);
+  for (const c of cells) if (!c.given) counts.set(c.mark, (counts.get(c.mark) ?? 0) + 1);
   const repeated = [...counts].find(([, n]) => n > 1);
-  expect(repeated, 'the passage should repeat at least one mark').toBeTruthy();
+  expect(repeated, 'the passage should repeat at least one unrevealed mark').toBeTruthy();
   const [mark, times] = repeated!;
 
   // tap the last copy: the cursor used to jump to the first, so a later copy
   // is the one worth clicking
-  const positions = labels.flatMap((l, i) => (l === mark ? [i] : []));
+  const positions = cells.flatMap((c, i) => (c.mark === mark && !c.given ? [i] : []));
   await all.nth(positions[positions.length - 1]).click();
 
   // 'z' rather than a common letter: reveals hand over frequent letters, and a
