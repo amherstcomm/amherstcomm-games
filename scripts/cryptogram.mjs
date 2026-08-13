@@ -20,10 +20,29 @@
 // strings, so "17" or "◆" is as ordinary as "K". That is the whole reason the
 // alphabet dial exists.
 
-/** The passages that are in play: `review: true` is the human hold. */
-export function livePassages(parsed) {
-  return parsed.quotes.filter((q) => !q.review);
+/** The passages that are in play: `review: true` is the human hold.
+ *
+ *  Two bands, and they are separate pools rather than one pool with a
+ *  preference. `standard` is 50-100 letters and is what easy and hard have
+ *  always drawn from; `short` is 35-49, for extreme. A passage carries no
+ *  `band` when it is standard, so the 2,674 entries curated before the short
+ *  harvest need no rewriting — and, more to the point, the standard pool stays
+ *  exactly the size it was, so the permutation walk deals easy and hard the
+ *  same passages it did yesterday. */
+export function livePassages(parsed, band = 'standard') {
+  return parsed.quotes.filter((q) => !q.review && (q.band ?? 'standard') === band);
 }
+
+/** Which length band each difficulty plays.
+ *
+ *  Less text is less to work with: the frequency profile of forty letters is a
+ *  poor likeness of English, and there are fewer repeated shapes to lever
+ *  against. Measured on the harvest, a 35-49 letter passage admits a second
+ *  common-word reading almost twice as often as a 50-100 one — which is why
+ *  every short passage is put through scripts/cryptogram-guard.ts and only
+ *  those with one answer are kept. Without that, extreme would be handing
+ *  players a puzzle whose honest solution the answer check calls wrong. */
+export const TIER_BAND = { easy: 'standard', hard: 'standard', extreme: 'short' };
 
 /** Which passage a given day gets, with no repeat inside a pool-sized window.
  *

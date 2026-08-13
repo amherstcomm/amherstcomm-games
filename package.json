@@ -13,7 +13,7 @@
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "typecheck": "tsc --noEmit -p tsconfig.app.json",
+    "typecheck": "tsc -b",
     "lastmod": "node scripts/route-lastmod.mjs",
     "blocklist": "node scripts/blocklist.mjs",
     "word-stats": "node scripts/word-stats.mjs",

@@ -685,7 +685,8 @@ give the cipher a way in, blocklist, dedupe — and keeps **2,674 candidates**:
   because most proverbs fall under the 50-letter floor. Short proverbs are
   *harder* cryptograms, not easier (fewer letters, less repetition), so the
   cut stock is a ready-made hard tier if passage length becomes the
-  difficulty dial the entry above suggests.
+  difficulty dial the entry above suggests. **It did** — see the short band
+  below, which took this source from 83 kept to 360 candidates.
 
 Duplicates keep their first source's attribution, so Bartlett's named
 authors beat "English proverb" for the same line. **The skim happened**
@@ -703,6 +704,40 @@ reveal.
 **Difficulty maps cleanly**, better than most games here: how many letters
 start revealed, how long the passage is, and whether the cipher preserves word
 boundaries. No second dial needed.
+
+**The short band shipped** (August 2026), and length is now a real dial:
+extreme plays 35-49 letters while easy and hard keep 50-100. A second harvest
+pass over the same three sources produced 1,412 candidates, and **350 are
+live** (246 Bartlett's, 70 proverbs, 70 inaugurals) — proverbs finally earn
+their place, having been all but excluded by the 50-letter floor.
+
+The floor is 35 because the unicity distance of a simple substitution — the
+length below which more than one plaintext fits — is about 28 letters for
+English. Clearing it on paper is not enough, though, and this is the thing
+worth remembering: **a short passage often has two answers.** Enciphered and
+solved against the common tier, 58% of 35-49 candidates admitted a second
+common-word reading, against 31% at 50-100. "must hunt over night" and "just
+hunt over night" are both English, and a player who hands in the second one is
+not wrong — but the answer check compares against the passage we stored and
+tells them they are. So `scripts/cryptogram-guard.ts` enciphers every
+candidate and keeps only those it can prove have one answer, which costs 75%
+of the harvest and is worth it.
+
+Two things it can't verify, both recorded rather than papered over.
+Contractions: `solveCryptogram` splits on runs of letters, so "Eve's" becomes
+"eve" plus a one-letter word that can only read as "a" or "i" — the passage
+then reports no reading at all and would be kept as *proven safe* when nothing
+was proven. 80% of contraction-bearing candidates were surviving that way.
+They're dropped. And a search that exhausts its node budget proves nothing, so
+those go too.
+
+Still open: **31% of the standard pool has the same ambiguity**, and 17 live
+passages carry Gutenberg markup (`_Sir To._`, `[History]`) that renders as
+literal characters on a board. Neither was touched here, because removing
+passages resizes the pool and the permutation walk would deal easy and hard
+different puzzles than it did yesterday. Worth a pass of its own, timed so it
+lands with a fresh cycle. Easy and hard hide the ambiguity behind their
+revealed letters; extreme's grouped boards don't.
 
 **It reuses more than it adds.** Deterministic per Eastern date like the rest;
 `daily_progress` stores the partial mapping so a half-solved puzzle follows you
