@@ -688,6 +688,31 @@ give the cipher a way in, blocklist, dedupe — and keeps **2,674 candidates**:
   difficulty dial the entry above suggests. **It did** — see the short band
   below, which took this source from 83 kept to 360 candidates.
 
+**Attribution is the quiet failure mode** (August 2026). The parsers read an
+author header and keep it until the next one, so a header that *doesn't match*
+costs nothing visible — it just credits that author's quotes to whoever came
+before. 61 Bartlett's headers and one inaugural were being missed, and **112
+passages shipped under the wrong name**, including 87 of Wordsworth's as
+Joseph Hopkinson and two of Obama's as George W. Bush. Nothing failed; the
+harvest reported its usual counts.
+
+The header shapes that broke it, all worth keeping in mind if a fourth source
+is ever added: a footnote marker between name and dates
+(`WILLIAM WORDSWORTH.[465-1] 1770-1850.`), an unknown birth or death year
+(`THOMAS MIDDLETON. ---- -1626.`, `OLIVER WENDELL HOLMES. 1809- ----.`), no
+dates at all (`BARTHOLOMEW DOWLING.`), a title with the name last
+(`Inaugural Address by President Barack Obama`), and a year wrapped onto the
+next line. The book's own divisions — `MISCELLANEOUS`, `OF UNKNOWN
+AUTHORSHIP` — share the dateless shape and now clear the author rather than
+inherit one, so quotes under them are dropped instead of misattributed.
+
+The lesson is the one worth generalising: **a parser that falls back to its
+last good value cannot report a failure.** The inaugural parser now throws on
+a title-shaped line it cannot read. Bartlett's cannot do the same, because
+capitalised lines are not all headers, so its safeguard is the re-derivation —
+if the sources are ever re-harvested, diff the authors against the pool before
+merging. That check is what found 14 of the 112; a human reading found 98.
+
 Duplicates keep their first source's attribution, so Bartlett's named
 authors beat "English proverb" for the same line. **The skim happened**
 (August 2026): the reviewed pool is `scripts/cryptogram-passages.json`,
