@@ -594,6 +594,24 @@ default, so three of the four palettes had never been checked by anything but
 a hand audit. The grid still grows two passes per palette; it just grows in
 CI instead of in someone's afternoon.
 
+**"Leaves the meaning-carrying hues alone" is a test now, not a promise.**
+Ocean shipped setting `--c-amber-400` to a teal so the accent matched the
+mood — and Weave paints its spangram `amber-400` and its theme words
+`sky-400`. On a pale blue page the two became the same colour and the board
+stopped telling you which word you had found. A decorative palette may change
+the slate ramp, `white`, `ink`, `accent` and `focus`; a unit test reads
+index.css and fails on anything else. Those two Weave states are separated by
+hue alone — luminance ratio 1.07, in the default palette too — so there is no
+margin for a decorative palette to borrow from.
+
+**Colour named in prose has the same problem.** "Must use the amber center
+letter" is true of one palette in six: under Red-green friendly it is orange,
+under Monochrome a pale grey, and Monochrome's whole point is that no hue is
+there to name. `COLOR_WORDS` in theme.ts holds the vocabulary per palette and
+the copy reads from it. Learn's hive section had been hardcoding, because it
+was never passed the words; where the colour added nothing, the sentence lost
+it instead.
+
 It earned itself immediately, catching two things a person would not have.
 `loadState` validated the palette against a literal `['default', 'deuter',
 'tritan', 'mono']` rather than `PALETTES`, so a new palette could be picked,

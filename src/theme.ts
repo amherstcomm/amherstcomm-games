@@ -19,6 +19,49 @@ export const PALETTES: Palette[] = ['default', 'deuter', 'tritan', 'mono', 'sepi
 /** the ones that exist for colour vision, as opposed to for looks */
 export const ACCESSIBLE_PALETTES: Palette[] = ['default', 'deuter', 'tritan', 'mono'];
 
+/** What to call a colour in copy, per palette.
+ *
+ *  "Must use the amber center letter" is true of one palette in six. Under
+ *  Red-green friendly that letter is orange; under Monochrome it is a pale
+ *  grey, and the whole point of that palette is that there is no hue to name.
+ *  Prose that hardcodes a colour is wrong for everyone not using the default,
+ *  and silently — the sentence still reads perfectly well.
+ *
+ *  `key` is the amber-400 family: the letter a word must use, the cell that is
+ *  selected. `right` and `wrong` are the found/rejected pair, `span` and
+ *  `theme` are Weave's two kinds of line. */
+export type ColorWords = {
+  right: string;
+  wrong: string;
+  span: string;
+  theme: string;
+  key: string;
+};
+
+export const COLOR_WORDS: Record<Palette, ColorWords> = {
+  default: { right: 'green', wrong: 'amber', span: 'gold', theme: 'blue', key: 'amber' },
+  deuter: { right: 'blue', wrong: 'orange', span: 'orange', theme: 'light blue', key: 'orange' },
+  tritan: {
+    right: 'green',
+    wrong: 'vermilion',
+    span: 'vermilion',
+    theme: 'pale cyan',
+    key: 'orange',
+  },
+  mono: {
+    right: 'the light tile',
+    wrong: 'the mid-grey tile',
+    span: 'white',
+    theme: 'grey',
+    // no article: this one slots into "the ___ center letter"
+    key: 'pale grey',
+  },
+  // decorative palettes leave every meaning-carrying hue alone, so the words
+  // for them are the default words
+  sepia: { right: 'green', wrong: 'amber', span: 'gold', theme: 'blue', key: 'amber' },
+  ocean: { right: 'green', wrong: 'amber', span: 'gold', theme: 'blue', key: 'amber' },
+};
+
 /** The four colours each palette shows in its row in Settings.
  *
  *  These repeat values index.css already declares, which is a duplication

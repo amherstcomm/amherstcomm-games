@@ -458,7 +458,6 @@
   --c-ink: 23 18 12;
   --c-focus: 245 176 65;
   --c-accent: 245 176 65;
-  --c-amber-400: 245 176 65;
 }
 
 :root[data-theme='light'][data-palette='sepia'] {
@@ -477,7 +476,6 @@
   --c-white: 45 37 27;
   --c-focus: 146 84 8;
   --c-accent: 146 84 8;
-  --c-amber-400: 186 106 12;
 }
 
 /* Ocean: deep water at night, sea glass by day. */
@@ -495,7 +493,6 @@
   --c-ink: 4 16 26;
   --c-focus: 94 214 226;
   --c-accent: 94 214 226;
-  --c-amber-400: 94 214 226;
 }
 
 :root[data-theme='light'][data-palette='ocean'] {
@@ -512,9 +509,6 @@
   --c-white: 20 40 52;
   --c-focus: 13 105 120;
   --c-accent: 13 105 120;
-  /* lighter than the accent it echoes: this one is a fill carrying dark ink,
-     and a deep teal leaves that ink at 3.1 */
-  --c-amber-400: 27 147 166;
 }
 
 /* keep overscroll and the area behind the app in the active theme */
