@@ -579,6 +579,30 @@ a friend read *some* of your results, plus blocking and removal. Build after
 display names exist and after leaderboards prove the aggregate pattern.
 
 ### More themes, for taste rather than need
+**Two shipped** (August 2026): Sepia — warm paper by day, candlelight after
+dark — and Ocean. Both move the ground only: the page, the panels, the
+borders, the tiers of text. The hues that carry meaning are left exactly
+where they were, so green still means found and rose still means wrong, and
+the shared-result emoji are the default squares because there is no sepia
+green square to post.
+
+**The audit is automated now, which is what made the CSS the easy part.**
+`e2e/contrast.spec.ts` walks every theme × palette over four colour-heavy
+routes with axe's contrast rule — twelve combinations in about forty seconds.
+Before it, the fourteen-route sweep only ever ran on whichever palette was
+default, so three of the four palettes had never been checked by anything but
+a hand audit. The grid still grows two passes per palette; it just grows in
+CI instead of in someone's afternoon.
+
+It earned itself immediately, catching two things a person would not have.
+`loadState` validated the palette against a literal `['default', 'deuter',
+'tritan', 'mono']` rather than `PALETTES`, so a new palette could be picked,
+saved, and silently reset to default on the next load — the list now reads
+from the source, as do theme and text scale. And both light palettes had
+tinted `--c-ink`, which is the text sitting *on* a saturated fill: warm ink on
+a warm accent came out at 3.1:1. The page's own text warms up; ink does not.
+
+The original analysis follows.
 The four palettes exist for colour vision — default, red–green, blue–yellow,
 monochrome — and the theme switch is light/dark/system. Nothing yet is there
 just because someone likes it: sepia, high-contrast, a warmer dark, seasonal.

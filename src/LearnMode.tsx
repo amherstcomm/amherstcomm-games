@@ -199,6 +199,10 @@ const COLOR_WORDS: Record<Palette, ColorWords> = {
   deuter: { right: 'blue', wrong: 'orange', span: 'orange', theme: 'light blue' },
   tritan: { right: 'green', wrong: 'vermilion', span: 'vermilion', theme: 'pale cyan' },
   mono: { right: 'the light tile', wrong: 'the mid-grey tile', span: 'white', theme: 'grey' },
+  // decorative palettes leave the meaning-carrying hues alone, so the words
+  // for them are the default ones
+  sepia: { right: 'green', wrong: 'amber', span: 'gold', theme: 'blue' },
+  ocean: { right: 'green', wrong: 'amber', span: 'gold', theme: 'blue' },
 };
 
 const guessSteps = (c: ColorWords) => [

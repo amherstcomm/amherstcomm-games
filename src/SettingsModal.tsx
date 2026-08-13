@@ -104,6 +104,52 @@ const PALETTE_OPTIONS: { id: Palette; label: string; blurb: string; tones: strin
   },
 ];
 
+// Same setting, different reason for existing. These change the page and the
+// panels rather than the colours that carry meaning — green still means found.
+const DECORATIVE_OPTIONS: { id: Palette; label: string; blurb: string; tones: string[] }[] = [
+  {
+    id: 'sepia',
+    label: 'Sepia',
+    blurb: 'Warm paper by day, candlelight after dark',
+    tones: ['245 176 65', '184 167 143', '79 66 50', '38 31 22'],
+  },
+  {
+    id: 'ocean',
+    label: 'Ocean',
+    blurb: 'Deep water at night, sea glass by day',
+    tones: ['94 214 226', '152 180 195', '33 70 94', '10 30 45'],
+  },
+];
+
+function PaletteChoice({
+  opt,
+  palette,
+  onPalette,
+}: {
+  opt: { id: Palette; label: string; blurb: string; tones: string[] };
+  palette: Palette;
+  onPalette: (p: Palette) => void;
+}) {
+  const on = palette === opt.id;
+  return (
+    <button
+      onClick={() => onPalette(opt.id)}
+      aria-pressed={on}
+      className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl border text-left transition-colors
+        ${on ? 'bg-amber-400/10 border-amber-400/40' : 'bg-white/5 border-white/10 hover:bg-white/10'}`}
+    >
+      <span className="flex-1 min-w-0">
+        <span className="flex items-center gap-2 text-sm font-semibold text-white">
+          {opt.label}
+          {on && <Check className="w-3.5 h-3.5 text-accent" />}
+        </span>
+        <span className="block text-xs text-slate-500">{opt.blurb}</span>
+      </span>
+      <Swatches tones={opt.tones} />
+    </button>
+  );
+}
+
 function Pill({
   on,
   onClick,
@@ -383,25 +429,24 @@ export default function SettingsModal({
               Colors
             </h3>
             <div className="space-y-2">
-              {PALETTE_OPTIONS.map(({ id, label, blurb, tones }) => (
-                <button
-                  key={id}
-                  onClick={() => onPalette(id)}
-                  aria-pressed={palette === id}
-                  className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl border text-left transition-colors
-                    ${palette === id
-                      ? 'bg-amber-400/10 border-amber-400/40'
-                      : 'bg-white/5 border-white/10 hover:bg-white/10'}`}
-                >
-                  <span className="flex-1 min-w-0">
-                    <span className="flex items-center gap-2 text-sm font-semibold text-white">
-                      {label}
-                      {palette === id && <Check className="w-3.5 h-3.5 text-accent" />}
-                    </span>
-                    <span className="block text-xs text-slate-500">{blurb}</span>
-                  </span>
-                  <Swatches tones={tones} />
-                </button>
+              {PALETTE_OPTIONS.map((opt) => (
+                <PaletteChoice key={opt.id} opt={opt} palette={palette} onPalette={onPalette} />
+              ))}
+            </div>
+
+            <h4 className="mt-4 text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">
+              Just for looks
+            </h4>
+            {/* One setting, so a decorative choice replaces an accommodation.
+                Saying it here is cheaper than someone discovering it by losing
+                the palette they needed. */}
+            <p className="text-xs text-slate-500 mb-2.5">
+              These change the page rather than the colours that carry meaning. Picking one
+              replaces the colour-vision choice above.
+            </p>
+            <div className="space-y-2">
+              {DECORATIVE_OPTIONS.map((opt) => (
+                <PaletteChoice key={opt.id} opt={opt} palette={palette} onPalette={onPalette} />
               ))}
             </div>
           </div>

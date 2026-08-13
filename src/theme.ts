@@ -6,12 +6,18 @@ export type ThemeMode = 'system' | 'light' | 'dark';
 // deuter covers deuteranopia/protanopia (red-green, by far the most common),
 // tritan covers tritanopia (blue-yellow), mono covers achromatopsia and any
 // case where hue can't be relied on at all
-export type Palette = 'default' | 'deuter' | 'tritan' | 'mono';
+// sepia and ocean are there for taste rather than need — they move the page,
+// panels and text tiers and leave the meaning-carrying hues alone. They share
+// this axis with the accommodations, so choosing one gives up the other; the
+// Settings list keeps them in separate groups and says so.
+export type Palette = 'default' | 'deuter' | 'tritan' | 'mono' | 'sepia' | 'ocean';
 // every size in the app is in rem, so scaling the root scales all of it
 export type TextScale = 'normal' | 'large' | 'larger';
 
 export const THEME_MODES: ThemeMode[] = ['system', 'light', 'dark'];
-export const PALETTES: Palette[] = ['default', 'deuter', 'tritan', 'mono'];
+export const PALETTES: Palette[] = ['default', 'deuter', 'tritan', 'mono', 'sepia', 'ocean'];
+/** the ones that exist for colour vision, as opposed to for looks */
+export const ACCESSIBLE_PALETTES: Palette[] = ['default', 'deuter', 'tritan', 'mono'];
 export const TEXT_SCALES: TextScale[] = ['normal', 'large', 'larger'];
 export const TEXT_SCALE_PCT: Record<TextScale, string> = {
   normal: '100%',

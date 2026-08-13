@@ -1,4 +1,5 @@
 import { DIFFICULTIES, type Difficulty } from '@/difficulty';
+import { PALETTES, TEXT_SCALES, THEME_MODES } from '@/theme';
 import type { Palette, TextScale, ThemeMode } from '@/theme';
 import { store as siteStore } from '@/siteStorage';
 
@@ -314,14 +315,14 @@ export function loadState(): PersistedState {
       dictionaries,
       sort,
       keyboard: p?.keyboard === true,
-      theme: ['system', 'light', 'dark'].includes(p?.theme) ? p.theme : 'system',
+      // These read the lists rather than repeating them. The palette list was
+      // a literal here, so adding a palette in theme.ts left this one rejecting
+      // it and quietly resetting to default — a setting that could be chosen,
+      // saved, and then lost on the next load.
+      theme: THEME_MODES.includes(p?.theme) ? p.theme : 'system',
       // 'cvd' was the original name for the red-green palette
-      palette: p?.palette === 'cvd'
-        ? 'deuter'
-        : ['default', 'deuter', 'tritan', 'mono'].includes(p?.palette)
-          ? p.palette
-          : 'default',
-      textScale: ['normal', 'large', 'larger'].includes(p?.textScale) ? p.textScale : 'normal',
+      palette: p?.palette === 'cvd' ? 'deuter' : PALETTES.includes(p?.palette) ? p.palette : 'default',
+      textScale: TEXT_SCALES.includes(p?.textScale) ? p.textScale : 'normal',
       navKeys: p?.navKeys === 'wasd' ? 'wasd' : 'numpad',
       hiddenModes: sanitizeHidden(p?.hiddenModes, ALL_MODES),
       hiddenViews: sanitizeHidden(p?.hiddenViews, ALL_VIEWS),
