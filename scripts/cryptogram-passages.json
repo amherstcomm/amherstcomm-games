@@ -48,12 +48,18 @@
   {
    "text": "Cowards [may] fear to die; but courage stout, Rather than live in snuff, will be put out.",
    "author": "Sir Walter Raleigh",
-   "source": "bartletts"
+   "source": "bartletts",
+   "review": true,
+   "disposition": "drop",
+   "disposition_reason": "Gutenberg markup (speaker label, emphasis or editorial brackets) \u2014 reads as literal characters on a board"
   },
   {
    "text": "[History] hath triumphed over time, which besides it nothing but eternity hath triumphed over.",
    "author": "Sir Walter Raleigh",
-   "source": "bartletts"
+   "source": "bartletts",
+   "review": true,
+   "disposition": "drop",
+   "disposition_reason": "Gutenberg markup (speaker label, emphasis or editorial brackets) \u2014 reads as literal characters on a board"
   },
   {
    "text": "How oft do they their silver bowers leave To come to succour us that succour want!",
@@ -699,7 +705,10 @@
   {
    "text": "_Sir To._ Dost thou think, because thou art virtuous, there shall be no more cakes and ale?",
    "author": "William Shakespeare",
-   "source": "bartletts"
+   "source": "bartletts",
+   "review": true,
+   "disposition": "drop",
+   "disposition_reason": "Gutenberg markup (speaker label, emphasis or editorial brackets) \u2014 reads as literal characters on a board"
   },
   {
    "text": "Then let thy love be younger than thyself, Or thy affection cannot hold the bent.",
@@ -844,7 +853,10 @@
   {
    "text": "_Hot._ Why, so can I, or so can any man; But will they come when you do call for them?",
    "author": "William Shakespeare",
-   "source": "bartletts"
+   "source": "bartletts",
+   "review": true,
+   "disposition": "drop",
+   "disposition_reason": "Gutenberg markup (speaker label, emphasis or editorial brackets) \u2014 reads as literal characters on a board"
   },
   {
    "text": "I had rather be a kitten and cry mew Than one of these same metre ballad-mongers.",
@@ -1958,7 +1970,10 @@
   {
    "text": "[The rich] are indeed rather possessed by their money than possessors.",
    "author": "Robert Burton",
-   "source": "bartletts"
+   "source": "bartletts",
+   "review": true,
+   "disposition": "drop",
+   "disposition_reason": "Gutenberg markup (speaker label, emphasis or editorial brackets) \u2014 reads as literal characters on a board"
   },
   {
    "text": "Like a hog, or dog in the manger, he doth only keep it because it shall do nobody else good, hurting himself and others.",
@@ -2103,7 +2118,10 @@
   {
    "text": "It [angling] deserves commendations; . . . it is an art worthy the knowledge and practice of a wise man.",
    "author": "Izaak Walton",
-   "source": "bartletts"
+   "source": "bartletts",
+   "review": true,
+   "disposition": "drop",
+   "disposition_reason": "Gutenberg markup (speaker label, emphasis or editorial brackets) \u2014 reads as literal characters on a board"
   },
   {
    "text": "Doubt not but angling will prove to be so pleasant that it will prove to be, like virtue, a reward to itself.",
@@ -2901,7 +2919,10 @@
   {
    "text": "Errors, like straws, upon the surface flow; He who would search for pearls must dive below.",
    "author": "John Dryden",
-   "source": "bartletts"
+   "source": "bartletts",
+   "review": true,
+   "disposition": "drop",
+   "disposition_reason": "reads equally as \"just\" in place of \"must\" \u2014 a rival a solver could honestly hand in"
   },
   {
    "text": "I am as free as Nature first made man, Ere the base laws of servitude began, When wild in woods the noble savage ran.",
@@ -3525,7 +3546,10 @@
   {
    "text": "_P._ What riches give us let us then inquire: Meat, fire, and clothes. _B._ What more? _P._ Meat, fine clothes, and fire.",
    "author": "Alexander Pope",
-   "source": "bartletts"
+   "source": "bartletts",
+   "review": true,
+   "disposition": "drop",
+   "disposition_reason": "Gutenberg markup (speaker label, emphasis or editorial brackets) \u2014 reads as literal characters on a board"
   },
   {
    "text": "But thousands die without or this or that,-- Die, and endow a college or a cat.",
@@ -4183,7 +4207,10 @@
   {
    "text": "I am not so lost in lexicography as to forget that _words are the daughters of earth, and that things are the sons of heaven_.",
    "author": "Samuel Johnson",
-   "source": "bartletts"
+   "source": "bartletts",
+   "review": true,
+   "disposition": "drop",
+   "disposition_reason": "Gutenberg markup (speaker label, emphasis or editorial brackets) \u2014 reads as literal characters on a board"
   },
   {
    "text": "He is no wise man that will quit a certainty for an uncertainty.",
@@ -4198,12 +4225,18 @@
   {
    "text": "This man [Chesterfield], I thought, had been a lord among wits; but I find he is only a wit among lords.",
    "author": "Samuel Johnson",
-   "source": "bartletts"
+   "source": "bartletts",
+   "review": true,
+   "disposition": "drop",
+   "disposition_reason": "Gutenberg markup (speaker label, emphasis or editorial brackets) \u2014 reads as literal characters on a board"
   },
   {
    "text": "Sir, your levellers wish to level _down_ as far as themselves; but they cannot bear levelling _up_ to themselves.",
    "author": "Samuel Johnson",
-   "source": "bartletts"
+   "source": "bartletts",
+   "review": true,
+   "disposition": "drop",
+   "disposition_reason": "Gutenberg markup (speaker label, emphasis or editorial brackets) \u2014 reads as literal characters on a board"
   },
   {
    "text": "A man ought to read just as inclination leads him; for what he reads as a task will do him little good.",
@@ -4226,7 +4259,10 @@
   {
    "text": "This was a good dinner enough, to be sure, but it was not a dinner to _ask_ a man to.",
    "author": "Samuel Johnson",
-   "source": "bartletts"
+   "source": "bartletts",
+   "review": true,
+   "disposition": "drop",
+   "disposition_reason": "Gutenberg markup (speaker label, emphasis or editorial brackets) \u2014 reads as literal characters on a board"
   },
   {
    "text": "That fellow seems to me to possess but one idea, and that is a wrong one.",
@@ -4469,7 +4505,10 @@
   {
    "text": "The whole [Scotch] nation hitherto has been void of wit and humour, and even incapable of relishing it.",
    "author": "Horace Walpole",
-   "source": "bartletts"
+   "source": "bartletts",
+   "review": true,
+   "disposition": "drop",
+   "disposition_reason": "Gutenberg markup (speaker label, emphasis or editorial brackets) \u2014 reads as literal characters on a board"
   },
   {
    "text": "How sleep the brave who sink to rest By all their country's wishes bless'd!",
@@ -5153,7 +5192,10 @@
   {
    "text": "Where they _do_ agree on the stage, their unanimity is wonderful.",
    "author": "Richard Brinsley Sheridan",
-   "source": "bartletts"
+   "source": "bartletts",
+   "review": true,
+   "disposition": "drop",
+   "disposition_reason": "Gutenberg markup (speaker label, emphasis or editorial brackets) \u2014 reads as literal characters on a board"
   },
   {
    "text": "You shall see them on a beautiful quarto page, where a neat rivulet of text shall meander through a meadow of margin.",
@@ -5378,7 +5420,10 @@
   {
    "text": "And finds, with keen, discriminating sight, Black 's not so black,--nor white so _very_ white.",
    "author": "George Canning",
-   "source": "bartletts"
+   "source": "bartletts",
+   "review": true,
+   "disposition": "drop",
+   "disposition_reason": "Gutenberg markup (speaker label, emphasis or editorial brackets) \u2014 reads as literal characters on a board"
   },
   {
    "text": "I called the New World into existence to redress the balance of the Old.",
@@ -6659,7 +6704,10 @@
   {
    "text": "Society is now one polish'd horde, Formed of two mighty tribes, the _Bores_ and _Bored_.",
    "author": "Lord Byron",
-   "source": "bartletts"
+   "source": "bartletts",
+   "review": true,
+   "disposition": "drop",
+   "disposition_reason": "Gutenberg markup (speaker label, emphasis or editorial brackets) \u2014 reads as literal characters on a board"
   },
   {
    "text": "All human history attests That happiness for man,--the hungry sinner!-- Since Eve ate apples, much depends on dinner.",
@@ -8989,7 +9037,10 @@
   {
    "text": "We must support our rights or lose our character, and with it, perhaps, our liberties.",
    "author": "James Monroe",
-   "source": "inaugurals"
+   "source": "inaugurals",
+   "review": true,
+   "disposition": "drop",
+   "disposition_reason": "reads equally as \"just\" in place of \"must\" \u2014 a rival a solver could honestly hand in"
   },
   {
    "text": "A people who fail to do it can scarcely be said to hold a place among independent nations.",
@@ -10885,7 +10936,10 @@
   {
    "text": "If we wish to erect new structures, we must have a definite knowledge of the old foundations.",
    "author": "Calvin Coolidge",
-   "source": "inaugurals"
+   "source": "inaugurals",
+   "review": true,
+   "disposition": "drop",
+   "disposition_reason": "reads equally as \"just\" in place of \"must\" \u2014 a rival a solver could honestly hand in"
   },
   {
    "text": "We must frequently take our bearings from these fixed stars of our political firmament if we expect to hold a true course.",
@@ -12160,7 +12214,10 @@
   {
    "text": "We must work to provide the knowledge and the surroundings which can enlarge the possibilities of every citizen.",
    "author": "Lyndon Baines Johnson",
-   "source": "inaugurals"
+   "source": "inaugurals",
+   "review": true,
+   "disposition": "drop",
+   "disposition_reason": "reads equally as \"just\" in place of \"must\" \u2014 a rival a solver could honestly hand in"
   },
   {
    "text": "Terrific dangers and troubles that we once called \"foreign\" now constantly live among us.",
@@ -12190,7 +12247,10 @@
   {
    "text": "Each of us must find a way to advance the purpose of the Nation, thus finding new purpose for ourselves.",
    "author": "Lyndon Baines Johnson",
-   "source": "inaugurals"
+   "source": "inaugurals",
+   "review": true,
+   "disposition": "drop",
+   "disposition_reason": "reads equally as \"just\" in place of \"must\" \u2014 a rival a solver could honestly hand in"
   },
   {
    "text": "To those who were small and few against the wilderness, the success of liberty demanded the strength of union.",
@@ -13006,7 +13066,10 @@
   {
    "text": "Our democracy must be not only the envy of the world but the engine of our *own* renewal.",
    "author": "Bill Clinton",
-   "source": "inaugurals"
+   "source": "inaugurals",
+   "review": true,
+   "disposition": "drop",
+   "disposition_reason": "Gutenberg markup (speaker label, emphasis or editorial brackets) \u2014 reads as literal characters on a board"
   },
   {
    "text": "We must provide for our nation the way a family provides for its children.",
@@ -13054,7 +13117,10 @@
   {
    "text": "I ask the congress to join with me; but no president, no congress, no government can undertake *this* mission alone.",
    "author": "Bill Clinton",
-   "source": "inaugurals"
+   "source": "inaugurals",
+   "review": true,
+   "disposition": "drop",
+   "disposition_reason": "Gutenberg markup (speaker label, emphasis or editorial brackets) \u2014 reads as literal characters on a board"
   },
   {
    "text": "Enough, indeed, for millions of others who are still young in spirit, to give of themselves in service, too.",

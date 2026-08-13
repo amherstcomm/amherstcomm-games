@@ -772,13 +772,57 @@ draws another passage instead so a cipher never quietly vanishes from the
 pool. A board that passes first time consumes the generator exactly as before,
 so nothing already playable moved.
 
-Still open: **31% of the standard pool has the same ambiguity**, and 17 live
-passages carry Gutenberg markup (`_Sir To._`, `[History]`) that renders as
-literal characters on a board. Neither was touched here, because removing
-passages resizes the pool and the permutation walk would deal easy and hard
-different puzzles than it did yesterday. Worth a pass of its own, timed so it
-lands with a fresh cycle. Easy and hard hide the ambiguity behind their
-revealed letters; extreme's grouped boards don't.
+**The 17 markup passages are held** (August 2026) — `_Sir To._`, `*own*`,
+`[History]` — which is what the funnel's markup stage would have caught had it
+existed when they were curated.
+
+**"31% of the standard pool has the same ambiguity" was overstated**, and the
+correction is worth keeping because the number is still true and still not a
+defect count. Three measurements, each of which was expected to justify a
+cull and didn't:
+
+1. *Do the given letters save it?* No — pinning one revealed letter, the help
+   the hard tier always gives, cleared the ambiguity in **1%** of a
+   200-passage sample. That was the argument for leaving the pool alone, and
+   it was wrong.
+2. *Do the rivals outrank the passage?* For 43% of flagged passages, yes — but
+   reading them settles it. "It is an ill **bind** turns none to **food**",
+   "cowards **[map]** fear to die", "from the **brown** of his head". They win
+   on the solver's score, which is a sum of common-word lengths, and lose on
+   meaning. The metric measures a dictionary, not an ear.
+3. *How many rivals could a person actually write?* Narrowed to those one
+   everyday word from the passage: **189 of 2,589**. Of those, about 60 have
+   a swap that is grammatical in the same slot — `must`/`just`,
+   `have`/`gave`, `say`/`saw`. The other 129 are `we`/`be` and `wind`/`bind`:
+   "**Be** have made enormous strides" is not a sentence anyone hands in.
+
+4. *Read them.* The 60 were flagged by a hand-written list of "plausible"
+   word pairs — which was the same error one level up, judging pairs instead
+   of sentences. `afford`/`accord` is a fine pair and
+   "government is able to **accord** a suitable army" is not English. Read in
+   context, 55 of the 60 fail on grammar or sense: "this is **add** remains",
+   "years have **done** into history", "the noble **liking** and the noble
+   dead", "**them** have been at a".
+
+**Five passages survive**, all of them `must`/`just`, all where `just` works
+as an adverb before a bare verb: "He who would search for pearls **just** dive
+below", "We **just** support our rights". Those are held. It is the same
+failure the short band's guard was built for, and at 5 in 2,589 it is the
+whole of it here.
+
+So the pool keeps 2,567 of 2,589. Culling 991 on measurement 1 or 2 would have
+destroyed curated work to fix a problem that mostly isn't there — and the
+thing that finally sorted it was reading the sentences, which no measurement
+here could do. Each metric was a proxy for "would a person write this", and
+each was wrong in the same direction: a dictionary, then a score, then a word
+list, none of them an ear.
+
+This does not undercut the short band's guard, and the difference is worth
+being explicit about: there, candidates are free and thousands deep, so
+refusing anything unproven costs nothing. Here the same rule would delete
+work a person did by hand. **Adding demands proof of safety; removing demands
+proof of harm** — which is why `cryptogram-guard.ts` grew an `--audit` mode
+that keeps what it cannot verify rather than dropping it.
 
 **It reuses more than it adds.** Deterministic per Eastern date like the rest;
 `daily_progress` stores the partial mapping so a half-solved puzzle follows you
