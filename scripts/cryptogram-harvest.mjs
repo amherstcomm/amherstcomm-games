@@ -37,14 +37,45 @@ import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
 
-const [, , outPath, ...sourceArgs] = process.argv;
-const sources = Object.fromEntries(sourceArgs.map((a) => a.split('=')));
-if (!outPath || !Object.keys(sources).length) {
+// ---------------------------------------------------------------------------
+// Length bands
+// ---------------------------------------------------------------------------
+// Two bands, because length is a difficulty dial in its own right: less text
+// means less for frequency analysis to bite on. `standard` is the original
+// 50-100 and is what every tier has always drawn from; `short` is a separate,
+// tagged pool for the hardest boards.
+//
+// The floor is 35 and not lower for a reason that isn't taste. The unicity
+// distance of a simple substitution cipher — the length below which more than
+// one plaintext fits the ciphertext, so the puzzle stops having one answer —
+// is about 28 letters for English. 35 clears it with a little room; 30 would
+// not, reliably.
+//
+// The repetition rule has to move with the band. `letters / distinct >= 3` is
+// not a constant a shorter passage can meet: distinct letters climb fast and
+// then flatten near 20, so the ratio is mostly just length in disguise. At
+// 50-100 letters 3.0 is a real filter; at 35-49 it would reject everything
+// English can produce. Each band gets the threshold that means the same thing
+// at its own length.
+const BANDS = {
+  standard: { min: 50, max: 100, ratio: 3.0 },
+  short: { min: 35, max: 49, ratio: 2.2 },
+};
+
+const [, , outPath, ...rawArgs] = process.argv;
+const args = Object.fromEntries(rawArgs.map((a) => a.split('=')));
+const bandName = args.band ?? 'standard';
+delete args.band;
+const sources = args;
+const BAND = BANDS[bandName];
+if (!outPath || !Object.keys(sources).length || !BAND) {
   console.error(
-    'usage: node scripts/cryptogram-harvest.mjs <out.json> bartletts=<txt> [inaugurals=<txt>] [proverbs=<txt>]'
+    'usage: node scripts/cryptogram-harvest.mjs <out.json> [band=standard|short] ' +
+      'bartletts=<txt> [inaugurals=<txt>] [proverbs=<txt>]'
   );
   process.exit(1);
 }
+console.log(`band ${bandName}: ${BAND.min}-${BAND.max} letters, repetition >= ${BAND.ratio}\n`);
 
 // strip the Gutenberg boilerplate so licence text can't be mistaken for content
 function gutenbergBody(path) {
@@ -227,9 +258,16 @@ stage('ascii only', (q) => /^[\x20-\x7e]+$/.test(q.text));
 // salutation or a list opener, not a thought
 stage('no digits, ends like a sentence', (q) => !/\d/.test(q.text) && /[.!?]['"]?$/.test(q.text));
 
-stage('50–100 letters', (q) => {
+// Gutenberg's plain-text emphasis and editorial marks survive every filter
+// above, because they are ASCII and they sit outside the words: "_Sir To._ Dost
+// thou think", "*all* the authority", "[History] hath triumphed". None of it is
+// part of the quote, and on a board it is neither cipher nor punctuation — just
+// characters the player is left to wonder about.
+stage('no editorial markup', (q) => !/[_*[\]{}<>|\\/]/.test(q.text));
+
+stage(`${BAND.min}–${BAND.max} letters`, (q) => {
   const letters = q.text.replace(/[^A-Za-z]/g, '').length;
-  return letters >= 50 && letters <= 100;
+  return letters >= BAND.min && letters <= BAND.max;
 });
 
 stage('every word in the dictionary', (q) => {
@@ -255,7 +293,7 @@ stage('no proper-noun usage', (q) => {
 stage('letter stats', (q) => {
   const letters = q.text.toLowerCase().replace(/[^a-z]/g, '');
   const distinct = new Set(letters).size;
-  return distinct >= 8 && letters.length / distinct >= 3;
+  return distinct >= 8 && letters.length / distinct >= BAND.ratio;
 });
 
 stage('blocklist', (q) => {
@@ -278,6 +316,11 @@ stage('deduplicated', (q) => {
 const REVIEW =
   /\b(slaves?|slavery|savages?|heathens?|negro(es)?|jew(s|ish)?|indians?|pagans?|barbarians?|g[iy]psy|gipsies|gypsies|conquest|wife|wives|wom[ae]n|races?)\b/i;
 for (const q of pool) if (REVIEW.test(q.text)) q.review = true;
+
+// Only the non-default band is written, so a passage with no `band` is a
+// standard one — which keeps the 2,674 already-curated entries untouched when
+// a short harvest is merged in.
+if (bandName !== 'standard') for (const q of pool) q.band = bandName;
 funnel.push(['flagged for review', pool.filter((q) => q.review).length]);
 
 for (const [name, count] of funnel) console.log(`${name.padEnd(32)} ${count}`);
