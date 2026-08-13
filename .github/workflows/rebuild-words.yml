@@ -1,11 +1,22 @@
 # Rebuilds the word lists end to end: band files, domains map, CSV, and the
 # Postgres words table, all from one derivation, so no consumer can drift
 # from another. Dispatch it after amending a flag list or bumping a source
-# package; it commits whatever changed to the branch it ran on.
+# package.
+#
+# It takes two dispatches, and that is deliberate. The client only accepts a
+# CDN band whose embedded version matches, and the bundled fallback has to ship
+# in the same commit the tag points at — so the tag cannot be created until the
+# rebuilt files are actually on the branch. main is protected, so they get there
+# by pull request:
+#
+#   dispatch -> opens a PR with whatever changed, creates no tag
+#   merge it
+#   dispatch again -> nothing left to change, so it tags
 #
 # The database load needs SUPABASE_DB_URL (the session-pooler connection
 # string, Dashboard -> Connect) as a repo secret; without it the workflow
-# still rebuilds and commits the files and says what it skipped.
+# still rebuilds the files and says what it skipped. It is idempotent — one
+# transaction that truncates and reloads — so the second dispatch is harmless.
 name: Rebuild word lists
 
 on:
@@ -18,6 +29,7 @@ on:
 
 permissions:
   contents: write
+  pull-requests: write
 
 jobs:
   rebuild:
@@ -60,16 +72,49 @@ jobs:
           \i /tmp/blocked-insert.sql
           commit;
           SQL
-      - name: Commit and tag
+      - name: Open a PR for whatever changed
+        id: rebuilt
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add src/wordbands scripts/blocked-words.json
           if git diff --cached --quiet; then
-            echo "nothing changed"
-          else
-            git commit -m "Rebuild word lists (${{ inputs.version }})"
-            git push
+            echo "changed=no" >> "$GITHUB_OUTPUT"
+            echo "The files on ${{ github.ref_name }} already are this build."
+            exit 0
           fi
-          git tag -f "${{ inputs.version }}"
-          git push -f origin "refs/tags/${{ inputs.version }}"
+          echo "changed=yes" >> "$GITHUB_OUTPUT"
+          branch="words/${{ inputs.version }}"
+          git checkout -b "$branch"
+          git commit -m "Rebuild word lists (${{ inputs.version }})"
+          git push -f origin "$branch"
+          if [ -z "$(gh pr list --head "$branch" --state open --json number --jq '.[].number')" ]; then
+            gh pr create --base "${{ github.ref_name }}" --head "$branch" \
+              --title "Rebuild word lists (${{ inputs.version }})" \
+              --body "Rebuilt by the Rebuild word lists workflow.
+
+          Merge this, then dispatch the workflow again with the same version to create the \`${{ inputs.version }}\` tag. The tag has to point at the commit that ships the bundled fallback, so it cannot be created before this lands."
+          fi
+      - name: Tag — only once the branch already is the build
+        if: steps.rebuilt.outputs.changed == 'no'
+        run: |
+          # The tagged CDN URL is cached forever, so a tag that already exists
+          # must never be moved: a moved tag serves the old files to everyone
+          # who cached it and the new ones to everyone who did not.
+          existing=$(git ls-remote origin "refs/tags/${{ inputs.version }}" | cut -f1)
+          head=$(git rev-parse HEAD)
+          if [ "$existing" = "$head" ]; then
+            echo "Already tagged."
+            exit 0
+          fi
+          if [ -n "$existing" ]; then
+            echo "::error::${{ inputs.version }} already exists at $existing but this build is $head. Pick a new version rather than moving a tag the CDN has cached."
+            exit 1
+          fi
+          git tag "${{ inputs.version }}"
+          git push origin "refs/tags/${{ inputs.version }}"
+      - name: Say why there is no tag yet
+        if: steps.rebuilt.outputs.changed == 'yes'
+        run: echo "::notice::Opened a PR with the rebuilt files. No tag yet — merge it, then dispatch again with the same version."
