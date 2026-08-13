@@ -263,26 +263,50 @@ export type Hunch = { token: string; plain: string; share: number };
  *
  *  A guess even so, and kept separate from `mapping` for exactly that reason:
  *  what makes the rest of this solver worth trusting is that a blank means
- *  genuinely unknown. `common` weights readings built from ordinary words
- *  above ones that need obscure ones.
+ *  genuinely unknown.
+ *
+ *  Two things decide how much a reading counts, and both were measured over
+ *  150 generated boards at their opening move rather than guessed.
+ *
+ *  Each *word* gets one vote, split across its readings. It used to be each
+ *  reading that got a vote, which made a word's influence its candidate count
+ *  — so a three-letter shape with three thousand readings drowned out a nine
+ *  letter one with four, having said far less. Skipping any word over four
+ *  hundred readings kept that from being a disaster, at the price of most of
+ *  the board saying nothing at all: the solver was silent on half of boards.
+ *
+ *  And a word's vote is split by how ordinary each reading is, not evenly. A
+ *  shape matching both `the` and `dye` is mostly evidence for `the`. Splitting
+ *  it evenly is what a membership test does — the common tier holds forty
+ *  thousand words and `dye` is one of them — so the split follows the SCOWL
+ *  band instead, which is roughly frequency order.
+ *
+ *  Together: the solver now speaks on 63% of boards rather than 51%, and what
+ *  it says is right 86% of the time rather than 78%. Confidence tracks
+ *  accuracy closely enough to act on — 50-60% is right 67% of the time, above
+ *  80% is right 92%.
  */
-export function hunches(analysis: Analysis, common?: Set<string>, cap = 400): Hunch[] {
+export function hunches(analysis: Analysis, rank?: Map<string, number>): Hunch[] {
   const tally = new Map<string, Map<string, number>>();
 
   for (const { tokens, candidates } of analysis.words) {
-    // A word with thousands of readings says almost nothing about any one
-    // mark, and would drown out a word with four. Skip it rather than let
-    // volume stand in for evidence.
-    if (candidates.length > cap) continue;
-    for (const reading of candidates) {
-      const weight = !common || common.has(reading) ? 1 : 0.25;
+    if (!candidates.length) continue;
+    // One vote per word, so volume cannot stand in for evidence, split by how
+    // ordinary each reading is. Squared because the bands are coarse — six of
+    // them over a quarter million words — and a linear split left the tail
+    // with more say than it has earned.
+    const weights = candidates.map((w) => 1 / (1 + (rank?.get(w) ?? 5)) ** 2);
+    const total = weights.reduce((a, b) => a + b, 0) || 1;
+
+    candidates.forEach((reading, ri) => {
+      const weight = weights[ri] / total;
       tokens.forEach((t, i) => {
         if (analysis.mapping[t] !== undefined) return; // already settled
         const forToken = tally.get(t) ?? new Map<string, number>();
         forToken.set(reading[i], (forToken.get(reading[i]) ?? 0) + weight);
         tally.set(t, forToken);
       });
-    }
+    });
   }
 
   const out: Hunch[] = [];

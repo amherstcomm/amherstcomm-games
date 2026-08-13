@@ -156,6 +156,50 @@ describe('hunches', () => {
     const shares = out.map((h) => h.share);
     expect([...shares].sort((a, b) => b - a)).toEqual(shares);
   });
+
+  it('leans on the ordinary reading of a shape, not the odd one', () => {
+    // 'the' and 'dog' share no shape, so build one that is genuinely
+    // ambiguous: 'was' and 'his' both fit ABC, and a rank saying 'was' is the
+    // everyday word should move the tally to it rather than splitting evenly.
+    const small = buildPatternIndex(['was', 'his']);
+    const even = hunches(analyse(parseCryptogram('XYZ', 'letters'), small));
+    for (const h of even) expect(h.share).toBe(0.5);
+
+    const ranked = hunches(
+      analyse(parseCryptogram('XYZ', 'letters'), small),
+      new Map([
+        ['was', 0],
+        ['his', 3],
+      ])
+    );
+    const first = ranked.find((h) => h.token === 'x')!;
+    expect(first.plain).toBe('w');
+    expect(first.share).toBeGreaterThan(0.9);
+  });
+
+  it('gives a word one vote however many readings it has', () => {
+    // Mark Q sits in two words. One has four readings that disagree about it
+    // (t, x, b, d); the other has two that agree on 'a'. Two words, one each
+    // way, so 'a' should come out at half.
+    //
+    // Counting readings instead of words gives 'a' two votes against four
+    // singles and calls it a third — the crowded shape shouting louder while
+    // saying less, which is what the old four-hundred-reading cap existed to
+    // paper over.
+    const small = buildPatternIndex(['tab', 'cab', 'tic', 'tod', 'saps', 'tint']);
+    const out = hunches(analyse(parseCryptogram('PQS MQNM', 'letters'), small));
+    const q = out.find((h) => h.token === 'q')!;
+    // 'tod' is gone before the count starts — MQNM cannot read Q as 'o', so
+    // propagation drops it. That leaves
+    //   PQS  -> tab cab tic, reading Q as a,a,i  ->  a takes 2/3 of one vote
+    //   MQNM -> saps tint,   reading Q as a,i    ->  a takes 1/2 of the other
+    // so a scores 7/6 of the two votes cast: 7/12.
+    expect(q.plain).toBe('a');
+    expect(q.share).toBeCloseTo(7 / 12, 5);
+    // Counting readings instead would make it 3 of 5 — the three-reading word
+    // outweighing the two-reading one for having more ways to be wrong.
+    expect(q.share).not.toBeCloseTo(0.6, 5);
+  });
 });
 
 describe('solveCryptogram', () => {
