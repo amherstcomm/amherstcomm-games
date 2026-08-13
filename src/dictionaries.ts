@@ -15,7 +15,7 @@ import type { Difficulty } from '@/difficulty';
 /** Bump together with the git tag when the lists are rebuilt. The tagged CDN
  *  URL is immutable, so caching is safe forever; the bundled fallback ships
  *  in the same commit, so the two can never disagree about a version. */
-export const WORDS_VERSION = 'words-v4';
+export const WORDS_VERSION = 'words-v5';
 
 /** slur never scores and is never shown, anywhere, under any setting.
  *  strong and mild score; they exist so a player can choose not to be
@@ -24,7 +24,10 @@ export type WordFlag = 'slur' | 'strong' | 'mild';
 
 type Band = { version: string; words: string[]; flags: Record<string, WordFlag> };
 
-const BAND_NAMES = ['band-35', 'band-55', 'band-70', 'band-80'] as const;
+// One band per SCOWL size. The three smallest used to be a single band-35,
+// which meant the only frequency signal the client had could not separate
+// 	he from dye. Every union below is unchanged - this only subdivides.
+const BAND_NAMES = ['band-10', 'band-20', 'band-35', 'band-55', 'band-70', 'band-80'] as const;
 type BandName = (typeof BAND_NAMES)[number];
 
 // lazy imports so a band is only ever loaded once, and only when needed
@@ -94,9 +97,9 @@ function pooled(key: string, make: () => Promise<string[]>): Promise<string[]> {
 export type DictionaryId = 'common' | 'standard' | 'full';
 
 const DICT_BANDS: Record<DictionaryId, BandName[]> = {
-  common: ['band-35'],
-  standard: ['band-35', 'band-55'],
-  full: ['band-35', 'band-55', 'band-70', 'band-80'],
+  common: ['band-10', 'band-20', 'band-35'],
+  standard: ['band-10', 'band-20', 'band-35', 'band-55'],
+  full: ['band-10', 'band-20', 'band-35', 'band-55', 'band-70', 'band-80'],
 };
 
 export function getDictionary(id: DictionaryId): Promise<string[]> {
@@ -114,9 +117,9 @@ export const DICTIONARIES: { id: Difficulty; label: string; blurb: string }[] = 
 // Acceptance is SCOWL and nothing else: 55, 70, 80 — every tier a size
 // SCOWL itself defined.
 const ACCEPT_BANDS: Record<Difficulty, BandName[]> = {
-  easy: ['band-35', 'band-55'],
-  hard: ['band-35', 'band-55', 'band-70'],
-  extreme: ['band-35', 'band-55', 'band-70', 'band-80'],
+  easy: ['band-10', 'band-20', 'band-35', 'band-55'],
+  hard: ['band-10', 'band-20', 'band-35', 'band-55', 'band-70'],
+  extreme: ['band-10', 'band-20', 'band-35', 'band-55', 'band-70', 'band-80'],
 };
 
 /** What a difficulty accepts — one band wider than it generates from, minus
@@ -151,10 +154,12 @@ export function getWordRank(): Promise<Map<string, number>> {
 
 let rankCache: Promise<Map<string, number>> | null = null;
 
-const GENERATION_BAND: Record<Difficulty, BandName> = {
-  easy: 'band-35',
-  hard: 'band-55',
-  extreme: 'band-70',
+// The bands a difficulty alone adds. Easy takes three now that the smallest
+// sizes are separate files, which is the same set of words it always drew on.
+const GENERATION_BAND: Record<Difficulty, BandName[]> = {
+  easy: ['band-10', 'band-20', 'band-35'],
+  hard: ['band-55'],
+  extreme: ['band-70'],
 };
 
 /** The words a difficulty draws its practice puzzles from: the band it alone
@@ -164,7 +169,7 @@ const GENERATION_BAND: Record<Difficulty, BandName> = {
  *  same mistake with a different clock. */
 export function getDifficultyPool(difficulty: Difficulty): Promise<string[]> {
   return pooled(`band:${difficulty}`, () =>
-    union([GENERATION_BAND[difficulty]], (flag) => flag !== undefined)
+    union(GENERATION_BAND[difficulty], (flag) => flag !== undefined)
   );
 }
 

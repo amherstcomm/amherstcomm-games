@@ -291,8 +291,22 @@ writeFileSync(OUT, csv.join('\n') + '\n');
 // the client and the table cannot disagree by construction.
 const WORDS_VERSION = process.env.WORDS_VERSION || 'words-v1';
 mkdirSync(BANDS_DIR, { recursive: true });
-const bandOf = (lv) => (lv <= 35 ? 'band-35' : lv <= 55 ? 'band-55' : lv <= 70 ? 'band-70' : 'band-80');
+// Split at 10 and 20 as well as 35. One band per SCOWL size, not one per
+// tier: the bands are the only frequency signal the client has, and a
+// band-35 that swallowed levels 10, 20 and 35 could not tell 	he from
+// dye — which is exactly what the cryptogram solver needs it to do when it
+// ranks the readings of a word shape. The unions every pool is built from
+// are unchanged; this only subdivides them.
+const bandOf = (lv) =>
+  lv <= 10 ? 'band-10'
+  : lv <= 20 ? 'band-20'
+  : lv <= 35 ? 'band-35'
+  : lv <= 55 ? 'band-55'
+  : lv <= 70 ? 'band-70'
+  : 'band-80';
 const bands = {
+  'band-10': { words: [], flags: {} },
+  'band-20': { words: [], flags: {} },
   'band-35': { words: [], flags: {} },
   'band-55': { words: [], flags: {} },
   'band-70': { words: [], flags: {} },
