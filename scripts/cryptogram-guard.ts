@@ -30,11 +30,25 @@ import { buildPatternIndex, solveCryptogram } from '../src/cryptogramSolver';
 
 type Passage = { text: string; author: string; source?: string; review?: boolean; band?: string };
 
-const [inPath, outPath] = process.argv.slice(2).filter((a) => !a.startsWith('-'));
+// Two jobs, and they want opposite defaults.
+//
+// Harvesting decides what to *add*, so anything it cannot prove safe is left
+// out — cheap, because the candidates are free and there are thousands.
+//
+// Auditing decides what to *remove* from a pool a human has already curated,
+// where the same rule would delete hundreds of good passages for the crime of
+// containing an apostrophe. Adding demands proof of safety; removing demands
+// proof of harm. So `audit` drops only what is shown to have another answer.
+const args = process.argv.slice(2);
+const audit = args.includes('--audit');
+const [inPath, outPath] = args.filter((a) => !a.startsWith('-'));
 if (!inPath || !outPath) {
-  console.error('usage: vite-node scripts/cryptogram-guard.ts -- <in.json> <out.json>');
+  console.error(
+    'usage: vite-node scripts/cryptogram-guard.ts -- [--audit] <in.json> <out.json>'
+  );
   process.exit(1);
 }
+console.log(audit ? 'auditing: drop only what is proven ambiguous\n' : 'harvesting: keep only what is proven unambiguous\n');
 
 // The tier a player writes from — the same three bands the client calls
 // `common`.
@@ -97,6 +111,7 @@ const examples: string[] = [];
 input.quotes.forEach((q, i) => {
   if (APOSTROPHE.test(q.text)) {
     tally.contraction++;
+    if (audit) kept.push(q);
     return;
   }
   const outcome = solveCryptogram(encipher(q.text), index);
@@ -105,8 +120,13 @@ input.quotes.forEach((q, i) => {
     if (outcome.reason === 'not found') {
       tally.notFound++;
       kept.push(q);
-    } else if (outcome.reason === 'gave up') tally.gaveUp++;
-    else tally.other++;
+    } else if (outcome.reason === 'gave up') {
+      tally.gaveUp++;
+      if (audit) kept.push(q);
+    } else {
+      tally.other++;
+      if (audit) kept.push(q);
+    }
   } else if (outcome.result.readings > 1) {
     tally.ambiguous++;
     if (examples.length < 6)
