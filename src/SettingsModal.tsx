@@ -34,6 +34,7 @@ import {
   DIFFICULTY_LABEL,
   type Difficulty,
 } from '@/difficulty';
+import { PALETTE_SWATCHES } from '@/theme';
 import type { Palette, TextScale, ThemeMode } from '@/theme';
 import { useModalA11y } from '@/useModalA11y';
 
@@ -77,48 +78,31 @@ const THEME_OPTIONS: { id: ThemeMode; label: string; Icon: typeof Sun }[] = [
   { id: 'dark', label: 'Dark', Icon: Moon },
 ];
 
-const PALETTE_OPTIONS: { id: Palette; label: string; blurb: string; tones: string[] }[] = [
-  {
-    id: 'default',
-    label: 'Default',
-    blurb: 'Green, amber, and rose',
-    tones: ['52 211 153', '251 191 36', '251 113 133', '125 211 252'],
-  },
+
+const PALETTE_OPTIONS: { id: Palette; label: string; blurb: string }[] = [
+  { id: 'default', label: 'Default', blurb: 'Green, amber, and rose' },
   {
     id: 'deuter',
     label: 'Red–green friendly',
     blurb: 'Deuteranopia and protanopia — blue and orange replace green and amber',
-    tones: ['59 130 246', '230 159 0', '236 72 153', '86 180 233'],
   },
   {
     id: 'tritan',
     label: 'Blue–yellow friendly',
     blurb: 'Tritanopia — green against vermilion, the axis those eyes keep',
-    tones: ['45 190 125', '232 106 58', '236 88 150', '165 228 240'],
   },
   {
     id: 'mono',
     label: 'Monochrome',
     blurb: 'No hue at all — states are separated by lightness',
-    tones: ['235 235 235', '180 180 180', '130 130 130', '90 90 90'],
   },
 ];
 
 // Same setting, different reason for existing. These change the page and the
 // panels rather than the colours that carry meaning — green still means found.
-const DECORATIVE_OPTIONS: { id: Palette; label: string; blurb: string; tones: string[] }[] = [
-  {
-    id: 'sepia',
-    label: 'Sepia',
-    blurb: 'Warm paper by day, candlelight after dark',
-    tones: ['245 176 65', '184 167 143', '79 66 50', '38 31 22'],
-  },
-  {
-    id: 'ocean',
-    label: 'Ocean',
-    blurb: 'Deep water at night, sea glass by day',
-    tones: ['94 214 226', '152 180 195', '33 70 94', '10 30 45'],
-  },
+const DECORATIVE_OPTIONS: { id: Palette; label: string; blurb: string }[] = [
+  { id: 'sepia', label: 'Sepia', blurb: 'Warm paper by day, candlelight after dark' },
+  { id: 'ocean', label: 'Ocean', blurb: 'Deep water at night, sea glass by day' },
 ];
 
 function PaletteChoice({
@@ -126,7 +110,7 @@ function PaletteChoice({
   palette,
   onPalette,
 }: {
-  opt: { id: Palette; label: string; blurb: string; tones: string[] };
+  opt: { id: Palette; label: string; blurb: string };
   palette: Palette;
   onPalette: (p: Palette) => void;
 }) {
@@ -145,7 +129,7 @@ function PaletteChoice({
         </span>
         <span className="block text-xs text-slate-500">{opt.blurb}</span>
       </span>
-      <Swatches tones={opt.tones} />
+      <Swatches tones={PALETTE_SWATCHES[opt.id]} />
     </button>
   );
 }
