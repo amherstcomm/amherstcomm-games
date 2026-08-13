@@ -2919,7 +2919,10 @@
   {
    "text": "Errors, like straws, upon the surface flow; He who would search for pearls must dive below.",
    "author": "John Dryden",
-   "source": "bartletts"
+   "source": "bartletts",
+   "review": true,
+   "disposition": "drop",
+   "disposition_reason": "reads equally as \"just\" in place of \"must\" \u2014 a rival a solver could honestly hand in"
   },
   {
    "text": "I am as free as Nature first made man, Ere the base laws of servitude began, When wild in woods the noble savage ran.",
@@ -9034,7 +9037,10 @@
   {
    "text": "We must support our rights or lose our character, and with it, perhaps, our liberties.",
    "author": "James Monroe",
-   "source": "inaugurals"
+   "source": "inaugurals",
+   "review": true,
+   "disposition": "drop",
+   "disposition_reason": "reads equally as \"just\" in place of \"must\" \u2014 a rival a solver could honestly hand in"
   },
   {
    "text": "A people who fail to do it can scarcely be said to hold a place among independent nations.",
@@ -10930,7 +10936,10 @@
   {
    "text": "If we wish to erect new structures, we must have a definite knowledge of the old foundations.",
    "author": "Calvin Coolidge",
-   "source": "inaugurals"
+   "source": "inaugurals",
+   "review": true,
+   "disposition": "drop",
+   "disposition_reason": "reads equally as \"just\" in place of \"must\" \u2014 a rival a solver could honestly hand in"
   },
   {
    "text": "We must frequently take our bearings from these fixed stars of our political firmament if we expect to hold a true course.",
@@ -12205,7 +12214,10 @@
   {
    "text": "We must work to provide the knowledge and the surroundings which can enlarge the possibilities of every citizen.",
    "author": "Lyndon Baines Johnson",
-   "source": "inaugurals"
+   "source": "inaugurals",
+   "review": true,
+   "disposition": "drop",
+   "disposition_reason": "reads equally as \"just\" in place of \"must\" \u2014 a rival a solver could honestly hand in"
   },
   {
    "text": "Terrific dangers and troubles that we once called \"foreign\" now constantly live among us.",
@@ -12235,7 +12247,10 @@
   {
    "text": "Each of us must find a way to advance the purpose of the Nation, thus finding new purpose for ourselves.",
    "author": "Lyndon Baines Johnson",
-   "source": "inaugurals"
+   "source": "inaugurals",
+   "review": true,
+   "disposition": "drop",
+   "disposition_reason": "reads equally as \"just\" in place of \"must\" \u2014 a rival a solver could honestly hand in"
   },
   {
    "text": "To those who were small and few against the wilderness, the success of liberty demanded the strength of union.",

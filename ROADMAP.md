@@ -796,10 +796,26 @@ cull and didn't:
    `have`/`gave`, `say`/`saw`. The other 129 are `we`/`be` and `wind`/`bind`:
    "**Be** have made enormous strides" is not a sentence anyone hands in.
 
-So the pool keeps its 2,572. Culling 991 passages on measurement 1 or 2 would
-have destroyed curated work to fix a problem that mostly isn't there. The 189
-went out for human review instead, since which rivals read as English is a
-judgment none of these three metrics can make.
+4. *Read them.* The 60 were flagged by a hand-written list of "plausible"
+   word pairs — which was the same error one level up, judging pairs instead
+   of sentences. `afford`/`accord` is a fine pair and
+   "government is able to **accord** a suitable army" is not English. Read in
+   context, 55 of the 60 fail on grammar or sense: "this is **add** remains",
+   "years have **done** into history", "the noble **liking** and the noble
+   dead", "**them** have been at a".
+
+**Five passages survive**, all of them `must`/`just`, all where `just` works
+as an adverb before a bare verb: "He who would search for pearls **just** dive
+below", "We **just** support our rights". Those are held. It is the same
+failure the short band's guard was built for, and at 5 in 2,589 it is the
+whole of it here.
+
+So the pool keeps 2,567 of 2,589. Culling 991 on measurement 1 or 2 would have
+destroyed curated work to fix a problem that mostly isn't there — and the
+thing that finally sorted it was reading the sentences, which no measurement
+here could do. Each metric was a proxy for "would a person write this", and
+each was wrong in the same direction: a dictionary, then a score, then a word
+list, none of them an ear.
 
 This does not undercut the short band's guard, and the difference is worth
 being explicit about: there, candidates are free and thousands deep, so
