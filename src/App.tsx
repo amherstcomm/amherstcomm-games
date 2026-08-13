@@ -1097,18 +1097,18 @@ function App() {
   const cryptoHunches = useMemo(
     () =>
       cryptoAnalysis
-        ? hunches(cryptoAnalysis, commonWordsArr ? new Set(commonWordsArr) : undefined)
-            // Half the surviving readings agreeing is the floor for saying
-            // anything. Measured on a cold start, where every word still has
-            // thousands of readings and the tally is drawn from an
-            // unrepresentative few, the top guess came in at 41% and was
-            // wrong — as were the five below it. A row of confident-looking
-            // noise is worse than an empty one, so the suggestions only speak
-            // once the evidence does.
+        ? hunches(cryptoAnalysis, wordRank ?? undefined)
+            // Half the weight agreeing is the floor for saying anything. It
+            // was set when a cold start put its top guess at 41% and wrong,
+            // and it still holds: measured over 150 boards at their opening
+            // move, what clears this bar is right 86% of the time and what
+            // falls below it 41%. The bar is doing the work it was put there
+            // for — a row of confident-looking noise is worse than an empty
+            // one.
             .filter((h) => h.share >= 0.5)
             .slice(0, 6)
         : [],
-    [cryptoAnalysis, commonWordsArr]
+    [cryptoAnalysis, wordRank]
   );
 
   /** settle a word on one reading, which propagation then spreads. Choosing

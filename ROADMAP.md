@@ -756,6 +756,32 @@ was proven. 80% of contraction-bearing candidates were surviving that way.
 They're dropped. And a search that exhausts its node budget proves nothing, so
 those go too.
 
+**Cold-start suggestions, and what the fix turned out to be** (August 2026).
+The open item was n-gram scoring, on the theory that a cold start has too
+little to go on. Measured first: over 150 boards at their opening move the
+solver was **silent on half of them**, and produced about two suggestions per
+board. Accuracy was not the problem — what it did say was 78% right, and its
+confidence tracked accuracy cleanly.
+
+The cause was the tally, not the evidence. Each *reading* got a vote, so a
+word's influence was its candidate count, and a three-letter shape with three
+thousand readings drowned out a nine-letter one with four. The cap at four
+hundred readings kept that from being a disaster by throwing most of the board
+away instead.
+
+Two changes, both measured against the same boards: one vote per **word**
+split across its readings, and that vote split by how ordinary each reading is
+(SCOWL band) rather than evenly. Result: **speaks on 63% of boards rather than
+51%, and is right 86% of the time rather than 78%.** Calibration sharpened too
+— above 80% confidence is 92% right.
+
+No n-grams. Letter statistics were never the missing piece for a board with
+word divisions, where shapes and word frequency say more. **Where n-grams
+would genuinely be the only tool is a grouped board**, which has no divisions
+to make shapes from — `solveCryptogram` refuses those outright and the
+suggestions panel has nothing to say. That is a different program (frequency
+hill-climbing) and remains unbuilt.
+
 **Repetition has a floor now** (August 2026), because the first short board
 that reached production showed why it needed one: 37 marks over 25 distinct
 with 7 repeating, homophonic, no reveals. Repetition is what a solver grips —
