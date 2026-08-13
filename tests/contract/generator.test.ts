@@ -15,7 +15,15 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { countSolutions, indexWords } from '../../scripts/squares.mjs';
 // the tier's own variant list, so the contract can't drift from the generator
 // @ts-expect-error plain-JS module without a declaration file
-import { livePassages, TIER_BAND, TIER_VARIANTS } from '../../scripts/cryptogram.mjs';
+import {
+  generateCryptogram,
+  generatePlayable,
+  livePassages,
+  markRepetition,
+  REPETITION_FLOOR,
+  TIER_BAND,
+  TIER_VARIANTS,
+} from '../../scripts/cryptogram.mjs';
 
 const run = promisify(execFile);
 
@@ -487,6 +495,65 @@ describe('cryptogram', () => {
     }
     const texts = new Set(standard.map((q: Feed) => q.text as string));
     for (const q of short) expect(texts.has(q.text as string), 'a passage in both bands').toBe(false);
+  });
+
+  // A board is solved off repetition: marks that recur are what frequency and
+  // word shape have to work with. Homophonic is the one cipher that can lose
+  // it, spending several marks on the same letter — over a year of dates it
+  // put 42 boards under this floor, the worst at 23%, all of them extreme.
+  // Every other cipher clears it always, so the floor only bites the one that
+  // can fail.
+  it('never serves a board with too little repetition to grip', () => {
+    const boards = [
+      ...VARIANTS.flatMap((v) =>
+        DIFFICULTIES.map((d) => ({ b: feed(v, 'cryptogram').byDifficulty[d] as Feed, where: `${v}${d}` }))
+      ),
+      ...DIFFICULTIES.flatMap((d) =>
+        (feeds.get('cryptogram-pool')!.byDifficulty[d] as Feed[]).map((b, i) => ({
+          b,
+          where: `pool ${d} #${i}`,
+        }))
+      ),
+    ];
+    for (const { b, where } of boards) {
+      expect(markRepetition(b), `${where} (${b.label})`).toBeGreaterThanOrEqual(REPETITION_FLOOR);
+    }
+  });
+
+  // The test above reads one day's feed, and only about one extreme board in
+  // nine is thin enough to matter — so on most dates it would pass with the
+  // guard removed entirely. This one goes at generatePlayable directly, over
+  // the pool that can actually produce a bad board: 36% of these pairings are
+  // degenerate on the first draw, so a broken guard has nowhere to hide.
+  it('either hands back a board with grip or hands back nothing', async () => {
+    const pool = livePassages(
+      JSON.parse(await readFile('scripts/cryptogram-passages.json', 'utf8')),
+      'short'
+    ) as { text: string; author: string }[];
+    const mulberry32 = (a: number) => () => {
+      a |= 0;
+      a = (a + 0x6d2b79f5) | 0;
+      let t = Math.imul(a ^ (a >>> 15), 1 | a);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+    let degenerate = 0;
+    let rescued = 0;
+    for (let i = 0; i < pool.length; i += 3) {
+      for (let seed = 1; seed <= 3; seed++) {
+        const raw = generateCryptogram(pool[i], mulberry32(seed), 'homophonic');
+        if (markRepetition(raw) >= REPETITION_FLOOR) continue;
+        degenerate++;
+        const board = generatePlayable(pool[i], mulberry32(seed), 'homophonic');
+        // null is a fair answer — the caller changes cipher or passage. What
+        // it must never do is return the thin board anyway.
+        if (board === null) continue;
+        expect(markRepetition(board), pool[i].text).toBeGreaterThanOrEqual(REPETITION_FLOOR);
+        rescued++;
+      }
+    }
+    expect(degenerate, 'the sweep found boards worth guarding against').toBeGreaterThan(50);
+    expect(rescued / degenerate, 're-dealing rescues nearly all of them').toBeGreaterThan(0.9);
   });
 
   // The pool walks the tier's variants in turn rather than drawing at random,

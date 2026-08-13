@@ -756,6 +756,22 @@ was proven. 80% of contraction-bearing candidates were surviving that way.
 They're dropped. And a search that exhausts its node budget proves nothing, so
 those go too.
 
+**Repetition has a floor now** (August 2026), because the first short board
+that reached production showed why it needed one: 37 marks over 25 distinct
+with 7 repeating, homophonic, no reveals. Repetition is what a solver grips —
+and homophonic is the only cipher that can lose it, since several marks stand
+for one letter, which also makes word shapes lie. Measured across both pools,
+every other cipher bottoms out at 55% of distinct marks repeating on standard
+and 47% on short; homophonic runs to 25%. Over a year of dates, 42 boards came
+in under 40%, the worst at 23%, every one of them extreme.
+
+The fix keeps the announced cipher: re-deal the homophones, which rescues 141
+of the 143 short passages that fail at first ask, 93 of them on the first
+retry. Only then does the daily fall back to another cipher, and practice
+draws another passage instead so a cipher never quietly vanishes from the
+pool. A board that passes first time consumes the generator exactly as before,
+so nothing already playable moved.
+
 Still open: **31% of the standard pool has the same ambiguity**, and 17 live
 passages carry Gutenberg markup (`_Sir To._`, `[History]`) that renders as
 literal characters on a board. Neither was touched here, because removing
