@@ -122,7 +122,43 @@ function knownWord(token) {
 
 function parseBartletts(path) {
   const lines = gutenbergBody(path).split(/\r?\n/);
-  const AUTHOR = /^([A-Z][A-Z .,'&()-]{2,60}?)\.?\s+(?:_?Circa_?\s+)?\d{3,4}[-–]?\d{0,4}\.?\s*$/;
+  // An author header is a name in capitals followed by dates. Both halves are
+  // messier than they look, and when the line fails to match the parser does
+  // not skip a quote — it keeps the *previous* author and attributes the whole
+  // run to them. That silence is what made this worth being careful about:
+  // 61 headers were missed, and 98 quotes went out under the wrong name.
+  //
+  //   WILLIAM WORDSWORTH.[465-1] 1770-1850.   a footnote marker after the name
+  //   THOMAS MIDDLETON. ---- -1626.           birth year unknown
+  //   OLIVER WENDELL HOLMES. 1809- ----.      still living in 1919
+  //   SIR HENRY TAYLOR. 1800-18--.            death year partly unknown
+  //
+  // So: an optional footnote, and a date field of digits and dashes that has
+  // to contain at least one digit. Commas are excluded from the dates on
+  // purpose — it is what keeps index lines ("SOUTHEY, ROBERT    506, 853")
+  // from reading as headers and inventing an author.
+  const AUTHOR =
+    /^([A-Z][A-Z .,'&()-]{2,60}?)\.?(?:\[[\d-]+\])?\s+(?:_?Circa_?\s+)?(?=[^\d]*\d)[\d– .-]{3,}\s*$/;
+
+  // Some headers carry no dates at all — BARTHOLOMEW DOWLING, COLONEL BLACKER,
+  // FRANCIS M. FINCH. Requiring dates missed them, and the quotes underneath
+  // went out under whoever came before.
+  const DATELESS = /^([A-Z][A-Z .,'&()-]{2,60})\.\s*$/;
+  // The same shape is used for the book's own divisions, and a quote filed
+  // under one of these has no author to name. Better to drop it than to invent
+  // an attribution or, worse, keep the previous one.
+  const SECTIONS = new Set([
+    'BY JOHN BARTLETT',
+    'ANONYMOUS BOOKS CITED',
+    'MISCELLANEOUS',
+    'MISCELLANEOUS TRANSLATIONS',
+    'OF UNKNOWN AUTHORSHIP',
+    'FOOTNOTES',
+    'INDEX',
+    'CONTENTS',
+    'PREFACE',
+    'APPENDIX',
+  ]);
   const out = [];
   let author = null;
   let inFootnotes = false;
@@ -136,15 +172,21 @@ function parseBartletts(path) {
     block = [];
   };
 
+  const titleCase = (name) =>
+    name
+      .toLowerCase()
+      .replace(/\b[a-z]/g, (c) => c.toUpperCase())
+      .replace(/\b(De|La|Le|Von|Van|Of|The|And)\b/g, (w) => w.toLowerCase())
+      .trim();
+
   for (const line of lines) {
-    const m = line.match(AUTHOR);
+    const m = line.match(AUTHOR) ?? line.match(DATELESS);
     if (m) {
       flush();
-      author = m[1]
-        .toLowerCase()
-        .replace(/\b[a-z]/g, (c) => c.toUpperCase())
-        .replace(/\b(De|La|Le|Von|Van|Of|The)\b/g, (w) => w.toLowerCase())
-        .trim();
+      // A division of the book, not a person: drop the author entirely so the
+      // quotes beneath it are skipped rather than credited to the last name
+      // seen.
+      author = SECTIONS.has(m[1].trim()) ? null : titleCase(m[1]);
       inFootnotes = false;
       continue;
     }
@@ -163,8 +205,22 @@ function parseBartletts(path) {
 
 function parseInaugurals(path) {
   const lines = gutenbergBody(path).split(/\r?\n/);
+  // Three header shapes, and the same silent failure as Bartlett's: an
+  // unmatched header leaves the previous president's name on everything that
+  // follows. Obama's addresses are titled the other way round and carry no
+  // date, which is how two of his lines went out as George W. Bush.
+  //
+  //   Ronald Reagan First Inaugural Address Tuesday, January 20, 1981
+  //   Bill Clinton Second Inaugural Address January 20, 1997     (no weekday)
+  //   Franklin D. Roosevelt Second Inaugural Address Wednesday, January 20,
+  //                                                    (year wrapped to next line)
+  //   Inaugural Address by President Barack Obama       (name last, no date)
   const HEADER =
-    /^(.{3,60}?)\s+(?:First|Second|Third|Fourth)?\s*Inaugural Address\s+(?:Mon|Tues|Wednes|Thurs|Fri|Satur|Sun)day,.*\b(\d{4})\s*$/;
+    /^(.{3,60}?)\s+(?:First|Second|Third|Fourth)?\s*Inaugural Address\b(?:\s+(?:Mon|Tues|Wednes|Thurs|Fri|Satur|Sun)day,)?\s*(?:[A-Z][a-z]+ \d{1,2},?\s*(?:\d{4})?)?\s*$/;
+  // "Inaugural Address by President Barack Obama", and the newspaper-style
+  // "Text of President Barack Obama's second inaugural address".
+  const HEADER_BY =
+    /^(?:Text of )?(?:Inaugural Address by )?President ([A-Z][^']{2,40}?)(?:'s)?(?:\s+(?:first|second))?\s*(?:inaugural address\b.*)?$/i;
   // a sentence that leans on its neighbours reads as a fragment once alone
   const DANGLING =
     /^(And|But|Or|Nor|Yet|So|For|That|This|These|Those|It|Its|They|Their|He|His|She|Her|There(fore)?|Thus|Hence|Moreover|Nevertheless|Instead|Finally|Second|Third)\b/;
@@ -184,11 +240,18 @@ function parseInaugurals(path) {
   };
 
   for (const line of lines) {
-    const m = line.match(HEADER);
-    if (m && /^\S/.test(line)) {
-      flush();
-      author = m[1].trim();
-      continue;
+    if (/^\S/.test(line) && /inaugural address/i.test(line)) {
+      const m = line.match(HEADER) ?? line.match(HEADER_BY);
+      if (m) {
+        flush();
+        author = m[1].trim();
+        continue;
+      }
+      // Better to stop than to keep silently crediting the last president.
+      // The front matter mentions the phrase in passing, so only lines that
+      // look like a title count.
+      if (/^(Text of |Inaugural Address by )/i.test(line))
+        throw new Error(`unparsed inaugural header: ${line}`);
     }
     if (/^\s*$/.test(line)) flush();
     else if (author) paragraph.push(line.trim());
