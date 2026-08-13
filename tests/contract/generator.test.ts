@@ -15,7 +15,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { countSolutions, indexWords } from '../../scripts/squares.mjs';
 // the tier's own variant list, so the contract can't drift from the generator
 // @ts-expect-error plain-JS module without a declaration file
-import { TIER_VARIANTS } from '../../scripts/cryptogram.mjs';
+import { livePassages, TIER_BAND, TIER_VARIANTS } from '../../scripts/cryptogram.mjs';
 
 const run = promisify(execFile);
 
@@ -427,6 +427,66 @@ describe('cryptogram', () => {
       expect(new Set(texts).size, `cryptogram pool ${d} repeats itself`).toBe(texts.length);
       for (const t of texts) expect(dailies.has(t), `pool ${d} spoils a daily`).toBe(false);
     }
+  });
+
+  // Length is a difficulty dial: forty letters is a poorer likeness of English
+  // than eighty, so there is less for frequency and shape to bite on. Extreme
+  // plays the short band and the other two do not, and a board that drifted
+  // across would be quietly easier or harder than its tier claims.
+  const LETTERS = (t: string) => t.toLowerCase().replace(/[^a-z]/g, '').length;
+  const BOUNDS = { standard: [50, 100], short: [35, 49] } as const;
+
+  // Stated outright, because every assertion below reads its expectation out
+  // of TIER_BAND — which makes them agree with whatever it says. They pin that
+  // the generator obeys the table; this pins what the table is meant to say.
+  it('gives the short band to extreme and nobody else', () => {
+    expect(TIER_BAND).toEqual({ easy: 'standard', hard: 'standard', extreme: 'short' });
+  });
+
+  it('plays each difficulty from its own length band', () => {
+    for (const v of VARIANTS) {
+      for (const d of DIFFICULTIES) {
+        const [lo, hi] = BOUNDS[TIER_BAND[d] as keyof typeof BOUNDS];
+        const n = LETTERS(decode(feed(v, 'cryptogram').byDifficulty[d].answer).text as string);
+        expect(n, `${v}cryptogram ${d} is ${TIER_BAND[d]}`).toBeGreaterThanOrEqual(lo);
+        expect(n, `${v}cryptogram ${d} is ${TIER_BAND[d]}`).toBeLessThanOrEqual(hi);
+      }
+    }
+  });
+
+  it('practises on the band it plays', () => {
+    for (const d of DIFFICULTIES) {
+      const [lo, hi] = BOUNDS[TIER_BAND[d] as keyof typeof BOUNDS];
+      for (const b of feeds.get('cryptogram-pool')!.byDifficulty[d] as Feed[]) {
+        const n = LETTERS(decode(b.answer).text as string);
+        expect(n, `cryptogram pool ${d}`).toBeGreaterThanOrEqual(lo);
+        expect(n, `cryptogram pool ${d}`).toBeLessThanOrEqual(hi);
+      }
+    }
+  });
+
+  // The bands are separate pools rather than one pool with a filter, and that
+  // is load-bearing: the standard pool has to keep dealing easy and hard the
+  // passages it dealt yesterday, which it only does while its own contents and
+  // order are untouched by whatever the short harvest added.
+  it('keeps the two bands disjoint, and every passage inside its own band', async () => {
+    const parsed = JSON.parse(await readFile('scripts/cryptogram-passages.json', 'utf8'));
+    const standard = livePassages(parsed, 'standard');
+    const short = livePassages(parsed, 'short');
+    expect(short.length, 'the short band is stocked').toBeGreaterThan(100);
+    for (const [band, pool] of [
+      ['standard', standard],
+      ['short', short],
+    ] as const) {
+      const [lo, hi] = BOUNDS[band];
+      for (const q of pool) {
+        const n = LETTERS(q.text as string);
+        expect(n, `${band}: ${q.text}`).toBeGreaterThanOrEqual(lo);
+        expect(n, `${band}: ${q.text}`).toBeLessThanOrEqual(hi);
+      }
+    }
+    const texts = new Set(standard.map((q: Feed) => q.text as string));
+    for (const q of short) expect(texts.has(q.text as string), 'a passage in both bands').toBe(false);
   });
 
   // The pool walks the tier's variants in turn rather than drawing at random,

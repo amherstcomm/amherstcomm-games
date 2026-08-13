@@ -13,6 +13,7 @@ import {
   generateCryptogram,
   livePassages,
   permutedIndex,
+  TIER_BAND,
   TIER_VARIANTS,
 } from './cryptogram.mjs';
 
@@ -167,11 +168,21 @@ const etDate =
 // the cryptogram walks its pool by day number, so the date becomes one
 const epochDay = Math.floor(Date.parse(`${etDate}T12:00:00Z`) / 86_400_000);
 
-// The curated passage pool, human holds excluded. Loaded whole: 2,590
+// The curated passage pools, human holds excluded. Loaded whole: 2,590
 // passages is a word list, not a corpus.
-const passagePool = livePassages(
-  JSON.parse(readFileSync(new URL('./cryptogram-passages.json', import.meta.url), 'utf8'))
+//
+// Two pools, not one: easy and hard share the standard band, extreme plays the
+// short one. Keeping them separate is what lets the short harvest land without
+// moving anybody's puzzle — the standard pool is the same 2,590 entries in the
+// same order, so the walk below deals it exactly as it did before.
+const parsedPassages = JSON.parse(
+  readFileSync(new URL('./cryptogram-passages.json', import.meta.url), 'utf8')
 );
+const passagePools = {
+  standard: livePassages(parsedPassages, 'standard'),
+  short: livePassages(parsedPassages, 'short'),
+};
+const poolFor = (difficulty) => passagePools[TIER_BAND[difficulty]];
 
 // Three difficulties, and they don't all mean the same thing. Guess, Hive,
 // Boxed and Scramble vary by word tier; Grid varies only by what it accepts,
@@ -655,11 +666,15 @@ for (const variant of ['', 'dev']) {
   // cryptogram: a passage per difficulty under a fresh substitution cipher.
   // The passage pick walks ONE permutation per cycle with the difficulties
   // offset a third of the pool apart — same-day difficulties can never
-  // collide, and no difficulty repeats a passage inside a pool-sized window
-  // (seven years). The cipher and reveals are then seeded per date and
-  // difficulty like every other game.
+  // collide, and no difficulty repeats a passage inside a pool-sized window:
+  // seven years for easy and hard, and a little under a year for extreme,
+  // whose short band is 350 passages rather than 2,590. Extreme cannot collide
+  // with the other two at all now, since it is reading a different pool.
+  // The cipher and reveals are then seeded per date and difficulty like every
+  // other game.
   const cryptogramByDifficulty = {};
   DIFFICULTIES.forEach((difficulty, di) => {
+    const passagePool = poolFor(difficulty);
     const position = epochDay + di * Math.floor(passagePool.length / 3);
     const cycle = cycleOf(position, passagePool.length);
     // seeded by the cycle, not the date: every day in a cycle must deal the
@@ -793,9 +808,11 @@ console.log(
 // shared practice pool for cryptogram: both variants' daily passages are held
 // out so practice never spoils a daily, same as weave's themes.
 const cgPoolRng = mulberry32(xmur3(`${SEED_SALT}anagrimoire-cryptogram-pool-${etDate}`)());
-const cgPoolPassages = passagePool.filter((p) => !dailyCryptogramTexts.has(p.text));
 const cryptogramPoolByDifficulty = { easy: [], hard: [], extreme: [] };
 for (const difficulty of DIFFICULTIES) {
+  // practice draws from the same band the difficulty plays, or extreme would
+  // rehearse on passages half again as long as the ones it serves
+  const cgPoolPassages = poolFor(difficulty).filter((p) => !dailyCryptogramTexts.has(p.text));
   const used = new Set();
   const options = TIER_VARIANTS[difficulty];
   for (let i = 0; i < 10; i++) {

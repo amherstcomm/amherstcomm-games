@@ -18,5 +18,8 @@
     "noUnusedParameters": false,
     "noFallthroughCasesInSwitch": true
   },
-  "include": ["vite.config.ts"]
+  // The build-time TypeScript in scripts/ belongs here too. It imports from
+  // src/, so without a project covering it a change to a solver signature
+  // would break the harvest and nothing would say so until someone ran it.
+  "include": ["vite.config.ts", "scripts/**/*.ts"]
 }
