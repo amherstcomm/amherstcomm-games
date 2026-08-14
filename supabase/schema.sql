@@ -847,25 +847,42 @@ begin
       from jsonb_array_elements_text(p_state->'chain') with ordinality as t(w, ord);
       if rungs is null or array_length(rungs, 1) is null then return false; end if;
 
-      if board is not null and board ? 'from' and board ? 'to' then
-        -- the ends come from the puzzle, so a client cannot mark itself right
-        -- on a ladder it was never set
-        prev := lower(board->>'from');
+    -- The ends come from the puzzle when we hold it, and from the claim itself
+    -- when we do not. The puzzle's copy is ground truth: a client cannot mark
+    -- itself right on a ladder it was never set. The claim's copy proves less —
+    -- a liar can move both ends — but it still has to agree with its own rungs,
+    -- and a chain that does not start one letter from the word it says it
+    -- started at is refused either way. Reading only the puzzle's copy let
+    -- `cold` to `warm` pass with a chain of `ward, warm`, because with no row
+    -- in daily_puzzles nothing was comparing the first rung to anything.
+    declare
+      claim_from text := lower(coalesce(board->>'from', p_state->>'from', ''));
+      claim_to text := lower(coalesce(board->>'to', p_state->>'to', ''));
+      -- state is whatever the client sent, so the cast is guarded: a `par` of
+      -- "many" would otherwise raise out of a function the leaderboard calls
+      -- once per row
+      claim_par_text text := coalesce(board->>'par', p_state->>'par', '');
+      claim_par int := 0;
+    begin
+      if claim_par_text ~ '^[0-9]+$' then claim_par := claim_par_text::int; end if;
+      if claim_from <> '' then
+        prev := claim_from;
         first_from := 1;
-        if rungs[array_length(rungs, 1)] is distinct from lower(board->>'to') then
-          return false;
-        end if;
-        -- par is the shortest route that exists; beating it means the chain
-        -- is not a chain, or not this puzzle's
-        if board ? 'par' and array_length(rungs, 1) < (board->>'par')::int then
-          return false;
-        end if;
       else
-        -- no puzzle row: the rungs can still be checked against each other,
-        -- which is most of the claim
         prev := rungs[1];
         first_from := 0;
       end if;
+
+      if claim_to <> '' and rungs[array_length(rungs, 1)] is distinct from claim_to then
+        return false;
+      end if;
+
+      -- par is the shortest route that exists, so a shorter chain is not a
+      -- chain — or not this puzzle's
+      if claim_par > 0 and array_length(rungs, 1) < claim_par then
+        return false;
+      end if;
+    end;
 
       for i in 1 .. array_length(rungs, 1) loop
         -- a rung has to be a word at this row's cut, and never a slur
