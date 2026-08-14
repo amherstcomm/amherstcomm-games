@@ -6,7 +6,7 @@
 // Regulars who don't want a lobby can set Settings -> Site -> Start on to a
 // game and never see this again.
 
-import { Grid3x3, Hexagon, KeyRound, LayoutGrid, Puzzle, Shuffle, Square, Table2, Trophy } from 'lucide-react';
+import { ArrowDownUp, Grid3x3, Hexagon, KeyRound, LayoutGrid, Puzzle, Shuffle, Square, Table2, Trophy } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { MODE_SLUG, pathOf, SLUG_NAME, type Slug } from '@/routes';
 import { difficulty, onDifficultyChange } from '@/difficulty';
@@ -33,6 +33,7 @@ const ICONS: Record<Slug, typeof Grid3x3> = {
   weave: Puzzle,
   squares: Table2,
   cryptogram: KeyRound,
+  ladder: ArrowDownUp,
 };
 
 // One line each, written for somebody who has never seen the game.
@@ -45,6 +46,7 @@ const BLURB: Record<Slug, string> = {
   weave: 'Find the words hiding in the board, all on a theme you have to work out.',
   squares: 'Fill the grid so every row and every column spells a word.',
   cryptogram: 'A short passage with every letter swapped for another. Work out which is which.',
+  ladder: 'Turn one word into another, changing a single letter at a time.',
 };
 
 const NUMBER_WORD: Record<number, string> = {

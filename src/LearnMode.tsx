@@ -11,6 +11,7 @@ import {
 } from 'react';
 import { CornerDownLeft, Delete, RefreshCw, RotateCcw } from 'lucide-react';
 import MobileKeyInput from '@/MobileKeyInput';
+import { isStep } from '@/ladder';
 import { findGridPath, solveGrid, gridNeighbors } from '@/solvers';
 import type { Mode } from '@/storage';
 import { colorWords, type ColorWords, type Palette } from '@/theme';
@@ -1836,7 +1837,162 @@ const TITLES: Record<Mode, string> = {
   weave: 'Weave',
   squares: 'Word Squares',
   cryptogram: 'Cryptogram',
+  ladder: 'Word Ladder',
 };
+
+function LearnLadder({
+  dict,
+  register,
+}: {
+  dict: Set<string> | null;
+  register: RegisterKeys;
+}) {
+  // A real ladder, played the way the board plays: type a rung, press Enter,
+  // and a rung that breaks a rule comes back with the rule it broke. COLD to
+  // WARM is Carroll's own, and it is four steps, so the whole lesson fits on
+  // one screen.
+  const FROM = 'cold';
+  const TO = 'warm';
+  const PAR = 4;
+
+  const [chain, setChain] = useState<string[]>([]);
+  const [current, setCurrent] = useState('');
+  const [flash, show] = useFlash();
+
+  const last = chain.length ? chain[chain.length - 1] : FROM;
+  const solved = chain.length > 0 && chain[chain.length - 1] === TO;
+
+  const submit = () => {
+    if (solved) return;
+    const w = current.toLowerCase();
+    if (!w) return;
+    if (w.length !== FROM.length) {
+      show(`${FROM.length} letters — ${w.toUpperCase()} has ${w.length}`);
+      return;
+    }
+    if (w === last || chain.includes(w) || w === FROM) {
+      show('Already used — a ladder cannot revisit a rung');
+      return;
+    }
+    if (!isStep(last, w)) {
+      show(`Change exactly one letter of ${last.toUpperCase()}`);
+      return;
+    }
+    if (dict && !dict.has(w)) {
+      show(`${w.toUpperCase()} is not in the word list`);
+      return;
+    }
+    setChain((c) => [...c, w]);
+    setCurrent('');
+    show(w === TO ? 'That is the ladder!' : 'Good rung', true);
+  };
+
+  const handleKey = (k: string) => {
+    if (solved) return;
+    if (k === 'enter') submit();
+    else if (k === 'backspace') setCurrent((c) => c.slice(0, -1));
+    else if (/^[a-z]$/.test(k)) setCurrent((c) => (c.length < FROM.length ? c + k : c));
+  };
+  useDemoKeys(register, handleKey);
+
+  return (
+    <>
+      <Section title="The goal">
+        <p className="text-sm text-slate-300 max-w-lg mx-auto">
+          Turn the first word into the last, changing one letter at a time. Every rung has to be
+          a real word, and the board tells you the fewest steps it can be done in.
+        </p>
+      </Section>
+
+      <Section title="Try it — COLD to WARM in four">
+        <p className="text-sm text-slate-400 mb-4">
+          Type a word and press Enter. One letter changes each time, and each rung has to be a
+          word of its own. (Stuck? CORD is a good first move.)
+        </p>
+
+        <ol className="space-y-1.5 mb-3">
+          <li className="text-center text-lg font-bold uppercase tracking-widest text-white">
+            {FROM}
+          </li>
+          {chain.map((w, i) => (
+            <li
+              key={`${w}-${i}`}
+              className="text-center text-lg font-bold uppercase tracking-widest text-emerald-300"
+            >
+              {w}
+            </li>
+          ))}
+          {!solved && (
+            <li className="relative mx-auto max-w-[10rem] h-11 rounded-xl bg-white/5 border-2 border-amber-400/50 flex items-center justify-center overflow-hidden">
+              <span className="text-lg font-bold uppercase tracking-widest text-white">
+                {current}
+                <span className="text-accent animate-pulse">|</span>
+              </span>
+              <MobileKeyInput onKey={handleKey} />
+            </li>
+          )}
+          {/* once the last rung IS the target, the target line would print it
+              a second time */}
+          {!solved && (
+            <li className="text-center text-lg font-bold uppercase tracking-widest text-white">
+              {TO}
+            </li>
+          )}
+        </ol>
+
+        <p aria-live="polite" className="min-h-[1.25rem] text-center text-xs mb-3">
+          {flash && (
+            <span className={flash.good ? 'text-emerald-300' : 'text-amber-300'}>{flash.text}</span>
+          )}
+        </p>
+
+        <div className="flex flex-wrap items-center justify-center gap-2.5">
+          <DemoButton onClick={() => setCurrent((c) => c.slice(0, -1))} ariaLabel="Delete letter">
+            <Delete className="w-4 h-4" />
+          </DemoButton>
+          <DemoButton onClick={submit}>
+            <CornerDownLeft className="w-4 h-4" />
+          </DemoButton>
+          <DemoButton
+            onClick={() => {
+              setChain([]);
+              setCurrent('');
+            }}
+          >
+            Start over
+          </DemoButton>
+        </div>
+
+        <p className="mt-3 text-center text-xs text-slate-500">
+          {solved
+            ? `${chain.length} steps${chain.length === PAR ? ' — par' : `, par is ${PAR}`}.`
+            : `${chain.length} of ${PAR} steps used.`}
+        </p>
+      </Section>
+
+      <Section title="The rules">
+        <Rules
+          items={[
+            'Exactly one letter changes per rung, and the word stays the same length throughout.',
+            'Every rung has to be a word in the list for the difficulty you are playing.',
+            'A rung cannot repeat one you have already used — a ladder that revisits a word is going backwards.',
+            'A word that breaks a rule is refused rather than kept, and the board says which rule it was.',
+            'Par is the shortest possible route, so matching it is the good result.',
+            'Difficulty is distance, not vocabulary: easy is three or four steps, extreme is seven or eight, and the words stay ordinary at every level.',
+          ]}
+        />
+      </Section>
+
+      <Section title="Where the pairs come from">
+        <p className="text-sm text-slate-300 max-w-lg mx-auto">
+          The two ends are always related — opposites, or a cause and its effect, or a part and
+          its whole. Nothing on the board says which, because both words are in front of you and
+          the connection is the sort of thing you notice rather than need told.
+        </p>
+      </Section>
+    </>
+  );
+}
 
 const LearnMode = forwardRef<
   LearnModeHandle,
@@ -1868,6 +2024,7 @@ const LearnMode = forwardRef<
       {mode === 'weave' && <LearnWeave dict={dict} colors={colors} />}
       {mode === 'squares' && <LearnSquares dict={dict} register={register} />}
       {mode === 'cryptogram' && <LearnCryptogram register={register} />}
+      {mode === 'ladder' && <LearnLadder dict={dict} register={register} />}
 
       <p className="mt-2 text-xs text-slate-500 border-t border-white/10 pt-5 max-w-lg mx-auto">
         Daily puzzles refresh about 15 minutes after 3:00&nbsp;a.m. Eastern. Progress and stats

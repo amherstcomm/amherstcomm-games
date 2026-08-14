@@ -113,7 +113,22 @@ function cryptogramState(s: Store | null): DailyState {
   return state;
 }
 
+// One record per difficulty like squares and cryptogram, and "started" is a
+// rung committed rather than a letter typed — a ladder in progress is a list
+// of words, so its length is the whole story.
+function ladderState(s: Store | null): DailyState {
+  const boards = Object.values((s?.daily ?? {}) as Record<string, Record<string, unknown>>);
+  let state: DailyState = 'none';
+  for (const b of boards) {
+    if (!b) continue;
+    if (b.solved === true || b.revealed === true) return 'done';
+    if (Array.isArray(b.chain) && b.chain.length) state = 'started';
+  }
+  return state;
+}
+
 const READERS: Record<Mode, { key: string; state: (s: Store | null) => DailyState }> = {
+  ladder: { key: 'anagrimoire:ladder:v1', state: ladderState },
   squares: { key: 'anagrimoire:squares:v1', state: squaresState },
   cryptogram: { key: 'anagrimoire:cryptogram:v1', state: cryptogramState },
   pattern: { key: 'anagrimoire:play:v1', state: guessState },

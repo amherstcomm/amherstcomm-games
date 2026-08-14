@@ -49,6 +49,15 @@ export type LifetimeStats = {
     bestTimeMs: number | null;
     totalTimeMs: number;
   };
+  /** `inPar` is the ladder's own measure of a good game: solving it at all is
+   *  one thing, solving it in the fewest steps another. */
+  ladder: {
+    solved: number;
+    revealed: number;
+    inPar: number;
+    bestTimeMs: number | null;
+    totalTimeMs: number;
+  };
   /** kept per board size: a 4×4 and a 5×5 are different puzzles, and pooling
    *  their times makes an average that describes neither */
   squares: Record<SquareStatSize, SquaresStat>;
@@ -76,7 +85,8 @@ export type GameEvent =
   | { game: 'box'; payload: { words: number; timeMs: number } }
   | { game: 'weave'; payload: { solved: boolean; timeMs: number; hints: number } }
   | { game: 'squares'; payload: { solved: boolean; size: number; timeMs: number } }
-  | { game: 'cryptogram'; payload: { solved: boolean; timeMs: number } };
+  | { game: 'cryptogram'; payload: { solved: boolean; timeMs: number } }
+  | { game: 'ladder'; payload: { solved: boolean; steps: number; par: number; timeMs: number } };
 
 function num(v: unknown): number {
   return typeof v === 'number' && Number.isFinite(v) && v >= 0 ? v : 0;
@@ -134,6 +144,13 @@ function sanitizeBucket(p: any): LifetimeStats {
       revealed: num(p?.cryptogram?.revealed),
       bestTimeMs: numOrNull(p?.cryptogram?.bestTimeMs),
       totalTimeMs: num(p?.cryptogram?.totalTimeMs),
+    },
+    ladder: {
+      solved: num(p?.ladder?.solved),
+      revealed: num(p?.ladder?.revealed),
+      inPar: num(p?.ladder?.inPar),
+      bestTimeMs: numOrNull(p?.ladder?.bestTimeMs),
+      totalTimeMs: num(p?.ladder?.totalTimeMs),
     },
     squares: Object.fromEntries(
       SQUARE_STAT_SIZES.map((k) => [
@@ -232,6 +249,20 @@ export function applyEvent(s: LifetimeStats, e: GameEvent): void {
       }
       break;
     }
+    case 'ladder': {
+      const { solved, steps, par, timeMs } = e.payload;
+      if (solved) {
+        s.ladder.solved += 1;
+        if (steps <= par) s.ladder.inPar += 1;
+        s.ladder.totalTimeMs += num(timeMs);
+        if (s.ladder.bestTimeMs === null || timeMs < s.ladder.bestTimeMs) {
+          s.ladder.bestTimeMs = num(timeMs);
+        }
+      } else {
+        s.ladder.revealed += 1;
+      }
+      break;
+    }
     case 'cryptogram': {
       const { solved, timeMs } = e.payload;
       if (solved) {
@@ -309,6 +340,16 @@ export function applyDailySummary(s: LifetimeStats, game: string, p: any): void 
         s.weave.bestTimeMs = minNullable(s.weave.bestTimeMs, num(p?.timeMs));
       } else {
         s.weave.revealed += 1;
+      }
+      break;
+    case 'ladder':
+      if (p?.solved) {
+        s.ladder.solved += 1;
+        if (num(p?.steps) <= num(p?.par)) s.ladder.inPar += 1;
+        s.ladder.totalTimeMs += num(p?.timeMs);
+        s.ladder.bestTimeMs = minNullable(s.ladder.bestTimeMs, num(p?.timeMs));
+      } else {
+        s.ladder.revealed += 1;
       }
       break;
     case 'cryptogram':
@@ -389,6 +430,13 @@ export function combineStats(a: LifetimeStats, b: LifetimeStats): LifetimeStats 
       revealed: a.cryptogram.revealed + b.cryptogram.revealed,
       bestTimeMs: minNullable(a.cryptogram.bestTimeMs, b.cryptogram.bestTimeMs),
       totalTimeMs: a.cryptogram.totalTimeMs + b.cryptogram.totalTimeMs,
+    },
+    ladder: {
+      solved: a.ladder.solved + b.ladder.solved,
+      revealed: a.ladder.revealed + b.ladder.revealed,
+      inPar: a.ladder.inPar + b.ladder.inPar,
+      bestTimeMs: minNullable(a.ladder.bestTimeMs, b.ladder.bestTimeMs),
+      totalTimeMs: a.ladder.totalTimeMs + b.ladder.totalTimeMs,
     },
     squares: Object.fromEntries(
       SQUARE_STAT_SIZES.map((k) => [
@@ -522,6 +570,19 @@ export function recordCryptogramFinish(
   record(daily, { game: 'cryptogram', payload: { solved, timeMs } }, puzzleDate);
 }
 
+/** A ladder ends once, solved or given up on. `steps` rides along so par can
+ *  be counted without the stats needing to know which pair it was. */
+export function recordLadderFinish(
+  daily: boolean,
+  solved: boolean,
+  steps: number,
+  par: number,
+  timeMs: number,
+  puzzleDate: string | null = null
+): void {
+  record(daily, { game: 'ladder', payload: { solved, steps, par, timeMs } }, puzzleDate);
+}
+
 /** A squares board is over exactly once — solved or given up on — so both
  *  outcomes are one event, and `size` rides along because the 4x4 and the 5x5
  *  are separate puzzles on the same day. */
@@ -585,6 +646,7 @@ const KNOWN_GAMES = new Set<GameEvent['game']>([
   'weave',
   'squares',
   'cryptogram',
+  'ladder',
 ]);
 
 // sum of all device baselines + full event-log replay -> the account's
