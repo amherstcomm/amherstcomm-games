@@ -16,6 +16,10 @@ export const TILE_EMOJI: Record<Palette, Record<TileKind, string>> = {
   mono: { correct: '⬜', present: '🔳', absent: '⬛' },
   sepia: { correct: '🟩', present: '🟨', absent: '⬛' },
   ocean: { correct: '🟩', present: '🟨', absent: '⬛' },
+  forest: { correct: '🟩', present: '🟨', absent: '⬛' },
+  plum: { correct: '🟩', present: '🟨', absent: '⬛' },
+  graphite: { correct: '🟩', present: '🟨', absent: '⬛' },
+  ember: { correct: '🟩', present: '🟨', absent: '⬛' },
 };
 
 export const WEAVE_EMOJI: Record<Palette, { theme: string; span: string; hint: string }> = {
@@ -25,6 +29,10 @@ export const WEAVE_EMOJI: Record<Palette, { theme: string; span: string; hint: s
   mono: { theme: '⚪', span: '⚫', hint: '💡' },
   sepia: { theme: '🔵', span: '🟡', hint: '💡' },
   ocean: { theme: '🔵', span: '🟡', hint: '💡' },
+  forest: { theme: '🔵', span: '🟡', hint: '💡' },
+  plum: { theme: '🔵', span: '🟡', hint: '💡' },
+  graphite: { theme: '🔵', span: '🟡', hint: '💡' },
+  ember: { theme: '🔵', span: '🟡', hint: '💡' },
 };
 
 export type SharePayload = { title: string; text: string; url: string };

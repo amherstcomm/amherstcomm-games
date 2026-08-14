@@ -68,6 +68,58 @@ describe('decorative palettes', () => {
   });
 });
 
+describe('monochrome', () => {
+  // Weave paints its spangram amber-400 and its theme words sky-400, at 50%
+  // and 40% over the page. Nine palettes tell those apart by hue; this one has
+  // none to spend, so the entire distinction is lightness — and light mode had
+  // amber at 124 against sky at 136, which composited to a difference of
+  // seventeen out of 255. On the palette that exists for people who cannot use
+  // hue, the two states of the board looked identical.
+  //
+  // Amber is pinned: 124 is the floor at which a full-opacity fill still
+  // carries dark ink at 4.5:1. So the separation has to come from sky.
+  const val = (selector: string, name: string) => {
+    const m = blockFor(selector).match(new RegExp(`${name}:\\s*(\\d+) (\\d+) (\\d+)`));
+    if (!m) return null;
+    return [Number(m[1]), Number(m[2]), Number(m[3])] as [number, number, number];
+  };
+  const lum = ([r, g, b]: [number, number, number]) => {
+    const f = (c: number) => (c / 255 <= 0.03928 ? c / 255 / 12.92 : ((c / 255 + 0.055) / 1.055) ** 2.4);
+    return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b);
+  };
+  const over = (fg: [number, number, number], a: number, bg: [number, number, number]) =>
+    fg.map((c, i) => a * c + (1 - a) * bg[i]) as [number, number, number];
+
+  it('keeps the spangram and a theme word apart by lightness in both themes', () => {
+    for (const [theme, selectors] of [
+      ['dark', [":root[data-palette='mono']", ":root[data-theme='dark']"]],
+      [
+        'light',
+        [
+          ":root[data-theme='light'][data-palette='mono']",
+          ":root[data-palette='mono']",
+          ":root[data-theme='light']",
+        ],
+      ],
+    ] as const) {
+      // first block that declares it wins, most specific first
+      const pick = (name: string) => {
+        for (const s of selectors) {
+          const v = val(s, name);
+          if (v) return v;
+        }
+        throw new Error(`${name} not found for ${theme}`);
+      };
+      const page = pick('--c-slate-950');
+      const span = over(pick('--c-amber-400'), 0.5, page);
+      const word = over(pick('--c-sky-400'), 0.4, page);
+      const [hi, lo] = [lum(span), lum(word)].sort((a, b) => b - a);
+      const ratio = (hi + 0.05) / (lo + 0.05);
+      expect(ratio, `mono on ${theme}: spangram and theme word are ${ratio.toFixed(2)} apart`).toBeGreaterThan(1.4);
+    }
+  });
+});
+
 describe('palette swatches', () => {
   it('offers a swatch for every palette, and no others', () => {
     expect(Object.keys(PALETTE_SWATCHES).sort()).toEqual([...PALETTES].sort());

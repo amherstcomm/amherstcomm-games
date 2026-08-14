@@ -10,22 +10,50 @@ export type ThemeMode = 'system' | 'light' | 'dark';
 // panels and text tiers and leave the meaning-carrying hues alone. They share
 // this axis with the accommodations, so choosing one gives up the other; the
 // Settings list keeps them in separate groups and says so.
-export type Palette = 'default' | 'deuter' | 'tritan' | 'mono' | 'sepia' | 'ocean';
+export type Palette =
+  | 'default'
+  | 'deuter'
+  | 'tritan'
+  | 'mono'
+  | 'sepia'
+  | 'ocean'
+  | 'forest'
+  | 'plum'
+  | 'graphite'
+  | 'ember';
 // every size in the app is in rem, so scaling the root scales all of it
 export type TextScale = 'normal' | 'large' | 'larger';
 
 export const THEME_MODES: ThemeMode[] = ['system', 'light', 'dark'];
-export const PALETTES: Palette[] = ['default', 'deuter', 'tritan', 'mono', 'sepia', 'ocean'];
+export const PALETTES: Palette[] = [
+  'default',
+  'deuter',
+  'tritan',
+  'mono',
+  'sepia',
+  'ocean',
+  'forest',
+  'plum',
+  'graphite',
+  'ember',
+];
 /** the ones that exist for colour vision, as opposed to for looks */
 export const ACCESSIBLE_PALETTES: Palette[] = ['default', 'deuter', 'tritan', 'mono'];
 
-/** What to call a colour in copy, per palette.
+/** What to call a colour in copy, per palette — and, for one of them, per
+ *  theme as well.
  *
- *  "Must use the amber center letter" is true of one palette in six. Under
- *  Red-green friendly that letter is orange; under Monochrome it is a pale
- *  grey, and the whole point of that palette is that there is no hue to name.
- *  Prose that hardcodes a colour is wrong for everyone not using the default,
- *  and silently — the sentence still reads perfectly well.
+ *  "Must use the amber center letter" is true of one palette in ten. Under
+ *  Red-green friendly that letter is orange; under Monochrome it is a grey,
+ *  and the whole point of that palette is that there is no hue to name. Prose
+ *  that hardcodes a colour is wrong for everyone not using the default, and
+ *  silently — the sentence still reads perfectly well.
+ *
+ *  Monochrome needs the theme too, which the first version of this missed. A
+ *  hue survives the light switch: amber is amber on either page. A *lightness*
+ *  does not. Every mono tile that reads as the light one on a dark page reads
+ *  as the dark one on a light page, so "the spangram locks in white" was
+ *  describing, to someone on a light page, the tile that is nearly black.
  *
  *  `key` is the amber-400 family: the letter a word must use, the cell that is
  *  selected. `right` and `wrong` are the found/rejected pair, `span` and
@@ -38,7 +66,7 @@ export type ColorWords = {
   key: string;
 };
 
-export const COLOR_WORDS: Record<Palette, ColorWords> = {
+const BASE_WORDS: Record<Palette, ColorWords> = {
   default: { right: 'green', wrong: 'amber', span: 'gold', theme: 'blue', key: 'amber' },
   deuter: { right: 'blue', wrong: 'orange', span: 'orange', theme: 'light blue', key: 'orange' },
   tritan: {
@@ -60,7 +88,25 @@ export const COLOR_WORDS: Record<Palette, ColorWords> = {
   // for them are the default words
   sepia: { right: 'green', wrong: 'amber', span: 'gold', theme: 'blue', key: 'amber' },
   ocean: { right: 'green', wrong: 'amber', span: 'gold', theme: 'blue', key: 'amber' },
+  forest: { right: 'green', wrong: 'amber', span: 'gold', theme: 'blue', key: 'amber' },
+  plum: { right: 'green', wrong: 'amber', span: 'gold', theme: 'blue', key: 'amber' },
+  graphite: { right: 'green', wrong: 'amber', span: 'gold', theme: 'blue', key: 'amber' },
+  ember: { right: 'green', wrong: 'amber', span: 'gold', theme: 'blue', key: 'amber' },
 };
+
+/** Monochrome on a light page, where every lightness above is upside down. */
+const MONO_LIGHT: ColorWords = {
+  right: 'the dark tile',
+  wrong: 'the mid-grey tile',
+  span: 'the darkest tile',
+  theme: 'a paler grey',
+  key: 'mid grey',
+};
+
+/** The words for a palette as it is actually being shown. */
+export function colorWords(palette: Palette, theme: 'light' | 'dark'): ColorWords {
+  return palette === 'mono' && theme === 'light' ? MONO_LIGHT : BASE_WORDS[palette];
+}
 
 /** The four colours each palette shows in its row in Settings.
  *
@@ -86,6 +132,10 @@ export const PALETTE_SWATCHES: Record<Palette, string[]> = {
   mono: ['235 235 235', '210 210 210', '165 165 165', '150 150 150'],
   sepia: ['245 176 65', '184 167 143', '79 66 50', '38 31 22'],
   ocean: ['94 214 226', '152 180 195', '33 70 94', '10 30 45'],
+  forest: ['122 205 158', '158 182 168', '46 74 59', '18 34 26'],
+  plum: ['209 160 233', '180 166 190', '78 58 90', '38 26 45'],
+  graphite: ['214 214 220', '173 173 178', '64 64 68', '29 29 31'],
+  ember: ['240 150 118', '188 166 158', '86 55 46', '43 25 21'],
 };
 export const TEXT_SCALES: TextScale[] = ['normal', 'large', 'larger'];
 export const TEXT_SCALE_PCT: Record<TextScale, string> = {
