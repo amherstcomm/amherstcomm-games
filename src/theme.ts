@@ -40,13 +40,20 @@ export const PALETTES: Palette[] = [
 /** the ones that exist for colour vision, as opposed to for looks */
 export const ACCESSIBLE_PALETTES: Palette[] = ['default', 'deuter', 'tritan', 'mono'];
 
-/** What to call a colour in copy, per palette.
+/** What to call a colour in copy, per palette — and, for one of them, per
+ *  theme as well.
  *
- *  "Must use the amber center letter" is true of one palette in six. Under
- *  Red-green friendly that letter is orange; under Monochrome it is a pale
- *  grey, and the whole point of that palette is that there is no hue to name.
- *  Prose that hardcodes a colour is wrong for everyone not using the default,
- *  and silently — the sentence still reads perfectly well.
+ *  "Must use the amber center letter" is true of one palette in ten. Under
+ *  Red-green friendly that letter is orange; under Monochrome it is a grey,
+ *  and the whole point of that palette is that there is no hue to name. Prose
+ *  that hardcodes a colour is wrong for everyone not using the default, and
+ *  silently — the sentence still reads perfectly well.
+ *
+ *  Monochrome needs the theme too, which the first version of this missed. A
+ *  hue survives the light switch: amber is amber on either page. A *lightness*
+ *  does not. Every mono tile that reads as the light one on a dark page reads
+ *  as the dark one on a light page, so "the spangram locks in white" was
+ *  describing, to someone on a light page, the tile that is nearly black.
  *
  *  `key` is the amber-400 family: the letter a word must use, the cell that is
  *  selected. `right` and `wrong` are the found/rejected pair, `span` and
@@ -59,7 +66,7 @@ export type ColorWords = {
   key: string;
 };
 
-export const COLOR_WORDS: Record<Palette, ColorWords> = {
+const BASE_WORDS: Record<Palette, ColorWords> = {
   default: { right: 'green', wrong: 'amber', span: 'gold', theme: 'blue', key: 'amber' },
   deuter: { right: 'blue', wrong: 'orange', span: 'orange', theme: 'light blue', key: 'orange' },
   tritan: {
@@ -86,6 +93,20 @@ export const COLOR_WORDS: Record<Palette, ColorWords> = {
   graphite: { right: 'green', wrong: 'amber', span: 'gold', theme: 'blue', key: 'amber' },
   ember: { right: 'green', wrong: 'amber', span: 'gold', theme: 'blue', key: 'amber' },
 };
+
+/** Monochrome on a light page, where every lightness above is upside down. */
+const MONO_LIGHT: ColorWords = {
+  right: 'the dark tile',
+  wrong: 'the mid-grey tile',
+  span: 'the darkest tile',
+  theme: 'a paler grey',
+  key: 'mid grey',
+};
+
+/** The words for a palette as it is actually being shown. */
+export function colorWords(palette: Palette, theme: 'light' | 'dark'): ColorWords {
+  return palette === 'mono' && theme === 'light' ? MONO_LIGHT : BASE_WORDS[palette];
+}
 
 /** The four colours each palette shows in its row in Settings.
  *

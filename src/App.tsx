@@ -8,7 +8,7 @@ import { stashInvite } from '@/friends';
 import { OskContext } from '@/MobileKeyInput';
 import SettingsModal from '@/SettingsModal';
 import KeyboardHelp from '@/KeyboardHelp';
-import { COLOR_WORDS, PALETTES, PaletteContext, TEXT_SCALES, THEME_MODES, useTheme, type Palette, type TextScale, type ThemeMode } from '@/theme';
+import { colorWords, PALETTES, PaletteContext, resolveTheme, TEXT_SCALES, THEME_MODES, useTheme, type Palette, type TextScale, type ThemeMode } from '@/theme';
 import { PrefsContext } from '@/prefs';
 import OnboardingCard from '@/OnboardingCard';
 import { useModalA11y } from '@/useModalA11y';
@@ -1940,6 +1940,7 @@ function App() {
               mode={mode}
               standardWords={standardWordsArr}
               palette={palette}
+              theme={resolveTheme(theme)}
             />
           </div>
         )}
@@ -2648,7 +2649,7 @@ function App() {
             </p>
           )}
           <p className="mt-3 text-xs text-slate-500">
-            Words are 4+ letters, must use the {COLOR_WORDS[palette].key} center letter, and may repeat letters.
+            Words are 4+ letters, must use the {colorWords(palette, resolveTheme(theme)).key} center letter, and may repeat letters.
             Words using all seven letters are pangrams. Both today&apos;s puzzles become
             available about 15 minutes after 3:00&nbsp;a.m. Eastern.
           </p>

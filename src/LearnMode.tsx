@@ -13,7 +13,7 @@ import { CornerDownLeft, Delete, RefreshCw, RotateCcw } from 'lucide-react';
 import MobileKeyInput from '@/MobileKeyInput';
 import { findGridPath, solveGrid, gridNeighbors } from '@/solvers';
 import type { Mode } from '@/storage';
-import { COLOR_WORDS, type ColorWords, type Palette } from '@/theme';
+import { colorWords, type ColorWords, type Palette } from '@/theme';
 
 export type LearnModeHandle = { pressKey: (k: string) => void };
 
@@ -1840,10 +1840,10 @@ const TITLES: Record<Mode, string> = {
 
 const LearnMode = forwardRef<
   LearnModeHandle,
-  { mode: Mode; standardWords: string[] | null; palette: Palette }
->(function LearnMode({ mode, standardWords, palette }, ref) {
+  { mode: Mode; standardWords: string[] | null; palette: Palette; theme: 'light' | 'dark' }
+>(function LearnMode({ mode, standardWords, palette, theme }, ref) {
   const dict = useMemo(() => (standardWords ? new Set(standardWords) : null), [standardWords]);
-  const colors = COLOR_WORDS[palette];
+  const colors = colorWords(palette, theme);
 
   // the active demo registers its key handler here; the on-screen keyboard
   // reaches it through the imperative handle
