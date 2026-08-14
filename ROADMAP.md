@@ -755,11 +755,17 @@ is real and the pair is nonsense: a player sees two words with no visible
 connection, which is worse than ACTS to DIMS, since it looks like it was
 *trying* to mean something. Dropping it costs volume there is no shortage of.
 
-So the supply question is settled and the taste question mostly with it. What
-is left for someone who plays rather than counts: whether the relation should
-be *named* on the board ("opposites", "cause and effect") or left to be
-noticed, and whether a pair with two relations at once is a better puzzle or
-just a coincidence.
+**The relation stays out of the board.** Both ends are given — that is the
+puzzle — so COLD and WARM already say what they are to each other, and a label
+reading "opposites" is only worth printing if one end were hidden. Which
+settles the other question too: a daily names both words.
+
+That keeps the relation entirely generator-side. It decides which pairs are
+eligible and never reaches the client, so the feed carries what it would have
+carried anyway — two words and a par — with no new payload, no copy to keep in
+step with the palettes, and nothing to translate.
+
+Also open: whether par is shown or discovered.
 
 Also open: whether a daily names both ends or only the start, and whether par
 is shown or discovered.
