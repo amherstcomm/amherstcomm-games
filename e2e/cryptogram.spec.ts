@@ -105,3 +105,30 @@ test('the solver deduces from a pasted passage', async ({ page }) => {
   await expect(page.locator('main')).toContainText(/[1-9]\d* marks settled/, { timeout: 20000 });
   await expect(page.locator('main p.font-mono').first()).toContainText('success');
 });
+
+// The used-letter tracker is a row of struck-through glyphs, each aria-hidden
+// because read aloud it is twenty-six letters and no information. Hiding it
+// left nothing in its place, so the crossing-off a sighted player gets for
+// free was unavailable rather than differently available.
+test('the crossed-off alphabet has a spoken equivalent', async ({ page }) => {
+  await page.goto('/daily/cryptogram');
+  // easy is never homophonic, and the tracker is hidden on a board that is —
+  // a letter being used there says nothing about whether it can be used again
+  const open = page.getByRole('button', { name: /, unsolved/ }).first();
+  await expect(open).toBeVisible();
+
+  // A board opens with given letters, so the tracker is already saying
+  // something; there is no empty state to assert against.
+  const spoken = page.getByText(/Plaintext letters used:|No plaintext letters used yet\./);
+  await expect(spoken).toBeAttached();
+
+  // A non-homophonic board is a bijection, so typing a letter already spoken
+  // for is not a new fact. Pick one the board has not used.
+  const before = (await spoken.innerText()).toUpperCase();
+  const free = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('').find((l) => !before.includes(l));
+  expect(free, 'the board had already used every letter').toBeTruthy();
+
+  await open.click();
+  await page.keyboard.press((free as string).toLowerCase());
+  await expect(page.getByText(new RegExp(`Plaintext letters used:[^.]*${free}`))).toBeAttached();
+});

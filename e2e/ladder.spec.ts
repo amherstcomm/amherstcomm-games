@@ -55,3 +55,40 @@ test('mismatched lengths are refused before any search', async ({ page }) => {
   await page.getByRole('textbox', { name: 'to' }).fill('warmer');
   await expect(page.getByText('Both words have to be the same length.')).toBeVisible();
 });
+
+// The game used to speak only when it said no. Rungs land in a list that is
+// not a live region, and the one region it had was cleared to empty on a good
+// word — so a screen reader heard every rejection and never heard an
+// acceptance, a step count, or a win. Asserting on the announcement rather
+// than on the list, because the list was always right; it was the saying that
+// was missing.
+test('an accepted rung is announced, not just drawn', async ({ page }) => {
+  await page.goto('/daily/ladder');
+  const input = page.getByRole('textbox', { name: /next rung/ });
+  await expect(input).toBeVisible();
+
+  // The pair comes from a fixture regenerated off the live feed, so it changes
+  // by date — a hardcoded rung would pass today and rot tomorrow. Walk the
+  // first letter instead until one neighbour is taken; every legal ladder has
+  // at least one, or the board would be unsolvable.
+  const first = (await rungs(page).first().innerText()).toLowerCase().trim();
+  const add = page.getByRole('button', { name: 'Add rung' });
+  let accepted = '';
+  for (const c of 'abcdefghijklmnopqrstuvwxyz') {
+    if (c === first[0]) continue;
+    const candidate = c + first.slice(1);
+    await input.fill(candidate);
+    await add.click();
+    if (await rungs(page).filter({ hasText: candidate.toUpperCase() }).count()) {
+      accepted = candidate;
+      break;
+    }
+  }
+  expect(accepted, `no one-letter neighbour of ${first} was accepted`).not.toBe('');
+
+  // the rung is on the board, and something said so. sr-only, so this asserts
+  // presence rather than visibility.
+  await expect(
+    page.locator('[aria-live]').filter({ hasText: new RegExp(`${accepted} accepted, 1 of \\d+`) })
+  ).toHaveCount(1);
+});

@@ -120,6 +120,8 @@ const LadderGame = forwardRef<LadderGameHandle>(function LadderGame(_props, ref)
   const [dailyError, setDailyError] = useState(false);
   const [entry, setEntry] = useState('');
   const [refusal, setRefusal] = useState('');
+  // what a screen reader is told; the visible board is the sighted equivalent
+  const [spoken, setSpoken] = useState('');
   const [words, setWords] = useState<Set<string> | null>(null);
   const [pool, setPool] = useState<LadderRecord[] | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -268,6 +270,17 @@ const LadderGame = forwardRef<LadderGameHandle>(function LadderGame(_props, ref)
     }
     setRefusal('');
     setEntry('');
+    // The refusal line is the only thing this game ever said out loud, so a
+    // screen reader heard every rejected word and never heard an accepted one
+    // — the chain grew in silence, and solving it was silent too. Rungs land
+    // in a list that is not live, and a live region cleared to empty announces
+    // nothing. So success gets a voice of its own.
+    const at = record.chain.length + 1;
+    setSpoken(
+      candidate === record.to
+        ? `${candidate}. Solved in ${at} ${at === 1 ? 'step' : 'steps'}, par is ${record.par}.`
+        : `${candidate} accepted, ${at} of ${record.par}.`
+    );
     update((r) => {
       const chain = [...r.chain, candidate];
       return { ...r, chain, solved: candidate === r.to };
@@ -282,8 +295,11 @@ const LadderGame = forwardRef<LadderGameHandle>(function LadderGame(_props, ref)
     },
   }));
 
-  const stepBack = () =>
+  const stepBack = () => {
+    const at = Math.max(0, (record?.chain.length ?? 0) - 1);
+    setSpoken(`Rung removed, ${at} of ${record?.par ?? 0}.`);
     update((r) => ({ ...r, chain: r.chain.slice(0, -1), solved: false }));
+  };
 
   const reveal = () => {
     if (!record || !words) return;
@@ -297,6 +313,7 @@ const LadderGame = forwardRef<LadderGameHandle>(function LadderGame(_props, ref)
     setStore((prev) => ({ ...prev, practice: { ...pick, chain: [] } }));
     setEntry('');
     setRefusal('');
+    setSpoken('');
   };
 
   const steps = record?.chain.length ?? 0;
@@ -402,6 +419,9 @@ const LadderGame = forwardRef<LadderGameHandle>(function LadderGame(_props, ref)
 
       <p aria-live="polite" className="mt-2 min-h-[1.25rem] text-center text-xs text-amber-300">
         {refusal}
+      </p>
+      <p className="sr-only" aria-live="polite">
+        {spoken}
       </p>
 
       {!done && (
