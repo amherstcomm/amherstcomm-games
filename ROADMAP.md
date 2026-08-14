@@ -437,6 +437,23 @@ found what automation couldn't — the leaderboard cards were static text in a
 dialog, spoken on hover but unreachable by Tab, and now take focus. Worth
 re-walking after any new surface; axe still covers only the mechanical half.
 
+**Owed: an NVDA walk of the Cryptogram surfaces.** They shipped after that
+pass and no screen reader has been near them — the board, where the cursor is
+a position and every mark of the same letter fills at once; the mobile key
+overlay; the solver panel and its candidate lists; the Learn demo. It is the
+newest and by far the most keyboard-driven thing here, which is exactly the
+shape the last walk found a bug in.
+
+The case for doing it by ear rather than trusting the sweep got made in
+August 2026, on a different surface. Monochrome on a light page rendered
+Weave's spangram and its theme words seventeen values of grey apart, so the
+board could not say which word you had found — on the palette that exists for
+people who cannot use hue. Every automated check passed, and correctly:
+axe measures *text* contrast, and two adjacent tiles reading identically is
+non-text contrast, which it does not cover. It took someone looking at a
+screenshot. The equivalent problem on a cryptogram board would hide the same
+way.
+
 **The sweep now walks every route** (August 2026): 43, from 14. It had grown
 once already, to cover all eight dailies, and the comment it grew for said
 "every game's daily, not a sample of them" — true, and it read as
@@ -673,6 +690,57 @@ palettes and decorative ones sitting in one list invites someone to pick a
 seasonal theme and lose an accommodation they needed.
 
 ## New game modes
+
+### Word ladder (Doublets) — proposed August 2026
+Carroll's game: turn one word into another a letter at a time, every step a
+word. COLD, CORD, CARD, WARD, WARM.
+
+**It is the best fit measured so far, and the reason is that it is nothing but
+dictionary.** Every step is a vocabulary question, unlike Wordoku's nine cells
+of eighty-one or a fill-in crossword's zero. And it needs no corpus that isn't
+already here — no passages to harvest, no clues to review, no licence. The
+word bands are the whole game.
+
+Supply is not a constraint. Over the common tier: 1,880 four-letter words give
+**1.4 million pairs at least three steps apart**, and 3,462 five-letter words
+give 1.5 million — spread across ladder lengths three to eight, so difficulty
+is a dial rather than a search. Sixty-nine four-letter words have no neighbour
+at all and simply never appear as endpoints.
+
+It also lands where the other candidates strain:
+
+- *Verification is the strongest kind.* The claim is the ladder; the server
+  checks each rung is a word in the tier and differs from the last by one
+  letter, and that the ends are the ends. That is `result_is_plausible`'s
+  existing shape — arithmetic, dictionary, then the puzzle itself — with
+  nothing new invented.
+- *Difficulty falls out.* Ladder length for the shape, word band for the
+  vocabulary. Both already exist.
+- *It resumes.* A half-built ladder is a list of words, which is what
+  `daily_progress` already stores.
+- *It has an obvious Solve view*, which every game here has. Breadth-first
+  search returns the shortest ladder exactly — no heuristics, no "gave up".
+- *Scoring writes itself.* Shortest known ladder is par; beating par is a real
+  achievement and cheap to check.
+
+Open questions worth answering before building: whether a daily should name
+both ends or only the start; whether par should be shown or discovered; and
+whether the pair wants curating for sense — COLD to WARM is a better puzzle
+than ACTS to DIMS, and nothing in the measurement above knows the difference.
+
+**Checked and not proposed: a categories game from the domains map.** The
+`domains.json` this repo already ships looked like a free "odd one out", but
+they are WordNet's 26 lexicographer files and they are enormous — `artifact`
+alone covers 7,604 common words, `act` 6,783. Categories that broad make a
+puzzle either trivial or arbitrary. The data earns its place filtering words;
+it cannot carry a game.
+
+**Sketched, not measured: an acrostic.** The one idea that would use both
+corpora already here — a passage from the cryptogram pool, and clues from the
+WordNet glosses the Crossword entry found. Generation is the hard part and it
+is a real constraint problem: the quotation's letters have to partition into
+words that are themselves cluable, with the answers' initials spelling
+something. Worth a feasibility pass before it is worth more words than this.
 
 ### Word Tetris
 Falling letters you steer into words. A real-time game loop, unlike anything
