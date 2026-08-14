@@ -13,7 +13,7 @@ import { CornerDownLeft, Delete, RefreshCw, RotateCcw } from 'lucide-react';
 import MobileKeyInput from '@/MobileKeyInput';
 import { findGridPath, solveGrid, gridNeighbors } from '@/solvers';
 import type { Mode } from '@/storage';
-import type { Palette } from '@/theme';
+import { COLOR_WORDS, type ColorWords, type Palette } from '@/theme';
 
 export type LearnModeHandle = { pressKey: (k: string) => void };
 
@@ -191,15 +191,6 @@ function GuessRow({
 
 const GUESS_SECRET = 'grape';
 
-// the tile colors change with the palette, so the copy names them from the
-// active one rather than hardcoding "green" and "amber"
-type ColorWords = { right: string; wrong: string; span: string; theme: string };
-const COLOR_WORDS: Record<Palette, ColorWords> = {
-  default: { right: 'green', wrong: 'amber', span: 'gold', theme: 'blue' },
-  deuter: { right: 'blue', wrong: 'orange', span: 'orange', theme: 'light blue' },
-  tritan: { right: 'green', wrong: 'vermilion', span: 'vermilion', theme: 'pale cyan' },
-  mono: { right: 'the light tile', wrong: 'the mid-grey tile', span: 'white', theme: 'grey' },
-};
 
 const guessSteps = (c: ColorWords) => [
   {
@@ -531,7 +522,15 @@ function hiveScore(word: string): number {
   return (word.length === 4 ? 1 : word.length) + (pangram ? 7 : 0);
 }
 
-function LearnHive({ dict, register }: { dict: Set<string> | null; register: RegisterKeys }) {
+function LearnHive({
+  dict,
+  register,
+  colors,
+}: {
+  dict: Set<string> | null;
+  register: RegisterKeys;
+  colors: ColorWords;
+}) {
   const [current, setCurrent] = useState('');
   const [found, setFound] = useState<string[]>([]);
   const [flash, show] = useFlash();
@@ -575,7 +574,7 @@ function LearnHive({ dict, register }: { dict: Set<string> | null; register: Reg
     <>
       <Section title="The goal">
         <p className="text-sm text-slate-300 max-w-lg mx-auto">
-          Build words from seven letters. Every word must use the amber center letter, and
+          Build words from seven letters. Every word must use the {colors.key} center letter, and
           letters can be reused as often as you like.
         </p>
       </Section>
@@ -646,7 +645,7 @@ function LearnHive({ dict, register }: { dict: Set<string> | null; register: Reg
           items={[
             'Daily is our own generated hive — the same one for everyone, seeded from a pangram so one always exists. It is not the NYT’s puzzle.',
             'Practice deals unlimited fresh hives; Shuffle rearranges the outer letters for a new perspective.',
-            'Words are checked against the list for the difficulty you’re playing; rejected guesses collect in an amber list.',
+            'Words are checked against the list for the difficulty you’re playing; rejected guesses collect in a list of their own.',
             'Reveal gives up and shows every answer in the solver.',
           ]}
         />
@@ -1049,7 +1048,7 @@ function LearnSquares({ dict, register }: { dict: Set<string> | null; register: 
       <Section title="Try it — half the grid is yours">
         <p className="text-sm text-slate-400 mb-4">
           Eight letters are given and eight are blank. Tap a square and type — the
-          bar beside each line turns green once that line is a word.
+          bar beside each line lights up once that line is a word.
         </p>
 
         <div className="w-fit mx-auto">
@@ -1857,7 +1856,7 @@ const LearnMode = forwardRef<
 
       {mode === 'pattern' && <LearnGuess dict={dict} register={register} colors={colors} />}
       {mode === 'descramble' && <LearnScramble dict={dict} register={register} />}
-      {mode === 'bee' && <LearnHive dict={dict} register={register} />}
+      {mode === 'bee' && <LearnHive dict={dict} register={register} colors={colors} />}
       {mode === 'grid' && <LearnGrid standardWords={standardWords} register={register} />}
       {mode === 'boxed' && <LearnBoxed dict={dict} register={register} />}
       {mode === 'weave' && <LearnWeave dict={dict} colors={colors} />}

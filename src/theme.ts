@@ -6,12 +6,87 @@ export type ThemeMode = 'system' | 'light' | 'dark';
 // deuter covers deuteranopia/protanopia (red-green, by far the most common),
 // tritan covers tritanopia (blue-yellow), mono covers achromatopsia and any
 // case where hue can't be relied on at all
-export type Palette = 'default' | 'deuter' | 'tritan' | 'mono';
+// sepia and ocean are there for taste rather than need — they move the page,
+// panels and text tiers and leave the meaning-carrying hues alone. They share
+// this axis with the accommodations, so choosing one gives up the other; the
+// Settings list keeps them in separate groups and says so.
+export type Palette = 'default' | 'deuter' | 'tritan' | 'mono' | 'sepia' | 'ocean';
 // every size in the app is in rem, so scaling the root scales all of it
 export type TextScale = 'normal' | 'large' | 'larger';
 
 export const THEME_MODES: ThemeMode[] = ['system', 'light', 'dark'];
-export const PALETTES: Palette[] = ['default', 'deuter', 'tritan', 'mono'];
+export const PALETTES: Palette[] = ['default', 'deuter', 'tritan', 'mono', 'sepia', 'ocean'];
+/** the ones that exist for colour vision, as opposed to for looks */
+export const ACCESSIBLE_PALETTES: Palette[] = ['default', 'deuter', 'tritan', 'mono'];
+
+/** What to call a colour in copy, per palette.
+ *
+ *  "Must use the amber center letter" is true of one palette in six. Under
+ *  Red-green friendly that letter is orange; under Monochrome it is a pale
+ *  grey, and the whole point of that palette is that there is no hue to name.
+ *  Prose that hardcodes a colour is wrong for everyone not using the default,
+ *  and silently — the sentence still reads perfectly well.
+ *
+ *  `key` is the amber-400 family: the letter a word must use, the cell that is
+ *  selected. `right` and `wrong` are the found/rejected pair, `span` and
+ *  `theme` are Weave's two kinds of line. */
+export type ColorWords = {
+  right: string;
+  wrong: string;
+  span: string;
+  theme: string;
+  key: string;
+};
+
+export const COLOR_WORDS: Record<Palette, ColorWords> = {
+  default: { right: 'green', wrong: 'amber', span: 'gold', theme: 'blue', key: 'amber' },
+  deuter: { right: 'blue', wrong: 'orange', span: 'orange', theme: 'light blue', key: 'orange' },
+  tritan: {
+    right: 'green',
+    wrong: 'vermilion',
+    span: 'vermilion',
+    theme: 'pale cyan',
+    key: 'orange',
+  },
+  mono: {
+    right: 'the light tile',
+    wrong: 'the mid-grey tile',
+    span: 'white',
+    theme: 'grey',
+    // no article: this one slots into "the ___ center letter"
+    key: 'pale grey',
+  },
+  // decorative palettes leave every meaning-carrying hue alone, so the words
+  // for them are the default words
+  sepia: { right: 'green', wrong: 'amber', span: 'gold', theme: 'blue', key: 'amber' },
+  ocean: { right: 'green', wrong: 'amber', span: 'gold', theme: 'blue', key: 'amber' },
+};
+
+/** The four colours each palette shows in its row in Settings.
+ *
+ *  These repeat values index.css already declares, which is a duplication
+ *  worth naming rather than hiding. It exists because a swatch depicts a
+ *  palette the page is *not* wearing, and the palettes are scoped to :root —
+ *  so the picker cannot read the variables of anything but the active one.
+ *  Lowering that scope so a subtree could preview a palette would change which
+ *  block wins for every colour in light mode: a re-audit of the whole grid for
+ *  the sake of six rows.
+ *
+ *  A unit test holds these to the stylesheet instead — every value here has to
+ *  be one that palette actually declares. It caught the mono row inventing a
+ *  grey ramp (180/130/90) that the palette never used, which is the failure
+ *  this duplication invites: a wrong swatch still looks like a colour, so
+ *  nothing about it asks to be checked. */
+export const PALETTE_SWATCHES: Record<Palette, string[]> = {
+  default: ['52 211 153', '251 191 36', '251 113 133', '125 211 252'],
+  deuter: ['59 130 246', '230 159 0', '236 72 153', '86 180 233'],
+  tritan: ['45 190 125', '232 106 58', '236 88 150', '165 228 240'],
+  // the real fills: this palette separates states by lightness, so a swatch
+  // showing lightnesses it does not use gets the one thing that matters wrong
+  mono: ['235 235 235', '210 210 210', '165 165 165', '150 150 150'],
+  sepia: ['245 176 65', '184 167 143', '79 66 50', '38 31 22'],
+  ocean: ['94 214 226', '152 180 195', '33 70 94', '10 30 45'],
+};
 export const TEXT_SCALES: TextScale[] = ['normal', 'large', 'larger'];
 export const TEXT_SCALE_PCT: Record<TextScale, string> = {
   normal: '100%',

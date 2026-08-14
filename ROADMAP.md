@@ -579,6 +579,48 @@ a friend read *some* of your results, plus blocking and removal. Build after
 display names exist and after leaderboards prove the aggregate pattern.
 
 ### More themes, for taste rather than need
+**Two shipped** (August 2026): Sepia — warm paper by day, candlelight after
+dark — and Ocean. Both move the ground only: the page, the panels, the
+borders, the tiers of text. The hues that carry meaning are left exactly
+where they were, so green still means found and rose still means wrong, and
+the shared-result emoji are the default squares because there is no sepia
+green square to post.
+
+**The audit is automated now, which is what made the CSS the easy part.**
+`e2e/contrast.spec.ts` walks every theme × palette over four colour-heavy
+routes with axe's contrast rule — twelve combinations in about forty seconds.
+Before it, the fourteen-route sweep only ever ran on whichever palette was
+default, so three of the four palettes had never been checked by anything but
+a hand audit. The grid still grows two passes per palette; it just grows in
+CI instead of in someone's afternoon.
+
+**"Leaves the meaning-carrying hues alone" is a test now, not a promise.**
+Ocean shipped setting `--c-amber-400` to a teal so the accent matched the
+mood — and Weave paints its spangram `amber-400` and its theme words
+`sky-400`. On a pale blue page the two became the same colour and the board
+stopped telling you which word you had found. A decorative palette may change
+the slate ramp, `white`, `ink`, `accent` and `focus`; a unit test reads
+index.css and fails on anything else. Those two Weave states are separated by
+hue alone — luminance ratio 1.07, in the default palette too — so there is no
+margin for a decorative palette to borrow from.
+
+**Colour named in prose has the same problem.** "Must use the amber center
+letter" is true of one palette in six: under Red-green friendly it is orange,
+under Monochrome a pale grey, and Monochrome's whole point is that no hue is
+there to name. `COLOR_WORDS` in theme.ts holds the vocabulary per palette and
+the copy reads from it. Learn's hive section had been hardcoding, because it
+was never passed the words; where the colour added nothing, the sentence lost
+it instead.
+
+It earned itself immediately, catching two things a person would not have.
+`loadState` validated the palette against a literal `['default', 'deuter',
+'tritan', 'mono']` rather than `PALETTES`, so a new palette could be picked,
+saved, and silently reset to default on the next load — the list now reads
+from the source, as do theme and text scale. And both light palettes had
+tinted `--c-ink`, which is the text sitting *on* a saturated fill: warm ink on
+a warm accent came out at 3.1:1. The page's own text warms up; ink does not.
+
+The original analysis follows.
 The four palettes exist for colour vision — default, red–green, blue–yellow,
 monochrome — and the theme switch is light/dark/system. Nothing yet is there
 just because someone likes it: sepia, high-contrast, a warmer dark, seasonal.

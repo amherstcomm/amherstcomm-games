@@ -6,11 +6,16 @@ import { SITE, SLUG_NAME, gameUrl, type Slug } from '@/routes';
 
 export type TileKind = 'correct' | 'present' | 'absent';
 
+// Sepia and ocean change the room, not the tiles — they leave the hues that
+// carry meaning where they are, so they share the default squares. Which is
+// also the honest answer: there is no sepia green square to post.
 export const TILE_EMOJI: Record<Palette, Record<TileKind, string>> = {
   default: { correct: '🟩', present: '🟨', absent: '⬛' },
   deuter: { correct: '🟦', present: '🟧', absent: '⬛' },
   tritan: { correct: '🟩', present: '🟥', absent: '⬛' },
   mono: { correct: '⬜', present: '🔳', absent: '⬛' },
+  sepia: { correct: '🟩', present: '🟨', absent: '⬛' },
+  ocean: { correct: '🟩', present: '🟨', absent: '⬛' },
 };
 
 export const WEAVE_EMOJI: Record<Palette, { theme: string; span: string; hint: string }> = {
@@ -18,6 +23,8 @@ export const WEAVE_EMOJI: Record<Palette, { theme: string; span: string; hint: s
   deuter: { theme: '🔵', span: '🟠', hint: '💡' },
   tritan: { theme: '🔵', span: '🔴', hint: '💡' },
   mono: { theme: '⚪', span: '⚫', hint: '💡' },
+  sepia: { theme: '🔵', span: '🟡', hint: '💡' },
+  ocean: { theme: '🔵', span: '🟡', hint: '💡' },
 };
 
 export type SharePayload = { title: string; text: string; url: string };

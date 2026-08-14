@@ -34,6 +34,7 @@ import {
   DIFFICULTY_LABEL,
   type Difficulty,
 } from '@/difficulty';
+import { PALETTE_SWATCHES } from '@/theme';
 import type { Palette, TextScale, ThemeMode } from '@/theme';
 import { useModalA11y } from '@/useModalA11y';
 
@@ -77,32 +78,61 @@ const THEME_OPTIONS: { id: ThemeMode; label: string; Icon: typeof Sun }[] = [
   { id: 'dark', label: 'Dark', Icon: Moon },
 ];
 
-const PALETTE_OPTIONS: { id: Palette; label: string; blurb: string; tones: string[] }[] = [
-  {
-    id: 'default',
-    label: 'Default',
-    blurb: 'Green, amber, and rose',
-    tones: ['52 211 153', '251 191 36', '251 113 133', '125 211 252'],
-  },
+
+const PALETTE_OPTIONS: { id: Palette; label: string; blurb: string }[] = [
+  { id: 'default', label: 'Default', blurb: 'Green, amber, and rose' },
   {
     id: 'deuter',
     label: 'Red–green friendly',
     blurb: 'Deuteranopia and protanopia — blue and orange replace green and amber',
-    tones: ['59 130 246', '230 159 0', '236 72 153', '86 180 233'],
   },
   {
     id: 'tritan',
     label: 'Blue–yellow friendly',
     blurb: 'Tritanopia — green against vermilion, the axis those eyes keep',
-    tones: ['45 190 125', '232 106 58', '236 88 150', '165 228 240'],
   },
   {
     id: 'mono',
     label: 'Monochrome',
     blurb: 'No hue at all — states are separated by lightness',
-    tones: ['235 235 235', '180 180 180', '130 130 130', '90 90 90'],
   },
 ];
+
+// Same setting, different reason for existing. These change the page and the
+// panels rather than the colours that carry meaning — green still means found.
+const DECORATIVE_OPTIONS: { id: Palette; label: string; blurb: string }[] = [
+  { id: 'sepia', label: 'Sepia', blurb: 'Warm paper by day, candlelight after dark' },
+  { id: 'ocean', label: 'Ocean', blurb: 'Deep water at night, sea glass by day' },
+];
+
+function PaletteChoice({
+  opt,
+  palette,
+  onPalette,
+}: {
+  opt: { id: Palette; label: string; blurb: string };
+  palette: Palette;
+  onPalette: (p: Palette) => void;
+}) {
+  const on = palette === opt.id;
+  return (
+    <button
+      onClick={() => onPalette(opt.id)}
+      aria-pressed={on}
+      className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl border text-left transition-colors
+        ${on ? 'bg-amber-400/10 border-amber-400/40' : 'bg-white/5 border-white/10 hover:bg-white/10'}`}
+    >
+      <span className="flex-1 min-w-0">
+        <span className="flex items-center gap-2 text-sm font-semibold text-white">
+          {opt.label}
+          {on && <Check className="w-3.5 h-3.5 text-accent" />}
+        </span>
+        <span className="block text-xs text-slate-500">{opt.blurb}</span>
+      </span>
+      <Swatches tones={PALETTE_SWATCHES[opt.id]} />
+    </button>
+  );
+}
 
 function Pill({
   on,
@@ -383,25 +413,24 @@ export default function SettingsModal({
               Colors
             </h3>
             <div className="space-y-2">
-              {PALETTE_OPTIONS.map(({ id, label, blurb, tones }) => (
-                <button
-                  key={id}
-                  onClick={() => onPalette(id)}
-                  aria-pressed={palette === id}
-                  className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl border text-left transition-colors
-                    ${palette === id
-                      ? 'bg-amber-400/10 border-amber-400/40'
-                      : 'bg-white/5 border-white/10 hover:bg-white/10'}`}
-                >
-                  <span className="flex-1 min-w-0">
-                    <span className="flex items-center gap-2 text-sm font-semibold text-white">
-                      {label}
-                      {palette === id && <Check className="w-3.5 h-3.5 text-accent" />}
-                    </span>
-                    <span className="block text-xs text-slate-500">{blurb}</span>
-                  </span>
-                  <Swatches tones={tones} />
-                </button>
+              {PALETTE_OPTIONS.map((opt) => (
+                <PaletteChoice key={opt.id} opt={opt} palette={palette} onPalette={onPalette} />
+              ))}
+            </div>
+
+            <h4 className="mt-4 text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">
+              Just for looks
+            </h4>
+            {/* One setting, so a decorative choice replaces an accommodation.
+                Saying it here is cheaper than someone discovering it by losing
+                the palette they needed. */}
+            <p className="text-xs text-slate-500 mb-2.5">
+              These change the page rather than the colours that carry meaning. Picking one
+              replaces the colour-vision choice above.
+            </p>
+            <div className="space-y-2">
+              {DECORATIVE_OPTIONS.map((opt) => (
+                <PaletteChoice key={opt.id} opt={opt} palette={palette} onPalette={onPalette} />
               ))}
             </div>
           </div>
