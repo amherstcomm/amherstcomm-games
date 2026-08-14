@@ -87,7 +87,11 @@ export default function KeyboardHelp({
           <X className="w-4 h-4" />
         </button>
 
-        <div className="overflow-y-auto p-6 sm:p-8">
+        {/* This panel is all text and key diagrams, so nothing inside it takes
+            focus — which left the one page about playing without a mouse
+            impossible to scroll without one. The sibling panels escape the
+            same markup only because they happen to contain buttons. */}
+        <div className="overflow-y-auto p-6 sm:p-8" tabIndex={0}>
         <h2 className="text-xl font-bold mb-1">Keyboard controls</h2>
         <p className="text-xs text-slate-500 mb-5">
           Everything here is playable without a mouse.

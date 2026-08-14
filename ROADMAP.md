@@ -437,6 +437,32 @@ found what automation couldn't — the leaderboard cards were static text in a
 dialog, spoken on hover but unreachable by Tab, and now take focus. Worth
 re-walking after any new surface; axe still covers only the mechanical half.
 
+**The sweep now walks every route** (August 2026): 43, from 14. It had grown
+once already, to cover all eight dailies, and the comment it grew for said
+"every game's daily, not a sample of them" — true, and it read as
+thoroughness. Underneath, three of the four views were still samples: two
+solvers of eight, two learn pages of eight, and **not one of the eight
+practice routes had ever been scanned**. Panels, legal pages and two of three
+settings tabs were outside it too. The list is generated from the games now,
+so a ninth game is scanned on all four views the day it exists.
+
+It found two real defects on the first run, both of a kind axe is good at and
+a person is not:
+
+- The **Squares learn demo** had eight buttons with no accessible name — the
+  blank cells render no text, so a screen reader read the grid as eight
+  buttons called "button". The real board had carried a proper label all
+  along; the demo was markup that looked the same and wasn't.
+- **`/keys`**, the panel documenting how to play without a mouse, had a scroll
+  region a keyboard could not reach. It is all text and diagrams, so nothing
+  in it takes focus, and axe flags a scrollable region with no focusable
+  descendant for exactly that reason. Four sibling panels share the markup and
+  escape the rule only because they happen to contain buttons.
+
+Coverage that looks complete is worse than coverage that admits its gaps,
+because nobody goes back to check it. Both of these lived behind a comment
+claiming the sweep was thorough.
+
 Difficulty took a day and produced roughly a dozen bugs. Every one was found
 by playing the site or by a throwaway script, and several looked fine right up
 until someone typed something. That's the argument: not coverage for its own

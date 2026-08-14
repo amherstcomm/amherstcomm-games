@@ -5,25 +5,45 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test } from './fixtures';
 
-// Every game's daily, not a sample of them. The sweep used to walk six fixed
-// routes, which left boxed, grid, squares and cryptogram — four of eight
-// games — outside the only automated accessibility check we have. A board
-// nobody scans is a board where a missing label lives for ever.
+// Every route, not every daily.
+//
+// This walked six fixed routes once, then grew to all eight dailies — and the
+// comment it grew for said "every game's daily, not a sample of them", which
+// was true and read as thoroughness. Underneath, three of the four views were
+// still samples: two solvers of eight, two learn pages of eight, and not one
+// of the eight practice routes had ever been scanned at all. Coverage that
+// looks complete is worse than coverage that admits what it skips, because
+// nobody goes back to check it.
+//
+// So the list is generated from the games rather than typed out. A ninth game
+// gets scanned on all four of its views the day it is added, without anyone
+// remembering to add it here.
+const SLUGS = [
+  'guess',
+  'scramble',
+  'hive',
+  'grid',
+  'boxed',
+  'weave',
+  'squares',
+  'cryptogram',
+] as const;
+const VIEWS = ['daily', 'solve', 'play', 'learn'] as const;
+
 const PAGES = [
   ['home', '/'],
-  ['daily guess', '/daily/guess'],
-  ['daily scramble', '/daily/scramble'],
-  ['daily hive', '/daily/hive'],
-  ['daily grid', '/daily/grid'],
-  ['daily boxed', '/daily/boxed'],
-  ['daily weave', '/daily/weave'],
-  ['daily squares', '/daily/squares'],
-  ['daily cryptogram', '/daily/cryptogram'],
-  ['descramble solver', '/solve/scramble'],
-  ['cryptogram solver', '/solve/cryptogram'],
-  ['settings', '/settings/site'],
-  ['learn hive', '/learn/hive'],
-  ['learn cryptogram', '/learn/cryptogram'],
+  ...VIEWS.flatMap((view) => SLUGS.map((slug) => [`${view} ${slug}`, `/${view}/${slug}`] as const)),
+  ['settings site', '/settings/site'],
+  ['settings games', '/settings/games'],
+  ['settings privacy', '/settings/privacy'],
+  ['stats', '/stats'],
+  ['keys', '/keys'],
+  ['about', '/about'],
+  ['legal notices', '/legal/notices'],
+  ['legal privacy', '/legal/privacy'],
+  ['legal terms', '/legal/terms'],
+  // signed out, which is the face most visitors meet
+  ['account', '/account'],
 ] as const;
 
 for (const [name, path] of PAGES) {
