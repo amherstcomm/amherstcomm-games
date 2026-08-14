@@ -770,12 +770,14 @@ stated target is a maze; one that says "five steps" is a challenge, and the
 difference costs nothing — breadth-first search computes par anyway, both to
 generate the pair and to check the answer.
 
-Worth knowing before that is built: `par` already exists in the feed and
-nothing reads it. `fetch-puzzles.mjs` publishes it twice — the NYT Letter
-Boxed par it fetches, and a flat `par: 2` for the generated Boxed daily — and
-no client code consumes either. So Boxed has been carrying a target it never
-shows. Either it should show one, or the field should go; a value that is
-generated, published and ignored is the kind that quietly becomes wrong.
+Boxed already shows one, which is where the idea comes from — and it showed it
+the wrong way. `fetch-puzzles.mjs` publishes `par: 2` with every generated
+board, and the status row read `Solvable in 2` as a literal. Both said two, so
+nothing looked broken; they simply had no connection, and a tier that ever
+generated a par-3 board would have had the feed carrying the truth while the
+board stated something else. It reads `record.par` now. Practice boards are
+built out of two chaining words, so they are par 2 by construction and the
+fallback is honest rather than hopeful.
 
 Also open: whether a daily names both ends or only the start, and whether par
 is shown or discovered.

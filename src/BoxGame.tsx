@@ -33,6 +33,10 @@ const BOX_KEY = 'anagrimoire:box:v1';
 
 type BoxRecord = {
   sides: string[];
+  /** fewest words the board can be solved in, from the feed. The generator
+   *  publishes it and the board used to state a hardcoded 2 beside it — true
+   *  of every board so far, and a claim nothing kept honest. */
+  par?: number;
   chain: string[];
   invalid?: string[]; // rejected non-dictionary guesses
   revealed?: boolean; // gave up — the board is over, incomplete
@@ -60,6 +64,9 @@ function sanitizeRecord(r: unknown): BoxRecord | null {
   }
   return {
     sides: rec.sides,
+    // practice boards are built out of two chaining words, so they are par 2
+    // by construction, same as the generated daily
+    par: typeof rec.par === 'number' && rec.par >= 1 ? rec.par : 2,
     chain: rec.chain.filter((w) => typeof w === 'string'),
     invalid: Array.isArray(rec.invalid) ? rec.invalid.filter((w) => typeof w === 'string') : [],
     revealed: rec.revealed === true,
@@ -254,7 +261,7 @@ const BoxGame = forwardRef<
         // the date lives at the top level; the board's own fields come from
         // whichever difficulty was resolved
         const d = { ...raw, ...chosen.board };
-        const rec = sanitizeRecord({ sides: d.sides, chain: [] });
+        const rec = sanitizeRecord({ sides: d.sides, par: d.par, chain: [] });
         if (!rec || typeof d.date !== 'string') throw new Error('bad payload');
         // reset when the date changes OR the sides differ (e.g. the daily
         // source changed mid-day)
@@ -539,7 +546,7 @@ const BoxGame = forwardRef<
             <span>
               {committedCovered.size} / 12 letters
             </span>
-            <span className="text-slate-500">Solvable in 2</span>
+            <span className="text-slate-500">Solvable in {record.par ?? 2}</span>
             {store.dailyMode && store.dailyDate && (
               <span className="text-slate-500">{store.dailyDate}</span>
             )}

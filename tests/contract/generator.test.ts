@@ -161,6 +161,19 @@ describe('box', () => {
       }
     }
   });
+
+  // The board prints "Solvable in N" from this. It used to print a literal 2
+  // beside a feed that happened to publish 2, which is the kind of agreement
+  // that holds until it doesn't — and the client still falls back to 2, so a
+  // feed that quietly stopped publishing par would look entirely fine.
+  it('states the par the board promises', () => {
+    for (const variant of VARIANTS) {
+      for (const d of DIFFICULTIES) {
+        const par = feed(variant, 'box').byDifficulty[d].par;
+        expect(par, `${variant}box ${d}`).toBe(2);
+      }
+    }
+  });
 });
 
 describe('grid', () => {
