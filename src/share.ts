@@ -20,6 +20,7 @@ export const TILE_EMOJI: Record<Palette, Record<TileKind, string>> = {
   plum: { correct: '🟩', present: '🟨', absent: '⬛' },
   graphite: { correct: '🟩', present: '🟨', absent: '⬛' },
   ember: { correct: '🟩', present: '🟨', absent: '⬛' },
+  garnet: { correct: '🟩', present: '🟨', absent: '⬛' },
 };
 
 export const WEAVE_EMOJI: Record<Palette, { theme: string; span: string; hint: string }> = {
@@ -33,6 +34,7 @@ export const WEAVE_EMOJI: Record<Palette, { theme: string; span: string; hint: s
   plum: { theme: '🔵', span: '🟡', hint: '💡' },
   graphite: { theme: '🔵', span: '🟡', hint: '💡' },
   ember: { theme: '🔵', span: '🟡', hint: '💡' },
+  garnet: { theme: '🔵', span: '🟡', hint: '💡' },
 };
 
 export type SharePayload = { title: string; text: string; url: string };

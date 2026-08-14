@@ -651,6 +651,49 @@
   --c-accent: 154 68 38;
 }
 
+/* Garnet: oxblood after dark, blush by day.
+   The one decorative palette whose ground shares a hue with a colour that
+   carries meaning — rose is what marks a wrong answer, and this page sits at
+   hue 6 to rose-400's 16. That is near enough to be the same colour, so the
+   whole palette rests on lightness instead: the ramp stays deep and
+   desaturated, and the accent is pushed clear of rose-400 by lightness rather
+   than by hue. Measured, a wrong answer lands ΔE 79 from the page on dark and
+   61 on light — level with ember and plum, whose grounds are nowhere near
+   rose. A shallower, more saturated red would have looked perfectly good in
+   the Settings picker and swallowed every wrong answer on the board. A unit
+   test holds the floor. */
+:root[data-palette='garnet'] {
+  --c-slate-950: 26 12 15;
+  --c-slate-900: 44 20 25;
+  --c-slate-800: 64 30 36;
+  --c-slate-700: 88 43 51;
+  --c-slate-600: 158 132 138;
+  --c-slate-500: 172 146 152;
+  --c-slate-400: 188 162 168;
+  --c-slate-300: 232 214 218;
+  --c-slate-200: 244 230 233;
+
+  --c-ink: 26 12 15;
+  --c-focus: 255 196 205;
+  --c-accent: 255 196 205;
+}
+
+:root[data-theme='light'][data-palette='garnet'] {
+  --c-slate-950: 252 242 244;
+  --c-slate-900: 255 251 252;
+  --c-slate-800: 242 224 228;
+  --c-slate-700: 222 196 202;
+  --c-slate-600: 122 90 98;
+  --c-slate-500: 92 64 72;
+  --c-slate-400: 92 64 72;
+  --c-slate-300: 72 48 55;
+  --c-slate-200: 46 28 33;
+
+  --c-white: 46 28 33;
+  --c-focus: 130 32 56;
+  --c-accent: 130 32 56;
+}
+
 /* keep overscroll and the area behind the app in the active theme */
 body {
   background-color: rgb(var(--c-slate-950));

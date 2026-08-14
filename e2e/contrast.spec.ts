@@ -1,9 +1,9 @@
 // Contrast across every theme × palette, which is the half of accessibility a
 // machine checks best and a person checks worst.
 //
-// The other axe sweep walks fourteen routes on whatever palette happens to be
-// default, so three of the four palettes have never been checked by anything
-// but a hand audit. That is the real cost of a palette — not the CSS, which is
+// The other axe sweep walks its routes on whatever palette happens to be
+// default, so every palette but that one would go unchecked by anything but a
+// hand audit. That is the real cost of a palette — not the CSS, which is
 // one block, but the promise that every combination still clears AA. A palette
 // shipped unaudited is worse than no palette, because the audited ones imply
 // the rest were checked too.

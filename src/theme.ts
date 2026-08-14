@@ -20,7 +20,8 @@ export type Palette =
   | 'forest'
   | 'plum'
   | 'graphite'
-  | 'ember';
+  | 'ember'
+  | 'garnet';
 // every size in the app is in rem, so scaling the root scales all of it
 export type TextScale = 'normal' | 'large' | 'larger';
 
@@ -36,6 +37,7 @@ export const PALETTES: Palette[] = [
   'plum',
   'graphite',
   'ember',
+  'garnet',
 ];
 /** the ones that exist for colour vision, as opposed to for looks */
 export const ACCESSIBLE_PALETTES: Palette[] = ['default', 'deuter', 'tritan', 'mono'];
@@ -43,7 +45,7 @@ export const ACCESSIBLE_PALETTES: Palette[] = ['default', 'deuter', 'tritan', 'm
 /** What to call a colour in copy, per palette — and, for one of them, per
  *  theme as well.
  *
- *  "Must use the amber center letter" is true of one palette in ten. Under
+ *  "Must use the amber center letter" is true of one palette in eleven. Under
  *  Red-green friendly that letter is orange; under Monochrome it is a grey,
  *  and the whole point of that palette is that there is no hue to name. Prose
  *  that hardcodes a colour is wrong for everyone not using the default, and
@@ -92,6 +94,7 @@ const BASE_WORDS: Record<Palette, ColorWords> = {
   plum: { right: 'green', wrong: 'amber', span: 'gold', theme: 'blue', key: 'amber' },
   graphite: { right: 'green', wrong: 'amber', span: 'gold', theme: 'blue', key: 'amber' },
   ember: { right: 'green', wrong: 'amber', span: 'gold', theme: 'blue', key: 'amber' },
+  garnet: { right: 'green', wrong: 'amber', span: 'gold', theme: 'blue', key: 'amber' },
 };
 
 /** Monochrome on a light page, where every lightness above is upside down. */
@@ -136,6 +139,7 @@ export const PALETTE_SWATCHES: Record<Palette, string[]> = {
   plum: ['209 160 233', '180 166 190', '78 58 90', '38 26 45'],
   graphite: ['214 214 220', '173 173 178', '64 64 68', '29 29 31'],
   ember: ['240 150 118', '188 166 158', '86 55 46', '43 25 21'],
+  garnet: ['255 196 205', '188 162 168', '88 43 51', '44 20 25'],
 };
 export const TEXT_SCALES: TextScale[] = ['normal', 'large', 'larger'];
 export const TEXT_SCALE_PCT: Record<TextScale, string> = {
