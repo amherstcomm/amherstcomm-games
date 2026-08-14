@@ -225,7 +225,7 @@ revoke execute on function public.would_block(text) from public, anon, authentic
 create table if not exists public.game_results (
   id bigint generated always as identity primary key,
   user_id uuid not null references auth.users (id) on delete cascade,
-  game text not null check (game in ('guess', 'hive', 'scramble', 'grid', 'box', 'weave', 'squares', 'cryptogram')),
+  game text not null check (game in ('guess', 'hive', 'scramble', 'grid', 'box', 'weave', 'squares', 'cryptogram', 'ladder')),
   daily boolean not null,
   puzzle_date date, -- Eastern-time date of the daily puzzle; null for practice
   payload jsonb not null default '{}'::jsonb,
@@ -275,7 +275,7 @@ create policy "read own results"
 -- ---------------------------------------------------------------------------
 create table if not exists public.daily_progress (
   user_id uuid not null references auth.users (id) on delete cascade,
-  game text not null check (game in ('guess', 'hive', 'scramble', 'grid', 'box', 'weave', 'squares', 'cryptogram')),
+  game text not null check (game in ('guess', 'hive', 'scramble', 'grid', 'box', 'weave', 'squares', 'cryptogram', 'ladder')),
   variant text not null default '',
   puzzle_date date not null,
   env text not null default 'prod',
@@ -822,6 +822,77 @@ begin
       end;
     end if;
     return true;
+
+  elsif p_game = 'ladder' then
+    -- The only game here that can be marked without holding an answer. A
+    -- ladder is a rule, not a solution: every rung a real word, each one
+    -- letter from the last, ending where it should. So this checks the claim
+    -- against itself, and a player who found a different route of the same
+    -- length passes — because they solved it.
+    if coalesce((p_result->>'solved')::boolean, false) is not true then return true; end if;
+    -- a rung a second is not a person reading words
+    if coalesce((p_result->>'timeMs')::numeric, 0) < 3000 then return false; end if;
+    if not has_state or not (p_state ? 'chain') then return true; end if;
+
+    declare
+      rungs text[];
+      prev text;
+      first_from int;   -- 1 when the first rung is measured against the puzzle
+      i int;
+      differ int;
+      j int;
+    begin
+      select array_agg(lower(w) order by ord)
+        into rungs
+      from jsonb_array_elements_text(p_state->'chain') with ordinality as t(w, ord);
+      if rungs is null or array_length(rungs, 1) is null then return false; end if;
+
+      if board is not null and board ? 'from' and board ? 'to' then
+        -- the ends come from the puzzle, so a client cannot mark itself right
+        -- on a ladder it was never set
+        prev := lower(board->>'from');
+        first_from := 1;
+        if rungs[array_length(rungs, 1)] is distinct from lower(board->>'to') then
+          return false;
+        end if;
+        -- par is the shortest route that exists; beating it means the chain
+        -- is not a chain, or not this puzzle's
+        if board ? 'par' and array_length(rungs, 1) < (board->>'par')::int then
+          return false;
+        end if;
+      else
+        -- no puzzle row: the rungs can still be checked against each other,
+        -- which is most of the claim
+        prev := rungs[1];
+        first_from := 0;
+      end if;
+
+      for i in 1 .. array_length(rungs, 1) loop
+        -- a rung has to be a word at this row's cut, and never a slur
+        if not exists (
+          select 1 from public.words w
+          where w.word = rungs[i] and w.level <= cut
+            and coalesce(w.flag, '') is distinct from 'slur'
+        ) then
+          return false;
+        end if;
+
+        -- every rung is one letter from the one before it. The first is
+        -- skipped only when there is nothing before it to compare against.
+        if i > 1 or first_from = 1 then
+          if length(prev) is distinct from length(rungs[i]) then return false; end if;
+          differ := 0;
+          for j in 1 .. length(prev) loop
+            if substr(prev, j, 1) is distinct from substr(rungs[i], j, 1) then
+              differ := differ + 1;
+            end if;
+          end loop;
+          if differ is distinct from 1 then return false; end if;
+        end if;
+        prev := rungs[i];
+      end loop;
+      return true;
+    end;
   end if;
 
   return false;
@@ -1380,12 +1451,12 @@ grant execute on function public.friends_board(int, text, text) to authenticated
 alter table public.game_results drop constraint if exists game_results_game_check;
 alter table public.game_results
   add constraint game_results_game_check
-  check (game in ('guess', 'hive', 'scramble', 'grid', 'box', 'weave', 'squares', 'cryptogram'));
+  check (game in ('guess', 'hive', 'scramble', 'grid', 'box', 'weave', 'squares', 'cryptogram', 'ladder'));
 
 alter table public.daily_progress drop constraint if exists daily_progress_game_check;
 alter table public.daily_progress
   add constraint daily_progress_game_check
-  check (game in ('guess', 'hive', 'scramble', 'grid', 'box', 'weave', 'squares', 'cryptogram'));
+  check (game in ('guess', 'hive', 'scramble', 'grid', 'box', 'weave', 'squares', 'cryptogram', 'ladder'));
 
 -- ---------------------------------------------------------------------------
 -- stats_baselines: one-time import of the lifetime stats a browser

@@ -23,7 +23,8 @@ export type DailyGame =
   | 'box'
   | 'weave'
   | 'squares'
-  | 'cryptogram';
+  | 'cryptogram'
+  | 'ladder';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Rec = Record<string, any>;
@@ -196,6 +197,31 @@ export function mergeDaily(
         elapsedMs: maxNum(local.elapsedMs, remote.elapsedMs),
       };
     }
+    case 'ladder': {
+      // A chain is a route, not a set. Two devices that each added a different
+      // rung would union into a sequence neither of them walked, and the rung
+      // after it would be measured against the wrong word — so one side wins
+      // whole, the same way Boxed's chain does.
+      const mine = (local.chain ?? []) as string[];
+      const theirs = (remote.chain ?? []) as string[];
+      const localDone = !!local.revealed || (local.solved ?? false);
+      const remoteDone = !!remote.revealed || (remote.solved ?? false);
+      const chain =
+        mode === 'push'
+          ? mine
+          : remoteDone && !localDone
+            ? theirs
+            : theirs.length > mine.length
+              ? theirs
+              : mine;
+      return {
+        ...local,
+        chain,
+        solved: !!(local.solved || remote.solved),
+        revealed: !!(local.revealed || remote.revealed),
+        elapsedMs: maxNum(local.elapsedMs, remote.elapsedMs),
+      };
+    }
     case 'weave':
       return {
         ...local,
@@ -276,6 +302,7 @@ const PROGRESS_FIELDS: Record<DailyGame, string[]> = {
   squares: ['entries', 'solved', 'revealed'],
   // `mapping` is the play; ciphertext, reveals and answer are the puzzle.
   cryptogram: ['mapping', 'solved', 'revealed'],
+  ladder: ['chain', 'solved', 'revealed'],
 };
 
 export function progressOf(game: DailyGame, state: Rec | null): Rec {

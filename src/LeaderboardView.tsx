@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Grid3x3, Hexagon, KeyRound, LayoutGrid, Puzzle, Shuffle, Square, Table2 } from 'lucide-react';
+import { ArrowDownUp, Grid3x3, Hexagon, KeyRound, LayoutGrid, Puzzle, Shuffle, Square, Table2 } from 'lucide-react';
 import {
   BOARD_LABELS,
   fetchBoards,
@@ -24,6 +24,7 @@ const ICONS: Record<BoardGame, typeof Grid3x3> = {
   squares4: Table2,
   squares5: Table2,
   cryptogram: KeyRound,
+  ladder: ArrowDownUp,
 };
 
 const ORDER: BoardGame[] = ['guess', 'scramble', 'hive', 'grid', 'box', 'weave', 'squares4', 'squares5', 'cryptogram'];

@@ -25,6 +25,7 @@ export const LEADERBOARD = {
   squares4: [],
   squares5: [],
   cryptogram: [],
+  ladder: [],
 };
 
 export const test = base.extend<{ rpcCalls: { fn: string; args: Record<string, unknown> }[] }>({

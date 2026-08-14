@@ -17,12 +17,30 @@ export function appToday(): string {
   return new Date(Date.now() - 8 * 60 * 60 * 1000).toISOString().slice(0, 10);
 }
 
+/** Every file the stub in fixtures.ts may be asked for. Listed so the cache
+ *  can tell "today's feed" from "today's feed, from before this game existed" —
+ *  a date-only check leaves a new game's tests reading a fixture set that
+ *  never had it, and the failure looks like a broken board rather than a stale
+ *  directory. */
+const EXPECTED = [
+  'daily-words',
+  'daily-hive',
+  'daily-box',
+  'daily-scramble',
+  'daily-grid',
+  'daily-weave',
+  'daily-squares',
+  'daily-cryptogram',
+  'daily-ladder',
+].flatMap((n) => [`${n}.json`, `dev-${n}.json`]);
+
 export default async function globalSetup() {
   const date = appToday();
   const marker = join(DATA_DIR, 'dev-daily-words.json');
 
-  // a feed from an earlier run today is still today's feed — skip the minute
-  if (existsSync(marker)) {
+  // a feed from an earlier run today is still today's feed — skip the minute,
+  // but only when it holds every file the tests can ask for
+  if (existsSync(marker) && EXPECTED.every((f) => existsSync(join(DATA_DIR, f)))) {
     try {
       if (JSON.parse(readFileSync(marker, 'utf8')).date === date) return;
     } catch {

@@ -3,7 +3,16 @@ import { PALETTES, TEXT_SCALES, THEME_MODES } from '@/theme';
 import type { Palette, TextScale, ThemeMode } from '@/theme';
 import { store as siteStore } from '@/siteStorage';
 
-export type Mode = 'pattern' | 'descramble' | 'bee' | 'boxed' | 'grid' | 'weave' | 'squares' | 'cryptogram';
+export type Mode =
+  | 'pattern'
+  | 'descramble'
+  | 'bee'
+  | 'boxed'
+  | 'grid'
+  | 'weave'
+  | 'squares'
+  | 'cryptogram'
+  | 'ladder';
 
 /** 'home' is the front page, 'last' is wherever you left off, and a Mode is
  *  that game's daily — for people who came for one game and mean to keep
@@ -12,7 +21,17 @@ export type StartPage = 'home' | 'last' | Mode;
 
 const KEY = 'anagrimoire:v1';
 
-export const ALL_MODES: Mode[] = ['pattern', 'descramble', 'bee', 'boxed', 'grid', 'weave', 'squares', 'cryptogram'];
+export const ALL_MODES: Mode[] = [
+  'pattern',
+  'descramble',
+  'bee',
+  'boxed',
+  'grid',
+  'weave',
+  'squares',
+  'cryptogram',
+  'ladder',
+];
 export const ALL_START_PAGES: StartPage[] = ['home', 'last', ...ALL_MODES];
 /** The solver's lists were Common/Standard/Full before they became the
  *  difficulties' accept tiers. Stored choices carry over rather than reset —
@@ -139,6 +158,10 @@ export type PersistedState = {
    *  coming back doesn't lose what was typed in */
   cryptogram: { cipher: string };
   cryptogramPlay: boolean;
+  /** the ladder solver's two ends, kept so leaving the tab and coming back
+   *  doesn't lose what was typed */
+  ladder: { from: string; to: string };
+  ladderPlay: boolean;
 };
 
 export type GridPreset = '3x3' | '4x4' | '5x5';
@@ -158,7 +181,7 @@ export const WEAVE_DIMS: Record<WeaveSize, { rows: number; cols: number }> = {
 
 export const DEFAULT_STATE: PersistedState = {
   mode: 'pattern',
-  dictionaries: { pattern: 'easy', descramble: 'easy', bee: 'easy', boxed: 'easy', grid: 'easy', weave: 'hard', squares: 'hard', cryptogram: 'hard' },
+  dictionaries: { pattern: 'easy', descramble: 'easy', bee: 'easy', boxed: 'easy', grid: 'easy', weave: 'hard', squares: 'hard', cryptogram: 'hard', ladder: 'easy' },
   sort: {
     pattern: { key: 'alpha', dir: 'asc' },
     descramble: { key: 'length', dir: 'desc' },
@@ -168,6 +191,7 @@ export const DEFAULT_STATE: PersistedState = {
     weave: { key: 'length', dir: 'desc' },
     squares: { key: 'length', dir: 'desc' },
     cryptogram: { key: 'length', dir: 'desc' },
+    ladder: { key: 'length', dir: 'desc' },
   },
   keyboard: false,
   theme: 'system',
@@ -200,6 +224,8 @@ export const DEFAULT_STATE: PersistedState = {
   squaresPlay: true,
   cryptogram: { cipher: '' },
   cryptogramPlay: true,
+  ladder: { from: '', to: '' },
+  ladderPlay: true,
 };
 
 function singleLetter(v: unknown): string {
@@ -249,6 +275,7 @@ export function loadState(): PersistedState {
       weave: { ...DEFAULT_STATE.sort.weave },
       squares: { ...DEFAULT_STATE.sort.squares },
       cryptogram: { ...DEFAULT_STATE.sort.cryptogram },
+      ladder: { ...DEFAULT_STATE.sort.ladder },
     };
     for (const m of ALL_MODES) {
       const s = p?.sort?.[m];
@@ -367,9 +394,16 @@ export function loadState(): PersistedState {
       weave: { letters: weaveLetters, size: weaveSize },
       squares: { letters: squaresLetters, size: squaresSize },
       cryptogram: { cipher: cryptogramCipher },
+      // the solver's ends: letters only, and short enough that a paste of
+      // something else cannot bloat the stored settings
+      ladder: {
+        from: typeof p?.ladder?.from === 'string' ? p.ladder.from.toLowerCase().replace(/[^a-z]/g, '').slice(0, 12) : '',
+        to: typeof p?.ladder?.to === 'string' ? p.ladder.to.toLowerCase().replace(/[^a-z]/g, '').slice(0, 12) : '',
+      },
       weavePlay: p?.weavePlay !== false,
       squaresPlay: p?.squaresPlay !== false,
       cryptogramPlay: p?.cryptogramPlay !== false,
+      ladderPlay: p?.ladderPlay !== false,
     };
   } catch {
     return DEFAULT_STATE;

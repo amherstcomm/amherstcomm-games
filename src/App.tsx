@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState, useEffect, useLayoutEffect, useRef, type ButtonHTMLAttributes, type ReactNode } from 'react';
-import { Search, Eraser, ArrowDown, ArrowUp, X, BookOpen, Grid3x3, Shuffle, Hexagon, Check, Keyboard, Delete, Github, Info, Square, CalendarDays, Star, Gamepad2, CornerDownLeft, LayoutGrid, Puzzle, BarChart3, UserRound, Scale, Settings, Home, Table2, KeyRound } from 'lucide-react';
+import { Search, Eraser, ArrowDown, ArrowDownUp, ArrowUp, X, BookOpen, Grid3x3, Shuffle, Hexagon, Check, Keyboard, Delete, Github, Info, Square, CalendarDays, Star, Gamepad2, CornerDownLeft, LayoutGrid, Puzzle, BarChart3, UserRound, Scale, Settings, Home, Table2, KeyRound } from 'lucide-react';
 import LearnMode, { type LearnModeHandle } from '@/LearnMode';
 import type { Session } from '@supabase/supabase-js';
 import StatsModal from '@/StatsModal';
@@ -31,6 +31,8 @@ import HomeView from '@/HomeView';
 import RouteLink from '@/RouteLink';
 import SquaresGame, { type SquaresGameHandle } from '@/SquaresGame';
 import CryptogramGame, { type CryptogramGameHandle } from '@/CryptogramGame';
+import LadderGame, { type LadderGameHandle } from '@/LadderGame';
+import { shortestLadder } from '@/ladder';
 import {
   analyse,
   buildPatternIndex,
@@ -145,6 +147,15 @@ const MODES: { id: Mode; label: string; blurb: string; description: string; play
     playDescription:
       'Every letter stands for another one, the same way throughout. Work out the passage.',
   },
+  {
+    id: 'ladder',
+    label: 'Word Ladder',
+    blurb: 'Turn one word into another, a letter at a time',
+    description:
+      'Play the daily ladder, or use Solve to find the shortest route between any two words of the same length.',
+    playDescription:
+      'Change one letter at a time, and every rung has to be a word. Get from the first to the last in par.',
+  },
 ];
 
 const MODE_ICONS: Record<Mode, typeof Grid3x3> = {
@@ -156,6 +167,7 @@ const MODE_ICONS: Record<Mode, typeof Grid3x3> = {
   weave: Puzzle,
   squares: Table2,
   cryptogram: KeyRound,
+  ladder: ArrowDownUp,
 };
 
 /** WordLock's mark, drawn the way the footer's other icons are drawn.
@@ -558,6 +570,9 @@ function App() {
   const [cryptogramPlay, setCryptogramPlay] = useState(
     initialPlay('cryptogram', initial.cryptogramPlay)
   );
+  const [ladderPlay, setLadderPlay] = useState(initialPlay('ladder', initial.ladderPlay));
+  const [ladderFrom, setLadderFrom] = useState(initial.ladder.from);
+  const [ladderTo, setLadderTo] = useState(initial.ladder.to);
   const [cryptoText, setCryptoText] = useState('');
   const [cryptoMode, setCryptoMode] = useState<InputMode>('letters');
   // marks the player has settled by picking a reading; propagation takes these
@@ -961,6 +976,7 @@ function App() {
   const weaveRef = useRef<WeaveGameHandle>(null);
   const squaresRef = useRef<SquaresGameHandle>(null);
   const cryptogramRef = useRef<CryptogramGameHandle>(null);
+  const ladderRef = useRef<LadderGameHandle>(null);
 
   // The switch and the games both read the same stored value; this only
   // mirrors it so the pressed state re-renders.
@@ -991,8 +1007,9 @@ function App() {
   const weavePlayActive = mode === 'weave' && weavePlay && !learnMode;
   const squaresPlayActive = mode === 'squares' && squaresPlay && !learnMode;
   const cryptogramPlayActive = mode === 'cryptogram' && cryptogramPlay && !learnMode;
+  const ladderPlayActive = mode === 'ladder' && ladderPlay && !learnMode;
   const playActive =
-    patternPlayActive || beePlayActive || boxedPlayActive || descramblePlayActive || gridPlayActive || weavePlayActive || squaresPlayActive || cryptogramPlayActive;
+    patternPlayActive || beePlayActive || boxedPlayActive || descramblePlayActive || gridPlayActive || weavePlayActive || squaresPlayActive || cryptogramPlayActive || ladderPlayActive;
 
 
 
@@ -1004,7 +1021,10 @@ function App() {
     // but to decide what a candidate list offers first. Without it the
     // readings come back alphabetically and "the" sits behind "dye" and "ecu".
     const cryptoSolve = mode === 'cryptogram' && !cryptogramPlay && !learnMode;
-    if (!playActive && !learnMode && !cryptoSolve) return;
+    // the ladder solver searches the common list, so it needs it loaded even
+    // though nothing is being played
+    const ladderSolve = mode === 'ladder' && !ladderPlay && !learnMode;
+    if (!playActive && !learnMode && !cryptoSolve && !ladderSolve) return;
     // how ordinary each word is, so the solver's candidate lists lead with the
     // readings a person would actually consider
     if (cryptoSolve && !wordRank) getWordRank().then(setWordRank);
@@ -1016,7 +1036,7 @@ function App() {
     ) {
       getDictionary('standard').then(setStandardWordsArr);
     }
-  }, [playActive, learnMode, mode, cryptogramPlay, patternPlayActive, beePlayActive, boxedPlayActive, descramblePlayActive, gridPlayActive, weavePlayActive, squaresPlayActive, commonWordsArr, fullWordsArr, standardWordsArr, wordRank]);
+  }, [playActive, learnMode, mode, cryptogramPlay, ladderPlay, patternPlayActive, beePlayActive, boxedPlayActive, descramblePlayActive, gridPlayActive, weavePlayActive, squaresPlayActive, commonWordsArr, fullWordsArr, standardWordsArr, wordRank]);
 
   const aboutRef = useRef<HTMLDivElement>(null);
   const legalRef = useRef<HTMLDivElement>(null);
@@ -1078,6 +1098,32 @@ function App() {
     return words ? buildPatternIndex(words, wordRank ?? undefined) : null;
   }, [mode, cryptogramPlay, acceptWordsArr, standardWordsArr, wordRank]);
 
+  /** The solver's answer, or the reason there isn't one.
+   *
+   *  It refuses before it searches, because the three ways this can be asked
+   *  wrongly — different lengths, a word the list doesn't have, nothing typed
+   *  yet — are all cheaper to explain than a blank result. Searching over the
+   *  common tier rather than the accept tier keeps the route made of words a
+   *  person would use; a ladder through `esne` answers the question and helps
+   *  nobody. */
+  const ladderResult = useMemo((): 
+    | { kind: 'idle'; note: string }
+    | { kind: 'none'; note: string }
+    | { kind: 'route'; route: string[] } => {
+    if (!ladderFrom || !ladderTo) return { kind: 'idle', note: 'Enter two words.' };
+    if (ladderFrom.length !== ladderTo.length)
+      return { kind: 'none', note: 'Both words have to be the same length.' };
+    if (ladderFrom === ladderTo) return { kind: 'idle', note: 'Those are the same word.' };
+    if (!commonWordsArr) return { kind: 'idle', note: 'Loading the word list…' };
+    const words = new Set(commonWordsArr);
+    for (const w of [ladderFrom, ladderTo])
+      if (!words.has(w)) return { kind: 'none', note: `${w} is not in the word list.` };
+    const route = shortestLadder(ladderFrom, ladderTo, words);
+    return route
+      ? { kind: 'route', route }
+      : { kind: 'none', note: 'No ladder connects those two.' };
+  }, [ladderFrom, ladderTo, commonWordsArr]);
+
   const cryptoWords = useMemo(
     () => (cryptoText.trim() ? parseCryptogram(cryptoText, cryptoMode) : []),
     [cryptoText, cryptoMode]
@@ -1128,6 +1174,7 @@ function App() {
     weave: [weavePlay, setWeavePlay],
     squares: [squaresPlay, setSquaresPlay],
     cryptogram: [cryptogramPlay, setCryptogramPlay],
+    ladder: [ladderPlay, setLadderPlay],
   };
 
   const prefs = useMemo(
@@ -1330,8 +1377,10 @@ function App() {
       squaresPlay,
       cryptogram: { cipher: '' },
       cryptogramPlay,
+      ladder: { from: ladderFrom, to: ladderTo },
+      ladderPlay,
     });
-  }, [mode, dictionaries, sorts, kbOpen, theme, palette, textScale, navKeys, hiddenModes, hiddenViews, lengthRange, practiceAllowed, highlightMatches, helpAllowed, solverDictionary, wordFilter, startPage, onboarded, patternPlay, beePlay, boxedPlay, descramblePlay, gridPlay, length, known, containsStr, excludedStr, rackStr, useAll, minLength, beeCenter, beeOuters, boxedLetters, solutionWords, gridLetters, gridPreset, weaveLetters, weaveSize, weavePlay, squaresPlay, squaresLetters, squaresSize, cryptogramPlay]);
+  }, [mode, dictionaries, sorts, kbOpen, theme, palette, textScale, navKeys, hiddenModes, hiddenViews, lengthRange, practiceAllowed, highlightMatches, helpAllowed, solverDictionary, wordFilter, startPage, onboarded, patternPlay, beePlay, boxedPlay, descramblePlay, gridPlay, length, known, containsStr, excludedStr, rackStr, useAll, minLength, beeCenter, beeOuters, boxedLetters, solutionWords, gridLetters, gridPreset, weaveLetters, weaveSize, weavePlay, squaresPlay, squaresLetters, squaresSize, cryptogramPlay, ladderPlay, ladderFrom, ladderTo]);
 
   // keep known array sized to length
   useEffect(() => {
@@ -1956,6 +2005,71 @@ function App() {
         {cryptogramPlayActive && (
         <div className="mb-8">
           <CryptogramGame ref={cryptogramRef} />
+        </div>
+        )}
+
+        {mode === 'ladder' && ladderPlay && (
+        <div className="mb-8">
+          <LadderGame ref={ladderRef} />
+        </div>
+        )}
+
+        {/* The ladder solver answers exactly, which no other solver here can
+            claim: breadth-first search returns the shortest route or proves
+            there is none, so there is nothing to rank and nothing to guess. */}
+        {mode === 'ladder' && !ladderPlay && (
+        <div className="mb-8 max-w-md mx-auto">
+          <p className="text-sm text-slate-300 mb-3">
+            Two words of the same length. The shortest ladder between them, if there is one.
+          </p>
+          <div className="flex items-center gap-2">
+            <label htmlFor="ladder-from" className="sr-only">from</label>
+            <input
+              id="ladder-from"
+              value={ladderFrom}
+              onChange={(e) => setLadderFrom(e.target.value.toLowerCase().replace(/[^a-z]/g, ''))}
+              placeholder="cold"
+              autoComplete="off"
+              spellCheck={false}
+              className="w-full text-center text-lg font-bold uppercase tracking-widest rounded-lg bg-white/5 border border-white/10 text-slate-200 px-3 py-2"
+            />
+            <span aria-hidden className="text-slate-500">to</span>
+            <label htmlFor="ladder-to" className="sr-only">to</label>
+            <input
+              id="ladder-to"
+              value={ladderTo}
+              onChange={(e) => setLadderTo(e.target.value.toLowerCase().replace(/[^a-z]/g, ''))}
+              placeholder="warm"
+              autoComplete="off"
+              spellCheck={false}
+              className="w-full text-center text-lg font-bold uppercase tracking-widest rounded-lg bg-white/5 border border-white/10 text-slate-200 px-3 py-2"
+            />
+          </div>
+          <div aria-live="polite" className="mt-4">
+            {ladderResult.kind === 'idle' && (
+              <p className="text-sm text-slate-500 text-center">{ladderResult.note}</p>
+            )}
+            {ladderResult.kind === 'none' && (
+              <p className="text-sm text-amber-300 text-center">{ladderResult.note}</p>
+            )}
+            {ladderResult.kind === 'route' && (
+              <>
+                <p className="text-xs text-slate-400 text-center mb-2">
+                  {ladderResult.route.length - 1} steps
+                </p>
+                <ol className="space-y-1">
+                  {ladderResult.route.map((w, i) => (
+                    <li
+                      key={`${w}-${i}`}
+                      className="text-center text-lg font-bold uppercase tracking-widest text-slate-200"
+                    >
+                      {w}
+                    </li>
+                  ))}
+                </ol>
+              </>
+            )}
+          </div>
         </div>
         )}
 
