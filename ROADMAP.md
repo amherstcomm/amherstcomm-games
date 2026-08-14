@@ -995,6 +995,42 @@ generatable variant is a *fill-in* crossword (word bank, no clues), which is
 a genuinely different and easier puzzle. Decide which one we actually want
 before starting.
 
+**Evaluated** (August 2026), and the block is softer than the paragraph above
+says — because the corpus is already installed. `wordnet-db` has been a
+dependency since the word build began: `build-words.mjs` reads `data.noun` from
+it for the domains map. The same files carry **glosses**, which are modern
+English definitions under a permissive licence, and nothing new needs
+licensing or authoring.
+
+Measured over the common tier: 52% of its 39,098 words have a gloss, and
+**15,633 (40%) survive a mechanical filter** — between 12 and 90 characters,
+and not containing the answer's own stem. A grid needs thirty to eighty words,
+and unlike Cryptogram, where each day spends a passage, a clue bank is
+per-word and every puzzle reuses it. Fifteen thousand clued words is not a
+constraint on anything.
+
+The bad glosses fail in ways that are filterable rather than fatal, which a
+sample makes plain: `castle` came back as "interchanging the positions of the
+king and a rook" and `dragon` as a gliding lizard — the wrong sense, fixed by
+reading WordNet's own sense-frequency order instead of the first line found.
+`island` came back as "a zone or area resembling an island", which the stem
+filter already removes. `hammer` came back with a verb gloss for a noun, which
+the `pos` column in the words table already knows enough to prevent. What is
+left is the review sweep this project has done twice before, and it is
+one-time.
+
+**The honest ceiling: this makes a quick crossword, not a cryptic or a themed
+one.** Definitional clues, no wordplay, no misdirection, no Sunday theme.
+Clue craft is most of what makes crosswords good and none of it is
+generatable. Worth being clear about before anyone expects otherwise.
+
+**And the fill-in variant is the weaker one, not the safer one.** It is fully
+generatable, verifiable like any grid, and accessible — but the words are
+handed to you, so solving is fitting by length and crossing and needs no
+vocabulary at all. On the "is this a word game" axis it sits below Wordoku,
+which at least asks you to know one word. The entry above treats fill-in as
+the pragmatic choice; measured, it is the one that gives the least back.
+
 ### Sudoku (traditional) — not planned
 Not a word game, shares zero infrastructure, and dilutes what the site is.
 Superseded by Wordoku above.
