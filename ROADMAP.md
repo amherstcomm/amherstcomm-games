@@ -765,7 +765,17 @@ eligible and never reaches the client, so the feed carries what it would have
 carried anyway — two words and a par — with no new payload, no copy to keep in
 step with the palettes, and nothing to translate.
 
-Also open: whether par is shown or discovered.
+**Par is shown**, because it gives something to work toward. A ladder with no
+stated target is a maze; one that says "five steps" is a challenge, and the
+difference costs nothing — breadth-first search computes par anyway, both to
+generate the pair and to check the answer.
+
+Worth knowing before that is built: `par` already exists in the feed and
+nothing reads it. `fetch-puzzles.mjs` publishes it twice — the NYT Letter
+Boxed par it fetches, and a flat `par: 2` for the generated Boxed daily — and
+no client code consumes either. So Boxed has been carrying a target it never
+shows. Either it should show one, or the field should go; a value that is
+generated, published and ignored is the kind that quietly becomes wrong.
 
 Also open: whether a daily names both ends or only the start, and whether par
 is shown or discovered.
