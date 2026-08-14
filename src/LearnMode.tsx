@@ -1075,6 +1075,12 @@ function LearnSquares({ dict, register }: { dict: Set<string> | null; register: 
                     <button
                       onMouseDown={(e) => e.preventDefault()}
                       onClick={() => !given && setCursor(i)}
+                      // Same shape the real board uses. An empty cell has no
+                      // text to be named by, so without this a screen reader
+                      // reads the demo grid as eight buttons called "button".
+                      aria-label={`row ${r + 1} column ${c + 1}${
+                        given ? `, ${at(i)}, given` : at(i) ? `, ${at(i)}` : ', empty'
+                      }`}
                       className={`w-11 h-12 rounded-xl border-2 text-xl font-bold uppercase transition-colors
                         ${given
                           ? 'bg-white/20 border-white/30 text-white'

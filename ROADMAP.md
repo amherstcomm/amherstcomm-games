@@ -437,6 +437,32 @@ found what automation couldn't — the leaderboard cards were static text in a
 dialog, spoken on hover but unreachable by Tab, and now take focus. Worth
 re-walking after any new surface; axe still covers only the mechanical half.
 
+**The sweep now walks every route** (August 2026): 43, from 14. It had grown
+once already, to cover all eight dailies, and the comment it grew for said
+"every game's daily, not a sample of them" — true, and it read as
+thoroughness. Underneath, three of the four views were still samples: two
+solvers of eight, two learn pages of eight, and **not one of the eight
+practice routes had ever been scanned**. Panels, legal pages and two of three
+settings tabs were outside it too. The list is generated from the games now,
+so a ninth game is scanned on all four views the day it exists.
+
+It found two real defects on the first run, both of a kind axe is good at and
+a person is not:
+
+- The **Squares learn demo** had eight buttons with no accessible name — the
+  blank cells render no text, so a screen reader read the grid as eight
+  buttons called "button". The real board had carried a proper label all
+  along; the demo was markup that looked the same and wasn't.
+- **`/keys`**, the panel documenting how to play without a mouse, had a scroll
+  region a keyboard could not reach. It is all text and diagrams, so nothing
+  in it takes focus, and axe flags a scrollable region with no focusable
+  descendant for exactly that reason. Four sibling panels share the markup and
+  escape the rule only because they happen to contain buttons.
+
+Coverage that looks complete is worse than coverage that admits its gaps,
+because nobody goes back to check it. Both of these lived behind a comment
+claiming the sweep was thorough.
+
 Difficulty took a day and produced roughly a dozen bugs. Every one was found
 by playing the site or by a throwaway script, and several looked fine right up
 until someone typed something. That's the argument: not coverage for its own
@@ -645,6 +671,47 @@ seasonal theme and lose an accommodation they needed.
 Falling letters you steer into words. A real-time game loop, unlike anything
 else here, fully generatable, and distinctive. The most interesting fit.
 
+**Evaluated** (August 2026), and the obstacle is not difficulty. It reuses the
+dictionary and bands, the daily feed shape and its seeding, the difficulty
+tiers, and the share and stats plumbing — the cheap half. What is new is a
+game loop (nothing here uses `requestAnimationFrame` or a tick),
+frame-rate-independent timing, collision and stacking, touch controls, and a
+render path that is not React state per frame.
+
+**It breaks three things the site currently holds, and a fourth quietly.**
+
+1. *Scores stop being verifiable.* Every leaderboard entry today is recomputed
+   server-side from evidence: `result_is_plausible` checks arithmetic, then
+   dictionary membership, then the claimed words against the actual puzzle. A
+   Tetris score is not a function of a word set — the achievement is the
+   real-time sequence, and the letters are as reachable as the player's hands
+   allow. Verifying it honestly means shipping an input replay the server
+   re-simulates, which is a game loop in plpgsql. The realistic choices are no
+   leaderboard, or a verifier outside Postgres.
+2. *Play stops being accessible.* WCAG AA across fourteen routes, plus the
+   NVDA walks. A falling-block game under time pressure has no screen-reader
+   equivalent and excludes motor impairment outright. Text scaling to 125%
+   fights a fixed playfield as well.
+3. *The site stops being unhurried.* Learn says "no clock, no stakes" in those
+   words, twice. Boxed and Cryptogram record elapsed time, but as a stat you
+   are free to ignore; nothing here pressures anyone.
+4. *A day stops being resumable.* `daily_progress` keeps partial state so a
+   half-finished puzzle follows you between devices. A real-time run does not
+   resume — it would be the first game where closing the tab costs the day.
+
+**The version that keeps all four: drop the clock, not the idea.** Letters
+fall into a well and you place each one with as long as you like; the score is
+the words formed. Deterministic dailies, scores the server can recompute from
+the placements against the seeded piece sequence, keyboard and screen-reader
+play, resume, and the site's own character — while still resembling nothing
+else here. The phrase above is "falling letters you steer into words", and
+that survives losing the timer. The invariants do not survive keeping it.
+
+**If the arcade version is wanted anyway** — a fair thing to want, it is the
+more fun one — the honest shape is practice-only, no leaderboard, explicitly
+outside the daily system. Nothing breaks, it is far less work, and it answers
+whether the game is fun before anyone pays for replay verification.
+
 ### Wordoku
 A 9×9 sudoku whose nine symbols are letters, with one row or the main
 diagonal spelling a nine-letter word of nine distinct letters (EDUCATION,
@@ -655,6 +722,51 @@ many cells are revealed.
 
 **Caveat:** it's a logic puzzle wearing letters — the dictionary does almost
 no work.
+
+**Evaluated** (August 2026). Technically it is the cheapest game left on this
+list, and nothing about it is new work: difficulty is how many cells are
+given, resume is a partial grid as Squares already does, and accessibility is
+a 9x9 letter grid, which Squares has shown reads fine by keyboard and by ear.
+Verification would be the *strongest* of any game here — the answer is a
+completed grid, so the server compares it outright, and `result_is_plausible`
+already does answer verification for Squares and Weave. Even the uniqueness
+requirement is familiar: a sudoku needs exactly one solution, and the Squares
+uniqueness contract test is that discipline already written down.
+
+**The word supply is not the problem.** 609 nine-letter words of nine distinct
+letters in the common tier, 1,928 through band-70 — algorithm, education,
+dangerous, computers. And unlike Cryptogram, where the passage *is* the
+puzzle, here the word only labels a grid, so one word backs any number of
+boards. Word repeats are cosmetic.
+
+**Making the dictionary work harder is where it gets tight**, and the reason
+is structural rather than a matter of effort. A row is a permutation of the
+nine letters, so any row can spell a word when the letter set has anagrams —
+89 sets do, giving 107 pairs (education / auctioned / cautioned; triangles /
+integrals / gnarliest; algorithm / logarithm). But two word *rows* must differ
+in every column or they collide, while a word row must *agree* with a diagonal
+word at the one cell where they cross. Differing everywhere and matching
+somewhere are mutually exclusive, and the measurement says so exactly: 26
+pairs can be two rows, 81 can be a row plus the diagonal, **none can be both**.
+Completability then splits them further — every two-row grid tried completed,
+against 30% for row-plus-diagonal.
+
+So: one word free, two words available in one arrangement or the other, three
+never. The scarce thing is vocabulary rather than boards, which is the inverse
+of Cryptogram.
+
+**What it costs is character, and more than the caveat above admits.** The
+Cryptogram entry warns that two logic-games-wearing-letters make the site
+something else, counting Cryptogram as the first. The two are not equivalent.
+Solving a cryptogram is word-dependent in every cell — word shapes, a
+vocabulary, the pattern dictionary. A wordoku is word-dependent in **nine
+cells out of eighty-one**; the other seventy-two are sudoku with letters
+painted on. The caveat lands far harder here than it ever did there.
+
+If the goal is more puzzles cheaply, this is the easy yes. If the goal is a
+word site, it is the weakest fit on the list — and the multi-word version is
+what would earn it a place, since two word rows make it a word puzzle with
+sudoku scaffolding rather than sudoku with a word stapled on.
 
 ### ~~Word squares~~ — done
 An N×N grid where every row *and* column is a real word, some letters given
@@ -908,6 +1020,42 @@ generatable; good clues need human authoring or a licensed corpus. The
 generatable variant is a *fill-in* crossword (word bank, no clues), which is
 a genuinely different and easier puzzle. Decide which one we actually want
 before starting.
+
+**Evaluated** (August 2026), and the block is softer than the paragraph above
+says — because the corpus is already installed. `wordnet-db` has been a
+dependency since the word build began: `build-words.mjs` reads `data.noun` from
+it for the domains map. The same files carry **glosses**, which are modern
+English definitions under a permissive licence, and nothing new needs
+licensing or authoring.
+
+Measured over the common tier: 52% of its 39,098 words have a gloss, and
+**15,633 (40%) survive a mechanical filter** — between 12 and 90 characters,
+and not containing the answer's own stem. A grid needs thirty to eighty words,
+and unlike Cryptogram, where each day spends a passage, a clue bank is
+per-word and every puzzle reuses it. Fifteen thousand clued words is not a
+constraint on anything.
+
+The bad glosses fail in ways that are filterable rather than fatal, which a
+sample makes plain: `castle` came back as "interchanging the positions of the
+king and a rook" and `dragon` as a gliding lizard — the wrong sense, fixed by
+reading WordNet's own sense-frequency order instead of the first line found.
+`island` came back as "a zone or area resembling an island", which the stem
+filter already removes. `hammer` came back with a verb gloss for a noun, which
+the `pos` column in the words table already knows enough to prevent. What is
+left is the review sweep this project has done twice before, and it is
+one-time.
+
+**The honest ceiling: this makes a quick crossword, not a cryptic or a themed
+one.** Definitional clues, no wordplay, no misdirection, no Sunday theme.
+Clue craft is most of what makes crosswords good and none of it is
+generatable. Worth being clear about before anyone expects otherwise.
+
+**And the fill-in variant is the weaker one, not the safer one.** It is fully
+generatable, verifiable like any grid, and accessible — but the words are
+handed to you, so solving is fitting by length and crossing and needs no
+vocabulary at all. On the "is this a word game" axis it sits below Wordoku,
+which at least asks you to know one word. The entry above treats fill-in as
+the pragmatic choice; measured, it is the one that gives the least back.
 
 ### Sudoku (traditional) — not planned
 Not a word game, shares zero infrastructure, and dilutes what the site is.
