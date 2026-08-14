@@ -70,7 +70,7 @@ describe('decorative palettes', () => {
 
 describe('monochrome', () => {
   // Weave paints its spangram amber-400 and its theme words sky-400, at 50%
-  // and 40% over the page. Nine palettes tell those apart by hue; this one has
+  // and 40% over the page. Ten palettes tell those apart by hue; this one has
   // none to spend, so the entire distinction is lightness — and light mode had
   // amber at 124 against sky at 136, which composited to a difference of
   // seventeen out of 255. On the palette that exists for people who cannot use
@@ -116,6 +116,74 @@ describe('monochrome', () => {
       const [hi, lo] = [lum(span), lum(word)].sort((a, b) => b - a);
       const ratio = (hi + 0.05) / (lo + 0.05);
       expect(ratio, `mono on ${theme}: spangram and theme word are ${ratio.toFixed(2)} apart`).toBeGreaterThan(1.4);
+    }
+  });
+});
+
+describe('the wrong answer stays findable', () => {
+  // The rule above stops a decorative palette *editing* a meaning-carrying
+  // hue. It cannot stop one moving the ground underneath it, and that is the
+  // other half of the same failure: rose-400 is what marks a wrong answer, and
+  // a palette free to repaint the page is free to paint it rose.
+  //
+  // Garnet is the case that asked the question — its page sits at hue 6 and
+  // rose-400 at hue 16, which is as close as two hues get. It survives because
+  // the ramp is deep and desaturated, so lightness does all the separating; a
+  // shallower red would have looked fine in the picker and quietly swallowed
+  // every wrong answer on the board.
+  //
+  // Nothing else catches this. Axe checks text against its own background, not
+  // one element against the element beside it, so the sweep passes either way.
+  // ΔE76 is crude — it is a regression floor, not a perception model — but it
+  // sees the thing a contrast ratio cannot, which is two colours that differ
+  // in lightness while sharing a hue.
+  const rgb = (selectors: string[], name: string): [number, number, number] => {
+    for (const s of selectors) {
+      const m = blockFor(s).match(new RegExp(`${name}:\\s*(\\d+) (\\d+) (\\d+)`));
+      if (m) return [Number(m[1]), Number(m[2]), Number(m[3])];
+    }
+    throw new Error(`${name} not declared in ${selectors.join(', ')}`);
+  };
+  const lab = ([r, g, b]: [number, number, number]) => {
+    const f = (c: number) => (c / 255 <= 0.04045 ? c / 255 / 12.92 : ((c / 255 + 0.055) / 1.055) ** 2.4);
+    const [R, G, B] = [f(r), f(g), f(b)];
+    const k = (t: number) => (t > 0.008856 ? Math.cbrt(t) : 7.787 * t + 16 / 116);
+    const X = k((0.4124 * R + 0.3576 * G + 0.1805 * B) / 0.95047);
+    const Y = k(0.2126 * R + 0.7152 * G + 0.0722 * B);
+    const Z = k((0.0193 * R + 0.1192 * G + 0.9505 * B) / 1.08883);
+    return [116 * Y - 16, 500 * (X - Y), 200 * (Y - Z)];
+  };
+  const dE = (a: [number, number, number], b: [number, number, number]) => {
+    const [A, B] = [lab(a), lab(b)];
+    return Math.hypot(A[0] - B[0], A[1] - B[1], A[2] - B[2]);
+  };
+  const decorative = PALETTES.filter((p) => !ACCESSIBLE_PALETTES.includes(p));
+
+  // Floors sit under the tightest shipping pair with room to spare, so this
+  // fails on a new palette rather than on the ones already measured. The
+  // ground pairs run 61–86 today; accent-vs-wrong is tighter everywhere,
+  // because on several palettes the accent is deliberately a warm hue.
+  it.each(decorative)('%s keeps rose clear of the ground it sits on', (palette) => {
+    for (const [theme, selectors] of [
+      ['dark', [`:root[data-palette='${palette}']`, ":root[data-theme='dark']"]],
+      [
+        'light',
+        [
+          `:root[data-theme='light'][data-palette='${palette}']`,
+          `:root[data-palette='${palette}']`,
+          ":root[data-theme='light']",
+        ],
+      ],
+    ] as const) {
+      const wrong = rgb([...selectors], '--c-rose-400');
+      for (const [what, name, floor] of [
+        ['the page', '--c-slate-950', 40],
+        ['a panel', '--c-slate-800', 40],
+        ['the accent', '--c-accent', 20],
+      ] as const) {
+        const d = dE(wrong, rgb([...selectors], name));
+        expect(d, `${palette} on ${theme}: a wrong answer is ΔE ${d.toFixed(1)} from ${what}`).toBeGreaterThan(floor);
+      }
     }
   });
 });
