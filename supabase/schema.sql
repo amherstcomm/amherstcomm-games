@@ -1080,6 +1080,37 @@ begin
   ) s;
   out_json := jsonb_set(out_json, '{cryptogram}', part);
 
+  -- ladder: days solved, then how many of those came in at par. The tie-break
+  -- is the game's own measure rather than the clock — a ladder walked in the
+  -- fewest steps is the better game, and racing one rewards typing speed over
+  -- finding the route. `steps` is the chain the player kept, so this counts
+  -- what result_is_plausible has already checked rung by rung.
+  select coalesce(jsonb_agg(jsonb_build_object('name', name, 'value', value, 'detail', detail) order by rk), '[]'::jsonb)
+    into part
+  from (
+    select *, row_number() over (order by value desc, detail desc) as rk
+    from (
+      select p.display_name as name,
+             count(*) filter (where (dp.result->>'solved')::boolean) as value,
+             count(*) filter (
+               where (dp.result->>'solved')::boolean
+                 and jsonb_array_length(coalesce(dp.state->'chain', '[]'::jsonb))
+                     <= coalesce((dp.state->>'par')::int, 2147483647)
+             ) as detail
+      from public.daily_progress dp
+      join public.profiles p on p.id = dp.user_id
+      where dp.game = 'ladder' and dp.completed and dp.env = p_env and dp.difficulty = p_difficulty and dp.puzzle_date >= since
+        and (p_users is null or dp.user_id = any(p_users))
+        and p.display_name is not null
+        and public.result_is_plausible('ladder', dp.state, dp.result, dp.difficulty, dp.variant, dp.puzzle_date, dp.env)
+      group by p.display_name
+      having count(*) filter (where (dp.result->>'solved')::boolean) > 0
+    ) a
+    order by rk
+    limit 10
+  ) s;
+  out_json := jsonb_set(out_json, '{ladder}', part);
+
   -- squares: one board per size. A 4×4 and a 5×5 aren't the same puzzle, and a
   -- combined ranking would quietly reward whoever played more of the easier
   -- one. Days solved, then the fastest — weave's shape, keyed on variant.

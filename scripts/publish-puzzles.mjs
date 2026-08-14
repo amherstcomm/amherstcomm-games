@@ -17,7 +17,7 @@ if (!KEY) {
   throw new Error('SUPABASE_SERVICE_ROLE_KEY is not set');
 }
 
-const GAMES = ['words', 'hive', 'box', 'scramble', 'grid', 'weave', 'squares', 'cryptogram'];
+const GAMES = ['words', 'hive', 'box', 'scramble', 'grid', 'weave', 'squares', 'cryptogram', 'ladder'];
 
 const rows = [];
 
@@ -35,6 +35,7 @@ for (const game of GAMES) {
 add('weave-pool.json', 'shared', 'weave-pool');
 add('squares-pool.json', 'shared', 'squares-pool');
 add('cryptogram-pool.json', 'shared', 'cryptogram-pool');
+add('ladder-pool.json', 'shared', 'ladder-pool');
 
 const res = await fetch(`${SUPABASE_URL}/rest/v1/daily_puzzles`, {
   method: 'POST',
