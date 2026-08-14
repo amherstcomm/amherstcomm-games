@@ -24,13 +24,14 @@ import {
   TIER_BAND,
   TIER_VARIANTS,
 } from '../../scripts/cryptogram.mjs';
+import { livePairs, TIER_PAR } from '../../scripts/ladder.mjs';
 
 const run = promisify(execFile);
 
 const DATE = '2026-01-15'; // pinned: same date, same feed, every run
 const DIFFICULTIES = ['easy', 'hard', 'extreme'] as const;
 const VARIANTS = ['', 'dev-'] as const;
-const GAMES = ['words', 'hive', 'box', 'scramble', 'grid', 'weave', 'squares', 'cryptogram'] as const;
+const GAMES = ['words', 'hive', 'box', 'scramble', 'grid', 'weave', 'squares', 'cryptogram', 'ladder'] as const;
 
 // Feeds are checked by assertion, not by type; typing them would restate the tests.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -59,7 +60,7 @@ beforeAll(async () => {
       feeds.set(`${variant}${game}`, JSON.parse(raw));
     }
   }
-  for (const pool of ['weave-pool', 'squares-pool', 'cryptogram-pool']) {
+  for (const pool of ['weave-pool', 'squares-pool', 'cryptogram-pool', 'ladder-pool']) {
     feeds.set(pool, JSON.parse(await readFile(join(dir, `${pool}.json`), 'utf8')));
   }
 });
@@ -618,5 +619,142 @@ describe('the practice pools', () => {
       expect(weavePool.byDifficulty[d].length, `weave pool ${d}`).toBeGreaterThanOrEqual(10);
       expect(squaresPool.byDifficulty[d].length, `squares pool ${d}`).toBeGreaterThanOrEqual(10);
     }
+  });
+});
+
+describe('ladder', () => {
+  // The rungs a player may step through: the common tier with the blocklist
+  // taken out of the graph, which is what the harvest measured par over. Par
+  // has to mean the same thing here or the board states a number nobody can
+  // hit.
+  const rungs = new Set<string>();
+  beforeAll(async () => {
+    const blocked = new Set(
+      (JSON.parse(await readFile('scripts/blocked-words.json', 'utf8')) as Feed).words.map(
+        (w: Feed) => w.word as string
+      )
+    );
+    for (const band of ['band-10', 'band-20', 'band-35']) {
+      const words = (JSON.parse(await readFile(`src/wordbands/${band}.json`, 'utf8')) as Feed)
+        .words as string[];
+      for (const w of words) if (/^[a-z]+$/.test(w) && !blocked.has(w)) rungs.add(w);
+    }
+  });
+
+  /** the shortest route, and the route itself so it can be shown to be real */
+  const route = (from: string, to: string): string[] | null => {
+    const prev = new Map<string, string | null>([[from, null]]);
+    const queue = [from];
+    for (let i = 0; i < queue.length; i++) {
+      const w = queue[i];
+      if (w === to) {
+        const path: string[] = [];
+        for (let at: string | null = to; at; at = prev.get(at)!) path.push(at);
+        return path.reverse();
+      }
+      for (let p = 0; p < w.length; p++) {
+        for (let c = 97; c < 123; c++) {
+          const next = w.slice(0, p) + String.fromCharCode(c) + w.slice(p + 1);
+          if (next !== w && rungs.has(next) && !prev.has(next)) {
+            prev.set(next, w);
+            queue.push(next);
+          }
+        }
+      }
+    }
+    return null;
+  };
+
+  const boards = () => [
+    ...VARIANTS.flatMap((v) =>
+      DIFFICULTIES.map((d) => ({ b: feed(v, 'ladder').byDifficulty[d] as Feed, where: `${v}${d}` }))
+    ),
+    ...DIFFICULTIES.flatMap((d) =>
+      (feeds.get('ladder-pool')!.byDifficulty[d] as Feed[]).map((b, i) => ({
+        b,
+        where: `pool ${d} #${i}`,
+      }))
+    ),
+  ];
+
+  it('gives both ends, the same length, and a par', () => {
+    for (const { b, where } of boards()) {
+      expect(typeof b.from, where).toBe('string');
+      expect(typeof b.to, where).toBe('string');
+      expect(b.from, where).not.toBe(b.to);
+      expect(b.from.length, where).toBe(b.to.length);
+      expect(Number.isInteger(b.par), where).toBe(true);
+    }
+  });
+
+  // The one that matters. The board prints "in 5 steps" and a player who
+  // cannot do it in five has been lied to, so par is not taken on trust from
+  // the pool file — it is re-derived here, and the route is reconstructed to
+  // prove the number is reachable rather than merely recorded.
+  it('states a par a player can actually reach', () => {
+    for (const { b, where } of boards()) {
+      const found = route(b.from, b.to);
+      expect(found, `${where}: ${b.from} -> ${b.to} has no ladder at all`).not.toBeNull();
+      expect(found!.length - 1, `${where}: ${found!.join(' -> ')}`).toBe(b.par);
+      for (const rung of found!) expect(rungs.has(rung), `${where}: ${rung}`).toBe(true);
+      found!.forEach((w, i) => {
+        if (i === 0) return;
+        const differ = [...w].filter((c, k) => c !== found![i - 1][k]).length;
+        expect(differ, `${where}: ${found![i - 1]} -> ${w}`).toBe(1);
+      });
+    }
+  });
+
+  it('deals each difficulty out of its own par band', () => {
+    for (const v of VARIANTS) {
+      for (const d of DIFFICULTIES) {
+        const [lo, hi] = TIER_PAR[d];
+        const par = feed(v, 'ladder').byDifficulty[d].par as number;
+        expect(par, `${v}${d}`).toBeGreaterThanOrEqual(lo);
+        expect(par, `${v}${d}`).toBeLessThanOrEqual(hi);
+      }
+    }
+  });
+
+  // Every other game encodes an answer into the feed and this one has none to
+  // encode: a ladder is checked by rule, so publishing a route would be
+  // publishing one arbitrary solution out of many and spoiling all of them.
+  it('publishes no route', () => {
+    for (const v of VARIANTS) {
+      const raw = JSON.stringify(feed(v, 'ladder'));
+      expect(raw).not.toMatch(/answer|route|path|steps"\s*:\s*\[/);
+      for (const d of DIFFICULTIES) {
+        expect(Object.keys(feed(v, 'ladder').byDifficulty[d]).sort()).toEqual(['from', 'par', 'to']);
+      }
+    }
+  });
+
+  it('keeps practice clear of both sites’ dailies', () => {
+    const dailies = new Set(
+      VARIANTS.flatMap((v) =>
+        DIFFICULTIES.map((d) => {
+          const b = feed(v, 'ladder').byDifficulty[d];
+          return `${b.from} ${b.to}`;
+        })
+      )
+    );
+    for (const d of DIFFICULTIES) {
+      const pool = feeds.get('ladder-pool')!.byDifficulty[d] as Feed[];
+      expect(pool.length, `ladder pool ${d}`).toBeGreaterThanOrEqual(10);
+      const seen = pool.map((b) => `${b.from} ${b.to}`);
+      expect(new Set(seen).size, `ladder pool ${d} repeats itself`).toBe(seen.length);
+      for (const s of seen) expect(dailies.has(s), `pool ${d} spoils a daily`).toBe(false);
+    }
+  });
+
+  it('holds back every pair the review flagged', async () => {
+    const parsed = JSON.parse(await readFile('scripts/ladder-pairs.json', 'utf8'));
+    const held = new Set(
+      (parsed.pairs as Feed[]).filter((p) => p.review).map((p) => `${p.a} ${p.b}`)
+    );
+    expect(held.size, 'the review flags survived the harvest').toBeGreaterThan(0);
+    expect(livePairs(parsed).length).toBe(parsed.pairs.length - held.size);
+    for (const { b, where } of boards())
+      expect(held.has(`${b.from} ${b.to}`), `${where} published a held pair`).toBe(false);
   });
 });

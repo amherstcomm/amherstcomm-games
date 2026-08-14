@@ -1,0 +1,5894 @@
+{
+ "rungs": [
+  "band-10",
+  "band-20",
+  "band-35"
+ ],
+ "pairs": [
+  {
+   "a": "ace",
+   "b": "one",
+   "rel": [
+    "synonym"
+   ],
+   "par": 3
+  },
+  {
+   "a": "bang",
+   "b": "bash",
+   "rel": [
+    "synonym"
+   ],
+   "par": 3
+  },
+  {
+   "a": "beet",
+   "b": "beta",
+   "rel": [
+    "has part",
+    "part of"
+   ],
+   "par": 3
+  },
+  {
+   "a": "bend",
+   "b": "road",
+   "rel": [
+    "has part",
+    "part of"
+   ],
+   "par": 3
+  },
+  {
+   "a": "bend",
+   "b": "kink",
+   "rel": [
+    "entailment"
+   ],
+   "par": 3
+  },
+  {
+   "a": "better",
+   "b": "punter",
+   "rel": [
+    "synonym"
+   ],
+   "par": 3
+  },
+  {
+   "a": "bird",
+   "b": "wing",
+   "rel": [
+    "has part",
+    "part of"
+   ],
+   "par": 3
+  },
+  {
+   "a": "boiled",
+   "b": "cooked",
+   "rel": [
+    "similar"
+   ],
+   "par": 3
+  },
+  {
+   "a": "bone",
+   "b": "horn",
+   "rel": [
+    "has part",
+    "part of"
+   ],
+   "par": 3
+  },
+  {
+   "a": "boom",
+   "b": "roar",
+   "rel": [
+    "synonym"
+   ],
+   "par": 3
+  },
+  {
+   "a": "boss",
+   "b": "brag",
+   "rel": [
+    "synonym"
+   ],
+   "par": 3
+  },
+  {
+   "a": "boy",
+   "b": "son",
+   "rel": [
+    "synonym"
+   ],
+   "par": 3
+  },
+  {
+   "a": "bubble",
+   "b": "gurgle",
+   "rel": [
+    "synonym",
+    "verb group"
+   ],
+   "par": 3
+  },
+  {
+   "a": "bum",
+   "b": "rat",
+   "rel": [
+    "synonym"
+   ],
+   "par": 3
+  },
+  {
+   "a": "buns",
+   "b": "rump",
+   "rel": [
+    "synonym"
+   ],
+   "par": 3
+  },
+  {
+   "a": "buss",
+   "b": "kiss",
+   "rel": [
+    "synonym"
+   ],
+   "par": 3
+  },
+  {
+   "a": "calm",
+   "b": "lull",
+   "rel": [
+    "synonym"
+   ],
+   "par": 3
+  },
+  {
+   "a": "car",
+   "b": "fin",
+   "rel": [
+    "has part",
+    "part of"
+   ],
+   "par": 3
+  },
+  {
+   "a": "care",
+   "b": "like",
+   "rel": [
+    "synonym"
+   ],
+   "par": 3
+  },
+  {
+   "a": "cart",
+   "b": "hale",
+   "rel": [
+    "synonym"
+   ],
+   "par": 3
+  },
+  {
+   "a": "cat",
+   "b": "guy",
+   "rel": [
+    "synonym"
+   ],
+   "par": 3
+  },
+  {
+   "a": "char",
+   "b": "coal",
+   "rel": [
+    "synonym"
+   ],
+   "par": 3
+  },
+  {
+   "a": "clang",
+   "b": "clash",
+   "rel": [
+    "synonym"
+   ],
+   "par": 3
+  },
+  {
+   "a": "clank",
+   "b": "clash",
+   "rel": [
+    "synonym"
+   ],
+   "par": 3
+  },
+  {
+   "a": "coiled",
+   "b": "rolled",
+   "rel": [
+    "similar"
+   ],
+   "par": 3
+  },
+  {
+   "a": "cop",
+   "b": "nab",
+   "rel": [
+    "synonym"
+   ],
+   "par": 3
+  },
+  {
+   "a": "cot",
+   "b": "leg",
+   "rel": [
+    "has part",
+    "part of"
+   ],
+   "par": 3
+  },
+  {
+   "a": "cub",
+   "b": "lad",
+   "rel": [
+    "synonym"
+   ],
+   "par": 3
+  },
+  {
+   "a": "dab",
+   "b": "pat",
+   "rel": [
+    "synonym"
+   ],
+   "par": 3
+  },
+  {
+   "a": "dad",
+   "b": "pop",
+   "rel": [
+    "synonym"
+   ],
+   "par": 3
+  },
+  {
+   "a": "dame",
+   "b": "doll",
+   "rel": [
+    "synonym"
+   ],
+   "par": 3
+  },
+  {
+   "a": "dame",
+   "b": "lady",
+   "rel": [
+    "synonym"
+   ],
+   "par": 3
+  },
+  {
+   "a": "deal",
+   "b": "peck",
+   "rel": [
+    "synonym"
+   ],
+   "par": 3
+  },
+  {
+   "a": "dig",
+   "b": "hoe",
+   "rel": [
+    "entailment"
+   ],
+   "par": 3
+  },
+  {
+   "a": "dodge",
+   "b": "hedge",
+   "rel": [
+    "synonym"
+   ],
+   "par": 3
+  },
+  {
+   "a": "doting",
+   "b": "loving",
+   "rel": [
+    "similar"
+   ],
+   "par": 3
+  },
+  {
+   "a": "dull",
+   "b": "mute",
+   "rel": [
+    "synonym"
+   ],
+   "par": 3
+  },
+  {
+   "a": "dung",
+   "b": "muck",
+   "rel": [
+    "synonym"
+   ],
+   "par": 3
+  },
+  {
+   "a": "dust",
+   "b": "junk",
+   "rel": [
+    "synonym"
+   ],
+   "par": 3
+  },
+  {
+   "a": "east",
+   "b": "west",
+   "rel": [
+    "antonym"
+   ],
+   "par": 3
+  },
+  {
+   "a": "eat",
+   "b": "jaw",
+   "rel": [
+    "entailment"
+   ],
+   "par": 3
+  },
+  {
+   "a": "eye",
+   "b": "lid",
+   "rel": [
+    "has part",
+    "part of"
+   ],
+   "par": 3
+  },
+  {
+   "a": "fee",
+   "b": "tip",
+   "rel": [
+    "synonym"
+   ],
+   "par": 3
+  },
+  {
+   "a": "firm",
+   "b": "hard",
+   "rel": [
+    "similar"
+   ],
+   "par": 3
+  },
+  {
+   "a": "fix",
+   "b": "set",
+   "rel": [
+    "synonym"
+   ],
+   "par": 3
+  },
+  {
+   "a": "flow",
+   "b": "flux",
+   "rel": [
+    "synonym"
+   ],
+   "par": 3
+  },
+  {
+   "a": "formed",
+   "b": "molded",
+   "rel": [
+    "similar"
+   ],
+   "par": 3
+  },
+  {
+   "a": "furry",
+   "b": "hairy",
+   "rel": [
+    "similar"
+   ],
+   "par": 3
+  },
+  {
+   "a": "gab",
+   "b": "yak",
+   "rel": [
+    "synonym"
+   ],
+   "par": 3
+  },
+  {
+   "a": "game",
+   "b": "halt",
+   "rel": [
+    "synonym"
+   ],
+   "par": 3
+  },
+  {
+   "a": "glass",
+   "b": "glaze",
+   "rel": [
+    "synonym"
+   ],
+   "par": 3
+  },
+  {
+   "a": "gob",
+   "b": "yap",
+   "rel": [
+    "synonym"
+   ],
+   "par": 3
+  },
+  {
+   "a": "gob",
+   "b": "tar",
+   "rel": [
+    "synonym"
+   ],
+   "par": 3
+  },
+  {
+   "a": "gobs",
+   "b": "tons",
+   "rel": [
+    "synonym"
+   ],
+   "par": 3
+  },
+  {
+   "a": "hat",
+   "b": "lid",
+   "rel": [
+    "synonym"
+   ],
+   "par": 3
+  },
+  {
+   "a": "hate",
+   "b": "love",
+   "rel": [
+    "antonym"
+   ],
+   "par": 3
+  },
+  {
+   "a": "heaps",
+   "b": "loads",
+   "rel": [
+    "synonym"
+   ],
+   "par": 3
+  },
+  {
+   "a": "hint",
+   "b": "mite",
+   "rel": [
+    "synonym"
+   ],
+   "par": 3
+  },
+  {
+   "a": "hog",
+   "b": "pig",
+   "rel": [
+    "synonym"
+   ],
+   "par": 3
+  },
+  {
+   "a": "honk",
+   "b": "toot",
+   "rel": [
+    "synonym"
+   ],
+   "par": 3
+  },
+  {
+   "a": "hook",
+   "b": "soak",
+   "rel": [
+    "synonym"
+   ],
+   "par": 3
+  },
+  {
+   "a": "jam",
+   "b": "mob",
+   "rel": [
+    "synonym"
+   ],
+   "par": 3
+  },
+  {
+   "a": "lay",
+   "b": "put",
+   "rel": [
+    "synonym"
+   ],
+   "par": 3
+  },
+  {
+   "a": "lay",
+   "b": "set",
+   "rel": [
+    "synonym"
+   ],
+   "par": 3
+  },
+  {
+   "a": "lay",
+   "b": "lie",
+   "rel": [
+    "cause"
+   ],
+   "par": 3
+  },
+  {
+   "a": "lean",
+   "b": "tend",
+   "rel": [
+    "synonym"
+   ],
+   "par": 3
+  },
+  {
+   "a": "lend",
+   "b": "loan",
+   "rel": [
+    "synonym"
+   ],
+   "par": 3
+  },
+  {
+   "a": "lift",
+   "b": "rise",
+   "rel": [
+    "cause"
+   ],
+   "par": 3
+  },
+  {
+   "a": "like",
+   "b": "same",
+   "rel": [
+    "also see",
+    "synonym"
+   ],
+   "par": 3
+  },
+  {
+   "a": "lone",
+   "b": "sole",
+   "rel": [
+    "synonym"
+   ],
+   "par": 3
+  },
+  {
+   "a": "many",
+   "b": "more",
+   "rel": [
+    "also see"
+   ],
+   "par": 3
+  },
+  {
+   "a": "mass",
+   "b": "mint",
+   "rel": [
+    "synonym"
+   ],
+   "par": 3
+  },
+  {
+   "a": "mint",
+   "b": "pile",
+   "rel": [
+    "synonym"
+   ],
+   "par": 3
+  },
+  {
+   "a": "nutty",
+   "b": "tasty",
+   "rel": [
+    "similar"
+   ],
+   "par": 3
+  },
+  {
+   "a": "pack",
+   "b": "pile",
+   "rel": [
+    "cause"
+   ],
+   "par": 3
+  },
+  {
+   "a": "pane",
+   "b": "wall",
+   "rel": [
+    "has part",
+    "part of"
+   ],
+   "par": 3
+  },
+  {
+   "a": "pate",
+   "b": "poll",
+   "rel": [
+    "synonym"
+   ],
+   "par": 3
+  },
+  {
+   "a": "plod",
+   "b": "slog",
+   "rel": [
+    "synonym"
+   ],
+   "par": 3
+  },
+  {
+   "a": "punt",
+   "b": "push",
+   "rel": [
+    "entailment"
+   ],
+   "par": 3
+  },
+  {
+   "a": "rage",
+   "b": "ramp",
+   "rel": [
+    "synonym"
+   ],
+   "par": 3
+  },
+  {
+   "a": "rank",
+   "b": "rate",
+   "rel": [
+    "synonym"
+   ],
+   "par": 3
+  },
+  {
+   "a": "rent",
+   "b": "tear",
+   "rel": [
+    "synonym"
+   ],
+   "par": 3
+  },
+  {
+   "a": "rice",
+   "b": "sake",
+   "rel": [
+    "has part",
+    "part of"
+   ],
+   "par": 3
+  },
+  {
+   "a": "said",
+   "b": "same",
+   "rel": [
+    "similar"
+   ],
+   "par": 3
+  },
+  {
+   "a": "shed",
+   "b": "slop",
+   "rel": [
+    "verb group"
+   ],
+   "par": 3
+  },
+  {
+   "a": "shuck",
+   "b": "stalk",
+   "rel": [
+    "synonym"
+   ],
+   "par": 3
+  },
+  {
+   "a": "slew",
+   "b": "slip",
+   "rel": [
+    "synonym"
+   ],
+   "par": 3
+  },
+  {
+   "a": "track",
+   "b": "trail",
+   "rel": [
+    "synonym"
+   ],
+   "par": 3
+  },
+  {
+   "a": "vie",
+   "b": "win",
+   "rel": [
+    "entailment"
+   ],
+   "par": 3
+  },
+  {
+   "a": "babble",
+   "b": "gurgle",
+   "rel": [
+    "synonym",
+    "verb group"
+   ],
+   "par": 4
+  },
+  {
+   "a": "back",
+   "b": "hind",
+   "rel": [
+    "synonym"
+   ],
+   "par": 4
+  },
+  {
+   "a": "banded",
+   "b": "belted",
+   "rel": [
+    "similar"
+   ],
+   "par": 4
+  },
+  {
+   "a": "bang",
+   "b": "bolt",
+   "rel": [
+    "synonym"
+   ],
+   "par": 4
+  },
+  {
+   "a": "bar",
+   "b": "pub",
+   "rel": [
+    "has part",
+    "part of"
+   ],
+   "par": 4
+  },
+  {
+   "a": "bash",
+   "b": "sock",
+   "rel": [
+    "synonym"
+   ],
+   "par": 4
+  },
+  {
+   "a": "bask",
+   "b": "like",
+   "rel": [
+    "entailment"
+   ],
+   "par": 4
+  },
+  {
+   "a": "bay",
+   "b": "sea",
+   "rel": [
+    "has part",
+    "part of"
+   ],
+   "par": 4
+  },
+  {
+   "a": "beak",
+   "b": "bird",
+   "rel": [
+    "has part",
+    "part of"
+   ],
+   "par": 4
+  },
+  {
+   "a": "bend",
+   "b": "flex",
+   "rel": [
+    "synonym"
+   ],
+   "par": 4
+  },
+  {
+   "a": "bettor",
+   "b": "punter",
+   "rel": [
+    "synonym"
+   ],
+   "par": 4
+  },
+  {
+   "a": "bird",
+   "b": "dame",
+   "rel": [
+    "synonym"
+   ],
+   "par": 4
+  },
+  {
+   "a": "blink",
+   "b": "flash",
+   "rel": [
+    "synonym"
+   ],
+   "par": 4
+  },
+  {
+   "a": "blot",
+   "b": "slur",
+   "rel": [
+    "synonym"
+   ],
+   "par": 4
+  },
+  {
+   "a": "bolt",
+   "b": "lock",
+   "rel": [
+    "has part",
+    "part of"
+   ],
+   "par": 4
+  },
+  {
+   "a": "bored",
+   "b": "tired",
+   "rel": [
+    "similar"
+   ],
+   "par": 4
+  },
+  {
+   "a": "box",
+   "b": "lid",
+   "rel": [
+    "has part",
+    "part of"
+   ],
+   "par": 4
+  },
+  {
+   "a": "brag",
+   "b": "tout",
+   "rel": [
+    "synonym"
+   ],
+   "par": 4
+  },
+  {
+   "a": "brook",
+   "b": "creek",
+   "rel": [
+    "synonym"
+   ],
+   "par": 4
+  },
+  {
+   "a": "buck",
+   "b": "dart",
+   "rel": [
+    "verb group"
+   ],
+   "par": 4
+  },
+  {
+   "a": "buck",
+   "b": "dash",
+   "rel": [
+    "verb group"
+   ],
+   "par": 4
+  },
+  {
+   "a": "bull",
+   "b": "fake",
+   "rel": [
+    "synonym"
+   ],
+   "par": 4
+  },
+  {
+   "a": "bung",
+   "b": "cask",
+   "rel": [
+    "has part",
+    "part of"
+   ],
+   "par": 4
+  },
+  {
+   "a": "bust",
+   "b": "tear",
+   "rel": [
+    "synonym"
+   ],
+   "par": 4
+  },
+  {
+   "a": "cake",
+   "b": "coat",
+   "rel": [
+    "synonym"
+   ],
+   "par": 4
+  },
+  {
+   "a": "call",
+   "b": "dial",
+   "rel": [
+    "entailment"
+   ],
+   "par": 4
+  },
+  {
+   "a": "call",
+   "b": "name",
+   "rel": [
+    "synonym",
+    "verb group"
+   ],
+   "par": 4
+  },
+  {
+   "a": "cant",
+   "b": "tilt",
+   "rel": [
+    "synonym"
+   ],
+   "par": 4
+  },
+  {
+   "a": "care",
+   "b": "wish",
+   "rel": [
+    "synonym"
+   ],
+   "par": 4
+  },
+  {
+   "a": "cart",
+   "b": "haul",
+   "rel": [
+    "synonym"
+   ],
+   "par": 4
+  },
+  {
+   "a": "cast",
+   "b": "mold",
+   "rel": [
+    "synonym"
+   ],
+   "par": 4
+  },
+  {
+   "a": "chink",
+   "b": "crack",
+   "rel": [
+    "verb group"
+   ],
+   "par": 4
+  },
+  {
+   "a": "chips",
+   "b": "fries",
+   "rel": [
+    "synonym"
+   ],
+   "par": 4
+  },
+  {
+   "a": "clang",
+   "b": "crash",
+   "rel": [
+    "synonym"
+   ],
+   "par": 4
+  },
+  {
+   "a": "clank",
+   "b": "crash",
+   "rel": [
+    "synonym"
+   ],
+   "par": 4
+  },
+  {
+   "a": "class",
+   "b": "grade",
+   "rel": [
+    "synonym"
+   ],
+   "par": 4
+  },
+  {
+   "a": "cling",
+   "b": "stick",
+   "rel": [
+    "verb group"
+   ],
+   "par": 4
+  },
+  {
+   "a": "cod",
+   "b": "due",
+   "rel": [
+    "similar"
+   ],
+   "par": 4
+  },
+  {
+   "a": "cold",
+   "b": "cool",
+   "rel": [
+    "also see"
+   ],
+   "par": 4
+  },
+  {
+   "a": "con",
+   "b": "pro",
+   "rel": [
+    "antonym"
+   ],
+   "par": 4
+  },
+  {
+   "a": "cost",
+   "b": "toll",
+   "rel": [
+    "synonym"
+   ],
+   "par": 4
+  },
+  {
+   "a": "cows",
+   "b": "herd",
+   "rel": [
+    "has part",
+    "part of"
+   ],
+   "par": 4
+  },
+  {
+   "a": "cram",
+   "b": "drum",
+   "rel": [
+    "synonym"
+   ],
+   "par": 4
+  },
+  {
+   "a": "damp",
+   "b": "mute",
+   "rel": [
+    "synonym"
+   ],
+   "par": 4
+  },
+  {
+   "a": "dare",
+   "b": "defy",
+   "rel": [
+    "synonym"
+   ],
+   "par": 4
+  },
+  {
+   "a": "dart",
+   "b": "dash",
+   "rel": [
+    "synonym"
+   ],
+   "par": 4
+  },
+  {
+   "a": "deal",
+   "b": "pile",
+   "rel": [
+    "synonym"
+   ],
+   "par": 4
+  },
+  {
+   "a": "dent",
+   "b": "slit",
+   "rel": [
+    "synonym"
+   ],
+   "par": 4
+  },
+  {
+   "a": "door",
+   "b": "lock",
+   "rel": [
+    "has part",
+    "part of"
+   ],
+   "par": 4
+  },
+  {
+   "a": "dour",
+   "b": "glum",
+   "rel": [
+    "synonym"
+   ],
+   "par": 4
+  },
+  {
+   "a": "earn",
+   "b": "sack",
+   "rel": [
+    "verb group"
+   ],
+   "par": 4
+  },
+  {
+   "a": "face",
+   "b": "look",
+   "rel": [
+    "synonym"
+   ],
+   "par": 4
+  },
+  {
+   "a": "fall",
+   "b": "rise",
+   "rel": [
+    "antonym"
+   ],
+   "par": 4
+  },
+  {
+   "a": "famed",
+   "b": "noted",
+   "rel": [
+    "synonym"
+   ],
+   "par": 4
+  },
+  {
+   "a": "fate",
+   "b": "luck",
+   "rel": [
+    "synonym"
+   ],
+   "par": 4
+  },
+  {
+   "a": "fix",
+   "b": "jam",
+   "rel": [
+    "synonym"
+   ],
+   "par": 4
+  },
+  {
+   "a": "flock",
+   "b": "stack",
+   "rel": [
+    "synonym"
+   ],
+   "par": 4
+  },
+  {
+   "a": "fool",
+   "b": "gull",
+   "rel": [
+    "synonym"
+   ],
+   "par": 4
+  },
+  {
+   "a": "foot",
+   "b": "sole",
+   "rel": [
+    "has part",
+    "part of"
+   ],
+   "par": 4
+  },
+  {
+   "a": "form",
+   "b": "kind",
+   "rel": [
+    "synonym"
+   ],
+   "par": 4
+  },
+  {
+   "a": "furled",
+   "b": "rolled",
+   "rel": [
+    "synonym"
+   ],
+   "par": 4
+  },
+  {
+   "a": "furred",
+   "b": "haired",
+   "rel": [
+    "similar"
+   ],
+   "par": 4
+  },
+  {
+   "a": "gate",
+   "b": "lock",
+   "rel": [
+    "has part",
+    "part of"
+   ],
+   "par": 4
+  },
+  {
+   "a": "gill",
+   "b": "pint",
+   "rel": [
+    "has part",
+    "part of"
+   ],
+   "par": 4
+  },
+  {
+   "a": "gist",
+   "b": "meat",
+   "rel": [
+    "synonym"
+   ],
+   "par": 4
+  },
+  {
+   "a": "goat",
+   "b": "horn",
+   "rel": [
+    "has part",
+    "part of"
+   ],
+   "par": 4
+  },
+  {
+   "a": "gobs",
+   "b": "wads",
+   "rel": [
+    "synonym"
+   ],
+   "par": 4
+  },
+  {
+   "a": "good",
+   "b": "well",
+   "rel": [
+    "synonym"
+   ],
+   "par": 4
+  },
+  {
+   "a": "guy",
+   "b": "rib",
+   "rel": [
+    "synonym"
+   ],
+   "par": 4
+  },
+  {
+   "a": "halt",
+   "b": "lame",
+   "rel": [
+    "synonym"
+   ],
+   "par": 4
+  },
+  {
+   "a": "hand",
+   "b": "mitt",
+   "rel": [
+    "synonym"
+   ],
+   "par": 4
+  },
+  {
+   "a": "hand",
+   "b": "palm",
+   "rel": [
+    "has part",
+    "part of"
+   ],
+   "par": 4
+  },
+  {
+   "a": "hard",
+   "b": "tall",
+   "rel": [
+    "similar"
+   ],
+   "par": 4
+  },
+  {
+   "a": "have",
+   "b": "lack",
+   "rel": [
+    "antonym"
+   ],
+   "par": 4
+  },
+  {
+   "a": "head",
+   "b": "mind",
+   "rel": [
+    "synonym"
+   ],
+   "par": 4
+  },
+  {
+   "a": "heal",
+   "b": "mend",
+   "rel": [
+    "synonym"
+   ],
+   "par": 4
+  },
+  {
+   "a": "heap",
+   "b": "peck",
+   "rel": [
+    "synonym"
+   ],
+   "par": 4
+  },
+  {
+   "a": "hold",
+   "b": "wave",
+   "rel": [
+    "entailment"
+   ],
+   "par": 4
+  },
+  {
+   "a": "hold",
+   "b": "keep",
+   "rel": [
+    "synonym"
+   ],
+   "par": 4
+  },
+  {
+   "a": "hood",
+   "b": "punk",
+   "rel": [
+    "synonym"
+   ],
+   "par": 4
+  },
+  {
+   "a": "howl",
+   "b": "wail",
+   "rel": [
+    "synonym"
+   ],
+   "par": 4
+  },
+  {
+   "a": "jade",
+   "b": "tire",
+   "rel": [
+    "cause",
+    "synonym"
+   ],
+   "par": 4
+  },
+  {
+   "a": "jaded",
+   "b": "tired",
+   "rel": [
+    "similar"
+   ],
+   "par": 4
+  },
+  {
+   "a": "jar",
+   "b": "lid",
+   "rel": [
+    "has part",
+    "part of"
+   ],
+   "par": 4
+  },
+  {
+   "a": "jump",
+   "b": "leap",
+   "rel": [
+    "synonym"
+   ],
+   "par": 4
+  },
+  {
+   "a": "just",
+   "b": "meet",
+   "rel": [
+    "similar"
+   ],
+   "par": 4
+  },
+  {
+   "a": "lack",
+   "b": "want",
+   "rel": [
+    "synonym"
+   ],
+   "par": 4
+  },
+  {
+   "a": "land",
+   "b": "soil",
+   "rel": [
+    "synonym"
+   ],
+   "par": 4
+  },
+  {
+   "a": "lash",
+   "b": "welt",
+   "rel": [
+    "synonym"
+   ],
+   "par": 4
+  },
+  {
+   "a": "last",
+   "b": "live",
+   "rel": [
+    "synonym"
+   ],
+   "par": 4
+  },
+  {
+   "a": "late",
+   "b": "past",
+   "rel": [
+    "similar"
+   ],
+   "par": 4
+  },
+  {
+   "a": "left",
+   "b": "near",
+   "rel": [
+    "similar"
+   ],
+   "par": 4
+  },
+  {
+   "a": "left",
+   "b": "port",
+   "rel": [
+    "similar"
+   ],
+   "par": 4
+  },
+  {
+   "a": "less",
+   "b": "more",
+   "rel": [
+    "antonym"
+   ],
+   "par": 4
+  },
+  {
+   "a": "like",
+   "b": "wish",
+   "rel": [
+    "synonym"
+   ],
+   "par": 4
+  },
+  {
+   "a": "lot",
+   "b": "wad",
+   "rel": [
+    "synonym"
+   ],
+   "par": 4
+  },
+  {
+   "a": "lots",
+   "b": "wads",
+   "rel": [
+    "synonym"
+   ],
+   "par": 4
+  },
+  {
+   "a": "lurch",
+   "b": "pitch",
+   "rel": [
+    "synonym"
+   ],
+   "par": 4
+  },
+  {
+   "a": "mail",
+   "b": "send",
+   "rel": [
+    "synonym"
+   ],
+   "par": 4
+  },
+  {
+   "a": "many",
+   "b": "some",
+   "rel": [
+    "also see",
+    "similar"
+   ],
+   "par": 4
+  },
+  {
+   "a": "mass",
+   "b": "pile",
+   "rel": [
+    "synonym"
+   ],
+   "par": 4
+  },
+  {
+   "a": "mass",
+   "b": "raft",
+   "rel": [
+    "synonym"
+   ],
+   "par": 4
+  },
+  {
+   "a": "meat",
+   "b": "seed",
+   "rel": [
+    "has part",
+    "part of"
+   ],
+   "par": 4
+  },
+  {
+   "a": "melt",
+   "b": "thaw",
+   "rel": [
+    "synonym"
+   ],
+   "par": 4
+  },
+  {
+   "a": "mint",
+   "b": "peck",
+   "rel": [
+    "synonym"
+   ],
+   "par": 4
+  },
+  {
+   "a": "mint",
+   "b": "raft",
+   "rel": [
+    "synonym"
+   ],
+   "par": 4
+  },
+  {
+   "a": "most",
+   "b": "near",
+   "rel": [
+    "synonym"
+   ],
+   "par": 4
+  },
+  {
+   "a": "pare",
+   "b": "peel",
+   "rel": [
+    "synonym"
+   ],
+   "par": 4
+  },
+  {
+   "a": "pass",
+   "b": "walk",
+   "rel": [
+    "synonym"
+   ],
+   "par": 4
+  },
+  {
+   "a": "peck",
+   "b": "pile",
+   "rel": [
+    "synonym"
+   ],
+   "par": 4
+  },
+  {
+   "a": "pile",
+   "b": "raft",
+   "rel": [
+    "synonym"
+   ],
+   "par": 4
+  },
+  {
+   "a": "pole",
+   "b": "punt",
+   "rel": [
+    "synonym"
+   ],
+   "par": 4
+  },
+  {
+   "a": "pond",
+   "b": "pool",
+   "rel": [
+    "synonym"
+   ],
+   "par": 4
+  },
+  {
+   "a": "pour",
+   "b": "pump",
+   "rel": [
+    "entailment"
+   ],
+   "par": 4
+  },
+  {
+   "a": "putter",
+   "b": "tinker",
+   "rel": [
+    "synonym"
+   ],
+   "par": 4
+  },
+  {
+   "a": "quiver",
+   "b": "shiver",
+   "rel": [
+    "synonym"
+   ],
+   "par": 4
+  },
+  {
+   "a": "race",
+   "b": "rush",
+   "rel": [
+    "synonym"
+   ],
+   "par": 4
+  },
+  {
+   "a": "rag",
+   "b": "vex",
+   "rel": [
+    "synonym"
+   ],
+   "par": 4
+  },
+  {
+   "a": "rant",
+   "b": "rave",
+   "rel": [
+    "synonym"
+   ],
+   "par": 4
+  },
+  {
+   "a": "ripped",
+   "b": "soaked",
+   "rel": [
+    "similar"
+   ],
+   "par": 4
+  },
+  {
+   "a": "roam",
+   "b": "swan",
+   "rel": [
+    "synonym"
+   ],
+   "par": 4
+  },
+  {
+   "a": "sage",
+   "b": "wise",
+   "rel": [
+    "similar"
+   ],
+   "par": 4
+  },
+  {
+   "a": "sand",
+   "b": "spit",
+   "rel": [
+    "has part",
+    "part of"
+   ],
+   "par": 4
+  },
+  {
+   "a": "scab",
+   "b": "skin",
+   "rel": [
+    "has part",
+    "part of"
+   ],
+   "par": 4
+  },
+  {
+   "a": "scan",
+   "b": "skim",
+   "rel": [
+    "synonym"
+   ],
+   "par": 4
+  },
+  {
+   "a": "scores",
+   "b": "stacks",
+   "rel": [
+    "synonym"
+   ],
+   "par": 4
+  },
+  {
+   "a": "seam",
+   "b": "skin",
+   "rel": [
+    "has part",
+    "part of"
+   ],
+   "par": 4
+  },
+  {
+   "a": "share",
+   "b": "stock",
+   "rel": [
+    "has part",
+    "part of"
+   ],
+   "par": 4
+  },
+  {
+   "a": "ship",
+   "b": "spar",
+   "rel": [
+    "has part",
+    "part of"
+   ],
+   "par": 4
+  },
+  {
+   "a": "slew",
+   "b": "veer",
+   "rel": [
+    "synonym"
+   ],
+   "par": 4
+  },
+  {
+   "a": "slim",
+   "b": "thin",
+   "rel": [
+    "similar"
+   ],
+   "par": 4
+  },
+  {
+   "a": "slug",
+   "b": "swig",
+   "rel": [
+    "synonym"
+   ],
+   "par": 4
+  },
+  {
+   "a": "snag",
+   "b": "tear",
+   "rel": [
+    "synonym"
+   ],
+   "par": 4
+  },
+  {
+   "a": "snap",
+   "b": "tear",
+   "rel": [
+    "synonym"
+   ],
+   "par": 4
+  },
+  {
+   "a": "soar",
+   "b": "zoom",
+   "rel": [
+    "synonym"
+   ],
+   "par": 4
+  },
+  {
+   "a": "sour",
+   "b": "tart",
+   "rel": [
+    "similar"
+   ],
+   "par": 4
+  },
+  {
+   "a": "spate",
+   "b": "stack",
+   "rel": [
+    "synonym"
+   ],
+   "par": 4
+  },
+  {
+   "a": "sum",
+   "b": "tot",
+   "rel": [
+    "synonym"
+   ],
+   "par": 4
+  },
+  {
+   "a": "tons",
+   "b": "wads",
+   "rel": [
+    "synonym"
+   ],
+   "par": 4
+  },
+  {
+   "a": "tub",
+   "b": "vat",
+   "rel": [
+    "synonym"
+   ],
+   "par": 4
+  },
+  {
+   "a": "age",
+   "b": "old",
+   "rel": [
+    "attribute"
+   ],
+   "par": 5
+  },
+  {
+   "a": "airs",
+   "b": "pose",
+   "rel": [
+    "synonym"
+   ],
+   "par": 5
+  },
+  {
+   "a": "arm",
+   "b": "paw",
+   "rel": [
+    "has part",
+    "part of"
+   ],
+   "par": 5
+  },
+  {
+   "a": "back",
+   "b": "rear",
+   "rel": [
+    "similar",
+    "synonym"
+   ],
+   "par": 5
+  },
+  {
+   "a": "bad",
+   "b": "ill",
+   "rel": [
+    "similar"
+   ],
+   "par": 5
+  },
+  {
+   "a": "bait",
+   "b": "trap",
+   "rel": [
+    "has part",
+    "part of"
+   ],
+   "par": 5
+  },
+  {
+   "a": "bandy",
+   "b": "bowed",
+   "rel": [
+    "synonym"
+   ],
+   "par": 5
+  },
+  {
+   "a": "bark",
+   "b": "root",
+   "rel": [
+    "has part",
+    "part of"
+   ],
+   "par": 5
+  },
+  {
+   "a": "bats",
+   "b": "daft",
+   "rel": [
+    "synonym"
+   ],
+   "par": 5
+  },
+  {
+   "a": "beef",
+   "b": "cows",
+   "rel": [
+    "has part",
+    "part of"
+   ],
+   "par": 5
+  },
+  {
+   "a": "bend",
+   "b": "turn",
+   "rel": [
+    "synonym"
+   ],
+   "par": 5
+  },
+  {
+   "a": "bend",
+   "b": "curl",
+   "rel": [
+    "entailment"
+   ],
+   "par": 5
+  },
+  {
+   "a": "bend",
+   "b": "hump",
+   "rel": [
+    "entailment"
+   ],
+   "par": 5
+  },
+  {
+   "a": "best",
+   "b": "good",
+   "rel": [
+    "also see"
+   ],
+   "par": 5
+  },
+  {
+   "a": "bill",
+   "b": "soak",
+   "rel": [
+    "entailment"
+   ],
+   "par": 5
+  },
+  {
+   "a": "bill",
+   "b": "hook",
+   "rel": [
+    "entailment"
+   ],
+   "par": 5
+  },
+  {
+   "a": "body",
+   "b": "head",
+   "rel": [
+    "has part",
+    "part of"
+   ],
+   "par": 5
+  },
+  {
+   "a": "bold",
+   "b": "rash",
+   "rel": [
+    "similar"
+   ],
+   "par": 5
+  },
+  {
+   "a": "bolt",
+   "b": "slap",
+   "rel": [
+    "synonym"
+   ],
+   "par": 5
+  },
+  {
+   "a": "bony",
+   "b": "lean",
+   "rel": [
+    "similar"
+   ],
+   "par": 5
+  },
+  {
+   "a": "boot",
+   "b": "heel",
+   "rel": [
+    "has part",
+    "part of"
+   ],
+   "par": 5
+  },
+  {
+   "a": "boot",
+   "b": "kick",
+   "rel": [
+    "synonym"
+   ],
+   "par": 5
+  },
+  {
+   "a": "buck",
+   "b": "tear",
+   "rel": [
+    "synonym"
+   ],
+   "par": 5
+  },
+  {
+   "a": "bump",
+   "b": "find",
+   "rel": [
+    "synonym"
+   ],
+   "par": 5
+  },
+  {
+   "a": "buns",
+   "b": "seat",
+   "rel": [
+    "synonym"
+   ],
+   "par": 5
+  },
+  {
+   "a": "bust",
+   "b": "poor",
+   "rel": [
+    "similar"
+   ],
+   "par": 5
+  },
+  {
+   "a": "cage",
+   "b": "coop",
+   "rel": [
+    "synonym"
+   ],
+   "par": 5
+  },
+  {
+   "a": "calf",
+   "b": "veal",
+   "rel": [
+    "has part",
+    "part of"
+   ],
+   "par": 5
+  },
+  {
+   "a": "camp",
+   "b": "tent",
+   "rel": [
+    "synonym"
+   ],
+   "par": 5
+  },
+  {
+   "a": "cart",
+   "b": "grip",
+   "rel": [
+    "has part",
+    "part of"
+   ],
+   "par": 5
+  },
+  {
+   "a": "cask",
+   "b": "hoop",
+   "rel": [
+    "has part",
+    "part of"
+   ],
+   "par": 5
+  },
+  {
+   "a": "cask",
+   "b": "ring",
+   "rel": [
+    "has part",
+    "part of"
+   ],
+   "par": 5
+  },
+  {
+   "a": "chap",
+   "b": "gent",
+   "rel": [
+    "synonym"
+   ],
+   "par": 5
+  },
+  {
+   "a": "char",
+   "b": "sear",
+   "rel": [
+    "synonym"
+   ],
+   "par": 5
+  },
+  {
+   "a": "clod",
+   "b": "goon",
+   "rel": [
+    "synonym"
+   ],
+   "par": 5
+  },
+  {
+   "a": "clump",
+   "b": "thump",
+   "rel": [
+    "synonym"
+   ],
+   "par": 5
+  },
+  {
+   "a": "coil",
+   "b": "curl",
+   "rel": [
+    "synonym"
+   ],
+   "par": 5
+  },
+  {
+   "a": "cooked",
+   "b": "stewed",
+   "rel": [
+    "similar"
+   ],
+   "par": 5
+  },
+  {
+   "a": "cooked",
+   "b": "seared",
+   "rel": [
+    "similar"
+   ],
+   "par": 5
+  },
+  {
+   "a": "cool",
+   "b": "warm",
+   "rel": [
+    "antonym"
+   ],
+   "par": 5
+  },
+  {
+   "a": "cool",
+   "b": "heat",
+   "rel": [
+    "antonym"
+   ],
+   "par": 5
+  },
+  {
+   "a": "cope",
+   "b": "wall",
+   "rel": [
+    "has part",
+    "part of"
+   ],
+   "par": 5
+  },
+  {
+   "a": "crop",
+   "b": "till",
+   "rel": [
+    "entailment"
+   ],
+   "par": 5
+  },
+  {
+   "a": "cube",
+   "b": "dice",
+   "rel": [
+    "synonym"
+   ],
+   "par": 5
+  },
+  {
+   "a": "cull",
+   "b": "pick",
+   "rel": [
+    "synonym"
+   ],
+   "par": 5
+  },
+  {
+   "a": "cure",
+   "b": "heal",
+   "rel": [
+    "synonym"
+   ],
+   "par": 5
+  },
+  {
+   "a": "curl",
+   "b": "lock",
+   "rel": [
+    "synonym"
+   ],
+   "par": 5
+  },
+  {
+   "a": "cursed",
+   "b": "darned",
+   "rel": [
+    "similar"
+   ],
+   "par": 5
+  },
+  {
+   "a": "damp",
+   "b": "dull",
+   "rel": [
+    "synonym"
+   ],
+   "par": 5
+  },
+  {
+   "a": "darn",
+   "b": "mend",
+   "rel": [
+    "synonym"
+   ],
+   "par": 5
+  },
+  {
+   "a": "darn",
+   "b": "hoot",
+   "rel": [
+    "synonym"
+   ],
+   "par": 5
+  },
+  {
+   "a": "dart",
+   "b": "tear",
+   "rel": [
+    "verb group"
+   ],
+   "par": 5
+  },
+  {
+   "a": "dead",
+   "b": "gone",
+   "rel": [
+    "similar"
+   ],
+   "par": 5
+  },
+  {
+   "a": "deal",
+   "b": "slew",
+   "rel": [
+    "synonym"
+   ],
+   "par": 5
+  },
+  {
+   "a": "dent",
+   "b": "nick",
+   "rel": [
+    "synonym"
+   ],
+   "par": 5
+  },
+  {
+   "a": "dock",
+   "b": "pier",
+   "rel": [
+    "synonym"
+   ],
+   "par": 5
+  },
+  {
+   "a": "door",
+   "b": "wall",
+   "rel": [
+    "has part",
+    "part of"
+   ],
+   "par": 5
+  },
+  {
+   "a": "dove",
+   "b": "hawk",
+   "rel": [
+    "antonym"
+   ],
+   "par": 5
+  },
+  {
+   "a": "dry",
+   "b": "wet",
+   "rel": [
+    "antonym"
+   ],
+   "par": 5
+  },
+  {
+   "a": "dull",
+   "b": "soft",
+   "rel": [
+    "similar"
+   ],
+   "par": 5
+  },
+  {
+   "a": "dumps",
+   "b": "mopes",
+   "rel": [
+    "synonym"
+   ],
+   "par": 5
+  },
+  {
+   "a": "dupe",
+   "b": "gull",
+   "rel": [
+    "synonym"
+   ],
+   "par": 5
+  },
+  {
+   "a": "easy",
+   "b": "soft",
+   "rel": [
+    "also see",
+    "synonym"
+   ],
+   "par": 5
+  },
+  {
+   "a": "face",
+   "b": "head",
+   "rel": [
+    "has part",
+    "part of"
+   ],
+   "par": 5
+  },
+  {
+   "a": "face",
+   "b": "nose",
+   "rel": [
+    "has part",
+    "part of"
+   ],
+   "par": 5
+  },
+  {
+   "a": "falls",
+   "b": "river",
+   "rel": [
+    "has part",
+    "part of"
+   ],
+   "par": 5
+  },
+  {
+   "a": "fell",
+   "b": "hide",
+   "rel": [
+    "synonym"
+   ],
+   "par": 5
+  },
+  {
+   "a": "fixed",
+   "b": "taped",
+   "rel": [
+    "similar"
+   ],
+   "par": 5
+  },
+  {
+   "a": "flog",
+   "b": "welt",
+   "rel": [
+    "synonym"
+   ],
+   "par": 5
+  },
+  {
+   "a": "flog",
+   "b": "whip",
+   "rel": [
+    "synonym"
+   ],
+   "par": 5
+  },
+  {
+   "a": "flow",
+   "b": "pour",
+   "rel": [
+    "cause"
+   ],
+   "par": 5
+  },
+  {
+   "a": "flux",
+   "b": "weld",
+   "rel": [
+    "entailment"
+   ],
+   "par": 5
+  },
+  {
+   "a": "foot",
+   "b": "heel",
+   "rel": [
+    "has part",
+    "part of"
+   ],
+   "par": 5
+  },
+  {
+   "a": "foot",
+   "b": "yard",
+   "rel": [
+    "has part",
+    "part of"
+   ],
+   "par": 5
+  },
+  {
+   "a": "frame",
+   "b": "shape",
+   "rel": [
+    "synonym"
+   ],
+   "par": 5
+  },
+  {
+   "a": "fret",
+   "b": "stew",
+   "rel": [
+    "synonym"
+   ],
+   "par": 5
+  },
+  {
+   "a": "fry",
+   "b": "kid",
+   "rel": [
+    "synonym"
+   ],
+   "par": 5
+  },
+  {
+   "a": "gait",
+   "b": "pace",
+   "rel": [
+    "synonym"
+   ],
+   "par": 5
+  },
+  {
+   "a": "game",
+   "b": "punt",
+   "rel": [
+    "synonym"
+   ],
+   "par": 5
+  },
+  {
+   "a": "gape",
+   "b": "yawn",
+   "rel": [
+    "synonym"
+   ],
+   "par": 5
+  },
+  {
+   "a": "gasp",
+   "b": "pant",
+   "rel": [
+    "synonym"
+   ],
+   "par": 5
+  },
+  {
+   "a": "girl",
+   "b": "miss",
+   "rel": [
+    "synonym"
+   ],
+   "par": 5
+  },
+  {
+   "a": "give",
+   "b": "sell",
+   "rel": [
+    "entailment"
+   ],
+   "par": 5
+  },
+  {
+   "a": "goad",
+   "b": "prod",
+   "rel": [
+    "synonym"
+   ],
+   "par": 5
+  },
+  {
+   "a": "goad",
+   "b": "spur",
+   "rel": [
+    "synonym"
+   ],
+   "par": 5
+  },
+  {
+   "a": "gone",
+   "b": "past",
+   "rel": [
+    "similar"
+   ],
+   "par": 5
+  },
+  {
+   "a": "grit",
+   "b": "sand",
+   "rel": [
+    "synonym"
+   ],
+   "par": 5
+  },
+  {
+   "a": "gush",
+   "b": "rave",
+   "rel": [
+    "synonym"
+   ],
+   "par": 5
+  },
+  {
+   "a": "guts",
+   "b": "sand",
+   "rel": [
+    "synonym"
+   ],
+   "par": 5
+  },
+  {
+   "a": "hard",
+   "b": "soft",
+   "rel": [
+    "antonym"
+   ],
+   "par": 5
+  },
+  {
+   "a": "haven",
+   "b": "oasis",
+   "rel": [
+    "synonym"
+   ],
+   "par": 5
+  },
+  {
+   "a": "heap",
+   "b": "pile",
+   "rel": [
+    "synonym"
+   ],
+   "par": 5
+  },
+  {
+   "a": "heap",
+   "b": "mint",
+   "rel": [
+    "synonym"
+   ],
+   "par": 5
+  },
+  {
+   "a": "heap",
+   "b": "slew",
+   "rel": [
+    "synonym"
+   ],
+   "par": 5
+  },
+  {
+   "a": "heaps",
+   "b": "slews",
+   "rel": [
+    "synonym"
+   ],
+   "par": 5
+  },
+  {
+   "a": "heel",
+   "b": "shoe",
+   "rel": [
+    "has part",
+    "part of"
+   ],
+   "par": 5
+  },
+  {
+   "a": "heel",
+   "b": "list",
+   "rel": [
+    "verb group"
+   ],
+   "par": 5
+  },
+  {
+   "a": "hiss",
+   "b": "hoot",
+   "rel": [
+    "synonym"
+   ],
+   "par": 5
+  },
+  {
+   "a": "hook",
+   "b": "lure",
+   "rel": [
+    "synonym"
+   ],
+   "par": 5
+  },
+  {
+   "a": "howl",
+   "b": "roar",
+   "rel": [
+    "synonym"
+   ],
+   "par": 5
+  },
+  {
+   "a": "hulk",
+   "b": "loom",
+   "rel": [
+    "synonym"
+   ],
+   "par": 5
+  },
+  {
+   "a": "jammed",
+   "b": "packed",
+   "rel": [
+    "synonym"
+   ],
+   "par": 5
+  },
+  {
+   "a": "jerk",
+   "b": "yank",
+   "rel": [
+    "synonym"
+   ],
+   "par": 5
+  },
+  {
+   "a": "jest",
+   "b": "joke",
+   "rel": [
+    "synonym"
+   ],
+   "par": 5
+  },
+  {
+   "a": "jute",
+   "b": "rope",
+   "rel": [
+    "has part",
+    "part of"
+   ],
+   "par": 5
+  },
+  {
+   "a": "kick",
+   "b": "move",
+   "rel": [
+    "entailment"
+   ],
+   "par": 5
+  },
+  {
+   "a": "kind",
+   "b": "sort",
+   "rel": [
+    "synonym"
+   ],
+   "par": 5
+  },
+  {
+   "a": "lade",
+   "b": "load",
+   "rel": [
+    "synonym"
+   ],
+   "par": 5
+  },
+  {
+   "a": "lady",
+   "b": "lord",
+   "rel": [
+    "antonym"
+   ],
+   "par": 5
+  },
+  {
+   "a": "lead",
+   "b": "take",
+   "rel": [
+    "synonym"
+   ],
+   "par": 5
+  },
+  {
+   "a": "leaf",
+   "b": "lobe",
+   "rel": [
+    "has part",
+    "part of"
+   ],
+   "par": 5
+  },
+  {
+   "a": "lean",
+   "b": "thin",
+   "rel": [
+    "also see",
+    "synonym"
+   ],
+   "par": 5
+  },
+  {
+   "a": "lean",
+   "b": "slim",
+   "rel": [
+    "similar"
+   ],
+   "par": 5
+  },
+  {
+   "a": "lean",
+   "b": "list",
+   "rel": [
+    "synonym"
+   ],
+   "par": 5
+  },
+  {
+   "a": "loaf",
+   "b": "lurk",
+   "rel": [
+    "synonym"
+   ],
+   "par": 5
+  },
+  {
+   "a": "loaf",
+   "b": "loll",
+   "rel": [
+    "synonym"
+   ],
+   "par": 5
+  },
+  {
+   "a": "lock",
+   "b": "mesh",
+   "rel": [
+    "synonym"
+   ],
+   "par": 5
+  },
+  {
+   "a": "long",
+   "b": "tall",
+   "rel": [
+    "similar"
+   ],
+   "par": 5
+  },
+  {
+   "a": "lope",
+   "b": "trot",
+   "rel": [
+    "synonym"
+   ],
+   "par": 5
+  },
+  {
+   "a": "lots",
+   "b": "much",
+   "rel": [
+    "synonym"
+   ],
+   "par": 5
+  },
+  {
+   "a": "loud",
+   "b": "soft",
+   "rel": [
+    "antonym"
+   ],
+   "par": 5
+  },
+  {
+   "a": "mass",
+   "b": "peck",
+   "rel": [
+    "synonym"
+   ],
+   "par": 5
+  },
+  {
+   "a": "mate",
+   "b": "pair",
+   "rel": [
+    "synonym"
+   ],
+   "par": 5
+  },
+  {
+   "a": "meek",
+   "b": "mild",
+   "rel": [
+    "synonym"
+   ],
+   "par": 5
+  },
+  {
+   "a": "mitt",
+   "b": "palm",
+   "rel": [
+    "has part",
+    "part of"
+   ],
+   "par": 5
+  },
+  {
+   "a": "more",
+   "b": "much",
+   "rel": [
+    "also see"
+   ],
+   "par": 5
+  },
+  {
+   "a": "move",
+   "b": "push",
+   "rel": [
+    "entailment"
+   ],
+   "par": 5
+  },
+  {
+   "a": "mush",
+   "b": "pulp",
+   "rel": [
+    "synonym"
+   ],
+   "par": 5
+  },
+  {
+   "a": "neat",
+   "b": "tidy",
+   "rel": [
+    "similar"
+   ],
+   "par": 5
+  },
+  {
+   "a": "need",
+   "b": "want",
+   "rel": [
+    "synonym"
+   ],
+   "par": 5
+  },
+  {
+   "a": "pale",
+   "b": "weak",
+   "rel": [
+    "similar"
+   ],
+   "par": 5
+  },
+  {
+   "a": "peal",
+   "b": "ring",
+   "rel": [
+    "synonym"
+   ],
+   "par": 5
+  },
+  {
+   "a": "peck",
+   "b": "raft",
+   "rel": [
+    "synonym"
+   ],
+   "par": 5
+  },
+  {
+   "a": "peck",
+   "b": "slew",
+   "rel": [
+    "synonym"
+   ],
+   "par": 5
+  },
+  {
+   "a": "piles",
+   "b": "rafts",
+   "rel": [
+    "synonym"
+   ],
+   "par": 5
+  },
+  {
+   "a": "pinch",
+   "b": "tinge",
+   "rel": [
+    "synonym"
+   ],
+   "par": 5
+  },
+  {
+   "a": "pipe",
+   "b": "tube",
+   "rel": [
+    "synonym"
+   ],
+   "par": 5
+  },
+  {
+   "a": "poke",
+   "b": "sack",
+   "rel": [
+    "synonym"
+   ],
+   "par": 5
+  },
+  {
+   "a": "pole",
+   "b": "push",
+   "rel": [
+    "entailment"
+   ],
+   "par": 5
+  },
+  {
+   "a": "potter",
+   "b": "tinker",
+   "rel": [
+    "synonym"
+   ],
+   "par": 5
+  },
+  {
+   "a": "pour",
+   "b": "teem",
+   "rel": [
+    "synonym"
+   ],
+   "par": 5
+  },
+  {
+   "a": "puke",
+   "b": "sick",
+   "rel": [
+    "synonym"
+   ],
+   "par": 5,
+   "review": true
+  },
+  {
+   "a": "pull",
+   "b": "push",
+   "rel": [
+    "antonym"
+   ],
+   "par": 5
+  },
+  {
+   "a": "puny",
+   "b": "weak",
+   "rel": [
+    "similar"
+   ],
+   "par": 5
+  },
+  {
+   "a": "quit",
+   "b": "stop",
+   "rel": [
+    "synonym"
+   ],
+   "par": 5
+  },
+  {
+   "a": "rent",
+   "b": "snag",
+   "rel": [
+    "synonym"
+   ],
+   "par": 5
+  },
+  {
+   "a": "ride",
+   "b": "walk",
+   "rel": [
+    "antonym"
+   ],
+   "par": 5
+  },
+  {
+   "a": "roar",
+   "b": "yowl",
+   "rel": [
+    "synonym"
+   ],
+   "par": 5
+  },
+  {
+   "a": "rock",
+   "b": "sway",
+   "rel": [
+    "synonym",
+    "verb group"
+   ],
+   "par": 5
+  },
+  {
+   "a": "rugged",
+   "b": "rutted",
+   "rel": [
+    "similar"
+   ],
+   "par": 5
+  },
+  {
+   "a": "rump",
+   "b": "seat",
+   "rel": [
+    "synonym"
+   ],
+   "par": 5
+  },
+  {
+   "a": "scant",
+   "b": "stint",
+   "rel": [
+    "synonym"
+   ],
+   "par": 5
+  },
+  {
+   "a": "scorn",
+   "b": "spurn",
+   "rel": [
+    "synonym"
+   ],
+   "par": 5
+  },
+  {
+   "a": "slog",
+   "b": "swig",
+   "rel": [
+    "synonym"
+   ],
+   "par": 5
+  },
+  {
+   "a": "spew",
+   "b": "spit",
+   "rel": [
+    "synonym"
+   ],
+   "par": 5,
+   "review": true
+  },
+  {
+   "a": "tame",
+   "b": "wild",
+   "rel": [
+    "antonym"
+   ],
+   "par": 5
+  },
+  {
+   "a": "tang",
+   "b": "zest",
+   "rel": [
+    "synonym"
+   ],
+   "par": 5
+  },
+  {
+   "a": "teeter",
+   "b": "totter",
+   "rel": [
+    "synonym"
+   ],
+   "par": 5
+  },
+  {
+   "a": "ace",
+   "b": "wiz",
+   "rel": [
+    "synonym"
+   ],
+   "par": 6
+  },
+  {
+   "a": "acid",
+   "b": "sour",
+   "rel": [
+    "similar"
+   ],
+   "par": 6
+  },
+  {
+   "a": "age",
+   "b": "new",
+   "rel": [
+    "attribute"
+   ],
+   "par": 6
+  },
+  {
+   "a": "backed",
+   "b": "coated",
+   "rel": [
+    "similar"
+   ],
+   "par": 6
+  },
+  {
+   "a": "bait",
+   "b": "lure",
+   "rel": [
+    "synonym"
+   ],
+   "par": 6
+  },
+  {
+   "a": "bait",
+   "b": "hook",
+   "rel": [
+    "synonym"
+   ],
+   "par": 6
+  },
+  {
+   "a": "bang",
+   "b": "slam",
+   "rel": [
+    "synonym"
+   ],
+   "par": 6
+  },
+  {
+   "a": "bang",
+   "b": "slap",
+   "rel": [
+    "synonym"
+   ],
+   "par": 6
+  },
+  {
+   "a": "barb",
+   "b": "gibe",
+   "rel": [
+    "synonym"
+   ],
+   "par": 6
+  },
+  {
+   "a": "bark",
+   "b": "skin",
+   "rel": [
+    "synonym"
+   ],
+   "par": 6
+  },
+  {
+   "a": "beam",
+   "b": "wood",
+   "rel": [
+    "has part",
+    "part of"
+   ],
+   "par": 6
+  },
+  {
+   "a": "bird",
+   "b": "rump",
+   "rel": [
+    "has part",
+    "part of"
+   ],
+   "par": 6
+  },
+  {
+   "a": "bird",
+   "b": "fowl",
+   "rel": [
+    "has part",
+    "part of",
+    "synonym"
+   ],
+   "par": 6
+  },
+  {
+   "a": "bird",
+   "b": "doll",
+   "rel": [
+    "synonym"
+   ],
+   "par": 6
+  },
+  {
+   "a": "blow",
+   "b": "bump",
+   "rel": [
+    "synonym"
+   ],
+   "par": 6
+  },
+  {
+   "a": "boar",
+   "b": "tusk",
+   "rel": [
+    "has part",
+    "part of"
+   ],
+   "par": 6
+  },
+  {
+   "a": "boom",
+   "b": "nail",
+   "rel": [
+    "synonym"
+   ],
+   "par": 6
+  },
+  {
+   "a": "both",
+   "b": "some",
+   "rel": [
+    "similar"
+   ],
+   "par": 6
+  },
+  {
+   "a": "bray",
+   "b": "mash",
+   "rel": [
+    "synonym"
+   ],
+   "par": 6
+  },
+  {
+   "a": "bread",
+   "b": "flour",
+   "rel": [
+    "has part",
+    "part of"
+   ],
+   "par": 6
+  },
+  {
+   "a": "bull",
+   "b": "horn",
+   "rel": [
+    "has part",
+    "part of"
+   ],
+   "par": 6
+  },
+  {
+   "a": "bully",
+   "b": "dandy",
+   "rel": [
+    "synonym"
+   ],
+   "par": 6
+  },
+  {
+   "a": "burly",
+   "b": "husky",
+   "rel": [
+    "synonym"
+   ],
+   "par": 6
+  },
+  {
+   "a": "burn",
+   "b": "glow",
+   "rel": [
+    "synonym"
+   ],
+   "par": 6
+  },
+  {
+   "a": "bust",
+   "b": "flop",
+   "rel": [
+    "synonym"
+   ],
+   "par": 6
+  },
+  {
+   "a": "bust",
+   "b": "snap",
+   "rel": [
+    "synonym"
+   ],
+   "par": 6
+  },
+  {
+   "a": "calf",
+   "b": "cows",
+   "rel": [
+    "has part",
+    "part of"
+   ],
+   "par": 6
+  },
+  {
+   "a": "care",
+   "b": "fear",
+   "rel": [
+    "synonym"
+   ],
+   "par": 6
+  },
+  {
+   "a": "cast",
+   "b": "film",
+   "rel": [
+    "entailment"
+   ],
+   "par": 6
+  },
+  {
+   "a": "cave",
+   "b": "roof",
+   "rel": [
+    "has part",
+    "part of"
+   ],
+   "par": 6
+  },
+  {
+   "a": "cheek",
+   "b": "trunk",
+   "rel": [
+    "has part",
+    "part of"
+   ],
+   "par": 6
+  },
+  {
+   "a": "chew",
+   "b": "plug",
+   "rel": [
+    "synonym"
+   ],
+   "par": 6
+  },
+  {
+   "a": "chin",
+   "b": "face",
+   "rel": [
+    "has part",
+    "part of"
+   ],
+   "par": 6
+  },
+  {
+   "a": "chow",
+   "b": "eats",
+   "rel": [
+    "synonym"
+   ],
+   "par": 6
+  },
+  {
+   "a": "clip",
+   "b": "trot",
+   "rel": [
+    "synonym"
+   ],
+   "par": 6
+  },
+  {
+   "a": "clod",
+   "b": "lump",
+   "rel": [
+    "synonym"
+   ],
+   "par": 6
+  },
+  {
+   "a": "clog",
+   "b": "foul",
+   "rel": [
+    "synonym"
+   ],
+   "par": 6
+  },
+  {
+   "a": "coin",
+   "b": "mint",
+   "rel": [
+    "synonym"
+   ],
+   "par": 6
+  },
+  {
+   "a": "curl",
+   "b": "kink",
+   "rel": [
+    "synonym"
+   ],
+   "par": 6
+  },
+  {
+   "a": "cursed",
+   "b": "damned",
+   "rel": [
+    "similar",
+    "synonym"
+   ],
+   "par": 6
+  },
+  {
+   "a": "curved",
+   "b": "hooked",
+   "rel": [
+    "similar"
+   ],
+   "par": 6
+  },
+  {
+   "a": "daft",
+   "b": "nuts",
+   "rel": [
+    "synonym"
+   ],
+   "par": 6
+  },
+  {
+   "a": "damn",
+   "b": "hoot",
+   "rel": [
+    "synonym"
+   ],
+   "par": 6
+  },
+  {
+   "a": "dart",
+   "b": "flit",
+   "rel": [
+    "synonym"
+   ],
+   "par": 6
+  },
+  {
+   "a": "dash",
+   "b": "tear",
+   "rel": [
+    "verb group"
+   ],
+   "par": 6
+  },
+  {
+   "a": "dashed",
+   "b": "dotted",
+   "rel": [
+    "synonym"
+   ],
+   "par": 6
+  },
+  {
+   "a": "dead",
+   "b": "live",
+   "rel": [
+    "antonym"
+   ],
+   "par": 6
+  },
+  {
+   "a": "deal",
+   "b": "mass",
+   "rel": [
+    "synonym"
+   ],
+   "par": 6
+  },
+  {
+   "a": "deal",
+   "b": "mint",
+   "rel": [
+    "synonym"
+   ],
+   "par": 6
+  },
+  {
+   "a": "deal",
+   "b": "raft",
+   "rel": [
+    "synonym"
+   ],
+   "par": 6
+  },
+  {
+   "a": "deal",
+   "b": "plow",
+   "rel": [
+    "synonym"
+   ],
+   "par": 6
+  },
+  {
+   "a": "dear",
+   "b": "love",
+   "rel": [
+    "synonym"
+   ],
+   "par": 6
+  },
+  {
+   "a": "dense",
+   "b": "heavy",
+   "rel": [
+    "similar"
+   ],
+   "par": 6
+  },
+  {
+   "a": "dirt",
+   "b": "soil",
+   "rel": [
+    "synonym"
+   ],
+   "par": 6
+  },
+  {
+   "a": "dope",
+   "b": "weed",
+   "rel": [
+    "synonym"
+   ],
+   "par": 6
+  },
+  {
+   "a": "duet",
+   "b": "pair",
+   "rel": [
+    "synonym"
+   ],
+   "par": 6
+  },
+  {
+   "a": "duet",
+   "b": "span",
+   "rel": [
+    "synonym"
+   ],
+   "par": 6
+  },
+  {
+   "a": "duet",
+   "b": "yoke",
+   "rel": [
+    "synonym"
+   ],
+   "par": 6
+  },
+  {
+   "a": "dupe",
+   "b": "fool",
+   "rel": [
+    "synonym"
+   ],
+   "par": 6
+  },
+  {
+   "a": "eon",
+   "b": "era",
+   "rel": [
+    "has part",
+    "part of"
+   ],
+   "par": 6
+  },
+  {
+   "a": "fall",
+   "b": "flop",
+   "rel": [
+    "also see"
+   ],
+   "par": 6
+  },
+  {
+   "a": "fast",
+   "b": "slow",
+   "rel": [
+    "antonym"
+   ],
+   "par": 6
+  },
+  {
+   "a": "flock",
+   "b": "spate",
+   "rel": [
+    "synonym"
+   ],
+   "par": 6
+  },
+  {
+   "a": "flying",
+   "b": "moving",
+   "rel": [
+    "similar"
+   ],
+   "par": 6
+  },
+  {
+   "a": "formed",
+   "b": "shaped",
+   "rel": [
+    "similar"
+   ],
+   "par": 6
+  },
+  {
+   "a": "fret",
+   "b": "fuss",
+   "rel": [
+    "synonym"
+   ],
+   "par": 6
+  },
+  {
+   "a": "fury",
+   "b": "rage",
+   "rel": [
+    "synonym"
+   ],
+   "par": 6
+  },
+  {
+   "a": "fuse",
+   "b": "weld",
+   "rel": [
+    "entailment"
+   ],
+   "par": 6
+  },
+  {
+   "a": "fuss",
+   "b": "spat",
+   "rel": [
+    "synonym"
+   ],
+   "par": 6
+  },
+  {
+   "a": "gape",
+   "b": "gawk",
+   "rel": [
+    "synonym"
+   ],
+   "par": 6
+  },
+  {
+   "a": "glint",
+   "b": "shine",
+   "rel": [
+    "synonym"
+   ],
+   "par": 6
+  },
+  {
+   "a": "good",
+   "b": "keen",
+   "rel": [
+    "similar"
+   ],
+   "par": 6
+  },
+  {
+   "a": "goon",
+   "b": "punk",
+   "rel": [
+    "synonym"
+   ],
+   "par": 6
+  },
+  {
+   "a": "goon",
+   "b": "lump",
+   "rel": [
+    "synonym"
+   ],
+   "par": 6
+  },
+  {
+   "a": "grab",
+   "b": "snap",
+   "rel": [
+    "synonym"
+   ],
+   "par": 6
+  },
+  {
+   "a": "halo",
+   "b": "ring",
+   "rel": [
+    "synonym"
+   ],
+   "par": 6
+  },
+  {
+   "a": "hawk",
+   "b": "vend",
+   "rel": [
+    "synonym"
+   ],
+   "par": 6
+  },
+  {
+   "a": "heap",
+   "b": "mass",
+   "rel": [
+    "synonym"
+   ],
+   "par": 6
+  },
+  {
+   "a": "heap",
+   "b": "raft",
+   "rel": [
+    "synonym"
+   ],
+   "par": 6
+  },
+  {
+   "a": "heaps",
+   "b": "piles",
+   "rel": [
+    "synonym"
+   ],
+   "par": 6
+  },
+  {
+   "a": "heaps",
+   "b": "rafts",
+   "rel": [
+    "synonym"
+   ],
+   "par": 6
+  },
+  {
+   "a": "heat",
+   "b": "wake",
+   "rel": [
+    "synonym"
+   ],
+   "par": 6
+  },
+  {
+   "a": "hemp",
+   "b": "rope",
+   "rel": [
+    "has part",
+    "part of"
+   ],
+   "par": 6
+  },
+  {
+   "a": "hide",
+   "b": "pelt",
+   "rel": [
+    "synonym"
+   ],
+   "par": 6
+  },
+  {
+   "a": "hire",
+   "b": "rent",
+   "rel": [
+    "synonym"
+   ],
+   "par": 6
+  },
+  {
+   "a": "hock",
+   "b": "pawn",
+   "rel": [
+    "synonym"
+   ],
+   "par": 6
+  },
+  {
+   "a": "hoop",
+   "b": "ring",
+   "rel": [
+    "synonym"
+   ],
+   "par": 6
+  },
+  {
+   "a": "horn",
+   "b": "tusk",
+   "rel": [
+    "synonym"
+   ],
+   "par": 6
+  },
+  {
+   "a": "huge",
+   "b": "vast",
+   "rel": [
+    "synonym"
+   ],
+   "par": 6
+  },
+  {
+   "a": "hurt",
+   "b": "pain",
+   "rel": [
+    "synonym"
+   ],
+   "par": 6
+  },
+  {
+   "a": "inner",
+   "b": "outer",
+   "rel": [
+    "antonym"
+   ],
+   "par": 6
+  },
+  {
+   "a": "jail",
+   "b": "poky",
+   "rel": [
+    "synonym"
+   ],
+   "par": 6
+  },
+  {
+   "a": "jerk",
+   "b": "jolt",
+   "rel": [
+    "synonym"
+   ],
+   "par": 6
+  },
+  {
+   "a": "just",
+   "b": "only",
+   "rel": [
+    "synonym"
+   ],
+   "par": 6
+  },
+  {
+   "a": "kind",
+   "b": "soft",
+   "rel": [
+    "also see"
+   ],
+   "par": 6
+  },
+  {
+   "a": "lame",
+   "b": "weak",
+   "rel": [
+    "similar"
+   ],
+   "par": 6
+  },
+  {
+   "a": "lark",
+   "b": "romp",
+   "rel": [
+    "synonym"
+   ],
+   "par": 6
+  },
+  {
+   "a": "leaded",
+   "b": "spaced",
+   "rel": [
+    "similar"
+   ],
+   "par": 6
+  },
+  {
+   "a": "lean",
+   "b": "tilt",
+   "rel": [
+    "synonym"
+   ],
+   "par": 6
+  },
+  {
+   "a": "lion",
+   "b": "mane",
+   "rel": [
+    "has part",
+    "part of"
+   ],
+   "par": 6
+  },
+  {
+   "a": "loads",
+   "b": "piles",
+   "rel": [
+    "synonym"
+   ],
+   "par": 6
+  },
+  {
+   "a": "loads",
+   "b": "rafts",
+   "rel": [
+    "synonym"
+   ],
+   "par": 6
+  },
+  {
+   "a": "loads",
+   "b": "slews",
+   "rel": [
+    "synonym"
+   ],
+   "par": 6
+  },
+  {
+   "a": "lone",
+   "b": "only",
+   "rel": [
+    "synonym"
+   ],
+   "par": 6
+  },
+  {
+   "a": "look",
+   "b": "seem",
+   "rel": [
+    "synonym"
+   ],
+   "par": 6
+  },
+  {
+   "a": "mint",
+   "b": "slew",
+   "rel": [
+    "synonym"
+   ],
+   "par": 6
+  },
+  {
+   "a": "mire",
+   "b": "slop",
+   "rel": [
+    "synonym"
+   ],
+   "par": 6
+  },
+  {
+   "a": "moldy",
+   "b": "musty",
+   "rel": [
+    "synonym"
+   ],
+   "par": 6
+  },
+  {
+   "a": "much",
+   "b": "some",
+   "rel": [
+    "similar"
+   ],
+   "par": 6
+  },
+  {
+   "a": "muck",
+   "b": "ooze",
+   "rel": [
+    "synonym"
+   ],
+   "par": 6
+  },
+  {
+   "a": "news",
+   "b": "word",
+   "rel": [
+    "synonym"
+   ],
+   "par": 6
+  },
+  {
+   "a": "null",
+   "b": "zero",
+   "rel": [
+    "synonym"
+   ],
+   "par": 6
+  },
+  {
+   "a": "pace",
+   "b": "step",
+   "rel": [
+    "synonym"
+   ],
+   "par": 6
+  },
+  {
+   "a": "pair",
+   "b": "span",
+   "rel": [
+    "synonym"
+   ],
+   "par": 6
+  },
+  {
+   "a": "pair",
+   "b": "yoke",
+   "rel": [
+    "synonym"
+   ],
+   "par": 6
+  },
+  {
+   "a": "past",
+   "b": "then",
+   "rel": [
+    "similar"
+   ],
+   "par": 6
+  },
+  {
+   "a": "peak",
+   "b": "rise",
+   "rel": [
+    "entailment"
+   ],
+   "par": 6
+  },
+  {
+   "a": "pelt",
+   "b": "skin",
+   "rel": [
+    "synonym"
+   ],
+   "par": 6
+  },
+  {
+   "a": "pier",
+   "b": "wall",
+   "rel": [
+    "has part",
+    "part of"
+   ],
+   "par": 6
+  },
+  {
+   "a": "plain",
+   "b": "stark",
+   "rel": [
+    "similar"
+   ],
+   "par": 6
+  },
+  {
+   "a": "plank",
+   "b": "plump",
+   "rel": [
+    "synonym"
+   ],
+   "par": 6
+  },
+  {
+   "a": "poke",
+   "b": "prod",
+   "rel": [
+    "synonym"
+   ],
+   "par": 6
+  },
+  {
+   "a": "pony",
+   "b": "trot",
+   "rel": [
+    "synonym"
+   ],
+   "par": 6
+  },
+  {
+   "a": "pore",
+   "b": "skin",
+   "rel": [
+    "has part",
+    "part of"
+   ],
+   "par": 6
+  },
+  {
+   "a": "prod",
+   "b": "spur",
+   "rel": [
+    "synonym"
+   ],
+   "par": 6
+  },
+  {
+   "a": "prod",
+   "b": "stab",
+   "rel": [
+    "synonym"
+   ],
+   "par": 6
+  },
+  {
+   "a": "real",
+   "b": "very",
+   "rel": [
+    "synonym"
+   ],
+   "par": 6
+  },
+  {
+   "a": "reef",
+   "b": "sail",
+   "rel": [
+    "has part",
+    "part of"
+   ],
+   "par": 6
+  },
+  {
+   "a": "reel",
+   "b": "spin",
+   "rel": [
+    "synonym"
+   ],
+   "par": 6
+  },
+  {
+   "a": "roar",
+   "b": "wail",
+   "rel": [
+    "synonym"
+   ],
+   "par": 6
+  },
+  {
+   "a": "room",
+   "b": "wall",
+   "rel": [
+    "has part",
+    "part of"
+   ],
+   "par": 6
+  },
+  {
+   "a": "root",
+   "b": "stem",
+   "rel": [
+    "synonym"
+   ],
+   "par": 6
+  },
+  {
+   "a": "ruin",
+   "b": "sack",
+   "rel": [
+    "entailment"
+   ],
+   "par": 6
+  },
+  {
+   "a": "salty",
+   "b": "tasty",
+   "rel": [
+    "also see",
+    "similar"
+   ],
+   "par": 6
+  },
+  {
+   "a": "same",
+   "b": "very",
+   "rel": [
+    "similar"
+   ],
+   "par": 6
+  },
+  {
+   "a": "scant",
+   "b": "skimp",
+   "rel": [
+    "synonym"
+   ],
+   "par": 6
+  },
+  {
+   "a": "sheer",
+   "b": "trend",
+   "rel": [
+    "synonym"
+   ],
+   "par": 6
+  },
+  {
+   "a": "shop",
+   "b": "surf",
+   "rel": [
+    "verb group"
+   ],
+   "par": 6
+  },
+  {
+   "a": "slack",
+   "b": "slump",
+   "rel": [
+    "synonym"
+   ],
+   "par": 6
+  },
+  {
+   "a": "veto",
+   "b": "vote",
+   "rel": [
+    "entailment"
+   ],
+   "par": 6
+  },
+  {
+   "a": "arced",
+   "b": "bowed",
+   "rel": [
+    "synonym"
+   ],
+   "par": 7
+  },
+  {
+   "a": "bang",
+   "b": "clap",
+   "rel": [
+    "synonym"
+   ],
+   "par": 7
+  },
+  {
+   "a": "barb",
+   "b": "jibe",
+   "rel": [
+    "synonym"
+   ],
+   "par": 7
+  },
+  {
+   "a": "bead",
+   "b": "drop",
+   "rel": [
+    "synonym"
+   ],
+   "par": 7
+  },
+  {
+   "a": "beaked",
+   "b": "billed",
+   "rel": [
+    "similar"
+   ],
+   "par": 7
+  },
+  {
+   "a": "beef",
+   "b": "oxen",
+   "rel": [
+    "has part",
+    "part of"
+   ],
+   "par": 7
+  },
+  {
+   "a": "beefy",
+   "b": "burly",
+   "rel": [
+    "synonym"
+   ],
+   "par": 7
+  },
+  {
+   "a": "bide",
+   "b": "stay",
+   "rel": [
+    "synonym"
+   ],
+   "par": 7
+  },
+  {
+   "a": "blamed",
+   "b": "darned",
+   "rel": [
+    "synonym"
+   ],
+   "par": 7
+  },
+  {
+   "a": "bland",
+   "b": "suave",
+   "rel": [
+    "synonym"
+   ],
+   "par": 7
+  },
+  {
+   "a": "body",
+   "b": "neck",
+   "rel": [
+    "has part",
+    "part of"
+   ],
+   "par": 7
+  },
+  {
+   "a": "bony",
+   "b": "thin",
+   "rel": [
+    "similar"
+   ],
+   "par": 7
+  },
+  {
+   "a": "brew",
+   "b": "sour",
+   "rel": [
+    "entailment"
+   ],
+   "par": 7
+  },
+  {
+   "a": "bust",
+   "b": "raid",
+   "rel": [
+    "synonym"
+   ],
+   "par": 7
+  },
+  {
+   "a": "cart",
+   "b": "drag",
+   "rel": [
+    "synonym"
+   ],
+   "par": 7
+  },
+  {
+   "a": "case",
+   "b": "suit",
+   "rel": [
+    "synonym"
+   ],
+   "par": 7
+  },
+  {
+   "a": "chip",
+   "b": "nick",
+   "rel": [
+    "synonym"
+   ],
+   "par": 7
+  },
+  {
+   "a": "chow",
+   "b": "grub",
+   "rel": [
+    "synonym"
+   ],
+   "par": 7
+  },
+  {
+   "a": "chunk",
+   "b": "clump",
+   "rel": [
+    "synonym"
+   ],
+   "par": 7
+  },
+  {
+   "a": "clump",
+   "b": "flock",
+   "rel": [
+    "synonym"
+   ],
+   "par": 7
+  },
+  {
+   "a": "craved",
+   "b": "wanted",
+   "rel": [
+    "similar"
+   ],
+   "par": 7
+  },
+  {
+   "a": "creep",
+   "b": "sneak",
+   "rel": [
+    "synonym"
+   ],
+   "par": 7
+  },
+  {
+   "a": "crib",
+   "b": "trot",
+   "rel": [
+    "synonym"
+   ],
+   "par": 7
+  },
+  {
+   "a": "crown",
+   "b": "tooth",
+   "rel": [
+    "has part",
+    "part of"
+   ],
+   "par": 7
+  },
+  {
+   "a": "dealer",
+   "b": "trader",
+   "rel": [
+    "synonym"
+   ],
+   "par": 7
+  },
+  {
+   "a": "deck",
+   "b": "ship",
+   "rel": [
+    "has part",
+    "part of"
+   ],
+   "par": 7
+  },
+  {
+   "a": "deeds",
+   "b": "works",
+   "rel": [
+    "synonym"
+   ],
+   "par": 7
+  },
+  {
+   "a": "deep",
+   "b": "late",
+   "rel": [
+    "synonym"
+   ],
+   "par": 7
+  },
+  {
+   "a": "dirt",
+   "b": "poop",
+   "rel": [
+    "synonym"
+   ],
+   "par": 7
+  },
+  {
+   "a": "dish",
+   "b": "meal",
+   "rel": [
+    "has part",
+    "part of"
+   ],
+   "par": 7
+  },
+  {
+   "a": "doom",
+   "b": "fate",
+   "rel": [
+    "synonym"
+   ],
+   "par": 7
+  },
+  {
+   "a": "downy",
+   "b": "hairy",
+   "rel": [
+    "similar"
+   ],
+   "par": 7
+  },
+  {
+   "a": "draw",
+   "b": "reap",
+   "rel": [
+    "synonym"
+   ],
+   "par": 7
+  },
+  {
+   "a": "dream",
+   "b": "sleep",
+   "rel": [
+    "entailment"
+   ],
+   "par": 7
+  },
+  {
+   "a": "driven",
+   "b": "goaded",
+   "rel": [
+    "synonym"
+   ],
+   "par": 7
+  },
+  {
+   "a": "drop",
+   "b": "sink",
+   "rel": [
+    "verb group"
+   ],
+   "par": 7
+  },
+  {
+   "a": "dumb",
+   "b": "slow",
+   "rel": [
+    "synonym"
+   ],
+   "par": 7
+  },
+  {
+   "a": "dusk",
+   "b": "even",
+   "rel": [
+    "has part",
+    "part of"
+   ],
+   "par": 7
+  },
+  {
+   "a": "easy",
+   "b": "slow",
+   "rel": [
+    "synonym"
+   ],
+   "par": 7
+  },
+  {
+   "a": "fair",
+   "b": "just",
+   "rel": [
+    "also see",
+    "synonym"
+   ],
+   "par": 7
+  },
+  {
+   "a": "fine",
+   "b": "thin",
+   "rel": [
+    "similar"
+   ],
+   "par": 7
+  },
+  {
+   "a": "flap",
+   "b": "fuss",
+   "rel": [
+    "synonym"
+   ],
+   "par": 7
+  },
+  {
+   "a": "flex",
+   "b": "hump",
+   "rel": [
+    "entailment"
+   ],
+   "par": 7
+  },
+  {
+   "a": "flip",
+   "b": "leaf",
+   "rel": [
+    "synonym"
+   ],
+   "par": 7
+  },
+  {
+   "a": "flog",
+   "b": "lash",
+   "rel": [
+    "synonym"
+   ],
+   "par": 7
+  },
+  {
+   "a": "fore",
+   "b": "prow",
+   "rel": [
+    "synonym"
+   ],
+   "par": 7
+  },
+  {
+   "a": "frog",
+   "b": "toad",
+   "rel": [
+    "synonym"
+   ],
+   "par": 7
+  },
+  {
+   "a": "gawk",
+   "b": "goon",
+   "rel": [
+    "synonym"
+   ],
+   "par": 7
+  },
+  {
+   "a": "gawk",
+   "b": "lump",
+   "rel": [
+    "synonym"
+   ],
+   "par": 7
+  },
+  {
+   "a": "goofy",
+   "b": "silly",
+   "rel": [
+    "synonym"
+   ],
+   "par": 7
+  },
+  {
+   "a": "grip",
+   "b": "hold",
+   "rel": [
+    "synonym"
+   ],
+   "par": 7
+  },
+  {
+   "a": "halt",
+   "b": "stop",
+   "rel": [
+    "synonym"
+   ],
+   "par": 7
+  },
+  {
+   "a": "halt",
+   "b": "stay",
+   "rel": [
+    "synonym"
+   ],
+   "par": 7
+  },
+  {
+   "a": "hart",
+   "b": "stag",
+   "rel": [
+    "synonym"
+   ],
+   "par": 7
+  },
+  {
+   "a": "haunt",
+   "b": "stalk",
+   "rel": [
+    "synonym"
+   ],
+   "par": 7
+  },
+  {
+   "a": "helm",
+   "b": "ship",
+   "rel": [
+    "has part",
+    "part of"
+   ],
+   "par": 7
+  },
+  {
+   "a": "hide",
+   "b": "skin",
+   "rel": [
+    "synonym"
+   ],
+   "par": 7
+  },
+  {
+   "a": "house",
+   "b": "porch",
+   "rel": [
+    "has part",
+    "part of"
+   ],
+   "par": 7
+  },
+  {
+   "a": "hump",
+   "b": "neck",
+   "rel": [
+    "verb group"
+   ],
+   "par": 7
+  },
+  {
+   "a": "joined",
+   "b": "linked",
+   "rel": [
+    "synonym"
+   ],
+   "par": 7
+  },
+  {
+   "a": "keep",
+   "b": "lose",
+   "rel": [
+    "antonym"
+   ],
+   "par": 7
+  },
+  {
+   "a": "lace",
+   "b": "shoe",
+   "rel": [
+    "has part",
+    "part of"
+   ],
+   "par": 7
+  },
+  {
+   "a": "lean",
+   "b": "trim",
+   "rel": [
+    "similar"
+   ],
+   "par": 7
+  },
+  {
+   "a": "lean",
+   "b": "wiry",
+   "rel": [
+    "similar"
+   ],
+   "par": 7
+  },
+  {
+   "a": "lifted",
+   "b": "raised",
+   "rel": [
+    "similar"
+   ],
+   "par": 7
+  },
+  {
+   "a": "limp",
+   "b": "weak",
+   "rel": [
+    "similar"
+   ],
+   "par": 7
+  },
+  {
+   "a": "mass",
+   "b": "slew",
+   "rel": [
+    "synonym"
+   ],
+   "par": 7
+  },
+  {
+   "a": "nail",
+   "b": "stem",
+   "rel": [
+    "has part",
+    "part of"
+   ],
+   "par": 7
+  },
+  {
+   "a": "nape",
+   "b": "neck",
+   "rel": [
+    "has part",
+    "part of"
+   ],
+   "par": 7
+  },
+  {
+   "a": "node",
+   "b": "stem",
+   "rel": [
+    "has part",
+    "part of"
+   ],
+   "par": 7
+  },
+  {
+   "a": "only",
+   "b": "sole",
+   "rel": [
+    "synonym"
+   ],
+   "par": 7
+  },
+  {
+   "a": "pair",
+   "b": "twin",
+   "rel": [
+    "synonym"
+   ],
+   "par": 7
+  },
+  {
+   "a": "pang",
+   "b": "stab",
+   "rel": [
+    "synonym"
+   ],
+   "par": 7
+  },
+  {
+   "a": "phase",
+   "b": "stage",
+   "rel": [
+    "synonym"
+   ],
+   "par": 7
+  },
+  {
+   "a": "poky",
+   "b": "slow",
+   "rel": [
+    "similar"
+   ],
+   "par": 7
+  },
+  {
+   "a": "poor",
+   "b": "rich",
+   "rel": [
+    "antonym"
+   ],
+   "par": 7
+  },
+  {
+   "a": "pout",
+   "b": "sulk",
+   "rel": [
+    "synonym"
+   ],
+   "par": 7
+  },
+  {
+   "a": "puke",
+   "b": "spew",
+   "rel": [
+    "synonym"
+   ],
+   "par": 7,
+   "review": true
+  },
+  {
+   "a": "puss",
+   "b": "slit",
+   "rel": [
+    "synonym"
+   ],
+   "par": 7
+  },
+  {
+   "a": "quiz",
+   "b": "test",
+   "rel": [
+    "synonym"
+   ],
+   "par": 7
+  },
+  {
+   "a": "raft",
+   "b": "slew",
+   "rel": [
+    "synonym"
+   ],
+   "par": 7
+  },
+  {
+   "a": "rafts",
+   "b": "slews",
+   "rel": [
+    "synonym"
+   ],
+   "par": 7
+  },
+  {
+   "a": "rapid",
+   "b": "river",
+   "rel": [
+    "has part",
+    "part of"
+   ],
+   "par": 7
+  },
+  {
+   "a": "ripped",
+   "b": "stoned",
+   "rel": [
+    "similar"
+   ],
+   "par": 7
+  },
+  {
+   "a": "rocky",
+   "b": "rough",
+   "rel": [
+    "similar"
+   ],
+   "par": 7
+  },
+  {
+   "a": "rooms",
+   "b": "suite",
+   "rel": [
+    "synonym"
+   ],
+   "par": 7
+  },
+  {
+   "a": "savor",
+   "b": "taste",
+   "rel": [
+    "synonym"
+   ],
+   "par": 7
+  },
+  {
+   "a": "shack",
+   "b": "trail",
+   "rel": [
+    "synonym"
+   ],
+   "par": 7
+  },
+  {
+   "a": "sick",
+   "b": "spew",
+   "rel": [
+    "synonym"
+   ],
+   "par": 7,
+   "review": true
+  },
+  {
+   "a": "skimp",
+   "b": "stint",
+   "rel": [
+    "synonym"
+   ],
+   "par": 7
+  },
+  {
+   "a": "slash",
+   "b": "slice",
+   "rel": [
+    "synonym"
+   ],
+   "par": 7
+  },
+  {
+   "a": "soap",
+   "b": "wash",
+   "rel": [
+    "entailment"
+   ],
+   "par": 7
+  },
+  {
+   "a": "spent",
+   "b": "tired",
+   "rel": [
+    "similar"
+   ],
+   "par": 7
+  },
+  {
+   "a": "star",
+   "b": "whiz",
+   "rel": [
+    "synonym"
+   ],
+   "par": 7
+  },
+  {
+   "a": "step",
+   "b": "walk",
+   "rel": [
+    "entailment"
+   ],
+   "par": 7
+  },
+  {
+   "a": "tacky",
+   "b": "tatty",
+   "rel": [
+    "synonym"
+   ],
+   "par": 7
+  },
+  {
+   "a": "thin",
+   "b": "wiry",
+   "rel": [
+    "similar"
+   ],
+   "par": 7
+  },
+  {
+   "a": "trash",
+   "b": "tripe",
+   "rel": [
+    "synonym"
+   ],
+   "par": 7
+  },
+  {
+   "a": "trip",
+   "b": "walk",
+   "rel": [
+    "entailment"
+   ],
+   "par": 7
+  },
+  {
+   "a": "acid",
+   "b": "pane",
+   "rel": [
+    "synonym"
+   ],
+   "par": 8
+  },
+  {
+   "a": "aged",
+   "b": "worn",
+   "rel": [
+    "similar"
+   ],
+   "par": 8
+  },
+  {
+   "a": "arid",
+   "b": "dull",
+   "rel": [
+    "similar"
+   ],
+   "par": 8
+  },
+  {
+   "a": "away",
+   "b": "home",
+   "rel": [
+    "antonym"
+   ],
+   "par": 8
+  },
+  {
+   "a": "balmy",
+   "b": "loony",
+   "rel": [
+    "synonym"
+   ],
+   "par": 8
+  },
+  {
+   "a": "beach",
+   "b": "shore",
+   "rel": [
+    "has part",
+    "part of"
+   ],
+   "par": 8
+  },
+  {
+   "a": "beefy",
+   "b": "husky",
+   "rel": [
+    "synonym"
+   ],
+   "par": 8
+  },
+  {
+   "a": "belly",
+   "b": "bowel",
+   "rel": [
+    "has part",
+    "part of"
+   ],
+   "par": 8
+  },
+  {
+   "a": "belly",
+   "b": "navel",
+   "rel": [
+    "has part",
+    "part of"
+   ],
+   "par": 8
+  },
+  {
+   "a": "black",
+   "b": "white",
+   "rel": [
+    "antonym"
+   ],
+   "par": 8
+  },
+  {
+   "a": "blamed",
+   "b": "cursed",
+   "rel": [
+    "similar"
+   ],
+   "par": 8
+  },
+  {
+   "a": "blamed",
+   "b": "damned",
+   "rel": [
+    "synonym"
+   ],
+   "par": 8
+  },
+  {
+   "a": "board",
+   "b": "plank",
+   "rel": [
+    "synonym"
+   ],
+   "par": 8
+  },
+  {
+   "a": "boiled",
+   "b": "stewed",
+   "rel": [
+    "synonym"
+   ],
+   "par": 8
+  },
+  {
+   "a": "bone",
+   "b": "cram",
+   "rel": [
+    "synonym"
+   ],
+   "par": 8
+  },
+  {
+   "a": "booth",
+   "b": "stall",
+   "rel": [
+    "synonym"
+   ],
+   "par": 8
+  },
+  {
+   "a": "bread",
+   "b": "clams",
+   "rel": [
+    "synonym"
+   ],
+   "par": 8
+  },
+  {
+   "a": "brisk",
+   "b": "fresh",
+   "rel": [
+    "synonym"
+   ],
+   "par": 8
+  },
+  {
+   "a": "broad",
+   "b": "thick",
+   "rel": [
+    "also see"
+   ],
+   "par": 8
+  },
+  {
+   "a": "brow",
+   "b": "face",
+   "rel": [
+    "has part",
+    "part of"
+   ],
+   "par": 8
+  },
+  {
+   "a": "buck",
+   "b": "clam",
+   "rel": [
+    "synonym"
+   ],
+   "par": 8
+  },
+  {
+   "a": "bullet",
+   "b": "heater",
+   "rel": [
+    "synonym"
+   ],
+   "par": 8
+  },
+  {
+   "a": "burned",
+   "b": "cooked",
+   "rel": [
+    "similar"
+   ],
+   "par": 8
+  },
+  {
+   "a": "cagey",
+   "b": "canny",
+   "rel": [
+    "synonym"
+   ],
+   "par": 8
+  },
+  {
+   "a": "cane",
+   "b": "flog",
+   "rel": [
+    "synonym"
+   ],
+   "par": 8
+  },
+  {
+   "a": "carved",
+   "b": "graven",
+   "rel": [
+    "similar"
+   ],
+   "par": 8
+  },
+  {
+   "a": "cheap",
+   "b": "flash",
+   "rel": [
+    "synonym"
+   ],
+   "par": 8
+  },
+  {
+   "a": "clay",
+   "b": "tile",
+   "rel": [
+    "has part",
+    "part of"
+   ],
+   "par": 8
+  },
+  {
+   "a": "cleft",
+   "b": "crack",
+   "rel": [
+    "synonym"
+   ],
+   "par": 8
+  },
+  {
+   "a": "clink",
+   "b": "pokey",
+   "rel": [
+    "synonym"
+   ],
+   "par": 8
+  },
+  {
+   "a": "clip",
+   "b": "time",
+   "rel": [
+    "synonym"
+   ],
+   "par": 8
+  },
+  {
+   "a": "cloak",
+   "b": "drape",
+   "rel": [
+    "synonym"
+   ],
+   "par": 8
+  },
+  {
+   "a": "club",
+   "b": "gild",
+   "rel": [
+    "synonym"
+   ],
+   "par": 8
+  },
+  {
+   "a": "clue",
+   "b": "hint",
+   "rel": [
+    "synonym"
+   ],
+   "par": 8
+  },
+  {
+   "a": "creep",
+   "b": "spook",
+   "rel": [
+    "synonym"
+   ],
+   "par": 8
+  },
+  {
+   "a": "damned",
+   "b": "doomed",
+   "rel": [
+    "synonym"
+   ],
+   "par": 8
+  },
+  {
+   "a": "dose",
+   "b": "drug",
+   "rel": [
+    "synonym"
+   ],
+   "par": 8
+  },
+  {
+   "a": "drab",
+   "b": "dull",
+   "rel": [
+    "similar"
+   ],
+   "par": 8
+  },
+  {
+   "a": "drag",
+   "b": "haul",
+   "rel": [
+    "synonym"
+   ],
+   "par": 8
+  },
+  {
+   "a": "drag",
+   "b": "hale",
+   "rel": [
+    "synonym"
+   ],
+   "par": 8
+  },
+  {
+   "a": "draw",
+   "b": "pull",
+   "rel": [
+    "synonym"
+   ],
+   "par": 8
+  },
+  {
+   "a": "draw",
+   "b": "line",
+   "rel": [
+    "synonym"
+   ],
+   "par": 8
+  },
+  {
+   "a": "dress",
+   "b": "frock",
+   "rel": [
+    "synonym"
+   ],
+   "par": 8
+  },
+  {
+   "a": "dress",
+   "b": "primp",
+   "rel": [
+    "verb group"
+   ],
+   "par": 8
+  },
+  {
+   "a": "eats",
+   "b": "grub",
+   "rel": [
+    "synonym"
+   ],
+   "par": 8
+  },
+  {
+   "a": "even",
+   "b": "flat",
+   "rel": [
+    "similar"
+   ],
+   "par": 8
+  },
+  {
+   "a": "fake",
+   "b": "sham",
+   "rel": [
+    "synonym"
+   ],
+   "par": 8
+  },
+  {
+   "a": "feller",
+   "b": "logger",
+   "rel": [
+    "synonym"
+   ],
+   "par": 8
+  },
+  {
+   "a": "flap",
+   "b": "wave",
+   "rel": [
+    "synonym"
+   ],
+   "par": 8
+  },
+  {
+   "a": "fleck",
+   "b": "stain",
+   "rel": [
+    "verb group"
+   ],
+   "par": 8
+  },
+  {
+   "a": "flesh",
+   "b": "shape",
+   "rel": [
+    "synonym"
+   ],
+   "par": 8
+  },
+  {
+   "a": "fling",
+   "b": "whirl",
+   "rel": [
+    "synonym"
+   ],
+   "par": 8
+  },
+  {
+   "a": "flint",
+   "b": "stony",
+   "rel": [
+    "synonym"
+   ],
+   "par": 8
+  },
+  {
+   "a": "flip",
+   "b": "toss",
+   "rel": [
+    "synonym"
+   ],
+   "par": 8
+  },
+  {
+   "a": "foxy",
+   "b": "wily",
+   "rel": [
+    "synonym"
+   ],
+   "par": 8
+  },
+  {
+   "a": "glint",
+   "b": "spark",
+   "rel": [
+    "synonym"
+   ],
+   "par": 8
+  },
+  {
+   "a": "goof",
+   "b": "zany",
+   "rel": [
+    "synonym"
+   ],
+   "par": 8
+  },
+  {
+   "a": "goon",
+   "b": "thug",
+   "rel": [
+    "synonym"
+   ],
+   "par": 8
+  },
+  {
+   "a": "grade",
+   "b": "place",
+   "rel": [
+    "synonym"
+   ],
+   "par": 8
+  },
+  {
+   "a": "graded",
+   "b": "ranked",
+   "rel": [
+    "synonym"
+   ],
+   "par": 8
+  },
+  {
+   "a": "grate",
+   "b": "stove",
+   "rel": [
+    "has part",
+    "part of"
+   ],
+   "par": 8
+  },
+  {
+   "a": "grip",
+   "b": "stem",
+   "rel": [
+    "has part",
+    "part of"
+   ],
+   "par": 8
+  },
+  {
+   "a": "grit",
+   "b": "guts",
+   "rel": [
+    "synonym"
+   ],
+   "par": 8
+  },
+  {
+   "a": "groin",
+   "b": "loins",
+   "rel": [
+    "has part",
+    "part of"
+   ],
+   "par": 8,
+   "review": true
+  },
+  {
+   "a": "grow",
+   "b": "turn",
+   "rel": [
+    "verb group"
+   ],
+   "par": 8
+  },
+  {
+   "a": "gutter",
+   "b": "toilet",
+   "rel": [
+    "synonym"
+   ],
+   "par": 8,
+   "review": true
+  },
+  {
+   "a": "harden",
+   "b": "temper",
+   "rel": [
+    "synonym"
+   ],
+   "par": 8
+  },
+  {
+   "a": "harsh",
+   "b": "rough",
+   "rel": [
+    "also see"
+   ],
+   "par": 8
+  },
+  {
+   "a": "heater",
+   "b": "warmer",
+   "rel": [
+    "synonym"
+   ],
+   "par": 8
+  },
+  {
+   "a": "item",
+   "b": "list",
+   "rel": [
+    "has part",
+    "part of"
+   ],
+   "par": 8
+  },
+  {
+   "a": "jolly",
+   "b": "merry",
+   "rel": [
+    "synonym"
+   ],
+   "par": 8
+  },
+  {
+   "a": "knob",
+   "b": "node",
+   "rel": [
+    "synonym"
+   ],
+   "par": 8
+  },
+  {
+   "a": "lash",
+   "b": "whip",
+   "rel": [
+    "has part",
+    "part of",
+    "synonym"
+   ],
+   "par": 8
+  },
+  {
+   "a": "lazy",
+   "b": "slow",
+   "rel": [
+    "similar"
+   ],
+   "par": 8
+  },
+  {
+   "a": "loins",
+   "b": "trunk",
+   "rel": [
+    "has part",
+    "part of"
+   ],
+   "par": 8
+  },
+  {
+   "a": "mate",
+   "b": "twin",
+   "rel": [
+    "synonym"
+   ],
+   "par": 8
+  },
+  {
+   "a": "molded",
+   "b": "shaped",
+   "rel": [
+    "synonym"
+   ],
+   "par": 8
+  },
+  {
+   "a": "new",
+   "b": "old",
+   "rel": [
+    "antonym"
+   ],
+   "par": 8
+  },
+  {
+   "a": "ooze",
+   "b": "seep",
+   "rel": [
+    "synonym"
+   ],
+   "par": 8
+  },
+  {
+   "a": "perch",
+   "b": "roost",
+   "rel": [
+    "has part",
+    "part of",
+    "synonym"
+   ],
+   "par": 8
+  },
+  {
+   "a": "pile",
+   "b": "slew",
+   "rel": [
+    "synonym"
+   ],
+   "par": 8
+  },
+  {
+   "a": "piles",
+   "b": "slews",
+   "rel": [
+    "synonym"
+   ],
+   "par": 8
+  },
+  {
+   "a": "plume",
+   "b": "pride",
+   "rel": [
+    "synonym"
+   ],
+   "par": 8
+  },
+  {
+   "a": "poke",
+   "b": "stab",
+   "rel": [
+    "synonym"
+   ],
+   "par": 8
+  },
+  {
+   "a": "sleek",
+   "b": "slick",
+   "rel": [
+    "synonym"
+   ],
+   "par": 8
+  },
+  {
+   "a": "slide",
+   "b": "swoop",
+   "rel": [
+    "synonym"
+   ],
+   "par": 8
+  },
+  {
+   "a": "slops",
+   "b": "swill",
+   "rel": [
+    "synonym"
+   ],
+   "par": 8
+  },
+  {
+   "a": "span",
+   "b": "yoke",
+   "rel": [
+    "synonym"
+   ],
+   "par": 8
+  },
+  {
+   "a": "stump",
+   "b": "tooth",
+   "rel": [
+    "has part",
+    "part of"
+   ],
+   "par": 8
+  },
+  {
+   "a": "teeth",
+   "b": "tooth",
+   "rel": [
+    "has part",
+    "part of"
+   ],
+   "par": 8
+  },
+  {
+   "a": "thin",
+   "b": "trim",
+   "rel": [
+    "similar"
+   ],
+   "par": 8
+  },
+  {
+   "a": "tilted",
+   "b": "tipped",
+   "rel": [
+    "synonym"
+   ],
+   "par": 8
+  },
+  {
+   "a": "tree",
+   "b": "wood",
+   "rel": [
+    "has part",
+    "part of"
+   ],
+   "par": 8
+  },
+  {
+   "a": "welt",
+   "b": "whip",
+   "rel": [
+    "synonym"
+   ],
+   "par": 8
+  },
+  {
+   "a": "wind",
+   "b": "wrap",
+   "rel": [
+    "synonym"
+   ],
+   "par": 8
+  }
+ ]
+}

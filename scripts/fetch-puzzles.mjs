@@ -9,14 +9,14 @@ import { generateWeave } from './weave.mjs';
 import { generateSquare, GIVEN_TARGET } from './squares.mjs';
 import { THEMES } from './themes.mjs';
 import {
-  cycleOf,
   generateCryptogram,
   generatePlayable,
   livePassages,
-  permutedIndex,
   TIER_BAND,
   TIER_VARIANTS,
 } from './cryptogram.mjs';
+import { generateLadder, livePairs, poolFor, TIER_PAR } from './ladder.mjs';
+import { cycleOf, permutedIndex } from './walk.mjs';
 
 const require = createRequire(import.meta.url);
 
@@ -183,7 +183,17 @@ const passagePools = {
   standard: livePassages(parsedPassages, 'standard'),
   short: livePassages(parsedPassages, 'short'),
 };
-const poolFor = (difficulty) => passagePools[TIER_BAND[difficulty]];
+const passagePoolFor = (difficulty) => passagePools[TIER_BAND[difficulty]];
+
+// The ladder pairs, split by par into the band each difficulty plays. Split
+// once here rather than per day: the walk needs a stable pool size, and a pool
+// that changed length between calls would deal repeats.
+const ladderPairs = livePairs(
+  JSON.parse(readFileSync(new URL('./ladder-pairs.json', import.meta.url), 'utf8'))
+);
+const ladderPools = Object.fromEntries(
+  Object.keys(TIER_PAR).map((d) => [d, poolFor(ladderPairs, d)])
+);
 
 // Three difficulties, and they don't all mean the same thing. Guess, Hive,
 // Boxed and Scramble vary by word tier; Grid varies only by what it accepts,
@@ -377,6 +387,7 @@ const diffSalt = (d) => (d === 'easy' ? '' : `-${d}`);
 
 const dailyWeaveClues = new Set();
 const dailyCryptogramTexts = new Set();
+const dailyLadderPairs = new Set();
 for (const variant of ['', 'dev']) {
   const salt = variant ? `-${variant}` : '';
   const prefix = variant ? 'dev-' : '';
@@ -675,7 +686,7 @@ for (const variant of ['', 'dev']) {
   // other game.
   const cryptogramByDifficulty = {};
   DIFFICULTIES.forEach((difficulty, di) => {
-    const passagePool = poolFor(difficulty);
+    const passagePool = passagePoolFor(difficulty);
     const position = epochDay + di * Math.floor(passagePool.length / 3);
     const cycle = cycleOf(position, passagePool.length);
     // seeded by the cycle, not the date: every day in a cycle must deal the
@@ -715,6 +726,38 @@ for (const variant of ['', 'dev']) {
       DIFFICULTIES.map((d) => {
         const b = cryptogramByDifficulty[d];
         return `${d} ${b.label}, ${b.tokens.length} tokens, ${Object.keys(b.reveals).length} revealed`;
+      }).join(' | ')
+  );
+
+  // ladder: a pair per difficulty, walked out of that difficulty's own pool.
+  // Each band is its own walk because they are separate pools — a pair is in
+  // exactly one band, by its par — so there is no offset to keep them apart
+  // and no way for two difficulties to collide.
+  //
+  // No answer is published, because there isn't one to publish. A ladder is
+  // checked by rule rather than against a stored route, so the feed carries
+  // what the player can already see: both ends, and the number of steps.
+  const ladderByDifficulty = {};
+  DIFFICULTIES.forEach((difficulty) => {
+    const pool = ladderPools[difficulty];
+    const cycle = cycleOf(epochDay, pool.length);
+    const cycleRng = mulberry32(
+      xmur3(`${SEED_SALT}anagrimoire-ladder-cycle-${difficulty}-${cycle}${salt}`)()
+    );
+    const pair = pool[permutedIndex(cycleRng, pool.length, epochDay)];
+    dailyLadderPairs.add(`${pair.a} ${pair.b}`);
+    ladderByDifficulty[difficulty] = generateLadder(pair);
+  });
+  await writeFile(
+    `${DATA_DIR}/${prefix}daily-ladder.json`,
+    JSON.stringify({ date: etDate, byDifficulty: ladderByDifficulty, fetchedAt: stamp }, null, 2) +
+      '\n'
+  );
+  console.log(
+    `Wrote data/${prefix}daily-ladder.json: ` +
+      DIFFICULTIES.map((d) => {
+        const b = ladderByDifficulty[d];
+        return `${d} ${b.from}->${b.to} in ${b.par}`;
       }).join(' | ')
   );
 }
@@ -821,7 +864,7 @@ const cryptogramPoolByDifficulty = { easy: [], hard: [], extreme: [] };
 for (const difficulty of DIFFICULTIES) {
   // practice draws from the same band the difficulty plays, or extreme would
   // rehearse on passages half again as long as the ones it serves
-  const cgPoolPassages = poolFor(difficulty).filter((p) => !dailyCryptogramTexts.has(p.text));
+  const cgPoolPassages = passagePoolFor(difficulty).filter((p) => !dailyCryptogramTexts.has(p.text));
   const used = new Set();
   const options = TIER_VARIANTS[difficulty];
   for (let i = 0; i < 10; i++) {
@@ -859,4 +902,36 @@ await writeFile(
 console.log(
   `Wrote data/cryptogram-pool.json: ` +
     DIFFICULTIES.map((d) => `${d} ${cryptogramPoolByDifficulty[d].length}`).join(', ')
+);
+
+// shared practice pool for the ladder: both variants' daily pairs are held out
+// so practice never spoils a daily, same as weave's themes and the cryptogram
+// passages.
+const ladderPoolRng = mulberry32(xmur3(`${SEED_SALT}anagrimoire-ladder-pool-${etDate}`)());
+const ladderPoolByDifficulty = { easy: [], hard: [], extreme: [] };
+for (const difficulty of DIFFICULTIES) {
+  const available = ladderPools[difficulty].filter(
+    (p) => !dailyLadderPairs.has(`${p.a} ${p.b}`)
+  );
+  const used = new Set();
+  for (let i = 0; i < 10; i++) {
+    let pair;
+    do {
+      pair = available[Math.floor(ladderPoolRng() * available.length)];
+    } while (used.has(`${pair.a} ${pair.b}`));
+    used.add(`${pair.a} ${pair.b}`);
+    ladderPoolByDifficulty[difficulty].push(generateLadder(pair));
+  }
+}
+await writeFile(
+  `${DATA_DIR}/ladder-pool.json`,
+  JSON.stringify(
+    { date: etDate, byDifficulty: ladderPoolByDifficulty, fetchedAt: new Date().toISOString() },
+    null,
+    2
+  ) + '\n'
+);
+console.log(
+  `Wrote data/ladder-pool.json: ` +
+    DIFFICULTIES.map((d) => `${d} ${ladderPoolByDifficulty[d].length}`).join(', ')
 );
