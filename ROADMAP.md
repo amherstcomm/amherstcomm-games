@@ -734,12 +734,32 @@ connects: **45**. Widening through band-70 reaches 62. What they look like:
     give -> take (4)    fall -> rise (4)    find -> lose (4)
     cool -> warm (5)    head -> tail (5)    tame -> wild (5)
 
-Sixty pairs is six weeks of dailies, so antonyms cannot *be* the daily. They
-can be the good seats: Learn's examples, a weekly marquee, the first run of
-puzzles anyone sees. The everyday board needs a broader rule, and the honest
-statement is that no measurement here settles which — "both ends common, of
-the tier's target length" has supply and no taste, and whether that is
-satisfying is a question for someone who plays it rather than counts it.
+Sixty is six weeks, so antonymy alone cannot be the daily — but it is one
+pointer of a dozen. WordNet also carries synonymy, part-and-whole, "similar
+to", "also see", entailment, cause and verb grouping, and taking the union
+answers it: **1,415 pairs**, near four years of dailies, every one a relation
+a player would recognise.
+
+    cause        jump -> leap   lift -> rise   drop -> fall   halt -> stop
+    also see     cold -> cool   fair -> just   lean -> thin   easy -> soft
+    entailment   veto -> vote   kick -> move   burn -> sear
+    meronym      beef -> cows   hemp -> rope   book -> text
+    verb group   break -> crack draw -> pull   quiz -> test
+    antonym      east -> west   give -> take   head -> tail
+
+**One relation has to be left out, and it is the biggest.** Hypernymy and its
+inverse supply 2,277 of the 3,523 pairs the full union reaches — and they
+produce `goat -> soul`, `crab -> soul`, `bull -> soul`, because WordNet files
+*soul* as a synonym of *person* and every creature hangs off it. The relation
+is real and the pair is nonsense: a player sees two words with no visible
+connection, which is worse than ACTS to DIMS, since it looks like it was
+*trying* to mean something. Dropping it costs volume there is no shortage of.
+
+So the supply question is settled and the taste question mostly with it. What
+is left for someone who plays rather than counts: whether the relation should
+be *named* on the board ("opposites", "cause and effect") or left to be
+noticed, and whether a pair with two relations at once is a better puzzle or
+just a coincidence.
 
 Also open: whether a daily names both ends or only the start, and whether par
 is shown or discovered.
