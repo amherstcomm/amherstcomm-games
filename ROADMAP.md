@@ -645,6 +645,47 @@ seasonal theme and lose an accommodation they needed.
 Falling letters you steer into words. A real-time game loop, unlike anything
 else here, fully generatable, and distinctive. The most interesting fit.
 
+**Evaluated** (August 2026), and the obstacle is not difficulty. It reuses the
+dictionary and bands, the daily feed shape and its seeding, the difficulty
+tiers, and the share and stats plumbing — the cheap half. What is new is a
+game loop (nothing here uses `requestAnimationFrame` or a tick),
+frame-rate-independent timing, collision and stacking, touch controls, and a
+render path that is not React state per frame.
+
+**It breaks three things the site currently holds, and a fourth quietly.**
+
+1. *Scores stop being verifiable.* Every leaderboard entry today is recomputed
+   server-side from evidence: `result_is_plausible` checks arithmetic, then
+   dictionary membership, then the claimed words against the actual puzzle. A
+   Tetris score is not a function of a word set — the achievement is the
+   real-time sequence, and the letters are as reachable as the player's hands
+   allow. Verifying it honestly means shipping an input replay the server
+   re-simulates, which is a game loop in plpgsql. The realistic choices are no
+   leaderboard, or a verifier outside Postgres.
+2. *Play stops being accessible.* WCAG AA across fourteen routes, plus the
+   NVDA walks. A falling-block game under time pressure has no screen-reader
+   equivalent and excludes motor impairment outright. Text scaling to 125%
+   fights a fixed playfield as well.
+3. *The site stops being unhurried.* Learn says "no clock, no stakes" in those
+   words, twice. Boxed and Cryptogram record elapsed time, but as a stat you
+   are free to ignore; nothing here pressures anyone.
+4. *A day stops being resumable.* `daily_progress` keeps partial state so a
+   half-finished puzzle follows you between devices. A real-time run does not
+   resume — it would be the first game where closing the tab costs the day.
+
+**The version that keeps all four: drop the clock, not the idea.** Letters
+fall into a well and you place each one with as long as you like; the score is
+the words formed. Deterministic dailies, scores the server can recompute from
+the placements against the seeded piece sequence, keyboard and screen-reader
+play, resume, and the site's own character — while still resembling nothing
+else here. The phrase above is "falling letters you steer into words", and
+that survives losing the timer. The invariants do not survive keeping it.
+
+**If the arcade version is wanted anyway** — a fair thing to want, it is the
+more fun one — the honest shape is practice-only, no leaderboard, explicitly
+outside the daily system. Nothing breaks, it is far less work, and it answers
+whether the game is fun before anyone pays for replay verification.
+
 ### Wordoku
 A 9×9 sudoku whose nine symbols are letters, with one row or the main
 diagonal spelling a nine-letter word of nine distinct letters (EDUCATION,
