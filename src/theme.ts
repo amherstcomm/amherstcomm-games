@@ -10,12 +10,33 @@ export type ThemeMode = 'system' | 'light' | 'dark';
 // panels and text tiers and leave the meaning-carrying hues alone. They share
 // this axis with the accommodations, so choosing one gives up the other; the
 // Settings list keeps them in separate groups and says so.
-export type Palette = 'default' | 'deuter' | 'tritan' | 'mono' | 'sepia' | 'ocean';
+export type Palette =
+  | 'default'
+  | 'deuter'
+  | 'tritan'
+  | 'mono'
+  | 'sepia'
+  | 'ocean'
+  | 'forest'
+  | 'plum'
+  | 'graphite'
+  | 'ember';
 // every size in the app is in rem, so scaling the root scales all of it
 export type TextScale = 'normal' | 'large' | 'larger';
 
 export const THEME_MODES: ThemeMode[] = ['system', 'light', 'dark'];
-export const PALETTES: Palette[] = ['default', 'deuter', 'tritan', 'mono', 'sepia', 'ocean'];
+export const PALETTES: Palette[] = [
+  'default',
+  'deuter',
+  'tritan',
+  'mono',
+  'sepia',
+  'ocean',
+  'forest',
+  'plum',
+  'graphite',
+  'ember',
+];
 /** the ones that exist for colour vision, as opposed to for looks */
 export const ACCESSIBLE_PALETTES: Palette[] = ['default', 'deuter', 'tritan', 'mono'];
 
@@ -60,6 +81,10 @@ export const COLOR_WORDS: Record<Palette, ColorWords> = {
   // for them are the default words
   sepia: { right: 'green', wrong: 'amber', span: 'gold', theme: 'blue', key: 'amber' },
   ocean: { right: 'green', wrong: 'amber', span: 'gold', theme: 'blue', key: 'amber' },
+  forest: { right: 'green', wrong: 'amber', span: 'gold', theme: 'blue', key: 'amber' },
+  plum: { right: 'green', wrong: 'amber', span: 'gold', theme: 'blue', key: 'amber' },
+  graphite: { right: 'green', wrong: 'amber', span: 'gold', theme: 'blue', key: 'amber' },
+  ember: { right: 'green', wrong: 'amber', span: 'gold', theme: 'blue', key: 'amber' },
 };
 
 /** The four colours each palette shows in its row in Settings.
@@ -86,6 +111,10 @@ export const PALETTE_SWATCHES: Record<Palette, string[]> = {
   mono: ['235 235 235', '210 210 210', '165 165 165', '150 150 150'],
   sepia: ['245 176 65', '184 167 143', '79 66 50', '38 31 22'],
   ocean: ['94 214 226', '152 180 195', '33 70 94', '10 30 45'],
+  forest: ['122 205 158', '158 182 168', '46 74 59', '18 34 26'],
+  plum: ['209 160 233', '180 166 190', '78 58 90', '38 26 45'],
+  graphite: ['214 214 220', '173 173 178', '64 64 68', '29 29 31'],
+  ember: ['240 150 118', '188 166 158', '86 55 46', '43 25 21'],
 };
 export const TEXT_SCALES: TextScale[] = ['normal', 'large', 'larger'];
 export const TEXT_SCALE_PCT: Record<TextScale, string> = {

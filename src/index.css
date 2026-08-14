@@ -511,6 +511,139 @@
   --c-accent: 13 105 120;
 }
 
+/* Forest: pine dark, and something like light through leaves. */
+:root[data-palette='forest'] {
+  --c-slate-950: 9 20 15;
+  --c-slate-900: 18 34 26;
+  --c-slate-800: 30 52 41;
+  --c-slate-700: 46 74 59;
+  --c-slate-600: 128 152 138;
+  --c-slate-500: 142 166 152;
+  --c-slate-400: 158 182 168;
+  --c-slate-300: 208 226 215;
+  --c-slate-200: 228 240 232;
+
+  --c-ink: 9 20 15;
+  --c-focus: 122 205 158;
+  --c-accent: 122 205 158;
+}
+
+:root[data-theme='light'][data-palette='forest'] {
+  --c-slate-950: 240 247 242;
+  --c-slate-900: 252 255 253;
+  --c-slate-800: 216 234 223;
+  --c-slate-700: 188 214 198;
+  --c-slate-600: 78 108 90;
+  --c-slate-500: 55 82 66;
+  --c-slate-400: 55 82 66;
+  --c-slate-300: 40 63 50;
+  --c-slate-200: 22 42 31;
+
+  --c-white: 22 42 31;
+  --c-focus: 20 104 66;
+  --c-accent: 20 104 66;
+}
+
+/* Plum: a dark that is not quite black, and a light that is not quite white. */
+:root[data-palette='plum'] {
+  --c-slate-950: 22 14 26;
+  --c-slate-900: 38 26 45;
+  --c-slate-800: 56 40 66;
+  --c-slate-700: 78 58 90;
+  --c-slate-600: 150 136 160;
+  --c-slate-500: 164 150 174;
+  --c-slate-400: 180 166 190;
+  --c-slate-300: 222 212 230;
+  --c-slate-200: 236 228 242;
+
+  --c-ink: 22 14 26;
+  --c-focus: 209 160 233;
+  --c-accent: 209 160 233;
+}
+
+:root[data-theme='light'][data-palette='plum'] {
+  --c-slate-950: 247 242 250;
+  --c-slate-900: 254 252 255;
+  --c-slate-800: 232 222 238;
+  --c-slate-700: 210 196 219;
+  --c-slate-600: 110 92 122;
+  --c-slate-500: 82 66 93;
+  --c-slate-400: 82 66 93;
+  --c-slate-300: 64 50 74;
+  --c-slate-200: 41 30 48;
+
+  --c-white: 41 30 48;
+  --c-focus: 116 58 140;
+  --c-accent: 116 58 140;
+}
+
+/* Graphite: no hue anywhere in the room. Not the Monochrome palette — the
+   game's own colours are untouched, only the page is grey. */
+:root[data-palette='graphite'] {
+  --c-slate-950: 16 16 17;
+  --c-slate-900: 29 29 31;
+  --c-slate-800: 45 45 48;
+  --c-slate-700: 64 64 68;
+  --c-slate-600: 143 143 148;
+  --c-slate-500: 157 157 162;
+  --c-slate-400: 173 173 178;
+  --c-slate-300: 218 218 222;
+  --c-slate-200: 234 234 237;
+
+  --c-ink: 16 16 17;
+  --c-focus: 214 214 220;
+  --c-accent: 214 214 220;
+}
+
+:root[data-theme='light'][data-palette='graphite'] {
+  --c-slate-950: 244 244 246;
+  --c-slate-900: 253 253 254;
+  --c-slate-800: 226 226 230;
+  --c-slate-700: 202 202 208;
+  --c-slate-600: 99 99 105;
+  --c-slate-500: 72 72 78;
+  --c-slate-400: 72 72 78;
+  --c-slate-300: 54 54 59;
+  --c-slate-200: 32 32 36;
+
+  --c-white: 32 32 36;
+  --c-focus: 63 63 70;
+  --c-accent: 63 63 70;
+}
+
+/* Ember: banked coals after dark, terracotta by day. */
+:root[data-palette='ember'] {
+  --c-slate-950: 26 14 12;
+  --c-slate-900: 43 25 21;
+  --c-slate-800: 62 38 32;
+  --c-slate-700: 86 55 46;
+  --c-slate-600: 158 136 128;
+  --c-slate-500: 172 150 142;
+  --c-slate-400: 188 166 158;
+  --c-slate-300: 230 214 208;
+  --c-slate-200: 243 232 227;
+
+  --c-ink: 26 14 12;
+  --c-focus: 240 150 118;
+  --c-accent: 240 150 118;
+}
+
+:root[data-theme='light'][data-palette='ember'] {
+  --c-slate-950: 250 242 238;
+  --c-slate-900: 255 251 249;
+  --c-slate-800: 238 224 216;
+  --c-slate-700: 217 197 187;
+  --c-slate-600: 122 96 86;
+  --c-slate-500: 92 70 62;
+  --c-slate-400: 92 70 62;
+  --c-slate-300: 72 54 47;
+  --c-slate-200: 46 32 27;
+
+  --c-white: 46 32 27;
+  --c-focus: 154 68 38;
+  --c-accent: 154 68 38;
+}
+
 /* keep overscroll and the area behind the app in the active theme */
 body {
   background-color: rgb(var(--c-slate-950));

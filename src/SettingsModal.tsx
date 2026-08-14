@@ -103,6 +103,10 @@ const PALETTE_OPTIONS: { id: Palette; label: string; blurb: string }[] = [
 const DECORATIVE_OPTIONS: { id: Palette; label: string; blurb: string }[] = [
   { id: 'sepia', label: 'Sepia', blurb: 'Warm paper by day, candlelight after dark' },
   { id: 'ocean', label: 'Ocean', blurb: 'Deep water at night, sea glass by day' },
+  { id: 'forest', label: 'Forest', blurb: 'Pine after dark, light through leaves by day' },
+  { id: 'plum', label: 'Plum', blurb: 'A dark that is not quite black' },
+  { id: 'graphite', label: 'Graphite', blurb: 'No hue in the room at all — the game keeps its own' },
+  { id: 'ember', label: 'Ember', blurb: 'Banked coals after dark, terracotta by day' },
 ];
 
 function PaletteChoice({

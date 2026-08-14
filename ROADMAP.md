@@ -424,11 +424,11 @@ hard. Boards currently hold about one entry per game per day, so splitting them
 three ways will look thin before it looks rich.
 
 ### A test suite worth having
-**Built** (August 2026): `.github/workflows/ci.yml` runs five gates on every
+**Built** (August 2026): `.github/workflows/ci.yml` runs six gates on every
 push — typecheck, lint, unit (vitest, `tests/unit/`), the feed contract
 (`tests/contract/`, which runs the real generator for a pinned date with the
-NYT fetches skipped), and Playwright with axe (`e2e/`, WCAG A/AA on six
-routes, every network stubbed). Squares uniqueness is re-checked in the
+NYT fetches skipped), a production build, and Playwright with axe (`e2e/`,
+WCAG A/AA on every route, every network stubbed). Squares uniqueness is re-checked in the
 contract suite (August 2026) — a verified-results requirement, since a board
 with a second legal fill would flag its honest solver as a fabricator. The
 ear-test axe can't do was walked by hand with NVDA (August 2026): the games,
@@ -605,12 +605,19 @@ a friend read *some* of your results, plus blocking and removal. Build after
 display names exist and after leaderboards prove the aggregate pattern.
 
 ### More themes, for taste rather than need
-**Two shipped** (August 2026): Sepia — warm paper by day, candlelight after
-dark — and Ocean. Both move the ground only: the page, the panels, the
-borders, the tiers of text. The hues that carry meaning are left exactly
-where they were, so green still means found and rose still means wrong, and
-the shared-result emoji are the default squares because there is no sepia
-green square to post.
+**Six shipped** (August 2026): Sepia, Ocean, Forest, Plum, Graphite and Ember.
+All move the ground only — the page, the panels, the borders, the tiers of
+text, and the accent and focus ring, which are decoration wherever they
+appear. The hues that carry meaning are left exactly where they were, so green
+still means found and rose still means wrong, and the shared-result emoji are
+the default squares because there is no sepia green square to post.
+
+The last four took one pass and no fixes, which is the whole return on the
+sweep: Sepia and Ocean each needed a round of contrast repairs, and by the
+time these were written the rule they had to satisfy was a test rather than a
+paragraph. Graphite is worth distinguishing from Monochrome — it greys the
+*room* and leaves the game's colours alone, where Monochrome removes hue from
+the game itself because someone needs it gone.
 
 **The audit is automated now, which is what made the CSS the easy part.**
 `e2e/contrast.spec.ts` walks every theme × palette over four colour-heavy

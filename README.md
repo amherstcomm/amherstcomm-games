@@ -99,7 +99,7 @@ Other scripts:
 
 ## Testing
 
-CI runs five gates on every push and pull request ([ci.yml](.github/workflows/ci.yml)): typecheck, lint, the unit rules (`tests/unit/`), the feed contract (`tests/contract/` — runs the real puzzle generator for a pinned date with the NYT fetches skipped, and asserts everything the client relies on, from board shapes to "no blocked word is ever published"), and a Playwright pass (`e2e/`) where every network the app talks to is stubbed, so a red run is ours rather than an outage's. The browser job scans six routes against WCAG 2.1 A/AA with axe — the mechanical half of accessibility; the judgment half stays a human's. Merging to `main` requires both jobs green.
+CI runs six gates on every push and pull request ([ci.yml](.github/workflows/ci.yml)): typecheck, lint, the unit rules (`tests/unit/`), the feed contract (`tests/contract/` — runs the real puzzle generator for a pinned date with the NYT fetches skipped, and asserts everything the client relies on, from board shapes to "no blocked word is ever published"), a production build, and a Playwright pass (`e2e/`) where every network the app talks to is stubbed, so a red run is ours rather than an outage's. The browser job scans every route against WCAG 2.1 A/AA with axe: all four views of all eight games, plus the panels, settings tabs and legal pages. That is the mechanical half of accessibility; the judgment half stays a human's. Merging to `main` requires both jobs green.
 
 ## Tech stack
 
