@@ -723,10 +723,26 @@ It also lands where the other candidates strain:
 - *Scoring writes itself.* Shortest known ladder is par; beating par is a real
   achievement and cheap to check.
 
-Open questions worth answering before building: whether a daily should name
-both ends or only the start; whether par should be shown or discovered; and
-whether the pair wants curating for sense — COLD to WARM is a better puzzle
-than ACTS to DIMS, and nothing in the measurement above knows the difference.
+**The pair has to mean something, and that is the scarce part.** COLD to WARM
+is a puzzle; ACTS to DIMS is an exercise, and the million-pair supply above
+cannot tell them apart. WordNet ships antonym pointers and is already
+installed, so the obvious source is free — and measured, it is lovely and
+small. Same-length antonyms in the common tier that a ladder actually
+connects: **45**. Widening through band-70 reaches 62. What they look like:
+
+    east -> west (3)    hate -> love (3)    fair -> foul (3)
+    give -> take (4)    fall -> rise (4)    find -> lose (4)
+    cool -> warm (5)    head -> tail (5)    tame -> wild (5)
+
+Sixty pairs is six weeks of dailies, so antonyms cannot *be* the daily. They
+can be the good seats: Learn's examples, a weekly marquee, the first run of
+puzzles anyone sees. The everyday board needs a broader rule, and the honest
+statement is that no measurement here settles which — "both ends common, of
+the tier's target length" has supply and no taste, and whether that is
+satisfying is a question for someone who plays it rather than counts it.
+
+Also open: whether a daily names both ends or only the start, and whether par
+is shown or discovered.
 
 **Checked and not proposed: a categories game from the domains map.** The
 `domains.json` this repo already ships looked like a free "odd one out", but
