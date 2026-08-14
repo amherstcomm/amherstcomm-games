@@ -20,6 +20,9 @@
 // strings, so "17" or "◆" is as ordinary as "K". That is the whole reason the
 // alphabet dial exists.
 
+// the day-to-day deal lives in walk.mjs, shared with the ladder
+export { cycleOf, permutedIndex } from './walk.mjs';
+
 /** The passages that are in play: `review: true` is the human hold.
  *
  *  Two bands, and they are separate pools rather than one pool with a
@@ -43,27 +46,6 @@ export function livePassages(parsed, band = 'standard') {
  *  those with one answer are kept. Without that, extreme would be handing
  *  players a puzzle whose honest solution the answer check calls wrong. */
 export const TIER_BAND = { easy: 'standard', hard: 'standard', extreme: 'short' };
-
-/** Which passage a given day gets, with no repeat inside a pool-sized window.
- *
- *  A fresh random pick per day would repeat on birthday-paradox time (weeks,
- *  at this pool size), and a stateless generator can't keep a ledger of what
- *  it already served. A permutation walk needs no ledger: days walk a shuffled
- *  order of the whole pool, so the first repeat arrives after poolSize days —
- *  seven years at 2,590 — and the next cycle reshuffles.
- */
-export function cycleOf(position, poolSize) {
-  return Math.floor(position / poolSize);
-}
-
-export function permutedIndex(cycleRng, poolSize, position) {
-  const perm = [...Array(poolSize).keys()];
-  for (let i = poolSize - 1; i > 0; i--) {
-    const j = Math.floor(cycleRng() * (i + 1));
-    [perm[i], perm[j]] = [perm[j], perm[i]];
-  }
-  return perm[position % poolSize];
-}
 
 const A = 'abcdefghijklmnopqrstuvwxyz'.split('');
 
