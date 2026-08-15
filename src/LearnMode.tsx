@@ -11,7 +11,8 @@ import {
 } from 'react';
 import { CornerDownLeft, Delete, RefreshCw, RotateCcw } from 'lucide-react';
 import MobileKeyInput from '@/MobileKeyInput';
-import { isStep } from '@/ladder';
+import { changedAt, isStep } from '@/ladder';
+import { LadderEntry, LadderWord } from '@/LadderRow';
 import { findGridPath, solveGrid, gridNeighbors } from '@/solvers';
 import type { Mode } from '@/storage';
 import { colorWords, type ColorWords, type Palette } from '@/theme';
@@ -1911,31 +1912,33 @@ function LearnLadder({
         </p>
 
         <ol className="space-y-1.5 mb-3">
-          <li className="text-center text-lg font-bold uppercase tracking-widest text-white">
-            {FROM}
+          <li>
+            <LadderWord word={FROM} tone="end" />
           </li>
           {chain.map((w, i) => (
-            <li
-              key={`${w}-${i}`}
-              className="text-center text-lg font-bold uppercase tracking-widest text-emerald-300"
-            >
-              {w}
+            <li key={`${w}-${i}`}>
+              <LadderWord
+                word={w}
+                tone="rung"
+                changed={changedAt(i === 0 ? FROM : chain[i - 1], w)}
+              />
             </li>
           ))}
           {!solved && (
-            <li className="relative mx-auto max-w-[10rem] h-11 rounded-xl bg-white/5 border-2 border-amber-400/50 flex items-center justify-center overflow-hidden">
-              <span className="text-lg font-bold uppercase tracking-widest text-white">
-                {current}
-                <span className="text-accent animate-pulse">|</span>
-              </span>
-              <MobileKeyInput onKey={handleKey} />
+            <li>
+              {/* the same boxes the game draws — this demo had its own copy of
+                  the board and went on teaching the old one the day the game
+                  changed */}
+              <LadderEntry length={FROM.length} value={current}>
+                <MobileKeyInput onKey={handleKey} />
+              </LadderEntry>
             </li>
           )}
           {/* once the last rung IS the target, the target line would print it
               a second time */}
           {!solved && (
-            <li className="text-center text-lg font-bold uppercase tracking-widest text-white">
-              {TO}
+            <li>
+              <LadderWord word={TO} tone="end" />
             </li>
           )}
         </ol>

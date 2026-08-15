@@ -42,3 +42,11 @@ export function shortestLadder(from: string, to: string, words: Set<string>): st
   }
   return null;
 }
+
+/** Which position changed between two rungs, or -1. Only ever one, since a
+ *  rung that moved two letters never made it onto the board — the boards draw
+ *  it so the eye can see what a step actually did. */
+export function changedAt(prev: string, next: string): number {
+  for (let i = 0; i < next.length; i++) if (prev[i] !== next[i]) return i;
+  return -1;
+}

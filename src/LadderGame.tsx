@@ -34,7 +34,8 @@ import ShareButton from '@/ShareButton';
 import { buildShare } from '@/share';
 import { recordLadderFinish } from '@/stats';
 import { loadState } from '@/storage';
-import { isStep, shortestLadder } from '@/ladder';
+import { changedAt, isStep, shortestLadder } from '@/ladder';
+import { LadderEntry, LadderWord } from '@/LadderRow';
 
 export type LadderGameHandle = { pressKey: (k: string) => void };
 
@@ -120,6 +121,8 @@ const LadderGame = forwardRef<LadderGameHandle>(function LadderGame(_props, ref)
   const [dailyError, setDailyError] = useState(false);
   const [entry, setEntry] = useState('');
   const [refusal, setRefusal] = useState('');
+  // what a screen reader is told; the visible board is the sighted equivalent
+  const [spoken, setSpoken] = useState('');
   const [words, setWords] = useState<Set<string> | null>(null);
   const [pool, setPool] = useState<LadderRecord[] | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -268,6 +271,17 @@ const LadderGame = forwardRef<LadderGameHandle>(function LadderGame(_props, ref)
     }
     setRefusal('');
     setEntry('');
+    // The refusal line is the only thing this game ever said out loud, so a
+    // screen reader heard every rejected word and never heard an accepted one
+    // — the chain grew in silence, and solving it was silent too. Rungs land
+    // in a list that is not live, and a live region cleared to empty announces
+    // nothing. So success gets a voice of its own.
+    const at = record.chain.length + 1;
+    setSpoken(
+      candidate === record.to
+        ? `${candidate}. Solved in ${at} ${at === 1 ? 'step' : 'steps'}, par is ${record.par}.`
+        : `${candidate} accepted, ${at} of ${record.par}.`
+    );
     update((r) => {
       const chain = [...r.chain, candidate];
       return { ...r, chain, solved: candidate === r.to };
@@ -282,8 +296,11 @@ const LadderGame = forwardRef<LadderGameHandle>(function LadderGame(_props, ref)
     },
   }));
 
-  const stepBack = () =>
+  const stepBack = () => {
+    const at = Math.max(0, (record?.chain.length ?? 0) - 1);
+    setSpoken(`Rung removed, ${at} of ${record?.par ?? 0}.`);
     update((r) => ({ ...r, chain: r.chain.slice(0, -1), solved: false }));
+  };
 
   const reveal = () => {
     if (!record || !words) return;
@@ -297,6 +314,7 @@ const LadderGame = forwardRef<LadderGameHandle>(function LadderGame(_props, ref)
     setStore((prev) => ({ ...prev, practice: { ...pick, chain: [] } }));
     setEntry('');
     setRefusal('');
+    setSpoken('');
   };
 
   const steps = record?.chain.length ?? 0;
@@ -352,19 +370,24 @@ const LadderGame = forwardRef<LadderGameHandle>(function LadderGame(_props, ref)
       </div>
 
       <ol className="space-y-1.5" aria-label={`ladder from ${record.from} to ${record.to}`}>
-        <li className="text-center text-lg font-bold uppercase tracking-widest text-white">
-          {record.from}
+        <li>
+          <LadderWord word={record.from} tone="end" />
         </li>
         {rungs.map((w, i) => (
-          <li
-            key={`${w}-${i}`}
-            className="text-center text-lg font-bold uppercase tracking-widest text-emerald-300"
-          >
-            {w}
+          <li key={`${w}-${i}`}>
+            {/* the letter that moved is the whole content of a step, and on a
+                row of boxes it is the one thing worth pointing at */}
+            <LadderWord word={w} tone="rung" changed={changedAt(i === 0 ? record.from : rungs[i - 1], w)} />
           </li>
         ))}
         {!done && (
           <li>
+            {/* Boxes for the eye, a real input for everything else. The input
+                keeps its own label, value and Enter handling and simply sits
+                on top at zero opacity — so typing, the phone keyboard and the
+                screen reader all carry on working, and none of them has to
+                know the row became a row of boxes. */}
+            <LadderEntry length={record.from.length} value={entry}>
             <label htmlFor="ladder-rung" className="sr-only">
               next rung, one letter from {last}
             </label>
@@ -386,22 +409,25 @@ const LadderGame = forwardRef<LadderGameHandle>(function LadderGame(_props, ref)
               autoComplete="off"
               autoCapitalize="off"
               spellCheck={false}
-              placeholder={'·'.repeat(record.from.length)}
-              className="w-full text-center text-lg font-bold uppercase tracking-widest rounded-lg bg-white/5 border-2 border-amber-400/60 text-white px-3 py-1.5 focus:border-amber-400"
+              className="absolute inset-0 w-full h-full opacity-0 cursor-text"
             />
+            </LadderEntry>
           </li>
         )}
         {/* the last rung IS the target once solved, and a revealed route ends
             on it too — printing the target again would double it */}
         {rungs[rungs.length - 1] !== record.to && (
-          <li className="text-center text-lg font-bold uppercase tracking-widest text-white">
-            {record.to}
+          <li>
+            <LadderWord word={record.to} tone="end" />
           </li>
         )}
       </ol>
 
       <p aria-live="polite" className="mt-2 min-h-[1.25rem] text-center text-xs text-amber-300">
         {refusal}
+      </p>
+      <p className="sr-only" aria-live="polite">
+        {spoken}
       </p>
 
       {!done && (

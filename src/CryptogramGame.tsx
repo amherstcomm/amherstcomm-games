@@ -655,6 +655,24 @@ const CryptogramGame = forwardRef<CryptogramGameHandle, object>(
                 habit of crossing off the alphabet. Hidden on a homophonic
                 board, where a letter being used says nothing about whether
                 it can be used again. */}
+            {/* The tracker above is a row of glyphs whose whole meaning is
+                struck-through or not, which is why each letter is aria-hidden
+                — read aloud it is twenty-six letters and no information. But
+                hiding it left nothing in its place, so the crossing-off a
+                sighted player gets for free was simply unavailable. This is
+                the same fact as a sentence. Not a live region: it changes on
+                every keystroke, and narrating the alphabet each time would
+                bury the board. */}
+            {!record.homophonic && (
+              <p className="sr-only">
+                {usedPlain.size
+                  ? `Plaintext letters used: ${[...usedPlain]
+                      .sort()
+                      .map((l) => l.toUpperCase())
+                      .join(', ')}.`
+                  : 'No plaintext letters used yet.'}
+              </p>
+            )}
             {!record.homophonic && (
               <div className="mt-6 flex flex-wrap justify-center gap-1 max-w-md mx-auto">
                 {'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('').map((l) => (
