@@ -1301,8 +1301,14 @@ A hint buys either the answer's **length** or its **next letter**, player's
 choice, and both cost the same. That makes spending one a decision rather than
 a dispenser: length is broad and cheap to reason from, a letter is narrow and
 specific, and which you want depends on whether you are stuck for the shape of
-the word or for the word itself. With five prompts on a board and three hints
-at the most generous tier, where to spend them is part of the game.
+the word or for the word itself.
+
+**A hint applies to one prompt, not the board.** Three hints is not three
+reveals across all five — it is three prompts you get help on, and two you do
+not. That is the whole of the difficulty setting: at easy you can buy your way
+through most of a board, at extreme you cannot buy anything, and in between the
+question is which of the five is worth it. Spending early on one you would have
+got anyway is how a hard board is lost.
 
 Length is once per prompt — asking twice buys nothing — and letters turn over
 left to right. `hintsUsed` goes on the record and into the result, the way
