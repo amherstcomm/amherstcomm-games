@@ -78,6 +78,27 @@ const MAX_LEN = 15;
 // hidden it — playDescription is what they get instead.
 // `short` is the nav's label where the full one will not fit a column. Only
 // the longest name needs one; everywhere else the nav shows `label`.
+// Which solvers answer with a *list of words from the dictionary*, and so want
+// the shared results panel underneath them.
+//
+// This was a denylist — everything except squares and cryptogram — which meant
+// a new game got the panel by default and had to opt out. Two never did: the
+// ladder solver answers with a route and the bridge solver with the words that
+// join two ends, and both were printing several thousand unrelated words below
+// their answer, under a heading offering to show all 4,743. Shipped that way
+// with the ladder and only noticed when bridge did it too.
+//
+// An allowlist puts the default the right way round: a game that does not
+// search the word list shows nothing, without having to know this exists.
+const WORD_LIST_SOLVERS = new Set<Mode>([
+  'pattern',
+  'descramble',
+  'bee',
+  'boxed',
+  'grid',
+  'weave',
+]);
+
 const MODES: { id: Mode; label: string; short?: string; blurb: string; description: string; playDescription: string }[] = [
   {
     id: 'pattern',
@@ -3154,7 +3175,7 @@ function App() {
           );
         })()}
 
-        {!playActive && mode !== 'squares' && mode !== 'cryptogram' && (
+        {!playActive && WORD_LIST_SOLVERS.has(mode) && (
         <>
         {/* results header */}
         <div className="flex items-center justify-between mb-4 flex-wrap gap-y-3">
@@ -3406,7 +3427,10 @@ function App() {
 
         {/* pb keeps the last row clear of the floating keyboard button */}
         <footer className="mt-14 pb-24 sm:pb-4 text-center text-xs text-slate-500">
-          {!playActive && !learnMode && (
+          {/* only where a word list is what is being searched — the ladder
+              and bridge solvers answer from a rule, so naming a dictionary
+              size under them describes work they do not do */}
+          {!playActive && !learnMode && WORD_LIST_SOLVERS.has(mode) && (
             <p>
               Searching {words.length.toLocaleString()} English words (the{' '}
               {DICTIONARIES.find((d) => d.id === dictionaryId)?.label.toLowerCase()} word
