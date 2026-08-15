@@ -538,6 +538,37 @@ should use the GitHub contents API or bust the cache deliberately.
 safe to move into Postgres, since the contract tests describe the feed rather
 than the file.
 
+### Report a puzzle or a player — proposed August 2026
+
+A generator that draws from 240,000 words will eventually publish something
+offensive, and a display name field will eventually hold something worse. Both
+have preventive filters — `blocked-words.json` through the bands, the
+`blocked_names` table and `would_block` for names — and neither is a substitute
+for someone being able to say "this one is wrong" at the moment they see it.
+
+**Decided:** reports land in a table and a scheduled function emails a digest,
+so there is a signal without an admin UI to build first. Anyone can file one,
+signed in or not, because the site plays without an account and the person who
+sees the bad word usually has none.
+
+**The design point worth getting right is the evidence.** The obvious version
+posts what the client saw, which is attacker-controlled and therefore worth
+very little — someone reporting a board that never existed is indistinguishable
+from someone reporting a real one. Almost nothing needs to be sent: a puzzle
+report is `(game, date, difficulty)` and the server reads the actual board out
+of `daily_puzzles`, and a player report is a profile id whose name the server
+already holds. The free-text reason is the only client-supplied field, and it
+is the only one that should be.
+
+Which also means a report is verifiable in a way most user-generated content is
+not: the server can confirm the reported thing exists and says what the reporter
+claims, before anyone reads a word of it.
+
+The rest is the shape of any anonymous write path — an insert-only policy with
+no read-back, a rate limit per source, and a `status` column so a handled report
+stops appearing in the digest. Worth building before the pool of games gets
+larger rather than after, since every new generator widens the surface.
+
 ### Admin portal — much later
 Everything owner-facing is SQL-editor-only today: clearing a display name,
 adding blocklist entries, reading `suspect_daily_results`. That's fine, and
