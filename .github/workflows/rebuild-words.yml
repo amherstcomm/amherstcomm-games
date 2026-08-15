@@ -1,7 +1,13 @@
-# Rebuilds the word lists end to end: band files, domains map, CSV, and the
-# Postgres words table, all from one derivation, so no consumer can drift
-# from another. Dispatch it after amending a flag list or bumping a source
-# package.
+# Rebuilds the word lists end to end: band files, domains map, version file,
+# CSV, and the Postgres words table, all from one derivation, so no consumer
+# can drift from another. Dispatch it after amending a flag list, editing the
+# blocklist, or bumping a source package.
+#
+# The version below is the only place it is written. src/wordbands/version.json
+# comes out of this run and src/dictionaries.ts reads it, so there is nothing
+# to remember to edit afterwards — that constant used to be maintained by hand
+# and a mismatch failed silently, the client rejecting every CDN band as stale
+# and serving the bundle for ever.
 #
 # It takes two dispatches, and that is deliberate. The client only accepts a
 # CDN band whose embedded version matches, and the bundled fallback has to ship
@@ -23,7 +29,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Version tag for the band files (e.g. words-v2). Also created as a git tag.'
+        description: 'Version for the band files (e.g. words-v6). Written into src/wordbands/version.json, stamped into every band, and created as a git tag.'
         required: true
         type: string
 

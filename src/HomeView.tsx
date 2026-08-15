@@ -7,6 +7,7 @@
 // game and never see this again.
 
 import { Grid3x3, Hexagon, KeyRound, LayoutGrid, Puzzle, Shuffle, Square, Table2, Trophy } from 'lucide-react';
+import { Combine } from 'lucide-react';
 import LadderIcon from '@/LadderIcon';
 import { useEffect, useState } from 'react';
 import { MODE_SLUG, pathOf, SLUG_NAME, type Slug } from '@/routes';
@@ -35,6 +36,7 @@ const ICONS: Record<Slug, typeof Grid3x3> = {
   squares: Table2,
   cryptogram: KeyRound,
   ladder: LadderIcon,
+  bridge: Combine,
 };
 
 // One line each, written for somebody who has never seen the game.
@@ -48,6 +50,7 @@ const BLURB: Record<Slug, string> = {
   squares: 'Fill the grid so every row and every column spells a word.',
   cryptogram: 'A short passage with every letter swapped for another. Work out which is which.',
   ladder: 'Turn one word into another, changing a single letter at a time.',
+  bridge: 'Find the word that joins both sides — SNOW · BALL · ROOM. Five a day.',
 };
 
 const NUMBER_WORD: Record<number, string> = {

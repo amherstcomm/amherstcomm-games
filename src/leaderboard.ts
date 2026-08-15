@@ -22,7 +22,8 @@ export type BoardGame =
   | 'squares4'
   | 'squares5'
   | 'cryptogram'
-  | 'ladder';
+  | 'ladder'
+  | 'bridge';
 
 export type BoardRow = { name: string; value: number; detail: number | null };
 export type Boards = Record<BoardGame, BoardRow[]>;
@@ -45,6 +46,7 @@ const MODE_BOARDS: Record<Mode, BoardGame[]> = {
   weave: ['weave'],
   squares: ['squares4', 'squares5'],
   ladder: ['ladder'],
+  bridge: ['bridge'],
   cryptogram: ['cryptogram'],
 };
 
@@ -77,7 +79,7 @@ export function boardsToShow(boards: Boards, modes: Mode[], status: Record<strin
 }
 
 export function emptyBoards(): Boards {
-  return { guess: [], hive: [], scramble: [], grid: [], box: [], weave: [], squares4: [], squares5: [], cryptogram: [], ladder: [] };
+  return { guess: [], hive: [], scramble: [], grid: [], box: [], weave: [], squares4: [], squares5: [], cryptogram: [], ladder: [], bridge: [] };
 }
 
 /** Global, or just your circle. The two run the same queries server-side, so
@@ -153,6 +155,13 @@ export const BOARD_LABELS: Record<
     detail: () => '',
   },
   cryptogram: { label: 'Cryptogram', value: (n) => `${n} solved`, detail: () => '' },
+  // ranked on boards finished, tie-broken on prompts found — a four-of-five
+  // day beats a blank one, and one number cannot say both
+  bridge: {
+    label: 'Bridge',
+    value: (n) => `${n} board${n === 1 ? '' : 's'}`,
+    detail: (n) => (n ? `${n} found` : ''),
+  },
   // ranked on ladders finished, tie-broken on how many were done in par
   ladder: {
     label: 'Word Ladder',

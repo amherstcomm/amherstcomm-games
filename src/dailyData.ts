@@ -22,6 +22,7 @@ export function dailyDataUrl(
     | 'daily-squares'
     | 'daily-cryptogram'
     | 'daily-ladder'
+    | 'daily-bridge'
 ): string {
   return `${BASE}/${IS_DEV_SITE ? 'dev-' : ''}${name}.json`;
 }
@@ -31,6 +32,7 @@ export const WEAVE_POOL_URL = `${BASE}/weave-pool.json`;
 export const SQUARES_POOL_URL = `${BASE}/squares-pool.json`;
 export const CRYPTOGRAM_POOL_URL = `${BASE}/cryptogram-pool.json`;
 export const LADDER_POOL_URL = `${BASE}/ladder-pool.json`;
+export const BRIDGE_POOL_URL = `${BASE}/bridge-pool.json`;
 
 // which daily set this site plays — synced results are tagged with it so
 // dev-site testing never pollutes production's global daily stats
@@ -87,6 +89,7 @@ const POOL_URL = {
   'squares-pool': SQUARES_POOL_URL,
   'cryptogram-pool': CRYPTOGRAM_POOL_URL,
   'ladder-pool': LADDER_POOL_URL,
+  'bridge-pool': BRIDGE_POOL_URL,
 };
 
 export async function fetchPool(pool: keyof typeof POOL_URL): Promise<any> {

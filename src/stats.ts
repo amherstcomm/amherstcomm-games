@@ -58,6 +58,18 @@ export type LifetimeStats = {
     bestTimeMs: number | null;
     totalTimeMs: number;
   };
+  /** A bridge board is five prompts, so a day is not solved or unsolved — it
+   *  is a count out of five. `boards` is the clean sweeps and `found` the
+   *  prompts, because a four-of-five day is worth more than a blank one and a
+   *  single number cannot say both. */
+  bridge: {
+    boards: number;
+    found: number;
+    revealed: number;
+    hints: number;
+    bestTimeMs: number | null;
+    totalTimeMs: number;
+  };
   /** kept per board size: a 4×4 and a 5×5 are different puzzles, and pooling
    *  their times makes an average that describes neither */
   squares: Record<SquareStatSize, SquaresStat>;
@@ -86,7 +98,11 @@ export type GameEvent =
   | { game: 'weave'; payload: { solved: boolean; timeMs: number; hints: number } }
   | { game: 'squares'; payload: { solved: boolean; size: number; timeMs: number } }
   | { game: 'cryptogram'; payload: { solved: boolean; timeMs: number } }
-  | { game: 'ladder'; payload: { solved: boolean; steps: number; par: number; timeMs: number } };
+  | { game: 'ladder'; payload: { solved: boolean; steps: number; par: number; timeMs: number } }
+  | {
+      game: 'bridge';
+      payload: { solved: number; of: number; hints: number; timeMs: number; revealed: boolean };
+    };
 
 function num(v: unknown): number {
   return typeof v === 'number' && Number.isFinite(v) && v >= 0 ? v : 0;
@@ -151,6 +167,14 @@ function sanitizeBucket(p: any): LifetimeStats {
       inPar: num(p?.ladder?.inPar),
       bestTimeMs: numOrNull(p?.ladder?.bestTimeMs),
       totalTimeMs: num(p?.ladder?.totalTimeMs),
+    },
+    bridge: {
+      boards: num(p?.bridge?.boards),
+      found: num(p?.bridge?.found),
+      revealed: num(p?.bridge?.revealed),
+      hints: num(p?.bridge?.hints),
+      bestTimeMs: numOrNull(p?.bridge?.bestTimeMs),
+      totalTimeMs: num(p?.bridge?.totalTimeMs),
     },
     squares: Object.fromEntries(
       SQUARE_STAT_SIZES.map((k) => [
@@ -263,6 +287,21 @@ export function applyEvent(s: LifetimeStats, e: GameEvent): void {
       }
       break;
     }
+    case 'bridge': {
+      const { solved, of, hints, timeMs, revealed } = e.payload;
+      s.bridge.found += num(solved);
+      s.bridge.hints += num(hints);
+      if (revealed) {
+        s.bridge.revealed += 1;
+      } else if (solved >= of) {
+        s.bridge.boards += 1;
+        s.bridge.totalTimeMs += num(timeMs);
+        if (s.bridge.bestTimeMs === null || timeMs < s.bridge.bestTimeMs) {
+          s.bridge.bestTimeMs = num(timeMs);
+        }
+      }
+      break;
+    }
     case 'cryptogram': {
       const { solved, timeMs } = e.payload;
       if (solved) {
@@ -352,6 +391,17 @@ export function applyDailySummary(s: LifetimeStats, game: string, p: any): void 
         s.ladder.revealed += 1;
       }
       break;
+    case 'bridge':
+      s.bridge.found += num(p?.solved);
+      s.bridge.hints += num(p?.hints);
+      if (p?.revealed) {
+        s.bridge.revealed += 1;
+      } else if (num(p?.solved) >= num(p?.of)) {
+        s.bridge.boards += 1;
+        s.bridge.totalTimeMs += num(p?.timeMs);
+        s.bridge.bestTimeMs = minNullable(s.bridge.bestTimeMs, num(p?.timeMs));
+      }
+      break;
     case 'cryptogram':
       if (p?.solved) {
         s.cryptogram.solved += 1;
@@ -391,6 +441,14 @@ export function combineStats(a: LifetimeStats, b: LifetimeStats): LifetimeStats 
       dist: a.guess.dist.map((n, i) => n + b.guess.dist[i]),
       totalTimeMs: a.guess.totalTimeMs + b.guess.totalTimeMs,
       bestTimeMs: minNullable(a.guess.bestTimeMs, b.guess.bestTimeMs),
+    },
+    bridge: {
+      boards: a.bridge.boards + b.bridge.boards,
+      found: a.bridge.found + b.bridge.found,
+      revealed: a.bridge.revealed + b.bridge.revealed,
+      hints: a.bridge.hints + b.bridge.hints,
+      bestTimeMs: minNullable(a.bridge.bestTimeMs, b.bridge.bestTimeMs),
+      totalTimeMs: a.bridge.totalTimeMs + b.bridge.totalTimeMs,
     },
     hive: {
       words: a.hive.words + b.hive.words,
@@ -586,6 +644,19 @@ export function recordLadderFinish(
 /** A squares board is over exactly once — solved or given up on — so both
  *  outcomes are one event, and `size` rides along because the 4x4 and the 5x5
  *  are separate puzzles on the same day. */
+/** One board, however it ended. `solved` is how many of the five came out, so
+ *  a partial day still counts for something — the alternative records a
+ *  four-of-five as identical to never opening it. */
+export function recordBridgeFinish(o: {
+  solved: number;
+  of: number;
+  hints: number;
+  timeMs: number;
+  revealed: boolean;
+}): void {
+  record(true, { game: 'bridge', payload: o }, null);
+}
+
 export function recordSquaresFinish(
   daily: boolean,
   solved: boolean,
@@ -647,6 +718,7 @@ const KNOWN_GAMES = new Set<GameEvent['game']>([
   'squares',
   'cryptogram',
   'ladder',
+  'bridge',
 ]);
 
 // sum of all device baselines + full event-log replay -> the account's

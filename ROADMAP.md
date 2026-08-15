@@ -580,6 +580,46 @@ Small, and it touches the thing the site says it cares about most: a result you
 can check. A board that will not say why one row is above another is the same
 failure as a score that cannot be recomputed, one layer up.
 
+### One blocklist, not two — proposed August 2026
+
+`blocked_words` and `blocked_names` hold **the same 349 words**. Measured:
+349 rows each, 349 shared, none unique to either. Both are projections of
+`scripts/blocked-words.json` — the words table is reloaded by
+`rebuild-words.yml`, the names table is seeded by `name-blocklist.mjs` — and
+they differ only in the column each carries.
+
+| | column | means |
+| --- | --- | --- |
+| `blocked_words` | `scope` | `both` = never generated and never accepted; `generation` = never generated, accepted if typed |
+| `blocked_names` | `match` | `substring` = rejected anywhere in a name; `exact` = rejected as the whole name |
+
+The two columns are not redundant and the merge has to keep both. They are
+also not independent: `name-blocklist.mjs` already derives one from the other
+— `both`-scope entries become substring patterns, because "not even if you
+type it" is the same judgement a substring match makes — with a computed
+safety check, since `abo` is inside *about*, `spic` inside *suspicion* and
+`coon` inside *raccoon*.
+
+So: one table with `term, origin, scope, match`, and the two derivations stay
+where they are. The reason to do it is the reason it surfaced. Adding a slur
+means remembering two tables loaded by two different mechanisms, one of which
+is a manual paste — and the August audit found the anti-LGBTQ+ terms at 5 of
+25 covered, which is what happens when a list has two homes and neither is
+obviously the one you are looking at.
+
+Not urgent, and worth doing before a third consumer appears.
+
+**The exception list is built** (August 2026), ahead of the merge rather than
+with it, because `scunthorpe` was being refused today. `public.allowed_names`
+holds fragments that are removed from a name *before* the patterns are matched
+— strip-then-match rather than exempt-after, so "scunthorpe" clears to nothing
+and passes while "scunthorpecunt" clears to "cunt" and is still refused.
+
+It also collapsed the duplicate matcher: `set_display_name` and `would_block`
+each carried their own copy of the same `like`, and the first version of this
+change updated only one of them, so the dry run allowed a name the claim would
+have refused. Both call `name_is_blocked` now.
+
 ### Report a puzzle or a player — proposed August 2026
 
 A generator that draws from 240,000 words will eventually publish something

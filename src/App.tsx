@@ -12,6 +12,9 @@ import { colorWords, PALETTES, PaletteContext, resolveTheme, TEXT_SCALES, THEME_
 import { PrefsContext } from '@/prefs';
 import OnboardingCard from '@/OnboardingCard';
 import { useModalA11y } from '@/useModalA11y';
+import { Combine } from 'lucide-react';
+import { bridges } from '@/bridge';
+import BridgeGame, { type BridgeGameHandle } from '@/BridgeGame';
 import GameMenu from '@/GameMenu';
 import LadderIcon from '@/LadderIcon';
 import { supabase } from '@/supabase';
@@ -75,6 +78,27 @@ const MAX_LEN = 15;
 // hidden it — playDescription is what they get instead.
 // `short` is the nav's label where the full one will not fit a column. Only
 // the longest name needs one; everywhere else the nav shows `label`.
+// Which solvers answer with a *list of words from the dictionary*, and so want
+// the shared results panel underneath them.
+//
+// This was a denylist — everything except squares and cryptogram — which meant
+// a new game got the panel by default and had to opt out. Two never did: the
+// ladder solver answers with a route and the bridge solver with the words that
+// join two ends, and both were printing several thousand unrelated words below
+// their answer, under a heading offering to show all 4,743. Shipped that way
+// with the ladder and only noticed when bridge did it too.
+//
+// An allowlist puts the default the right way round: a game that does not
+// search the word list shows nothing, without having to know this exists.
+const WORD_LIST_SOLVERS = new Set<Mode>([
+  'pattern',
+  'descramble',
+  'bee',
+  'boxed',
+  'grid',
+  'weave',
+]);
+
 const MODES: { id: Mode; label: string; short?: string; blurb: string; description: string; playDescription: string }[] = [
   {
     id: 'pattern',
@@ -161,6 +185,15 @@ const MODES: { id: Mode; label: string; short?: string; blurb: string; descripti
     playDescription:
       'Change one letter at a time, and every rung has to be a word. Get from the first to the last in par.',
   },
+  {
+    id: 'bridge',
+    label: 'Bridge',
+    blurb: 'Find the word that joins both sides',
+    description:
+      'Play the daily five, or use Solve to find every word that joins any two others.',
+    playDescription:
+      'Five prompts, and the answer is the word that joins both sides — SNOW · BALL · ROOM. Hints turn over a length or a letter, and you get three, one or none.',
+  },
 ];
 
 const MODE_ICONS: Record<Mode, typeof Grid3x3> = {
@@ -173,6 +206,7 @@ const MODE_ICONS: Record<Mode, typeof Grid3x3> = {
   squares: Table2,
   cryptogram: KeyRound,
   ladder: LadderIcon,
+  bridge: Combine,
 };
 
 /** WordLock's mark, drawn the way the footer's other icons are drawn.
@@ -576,6 +610,9 @@ function App() {
     initialPlay('cryptogram', initial.cryptogramPlay)
   );
   const [ladderPlay, setLadderPlay] = useState(initialPlay('ladder', initial.ladderPlay));
+  const [bridgePlay, setBridgePlay] = useState(initialPlay('bridge', initial.bridgePlay));
+  const [bridgeX, setBridgeX] = useState(initial.bridge.x);
+  const [bridgeY, setBridgeY] = useState(initial.bridge.y);
   const [ladderFrom, setLadderFrom] = useState(initial.ladder.from);
   const [ladderTo, setLadderTo] = useState(initial.ladder.to);
   const [cryptoText, setCryptoText] = useState('');
@@ -1005,6 +1042,7 @@ function App() {
   const squaresRef = useRef<SquaresGameHandle>(null);
   const cryptogramRef = useRef<CryptogramGameHandle>(null);
   const ladderRef = useRef<LadderGameHandle>(null);
+  const bridgeRef = useRef<BridgeGameHandle>(null);
 
   // The switch and the games both read the same stored value; this only
   // mirrors it so the pressed state re-renders.
@@ -1036,8 +1074,9 @@ function App() {
   const squaresPlayActive = mode === 'squares' && squaresPlay && !learnMode;
   const cryptogramPlayActive = mode === 'cryptogram' && cryptogramPlay && !learnMode;
   const ladderPlayActive = mode === 'ladder' && ladderPlay && !learnMode;
+  const bridgePlayActive = mode === 'bridge' && bridgePlay && !learnMode;
   const playActive =
-    patternPlayActive || beePlayActive || boxedPlayActive || descramblePlayActive || gridPlayActive || weavePlayActive || squaresPlayActive || cryptogramPlayActive || ladderPlayActive;
+    patternPlayActive || beePlayActive || boxedPlayActive || descramblePlayActive || gridPlayActive || weavePlayActive || squaresPlayActive || cryptogramPlayActive || ladderPlayActive || bridgePlayActive;
 
 
 
@@ -1052,19 +1091,22 @@ function App() {
     // the ladder solver searches the common list, so it needs it loaded even
     // though nothing is being played
     const ladderSolve = mode === 'ladder' && !ladderPlay && !learnMode;
-    if (!playActive && !learnMode && !cryptoSolve && !ladderSolve) return;
+    // the bridge solver checks membership in the standard list, so it needs
+    // that loaded even though nothing is being played
+    const bridgeSolve = mode === 'bridge' && !bridgePlay && !learnMode;
+    if (!playActive && !learnMode && !cryptoSolve && !ladderSolve && !bridgeSolve) return;
     // how ordinary each word is, so the solver's candidate lists lead with the
     // readings a person would actually consider
     if (cryptoSolve && !wordRank) getWordRank().then(setWordRank);
     if (!commonWordsArr) getDictionary('common').then(setCommonWordsArr);
     if (patternPlayActive && !fullWordsArr) getDictionary('full').then(setFullWordsArr);
     if (
-      (learnMode || beePlayActive || boxedPlayActive || descramblePlayActive || gridPlayActive || weavePlayActive || squaresPlayActive) &&
+      (learnMode || beePlayActive || boxedPlayActive || descramblePlayActive || gridPlayActive || weavePlayActive || squaresPlayActive || bridgeSolve) &&
       !standardWordsArr
     ) {
       getDictionary('standard').then(setStandardWordsArr);
     }
-  }, [playActive, learnMode, mode, cryptogramPlay, ladderPlay, patternPlayActive, beePlayActive, boxedPlayActive, descramblePlayActive, gridPlayActive, weavePlayActive, squaresPlayActive, commonWordsArr, fullWordsArr, standardWordsArr, wordRank]);
+  }, [playActive, learnMode, mode, cryptogramPlay, ladderPlay, bridgePlay, patternPlayActive, beePlayActive, boxedPlayActive, descramblePlayActive, gridPlayActive, weavePlayActive, squaresPlayActive, commonWordsArr, fullWordsArr, standardWordsArr, wordRank]);
 
   const aboutRef = useRef<HTMLDivElement>(null);
   const legalRef = useRef<HTMLDivElement>(null);
@@ -1152,6 +1194,23 @@ function App() {
       : { kind: 'none', note: 'No ladder connects those two.' };
   }, [ladderFrom, ladderTo, commonWordsArr]);
 
+  /** Every word that bridges the two ends. Unlike the ladder's search this can
+   *  return several — the harvest only publishes prompts with one answer, but
+   *  the solver's job is to say what is true rather than what was published,
+   *  and a wider dictionary than the harvest used will sometimes find another. */
+  const bridgeAnswers = useMemo(():
+    | { kind: 'idle'; note: string }
+    | { kind: 'none'; note: string }
+    | { kind: 'words'; words: string[] } => {
+    if (!bridgeX || !bridgeY) return { kind: 'idle', note: 'Enter both ends.' };
+    if (!standardWordsArr) return { kind: 'idle', note: 'Loading the word list…' };
+    const words = new Set(standardWordsArr);
+    const found = bridges({ x: bridgeX, y: bridgeY }, words);
+    return found.length
+      ? { kind: 'words', words: found }
+      : { kind: 'none', note: `Nothing joins ${bridgeX.toUpperCase()} and ${bridgeY.toUpperCase()}.` };
+  }, [bridgeX, bridgeY, standardWordsArr]);
+
   const cryptoWords = useMemo(
     () => (cryptoText.trim() ? parseCryptogram(cryptoText, cryptoMode) : []),
     [cryptoText, cryptoMode]
@@ -1203,6 +1262,7 @@ function App() {
     squares: [squaresPlay, setSquaresPlay],
     cryptogram: [cryptogramPlay, setCryptogramPlay],
     ladder: [ladderPlay, setLadderPlay],
+    bridge: [bridgePlay, setBridgePlay],
   };
 
   const prefs = useMemo(
@@ -1406,9 +1466,11 @@ function App() {
       cryptogram: { cipher: '' },
       cryptogramPlay,
       ladder: { from: ladderFrom, to: ladderTo },
+      bridge: { x: bridgeX, y: bridgeY },
+      bridgePlay,
       ladderPlay,
     });
-  }, [mode, dictionaries, sorts, kbOpen, theme, palette, textScale, navKeys, hiddenModes, hiddenViews, lengthRange, practiceAllowed, highlightMatches, helpAllowed, solverDictionary, wordFilter, startPage, onboarded, patternPlay, beePlay, boxedPlay, descramblePlay, gridPlay, length, known, containsStr, excludedStr, rackStr, useAll, minLength, beeCenter, beeOuters, boxedLetters, solutionWords, gridLetters, gridPreset, weaveLetters, weaveSize, weavePlay, squaresPlay, squaresLetters, squaresSize, cryptogramPlay, ladderPlay, ladderFrom, ladderTo]);
+  }, [mode, dictionaries, sorts, kbOpen, theme, palette, textScale, navKeys, hiddenModes, hiddenViews, lengthRange, practiceAllowed, highlightMatches, helpAllowed, solverDictionary, wordFilter, startPage, onboarded, patternPlay, beePlay, boxedPlay, descramblePlay, gridPlay, length, known, containsStr, excludedStr, rackStr, useAll, minLength, beeCenter, beeOuters, boxedLetters, solutionWords, gridLetters, gridPreset, weaveLetters, weaveSize, weavePlay, squaresPlay, squaresLetters, squaresSize, cryptogramPlay, ladderPlay, ladderFrom, ladderTo, bridgePlay, bridgeX, bridgeY]);
 
   // keep known array sized to length
   useEffect(() => {
@@ -2065,6 +2127,60 @@ function App() {
         {cryptogramPlayActive && (
         <div className="mb-8">
           <CryptogramGame ref={cryptogramRef} />
+        </div>
+        )}
+
+        {mode === 'bridge' && bridgePlay && (
+        <div className="mb-8">
+          <BridgeGame ref={bridgeRef} />
+        </div>
+        )}
+
+        {/* The bridge solver, which answers exactly: membership in the word
+            list is the whole rule, so there is nothing to rank. It lists every
+            word that joins the two ends rather than one, because more than one
+            can be right even where the daily pool kept only prompts with a
+            single answer. */}
+        {mode === 'bridge' && !bridgePlay && (
+        <div className="mb-8">
+          <div className="flex items-end justify-center gap-2 mb-4">
+            <div>
+              <label htmlFor="bridge-x" className="block text-xs font-medium text-slate-400 uppercase tracking-wider mb-1.5">First</label>
+              <input
+                id="bridge-x"
+                aria-label="first"
+                value={bridgeX}
+                onChange={(e) => setBridgeX(e.target.value.toLowerCase().replace(/[^a-z]/g, '').slice(0, 12))}
+                placeholder="snow"
+                className="w-28 text-center text-lg font-bold uppercase tracking-widest rounded-lg bg-white/5 border border-white/10 text-white px-2 py-1.5"
+              />
+            </div>
+            <span aria-hidden className="pb-3 text-slate-600 text-lg">·</span>
+            <div>
+              <label htmlFor="bridge-y" className="block text-xs font-medium text-slate-400 uppercase tracking-wider mb-1.5">Second</label>
+              <input
+                id="bridge-y"
+                aria-label="second"
+                value={bridgeY}
+                onChange={(e) => setBridgeY(e.target.value.toLowerCase().replace(/[^a-z]/g, '').slice(0, 12))}
+                placeholder="room"
+                className="w-28 text-center text-lg font-bold uppercase tracking-widest rounded-lg bg-white/5 border border-white/10 text-white px-2 py-1.5"
+              />
+            </div>
+          </div>
+          {bridgeAnswers.kind === 'words' ? (
+            <ul className="flex flex-wrap justify-center gap-2">
+              {bridgeAnswers.words.map((w) => (
+                <li key={w} className="px-3 py-1.5 rounded-lg bg-white/5 border border-white/10 text-sm">
+                  <span className="text-slate-500 uppercase">{bridgeX}</span>
+                  <span className="font-bold uppercase text-accent">{w}</span>
+                  <span className="text-slate-500 uppercase">{bridgeY}</span>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-center text-sm text-slate-400">{bridgeAnswers.note}</p>
+          )}
         </div>
         )}
 
@@ -3059,7 +3175,7 @@ function App() {
           );
         })()}
 
-        {!playActive && mode !== 'squares' && mode !== 'cryptogram' && (
+        {!playActive && WORD_LIST_SOLVERS.has(mode) && (
         <>
         {/* results header */}
         <div className="flex items-center justify-between mb-4 flex-wrap gap-y-3">
@@ -3311,7 +3427,10 @@ function App() {
 
         {/* pb keeps the last row clear of the floating keyboard button */}
         <footer className="mt-14 pb-24 sm:pb-4 text-center text-xs text-slate-500">
-          {!playActive && !learnMode && (
+          {/* only where a word list is what is being searched — the ladder
+              and bridge solvers answer from a rule, so naming a dictionary
+              size under them describes work they do not do */}
+          {!playActive && !learnMode && WORD_LIST_SOLVERS.has(mode) && (
             <p>
               Searching {words.length.toLocaleString()} English words (the{' '}
               {DICTIONARIES.find((d) => d.id === dictionaryId)?.label.toLowerCase()} word

@@ -24,6 +24,7 @@ import {
   TIER_HINTS,
 } from './bridge.mjs';
 import { cycleOf, permutedIndex } from './walk.mjs';
+import { blockedSet, neverPublish as neverPublishSet } from './blocked.mjs';
 
 const require = createRequire(import.meta.url);
 
@@ -144,9 +145,26 @@ function mulberry32(a) {
 // *built* from, never to the sets they're *validated* against: refusing to
 // publish a word and refusing to accept one a player typed are different
 // things, and only the first is ours to decide. See scripts/blocklist.mjs.
-const blockedFromAnswers = new Set(
-  JSON.parse(readFileSync('scripts/blocked-words.json', 'utf8')).words.map((w) => w.word)
-);
+const blockedFromAnswers = blockedSet();
+
+// The curated pools — ladder pairs, bridge prompts, cryptogram passages — are
+// harvested once and committed, and the blocklist is not. So a word added to
+// the blocklist leaves every pool quietly stale, still holding entries nobody
+// would harvest today, and nothing notices until a contract test happens to
+// trip over one. That is how `chink` stayed a live ladder pair.
+//
+// So the blocklist is applied here as well as at harvest: the harvest keeps the
+// pool clean, and this keeps a stale pool from publishing. Only `both`-scope
+// words, because these are passages and prompts rather than answers, and
+// `generation` is where the ordinary words live — Lincoln's "we may hasten or
+// we may retard", Milton's "Thrones, Dominations", Pope on "your sex's earliest
+// care". Dropping those would be the Scunthorpe trade one level up.
+//
+// It does not fix everything a stale pool can be wrong about. The ladder's par
+// is measured over a graph the blocklist prunes, so a pair whose route ran
+// through a newly blocked word has a par nobody can reach — filtering the ends
+// cannot see that, and the contract test is what catches it.
+const neverPublish = neverPublishSet();
 
 /** A generation pool with the blocked words taken out. */
 function answerPool(set) {
@@ -187,8 +205,8 @@ const parsedPassages = JSON.parse(
   readFileSync(new URL('./cryptogram-passages.json', import.meta.url), 'utf8')
 );
 const passagePools = {
-  standard: livePassages(parsedPassages, 'standard'),
-  short: livePassages(parsedPassages, 'short'),
+  standard: livePassages(parsedPassages, 'standard', neverPublish),
+  short: livePassages(parsedPassages, 'short', neverPublish),
 };
 const passagePoolFor = (difficulty) => passagePools[TIER_BAND[difficulty]];
 
@@ -196,7 +214,8 @@ const passagePoolFor = (difficulty) => passagePools[TIER_BAND[difficulty]];
 // once here rather than per day: the walk needs a stable pool size, and a pool
 // that changed length between calls would deal repeats.
 const ladderPairs = livePairs(
-  JSON.parse(readFileSync(new URL('./ladder-pairs.json', import.meta.url), 'utf8'))
+  JSON.parse(readFileSync(new URL('./ladder-pairs.json', import.meta.url), 'utf8')),
+  neverPublish
 );
 const ladderPools = Object.fromEntries(
   Object.keys(TIER_PAR).map((d) => [d, poolFor(ladderPairs, d)])
@@ -207,7 +226,10 @@ const ladderPools = Object.fromEntries(
 // Loaded once, because the walk needs a stable pool length: a pool that
 // changed size between calls would deal repeats.
 const bridgePool = bridgePoolFor(
-  livePrompts(JSON.parse(readFileSync(new URL('./bridge-prompts.json', import.meta.url), 'utf8')))
+  livePrompts(
+    JSON.parse(readFileSync(new URL('./bridge-prompts.json', import.meta.url), 'utf8')),
+    neverPublish
+  )
 );
 
 // Three difficulties, and they don't all mean the same thing. Guess, Hive,
@@ -774,6 +796,9 @@ for (const variant of ['', 'dev']) {
   // ladder, so the server does not need them to mark a board — but a hint has
   // to know the word before the player does, and hints are client-side.
   const bridgeByDifficulty = {};
+  // shared across the day's three boards, so a difficulty cannot land on an
+  // answer another one already spent
+  const spentToday = new Set();
   DIFFICULTIES.forEach((difficulty, tier) => {
     const cycle = cycleOf(epochDay, bridgePool.length);
     const cycleRng = mulberry32(
@@ -782,8 +807,10 @@ for (const variant of ['', 'dev']) {
     const board = generateBoard(
       bridgePool,
       cycleRng,
-      epochDay * BOARD_SIZE * DIFFICULTIES.length + tier * BOARD_SIZE
+      epochDay * BOARD_SIZE * DIFFICULTIES.length + tier * BOARD_SIZE,
+      { exclude: spentToday }
     );
+    for (const m of board.answers) spentToday.add(m);
     for (const p of board.prompts) dailyBridgePrompts.add(`${p.x} ${p.y}`);
     bridgeByDifficulty[difficulty] = {
       prompts: board.prompts,

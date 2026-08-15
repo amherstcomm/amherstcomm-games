@@ -985,14 +985,6 @@
    "par": 4
   },
   {
-   "a": "chink",
-   "b": "crack",
-   "rel": [
-    "verb group"
-   ],
-   "par": 4
-  },
-  {
    "a": "chips",
    "b": "fries",
    "rel": [
@@ -4450,14 +4442,6 @@
    "par": 7
   },
   {
-   "a": "chunk",
-   "b": "clump",
-   "rel": [
-    "synonym"
-   ],
-   "par": 7
-  },
-  {
    "a": "clump",
    "b": "flock",
    "rel": [
@@ -5144,14 +5128,6 @@
    "par": 8
   },
   {
-   "a": "balmy",
-   "b": "loony",
-   "rel": [
-    "synonym"
-   ],
-   "par": 8
-  },
-  {
    "a": "beach",
    "b": "shore",
    "rel": [
@@ -5332,6 +5308,14 @@
    "par": 8
   },
   {
+   "a": "chunk",
+   "b": "clump",
+   "rel": [
+    "synonym"
+   ],
+   "par": 8
+  },
+  {
    "a": "clay",
    "b": "tile",
    "rel": [
@@ -5343,14 +5327,6 @@
   {
    "a": "cleft",
    "b": "crack",
-   "rel": [
-    "synonym"
-   ],
-   "par": 8
-  },
-  {
-   "a": "clink",
-   "b": "pokey",
    "rel": [
     "synonym"
    ],
@@ -5519,14 +5495,6 @@
   {
    "a": "flesh",
    "b": "shape",
-   "rel": [
-    "synonym"
-   ],
-   "par": 8
-  },
-  {
-   "a": "fling",
-   "b": "whirl",
    "rel": [
     "synonym"
    ],

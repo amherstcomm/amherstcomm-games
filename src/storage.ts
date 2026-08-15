@@ -12,7 +12,8 @@ export type Mode =
   | 'weave'
   | 'squares'
   | 'cryptogram'
-  | 'ladder';
+  | 'ladder'
+  | 'bridge';
 
 /** 'home' is the front page, 'last' is wherever you left off, and a Mode is
  *  that game's daily — for people who came for one game and mean to keep
@@ -31,6 +32,7 @@ export const ALL_MODES: Mode[] = [
   'squares',
   'cryptogram',
   'ladder',
+  'bridge',
 ];
 export const ALL_START_PAGES: StartPage[] = ['home', 'last', ...ALL_MODES];
 /** The solver's lists were Common/Standard/Full before they became the
@@ -162,6 +164,10 @@ export type PersistedState = {
    *  doesn't lose what was typed */
   ladder: { from: string; to: string };
   ladderPlay: boolean;
+  /** the bridge solver's two ends, kept for the same reason as the ladder's:
+   *  leaving the tab and coming back should not lose what you typed */
+  bridge: { x: string; y: string };
+  bridgePlay: boolean;
 };
 
 export type GridPreset = '3x3' | '4x4' | '5x5';
@@ -181,7 +187,7 @@ export const WEAVE_DIMS: Record<WeaveSize, { rows: number; cols: number }> = {
 
 export const DEFAULT_STATE: PersistedState = {
   mode: 'pattern',
-  dictionaries: { pattern: 'easy', descramble: 'easy', bee: 'easy', boxed: 'easy', grid: 'easy', weave: 'hard', squares: 'hard', cryptogram: 'hard', ladder: 'easy' },
+  dictionaries: { pattern: 'easy', descramble: 'easy', bee: 'easy', boxed: 'easy', grid: 'easy', weave: 'hard', squares: 'hard', cryptogram: 'hard', ladder: 'easy', bridge: 'easy' },
   sort: {
     pattern: { key: 'alpha', dir: 'asc' },
     descramble: { key: 'length', dir: 'desc' },
@@ -192,6 +198,7 @@ export const DEFAULT_STATE: PersistedState = {
     squares: { key: 'length', dir: 'desc' },
     cryptogram: { key: 'length', dir: 'desc' },
     ladder: { key: 'length', dir: 'desc' },
+    bridge: { key: 'length', dir: 'desc' },
   },
   keyboard: false,
   theme: 'system',
@@ -226,6 +233,8 @@ export const DEFAULT_STATE: PersistedState = {
   cryptogramPlay: true,
   ladder: { from: '', to: '' },
   ladderPlay: true,
+  bridge: { x: '', y: '' },
+  bridgePlay: true,
 };
 
 function singleLetter(v: unknown): string {
@@ -276,6 +285,7 @@ export function loadState(): PersistedState {
       squares: { ...DEFAULT_STATE.sort.squares },
       cryptogram: { ...DEFAULT_STATE.sort.cryptogram },
       ladder: { ...DEFAULT_STATE.sort.ladder },
+      bridge: { ...DEFAULT_STATE.sort.bridge },
     };
     for (const m of ALL_MODES) {
       const s = p?.sort?.[m];
@@ -404,6 +414,11 @@ export function loadState(): PersistedState {
       squaresPlay: p?.squaresPlay !== false,
       cryptogramPlay: p?.cryptogramPlay !== false,
       ladderPlay: p?.ladderPlay !== false,
+      bridge: {
+        x: typeof p?.bridge?.x === 'string' ? p.bridge.x.toLowerCase().replace(/[^a-z]/g, '').slice(0, 12) : '',
+        y: typeof p?.bridge?.y === 'string' ? p.bridge.y.toLowerCase().replace(/[^a-z]/g, '').slice(0, 12) : '',
+      },
+      bridgePlay: p?.bridgePlay !== false,
     };
   } catch {
     return DEFAULT_STATE;

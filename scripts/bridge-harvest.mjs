@@ -35,6 +35,7 @@
 //   4. One answer only. A prompt with two legal bridges is not a puzzle, and
 //      the player who finds the other one is right.
 import { readFileSync, writeFileSync } from 'node:fs';
+import { blockedSet } from './blocked.mjs';
 import { createRequire } from 'node:module';
 import { join } from 'node:path';
 
@@ -50,11 +51,7 @@ const DICT = require('wordnet-db').path;
 // well as the parts: CHICKEN and HEAD are both perfectly ordinary, and the
 // prompt still built itself out of a word we do not publish. Anything the
 // player reads or has to type gets checked.
-const blocked = new Set(
-  JSON.parse(readFileSync(new URL('./blocked-words.json', import.meta.url), 'utf8')).words.map(
-    (w) => w.word
-  )
-);
+const blocked = blockedSet();
 
 // ---------------------------------------------------------------- the words
 const rows = readFileSync('scripts/words.csv', 'utf8').trim().split('\n').slice(1);
@@ -92,12 +89,17 @@ for (const line of rows) {
 // nothing — bridge answers are common words already — while the compound band
 // is the dial that matters, because what limits variety is which compounds
 // happen to exist rather than which words can join. At 35 the pool is 226
-// answers; at 55 it is 561 but the tail is prompts like MAR · TEN · ABILITY,
-// where marten and tenability are both real and neither is reachable. 50 keeps
-// most of the range and drops that tail.
+// answers; at 50 it is 479 and at 55 it is 561, and the tail is where the
+// unreachable ones live — MAR · TEN · ABILITY, CAD · DISH · RAG, SAC · HEM ·
+// STITCH. Those fail on the compounds rather than the clue words: nobody needs
+// to know what a cad is to solve CAD · ? · RAG, they need to recognise
+// `caddish` and `dishrag`, and both sit at band 50. Read a spread at each
+// level and 35 and 40 are uniformly good while 50 is where carboy and acetone
+// arrive. 40 leaves 5,772 prompts across 308 answers, which is a year of
+// fifteen-a-day before a prompt comes round again.
 const XY_BAND = Number(process.env.BRIDGE_XY ?? 35);
 const ANSWER_BAND = Number(process.env.BRIDGE_ANSWER ?? 35);
-const WHOLE_BAND = Number(process.env.BRIDGE_WHOLE ?? 50);
+const WHOLE_BAND = Number(process.env.BRIDGE_WHOLE ?? 40);
 
 // The seam where the sound changes. -ion after t or s is the whole of it in
 // practice: the other fusing endings (-ial, -ious, -ure) are not words, so they

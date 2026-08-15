@@ -111,9 +111,25 @@
       "scope": "generation"
     },
     {
+      "word": "bastards",
+      "origin": "plural:ldnoobw",
+      "scope": "generation"
+    },
+    {
       "word": "bastinado",
       "origin": "ldnoobw",
       "scope": "generation"
+    },
+    {
+      "word": "bastinados",
+      "origin": "plural:ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "battyboy",
+      "origin": "manual",
+      "scope": "both",
+      "note": "anti-LGBTQ+ slur; no ordinary sense, so refused everywhere"
     },
     {
       "word": "bbw",
@@ -138,6 +154,11 @@
     {
       "word": "beastiality",
       "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "bestialities",
+      "origin": "plural:ldnoobw",
       "scope": "generation"
     },
     {
@@ -172,6 +193,11 @@
       "scope": "generation"
     },
     {
+      "word": "blowjobs",
+      "origin": "plural:ldnoobw",
+      "scope": "generation"
+    },
+    {
       "word": "blumpkin",
       "origin": "ldnoobw",
       "scope": "generation"
@@ -187,8 +213,18 @@
       "scope": "generation"
     },
     {
+      "word": "bondages",
+      "origin": "plural:ldnoobw",
+      "scope": "generation"
+    },
+    {
       "word": "boner",
       "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "boners",
+      "origin": "plural:ldnoobw",
       "scope": "generation"
     },
     {
@@ -232,6 +268,11 @@
       "scope": "generation"
     },
     {
+      "word": "bulldykes",
+      "origin": "plural:ldnoobw",
+      "scope": "generation"
+    },
+    {
       "word": "bullshit",
       "origin": "esdb:vulgar-1",
       "scope": "both"
@@ -267,6 +308,11 @@
       "scope": "generation"
     },
     {
+      "word": "bungholes",
+      "origin": "plural:ldnoobw",
+      "scope": "generation"
+    },
+    {
       "word": "busty",
       "origin": "ldnoobw",
       "scope": "generation"
@@ -286,6 +332,22 @@
       "word": "butthole",
       "origin": "ldnoobw",
       "scope": "generation"
+    },
+    {
+      "word": "buttholes",
+      "origin": "plural:ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "butts",
+      "origin": "plural:manual",
+      "scope": "generation"
+    },
+    {
+      "word": "cameljockey",
+      "origin": "manual",
+      "scope": "both",
+      "note": "anti-Arab or anti-Muslim slur; no ordinary sense, so refused everywhere"
     },
     {
       "word": "camgirl",
@@ -308,6 +370,18 @@
       "scope": "generation"
     },
     {
+      "word": "chav",
+      "origin": "manual",
+      "scope": "generation",
+      "note": "slur in use, but class abuse rather than a slur proper — never published, still accepted if a player types it"
+    },
+    {
+      "word": "chavs",
+      "origin": "manual",
+      "scope": "generation",
+      "note": "slur in use, but class abuse rather than a slur proper — never published, still accepted if a player types it"
+    },
+    {
       "word": "chickenshit",
       "origin": "esdb:vulgar-1",
       "scope": "both"
@@ -316,6 +390,42 @@
       "word": "chickenshits",
       "origin": "esdb:vulgar-1",
       "scope": "both"
+    },
+    {
+      "word": "ching",
+      "origin": "manual",
+      "scope": "both",
+      "note": "anti-Asian slur; no ordinary sense, so refused everywhere"
+    },
+    {
+      "word": "chingchong",
+      "origin": "manual",
+      "scope": "both",
+      "note": "anti-Asian slur; no ordinary sense, so refused everywhere"
+    },
+    {
+      "word": "chingchongs",
+      "origin": "manual",
+      "scope": "both",
+      "note": "anti-Asian slur; no ordinary sense, so refused everywhere"
+    },
+    {
+      "word": "chink",
+      "origin": "manual",
+      "scope": "generation",
+      "note": "slur in use, but a chink of light — never published, still accepted if a player types it"
+    },
+    {
+      "word": "chinks",
+      "origin": "manual",
+      "scope": "generation",
+      "note": "slur in use, but a chink of light — never published, still accepted if a player types it"
+    },
+    {
+      "word": "christkiller",
+      "origin": "manual",
+      "scope": "both",
+      "note": "antisemitic slur; no ordinary sense, so refused everywhere"
     },
     {
       "word": "cialis",
@@ -335,6 +445,11 @@
     {
       "word": "clitoris",
       "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "clits",
+      "origin": "plural:ldnoobw",
       "scope": "generation"
     },
     {
@@ -365,6 +480,18 @@
       "scope": "both"
     },
     {
+      "word": "coolie",
+      "origin": "manual",
+      "scope": "both",
+      "note": "anti-Asian slur; no ordinary sense, so refused everywhere"
+    },
+    {
+      "word": "coolies",
+      "origin": "manual",
+      "scope": "both",
+      "note": "anti-Asian slur; no ordinary sense, so refused everywhere"
+    },
+    {
       "word": "coon",
       "origin": "esdb:offensive-2",
       "scope": "both"
@@ -382,6 +509,11 @@
     {
       "word": "coprophilia",
       "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "coprophilias",
+      "origin": "plural:ldnoobw",
       "scope": "generation"
     },
     {
@@ -415,9 +547,32 @@
       "scope": "generation"
     },
     {
+      "word": "craps",
+      "origin": "plural:esdb:vulgar-3",
+      "scope": "generation"
+    },
+    {
       "word": "creampie",
       "origin": "ldnoobw",
       "scope": "generation"
+    },
+    {
+      "word": "crip",
+      "origin": "manual",
+      "scope": "generation",
+      "note": "slur in use, but also reclaimed — never published, still accepted if a player types it"
+    },
+    {
+      "word": "cripple",
+      "origin": "manual",
+      "scope": "generation",
+      "note": "slur in use, but the verb — never published, still accepted if a player types it"
+    },
+    {
+      "word": "cripples",
+      "origin": "manual",
+      "scope": "generation",
+      "note": "slur in use, but the verb — never published, still accepted if a player types it"
     },
     {
       "word": "cum",
@@ -427,6 +582,11 @@
     {
       "word": "cumming",
       "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "cums",
+      "origin": "plural:ldnoobw",
       "scope": "generation"
     },
     {
@@ -455,14 +615,44 @@
       "scope": "both"
     },
     {
+      "word": "currymuncher",
+      "origin": "manual",
+      "scope": "both",
+      "note": "anti-South Asian slur; no ordinary sense, so refused everywhere"
+    },
+    {
+      "word": "dago",
+      "origin": "manual",
+      "scope": "both",
+      "note": "anti-Latino slur; no ordinary sense, so refused everywhere"
+    },
+    {
+      "word": "dagos",
+      "origin": "manual",
+      "scope": "both",
+      "note": "anti-Latino slur; no ordinary sense, so refused everywhere"
+    },
+    {
       "word": "darkie",
       "origin": "ldnoobw",
       "scope": "both"
     },
     {
+      "word": "darkies",
+      "origin": "manual",
+      "scope": "both",
+      "note": "anti-Black slur; no ordinary sense, so refused everywhere"
+    },
+    {
       "word": "daterape",
       "origin": "ldnoobw",
       "scope": "generation"
+    },
+    {
+      "word": "deafmute",
+      "origin": "manual",
+      "scope": "both",
+      "note": "disability slur; no ordinary sense, so refused everywhere"
     },
     {
       "word": "deepthroat",
@@ -500,6 +690,11 @@
       "scope": "generation"
     },
     {
+      "word": "dildos",
+      "origin": "plural:ldnoobw",
+      "scope": "generation"
+    },
+    {
       "word": "dingleberries",
       "origin": "ldnoobw",
       "scope": "generation"
@@ -530,6 +725,11 @@
       "scope": "generation"
     },
     {
+      "word": "dominations",
+      "origin": "plural:ldnoobw",
+      "scope": "generation"
+    },
+    {
       "word": "dominatrix",
       "origin": "ldnoobw",
       "scope": "generation"
@@ -540,9 +740,39 @@
       "scope": "generation"
     },
     {
+      "word": "dothead",
+      "origin": "manual",
+      "scope": "both",
+      "note": "anti-South Asian slur; no ordinary sense, so refused everywhere"
+    },
+    {
+      "word": "dotheads",
+      "origin": "manual",
+      "scope": "both",
+      "note": "anti-South Asian slur; no ordinary sense, so refused everywhere"
+    },
+    {
+      "word": "durka",
+      "origin": "manual",
+      "scope": "both",
+      "note": "anti-Arab or anti-Muslim slur; no ordinary sense, so refused everywhere"
+    },
+    {
       "word": "dvda",
       "origin": "ldnoobw",
       "scope": "generation"
+    },
+    {
+      "word": "dyke",
+      "origin": "manual",
+      "scope": "generation",
+      "note": "slur in use, but a levee — never published, still accepted if a player types it"
+    },
+    {
+      "word": "dykes",
+      "origin": "manual",
+      "scope": "generation",
+      "note": "slur in use, but a levee — never published, still accepted if a player types it"
     },
     {
       "word": "ecchi",
@@ -555,8 +785,18 @@
       "scope": "generation"
     },
     {
+      "word": "ejaculations",
+      "origin": "plural:ldnoobw",
+      "scope": "generation"
+    },
+    {
       "word": "erotic",
       "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "erotics",
+      "origin": "plural:ldnoobw",
       "scope": "generation"
     },
     {
@@ -565,8 +805,18 @@
       "scope": "generation"
     },
     {
+      "word": "erotisms",
+      "origin": "plural:ldnoobw",
+      "scope": "generation"
+    },
+    {
       "word": "escort",
       "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "escorts",
+      "origin": "plural:ldnoobw",
       "scope": "generation"
     },
     {
@@ -583,6 +833,24 @@
       "word": "faggot",
       "origin": "ldnoobw",
       "scope": "both"
+    },
+    {
+      "word": "faggots",
+      "origin": "manual",
+      "scope": "both",
+      "note": "anti-LGBTQ+ slur; no ordinary sense, so refused everywhere"
+    },
+    {
+      "word": "faggy",
+      "origin": "manual",
+      "scope": "both",
+      "note": "anti-LGBTQ+ slur; no ordinary sense, so refused everywhere"
+    },
+    {
+      "word": "fags",
+      "origin": "manual",
+      "scope": "both",
+      "note": "anti-LGBTQ+ slur; no ordinary sense, so refused everywhere"
     },
     {
       "word": "fart",
@@ -620,6 +888,11 @@
       "scope": "generation"
     },
     {
+      "word": "fellatios",
+      "origin": "plural:ldnoobw",
+      "scope": "generation"
+    },
+    {
       "word": "feltch",
       "origin": "ldnoobw",
       "scope": "generation"
@@ -642,6 +915,11 @@
     {
       "word": "fingering",
       "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "fingerings",
+      "origin": "plural:ldnoobw",
       "scope": "generation"
     },
     {
@@ -730,9 +1008,26 @@
       "scope": "generation"
     },
     {
+      "word": "gangbangs",
+      "origin": "plural:ldnoobw",
+      "scope": "generation"
+    },
+    {
       "word": "genitals",
       "origin": "ldnoobw",
       "scope": "generation"
+    },
+    {
+      "word": "gimp",
+      "origin": "manual",
+      "scope": "generation",
+      "note": "slur in use, but also a limp — never published, still accepted if a player types it"
+    },
+    {
+      "word": "gimps",
+      "origin": "manual",
+      "scope": "generation",
+      "note": "slur in use, but also a limp — never published, still accepted if a player types it"
     },
     {
       "word": "goatcx",
@@ -750,14 +1045,50 @@
       "scope": "generation"
     },
     {
+      "word": "golliwog",
+      "origin": "manual",
+      "scope": "both",
+      "note": "anti-Black slur; no ordinary sense, so refused everywhere"
+    },
+    {
+      "word": "golliwogs",
+      "origin": "manual",
+      "scope": "both",
+      "note": "anti-Black slur; no ordinary sense, so refused everywhere"
+    },
+    {
       "word": "goodpoop",
       "origin": "ldnoobw",
       "scope": "generation"
     },
     {
+      "word": "gook",
+      "origin": "manual",
+      "scope": "generation",
+      "note": "slur in use, but gook as in gunk — never published, still accepted if a player types it"
+    },
+    {
+      "word": "gooks",
+      "origin": "manual",
+      "scope": "generation",
+      "note": "slur in use, but gook as in gunk — never published, still accepted if a player types it"
+    },
+    {
       "word": "goregasm",
       "origin": "ldnoobw",
       "scope": "generation"
+    },
+    {
+      "word": "greaser",
+      "origin": "manual",
+      "scope": "both",
+      "note": "anti-Latino slur; no ordinary sense, so refused everywhere"
+    },
+    {
+      "word": "greasers",
+      "origin": "manual",
+      "scope": "both",
+      "note": "anti-Latino slur; no ordinary sense, so refused everywhere"
     },
     {
       "word": "grope",
@@ -766,9 +1097,62 @@
       "note": "surfaced by LDNOOBW (CC BY 4.0) during the squares review; not an answer we would publish"
     },
     {
+      "word": "gropes",
+      "origin": "plural:manual",
+      "scope": "generation"
+    },
+    {
       "word": "guro",
       "origin": "ldnoobw",
       "scope": "generation"
+    },
+    {
+      "word": "gyp",
+      "origin": "manual",
+      "scope": "generation",
+      "note": "slur in use, but in common innocent use — never published, still accepted if a player types it"
+    },
+    {
+      "word": "gypped",
+      "origin": "manual",
+      "scope": "generation",
+      "note": "slur in use, but in common innocent use — never published, still accepted if a player types it"
+    },
+    {
+      "word": "gyppo",
+      "origin": "manual",
+      "scope": "both",
+      "note": "anti-Roma slur; no ordinary sense, so refused everywhere"
+    },
+    {
+      "word": "gyppos",
+      "origin": "manual",
+      "scope": "both",
+      "note": "anti-Roma slur; no ordinary sense, so refused everywhere"
+    },
+    {
+      "word": "gyps",
+      "origin": "manual",
+      "scope": "generation",
+      "note": "slur in use, but in common innocent use — never published, still accepted if a player types it"
+    },
+    {
+      "word": "gypsies",
+      "origin": "manual",
+      "scope": "generation",
+      "note": "slur in use, but an ordinary word to many, a slur to Roma people — never published, still accepted if a player types it"
+    },
+    {
+      "word": "gypsy",
+      "origin": "manual",
+      "scope": "generation",
+      "note": "slur in use, but an ordinary word to many, a slur to Roma people — never published, still accepted if a player types it"
+    },
+    {
+      "word": "halfbreed",
+      "origin": "manual",
+      "scope": "both",
+      "note": "anti-Indigenous slur; no ordinary sense, so refused everywhere"
     },
     {
       "word": "handjob",
@@ -781,9 +1165,38 @@
       "scope": "generation"
     },
     {
+      "word": "hardcores",
+      "origin": "plural:ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "heeb",
+      "origin": "manual",
+      "scope": "both",
+      "note": "antisemitic slur; no ordinary sense, so refused everywhere"
+    },
+    {
+      "word": "heebs",
+      "origin": "manual",
+      "scope": "both",
+      "note": "antisemitic slur; no ordinary sense, so refused everywhere"
+    },
+    {
       "word": "hentai",
       "origin": "ldnoobw",
       "scope": "generation"
+    },
+    {
+      "word": "heshe",
+      "origin": "manual",
+      "scope": "both",
+      "note": "anti-LGBTQ+ slur; no ordinary sense, so refused everywhere"
+    },
+    {
+      "word": "homo",
+      "origin": "manual",
+      "scope": "generation",
+      "note": "slur in use, but a prefix and a clade — never published, still accepted if a player types it"
     },
     {
       "word": "homoerotic",
@@ -791,13 +1204,36 @@
       "scope": "generation"
     },
     {
+      "word": "homos",
+      "origin": "manual",
+      "scope": "generation",
+      "note": "slur in use, but a prefix and a clade — never published, still accepted if a player types it"
+    },
+    {
       "word": "honkey",
       "origin": "ldnoobw",
       "scope": "generation"
     },
     {
+      "word": "honkies",
+      "origin": "manual",
+      "scope": "both",
+      "note": "anti-European slur; no ordinary sense, so refused everywhere"
+    },
+    {
+      "word": "honky",
+      "origin": "manual",
+      "scope": "both",
+      "note": "anti-European slur; no ordinary sense, so refused everywhere"
+    },
+    {
       "word": "hooker",
       "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "hookers",
+      "origin": "plural:ldnoobw",
       "scope": "generation"
     },
     {
@@ -812,9 +1248,26 @@
       "scope": "both"
     },
     {
+      "word": "horseshits",
+      "origin": "plural:esdb:vulgar-1",
+      "scope": "both"
+    },
+    {
       "word": "humping",
       "origin": "ldnoobw",
       "scope": "generation"
+    },
+    {
+      "word": "hymie",
+      "origin": "manual",
+      "scope": "both",
+      "note": "antisemitic slur; no ordinary sense, so refused everywhere"
+    },
+    {
+      "word": "hymies",
+      "origin": "manual",
+      "scope": "both",
+      "note": "antisemitic slur; no ordinary sense, so refused everywhere"
     },
     {
       "word": "incest",
@@ -822,8 +1275,30 @@
       "scope": "generation"
     },
     {
+      "word": "incests",
+      "origin": "plural:ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "injun",
+      "origin": "manual",
+      "scope": "both",
+      "note": "anti-Indigenous slur; no ordinary sense, so refused everywhere"
+    },
+    {
+      "word": "injuns",
+      "origin": "manual",
+      "scope": "both",
+      "note": "anti-Indigenous slur; no ordinary sense, so refused everywhere"
+    },
+    {
       "word": "intercourse",
       "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "intercourses",
+      "origin": "plural:ldnoobw",
       "scope": "generation"
     },
     {
@@ -832,8 +1307,25 @@
       "scope": "generation"
     },
     {
+      "word": "jap",
+      "origin": "manual",
+      "scope": "both",
+      "note": "anti-Asian slur; no ordinary sense, so refused everywhere"
+    },
+    {
+      "word": "japs",
+      "origin": "manual",
+      "scope": "both",
+      "note": "anti-Asian slur; no ordinary sense, so refused everywhere"
+    },
+    {
       "word": "jigaboo",
       "origin": "ldnoobw",
+      "scope": "both"
+    },
+    {
+      "word": "jigaboos",
+      "origin": "plural:ldnoobw",
       "scope": "both"
     },
     {
@@ -852,14 +1344,31 @@
       "scope": "generation"
     },
     {
+      "word": "jizzes",
+      "origin": "plural:ldnoobw",
+      "scope": "generation"
+    },
+    {
       "word": "juggs",
       "origin": "ldnoobw",
       "scope": "generation"
     },
     {
+      "word": "junglebunny",
+      "origin": "manual",
+      "scope": "both",
+      "note": "anti-Black slur; no ordinary sense, so refused everywhere"
+    },
+    {
       "word": "kike",
       "origin": "ldnoobw",
       "scope": "both"
+    },
+    {
+      "word": "kikes",
+      "origin": "manual",
+      "scope": "both",
+      "note": "antisemitic slur; no ordinary sense, so refused everywhere"
     },
     {
       "word": "kinbaku",
@@ -893,6 +1402,30 @@
       "scope": "both"
     },
     {
+      "word": "ladyboy",
+      "origin": "manual",
+      "scope": "both",
+      "note": "anti-LGBTQ+ slur; no ordinary sense, so refused everywhere"
+    },
+    {
+      "word": "ladyboys",
+      "origin": "manual",
+      "scope": "both",
+      "note": "anti-LGBTQ+ slur; no ordinary sense, so refused everywhere"
+    },
+    {
+      "word": "limey",
+      "origin": "manual",
+      "scope": "generation",
+      "note": "slur in use, but mild and dated — never published, still accepted if a player types it"
+    },
+    {
+      "word": "limeys",
+      "origin": "manual",
+      "scope": "generation",
+      "note": "slur in use, but mild and dated — never published, still accepted if a player types it"
+    },
+    {
       "word": "livesex",
       "origin": "ldnoobw",
       "scope": "generation"
@@ -903,13 +1436,35 @@
       "scope": "generation"
     },
     {
+      "word": "looney",
+      "origin": "manual",
+      "scope": "generation",
+      "note": "slur in use, but mental-health abuse — never published, still accepted if a player types it"
+    },
+    {
+      "word": "loony",
+      "origin": "manual",
+      "scope": "generation",
+      "note": "slur in use, but mental-health abuse — never published, still accepted if a player types it"
+    },
+    {
       "word": "lovemaking",
       "origin": "ldnoobw",
       "scope": "generation"
     },
     {
+      "word": "lovemakings",
+      "origin": "plural:ldnoobw",
+      "scope": "generation"
+    },
+    {
       "word": "masturbate",
       "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "masturbates",
+      "origin": "plural:ldnoobw",
       "scope": "generation"
     },
     {
@@ -923,13 +1478,52 @@
       "scope": "generation"
     },
     {
+      "word": "masturbations",
+      "origin": "plural:ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "midget",
+      "origin": "manual",
+      "scope": "generation",
+      "note": "slur in use, but historically used of small things — never published, still accepted if a player types it"
+    },
+    {
+      "word": "midgets",
+      "origin": "manual",
+      "scope": "generation",
+      "note": "slur in use, but historically used of small things — never published, still accepted if a player types it"
+    },
+    {
       "word": "milf",
       "origin": "ldnoobw",
       "scope": "generation"
     },
     {
+      "word": "milfs",
+      "origin": "plural:ldnoobw",
+      "scope": "generation"
+    },
+    {
       "word": "mong",
       "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "mongoloid",
+      "origin": "manual",
+      "scope": "both",
+      "note": "disability slur; no ordinary sense, so refused everywhere"
+    },
+    {
+      "word": "mongoloids",
+      "origin": "manual",
+      "scope": "both",
+      "note": "disability slur; no ordinary sense, so refused everywhere"
+    },
+    {
+      "word": "mongs",
+      "origin": "plural:ldnoobw",
       "scope": "generation"
     },
     {
@@ -953,6 +1547,24 @@
       "scope": "generation"
     },
     {
+      "word": "mulatto",
+      "origin": "manual",
+      "scope": "both",
+      "note": "anti-Black slur; no ordinary sense, so refused everywhere"
+    },
+    {
+      "word": "muzzie",
+      "origin": "manual",
+      "scope": "both",
+      "note": "anti-Arab or anti-Muslim slur; no ordinary sense, so refused everywhere"
+    },
+    {
+      "word": "muzzies",
+      "origin": "manual",
+      "scope": "both",
+      "note": "anti-Arab or anti-Muslim slur; no ordinary sense, so refused everywhere"
+    },
+    {
       "word": "nambla",
       "origin": "ldnoobw",
       "scope": "generation"
@@ -963,9 +1575,21 @@
       "scope": "generation"
     },
     {
+      "word": "negress",
+      "origin": "manual",
+      "scope": "both",
+      "note": "anti-Black slur; no ordinary sense, so refused everywhere"
+    },
+    {
       "word": "negro",
       "origin": "ldnoobw",
       "scope": "generation"
+    },
+    {
+      "word": "negroes",
+      "origin": "manual",
+      "scope": "both",
+      "note": "anti-Black slur; no ordinary sense, so refused everywhere"
     },
     {
       "word": "neonazi",
@@ -1069,9 +1693,25 @@
       "note": "surfaced by LDNOOBW (CC BY 4.0) during the squares review; not an answer we would publish"
     },
     {
+      "word": "nudes",
+      "origin": "plural:manual",
+      "scope": "generation"
+    },
+    {
+      "word": "nudities",
+      "origin": "plural:ldnoobw",
+      "scope": "generation"
+    },
+    {
       "word": "nudity",
       "origin": "ldnoobw",
       "scope": "generation"
+    },
+    {
+      "word": "nutjob",
+      "origin": "manual",
+      "scope": "generation",
+      "note": "slur in use, but mental-health abuse — never published, still accepted if a player types it"
     },
     {
       "word": "nutten",
@@ -1089,9 +1729,25 @@
       "scope": "generation"
     },
     {
+      "word": "nymphomanias",
+      "origin": "plural:ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "nymphos",
+      "origin": "plural:ldnoobw",
+      "scope": "generation"
+    },
+    {
       "word": "octopussy",
       "origin": "ldnoobw",
       "scope": "generation"
+    },
+    {
+      "word": "octoroon",
+      "origin": "manual",
+      "scope": "both",
+      "note": "anti-Black slur; no ordinary sense, so refused everywhere"
     },
     {
       "word": "omorashi",
@@ -1101,6 +1757,16 @@
     {
       "word": "orgasm",
       "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "orgasms",
+      "origin": "plural:ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "orgies",
+      "origin": "plural:manual",
       "scope": "generation"
     },
     {
@@ -1118,6 +1784,12 @@
       "word": "paki",
       "origin": "ldnoobw",
       "scope": "generation"
+    },
+    {
+      "word": "pakis",
+      "origin": "manual",
+      "scope": "both",
+      "note": "anti-South Asian slur; no ordinary sense, so refused everywhere"
     },
     {
       "word": "panties",
@@ -1140,8 +1812,18 @@
       "scope": "generation"
     },
     {
+      "word": "pedophiles",
+      "origin": "plural:ldnoobw",
+      "scope": "generation"
+    },
+    {
       "word": "pegging",
       "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "peggings",
+      "origin": "plural:ldnoobw",
       "scope": "generation"
     },
     {
@@ -1151,9 +1833,27 @@
       "note": "surfaced by LDNOOBW (CC BY 4.0) during the squares review; not an answer we would publish"
     },
     {
+      "word": "pickaninnies",
+      "origin": "manual",
+      "scope": "both",
+      "note": "anti-Black slur; no ordinary sense, so refused everywhere"
+    },
+    {
+      "word": "pickaninny",
+      "origin": "manual",
+      "scope": "both",
+      "note": "anti-Black slur; no ordinary sense, so refused everywhere"
+    },
+    {
       "word": "pikey",
       "origin": "ldnoobw",
       "scope": "generation"
+    },
+    {
+      "word": "pikeys",
+      "origin": "manual",
+      "scope": "both",
+      "note": "anti-Roma slur; no ordinary sense, so refused everywhere"
     },
     {
       "word": "piss",
@@ -1196,6 +1896,23 @@
       "scope": "generation"
     },
     {
+      "word": "playboys",
+      "origin": "plural:ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "polack",
+      "origin": "manual",
+      "scope": "both",
+      "note": "anti-European slur; no ordinary sense, so refused everywhere"
+    },
+    {
+      "word": "polacks",
+      "origin": "manual",
+      "scope": "both",
+      "note": "anti-European slur; no ordinary sense, so refused everywhere"
+    },
+    {
       "word": "ponyplay",
       "origin": "ldnoobw",
       "scope": "generation"
@@ -1206,8 +1923,31 @@
       "scope": "generation"
     },
     {
+      "word": "poofs",
+      "origin": "manual",
+      "scope": "both",
+      "note": "anti-LGBTQ+ slur; no ordinary sense, so refused everywhere"
+    },
+    {
+      "word": "poofter",
+      "origin": "manual",
+      "scope": "both",
+      "note": "anti-LGBTQ+ slur; no ordinary sense, so refused everywhere"
+    },
+    {
+      "word": "poofters",
+      "origin": "manual",
+      "scope": "both",
+      "note": "anti-LGBTQ+ slur; no ordinary sense, so refused everywhere"
+    },
+    {
       "word": "poon",
       "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "poons",
+      "origin": "plural:ldnoobw",
       "scope": "generation"
     },
     {
@@ -1216,9 +1956,20 @@
       "scope": "generation"
     },
     {
+      "word": "poontangs",
+      "origin": "plural:ldnoobw",
+      "scope": "generation"
+    },
+    {
       "word": "poopchute",
       "origin": "ldnoobw",
       "scope": "generation"
+    },
+    {
+      "word": "porchmonkey",
+      "origin": "manual",
+      "scope": "both",
+      "note": "anti-Black slur; no ordinary sense, so refused everywhere"
     },
     {
       "word": "porn",
@@ -1231,9 +1982,30 @@
       "scope": "generation"
     },
     {
+      "word": "pornographies",
+      "origin": "plural:ldnoobw",
+      "scope": "generation"
+    },
+    {
       "word": "pornography",
       "origin": "ldnoobw",
       "scope": "generation"
+    },
+    {
+      "word": "pornos",
+      "origin": "plural:ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "porns",
+      "origin": "plural:ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "psycho",
+      "origin": "manual",
+      "scope": "generation",
+      "note": "slur in use, but mental-health abuse — never published, still accepted if a player types it"
     },
     {
       "word": "pthc",
@@ -1251,10 +2023,21 @@
       "scope": "generation"
     },
     {
+      "word": "pussies",
+      "origin": "plural:manual",
+      "scope": "generation"
+    },
+    {
       "word": "pussy",
       "origin": "manual",
       "scope": "generation",
       "note": "surfaced by LDNOOBW (CC BY 4.0) during the squares review; not an answer we would publish"
+    },
+    {
+      "word": "quadroon",
+      "origin": "manual",
+      "scope": "both",
+      "note": "anti-Black slur; no ordinary sense, so refused everywhere"
     },
     {
       "word": "queaf",
@@ -1267,8 +2050,25 @@
       "scope": "generation"
     },
     {
+      "word": "queer",
+      "origin": "manual",
+      "scope": "generation",
+      "note": "slur in use, but reclaimed and in everyday positive use — never published, still accepted if a player types it"
+    },
+    {
+      "word": "queers",
+      "origin": "manual",
+      "scope": "generation",
+      "note": "slur in use, but reclaimed and in everyday positive use — never published, still accepted if a player types it"
+    },
+    {
       "word": "quim",
       "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "quims",
+      "origin": "plural:ldnoobw",
       "scope": "generation"
     },
     {
@@ -1277,10 +2077,21 @@
       "scope": "generation"
     },
     {
+      "word": "ragheads",
+      "origin": "manual",
+      "scope": "both",
+      "note": "anti-Arab or anti-Muslim slur; no ordinary sense, so refused everywhere"
+    },
+    {
       "word": "rape",
       "origin": "manual",
       "scope": "generation",
       "note": "surfaced by LDNOOBW (CC BY 4.0) during the squares review; not an answer we would publish"
+    },
+    {
+      "word": "rapes",
+      "origin": "plural:manual",
+      "scope": "generation"
     },
     {
       "word": "raping",
@@ -1293,9 +2104,49 @@
       "scope": "generation"
     },
     {
+      "word": "rapists",
+      "origin": "plural:ldnoobw",
+      "scope": "generation"
+    },
+    {
       "word": "rectum",
       "origin": "ldnoobw",
       "scope": "generation"
+    },
+    {
+      "word": "rectums",
+      "origin": "plural:ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "redskin",
+      "origin": "manual",
+      "scope": "both",
+      "note": "anti-Indigenous slur; no ordinary sense, so refused everywhere"
+    },
+    {
+      "word": "redskins",
+      "origin": "manual",
+      "scope": "both",
+      "note": "anti-Indigenous slur; no ordinary sense, so refused everywhere"
+    },
+    {
+      "word": "retard",
+      "origin": "manual",
+      "scope": "generation",
+      "note": "slur in use, but the verb, to slow — never published, still accepted if a player types it"
+    },
+    {
+      "word": "retarded",
+      "origin": "manual",
+      "scope": "generation",
+      "note": "slur in use, but the verb, to slow — never published, still accepted if a player types it"
+    },
+    {
+      "word": "retards",
+      "origin": "manual",
+      "scope": "generation",
+      "note": "slur in use, but the verb, to slow — never published, still accepted if a player types it"
     },
     {
       "word": "rimjob",
@@ -1308,9 +2159,44 @@
       "scope": "generation"
     },
     {
+      "word": "russki",
+      "origin": "manual",
+      "scope": "both",
+      "note": "anti-European slur; no ordinary sense, so refused everywhere"
+    },
+    {
+      "word": "russkies",
+      "origin": "manual",
+      "scope": "both",
+      "note": "anti-European slur; no ordinary sense, so refused everywhere"
+    },
+    {
       "word": "sadism",
       "origin": "ldnoobw",
       "scope": "generation"
+    },
+    {
+      "word": "sadisms",
+      "origin": "plural:ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "sambo",
+      "origin": "manual",
+      "scope": "both",
+      "note": "anti-Black slur; no ordinary sense, so refused everywhere"
+    },
+    {
+      "word": "sambos",
+      "origin": "manual",
+      "scope": "both",
+      "note": "anti-Black slur; no ordinary sense, so refused everywhere"
+    },
+    {
+      "word": "sandnigger",
+      "origin": "manual",
+      "scope": "both",
+      "note": "anti-Arab or anti-Muslim slur; no ordinary sense, so refused everywhere"
     },
     {
       "word": "santorum",
@@ -1321,6 +2207,23 @@
       "word": "scat",
       "origin": "ldnoobw",
       "scope": "generation"
+    },
+    {
+      "word": "scats",
+      "origin": "plural:ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "schizo",
+      "origin": "manual",
+      "scope": "generation",
+      "note": "slur in use, but a clipping of a diagnosis — never published, still accepted if a player types it"
+    },
+    {
+      "word": "schizos",
+      "origin": "manual",
+      "scope": "generation",
+      "note": "slur in use, but a clipping of a diagnosis — never published, still accepted if a player types it"
     },
     {
       "word": "schlong",
@@ -1339,6 +2242,11 @@
       "note": "surfaced by LDNOOBW (CC BY 4.0) during the squares review; not an answer we would publish"
     },
     {
+      "word": "semens",
+      "origin": "plural:manual",
+      "scope": "generation"
+    },
+    {
       "word": "sex",
       "origin": "ldnoobw",
       "scope": "generation"
@@ -1349,6 +2257,11 @@
       "scope": "generation"
     },
     {
+      "word": "sexes",
+      "origin": "plural:ldnoobw",
+      "scope": "generation"
+    },
+    {
       "word": "sexo",
       "origin": "ldnoobw",
       "scope": "generation"
@@ -1356,6 +2269,11 @@
     {
       "word": "sexual",
       "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "sexualities",
+      "origin": "plural:ldnoobw",
       "scope": "generation"
     },
     {
@@ -1380,9 +2298,21 @@
       "scope": "both"
     },
     {
+      "word": "sheeny",
+      "origin": "manual",
+      "scope": "both",
+      "note": "antisemitic slur; no ordinary sense, so refused everywhere"
+    },
+    {
       "word": "shemale",
       "origin": "ldnoobw",
       "scope": "generation"
+    },
+    {
+      "word": "shemales",
+      "origin": "manual",
+      "scope": "both",
+      "note": "anti-LGBTQ+ slur; no ordinary sense, so refused everywhere"
     },
     {
       "word": "shibari",
@@ -1430,6 +2360,11 @@
       "scope": "both"
     },
     {
+      "word": "shitloads",
+      "origin": "plural:esdb:vulgar-1",
+      "scope": "both"
+    },
+    {
       "word": "shits",
       "origin": "esdb:vulgar-1",
       "scope": "both"
@@ -1465,8 +2400,36 @@
       "scope": "generation"
     },
     {
+      "word": "shrimpings",
+      "origin": "plural:ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "shylock",
+      "origin": "manual",
+      "scope": "generation",
+      "note": "slur in use, but an antisemitic trope by way of Shakespeare — never published, still accepted if a player types it"
+    },
+    {
+      "word": "skank",
+      "origin": "manual",
+      "scope": "generation",
+      "note": "slur in use, but misogynistic — never published, still accepted if a player types it"
+    },
+    {
+      "word": "skanks",
+      "origin": "manual",
+      "scope": "generation",
+      "note": "slur in use, but misogynistic — never published, still accepted if a player types it"
+    },
+    {
       "word": "skeet",
       "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "skeets",
+      "origin": "plural:ldnoobw",
       "scope": "generation"
     },
     {
@@ -1475,10 +2438,21 @@
       "scope": "generation"
     },
     {
+      "word": "slopehead",
+      "origin": "manual",
+      "scope": "both",
+      "note": "anti-Asian slur; no ordinary sense, so refused everywhere"
+    },
+    {
       "word": "slut",
       "origin": "manual",
       "scope": "generation",
       "note": "surfaced by LDNOOBW (CC BY 4.0) during the squares review; not an answer we would publish"
+    },
+    {
+      "word": "sluts",
+      "origin": "plural:manual",
+      "scope": "generation"
     },
     {
       "word": "smut",
@@ -1487,8 +2461,18 @@
       "note": "surfaced by LDNOOBW (CC BY 4.0) during the squares review; not an answer we would publish"
     },
     {
+      "word": "smuts",
+      "origin": "plural:manual",
+      "scope": "generation"
+    },
+    {
       "word": "snatch",
       "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "snatches",
+      "origin": "plural:ldnoobw",
       "scope": "generation"
     },
     {
@@ -1497,8 +2481,30 @@
       "scope": "generation"
     },
     {
+      "word": "sodomies",
+      "origin": "plural:ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "sodomite",
+      "origin": "manual",
+      "scope": "both",
+      "note": "anti-LGBTQ+ slur; no ordinary sense, so refused everywhere"
+    },
+    {
+      "word": "sodomites",
+      "origin": "manual",
+      "scope": "both",
+      "note": "anti-LGBTQ+ slur; no ordinary sense, so refused everywhere"
+    },
+    {
       "word": "sodomize",
       "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "sodomizes",
+      "origin": "plural:ldnoobw",
       "scope": "generation"
     },
     {
@@ -1512,9 +2518,45 @@
       "scope": "generation"
     },
     {
+      "word": "spastics",
+      "origin": "manual",
+      "scope": "generation",
+      "note": "slur in use, but a medical term — never published, still accepted if a player types it"
+    },
+    {
+      "word": "spaz",
+      "origin": "manual",
+      "scope": "both",
+      "note": "disability slur; no ordinary sense, so refused everywhere"
+    },
+    {
+      "word": "spazz",
+      "origin": "manual",
+      "scope": "both",
+      "note": "disability slur; no ordinary sense, so refused everywhere"
+    },
+    {
+      "word": "spazzes",
+      "origin": "manual",
+      "scope": "both",
+      "note": "disability slur; no ordinary sense, so refused everywhere"
+    },
+    {
+      "word": "spearchucker",
+      "origin": "manual",
+      "scope": "both",
+      "note": "anti-Black slur; no ordinary sense, so refused everywhere"
+    },
+    {
       "word": "spic",
       "origin": "ldnoobw",
       "scope": "both"
+    },
+    {
+      "word": "spics",
+      "origin": "manual",
+      "scope": "both",
+      "note": "anti-Latino slur; no ordinary sense, so refused everywhere"
     },
     {
       "word": "splooge",
@@ -1533,6 +2575,23 @@
       "note": "surfaced by LDNOOBW (CC BY 4.0) during the squares review; not an answer we would publish"
     },
     {
+      "word": "spunks",
+      "origin": "plural:manual",
+      "scope": "generation"
+    },
+    {
+      "word": "squaw",
+      "origin": "manual",
+      "scope": "both",
+      "note": "anti-Indigenous slur; no ordinary sense, so refused everywhere"
+    },
+    {
+      "word": "squaws",
+      "origin": "manual",
+      "scope": "both",
+      "note": "anti-Indigenous slur; no ordinary sense, so refused everywhere"
+    },
+    {
       "word": "strapon",
       "origin": "ldnoobw",
       "scope": "generation"
@@ -1540,6 +2599,11 @@
     {
       "word": "strappado",
       "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "strappados",
+      "origin": "plural:ldnoobw",
       "scope": "generation"
     },
     {
@@ -1560,13 +2624,58 @@
       "scope": "generation"
     },
     {
+      "word": "swastikas",
+      "origin": "plural:ldnoobw",
+      "scope": "generation"
+    },
+    {
       "word": "swinger",
       "origin": "ldnoobw",
       "scope": "generation"
     },
     {
+      "word": "swingers",
+      "origin": "plural:ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "tarbaby",
+      "origin": "manual",
+      "scope": "both",
+      "note": "anti-Black slur; no ordinary sense, so refused everywhere"
+    },
+    {
+      "word": "tard",
+      "origin": "manual",
+      "scope": "both",
+      "note": "disability slur; no ordinary sense, so refused everywhere"
+    },
+    {
+      "word": "tards",
+      "origin": "manual",
+      "scope": "both",
+      "note": "disability slur; no ordinary sense, so refused everywhere"
+    },
+    {
+      "word": "thot",
+      "origin": "manual",
+      "scope": "generation",
+      "note": "slur in use, but misogynistic — never published, still accepted if a player types it"
+    },
+    {
+      "word": "thots",
+      "origin": "manual",
+      "scope": "generation",
+      "note": "slur in use, but misogynistic — never published, still accepted if a player types it"
+    },
+    {
       "word": "threesome",
       "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "threesomes",
+      "origin": "plural:ldnoobw",
       "scope": "generation"
     },
     {
@@ -1611,9 +2720,26 @@
       "scope": "generation"
     },
     {
+      "word": "tossers",
+      "origin": "plural:ldnoobw",
+      "scope": "generation"
+    },
+    {
       "word": "towelhead",
       "origin": "ldnoobw",
       "scope": "generation"
+    },
+    {
+      "word": "towelheads",
+      "origin": "manual",
+      "scope": "both",
+      "note": "anti-Arab or anti-Muslim slur; no ordinary sense, so refused everywhere"
+    },
+    {
+      "word": "trannies",
+      "origin": "manual",
+      "scope": "both",
+      "note": "anti-LGBTQ+ slur; no ordinary sense, so refused everywhere"
     },
     {
       "word": "tranny",
@@ -1626,8 +2752,18 @@
       "scope": "generation"
     },
     {
+      "word": "tribadisms",
+      "origin": "plural:ldnoobw",
+      "scope": "generation"
+    },
+    {
       "word": "tubgirl",
       "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "tushies",
+      "origin": "plural:ldnoobw",
       "scope": "generation"
     },
     {
@@ -1641,6 +2777,11 @@
       "scope": "generation"
     },
     {
+      "word": "twats",
+      "origin": "plural:ldnoobw",
+      "scope": "generation"
+    },
+    {
       "word": "twink",
       "origin": "ldnoobw",
       "scope": "generation"
@@ -1651,8 +2792,23 @@
       "scope": "generation"
     },
     {
+      "word": "twinkies",
+      "origin": "plural:ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "twinks",
+      "origin": "plural:ldnoobw",
+      "scope": "generation"
+    },
+    {
       "word": "undressing",
       "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "undressings",
+      "origin": "plural:ldnoobw",
       "scope": "generation"
     },
     {
@@ -1671,6 +2827,11 @@
       "scope": "generation"
     },
     {
+      "word": "vaginas",
+      "origin": "plural:ldnoobw",
+      "scope": "generation"
+    },
+    {
       "word": "viagra",
       "origin": "ldnoobw",
       "scope": "generation"
@@ -1681,6 +2842,11 @@
       "scope": "generation"
     },
     {
+      "word": "vibrators",
+      "origin": "plural:ldnoobw",
+      "scope": "generation"
+    },
+    {
       "word": "vorarephilia",
       "origin": "ldnoobw",
       "scope": "generation"
@@ -1688,6 +2854,11 @@
     {
       "word": "voyeur",
       "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "voyeurs",
+      "origin": "plural:ldnoobw",
       "scope": "generation"
     },
     {
@@ -1706,8 +2877,19 @@
       "scope": "generation"
     },
     {
+      "word": "wagonburner",
+      "origin": "manual",
+      "scope": "both",
+      "note": "anti-Indigenous slur; no ordinary sense, so refused everywhere"
+    },
+    {
       "word": "wank",
       "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "wanks",
+      "origin": "plural:ldnoobw",
       "scope": "generation"
     },
     {
@@ -1716,10 +2898,33 @@
       "scope": "both"
     },
     {
+      "word": "wetbacks",
+      "origin": "manual",
+      "scope": "both",
+      "note": "anti-Latino slur; no ordinary sense, so refused everywhere"
+    },
+    {
       "word": "whore",
       "origin": "manual",
       "scope": "generation",
       "note": "surfaced by LDNOOBW (CC BY 4.0) during the squares review; not an answer we would publish"
+    },
+    {
+      "word": "whores",
+      "origin": "plural:manual",
+      "scope": "generation"
+    },
+    {
+      "word": "wog",
+      "origin": "manual",
+      "scope": "both",
+      "note": "anti-European slur; no ordinary sense, so refused everywhere"
+    },
+    {
+      "word": "wogs",
+      "origin": "manual",
+      "scope": "both",
+      "note": "anti-European slur; no ordinary sense, so refused everywhere"
     },
     {
       "word": "wop",
@@ -1762,13 +2967,42 @@
       "scope": "generation"
     },
     {
+      "word": "yellowman",
+      "origin": "manual",
+      "scope": "both",
+      "note": "anti-Asian slur; no ordinary sense, so refused everywhere"
+    },
+    {
+      "word": "yid",
+      "origin": "manual",
+      "scope": "both",
+      "note": "antisemitic slur; no ordinary sense, so refused everywhere"
+    },
+    {
+      "word": "yids",
+      "origin": "manual",
+      "scope": "both",
+      "note": "antisemitic slur; no ordinary sense, so refused everywhere"
+    },
+    {
       "word": "yiffy",
       "origin": "ldnoobw",
       "scope": "generation"
     },
     {
+      "word": "zipperhead",
+      "origin": "manual",
+      "scope": "both",
+      "note": "anti-Asian slur; no ordinary sense, so refused everywhere"
+    },
+    {
       "word": "zoophilia",
       "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "zoophilias",
+      "origin": "plural:ldnoobw",
       "scope": "generation"
     }
   ]

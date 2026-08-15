@@ -127,7 +127,25 @@ function ladderState(s: Store | null): DailyState {
   return state;
 }
 
+// A bridge board is done when every prompt is answered or the player gave up,
+// and started at the first one found — the same shape as the ladder, counting
+// entries rather than rungs.
+function bridgeState(s: Store | null): DailyState {
+  const boards = Object.values((s?.daily ?? {}) as Record<string, Record<string, unknown>>);
+  let state: DailyState = 'none';
+  for (const b of boards) {
+    if (!b) continue;
+    const entries = Array.isArray(b.entries) ? (b.entries as string[]) : [];
+    const filled = entries.filter((e) => e).length;
+    const prompts = Array.isArray(b.prompts) ? b.prompts.length : 0;
+    if (b.revealed === true || (prompts > 0 && filled === prompts)) return 'done';
+    if (filled) state = 'started';
+  }
+  return state;
+}
+
 const READERS: Record<Mode, { key: string; state: (s: Store | null) => DailyState }> = {
+  bridge: { key: 'anagrimoire:bridge:v1', state: bridgeState },
   ladder: { key: 'anagrimoire:ladder:v1', state: ladderState },
   squares: { key: 'anagrimoire:squares:v1', state: squaresState },
   cryptogram: { key: 'anagrimoire:cryptogram:v1', state: cryptogramState },

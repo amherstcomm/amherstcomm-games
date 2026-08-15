@@ -806,6 +806,20 @@ describe('bridge', () => {
     }
   });
 
+  // Within a board was the only rule at first, and the first day published put
+  // OUT in all three difficulties and WATER in all three. Each board was
+  // internally fine; the productive answers own enough of the pool that three
+  // independent draws collide readily. A day is fifteen different words.
+  it('spends no answer twice in a day', () => {
+    for (const v of VARIANTS) {
+      const all = DIFFICULTIES.flatMap(
+        (d) => decode(feed(v, 'bridge').byDifficulty[d].answers) as string[]
+      );
+      expect(all.length, v).toBe(15);
+      expect(new Set(all).size, `${v}: ${all.join(', ')}`).toBe(15);
+    }
+  });
+
   it('gives every prompt an answer that actually bridges', () => {
     for (const { b, where } of boards()) {
       const answers = decode(b.answers) as string[];
