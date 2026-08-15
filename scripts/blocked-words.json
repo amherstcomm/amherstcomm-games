@@ -126,6 +126,11 @@
       "scope": "generation"
     },
     {
+      "word": "battyboy",
+      "origin": "manual",
+      "scope": "both"
+    },
+    {
       "word": "bbw",
       "origin": "ldnoobw",
       "scope": "generation"
@@ -338,6 +343,11 @@
       "scope": "generation"
     },
     {
+      "word": "cameljockey",
+      "origin": "manual",
+      "scope": "both"
+    },
+    {
       "word": "camgirl",
       "origin": "ldnoobw",
       "scope": "generation"
@@ -358,6 +368,16 @@
       "scope": "generation"
     },
     {
+      "word": "chav",
+      "origin": "manual",
+      "scope": "generation"
+    },
+    {
+      "word": "chavs",
+      "origin": "manual",
+      "scope": "generation"
+    },
+    {
       "word": "chickenshit",
       "origin": "esdb:vulgar-1",
       "scope": "both"
@@ -365,6 +385,21 @@
     {
       "word": "chickenshits",
       "origin": "esdb:vulgar-1",
+      "scope": "both"
+    },
+    {
+      "word": "ching",
+      "origin": "manual",
+      "scope": "both"
+    },
+    {
+      "word": "chingchong",
+      "origin": "manual",
+      "scope": "both"
+    },
+    {
+      "word": "chingchongs",
+      "origin": "manual",
       "scope": "both"
     },
     {
@@ -376,6 +411,11 @@
       "word": "chinks",
       "origin": "manual",
       "scope": "generation"
+    },
+    {
+      "word": "christkiller",
+      "origin": "manual",
+      "scope": "both"
     },
     {
       "word": "cialis",
@@ -505,6 +545,11 @@
       "scope": "generation"
     },
     {
+      "word": "crip",
+      "origin": "manual",
+      "scope": "generation"
+    },
+    {
       "word": "cripple",
       "origin": "manual",
       "scope": "generation"
@@ -555,6 +600,21 @@
       "scope": "both"
     },
     {
+      "word": "currymuncher",
+      "origin": "manual",
+      "scope": "both"
+    },
+    {
+      "word": "dago",
+      "origin": "manual",
+      "scope": "both"
+    },
+    {
+      "word": "dagos",
+      "origin": "manual",
+      "scope": "both"
+    },
+    {
       "word": "darkie",
       "origin": "ldnoobw",
       "scope": "both"
@@ -568,6 +628,11 @@
       "word": "daterape",
       "origin": "ldnoobw",
       "scope": "generation"
+    },
+    {
+      "word": "deafmute",
+      "origin": "manual",
+      "scope": "both"
     },
     {
       "word": "deepthroat",
@@ -655,6 +720,21 @@
       "scope": "generation"
     },
     {
+      "word": "dothead",
+      "origin": "manual",
+      "scope": "both"
+    },
+    {
+      "word": "dotheads",
+      "origin": "manual",
+      "scope": "both"
+    },
+    {
+      "word": "durka",
+      "origin": "manual",
+      "scope": "both"
+    },
+    {
       "word": "dvda",
       "origin": "ldnoobw",
       "scope": "generation"
@@ -731,6 +811,11 @@
     },
     {
       "word": "faggots",
+      "origin": "manual",
+      "scope": "both"
+    },
+    {
+      "word": "faggy",
       "origin": "manual",
       "scope": "both"
     },
@@ -905,6 +990,16 @@
       "scope": "generation"
     },
     {
+      "word": "gimp",
+      "origin": "manual",
+      "scope": "generation"
+    },
+    {
+      "word": "gimps",
+      "origin": "manual",
+      "scope": "generation"
+    },
+    {
       "word": "goatcx",
       "origin": "ldnoobw",
       "scope": "generation"
@@ -918,6 +1013,16 @@
       "word": "gokkun",
       "origin": "ldnoobw",
       "scope": "generation"
+    },
+    {
+      "word": "golliwog",
+      "origin": "manual",
+      "scope": "both"
+    },
+    {
+      "word": "golliwogs",
+      "origin": "manual",
+      "scope": "both"
     },
     {
       "word": "goodpoop",
@@ -938,6 +1043,16 @@
       "word": "goregasm",
       "origin": "ldnoobw",
       "scope": "generation"
+    },
+    {
+      "word": "greaser",
+      "origin": "manual",
+      "scope": "both"
+    },
+    {
+      "word": "greasers",
+      "origin": "manual",
+      "scope": "both"
     },
     {
       "word": "grope",
@@ -966,9 +1081,34 @@
       "scope": "generation"
     },
     {
+      "word": "gyppo",
+      "origin": "manual",
+      "scope": "both"
+    },
+    {
+      "word": "gyppos",
+      "origin": "manual",
+      "scope": "both"
+    },
+    {
       "word": "gyps",
       "origin": "manual",
       "scope": "generation"
+    },
+    {
+      "word": "gypsies",
+      "origin": "manual",
+      "scope": "generation"
+    },
+    {
+      "word": "gypsy",
+      "origin": "manual",
+      "scope": "generation"
+    },
+    {
+      "word": "halfbreed",
+      "origin": "manual",
+      "scope": "both"
     },
     {
       "word": "handjob",
@@ -986,9 +1126,24 @@
       "scope": "generation"
     },
     {
+      "word": "heeb",
+      "origin": "manual",
+      "scope": "both"
+    },
+    {
+      "word": "heebs",
+      "origin": "manual",
+      "scope": "both"
+    },
+    {
       "word": "hentai",
       "origin": "ldnoobw",
       "scope": "generation"
+    },
+    {
+      "word": "heshe",
+      "origin": "manual",
+      "scope": "both"
     },
     {
       "word": "homo",
@@ -1009,6 +1164,16 @@
       "word": "honkey",
       "origin": "ldnoobw",
       "scope": "generation"
+    },
+    {
+      "word": "honkies",
+      "origin": "manual",
+      "scope": "both"
+    },
+    {
+      "word": "honky",
+      "origin": "manual",
+      "scope": "both"
     },
     {
       "word": "hooker",
@@ -1040,6 +1205,16 @@
       "word": "humping",
       "origin": "ldnoobw",
       "scope": "generation"
+    },
+    {
+      "word": "hymie",
+      "origin": "manual",
+      "scope": "both"
+    },
+    {
+      "word": "hymies",
+      "origin": "manual",
+      "scope": "both"
     },
     {
       "word": "incest",
@@ -1122,6 +1297,11 @@
       "scope": "generation"
     },
     {
+      "word": "junglebunny",
+      "origin": "manual",
+      "scope": "both"
+    },
+    {
       "word": "kike",
       "origin": "ldnoobw",
       "scope": "both"
@@ -1173,6 +1353,16 @@
       "scope": "both"
     },
     {
+      "word": "limey",
+      "origin": "manual",
+      "scope": "generation"
+    },
+    {
+      "word": "limeys",
+      "origin": "manual",
+      "scope": "generation"
+    },
+    {
       "word": "livesex",
       "origin": "ldnoobw",
       "scope": "generation"
@@ -1180,6 +1370,16 @@
     {
       "word": "lolita",
       "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "looney",
+      "origin": "manual",
+      "scope": "generation"
+    },
+    {
+      "word": "loony",
+      "origin": "manual",
       "scope": "generation"
     },
     {
@@ -1283,6 +1483,16 @@
       "scope": "both"
     },
     {
+      "word": "muzzie",
+      "origin": "manual",
+      "scope": "both"
+    },
+    {
+      "word": "muzzies",
+      "origin": "manual",
+      "scope": "both"
+    },
+    {
       "word": "nambla",
       "origin": "ldnoobw",
       "scope": "generation"
@@ -1301,6 +1511,11 @@
       "word": "negro",
       "origin": "ldnoobw",
       "scope": "generation"
+    },
+    {
+      "word": "negroes",
+      "origin": "manual",
+      "scope": "both"
     },
     {
       "word": "neonazi",
@@ -1419,6 +1634,11 @@
       "scope": "generation"
     },
     {
+      "word": "nutjob",
+      "origin": "manual",
+      "scope": "generation"
+    },
+    {
       "word": "nutten",
       "origin": "ldnoobw",
       "scope": "generation"
@@ -1447,6 +1667,11 @@
       "word": "octopussy",
       "origin": "ldnoobw",
       "scope": "generation"
+    },
+    {
+      "word": "octoroon",
+      "origin": "manual",
+      "scope": "both"
     },
     {
       "word": "omorashi",
@@ -1531,9 +1756,24 @@
       "note": "surfaced by LDNOOBW (CC BY 4.0) during the squares review; not an answer we would publish"
     },
     {
+      "word": "pickaninnies",
+      "origin": "manual",
+      "scope": "both"
+    },
+    {
+      "word": "pickaninny",
+      "origin": "manual",
+      "scope": "both"
+    },
+    {
       "word": "pikey",
       "origin": "ldnoobw",
       "scope": "generation"
+    },
+    {
+      "word": "pikeys",
+      "origin": "manual",
+      "scope": "both"
     },
     {
       "word": "piss",
@@ -1579,6 +1819,16 @@
       "word": "playboys",
       "origin": "plural:ldnoobw",
       "scope": "generation"
+    },
+    {
+      "word": "polack",
+      "origin": "manual",
+      "scope": "both"
+    },
+    {
+      "word": "polacks",
+      "origin": "manual",
+      "scope": "both"
     },
     {
       "word": "ponyplay",
@@ -1631,6 +1881,11 @@
       "scope": "generation"
     },
     {
+      "word": "porchmonkey",
+      "origin": "manual",
+      "scope": "both"
+    },
+    {
       "word": "porn",
       "origin": "ldnoobw",
       "scope": "generation"
@@ -1661,6 +1916,11 @@
       "scope": "generation"
     },
     {
+      "word": "psycho",
+      "origin": "manual",
+      "scope": "generation"
+    },
+    {
       "word": "pthc",
       "origin": "ldnoobw",
       "scope": "generation"
@@ -1685,6 +1945,11 @@
       "origin": "manual",
       "scope": "generation",
       "note": "surfaced by LDNOOBW (CC BY 4.0) during the squares review; not an answer we would publish"
+    },
+    {
+      "word": "quadroon",
+      "origin": "manual",
+      "scope": "both"
     },
     {
       "word": "queaf",
@@ -1720,6 +1985,11 @@
       "word": "raghead",
       "origin": "ldnoobw",
       "scope": "generation"
+    },
+    {
+      "word": "ragheads",
+      "origin": "manual",
+      "scope": "both"
     },
     {
       "word": "rape",
@@ -1793,6 +2063,16 @@
       "scope": "generation"
     },
     {
+      "word": "russki",
+      "origin": "manual",
+      "scope": "both"
+    },
+    {
+      "word": "russkies",
+      "origin": "manual",
+      "scope": "both"
+    },
+    {
       "word": "sadism",
       "origin": "ldnoobw",
       "scope": "generation"
@@ -1801,6 +2081,21 @@
       "word": "sadisms",
       "origin": "plural:ldnoobw",
       "scope": "generation"
+    },
+    {
+      "word": "sambo",
+      "origin": "manual",
+      "scope": "both"
+    },
+    {
+      "word": "sambos",
+      "origin": "manual",
+      "scope": "both"
+    },
+    {
+      "word": "sandnigger",
+      "origin": "manual",
+      "scope": "both"
     },
     {
       "word": "santorum",
@@ -1815,6 +2110,16 @@
     {
       "word": "scats",
       "origin": "plural:ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "schizo",
+      "origin": "manual",
+      "scope": "generation"
+    },
+    {
+      "word": "schizos",
+      "origin": "manual",
       "scope": "generation"
     },
     {
@@ -1887,6 +2192,11 @@
     {
       "word": "shat",
       "origin": "esdb:vulgar-1",
+      "scope": "both"
+    },
+    {
+      "word": "sheeny",
+      "origin": "manual",
       "scope": "both"
     },
     {
@@ -1990,6 +2300,21 @@
       "scope": "generation"
     },
     {
+      "word": "shylock",
+      "origin": "manual",
+      "scope": "generation"
+    },
+    {
+      "word": "skank",
+      "origin": "manual",
+      "scope": "generation"
+    },
+    {
+      "word": "skanks",
+      "origin": "manual",
+      "scope": "generation"
+    },
+    {
       "word": "skeet",
       "origin": "ldnoobw",
       "scope": "generation"
@@ -2003,6 +2328,11 @@
       "word": "slanteye",
       "origin": "ldnoobw",
       "scope": "generation"
+    },
+    {
+      "word": "slopehead",
+      "origin": "manual",
+      "scope": "both"
     },
     {
       "word": "slut",
@@ -2080,6 +2410,26 @@
       "word": "spastics",
       "origin": "manual",
       "scope": "generation"
+    },
+    {
+      "word": "spaz",
+      "origin": "manual",
+      "scope": "both"
+    },
+    {
+      "word": "spazz",
+      "origin": "manual",
+      "scope": "both"
+    },
+    {
+      "word": "spazzes",
+      "origin": "manual",
+      "scope": "both"
+    },
+    {
+      "word": "spearchucker",
+      "origin": "manual",
+      "scope": "both"
     },
     {
       "word": "spic",
@@ -2170,6 +2520,31 @@
       "scope": "generation"
     },
     {
+      "word": "tarbaby",
+      "origin": "manual",
+      "scope": "both"
+    },
+    {
+      "word": "tard",
+      "origin": "manual",
+      "scope": "both"
+    },
+    {
+      "word": "tards",
+      "origin": "manual",
+      "scope": "both"
+    },
+    {
+      "word": "thot",
+      "origin": "manual",
+      "scope": "generation"
+    },
+    {
+      "word": "thots",
+      "origin": "manual",
+      "scope": "generation"
+    },
+    {
       "word": "threesome",
       "origin": "ldnoobw",
       "scope": "generation"
@@ -2229,6 +2604,11 @@
       "word": "towelhead",
       "origin": "ldnoobw",
       "scope": "generation"
+    },
+    {
+      "word": "towelheads",
+      "origin": "manual",
+      "scope": "both"
     },
     {
       "word": "trannies",
@@ -2371,6 +2751,11 @@
       "scope": "generation"
     },
     {
+      "word": "wagonburner",
+      "origin": "manual",
+      "scope": "both"
+    },
+    {
       "word": "wank",
       "origin": "ldnoobw",
       "scope": "generation"
@@ -2452,9 +2837,29 @@
       "scope": "generation"
     },
     {
+      "word": "yellowman",
+      "origin": "manual",
+      "scope": "both"
+    },
+    {
+      "word": "yid",
+      "origin": "manual",
+      "scope": "both"
+    },
+    {
+      "word": "yids",
+      "origin": "manual",
+      "scope": "both"
+    },
+    {
       "word": "yiffy",
       "origin": "ldnoobw",
       "scope": "generation"
+    },
+    {
+      "word": "zipperhead",
+      "origin": "manual",
+      "scope": "both"
     },
     {
       "word": "zoophilia",
