@@ -16,6 +16,13 @@ import {
   TIER_VARIANTS,
 } from './cryptogram.mjs';
 import { generateLadder, livePairs, poolFor, TIER_PAR } from './ladder.mjs';
+import {
+  BOARD_SIZE,
+  generateBoard,
+  livePrompts,
+  poolFor as bridgePoolFor,
+  TIER_HINTS,
+} from './bridge.mjs';
 import { cycleOf, permutedIndex } from './walk.mjs';
 
 const require = createRequire(import.meta.url);
@@ -193,6 +200,14 @@ const ladderPairs = livePairs(
 );
 const ladderPools = Object.fromEntries(
   Object.keys(TIER_PAR).map((d) => [d, poolFor(ladderPairs, d)])
+);
+
+// The bridge prompts. One pool for every difficulty — difficulty here is the
+// hint budget, not the words — so unlike the ladder there is nothing to split.
+// Loaded once, because the walk needs a stable pool length: a pool that
+// changed size between calls would deal repeats.
+const bridgePool = bridgePoolFor(
+  livePrompts(JSON.parse(readFileSync(new URL('./bridge-prompts.json', import.meta.url), 'utf8')))
 );
 
 // Three difficulties, and they don't all mean the same thing. Guess, Hive,
@@ -388,6 +403,7 @@ const diffSalt = (d) => (d === 'easy' ? '' : `-${d}`);
 const dailyWeaveClues = new Set();
 const dailyCryptogramTexts = new Set();
 const dailyLadderPairs = new Set();
+const dailyBridgePrompts = new Set();
 for (const variant of ['', 'dev']) {
   const salt = variant ? `-${variant}` : '';
   const prefix = variant ? 'dev-' : '';
@@ -748,6 +764,46 @@ for (const variant of ['', 'dev']) {
     dailyLadderPairs.add(`${pair.a} ${pair.b}`);
     ladderByDifficulty[difficulty] = generateLadder(pair);
   });
+  // bridge: five prompts a difficulty, walked out of the one pool. All three
+  // deal from the same prompts — difficulty is the hint budget, not the words —
+  // so each difficulty gets its own walk offset to keep the boards apart. The
+  // offset is a whole board's worth, so two difficulties cannot overlap even
+  // when the walk skips for a repeated answer.
+  //
+  // The answers ride along in the payload. A bridge is checked by rule, like a
+  // ladder, so the server does not need them to mark a board — but a hint has
+  // to know the word before the player does, and hints are client-side.
+  const bridgeByDifficulty = {};
+  DIFFICULTIES.forEach((difficulty, tier) => {
+    const cycle = cycleOf(epochDay, bridgePool.length);
+    const cycleRng = mulberry32(
+      xmur3(`${SEED_SALT}anagrimoire-bridge-cycle-${cycle}${salt}`)()
+    );
+    const board = generateBoard(
+      bridgePool,
+      cycleRng,
+      epochDay * BOARD_SIZE * DIFFICULTIES.length + tier * BOARD_SIZE
+    );
+    for (const p of board.prompts) dailyBridgePrompts.add(`${p.x} ${p.y}`);
+    bridgeByDifficulty[difficulty] = {
+      prompts: board.prompts,
+      answers: Buffer.from(JSON.stringify(board.answers)).toString('base64'),
+      hints: TIER_HINTS[difficulty],
+    };
+  });
+  await writeFile(
+    `${DATA_DIR}/${prefix}daily-bridge.json`,
+    JSON.stringify({ date: etDate, byDifficulty: bridgeByDifficulty, fetchedAt: stamp }, null, 2) +
+      '\n'
+  );
+  console.log(
+    `Wrote data/${prefix}daily-bridge.json: ` +
+      DIFFICULTIES.map((d) => {
+        const b = bridgeByDifficulty[d];
+        return `${d} ${b.prompts.length} prompts, ${b.hints} hints`;
+      }).join(' | ')
+  );
+
   await writeFile(
     `${DATA_DIR}/${prefix}daily-ladder.json`,
     JSON.stringify({ date: etDate, byDifficulty: ladderByDifficulty, fetchedAt: stamp }, null, 2) +
@@ -902,6 +958,45 @@ await writeFile(
 console.log(
   `Wrote data/cryptogram-pool.json: ` +
     DIFFICULTIES.map((d) => `${d} ${cryptogramPoolByDifficulty[d].length}`).join(', ')
+);
+
+// shared practice pool for the bridge: ten boards a difficulty, with today's
+// prompts held out so practice never spoils a daily — same as weave's themes,
+// the cryptogram passages and the ladder pairs.
+const bridgePoolRng = mulberry32(xmur3(`${SEED_SALT}anagrimoire-bridge-pool-${etDate}`)());
+const bridgePoolByDifficulty = { easy: [], hard: [], extreme: [] };
+for (const difficulty of DIFFICULTIES) {
+  const available = bridgePool.filter((p) => !dailyBridgePrompts.has(`${p.x} ${p.y}`));
+  for (let i = 0; i < 10; i++) {
+    // a practice board is drawn rather than walked: it is not a daily, so it
+    // has nothing to keep in step, and it only has to hold the same rule —
+    // five prompts, five different answers
+    const answers = new Set();
+    const prompts = [];
+    while (prompts.length < BOARD_SIZE) {
+      const pick = available[Math.floor(bridgePoolRng() * available.length)];
+      if (answers.has(pick.m)) continue;
+      answers.add(pick.m);
+      prompts.push(pick);
+    }
+    bridgePoolByDifficulty[difficulty].push({
+      prompts: prompts.map((p) => ({ x: p.x, y: p.y })),
+      answers: Buffer.from(JSON.stringify(prompts.map((p) => p.m))).toString('base64'),
+      hints: TIER_HINTS[difficulty],
+    });
+  }
+}
+await writeFile(
+  `${DATA_DIR}/bridge-pool.json`,
+  JSON.stringify(
+    { date: etDate, byDifficulty: bridgePoolByDifficulty, fetchedAt: new Date().toISOString() },
+    null,
+    2
+  ) + '\n'
+);
+console.log(
+  'Wrote data/bridge-pool.json: ' +
+    DIFFICULTIES.map((d) => `${d} ${bridgePoolByDifficulty[d].length}`).join(', ')
 );
 
 // shared practice pool for the ladder: both variants' daily pairs are held out
