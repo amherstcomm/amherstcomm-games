@@ -26,7 +26,8 @@ export type Slug =
   | 'weave'
   | 'squares'
   | 'cryptogram'
-  | 'ladder';
+  | 'ladder'
+  | 'bridge';
 export type Panel = 'keys' | 'about';
 export type LegalDoc = 'notices' | 'privacy' | 'terms';
 export type StatsTab = 'overall' | 'daily' | 'practice' | 'history' | 'boards';
@@ -45,6 +46,7 @@ const SLUG_MODE: Record<Slug, Mode> = {
   squares: 'squares',
   cryptogram: 'cryptogram',
   ladder: 'ladder',
+  bridge: 'bridge',
 };
 
 export const MODE_SLUG = Object.fromEntries(
@@ -63,6 +65,7 @@ export const SLUG_NAME: Record<Slug, string> = {
   squares: 'Word Squares',
   cryptogram: 'Cryptogram',
   ladder: 'Word Ladder',
+  bridge: 'Bridge',
 };
 
 const VIEWS: View[] = ['solve', 'play', 'learn'];

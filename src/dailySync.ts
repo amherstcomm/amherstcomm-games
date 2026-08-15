@@ -24,7 +24,8 @@ export type DailyGame =
   | 'weave'
   | 'squares'
   | 'cryptogram'
-  | 'ladder';
+  | 'ladder'
+  | 'bridge';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Rec = Record<string, any>;
@@ -222,6 +223,39 @@ export function mergeDaily(
         elapsedMs: maxNum(local.elapsedMs, remote.elapsedMs),
       };
     }
+    case 'bridge': {
+      // Five independent prompts, so unlike the ladder's chain these *can* be
+      // merged slot by slot: two devices that each solved a different one both
+      // did solve it. Hints merge the same way, taking whichever side turned
+      // over more of a given answer, and `spent` follows from them rather than
+      // being summed — adding two devices' counts would charge a player twice
+      // for the same hint.
+      const mine = (local.entries ?? []) as string[];
+      const theirs = (remote.entries ?? []) as string[];
+      const n = Math.max(mine.length, theirs.length);
+      const entries = Array.from({ length: n }, (_, i) =>
+        mode === 'push' ? mine[i] || '' : mine[i] || theirs[i] || ''
+      );
+      type Hint = { length?: boolean; letters?: number };
+      const mineH = (local.hints ?? []) as Hint[];
+      const theirsH = (remote.hints ?? []) as Hint[];
+      const hints = Array.from({ length: n }, (_, i) => {
+        const a = mineH[i] ?? {};
+        const b = mode === 'push' ? {} : (theirsH[i] ?? {});
+        return {
+          length: !!(a.length || b.length),
+          letters: Math.max(a.letters ?? 0, b.letters ?? 0),
+        };
+      });
+      return {
+        ...local,
+        entries,
+        hints,
+        spent: hints.reduce((n2, h) => n2 + (h.length ? 1 : 0) + h.letters, 0),
+        revealed: !!(local.revealed || remote.revealed),
+        elapsedMs: maxNum(local.elapsedMs, remote.elapsedMs),
+      };
+    }
     case 'weave':
       return {
         ...local,
@@ -295,6 +329,9 @@ const PROGRESS_FIELDS: Record<DailyGame, string[]> = {
   scramble: ['found', 'invalid', 'endsAt', 'finished'],
   grid: ['found', 'invalid', 'endsAt', 'finished'],
   weave: ['found', 'hintWords', 'hintsUsed', 'revealed'],
+  // the play is the words typed and the hints bought; prompts and answers are
+  // the puzzle, identical on both devices
+  bridge: ['entries', 'hints', 'spent', 'revealed'],
   // `entries` is the play; cells, answer and size are the puzzle, identical on
   // both devices. elapsedMs is left out on purpose — a running clock rewriting
   // state every second would leave no device ever looking "clean", which is

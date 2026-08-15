@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Grid3x3, Hexagon, KeyRound, LayoutGrid, Puzzle, Shuffle, Square, Table2 } from 'lucide-react';
+import { Combine } from 'lucide-react';
 import LadderIcon from '@/LadderIcon';
 import {
   BOARD_LABELS,
@@ -26,6 +27,7 @@ const ICONS: Record<BoardGame, typeof Grid3x3> = {
   squares5: Table2,
   cryptogram: KeyRound,
   ladder: LadderIcon,
+  bridge: Combine,
 };
 
 const ORDER: BoardGame[] = ['guess', 'scramble', 'hive', 'grid', 'box', 'weave', 'squares4', 'squares5', 'cryptogram'];

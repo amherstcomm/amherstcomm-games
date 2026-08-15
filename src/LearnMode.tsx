@@ -1839,6 +1839,7 @@ const TITLES: Record<Mode, string> = {
   squares: 'Word Squares',
   cryptogram: 'Cryptogram',
   ladder: 'Word Ladder',
+  bridge: 'Bridge',
 };
 
 function LearnLadder({
