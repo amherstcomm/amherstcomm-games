@@ -106,189 +106,146 @@ for (const [offset, pos, slots, words] of pending) {
 const isDerived = (a, b) => derived.has(a < b ? `${a}|${b}` : `${b}|${a}`);
 
 // ------------------------------------------------------------- the prompts
-// Difficulty is how hard the answer is to reach, not how obscure the puzzle
-// is. The first pass got this backwards — extreme opened the compound band to
-// 70 and produced BULL · ACE · RATE and SUB · PAR · BUCKLE, which are not
-// harder, only stranger. Nobody fails to bridge those for want of thinking;
-// they fail because `bullace` is a plum nobody has heard of.
+// One pool, with each prompt carrying the answer's degree — how many compounds
+// that word appears in.
 //
-// So the two ends stay familiar at every tier: they are the clue, and a clue
-// made of words the player does not know is a worse clue, not a harder one.
-// What moves is the band the *answer* is drawn from, which is the one thing
-// the player has to produce.
+// It used to be three pools split on that number, and the split was circular.
+// Degree IS prompt count: an answer in d compounds pairs them into about
+// (d/2)^2 prompts, so binning by degree bins by prompt count, and picking
+// high-degree answers for "easy" picks exactly the answers that generate the
+// most prompts. English has about two dozen that productive, so easy came out
+// as 2,414 prompts across 24 answers — not a fact about the language, just the
+// tier definition restated. Difficulty is a hint budget now (three, one, none),
+// which leaves the whole pool available at every tier and makes supply and
+// difficulty independent.
 //
-// Difficulty is the answer's *productivity*, not its rarity or the compound's.
-// Two earlier attempts got this wrong in opposite directions. Widening the
-// compound band made extreme stranger rather than harder — BULL · ACE · RATE.
-// Banding by how rare the answer is inverted the pool instead, 19,644 easy
-// against 64 extreme, because bridge answers are overwhelmingly common words:
-// OUT, OVER, SIDE, HEAD, WATER. A rare word rarely bridges anything, so there
-// is no supply out there to find.
+// Degree stays on each prompt because it is a real signal, just not a wall: a
+// board can favour productive answers without the pools being disjoint.
 //
-// What actually makes OUT easy is that it is the usual suspect — it bridges
-// dozens of pairs, so a player who knows the game tries it first. A word that
-// bridges two pairs has to be reached from the clue itself. So the tier is how
-// many compounds the answer takes part in, and every tier keeps the familiar
-// bands that read well.
-// Settable so the bands can be compared rather than argued about. The default
-// is the common tier throughout, which is where Ladder draws its rungs.
+// Bands: ends and answers at 35, compounds at 55. Opening the answer band buys
+// nothing — bridge answers are common words already — while opening the
+// compound band takes the pool from 233 answers to 567, because what limits
+// variety is which compounds happen to exist rather than which words can join.
 const XY_BAND = Number(process.env.BRIDGE_XY ?? 35);
 const ANSWER_BAND = Number(process.env.BRIDGE_ANSWER ?? 35);
-const WHOLE_BAND = Number(process.env.BRIDGE_WHOLE ?? 35);
-// degree = how many distinct compounds the answer forms, either side
-//
-// The boundaries are set by runway rather than by feel. A board spends one
-// prompt of its own tier and fills the rest from easier ones, so a tier needs
-// roughly a year of its own: 365. Degree 2-4 gave extreme 224, which is seven
-// months, and hard had years of headroom — so the 5s and 6s move down.
-const TIERS = [
-  { tier: 'easy', min: 12, max: Infinity },
-  { tier: 'hard', min: 7, max: 11 },
-  { tier: 'extreme', min: 2, max: 6 },
-];
+const WHOLE_BAND = Number(process.env.BRIDGE_WHOLE ?? 55);
 
-const funnel = [];
-const seen = new Set();
-const pool = { easy: [], hard: [], extreme: [] };
+const ok = (w, l, band) =>
+  l <= band && w.length >= 3 && base.has(w) && content.has(w) && !blocked.has(w);
+const ends = new Set([...level].filter(([w, l]) => ok(w, l, XY_BAND)).map(([w]) => w));
+const answers = new Set([...level].filter(([w, l]) => ok(w, l, ANSWER_BAND)).map(([w]) => w));
+const parts = new Set([...ends, ...answers]);
+const wholes = [...level].filter(([w, l]) => l <= WHOLE_BAND && base.has(w)).map(([w]) => w);
 
-for (const { tier, min, max } of TIERS) {
-  const answer = ANSWER_BAND;
-  const whole = WHOLE_BAND;
-  const ok = (w, l, band) =>
-    l <= band && w.length >= 3 && base.has(w) && content.has(w) && !blocked.has(w);
-  // the two ends the player reads
-  const ends = new Set([...level].filter(([w, l]) => ok(w, l, XY_BAND)).map(([w]) => w));
-  // the word they have to come up with
-  const answers = new Set([...level].filter(([w, l]) => ok(w, l, answer)).map(([w]) => w));
-  const parts = new Set([...ends, ...answers]);
-  const wholes = [...level].filter(([w, l]) => l <= whole && base.has(w)).map(([w]) => w);
-
-  const after = new Map();
-  const before = new Map();
-  let splits = 0;
-  let dropped = 0;
-  for (const w of wholes) {
-    if (w.length < 6 || w.length > 14) continue;
-    for (let i = 3; i <= w.length - 3; i++) {
-      const a = w.slice(0, i);
-      const b = w.slice(i);
-      if (!parts.has(a) || !parts.has(b)) continue;
-      if (blocked.has(w)) continue;
-      if (isDerived(w, a) || isDerived(w, b)) {
-        dropped++;
-        continue;
-      }
-      splits++;
-      if (!after.has(a)) after.set(a, new Set());
-      if (!before.has(b)) before.set(b, new Set());
-      after.get(a).add(b);
-      before.get(b).add(a);
+const after = new Map();
+const before = new Map();
+let splits = 0;
+let dropped = 0;
+for (const w of wholes) {
+  if (w.length < 6 || w.length > 14) continue;
+  if (blocked.has(w)) continue;
+  for (let i = 3; i <= w.length - 3; i++) {
+    const a = w.slice(0, i);
+    const b = w.slice(i);
+    if (!parts.has(a) || !parts.has(b)) continue;
+    if (isDerived(w, a) || isDerived(w, b)) {
+      dropped++;
+      continue;
     }
+    splits++;
+    if (!after.has(a)) after.set(a, new Set());
+    if (!before.has(b)) before.set(b, new Set());
+    after.get(a).add(b);
+    before.get(b).add(a);
   }
-
-  const byPrompt = new Map();
-  for (const m of answers) {
-    const xs = before.get(m);
-    const ys = after.get(m);
-    if (!xs || !ys) continue;
-    const degree = xs.size + ys.size;
-    if (degree < min || degree > max) continue;
-    for (const x of xs) {
-      for (const y of ys) {
-        if (x === y || x === m || y === m) continue;
-        // a prompt is only readable if both ends are words people know
-        if (!ends.has(x) || !ends.has(y)) continue;
-        const k = `${x}|${y}`;
-        if (!byPrompt.has(k)) byPrompt.set(k, new Set());
-        byPrompt.get(k).add(m);
-      }
-    }
-  }
-
-  let one = 0;
-  for (const [k, ms] of byPrompt) {
-    if (ms.size !== 1) continue;
-    one++;
-    // the tiers are disjoint by answer band, so this only catches a prompt
-    // whose two ends bridge in more than one band — still one answer per tier,
-    // but two different puzzles wearing the same clue
-    if (seen.has(k)) continue;
-    seen.add(k);
-    const [x, y] = k.split('|');
-    const m = [...ms][0];
-    pool[tier].push({ x, m, y, left: x + m, right: m + y });
-  }
-  funnel.push(
-    `${tier.padEnd(7)} degree ${String(min).padStart(2)}-${String(max === Infinity ? 99 : max).padEnd(2)} wholes<=${String(whole).padEnd(2)}  splits ${String(splits).padStart(5)}  derived-dropped ${String(dropped).padStart(4)}  prompts ${String(byPrompt.size).padStart(6)}  one-answer ${String(one).padStart(6)}  new ${String(pool[tier].length).padStart(6)}`
-  );
 }
 
+const byPrompt = new Map();
+for (const m of answers) {
+  const xs = before.get(m);
+  const ys = after.get(m);
+  if (!xs || !ys) continue;
+  for (const x of xs) {
+    for (const y of ys) {
+      if (x === y || x === m || y === m) continue;
+      // a prompt is only readable if both ends are words people know
+      if (!ends.has(x) || !ends.has(y)) continue;
+      const k = `${x}|${y}`;
+      if (!byPrompt.has(k)) byPrompt.set(k, new Set());
+      byPrompt.get(k).add(m);
+    }
+  }
+}
+
+const pool = [];
+for (const [k, ms] of byPrompt) {
+  // a prompt with two legal bridges is not a puzzle, and whoever finds the
+  // other one is right
+  if (ms.size !== 1) continue;
+  const [x, y] = k.split('|');
+  const m = [...ms][0];
+  pool.push({
+    x,
+    m,
+    y,
+    left: x + m,
+    right: m + y,
+    degree: (before.get(m)?.size ?? 0) + (after.get(m)?.size ?? 0),
+  });
+}
+
+console.log(
+  `splits ${splits.toLocaleString()}  derived-dropped ${dropped.toLocaleString()}  prompts ${byPrompt.size.toLocaleString()}  one-answer ${pool.length.toLocaleString()}`
+);
 console.log(`derivational pairs: ${derived.size.toLocaleString()}`);
-console.log(funnel.join('\n'));
 
 // Read a spread rather than the head of the list: the first N of anything
-// sorted is the least representative sample available.
-for (const tier of ['easy', 'hard', 'extreme']) {
-  const list = pool[tier];
-  console.log(`\n${tier} (${list.length.toLocaleString()}):`);
-  const step = Math.max(1, Math.floor(list.length / 12));
-  for (let i = 0, n = 0; i < list.length && n < 12; i += step, n++) {
-    const p = list[i];
+// sorted is the least representative sample available. Sampled by degree band,
+// because that is what a board will weight on.
+const BANDS = [
+  ['productive', (p) => p.degree >= 12],
+  ['middling', (p) => p.degree >= 7 && p.degree < 12],
+  ['sparse', (p) => p.degree < 7],
+];
+
+// The junk that survives every filter above is coincidence — massacre as
+// mass+acre, campus as cam+pus, justice as just+ice — and it cannot be seen by
+// morphology, only by meaning. Suffix-shaped ends are the part that IS
+// mechanical, so those are flagged; the rest is a reading job. Flagged rather
+// than dropped, and held out of play until a person clears them, the same
+// convention the cryptogram pool and the ladder pairs use.
+const REVIEW_TAIL = /^(less|able|age|ice|ion|ary|ery|ous|ure|ant|ent|ist|ism|ity|ive)$/;
+let flagged = 0;
+for (const p of pool) {
+  if (REVIEW_TAIL.test(p.y) || REVIEW_TAIL.test(p.x)) {
+    p.review = true;
+    flagged++;
+  }
+}
+
+const live = pool.filter((p) => !p.review);
+const liveAnswers = new Set(live.map((p) => p.m));
+console.log(
+  `
+flagged for review: ${flagged}   live ${live.length.toLocaleString()} across ${liveAnswers.size} answers`
+);
+
+// Prompt count is the wrong measure of supply and the reason is circular: an
+// answer in d compounds pairs them into about (d/2)^2 prompts, so a count of
+// prompts is mostly a count of how productive its answers happen to be.
+// Answers is the number that is not self-referential.
+for (const [name, test] of BANDS) {
+  const band = live.filter(test);
+  const ans = new Set(band.map((p) => p.m));
+  console.log(`  ${name.padEnd(11)} ${String(band.length).padStart(6)} prompts across ${String(ans.size).padStart(4)} answers`);
+  const step = Math.max(1, Math.floor(band.length / 6));
+  for (let i = 0, n = 0; i < band.length && n < 6; i += step, n++) {
+    const p = band[i];
     console.log(
-      `  ${p.x.toUpperCase()} · ${p.m.toUpperCase()} · ${p.y.toUpperCase()}   (${p.left}, ${p.right})`
+      `      ${p.x.toUpperCase()} · ${p.m.toUpperCase()} · ${p.y.toUpperCase()}   (${p.left}, ${p.right})`
     );
   }
 }
 
-// The junk that survives everything above concentrates in the least productive
-// answers, and that is not bad luck: a word that genuinely joins to things
-// joins to many things, so a two-compound "answer" is disproportionately an
-// accident — massacre as mass+acre, campus as cam+pus, justice as just+ice.
-// Flagged rather than dropped, and held out of play until a person clears
-// them, which is the convention the cryptogram pool and the ladder pairs both
-// use: the judgment is not reproducible by a re-run, so it cannot live here.
-const REVIEW_TAIL = /^(less|able|age|ice|ion|ary|ery|ous|ure|ant|ent|ist|ism|ity|ive)$/;
-let flagged = 0;
-for (const tier of Object.keys(pool)) {
-  for (const p of pool[tier]) {
-    if (REVIEW_TAIL.test(p.y) || REVIEW_TAIL.test(p.x)) {
-      p.review = true;
-      flagged++;
-    }
-  }
-}
-console.log(`\nflagged for review: ${flagged}`);
-
-// Prompt count is the wrong measure of supply, and the reason is circular
-// rather than empirical — worth stating plainly, because the first version of
-// this comment reported it as something the corpus had done.
-//
-// Degree *is* prompt count. An answer in d compounds pairs them into roughly
-// (d/2)^2 prompts, so binning by degree bins by prompt count, and picking
-// high-degree answers for easy picks exactly the answers that generate the
-// most prompts. English has about two dozen that productive. So "easy has
-// 2,414 prompts across 24 answers" is not a property of the language; it is
-// the tier definition restated, and no amount of harvesting changes it.
-//
-// The trap is that prompt count then *measures* the tier as healthy, because
-// it is inflated by the same property the tier selects for. Answers is the
-// number that is not self-referential, so both get printed and the second one
-// is the one to read.
-for (const tier of Object.keys(pool)) {
-  const live = pool[tier].filter((p) => !p.review);
-  const answers = new Set(live.map((p) => p.m));
-  const busiest = [...answers]
-    .map((m) => [m, live.filter((p) => p.m === m).length])
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 4)
-    .map(([m, n]) => `${m}x${n}`)
-    .join(' ');
-  console.log(
-    `  ${tier.padEnd(7)} ${String(live.length).padStart(5)} live of ${String(pool[tier].length).padEnd(5)} across ${String(answers.size).padStart(4)} answers   busiest: ${busiest}`
-  );
-}
-
-writeFileSync(outPath, JSON.stringify(pool, null, 1) + '\n');
-console.log(
-  `\nwrote ${outPath}: ${Object.values(pool).reduce((n, l) => n + l.length, 0).toLocaleString()} prompts`
-);
+writeFileSync(outPath, JSON.stringify({ prompts: pool }, null, 1) + '\n');
+console.log(`\nwrote ${outPath}: ${pool.length.toLocaleString()} prompts`);

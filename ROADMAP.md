@@ -1291,10 +1291,39 @@ None of these is measured yet except where noted.
 
 **Bridge.** `SNOW · ? · BALL`: find the middle word that compounds both ways.
 One-word answer, exactly verifiable, trivially accessible, and unlike anything
-here. The whole game is vocabulary. What has to be measured before it is real:
-how many (X, Y) prompts have exactly one answer — a prompt with three legal
-bridges is not a puzzle — and whether the compound list survives contact with
-the band filter.
+here. **Pool harvested** — see `scripts/bridge-harvest.mjs`.
+
+*Difficulty is a hint budget, not a word band.* Easy grants three hints, hard
+one, extreme none; a hint turns over the next letter of the answer. Every tier
+draws from the whole pool, so difficulty and supply are independent.
+
+That last part is the whole lesson of building it. The first design binned
+prompts by the answer's *degree* — how many compounds it appears in — on the
+reasoning that OUT is easy because it is the usual suspect. True, and useless
+as a partition, because degree **is** prompt count: an answer in d compounds
+pairs them into about (d/2)^2 prompts. Binning by degree bins by prompt count,
+so the easy tier was defined by exactly the property that makes it repetitive,
+and English only has two dozen words that productive. Easy came out as 2,414
+prompts across 24 answers, and the runway arithmetic — counted in prompts —
+called that healthy, because prompts are inflated by the property the tier
+selects for. A measure that is a restatement of the thing it measures cannot
+report a problem with it.
+
+Degree survives as a weighting rather than a wall: a board can favour
+productive answers without the pools being disjoint.
+
+*Bands.* Ends and answers at 35, compounds at 55. Opening the answer band buys
+nothing — bridge answers are common words already, and 55 turns 24 easy
+answers into 26 — while opening the compound band takes the pool from 233
+answers to 567, because what limits variety is which compounds happen to
+exist. It costs quality: read twelve per tier and easy holds at 11, extreme at
+10, hard drops to 8, where the junk is long compounds splitting by accident —
+alliteration as all+iteration, reincarnation as rein+carnation. A minimum part
+length would remove those and would also remove OUT, MAN and EGG, so the
+answer is a review pass rather than a filter.
+
+*Still open:* the review pass over the harvest, and whether a board is five
+prompts with distinct answers.
 
 **Grouping.** Sixteen words, four groups of four. The `domains` column is
 already in `words.csv`, so the categories exist without new data. The risk is
