@@ -1244,6 +1244,18 @@
       "note": "anti-LGBTQ+ slur; no ordinary sense, so refused everywhere"
     },
     {
+      "word": "hexadecaroon",
+      "origin": "manual",
+      "scope": "both",
+      "note": "archaic fractional-ancestry term, the quadroon/octoroon family. Not in any word list we generate from, so this is for the display-name path — and for the day a word list grows into it"
+    },
+    {
+      "word": "hexadecaroons",
+      "origin": "manual",
+      "scope": "both",
+      "note": "archaic fractional-ancestry term, the quadroon/octoroon family. Not in any word list we generate from, so this is for the display-name path — and for the day a word list grows into it"
+    },
+    {
       "word": "homo",
       "origin": "manual",
       "scope": "generation",
@@ -1632,6 +1644,12 @@
       "origin": "plural:manual",
       "scope": "both",
       "note": "plural of mustee — archaic term for mixed ancestry, the octoroon/quadroon family; no ordinary sense, so refused everywhere. Not in WordNet, so the sense is not confirmable from our own data"
+    },
+    {
+      "word": "mustefino",
+      "origin": "manual",
+      "scope": "both",
+      "note": "archaic fractional-ancestry term, the quadroon/octoroon family. Not in any word list we generate from, so this is for the display-name path — and for the day a word list grows into it"
     },
     {
       "word": "muzzie",
@@ -2278,6 +2296,12 @@
       "origin": "manual",
       "scope": "both",
       "note": "anti-European slur; no ordinary sense, so refused everywhere"
+    },
+    {
+      "word": "sacatra",
+      "origin": "manual",
+      "scope": "both",
+      "note": "archaic fractional-ancestry term, the quadroon/octoroon family. Not in any word list we generate from, so this is for the display-name path — and for the day a word list grows into it"
     },
     {
       "word": "sadism",
