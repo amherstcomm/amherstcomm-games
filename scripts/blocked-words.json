@@ -1129,6 +1129,18 @@
       "note": "anti-Latino slur; no ordinary sense, so refused everywhere"
     },
     {
+      "word": "griffe",
+      "origin": "manual",
+      "scope": "generation",
+      "note": "same family as octoroon, but also a claw-shaped ornament at the base of a column — never published, still accepted if a player types it"
+    },
+    {
+      "word": "griffes",
+      "origin": "plural:manual",
+      "scope": "generation",
+      "note": "plural of griffe — same family as octoroon, but also a claw-shaped ornament at the base of a column — never published, still accepted if a player types it"
+    },
+    {
       "word": "grope",
       "origin": "manual",
       "scope": "generation",
@@ -1528,6 +1540,18 @@
       "scope": "generation"
     },
     {
+      "word": "mestee",
+      "origin": "manual",
+      "scope": "both",
+      "note": "variant of mustee; no ordinary sense, so refused everywhere"
+    },
+    {
+      "word": "mestees",
+      "origin": "plural:manual",
+      "scope": "both",
+      "note": "plural of mestee — variant of mustee; no ordinary sense, so refused everywhere"
+    },
+    {
       "word": "midget",
       "origin": "manual",
       "scope": "generation",
@@ -1596,6 +1620,18 @@
       "origin": "manual",
       "scope": "both",
       "note": "anti-Black slur; no ordinary sense, so refused everywhere"
+    },
+    {
+      "word": "mustee",
+      "origin": "manual",
+      "scope": "both",
+      "note": "archaic term for mixed ancestry, the octoroon/quadroon family; no ordinary sense, so refused everywhere. Not in WordNet, so the sense is not confirmable from our own data"
+    },
+    {
+      "word": "mustees",
+      "origin": "plural:manual",
+      "scope": "both",
+      "note": "plural of mustee — archaic term for mixed ancestry, the octoroon/quadroon family; no ordinary sense, so refused everywhere. Not in WordNet, so the sense is not confirmable from our own data"
     },
     {
       "word": "muzzie",
