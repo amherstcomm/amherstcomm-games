@@ -21,6 +21,7 @@
 
 import { createRequire } from 'node:module';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { neverPublish } from './blocked.mjs';
 import { join } from 'node:path';
 
 const require = createRequire(import.meta.url);
@@ -40,6 +41,19 @@ const ESDB = 'https://raw.githubusercontent.com/en-wl/wordlist/v2/data/scowl-pre
 // catches. Every entry is one line to amend, and the rebuild workflow makes
 // amendments cheap. When in doubt leave a word unflagged: flagging ordinary
 // English (sex, escort, nipple) is the filter failing, not working.
+
+// The generator blocklist is the source for this tier rather than a list kept
+// beside it. It used to be a hand-copied subset — the comment below still says
+// "the manual set the generator blocklist already carries" — and the two drifted
+// the moment the blocklist grew: 38 `both`-scope words, redskin and golliwog and
+// yid among them, were unflagged here, which means they scored in every game
+// and the display filter had nothing to hide.
+//
+// `both` scope and the `slur` tier say the same thing from two directions —
+// never generated and never accepted, never scores and never shown — so one can
+// be read off the other. `generation` scope cannot: it is where the ordinary
+// words live.
+const blocklistSlurs = neverPublish();
 
 const SLURS = new Set([
   // ethnicity — the manual set the generator blocklist already carries
@@ -241,7 +255,7 @@ const rows = [...words].sort();
 
 function flagOf(w) {
   if (NOT_FLAGGED.has(w)) return '';
-  if (SLURS.has(w)) return 'slur';
+  if (SLURS.has(w) || blocklistSlurs.has(w)) return 'slur';
   let f = esdbFlag.get(w) ?? '';
   if (STRONG.has(w) && (!f || RANK.strong > RANK[f])) f = 'strong';
   if (!f && SUBSTRING_STRONG.some((sub) => w.includes(sub))) f = 'strong';

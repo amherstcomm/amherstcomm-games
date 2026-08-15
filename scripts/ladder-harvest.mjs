@@ -26,6 +26,7 @@
 // meaningless pair, which is worse than an arbitrary one — it looks like it
 // was trying to mean something.
 import { readFileSync, writeFileSync } from 'node:fs';
+import { blockedSet } from './blocked.mjs';
 import { createRequire } from 'node:module';
 import { join } from 'node:path';
 
@@ -47,11 +48,7 @@ const wordnet = require('wordnet-db').path;
 // through a slur is not a route we can offer, and par has to be measured over
 // the words the player may actually use.
 const BANDS = ['band-10', 'band-20', 'band-35'];
-const blocked = new Set(
-  JSON.parse(readFileSync(new URL('./blocked-words.json', import.meta.url), 'utf8')).words.map(
-    (w) => w.word
-  )
-);
+const blocked = blockedSet();
 const rungs = new Set();
 for (const b of BANDS) {
   for (const w of JSON.parse(readFileSync(new URL(`../src/wordbands/${b}.json`, import.meta.url), 'utf8')).words) {

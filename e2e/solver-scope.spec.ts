@@ -20,7 +20,11 @@ const SEARCHES_WORDS = ['guess', 'scramble', 'hive', 'grid', 'boxed', 'weave'];
 /** the solvers that answer from a rule or a board */
 const ANSWERS_OTHERWISE = ['squares', 'cryptogram', 'ladder', 'bridge'];
 
+// Ten routes in one test, each a cold load of a solver — comfortably past the
+// default timeout on a slow runner, where it failed on the tenth and passed on
+// retry. The alternative is ten tests that each say a third of the thing.
 test('only word-list solvers show a word list', async ({ page }) => {
+  test.slow();
   const bad: string[] = [];
 
   for (const slug of ANSWERS_OTHERWISE) {

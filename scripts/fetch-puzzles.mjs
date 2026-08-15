@@ -24,6 +24,7 @@ import {
   TIER_HINTS,
 } from './bridge.mjs';
 import { cycleOf, permutedIndex } from './walk.mjs';
+import { blockedSet, neverPublish as neverPublishSet } from './blocked.mjs';
 
 const require = createRequire(import.meta.url);
 
@@ -144,8 +145,7 @@ function mulberry32(a) {
 // *built* from, never to the sets they're *validated* against: refusing to
 // publish a word and refusing to accept one a player typed are different
 // things, and only the first is ours to decide. See scripts/blocklist.mjs.
-const blockedWords = JSON.parse(readFileSync('scripts/blocked-words.json', 'utf8')).words;
-const blockedFromAnswers = new Set(blockedWords.map((w) => w.word));
+const blockedFromAnswers = blockedSet();
 
 // The curated pools — ladder pairs, bridge prompts, cryptogram passages — are
 // harvested once and committed, and the blocklist is not. So a word added to
@@ -164,7 +164,7 @@ const blockedFromAnswers = new Set(blockedWords.map((w) => w.word));
 // is measured over a graph the blocklist prunes, so a pair whose route ran
 // through a newly blocked word has a par nobody can reach — filtering the ends
 // cannot see that, and the contract test is what catches it.
-const neverPublish = new Set(blockedWords.filter((w) => w.scope === 'both').map((w) => w.word));
+const neverPublish = neverPublishSet();
 
 /** A generation pool with the blocked words taken out. */
 function answerPool(set) {

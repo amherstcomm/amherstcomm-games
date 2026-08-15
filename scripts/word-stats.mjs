@@ -17,6 +17,7 @@
 // Run when a word list or the blocklist changes: npm run word-stats
 
 import { createRequire } from 'node:module';
+import { blockedEntries } from './blocked.mjs';
 import { writeFileSync } from 'node:fs';
 
 const require = createRequire(import.meta.url);
@@ -43,7 +44,7 @@ const DAILY_MIN = 3;
 const DAILY_MAX = 12;
 
 const blocked = new Set(
-  require('./blocked-words.json').words.map((w) => w.word)
+  blockedEntries().map((w) => w.word)
 );
 
 

@@ -75,21 +75,33 @@ test('mismatched lengths are refused before any search', async ({ page }) => {
 // than on the list, because the list was always right; it was the saying that
 // was missing.
 test('an accepted rung is announced, not just drawn', async ({ page }) => {
+  // up to 26 candidates a position, each waiting a moment to be refused
+  test.slow();
   await page.goto('/daily/ladder');
   const input = page.getByRole('textbox', { name: /next rung/ });
   await expect(input).toBeVisible();
 
   // The pair comes from a fixture regenerated off the live feed, so it changes
-  // by date — a hardcoded rung would pass today and rot tomorrow. Walk the
-  // first letter instead until one neighbour is taken; every legal ladder has
-  // at least one, or the board would be unsolvable.
+  // by date — a hardcoded rung would pass today and rot tomorrow. So try
+  // neighbours until one is taken; every legal ladder has at least one, or the
+  // board would be unsolvable.
   const first = await wordAt(page, 0);
   const add = page.getByRole('button', { name: 'Add rung' });
   const before = await rungs(page).count();
   let accepted = '';
-  for (const c of 'abcdefghijklmnopqrstuvwxyz') {
-    if (c === first[0]) continue;
-    const candidate = c + first.slice(1);
+  // Every position, not just the first. Walking only the leading letter
+  // assumes every word has a neighbour there, and `spate` does not — its
+  // neighbours are `state` and `space`, one and two letters in. That passed
+  // for months of fixture dates and failed the day the feed dealt a word
+  // whose only steps are in the middle.
+  const candidates: string[] = [];
+  for (let i = 0; i < first.length; i++) {
+    for (const c of 'abcdefghijklmnopqrstuvwxyz') {
+      if (c === first[i]) continue;
+      candidates.push(first.slice(0, i) + c + first.slice(i + 1));
+    }
+  }
+  for (const candidate of candidates) {
     await input.fill(candidate);
     await add.click();
     // a refused rung leaves the board alone, so the row count is the signal —

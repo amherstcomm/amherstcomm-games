@@ -23,7 +23,7 @@
 import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
-const { words } = require('./blocked-words.json');
+const words = blockedEntries();
 
 // Which slurs are actually safe to match anywhere in a name, computed rather
 // than assumed. Mapping every `both` entry to substring looked right and was

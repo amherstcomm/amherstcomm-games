@@ -33,6 +33,7 @@
 // harvests into that file, never overwrite it.
 
 import { readFileSync, writeFileSync } from 'node:fs';
+import { blockedSet } from './blocked.mjs';
 import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
@@ -99,11 +100,7 @@ for (const variety of ['english', 'american', 'british']) {
   }
 }
 
-const blocked = new Set(
-  JSON.parse(readFileSync(new URL('./blocked-words.json', import.meta.url), 'utf8')).words.map(
-    (w) => w.word
-  )
-);
+const blocked = blockedSet();
 
 function knownWord(token) {
   const t = token.toLowerCase();
