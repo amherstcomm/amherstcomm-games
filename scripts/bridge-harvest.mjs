@@ -88,13 +88,16 @@ for (const line of rows) {
 // Degree stays on each prompt because it is a real signal, just not a wall: a
 // board can favour productive answers without the pools being disjoint.
 //
-// Bands: ends and answers at 35, compounds at 55. Opening the answer band buys
-// nothing — bridge answers are common words already — while opening the
-// compound band takes the pool from 233 answers to 567, because what limits
-// variety is which compounds happen to exist rather than which words can join.
+// Bands: ends and answers at 35, compounds at 50. Opening the answer band buys
+// nothing — bridge answers are common words already — while the compound band
+// is the dial that matters, because what limits variety is which compounds
+// happen to exist rather than which words can join. At 35 the pool is 226
+// answers; at 55 it is 561 but the tail is prompts like MAR · TEN · ABILITY,
+// where marten and tenability are both real and neither is reachable. 50 keeps
+// most of the range and drops that tail.
 const XY_BAND = Number(process.env.BRIDGE_XY ?? 35);
 const ANSWER_BAND = Number(process.env.BRIDGE_ANSWER ?? 35);
-const WHOLE_BAND = Number(process.env.BRIDGE_WHOLE ?? 55);
+const WHOLE_BAND = Number(process.env.BRIDGE_WHOLE ?? 50);
 
 // The seam where the sound changes. -ion after t or s is the whole of it in
 // practice: the other fusing endings (-ial, -ious, -ure) are not words, so they
