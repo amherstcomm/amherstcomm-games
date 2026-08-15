@@ -538,6 +538,79 @@ should use the GitHub contents API or bust the cache deliberately.
 safe to move into Postgres, since the contract tests describe the feed rather
 than the file.
 
+### Leaderboards that show what they ranked on — proposed August 2026
+
+Home and the leaderboard panel both draw from `boards_for`, and for several
+games every row reads `1 solved`. Weave, Word Squares at both sizes and
+Cryptogram return an empty `detail` in `BOARD_LABELS`, so a board of five
+people is five identical lines.
+
+**The rows are not actually tied, which is the worse half.** `boards_for`
+already ranks on time — it sums `(dp.result->>'timeMs')` as `tiebreak` and
+orders `value desc, detail asc, tiebreak asc`. So the order on screen is real
+and considered, and the page shows nothing that accounts for it. Five rows
+reading the same thing in a deliberate order looks like no order at all, and
+the natural reading is that the board is broken or arbitrary. A missing number
+would be a gap; a hidden ranking is misinformation.
+
+The data is already there and already trustworthy: `timeMs` is stored per
+result and `result_is_plausible` has been checking it since the verification
+work. What is missing is one column in the RPC's projection — it selects
+`name, value, detail` and drops the tiebreak it just computed — and a `detail`
+for the four games that have none.
+
+**Decided per game, because time is not equally meaningful across them:**
+
+- **Cryptogram, Word Squares** — a single solve, where elapsed time is the
+  whole story.
+- **Weave** — time *and* hints, ranked on time with hints breaking the tie.
+  Both say something real, and they say different things: the clock is how
+  hard it was, the hint count is whether you did it yourself.
+- **Guess** — already shows `best n/6`, which beats either.
+- **Hive, Scramble, Grid** — no clock. They are scored on points, so they are
+  already ranked on the thing the player chose to optimise, and a timer would
+  rank them on something they were not doing.
+
+Weave is the one that needs no new machinery to say all of it: `boards_for`
+already orders on three levels — `value desc, detail asc, tiebreak asc` — so
+solves, then time, then hints drops straight into the slots that exist. The
+projection is what has to grow, not the ordering.
+
+Small, and it touches the thing the site says it cares about most: a result you
+can check. A board that will not say why one row is above another is the same
+failure as a score that cannot be recomputed, one layer up.
+
+### Report a puzzle or a player — proposed August 2026
+
+A generator that draws from 240,000 words will eventually publish something
+offensive, and a display name field will eventually hold something worse. Both
+have preventive filters — `blocked-words.json` through the bands, the
+`blocked_names` table and `would_block` for names — and neither is a substitute
+for someone being able to say "this one is wrong" at the moment they see it.
+
+**Decided:** reports land in a table and a scheduled function emails a digest,
+so there is a signal without an admin UI to build first. Anyone can file one,
+signed in or not, because the site plays without an account and the person who
+sees the bad word usually has none.
+
+**The design point worth getting right is the evidence.** The obvious version
+posts what the client saw, which is attacker-controlled and therefore worth
+very little — someone reporting a board that never existed is indistinguishable
+from someone reporting a real one. Almost nothing needs to be sent: a puzzle
+report is `(game, date, difficulty)` and the server reads the actual board out
+of `daily_puzzles`, and a player report is a profile id whose name the server
+already holds. The free-text reason is the only client-supplied field, and it
+is the only one that should be.
+
+Which also means a report is verifiable in a way most user-generated content is
+not: the server can confirm the reported thing exists and says what the reporter
+claims, before anyone reads a word of it.
+
+The rest is the shape of any anonymous write path — an insert-only policy with
+no read-back, a rate limit per source, and a `status` column so a handled report
+stops appearing in the digest. Worth building before the pool of games gets
+larger rather than after, since every new generator widens the surface.
+
 ### Admin portal — much later
 Everything owner-facing is SQL-editor-only today: clearing a display name,
 adding blocklist entries, reading `suspect_daily_results`. That's fine, and
@@ -1174,6 +1247,25 @@ the `pos` column in the words table already knows enough to prevent. What is
 left is the review sweep this project has done twice before, and it is
 one-time.
 
+**Confirmed (August 2026): sense order is enough, and the trap is off-by-one.**
+Measured over the tier a daily would draw from (level<=20, 4-8 letters):
+5,016 of 7,279 words carry a gloss (69%), and reading the *first* offset on
+the index line gives a usable standalone clue for 30 of a 32-word spread
+sample — `duck` is the bird, `guard` is a person who keeps watch, `envelope`
+is a flat container for a letter. The two failures are stem leaks, which the
+filter above already removes.
+
+Worth writing down because it cost an afternoon: an `index.*` line is
+`lemma pos synset_cnt p_cnt [ptr_symbol x p_cnt] sense_cnt tagsense_cnt` and
+then the offsets **in sense order**, so sense 1 is the first offset after that
+header — at `4 + p_cnt + 2`. Reaching for the last field of the line instead
+yields the *rarest* sense of every word, and it does so plausibly: `duck`
+comes back as a cotton fabric, `guard` as a basketball position, `justify` as
+adjusting the spaces between words. That output looks exactly like a corpus
+with bad sense ordering rather than like a parsing error, which is what makes
+it worth a note here. `ladder-harvest.mjs` reads this correctly; a first
+attempt at a definition harvest did not.
+
 **The honest ceiling: this makes a quick crossword, not a cryptic or a themed
 one.** Definitional clues, no wordplay, no misdirection, no Sunday theme.
 Clue craft is most of what makes crosswords good and none of it is
@@ -1185,6 +1277,121 @@ handed to you, so solving is fitting by length and crossing and needs no
 vocabulary at all. On the "is this a word game" axis it sits below Wordoku,
 which at least asks you to know one word. The entry above treats fill-in as
 the pragmatic choice; measured, it is the one that gives the least back.
+
+### Ideas for a tenth game — proposed August 2026
+
+Nine games, and eight of them are letter manipulation: Guess, Scramble, Hive,
+Grid, Boxed, Squares, Ladder and Cryptogram all ask what letters do. Only
+Weave touches meaning, and only as a label on a board that is still traced
+letter by letter. Two axes of word knowledge are unused — **semantics** and
+**sound** — which is the argument for the first four below over a tenth way
+of rearranging letters.
+
+None of these is measured yet except where noted.
+
+**Bridge.** `SNOW · ? · BALL`: find the middle word that compounds both ways.
+One-word answer, exactly verifiable, trivially accessible, and unlike anything
+here. **Pool harvested** — see `scripts/bridge-harvest.mjs`.
+
+*Difficulty is a hint budget, not a word band.* Easy grants three hints, hard
+one, extreme none. Every tier draws from the whole pool, so difficulty and
+supply are independent — which is the property the first design lacked.
+
+A hint buys either the answer's **length** or its **next letter**, player's
+choice, and both cost the same. That makes spending one a decision rather than
+a dispenser: length is broad and cheap to reason from, a letter is narrow and
+specific, and which you want depends on whether you are stuck for the shape of
+the word or for the word itself.
+
+**A hint applies to one prompt, not the board.** Three hints is not three
+reveals across all five — it is three prompts you get help on, and two you do
+not. That is the whole of the difficulty setting: at easy you can buy your way
+through most of a board, at extreme you cannot buy anything, and in between the
+question is which of the five is worth it. Spending early on one you would have
+got anyway is how a hard board is lost.
+
+Length is once per prompt — asking twice buys nothing — and letters turn over
+left to right. `hintsUsed` goes on the record and into the result, the way
+Weave already does it, so it can carry the leaderboard tiebreak.
+
+That last part is the whole lesson of building it. The first design binned
+prompts by the answer's *degree* — how many compounds it appears in — on the
+reasoning that OUT is easy because it is the usual suspect. True, and useless
+as a partition, because degree **is** prompt count: an answer in d compounds
+pairs them into about (d/2)^2 prompts. Binning by degree bins by prompt count,
+so the easy tier was defined by exactly the property that makes it repetitive,
+and English only has two dozen words that productive. Easy came out as 2,414
+prompts across 24 answers, and the runway arithmetic — counted in prompts —
+called that healthy, because prompts are inflated by the property the tier
+selects for. A measure that is a restatement of the thing it measures cannot
+report a problem with it.
+
+Degree survives as a weighting rather than a wall: a board can favour
+productive answers without the pools being disjoint.
+
+*Bands.* Ends and answers at 35, compounds at 55. Opening the answer band buys
+nothing — bridge answers are common words already, and 55 turns 24 easy
+answers into 26 — while opening the compound band takes the pool from 233
+answers to 567, because what limits variety is which compounds happen to
+exist. It costs quality: read twelve per tier and easy holds at 11, extreme at
+10, hard drops to 8, where the junk is long compounds splitting by accident —
+alliteration as all+iteration, reincarnation as rein+carnation. A minimum part
+length would remove those and would also remove OUT, MAN and EGG, so the
+answer is a review pass rather than a filter.
+
+*The board.* The two ends are coloured differently and the answer takes from
+both, so the bridge word reads as belonging to each side. On solve the slot
+keeps **the answer only** — not the two words it formed. A setting turns those
+on for anyone who wants the confirmation.
+
+The blend has to be spatial rather than chromatic. Mixing two hues is the
+obvious reading and it fails on the palettes that exist for people who cannot
+use hue: under Monochrome a blend of two lightnesses is a third lightness
+between them, which is the least distinguishable value on offer, and under the
+red-green palette a mix can land near one of its parents. Splitting or grading
+the answer tile left-to-right — the left end's treatment on the left, the
+right end's on the right — says the same thing by position, and position
+survives every palette. Same lesson as the Weave spangram, which went
+invisible in Monochrome for exactly this reason.
+
+Showing both formed words is filed as accessibility rather than decoration.
+The colour pairing is invisible to a screen reader, so the ends need naming in
+text regardless; for anyone who cannot see the pairing at all, the formed words
+are the confirmation that the answer was right — and they also settle the case
+where a solver reached a legal bridge the harvest did not have.
+
+*Still open:* wiring into the daily pipeline, contract tests, and the client.
+
+**Grouping.** Sixteen words, four groups of four. The `domains` column is
+already in `words.csv`, so the categories exist without new data. The risk is
+not supply, it is that mechanically-drawn groups are flat: what makes this
+genre good is a word that looks like it belongs to the wrong group, and trap
+quality is the thing to measure. Words sitting in two or more domains are the
+raw material for that, and are countable today.
+
+**Definition.** A gloss as the clue, guess the word, letters revealing as you
+miss. Cheapest of the five and viable: 69% of the pool carries a gloss and the
+leading sense is usable as-is about nine times in ten (measured under
+Crossword above). The open question is not the corpus but the game — a clue
+and a word is a single guess, so it needs something to make a puzzle of it,
+whether that is a letter-reveal ladder, several clues sharing an answer
+pattern, or a run of them against one board. Nearest to Crossword of anything
+here, and worth deciding against that rather than on its own.
+
+**Rhyme.** Find words that rhyme with today's word. The only idea here that
+asks something no other game asks, and the only one needing a new dependency
+(CMUdict, permissive). The risk is that rhyme is dialect-dependent, so
+"correct" becomes arguable — which is the one thing the verification model
+cannot absorb, since `result_is_plausible` has to agree with the player about
+what counts.
+
+**Growth.** Start from one letter and add a letter anywhere each turn, every
+step a word: A, AT, CAT, CHAT, CHEAT, CHEATS. Reads like Ladder and plays
+differently — Ladder substitutes at a fixed length, this one grows, so the
+search space widens instead of staying flat. Deterministic, verifiable,
+resumable, and most of the ladder's BFS and its verification shape transfer.
+The letter-based one, included because the mechanic is genuinely new here even
+though the axis is not.
 
 ### Sudoku (traditional) — not planned
 Not a word game, shares zero infrastructure, and dilutes what the site is.

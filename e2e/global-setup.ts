@@ -32,6 +32,7 @@ const EXPECTED = [
   'daily-squares',
   'daily-cryptogram',
   'daily-ladder',
+  'daily-bridge',
 ].flatMap((n) => [`${n}.json`, `dev-${n}.json`]);
 
 export default async function globalSetup() {

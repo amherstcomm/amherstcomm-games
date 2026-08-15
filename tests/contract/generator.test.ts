@@ -31,7 +31,7 @@ const run = promisify(execFile);
 const DATE = '2026-01-15'; // pinned: same date, same feed, every run
 const DIFFICULTIES = ['easy', 'hard', 'extreme'] as const;
 const VARIANTS = ['', 'dev-'] as const;
-const GAMES = ['words', 'hive', 'box', 'scramble', 'grid', 'weave', 'squares', 'cryptogram', 'ladder'] as const;
+const GAMES = ['words', 'hive', 'box', 'scramble', 'grid', 'weave', 'squares', 'cryptogram', 'ladder', 'bridge'] as const;
 
 // Feeds are checked by assertion, not by type; typing them would restate the tests.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -60,7 +60,7 @@ beforeAll(async () => {
       feeds.set(`${variant}${game}`, JSON.parse(raw));
     }
   }
-  for (const pool of ['weave-pool', 'squares-pool', 'cryptogram-pool', 'ladder-pool']) {
+  for (const pool of ['weave-pool', 'squares-pool', 'cryptogram-pool', 'ladder-pool', 'bridge-pool']) {
     feeds.set(pool, JSON.parse(await readFile(join(dir, `${pool}.json`), 'utf8')));
   }
 });
@@ -756,5 +756,142 @@ describe('ladder', () => {
     expect(livePairs(parsed).length).toBe(parsed.pairs.length - held.size);
     for (const { b, where } of boards())
       expect(held.has(`${b.from} ${b.to}`), `${where} published a held pair`).toBe(false);
+  });
+});
+
+describe('bridge', () => {
+  // The words a bridge may be built from: the common tier with the blocklist
+  // out, which is the dictionary the client will check against. A prompt whose
+  // answer is not reachable in that list is unsolvable however good it looks.
+  const words = new Set<string>();
+  beforeAll(async () => {
+    const blocked = new Set(
+      (JSON.parse(await readFile('scripts/blocked-words.json', 'utf8')) as Feed).words.map(
+        (w: Feed) => w.word as string
+      )
+    );
+    // Through band-55, because the harvest builds compounds up to level 50 and
+    // that is the band file they land in. No catch on the read: a band that
+    // stopped existing would quietly shrink the dictionary and turn this test
+    // into one that cannot fail.
+    for (const band of ['band-10', 'band-20', 'band-35', 'band-55']) {
+      const raw = await readFile(`src/wordbands/${band}.json`, 'utf8');
+      for (const w of (JSON.parse(raw) as Feed).words as string[]) {
+        if (/^[a-z]+$/.test(w) && !blocked.has(w)) words.add(w);
+      }
+    }
+  });
+
+  const boards = () => [
+    ...VARIANTS.flatMap((v) =>
+      DIFFICULTIES.map((d) => ({ b: feed(v, 'bridge').byDifficulty[d] as Feed, where: `${v}${d}` }))
+    ),
+    ...DIFFICULTIES.flatMap((d) =>
+      (feeds.get('bridge-pool')!.byDifficulty[d] as Feed[]).map((b, i) => ({
+        b,
+        where: `pool ${d} #${i}`,
+      }))
+    ),
+  ];
+
+  it('deals five prompts with five different answers', () => {
+    for (const { b, where } of boards()) {
+      expect(b.prompts.length, where).toBe(5);
+      const answers = decode(b.answers) as string[];
+      expect(answers.length, where).toBe(5);
+      // The rule the generator exists to enforce. The pool holds far more
+      // prompts than answers, so a walk that did not check would happily deal
+      // OUT three times in one board — which is one prompt asked three ways.
+      expect(new Set(answers).size, `${where}: ${answers.join(', ')}`).toBe(5);
+    }
+  });
+
+  it('gives every prompt an answer that actually bridges', () => {
+    for (const { b, where } of boards()) {
+      const answers = decode(b.answers) as string[];
+      b.prompts.forEach((p: Feed, i: number) => {
+        const m = answers[i];
+        const label = `${where}: ${p.x} · ${m} · ${p.y}`;
+        expect(words.has(p.x + m), `${label} — ${p.x + m} is not a word`).toBe(true);
+        expect(words.has(m + p.y), `${label} — ${m + p.y} is not a word`).toBe(true);
+      });
+    }
+  });
+
+  // Difficulty here is support rather than vocabulary, so this is the whole of
+  // it: the same pool at every level, and a different number of hints.
+  it('sets the hint budget by difficulty and nothing else', () => {
+    const HINTS = { easy: 3, hard: 1, extreme: 0 };
+    for (const v of VARIANTS) {
+      for (const d of DIFFICULTIES) {
+        expect(feed(v, 'bridge').byDifficulty[d].hints, `${v}${d}`).toBe(HINTS[d]);
+        expect(Object.keys(feed(v, 'bridge').byDifficulty[d]).sort()).toEqual([
+          'answers',
+          'hints',
+          'prompts',
+        ]);
+      }
+    }
+  });
+
+  // Both ends, the answer and both compounds. The harvest asserts this over
+  // the pool; this asserts it over what actually ships, which is the only
+  // place it can be checked after a generator change.
+  it('publishes no blocked word, in a prompt or in a compound', async () => {
+    const blocked = new Set(
+      (JSON.parse(await readFile('scripts/blocked-words.json', 'utf8')) as Feed).words.map(
+        (w: Feed) => w.word as string
+      )
+    );
+    for (const { b, where } of boards()) {
+      const answers = decode(b.answers) as string[];
+      b.prompts.forEach((p: Feed, i: number) => {
+        const m = answers[i];
+        for (const w of [p.x, m, p.y, p.x + m, m + p.y]) {
+          expect(blocked.has(w), `${where}: ${w}`).toBe(false);
+        }
+      });
+    }
+  });
+
+  // A prompt carries its two ends and nothing else, and the answers travel
+  // encoded — the same courtesy weave's answers get, so a glance at the feed
+  // does not spoil the day. Not secrecy: base64 is a wrapper, and the real
+  // guarantee is that a bridge is checked by rule, so the answers being
+  // readable costs nothing but the surprise.
+  //
+  // Deliberately *not* asserting that an answer string appears nowhere in the
+  // prompts. The first version of this did, and it was wrong: an answer is
+  // frequently an end word of another prompt on the same board — WORK is the
+  // answer to PIECE · ? · SHEET and the left end of WORK · ? · LAW — so that
+  // test failed on a board with nothing wrong with it.
+  it('shows the player the ends and nothing else', () => {
+    for (const v of VARIANTS) {
+      for (const d of DIFFICULTIES) {
+        const b = feed(v, 'bridge').byDifficulty[d];
+        for (const p of b.prompts) expect(Object.keys(p).sort()).toEqual(['x', 'y']);
+        expect(typeof b.answers, `${v}${d}`).toBe('string');
+        expect(Array.isArray(decode(b.answers)), `${v}${d}`).toBe(true);
+      }
+    }
+  });
+
+  it('keeps practice clear of both sites’ dailies', () => {
+    const dailies = new Set(
+      VARIANTS.flatMap((v) =>
+        DIFFICULTIES.flatMap((d) =>
+          (feed(v, 'bridge').byDifficulty[d].prompts as Feed[]).map((p) => `${p.x} ${p.y}`)
+        )
+      )
+    );
+    for (const d of DIFFICULTIES) {
+      const pool = feeds.get('bridge-pool')!.byDifficulty[d] as Feed[];
+      expect(pool.length, `bridge pool ${d}`).toBeGreaterThanOrEqual(10);
+      for (const b of pool) {
+        for (const p of b.prompts as Feed[]) {
+          expect(dailies.has(`${p.x} ${p.y}`), `pool ${d} reuses today's ${p.x}/${p.y}`).toBe(false);
+        }
+      }
+    }
   });
 });
