@@ -1339,8 +1339,28 @@ alliteration as all+iteration, reincarnation as rein+carnation. A minimum part
 length would remove those and would also remove OUT, MAN and EGG, so the
 answer is a review pass rather than a filter.
 
-*Still open:* the review pass over the harvest, and whether a board is five
-prompts with distinct answers.
+*The board.* The two ends are coloured differently and the answer takes from
+both, so the bridge word reads as belonging to each side. On solve the slot
+keeps **the answer only** — not the two words it formed. A setting turns those
+on for anyone who wants the confirmation.
+
+The blend has to be spatial rather than chromatic. Mixing two hues is the
+obvious reading and it fails on the palettes that exist for people who cannot
+use hue: under Monochrome a blend of two lightnesses is a third lightness
+between them, which is the least distinguishable value on offer, and under the
+red-green palette a mix can land near one of its parents. Splitting or grading
+the answer tile left-to-right — the left end's treatment on the left, the
+right end's on the right — says the same thing by position, and position
+survives every palette. Same lesson as the Weave spangram, which went
+invisible in Monochrome for exactly this reason.
+
+Showing both formed words is filed as accessibility rather than decoration.
+The colour pairing is invisible to a screen reader, so the ends need naming in
+text regardless; for anyone who cannot see the pairing at all, the formed words
+are the confirmation that the answer was right — and they also settle the case
+where a solver reached a legal bridge the harvest did not have.
+
+*Still open:* wiring into the daily pipeline, contract tests, and the client.
 
 **Grouping.** Sixteen words, four groups of four. The `domains` column is
 already in `words.csv`, so the categories exist without new data. The risk is
