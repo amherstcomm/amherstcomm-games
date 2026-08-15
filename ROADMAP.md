@@ -559,13 +559,22 @@ work. What is missing is one column in the RPC's projection — it selects
 `name, value, detail` and drops the tiebreak it just computed — and a `detail`
 for the four games that have none.
 
-**Worth deciding per game rather than defaulting everything to time**, since
-time is not equally meaningful across them. A cryptogram or a word square is a
-single solve where elapsed time is the whole story. Weave has a hint count that
-says more than the clock. Guess already shows `best n/6`, which is better than
-either. And the games scored on points — Hive, Scramble, Grid — do not want a
-clock at all, because they are already ranked on something the player chose to
-optimise.
+**Decided per game, because time is not equally meaningful across them:**
+
+- **Cryptogram, Word Squares** — a single solve, where elapsed time is the
+  whole story.
+- **Weave** — time *and* hints, ranked on time with hints breaking the tie.
+  Both say something real, and they say different things: the clock is how
+  hard it was, the hint count is whether you did it yourself.
+- **Guess** — already shows `best n/6`, which beats either.
+- **Hive, Scramble, Grid** — no clock. They are scored on points, so they are
+  already ranked on the thing the player chose to optimise, and a timer would
+  rank them on something they were not doing.
+
+Weave is the one that needs no new machinery to say all of it: `boards_for`
+already orders on three levels — `value desc, detail asc, tiebreak asc` — so
+solves, then time, then hints drops straight into the slots that exist. The
+projection is what has to grow, not the ordering.
 
 Small, and it touches the thing the site says it cares about most: a result you
 can check. A board that will not say why one row is above another is the same
