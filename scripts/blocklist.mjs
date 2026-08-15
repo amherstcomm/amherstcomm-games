@@ -14,6 +14,9 @@
 // Run rarely, by hand: npm run blocklist
 
 import { readFileSync, writeFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
+
+const require = createRequire(import.meta.url);
 
 const OUT = 'scripts/blocked-words.json';
 const ESDB =
@@ -156,7 +159,67 @@ for (const word of ldnoobw) {
   });
 }
 
-const words = [...derived, ...manual].sort((a, b) => a.word.localeCompare(b.word));
+// Plurals, derived here rather than stored.
+//
+// The list holds singulars — 252 of 291 base entries had no plural beside
+// them — which matters because a puzzle is built out of whole dictionary
+// words, so `redskins` is as publishable as `redskin`. They were added to the
+// file once, with origin `plural:*`, and the next regeneration threw all 86
+// away: this script keeps `manual` entries and nothing else, correctly, since
+// everything else is supposed to be reproducible. Derived data stored as
+// source lasts exactly until the source is rebuilt.
+//
+// So it is a rule now. Only plurals that are real words are added — a
+// blocklist full of strings nothing can generate is noise, and noise is where
+// a real gap hides.
+const dictionary = new Set();
+for (const size of [10, 20, 35, 40, 50, 55, 60, 70, 80]) {
+  for (const locale of ['english', 'american']) {
+    try {
+      for (const w of require(`wordlist-english/${locale}-words-${size}.json`)) {
+        dictionary.add(String(w).toLowerCase());
+      }
+    } catch {
+      // not every size exists for every locale
+    }
+  }
+}
+// words.csv too, when it is there. It is the previous build's output rather
+// than this one's — this runs first, so build-words can read the blocklist for
+// its flag tier — but it is a superset of the packages above, carrying the
+// vendored SCOWL-80, and the dictionary does not move between builds. Without
+// it, 36 plurals go missing: bondages, bulldykes, buttholes.
+try {
+  for (const line of readFileSync('scripts/words.csv', 'utf8').split('\n').slice(1)) {
+    const w = line.slice(0, line.indexOf(','));
+    if (/^[a-z]+$/.test(w)) dictionary.add(w);
+  }
+} catch {
+  // first build, or run from elsewhere — the packages alone still work
+}
+
+const pluralOf = (w) => {
+  if (/[^aeiou]y$/.test(w)) return w.slice(0, -1) + 'ies';
+  if (/(s|x|z|ch|sh)$/.test(w)) return w + 'es';
+  return w + 's';
+};
+
+const base = [...derived, ...manual];
+const known = new Set(base.map((w) => w.word));
+const plurals = [];
+for (const entry of base) {
+  const p = pluralOf(entry.word);
+  if (known.has(p) || !dictionary.has(p)) continue;
+  known.add(p);
+  plurals.push({
+    word: p,
+    origin: `plural:${entry.origin}`,
+    scope: entry.scope,
+    ...(entry.note ? { note: `plural of ${entry.word} — ${entry.note}` } : {}),
+  });
+}
+
+const words = [...base, ...plurals].sort((a, b) => a.word.localeCompare(b.word));
 
 writeFileSync(
   OUT,
