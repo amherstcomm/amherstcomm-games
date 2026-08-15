@@ -1174,22 +1174,24 @@ the `pos` column in the words table already knows enough to prevent. What is
 left is the review sweep this project has done twice before, and it is
 one-time.
 
-**Correction (August 2026): sense order does not fix the wrong-sense problem.**
-The paragraph above says reading WordNet's sense-frequency order rather than
-the first line found is enough. Measured against that order, over the tier a
-daily would draw from (level<=20, 4-8 letters, 5,016 of 7,279 words carry a
-gloss — 69%), it is not. The leading sense is regularly not the one anybody
-means: `duck` is "a heavy cotton fabric of plain weave", `guard` is "a
-position on a basketball team", `justify` is "adjust the spaces between
-words", `envelope` is "the bag containing the gas in a balloon", `industry`
-is "persevering determination to perform a task". About half a spread sample
-described a sense the player is not thinking of.
+**Confirmed (August 2026): sense order is enough, and the trap is off-by-one.**
+Measured over the tier a daily would draw from (level<=20, 4-8 letters):
+5,016 of 7,279 words carry a gloss (69%), and reading the *first* offset on
+the index line gives a usable standalone clue for 30 of a 32-word spread
+sample — `duck` is the bird, `guard` is a person who keeps watch, `envelope`
+is a flat container for a letter. The two failures are stem leaks, which the
+filter above already removes.
 
-The cause is that WordNet orders senses by frequency in SemCor, a small and
-old tagged corpus, so the ordering is real but not modern-usage. A crossword
-survives this — crossings rescue a clue nobody can read cold, and that is
-most of why crosswords tolerate hard clues at all. Anything where the gloss
-is the whole puzzle does not.
+Worth writing down because it cost an afternoon: an `index.*` line is
+`lemma pos synset_cnt p_cnt [ptr_symbol x p_cnt] sense_cnt tagsense_cnt` and
+then the offsets **in sense order**, so sense 1 is the first offset after that
+header — at `4 + p_cnt + 2`. Reaching for the last field of the line instead
+yields the *rarest* sense of every word, and it does so plausibly: `duck`
+comes back as a cotton fabric, `guard` as a basketball position, `justify` as
+adjusting the spaces between words. That output looks exactly like a corpus
+with bad sense ordering rather than like a parsing error, which is what makes
+it worth a note here. `ladder-harvest.mjs` reads this correctly; a first
+attempt at a definition harvest did not.
 
 **The honest ceiling: this makes a quick crossword, not a cryptic or a themed
 one.** Definitional clues, no wordplay, no misdirection, no Sunday theme.
@@ -1229,12 +1231,13 @@ quality is the thing to measure. Words sitting in two or more domains are the
 raw material for that, and are countable today.
 
 **Definition.** A gloss as the clue, guess the word, letters revealing as you
-miss. Cheap to build and the weakest of the five — **see the correction under
-Crossword above**. Coverage is fine at 69%; sense selection is not, and about
-half the leading glosses describe a sense nobody means. A crossword absorbs
-that through crossings. This has no crossings, so every bad gloss is a dead
-puzzle. It would need a hand-reviewed clue bank, which is the authoring cost
-the whole pipeline exists to avoid.
+miss. Cheapest of the five and viable: 69% of the pool carries a gloss and the
+leading sense is usable as-is about nine times in ten (measured under
+Crossword above). The open question is not the corpus but the game — a clue
+and a word is a single guess, so it needs something to make a puzzle of it,
+whether that is a letter-reveal ladder, several clues sharing an answer
+pattern, or a run of them against one board. Nearest to Crossword of anything
+here, and worth deciding against that rather than on its own.
 
 **Rhyme.** Find words that rhyme with today's word. The only idea here that
 asks something no other game asks, and the only one needing a new dependency
