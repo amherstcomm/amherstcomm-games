@@ -343,6 +343,22 @@ writeFileSync(
   JSON.stringify({ version: WORDS_VERSION, domains: domainsOut }) + '\n'
 );
 
+// The version, written rather than declared.
+//
+// It used to be a hand-edited constant in src/dictionaries.ts kept in step
+// with whatever the rebuild workflow was dispatched with — two places holding
+// one fact, one of them updated by remembering to. The mismatch is not loud
+// either: the client asks the CDN for one version, gets a band stamped with
+// another, rejects it as a stale cache and falls back to the bundle. Nothing
+// breaks and the CDN is simply never used again.
+//
+// So it comes out of the same run that stamps the bands, and ships in the same
+// commit the tag will point at.
+writeFileSync(
+  join(BANDS_DIR, 'version.json'),
+  JSON.stringify({ version: WORDS_VERSION }) + '\n'
+);
+
 const pct = (n) => `${((n / rows.length) * 100).toFixed(1)}%`;
 console.log(`wrote ${OUT}: ${rows.length.toLocaleString()} rows`);
 console.log(`  with a SCOWL level : ${withLevel.toLocaleString().padStart(9)}  ${pct(withLevel)}`);

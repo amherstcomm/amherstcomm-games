@@ -11,11 +11,18 @@
 // answers. Dev and tests always use the bundle: deterministic, offline, and
 // the CDN path stays a production concern.
 import type { Difficulty } from '@/difficulty';
+import version from './wordbands/version.json';
 
-/** Bump together with the git tag when the lists are rebuilt. The tagged CDN
- *  URL is immutable, so caching is safe forever; the bundled fallback ships
- *  in the same commit, so the two can never disagree about a version. */
-export const WORDS_VERSION = 'words-v5';
+/** Written by scripts/build-words.mjs in the same run that stamps the bands,
+ *  so this and they can never disagree — it used to be a constant here that
+ *  had to be edited to match whatever the rebuild workflow was dispatched
+ *  with, and a mismatch fails silently: the client asks the CDN for one
+ *  version, gets a band stamped with another, rejects it and falls back to the
+ *  bundle for ever.
+ *
+ *  The tagged CDN URL is immutable, so caching is safe forever; the bundled
+ *  fallback ships in the same commit the tag points at. */
+export const WORDS_VERSION = version.version;
 
 /** slur never scores and is never shown, anywhere, under any setting.
  *  strong and mild score; they exist so a player can choose not to be
