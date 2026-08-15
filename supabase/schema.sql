@@ -270,7 +270,7 @@ revoke execute on function public.would_block(text) from public, anon, authentic
 create table if not exists public.game_results (
   id bigint generated always as identity primary key,
   user_id uuid not null references auth.users (id) on delete cascade,
-  game text not null check (game in ('guess', 'hive', 'scramble', 'grid', 'box', 'weave', 'squares', 'cryptogram', 'ladder')),
+  game text not null check (game in ('guess', 'hive', 'scramble', 'grid', 'box', 'weave', 'squares', 'cryptogram', 'ladder', 'bridge')),
   daily boolean not null,
   puzzle_date date, -- Eastern-time date of the daily puzzle; null for practice
   payload jsonb not null default '{}'::jsonb,
@@ -320,7 +320,7 @@ create policy "read own results"
 -- ---------------------------------------------------------------------------
 create table if not exists public.daily_progress (
   user_id uuid not null references auth.users (id) on delete cascade,
-  game text not null check (game in ('guess', 'hive', 'scramble', 'grid', 'box', 'weave', 'squares', 'cryptogram', 'ladder')),
+  game text not null check (game in ('guess', 'hive', 'scramble', 'grid', 'box', 'weave', 'squares', 'cryptogram', 'ladder', 'bridge')),
   variant text not null default '',
   puzzle_date date not null,
   env text not null default 'prod',
@@ -955,6 +955,63 @@ begin
       end loop;
       return true;
     end;
+
+  elsif p_game = 'bridge' then
+    -- Checked by rule, like the ladder, and for the same reason: a bridge is
+    -- "X + M and M + Y are both words", so the answer is re-derivable and the
+    -- server never has to hold one. A player who reached a legal bridge this
+    -- pool does not know about is right, and this says so.
+    declare
+      prompts jsonb := coalesce(board->'prompts', p_state->'prompts');
+      entries jsonb := p_state->'entries';
+      solved int := coalesce((p_result->>'solved')::int, 0);
+      hint_budget int := case p_difficulty when 'easy' then 3 when 'hard' then 1 else 0 end;
+      good int := 0;
+      k int;
+      entry text;
+      x text;
+      y text;
+    begin
+      if solved <= 0 then return true; end if;
+      -- five prompts is the board, so more than five solved is not a board
+      if solved > 5 then return false; end if;
+      -- hints only ever cost you, so under-claiming them cannot be caught and
+      -- is not worth trying to. Claiming more than the tier grants is a
+      -- malformed row rather than a cheat, and it is cheap to refuse.
+      if coalesce((p_result->>'hints')::int, 0) > hint_budget then return false; end if;
+      -- two seconds a prompt is not somebody reading two words and thinking
+      if coalesce((p_result->>'timeMs')::numeric, 0) < solved * 2000 then return false; end if;
+
+      if prompts is null or entries is null then return true; end if;
+      if jsonb_typeof(prompts) <> 'array' or jsonb_typeof(entries) <> 'array' then
+        return false;
+      end if;
+
+      -- Count the entries that genuinely bridge. The prompts come from the
+      -- puzzle when we hold it and from the claim when we do not, the same
+      -- fallback the ladder uses — a client cannot mark itself right on a
+      -- board it was never set, and a claim still has to agree with itself.
+      for k in 0 .. least(jsonb_array_length(prompts), jsonb_array_length(entries)) - 1 loop
+        entry := lower(coalesce(entries->>k, ''));
+        x := lower(coalesce(prompts->k->>'x', ''));
+        y := lower(coalesce(prompts->k->>'y', ''));
+        continue when entry = '' or x = '' or y = '';
+        if entry !~ '^[a-z]+$' then return false; end if;
+        if not use_dict then
+          good := good + 1;
+        elsif exists (
+          select 1 from public.words w
+          where w.word = x || entry and w.level <= cut and w.flag is distinct from 'slur'
+        ) and exists (
+          select 1 from public.words w
+          where w.word = entry || y and w.level <= cut and w.flag is distinct from 'slur'
+        ) then
+          good := good + 1;
+        end if;
+      end loop;
+
+      return good >= solved;
+    end;
   end if;
 
   return false;
@@ -1172,6 +1229,37 @@ begin
     limit 10
   ) s;
   out_json := jsonb_set(out_json, '{ladder}', part);
+
+  -- bridge: boards finished, then prompts found. A board is five prompts and a
+  -- day where four came out is worth more than a day where none did, so the
+  -- second number counts the whole run rather than only the clean sweeps —
+  -- otherwise a near-miss and a no-show rank identically.
+  --
+  -- Hints are the difficulty setting rather than a ranking, and they are
+  -- self-reported besides: under-claiming cannot be caught, so ranking on them
+  -- would reward the claim rather than the play. They belong beside a result,
+  -- not in the order of one.
+  select coalesce(jsonb_agg(jsonb_build_object('name', name, 'value', value, 'detail', detail) order by rk), '[]'::jsonb)
+    into part
+  from (
+    select *, row_number() over (order by value desc, detail desc) as rk
+    from (
+      select p.display_name as name,
+             count(*) filter (where coalesce((dp.result->>'solved')::int, 0) >= 5) as value,
+             sum(least(coalesce((dp.result->>'solved')::int, 0), 5)) as detail
+      from public.daily_progress dp
+      join public.profiles p on p.id = dp.user_id
+      where dp.game = 'bridge' and dp.completed and dp.env = p_env and dp.difficulty = p_difficulty and dp.puzzle_date >= since
+        and (p_users is null or dp.user_id = any(p_users))
+        and p.display_name is not null
+        and public.result_is_plausible('bridge', dp.state, dp.result, dp.difficulty, dp.variant, dp.puzzle_date, dp.env)
+      group by p.display_name
+      having sum(coalesce((dp.result->>'solved')::int, 0)) > 0
+    ) a
+    order by rk
+    limit 10
+  ) s;
+  out_json := jsonb_set(out_json, '{bridge}', part);
 
   -- squares: one board per size. A 4×4 and a 5×5 aren't the same puzzle, and a
   -- combined ranking would quietly reward whoever played more of the easier
@@ -1544,12 +1632,12 @@ grant execute on function public.friends_board(int, text, text) to authenticated
 alter table public.game_results drop constraint if exists game_results_game_check;
 alter table public.game_results
   add constraint game_results_game_check
-  check (game in ('guess', 'hive', 'scramble', 'grid', 'box', 'weave', 'squares', 'cryptogram', 'ladder'));
+  check (game in ('guess', 'hive', 'scramble', 'grid', 'box', 'weave', 'squares', 'cryptogram', 'ladder', 'bridge'));
 
 alter table public.daily_progress drop constraint if exists daily_progress_game_check;
 alter table public.daily_progress
   add constraint daily_progress_game_check
-  check (game in ('guess', 'hive', 'scramble', 'grid', 'box', 'weave', 'squares', 'cryptogram', 'ladder'));
+  check (game in ('guess', 'hive', 'scramble', 'grid', 'box', 'weave', 'squares', 'cryptogram', 'ladder', 'bridge'));
 
 -- ---------------------------------------------------------------------------
 -- stats_baselines: one-time import of the lifetime stats a browser
