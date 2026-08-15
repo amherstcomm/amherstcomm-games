@@ -30,10 +30,21 @@
       "scope": "generation"
     },
     {
+      "word": "anilinguses",
+      "origin": "plural:ldnoobw",
+      "scope": "generation"
+    },
+    {
       "word": "anus",
       "origin": "manual",
       "scope": "generation",
       "note": "surfaced by LDNOOBW (CC BY 4.0) during the squares review; not an answer we would publish"
+    },
+    {
+      "word": "anuses",
+      "origin": "plural:manual",
+      "scope": "generation",
+      "note": "plural of anus — surfaced by LDNOOBW (CC BY 4.0) during the squares review; not an answer we would publish"
     },
     {
       "word": "apeshit",
@@ -53,6 +64,11 @@
     {
       "word": "ass",
       "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "asses",
+      "origin": "plural:ldnoobw",
       "scope": "generation"
     },
     {
@@ -208,6 +224,11 @@
       "scope": "generation"
     },
     {
+      "word": "bollockses",
+      "origin": "plural:ldnoobw",
+      "scope": "generation"
+    },
+    {
       "word": "bondage",
       "origin": "ldnoobw",
       "scope": "generation"
@@ -341,7 +362,8 @@
     {
       "word": "butts",
       "origin": "plural:manual",
-      "scope": "generation"
+      "scope": "generation",
+      "note": "plural of butt — surfaced by LDNOOBW (CC BY 4.0) during the squares review; not an answer we would publish"
     },
     {
       "word": "cameljockey",
@@ -445,6 +467,11 @@
     {
       "word": "clitoris",
       "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "clitorises",
+      "origin": "plural:ldnoobw",
       "scope": "generation"
     },
     {
@@ -575,6 +602,12 @@
       "note": "slur in use, but the verb — never published, still accepted if a player types it"
     },
     {
+      "word": "crips",
+      "origin": "plural:manual",
+      "scope": "generation",
+      "note": "plural of crip — slur in use, but also reclaimed — never published, still accepted if a player types it"
+    },
+    {
       "word": "cum",
       "origin": "ldnoobw",
       "scope": "generation"
@@ -602,6 +635,11 @@
     {
       "word": "cunnilingus",
       "origin": "ldnoobw",
+      "scope": "generation"
+    },
+    {
+      "word": "cunnilinguses",
+      "origin": "plural:ldnoobw",
       "scope": "generation"
     },
     {
@@ -1099,7 +1137,8 @@
     {
       "word": "gropes",
       "origin": "plural:manual",
-      "scope": "generation"
+      "scope": "generation",
+      "note": "plural of grope — surfaced by LDNOOBW (CC BY 4.0) during the squares review; not an answer we would publish"
     },
     {
       "word": "guro",
@@ -1442,6 +1481,12 @@
       "note": "slur in use, but mental-health abuse — never published, still accepted if a player types it"
     },
     {
+      "word": "loonies",
+      "origin": "plural:manual",
+      "scope": "generation",
+      "note": "plural of loony — slur in use, but mental-health abuse — never published, still accepted if a player types it"
+    },
+    {
       "word": "loony",
       "origin": "manual",
       "scope": "generation",
@@ -1695,7 +1740,8 @@
     {
       "word": "nudes",
       "origin": "plural:manual",
-      "scope": "generation"
+      "scope": "generation",
+      "note": "plural of nude — surfaced by LDNOOBW (CC BY 4.0) during the squares review; not an answer we would publish"
     },
     {
       "word": "nudities",
@@ -1750,6 +1796,12 @@
       "note": "anti-Black slur; no ordinary sense, so refused everywhere"
     },
     {
+      "word": "octoroons",
+      "origin": "plural:manual",
+      "scope": "both",
+      "note": "plural of octoroon — anti-Black slur; no ordinary sense, so refused everywhere"
+    },
+    {
       "word": "omorashi",
       "origin": "ldnoobw",
       "scope": "generation"
@@ -1767,7 +1819,8 @@
     {
       "word": "orgies",
       "origin": "plural:manual",
-      "scope": "generation"
+      "scope": "generation",
+      "note": "plural of orgy — surfaced by LDNOOBW (CC BY 4.0) during the squares review; not an answer we would publish"
     },
     {
       "word": "orgy",
@@ -1831,6 +1884,12 @@
       "origin": "manual",
       "scope": "generation",
       "note": "surfaced by LDNOOBW (CC BY 4.0) during the squares review; not an answer we would publish"
+    },
+    {
+      "word": "penises",
+      "origin": "plural:manual",
+      "scope": "generation",
+      "note": "plural of penis — surfaced by LDNOOBW (CC BY 4.0) during the squares review; not an answer we would publish"
     },
     {
       "word": "pickaninnies",
@@ -2008,6 +2067,12 @@
       "note": "slur in use, but mental-health abuse — never published, still accepted if a player types it"
     },
     {
+      "word": "psychos",
+      "origin": "plural:manual",
+      "scope": "generation",
+      "note": "plural of psycho — slur in use, but mental-health abuse — never published, still accepted if a player types it"
+    },
+    {
       "word": "pthc",
       "origin": "ldnoobw",
       "scope": "generation"
@@ -2025,7 +2090,8 @@
     {
       "word": "pussies",
       "origin": "plural:manual",
-      "scope": "generation"
+      "scope": "generation",
+      "note": "plural of pussy — surfaced by LDNOOBW (CC BY 4.0) during the squares review; not an answer we would publish"
     },
     {
       "word": "pussy",
@@ -2038,6 +2104,12 @@
       "origin": "manual",
       "scope": "both",
       "note": "anti-Black slur; no ordinary sense, so refused everywhere"
+    },
+    {
+      "word": "quadroons",
+      "origin": "plural:manual",
+      "scope": "both",
+      "note": "plural of quadroon — anti-Black slur; no ordinary sense, so refused everywhere"
     },
     {
       "word": "queaf",
@@ -2091,7 +2163,8 @@
     {
       "word": "rapes",
       "origin": "plural:manual",
-      "scope": "generation"
+      "scope": "generation",
+      "note": "plural of rape — surfaced by LDNOOBW (CC BY 4.0) during the squares review; not an answer we would publish"
     },
     {
       "word": "raping",
@@ -2244,7 +2317,8 @@
     {
       "word": "semens",
       "origin": "plural:manual",
-      "scope": "generation"
+      "scope": "generation",
+      "note": "plural of semen — surfaced by LDNOOBW (CC BY 4.0) during the squares review; not an answer we would publish"
     },
     {
       "word": "sex",
@@ -2296,6 +2370,12 @@
       "word": "shat",
       "origin": "esdb:vulgar-1",
       "scope": "both"
+    },
+    {
+      "word": "sheenies",
+      "origin": "plural:manual",
+      "scope": "both",
+      "note": "plural of sheeny — antisemitic slur; no ordinary sense, so refused everywhere"
     },
     {
       "word": "sheeny",
@@ -2411,6 +2491,12 @@
       "note": "slur in use, but an antisemitic trope by way of Shakespeare — never published, still accepted if a player types it"
     },
     {
+      "word": "shylocks",
+      "origin": "plural:manual",
+      "scope": "generation",
+      "note": "plural of shylock — slur in use, but an antisemitic trope by way of Shakespeare — never published, still accepted if a player types it"
+    },
+    {
       "word": "skank",
       "origin": "manual",
       "scope": "generation",
@@ -2452,7 +2538,8 @@
     {
       "word": "sluts",
       "origin": "plural:manual",
-      "scope": "generation"
+      "scope": "generation",
+      "note": "plural of slut — surfaced by LDNOOBW (CC BY 4.0) during the squares review; not an answer we would publish"
     },
     {
       "word": "smut",
@@ -2463,7 +2550,8 @@
     {
       "word": "smuts",
       "origin": "plural:manual",
-      "scope": "generation"
+      "scope": "generation",
+      "note": "plural of smut — surfaced by LDNOOBW (CC BY 4.0) during the squares review; not an answer we would publish"
     },
     {
       "word": "snatch",
@@ -2577,7 +2665,8 @@
     {
       "word": "spunks",
       "origin": "plural:manual",
-      "scope": "generation"
+      "scope": "generation",
+      "note": "plural of spunk — surfaced by LDNOOBW (CC BY 4.0) during the squares review; not an answer we would publish"
     },
     {
       "word": "squaw",
@@ -2912,7 +3001,8 @@
     {
       "word": "whores",
       "origin": "plural:manual",
-      "scope": "generation"
+      "scope": "generation",
+      "note": "plural of whore — surfaced by LDNOOBW (CC BY 4.0) during the squares review; not an answer we would publish"
     },
     {
       "word": "wog",

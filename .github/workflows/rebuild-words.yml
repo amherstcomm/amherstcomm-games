@@ -47,12 +47,15 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      # Before the build, not after: build-words reads this file to decide the
+      # slur flag tier, so a blocklist refreshed afterwards would not reach the
+      # bands until the *next* rebuild.
+      - name: Refresh the blocklist first — build-words reads it for the flags
+        run: node scripts/blocklist.mjs
       - name: Build lists, bands and CSV
         env:
           WORDS_VERSION: ${{ inputs.version }}
         run: node scripts/build-words.mjs
-      - name: Refresh the blocklist too — same sources, same run
-        run: node scripts/blocklist.mjs
       - name: Load Postgres
         env:
           SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
