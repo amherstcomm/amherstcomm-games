@@ -12,6 +12,8 @@ import {
 import { CornerDownLeft, Delete, RefreshCw, RotateCcw } from 'lucide-react';
 import MobileKeyInput from '@/MobileKeyInput';
 import { changedAt, isStep } from '@/ladder';
+import type { Prompt } from '@/bridge';
+import BridgeRow from '@/BridgeRow';
 import { LadderEntry, LadderWord } from '@/LadderRow';
 import { findGridPath, solveGrid, gridNeighbors } from '@/solvers';
 import type { Mode } from '@/storage';
@@ -1842,6 +1844,156 @@ const TITLES: Record<Mode, string> = {
   bridge: 'Bridge',
 };
 
+function LearnBridge({
+  dict,
+  register,
+}: {
+  dict: Set<string> | null;
+  register: RegisterKeys;
+}) {
+  // A real board, played the way the daily plays, with the same row component
+  // the game draws — so this cannot quietly go on teaching a board that has
+  // changed. Three prompts rather than five: the lesson is the rule, and five
+  // of the same thing teaches nothing the third one did not.
+  // Taken from the real pool, so each has exactly one answer and both halves
+  // are in the dictionary the demo checks against. The first draft used
+  // HEAD · ? · SHAKE, which sounds like it must work and has no answer at all.
+  const PROMPTS: Prompt[] = [
+    { x: 'snow', y: 'park' }, // ball
+    { x: 'fire', y: 'light' }, // side
+    { x: 'hand', y: 'shelf' }, // book
+  ];
+  const LENGTHS = [4, 4, 4];
+  const [entries, setEntries] = useState(['', '', '']);
+  const [at, setAt] = useState(0);
+  const [current, setCurrent] = useState('');
+  const [lengths, setLengths] = useState([false, false, false]);
+  const [flash, show] = useFlash();
+
+  const solved = entries.every((e) => e);
+  const prompt = PROMPTS[at];
+
+  const submit = () => {
+    if (solved || !prompt) return;
+    const w = current.toLowerCase();
+    if (!w) return;
+    if (entries[at]) return;
+    if (w.length < 3) {
+      show('Three letters or more');
+      return;
+    }
+    // Silence here is the wrong answer: the word list is a real download, and
+    // a demo that ignores your first Enter reads as broken rather than busy.
+    if (!dict) {
+      show('Still loading the word list');
+      return;
+    }
+    if (!dict.has(prompt.x + w)) {
+      show(`${(prompt.x + w).toUpperCase()} is not a word`);
+      return;
+    }
+    if (!dict.has(w + prompt.y)) {
+      show(`${(w + prompt.y).toUpperCase()} is not a word`);
+      return;
+    }
+    const next = [...entries];
+    next[at] = w;
+    setEntries(next);
+    setCurrent('');
+    show(next.every((e) => e) ? 'That is the board!' : 'Both halves are words', true);
+    const open = PROMPTS.findIndex((_, i) => i !== at && !next[i]);
+    if (open >= 0) setAt(open);
+  };
+
+  const handleKey = (k: string) => {
+    if (solved) return;
+    if (k === 'enter') submit();
+    else if (k === 'backspace') setCurrent((c) => c.slice(0, -1));
+    else if (/^[a-z]$/.test(k)) setCurrent((c) => c + k);
+  };
+  useDemoKeys(register, handleKey);
+
+  return (
+    <>
+      <Section title="The goal">
+        <p className="text-sm text-slate-300 max-w-lg mx-auto">
+          Find the word that joins both sides. SNOW · BALL · ROOM works because{' '}
+          <span className="font-semibold text-white">snowball</span> and{' '}
+          <span className="font-semibold text-white">ballroom</span> are both words — that is the
+          whole rule, and it is about spelling rather than meaning.
+        </p>
+      </Section>
+
+      <Section title="Try it — three to find">
+        <p className="text-sm text-slate-400 mb-4">
+          Type a word and press Enter. Tap a row to switch to it. (Stuck? The first one takes a
+          bouncy thing.)
+        </p>
+
+        <ol className="space-y-2 mb-3">
+          {PROMPTS.map((p, i) => (
+            <li key={`${p.x}-${p.y}`}>
+              <BridgeRow
+                prompt={p}
+                answer={entries[i]}
+                shown={{ prefix: '', length: lengths[i] ? LENGTHS[i] : null }}
+                picked={i === at && !solved}
+                onPick={!solved && !entries[i] ? () => setAt(i) : undefined}
+              />
+            </li>
+          ))}
+        </ol>
+
+        {!solved && prompt && (
+          <div className="relative mx-auto max-w-[14rem] h-11 rounded-xl bg-white/5 border-2 border-amber-400/50 flex items-center justify-center overflow-hidden mb-3">
+            <span className="text-lg font-bold uppercase tracking-widest text-white">
+              {current}
+              <span className="text-accent animate-pulse">|</span>
+            </span>
+            <MobileKeyInput onKey={handleKey} />
+          </div>
+        )}
+
+        <p aria-live="polite" className="min-h-[1.25rem] text-center text-xs mb-3">
+          {flash && (
+            <span className={flash.good ? 'text-emerald-300' : 'text-amber-300'}>{flash.text}</span>
+          )}
+        </p>
+
+        {!solved && (
+          <div className="text-center">
+            <button
+              onClick={() => setLengths((l) => l.map((v, i) => (i === at ? true : v)))}
+              className="text-xs text-slate-400 underline underline-offset-2 hover:text-white"
+            >
+              Spend a hint on this row&apos;s length
+            </button>
+          </div>
+        )}
+      </Section>
+
+      <Section title="Hints are the difficulty">
+        <Rules
+          items={[
+            'A hint buys either the length or the next letter, your choice, and both cost the same.',
+            'It is spent on one prompt, not the board — three hints is three rows you get help on and two you do not.',
+            'Easy gives you three, hard one, extreme none. The words are the same at every level; what changes is how much help you can buy.',
+          ]}
+        />
+      </Section>
+
+      <Section title="What counts">
+        <p className="text-sm text-slate-300 max-w-lg mx-auto">
+          Both halves only have to be words, not compounds. REDDISH is RED + DISH and GRIMACE is
+          GRIM + ACE, and either is a fair answer, because you can check it the moment you think
+          of it. Some prompts have more than one answer — the daily only uses ones that do not,
+          but the solver lists them all.
+        </p>
+      </Section>
+    </>
+  );
+}
+
 function LearnLadder({
   dict,
   register,
@@ -2029,6 +2181,7 @@ const LearnMode = forwardRef<
       {mode === 'squares' && <LearnSquares dict={dict} register={register} />}
       {mode === 'cryptogram' && <LearnCryptogram register={register} />}
       {mode === 'ladder' && <LearnLadder dict={dict} register={register} />}
+      {mode === 'bridge' && <LearnBridge dict={dict} register={register} />}
 
       <p className="mt-2 text-xs text-slate-500 border-t border-white/10 pt-5 max-w-lg mx-auto">
         Daily puzzles refresh about 15 minutes after 3:00&nbsp;a.m. Eastern. Progress and stats

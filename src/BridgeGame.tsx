@@ -26,6 +26,7 @@ import { buildShare } from '@/share';
 import { recordBridgeFinish } from '@/stats';
 import { revealed, spend, NO_HINTS, type PromptHints, type Prompt } from '@/bridge';
 import MobileKeyInput from '@/MobileKeyInput';
+import BridgeRow from '@/BridgeRow';
 
 export type BridgeGameHandle = { pressKey: (k: string) => void };
 
@@ -404,50 +405,15 @@ const BridgeGame = forwardRef<BridgeGameHandle>(function BridgeGame(_props, ref)
       <ol className="space-y-2" aria-label="bridges">
         {record.prompts.map((p, i) => {
           const got = record.entries[i];
-          const picked = i === at && !done;
-          const answer = record.answers[i] ?? '';
-          const seen = revealed(answer, record.hints[i] ?? NO_HINTS);
           return (
             <li key={`${p.x}-${p.y}`}>
-              <button
-                type="button"
-                onClick={() => !done && !got && setAt(i)}
-                aria-current={picked ? 'true' : undefined}
-                className={`w-full flex items-center justify-center gap-2 rounded-lg border-2 px-2 py-2 transition-colors ${
-                  got
-                    ? 'border-emerald-400/40 bg-emerald-400/10'
-                    : picked
-                      ? 'border-amber-400 bg-white/5'
-                      : 'border-white/10 bg-white/[0.02] hover:bg-white/5'
-                }`}
-              >
-                {/* The two ends are given different weights rather than
-                    different hues: the pairing has to survive Monochrome, and
-                    a blend of two colours there is a third lightness between
-                    them — the least distinguishable value on offer. */}
-                <span className="text-sm font-bold uppercase tracking-wide text-sky-300">{p.x}</span>
-                <span aria-hidden className="text-slate-600">·</span>
-                <span
-                  className={`min-w-16 text-sm font-bold uppercase tracking-widest ${
-                    got ? 'text-emerald-200' : 'text-slate-500'
-                  }`}
-                >
-                  {got
-                    ? got
-                    : seen.length
-                      ? seen.prefix + '·'.repeat(seen.length - seen.prefix.length)
-                      : '?'}
-                </span>
-                <span aria-hidden className="text-slate-600">·</span>
-                <span className="text-sm font-bold uppercase tracking-wide text-violet-300">{p.y}</span>
-              </button>
-              <span className="sr-only">
-                {got
-                  ? `${p.x} ${got} ${p.y}, found`
-                  : `${p.x} blank ${p.y}${seen.length ? `, ${seen.length} letters` : ''}${
-                      seen.prefix ? `, starts ${seen.prefix.split('').join(' ')}` : ''
-                    }`}
-              </span>
+              <BridgeRow
+                prompt={p}
+                answer={got}
+                shown={revealed(record.answers[i] ?? '', record.hints[i] ?? NO_HINTS)}
+                picked={i === at && !done}
+                onPick={!done && !got ? () => setAt(i) : undefined}
+              />
             </li>
           );
         })}

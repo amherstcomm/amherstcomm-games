@@ -1070,19 +1070,22 @@ function App() {
     // the ladder solver searches the common list, so it needs it loaded even
     // though nothing is being played
     const ladderSolve = mode === 'ladder' && !ladderPlay && !learnMode;
-    if (!playActive && !learnMode && !cryptoSolve && !ladderSolve) return;
+    // the bridge solver checks membership in the standard list, so it needs
+    // that loaded even though nothing is being played
+    const bridgeSolve = mode === 'bridge' && !bridgePlay && !learnMode;
+    if (!playActive && !learnMode && !cryptoSolve && !ladderSolve && !bridgeSolve) return;
     // how ordinary each word is, so the solver's candidate lists lead with the
     // readings a person would actually consider
     if (cryptoSolve && !wordRank) getWordRank().then(setWordRank);
     if (!commonWordsArr) getDictionary('common').then(setCommonWordsArr);
     if (patternPlayActive && !fullWordsArr) getDictionary('full').then(setFullWordsArr);
     if (
-      (learnMode || beePlayActive || boxedPlayActive || descramblePlayActive || gridPlayActive || weavePlayActive || squaresPlayActive) &&
+      (learnMode || beePlayActive || boxedPlayActive || descramblePlayActive || gridPlayActive || weavePlayActive || squaresPlayActive || bridgeSolve) &&
       !standardWordsArr
     ) {
       getDictionary('standard').then(setStandardWordsArr);
     }
-  }, [playActive, learnMode, mode, cryptogramPlay, ladderPlay, patternPlayActive, beePlayActive, boxedPlayActive, descramblePlayActive, gridPlayActive, weavePlayActive, squaresPlayActive, commonWordsArr, fullWordsArr, standardWordsArr, wordRank]);
+  }, [playActive, learnMode, mode, cryptogramPlay, ladderPlay, bridgePlay, patternPlayActive, beePlayActive, boxedPlayActive, descramblePlayActive, gridPlayActive, weavePlayActive, squaresPlayActive, commonWordsArr, fullWordsArr, standardWordsArr, wordRank]);
 
   const aboutRef = useRef<HTMLDivElement>(null);
   const legalRef = useRef<HTMLDivElement>(null);
