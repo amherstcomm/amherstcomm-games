@@ -134,10 +134,15 @@ const XY_BAND = 35;
 const ANSWER_BAND = 35;
 const WHOLE_BAND = 35;
 // degree = how many distinct compounds the answer forms, either side
+//
+// The boundaries are set by runway rather than by feel. A board spends one
+// prompt of its own tier and fills the rest from easier ones, so a tier needs
+// roughly a year of its own: 365. Degree 2-4 gave extreme 224, which is seven
+// months, and hard had years of headroom — so the 5s and 6s move down.
 const TIERS = [
   { tier: 'easy', min: 12, max: Infinity },
-  { tier: 'hard', min: 5, max: 11 },
-  { tier: 'extreme', min: 2, max: 4 },
+  { tier: 'hard', min: 7, max: 11 },
+  { tier: 'extreme', min: 2, max: 6 },
 ];
 
 const funnel = [];
@@ -251,9 +256,30 @@ for (const tier of Object.keys(pool)) {
   }
 }
 console.log(`\nflagged for review: ${flagged}`);
+
+// Prompt count is the wrong measure of supply and it flatters this pool badly.
+// The prompts are not independent: easy holds 2,414 of them and 24 answers,
+// because a degree-12 answer is by definition in a dozen compounds and every
+// pairing of them is another prompt. OUT alone accounts for a fifth of the
+// tier. A player who has learned two dozen words has finished easy, however
+// many prompts are left.
+//
+// So both numbers get printed, and the second is the one that matters. Note
+// which way it runs: extreme has the fewest prompts and by far the most
+// answers, because the productivity that makes easy easy is the same thing
+// that makes it repetitive.
 for (const tier of Object.keys(pool)) {
-  const live = pool[tier].filter((p) => !p.review).length;
-  console.log(`  ${tier.padEnd(7)} ${String(live).padStart(5)} live of ${pool[tier].length}`);
+  const live = pool[tier].filter((p) => !p.review);
+  const answers = new Set(live.map((p) => p.m));
+  const busiest = [...answers]
+    .map((m) => [m, live.filter((p) => p.m === m).length])
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 4)
+    .map(([m, n]) => `${m}x${n}`)
+    .join(' ');
+  console.log(
+    `  ${tier.padEnd(7)} ${String(live.length).padStart(5)} live of ${String(pool[tier].length).padEnd(5)} across ${String(answers.size).padStart(4)} answers   busiest: ${busiest}`
+  );
 }
 
 writeFileSync(outPath, JSON.stringify(pool, null, 1) + '\n');
