@@ -774,6 +774,9 @@ for (const variant of ['', 'dev']) {
   // ladder, so the server does not need them to mark a board — but a hint has
   // to know the word before the player does, and hints are client-side.
   const bridgeByDifficulty = {};
+  // shared across the day's three boards, so a difficulty cannot land on an
+  // answer another one already spent
+  const spentToday = new Set();
   DIFFICULTIES.forEach((difficulty, tier) => {
     const cycle = cycleOf(epochDay, bridgePool.length);
     const cycleRng = mulberry32(
@@ -782,8 +785,10 @@ for (const variant of ['', 'dev']) {
     const board = generateBoard(
       bridgePool,
       cycleRng,
-      epochDay * BOARD_SIZE * DIFFICULTIES.length + tier * BOARD_SIZE
+      epochDay * BOARD_SIZE * DIFFICULTIES.length + tier * BOARD_SIZE,
+      { exclude: spentToday }
     );
+    for (const m of board.answers) spentToday.add(m);
     for (const p of board.prompts) dailyBridgePrompts.add(`${p.x} ${p.y}`);
     bridgeByDifficulty[difficulty] = {
       prompts: board.prompts,

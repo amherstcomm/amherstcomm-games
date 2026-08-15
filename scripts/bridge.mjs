@@ -57,16 +57,23 @@ export function poolFor(prompts) {
 /** Deal one board.
  *
  *  Walks the pool from `position`, taking prompts whose answer has not already
- *  been used on this board, so the five are five distinct puzzles. Skipping
- *  costs the walk nothing — it steps on and the no-repeat guarantee still
- *  holds, since the guarantee is about the order being a permutation rather
- *  than about consuming it one at a time.
+ *  been used, so the five are five distinct puzzles. Skipping costs the walk
+ *  nothing — it steps on and the no-repeat guarantee still holds, since the
+ *  guarantee is about the order being a permutation rather than about
+ *  consuming it one at a time.
+ *
+ *  `exclude` carries answers already spent elsewhere, which is how a day's
+ *  three boards avoid landing on the same word. The first published day had
+ *  OUT as the answer in all three difficulties and WATER in all three: each
+ *  board was internally distinct, because that was the only rule, and the
+ *  productive answers own so much of the pool that three independent draws
+ *  collide readily.
  *
  *  Returns the prompts and the answers separately. The board a player sees is
  *  the ends alone; the answers ride along for the hints, which need to know the
  *  word before the player does. */
-export function generateBoard(pool, cycleRng, position, size = BOARD_SIZE) {
-  const answers = new Set();
+export function generateBoard(pool, cycleRng, position, { size = BOARD_SIZE, exclude } = {}) {
+  const answers = new Set(exclude ?? []);
   const prompts = [];
   for (let step = 0; prompts.length < size && step < pool.length; step++) {
     const p = pool[permutedIndex(cycleRng, pool.length, position + step)];
