@@ -538,6 +538,39 @@ should use the GitHub contents API or bust the cache deliberately.
 safe to move into Postgres, since the contract tests describe the feed rather
 than the file.
 
+### Leaderboards that show what they ranked on — proposed August 2026
+
+Home and the leaderboard panel both draw from `boards_for`, and for several
+games every row reads `1 solved`. Weave, Word Squares at both sizes and
+Cryptogram return an empty `detail` in `BOARD_LABELS`, so a board of five
+people is five identical lines.
+
+**The rows are not actually tied, which is the worse half.** `boards_for`
+already ranks on time — it sums `(dp.result->>'timeMs')` as `tiebreak` and
+orders `value desc, detail asc, tiebreak asc`. So the order on screen is real
+and considered, and the page shows nothing that accounts for it. Five rows
+reading the same thing in a deliberate order looks like no order at all, and
+the natural reading is that the board is broken or arbitrary. A missing number
+would be a gap; a hidden ranking is misinformation.
+
+The data is already there and already trustworthy: `timeMs` is stored per
+result and `result_is_plausible` has been checking it since the verification
+work. What is missing is one column in the RPC's projection — it selects
+`name, value, detail` and drops the tiebreak it just computed — and a `detail`
+for the four games that have none.
+
+**Worth deciding per game rather than defaulting everything to time**, since
+time is not equally meaningful across them. A cryptogram or a word square is a
+single solve where elapsed time is the whole story. Weave has a hint count that
+says more than the clock. Guess already shows `best n/6`, which is better than
+either. And the games scored on points — Hive, Scramble, Grid — do not want a
+clock at all, because they are already ranked on something the player chose to
+optimise.
+
+Small, and it touches the thing the site says it cares about most: a result you
+can check. A board that will not say why one row is above another is the same
+failure as a score that cannot be recomputed, one layer up.
+
 ### Report a puzzle or a player — proposed August 2026
 
 A generator that draws from 240,000 words will eventually publish something
