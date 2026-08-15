@@ -184,18 +184,29 @@ for (const size of [10, 20, 35, 40, 50, 55, 60, 70, 80]) {
     }
   }
 }
-// words.csv too, when it is there. It is the previous build's output rather
-// than this one's — this runs first, so build-words can read the blocklist for
-// its flag tier — but it is a superset of the packages above, carrying the
-// vendored SCOWL-80, and the dictionary does not move between builds. Without
-// it, 36 plurals go missing: bondages, bulldykes, buttholes.
-try {
-  for (const line of readFileSync('scripts/words.csv', 'utf8').split('\n').slice(1)) {
-    const w = line.slice(0, line.indexOf(','));
+// And SCOWL's own 80 tier, vendored in scripts/scowl/ — the same files
+// build-words reads, because wordlist-english stops at 70.
+//
+// This used to read scripts/words.csv, which was wrong in a way that only
+// showed up on a runner: words.csv is a build artifact and gitignored, so on
+// a fresh checkout it is not there. Locally it was, so the derivation looked
+// right and quietly lost 46 plurals in CI — bondages, bulldykes, griffes,
+// mestees. The try/catch that made it optional is what hid it.
+//
+// Reading the sources instead of the artifact also breaks a circle: this
+// script has to run before build-words, because build-words reads the
+// blocklist to decide the slur flag tier, and build-words is what writes
+// words.csv. Nothing here may depend on its output.
+for (const f of ['english-words.80', 'american-words.80']) {
+  for (const raw of readFileSync(new URL(`./scowl/${f}`, import.meta.url), 'latin1').split('\n')) {
+    const w = raw.trim().toLowerCase();
     if (/^[a-z]+$/.test(w)) dictionary.add(w);
   }
-} catch {
-  // first build, or run from elsewhere — the packages alone still work
+}
+
+if (dictionary.size < 100_000) {
+  console.error(`only ${dictionary.size} dictionary words — refusing to derive plurals from a partial list`);
+  process.exit(1);
 }
 
 const pluralOf = (w) => {
