@@ -130,9 +130,11 @@ const isDerived = (a, b) => derived.has(a < b ? `${a}|${b}` : `${b}|${a}`);
 // bridges two pairs has to be reached from the clue itself. So the tier is how
 // many compounds the answer takes part in, and every tier keeps the familiar
 // bands that read well.
-const XY_BAND = 35;
-const ANSWER_BAND = 35;
-const WHOLE_BAND = 35;
+// Settable so the bands can be compared rather than argued about. The default
+// is the common tier throughout, which is where Ladder draws its rungs.
+const XY_BAND = Number(process.env.BRIDGE_XY ?? 35);
+const ANSWER_BAND = Number(process.env.BRIDGE_ANSWER ?? 35);
+const WHOLE_BAND = Number(process.env.BRIDGE_WHOLE ?? 35);
 // degree = how many distinct compounds the answer forms, either side
 //
 // The boundaries are set by runway rather than by feel. A board spends one
@@ -257,17 +259,21 @@ for (const tier of Object.keys(pool)) {
 }
 console.log(`\nflagged for review: ${flagged}`);
 
-// Prompt count is the wrong measure of supply and it flatters this pool badly.
-// The prompts are not independent: easy holds 2,414 of them and 24 answers,
-// because a degree-12 answer is by definition in a dozen compounds and every
-// pairing of them is another prompt. OUT alone accounts for a fifth of the
-// tier. A player who has learned two dozen words has finished easy, however
-// many prompts are left.
+// Prompt count is the wrong measure of supply, and the reason is circular
+// rather than empirical — worth stating plainly, because the first version of
+// this comment reported it as something the corpus had done.
 //
-// So both numbers get printed, and the second is the one that matters. Note
-// which way it runs: extreme has the fewest prompts and by far the most
-// answers, because the productivity that makes easy easy is the same thing
-// that makes it repetitive.
+// Degree *is* prompt count. An answer in d compounds pairs them into roughly
+// (d/2)^2 prompts, so binning by degree bins by prompt count, and picking
+// high-degree answers for easy picks exactly the answers that generate the
+// most prompts. English has about two dozen that productive. So "easy has
+// 2,414 prompts across 24 answers" is not a property of the language; it is
+// the tier definition restated, and no amount of harvesting changes it.
+//
+// The trap is that prompt count then *measures* the tier as healthy, because
+// it is inflated by the same property the tier selects for. Answers is the
+// number that is not self-referential, so both get printed and the second one
+// is the one to read.
 for (const tier of Object.keys(pool)) {
   const live = pool[tier].filter((p) => !p.review);
   const answers = new Set(live.map((p) => p.m));
