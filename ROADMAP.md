@@ -1174,6 +1174,23 @@ the `pos` column in the words table already knows enough to prevent. What is
 left is the review sweep this project has done twice before, and it is
 one-time.
 
+**Correction (August 2026): sense order does not fix the wrong-sense problem.**
+The paragraph above says reading WordNet's sense-frequency order rather than
+the first line found is enough. Measured against that order, over the tier a
+daily would draw from (level<=20, 4-8 letters, 5,016 of 7,279 words carry a
+gloss — 69%), it is not. The leading sense is regularly not the one anybody
+means: `duck` is "a heavy cotton fabric of plain weave", `guard` is "a
+position on a basketball team", `justify` is "adjust the spaces between
+words", `envelope` is "the bag containing the gas in a balloon", `industry`
+is "persevering determination to perform a task". About half a spread sample
+described a sense the player is not thinking of.
+
+The cause is that WordNet orders senses by frequency in SemCor, a small and
+old tagged corpus, so the ordering is real but not modern-usage. A crossword
+survives this — crossings rescue a clue nobody can read cold, and that is
+most of why crosswords tolerate hard clues at all. Anything where the gloss
+is the whole puzzle does not.
+
 **The honest ceiling: this makes a quick crossword, not a cryptic or a themed
 one.** Definitional clues, no wordplay, no misdirection, no Sunday theme.
 Clue craft is most of what makes crosswords good and none of it is
@@ -1185,6 +1202,54 @@ handed to you, so solving is fitting by length and crossing and needs no
 vocabulary at all. On the "is this a word game" axis it sits below Wordoku,
 which at least asks you to know one word. The entry above treats fill-in as
 the pragmatic choice; measured, it is the one that gives the least back.
+
+### Ideas for a tenth game — proposed August 2026
+
+Nine games, and eight of them are letter manipulation: Guess, Scramble, Hive,
+Grid, Boxed, Squares, Ladder and Cryptogram all ask what letters do. Only
+Weave touches meaning, and only as a label on a board that is still traced
+letter by letter. Two axes of word knowledge are unused — **semantics** and
+**sound** — which is the argument for the first four below over a tenth way
+of rearranging letters.
+
+None of these is measured yet except where noted.
+
+**Bridge.** `SNOW · ? · BALL`: find the middle word that compounds both ways.
+One-word answer, exactly verifiable, trivially accessible, and unlike anything
+here. The whole game is vocabulary. What has to be measured before it is real:
+how many (X, Y) prompts have exactly one answer — a prompt with three legal
+bridges is not a puzzle — and whether the compound list survives contact with
+the band filter.
+
+**Grouping.** Sixteen words, four groups of four. The `domains` column is
+already in `words.csv`, so the categories exist without new data. The risk is
+not supply, it is that mechanically-drawn groups are flat: what makes this
+genre good is a word that looks like it belongs to the wrong group, and trap
+quality is the thing to measure. Words sitting in two or more domains are the
+raw material for that, and are countable today.
+
+**Definition.** A gloss as the clue, guess the word, letters revealing as you
+miss. Cheap to build and the weakest of the five — **see the correction under
+Crossword above**. Coverage is fine at 69%; sense selection is not, and about
+half the leading glosses describe a sense nobody means. A crossword absorbs
+that through crossings. This has no crossings, so every bad gloss is a dead
+puzzle. It would need a hand-reviewed clue bank, which is the authoring cost
+the whole pipeline exists to avoid.
+
+**Rhyme.** Find words that rhyme with today's word. The only idea here that
+asks something no other game asks, and the only one needing a new dependency
+(CMUdict, permissive). The risk is that rhyme is dialect-dependent, so
+"correct" becomes arguable — which is the one thing the verification model
+cannot absorb, since `result_is_plausible` has to agree with the player about
+what counts.
+
+**Growth.** Start from one letter and add a letter anywhere each turn, every
+step a word: A, AT, CAT, CHAT, CHEAT, CHEATS. Reads like Ladder and plays
+differently — Ladder substitutes at a fixed length, this one grows, so the
+search space widens instead of staying flat. Deterministic, verifiable,
+resumable, and most of the ladder's BFS and its verification shape transfer.
+The letter-based one, included because the mechanic is genuinely new here even
+though the axis is not.
 
 ### Sudoku (traditional) — not planned
 Not a word game, shares zero infrastructure, and dilutes what the site is.
