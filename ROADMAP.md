@@ -1294,8 +1294,19 @@ One-word answer, exactly verifiable, trivially accessible, and unlike anything
 here. **Pool harvested** — see `scripts/bridge-harvest.mjs`.
 
 *Difficulty is a hint budget, not a word band.* Easy grants three hints, hard
-one, extreme none; a hint turns over the next letter of the answer. Every tier
-draws from the whole pool, so difficulty and supply are independent.
+one, extreme none. Every tier draws from the whole pool, so difficulty and
+supply are independent — which is the property the first design lacked.
+
+A hint buys either the answer's **length** or its **next letter**, player's
+choice, and both cost the same. That makes spending one a decision rather than
+a dispenser: length is broad and cheap to reason from, a letter is narrow and
+specific, and which you want depends on whether you are stuck for the shape of
+the word or for the word itself. With five prompts on a board and three hints
+at the most generous tier, where to spend them is part of the game.
+
+Length is once per prompt — asking twice buys nothing — and letters turn over
+left to right. `hintsUsed` goes on the record and into the result, the way
+Weave already does it, so it can carry the leaderboard tiebreak.
 
 That last part is the whole lesson of building it. The first design binned
 prompts by the answer's *degree* — how many compounds it appears in — on the
