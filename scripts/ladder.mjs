@@ -17,8 +17,10 @@ export { cycleOf, permutedIndex } from './walk.mjs';
 
 /** The pairs in play: `review: true` is the human hold, same as the cryptogram
  *  pool — kept in the data so a change of heart is an unflag. */
-export function livePairs(parsed) {
-  return parsed.pairs.filter((p) => !p.review);
+export function livePairs(parsed, blocked = null) {
+  return parsed.pairs.filter(
+    (p) => !p.review && !(blocked && (blocked.has(p.a) || blocked.has(p.b)))
+  );
 }
 
 /** What difficulty means here.

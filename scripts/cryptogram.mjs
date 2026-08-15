@@ -32,8 +32,13 @@ export { cycleOf, permutedIndex } from './walk.mjs';
  *  harvest need no rewriting — and, more to the point, the standard pool stays
  *  exactly the size it was, so the permutation walk deals easy and hard the
  *  same passages it did yesterday. */
-export function livePassages(parsed, band = 'standard') {
-  return parsed.quotes.filter((q) => !q.review && (q.band ?? 'standard') === band);
+export function livePassages(parsed, band = 'standard', blocked = null) {
+  return parsed.quotes.filter(
+    (q) =>
+      !q.review &&
+      (q.band ?? 'standard') === band &&
+      !(blocked && (String(q.text ?? '').toLowerCase().match(/[a-z]+/g) ?? []).some((w) => blocked.has(w)))
+  );
 }
 
 /** Which length band each difficulty plays.

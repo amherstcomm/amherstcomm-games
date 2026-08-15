@@ -25,8 +25,12 @@ import { permutedIndex } from './walk.mjs';
 /** Prompts in play: `review: true` is the human hold, same as the cryptogram
  *  pool and the ladder pairs — kept in the data so a change of heart is an
  *  unflag rather than a re-harvest. */
-export function livePrompts(parsed) {
-  return parsed.prompts.filter((p) => !p.review);
+export function livePrompts(parsed, blocked = null) {
+  return parsed.prompts.filter(
+    (p) =>
+      !p.review &&
+      !(blocked && [p.x, p.m, p.y, p.left, p.right].some((w) => blocked.has(w)))
+  );
 }
 
 /** Five is enough to be a session and few enough that the hint budget bites:
