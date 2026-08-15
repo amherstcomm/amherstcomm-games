@@ -34,7 +34,8 @@ import ShareButton from '@/ShareButton';
 import { buildShare } from '@/share';
 import { recordLadderFinish } from '@/stats';
 import { loadState } from '@/storage';
-import { isStep, shortestLadder } from '@/ladder';
+import { changedAt, isStep, shortestLadder } from '@/ladder';
+import { LadderEntry, LadderWord } from '@/LadderRow';
 
 export type LadderGameHandle = { pressKey: (k: string) => void };
 
@@ -369,19 +370,24 @@ const LadderGame = forwardRef<LadderGameHandle>(function LadderGame(_props, ref)
       </div>
 
       <ol className="space-y-1.5" aria-label={`ladder from ${record.from} to ${record.to}`}>
-        <li className="text-center text-lg font-bold uppercase tracking-widest text-white">
-          {record.from}
+        <li>
+          <LadderWord word={record.from} tone="end" />
         </li>
         {rungs.map((w, i) => (
-          <li
-            key={`${w}-${i}`}
-            className="text-center text-lg font-bold uppercase tracking-widest text-emerald-300"
-          >
-            {w}
+          <li key={`${w}-${i}`}>
+            {/* the letter that moved is the whole content of a step, and on a
+                row of boxes it is the one thing worth pointing at */}
+            <LadderWord word={w} tone="rung" changed={changedAt(i === 0 ? record.from : rungs[i - 1], w)} />
           </li>
         ))}
         {!done && (
           <li>
+            {/* Boxes for the eye, a real input for everything else. The input
+                keeps its own label, value and Enter handling and simply sits
+                on top at zero opacity — so typing, the phone keyboard and the
+                screen reader all carry on working, and none of them has to
+                know the row became a row of boxes. */}
+            <LadderEntry length={record.from.length} value={entry}>
             <label htmlFor="ladder-rung" className="sr-only">
               next rung, one letter from {last}
             </label>
@@ -403,16 +409,16 @@ const LadderGame = forwardRef<LadderGameHandle>(function LadderGame(_props, ref)
               autoComplete="off"
               autoCapitalize="off"
               spellCheck={false}
-              placeholder={'·'.repeat(record.from.length)}
-              className="w-full text-center text-lg font-bold uppercase tracking-widest rounded-lg bg-white/5 border-2 border-amber-400/60 text-white px-3 py-1.5 focus:border-amber-400"
+              className="absolute inset-0 w-full h-full opacity-0 cursor-text"
             />
+            </LadderEntry>
           </li>
         )}
         {/* the last rung IS the target once solved, and a revealed route ends
             on it too — printing the target again would double it */}
         {rungs[rungs.length - 1] !== record.to && (
-          <li className="text-center text-lg font-bold uppercase tracking-widest text-white">
-            {record.to}
+          <li>
+            <LadderWord word={record.to} tone="end" />
           </li>
         )}
       </ol>

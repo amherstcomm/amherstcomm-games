@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState, useEffect, useLayoutEffect, useRef, type ButtonHTMLAttributes, type ReactNode } from 'react';
-import { Search, Eraser, ArrowDown, ArrowDownUp, ArrowUp, X, BookOpen, Grid3x3, Shuffle, Hexagon, Check, Keyboard, Delete, Github, Info, Square, CalendarDays, Star, Gamepad2, CornerDownLeft, LayoutGrid, Puzzle, BarChart3, UserRound, Scale, Settings, Home, Table2, KeyRound } from 'lucide-react';
+import { Search, Eraser, ArrowDown, ArrowUp, X, BookOpen, Grid3x3, Shuffle, Hexagon, Check, Keyboard, Delete, Github, Info, Square, CalendarDays, Star, Gamepad2, CornerDownLeft, LayoutGrid, Puzzle, BarChart3, UserRound, Scale, Settings, Home, Table2, KeyRound } from 'lucide-react';
 import LearnMode, { type LearnModeHandle } from '@/LearnMode';
 import type { Session } from '@supabase/supabase-js';
 import StatsModal from '@/StatsModal';
@@ -12,6 +12,8 @@ import { colorWords, PALETTES, PaletteContext, resolveTheme, TEXT_SCALES, THEME_
 import { PrefsContext } from '@/prefs';
 import OnboardingCard from '@/OnboardingCard';
 import { useModalA11y } from '@/useModalA11y';
+import GameMenu from '@/GameMenu';
+import LadderIcon from '@/LadderIcon';
 import { supabase } from '@/supabase';
 import { importBaselineOnce } from '@/stats';
 import GuessGame, { type GuessGameHandle, type LetterState } from '@/GuessGame';
@@ -71,7 +73,9 @@ const MAX_LEN = 15;
 
 // description sells the solver, which is the wrong pitch for someone who has
 // hidden it — playDescription is what they get instead.
-const MODES: { id: Mode; label: string; blurb: string; description: string; playDescription: string }[] = [
+// `short` is the nav's label where the full one will not fit a column. Only
+// the longest name needs one; everywhere else the nav shows `label`.
+const MODES: { id: Mode; label: string; short?: string; blurb: string; description: string; playDescription: string }[] = [
   {
     id: 'pattern',
     // the slug stays 'pattern' — it's in shared links — but nothing else calls
@@ -150,6 +154,7 @@ const MODES: { id: Mode; label: string; blurb: string; description: string; play
   {
     id: 'ladder',
     label: 'Word Ladder',
+    short: 'Ladder',
     blurb: 'Turn one word into another, a letter at a time',
     description:
       'Play the daily ladder, or use Solve to find the shortest route between any two words of the same length.',
@@ -167,7 +172,7 @@ const MODE_ICONS: Record<Mode, typeof Grid3x3> = {
   weave: Puzzle,
   squares: Table2,
   cryptogram: KeyRound,
-  ladder: ArrowDownUp,
+  ladder: LadderIcon,
 };
 
 /** WordLock's mark, drawn the way the footer's other icons are drawn.
@@ -604,6 +609,23 @@ function App() {
 
   const [strandsClue, setStrandsClue] = useState<string | null>(null);
 
+  // The solvers load "today's board" out of the same feed the games play, and
+  // that feed is { date, byDifficulty: { easy, hard, extreme } }. These five
+  // read the old flat shape — `d.cells`, `d.center` — got undefined, and
+  // reported it as a failed fetch. So the board a game had just rendered was
+  // one the solver beside it said it could not reach, which is why this looked
+  // like a network fault and was not one.
+  //
+  // Nothing to do with the move to Postgres, though that is where it got
+  // noticed: the generator has written only this shape for as long as the
+  // tiers have existed, so the published files never carried the flat keys
+  // either. The fallback below is for a payload that predates tiers; it is not
+  // what was being served.
+  function tierOf(d: Record<string, unknown>): Record<string, unknown> {
+    const tiers = d.byDifficulty as Record<string, Record<string, unknown>> | undefined;
+    return tiers?.[currentDifficulty()] ?? tiers?.easy ?? d;
+  }
+
   async function fillTodaysStrands() {
     setTodayStatus('loading');
     try {
@@ -630,13 +652,19 @@ function App() {
     setTodayStatus('loading');
     try {
       const d = await fetchDailyData('daily-weave');
-      const board = d.board as string[];
-      if (!Array.isArray(board) || board.length !== 8 || !board.every((row) => /^[a-z]{6}$/.test(row))) {
-        throw new Error('bad payload');
-      }
-      setWeaveSize('6x8');
+      const b = tierOf(d);
+      const board = b.board as string[];
+      // hard and extreme are wider boards, so the size comes off the payload
+      const size = !Array.isArray(board)
+        ? undefined
+        : (Object.keys(WEAVE_DIMS) as WeaveSize[]).find((k) => {
+            const { rows, cols } = WEAVE_DIMS[k];
+            return board.length === rows && board.every((row) => new RegExp(`^[a-z]{${cols}}$`).test(row));
+          });
+      if (!size) throw new Error('bad payload');
+      setWeaveSize(size);
       setWeaveLetters(board.join('').split(''));
-      setStrandsClue(typeof d.clue === 'string' ? d.clue : null);
+      setStrandsClue(typeof b.clue === 'string' ? b.clue : null);
       setTodayStatus('idle');
     } catch {
       setTodayStatus('error');
@@ -1547,8 +1575,9 @@ function App() {
     setTodayStatus('loading');
     try {
       const d = await fetchDailyData('daily-hive');
-      const center = String(d.center).toLowerCase();
-      const outers = (d.outers as string[]).map((c) => String(c).toLowerCase());
+      const b = tierOf(d);
+      const center = String(b.center).toLowerCase();
+      const outers = (b.outers as string[]).map((c) => String(c).toLowerCase());
       if (!/^[a-z]$/.test(center) || outers.length !== 6 || !outers.every((c) => /^[a-z]$/.test(c))) {
         throw new Error('bad payload');
       }
@@ -1564,7 +1593,7 @@ function App() {
     setTodayStatus('loading');
     try {
       const d = await fetchDailyData('daily-box');
-      const letters = (d.sides as string[])
+      const letters = (tierOf(d).sides as string[])
         .flatMap((s) => String(s).toLowerCase().replace(/[^a-z]/g, '').split(''))
         .slice(0, 12);
       if (letters.length !== 12) throw new Error('bad payload');
@@ -1579,11 +1608,15 @@ function App() {
     setTodayStatus('loading');
     try {
       const d = await fetchDailyData('daily-grid');
-      const cells = (d.cells as string[]).map((c) => String(c).toLowerCase());
-      if (cells.length !== 16 || !cells.every((c) => /^[a-z]$/.test(c))) {
+      const cells = (tierOf(d).cells as string[]).map((c) => String(c).toLowerCase());
+      // the tiers are different board sizes, so the preset follows the cells
+      const preset = (Object.keys(GRID_PRESET_DIMS) as GridPreset[]).find(
+        (k) => GRID_PRESET_DIMS[k].rows * GRID_PRESET_DIMS[k].cols === cells.length
+      );
+      if (!preset || !cells.every((c) => /^[a-z]$/.test(c))) {
         throw new Error('bad payload');
       }
-      setGridPreset('4x4');
+      setGridPreset(preset);
       setGridLetters(cells);
       setTodayStatus('idle');
     } catch {
@@ -1595,7 +1628,7 @@ function App() {
     setTodayStatus('loading');
     try {
       const d = await fetchDailyData('daily-scramble');
-      const letters = (d.letters as string[]).map((c) => String(c).toLowerCase());
+      const letters = (tierOf(d).letters as string[]).map((c) => String(c).toLowerCase());
       if (letters.length !== 7 || !letters.every((c) => /^[a-z]$/.test(c))) {
         throw new Error('bad payload');
       }
@@ -1793,14 +1826,20 @@ function App() {
         aria-label="Game modes"
         className="sticky top-0 z-40 bg-slate-950/80 backdrop-blur border-b border-white/10"
       >
-        {/* No wordmark up here any more — the page header carries the name,
-            and without it the tabs can sit centred at every width instead of
-            being pushed to one side on desktop. */}
-        <div className="max-w-3xl mx-auto px-2 sm:px-5 flex items-center justify-center">
-          {/* the column count follows what's actually shown, so hiding games
-              widens the rest rather than leaving gaps */}
-          <div
-            className="flex-1 md:flex-none grid md:flex gap-0.5 sm:gap-1 py-1.5"
+        {/* Nine tabs do not fit on one row at this width: the horizontal layout
+            wanted 888px inside a 768px bar, so it never fit at any viewport —
+            it squeezed, and "Word Ladder" ran out of its column on a phone.
+            Wrapping to two and three rows fixed the overflow and cost a third
+            of a phone screen, which is worse: this bar is sticky, so that is a
+            third of every screen, on every page, forever.
+
+            So the bar stops being a row of tabs when it cannot be one. Below
+            lg it is the game you are in plus a menu holding the rest — one
+            row, one height, however many games there are. The bar runs a
+            little wider than the content at lg and above, which is the width
+            at which nine full-size labels genuinely fit. */}
+        <div className="max-w-3xl lg:max-w-4xl mx-auto px-2 sm:px-5 flex items-center justify-center">
+          <div className="hidden lg:grid flex-1 gap-1 py-1.5"
             style={{ gridTemplateColumns: `repeat(${shownModes.length}, minmax(0, 1fr))` }}
           >
             {MODES.filter((m) => shownModes.includes(m.id)).map((m) => {
@@ -1820,16 +1859,37 @@ function App() {
                     setMode(m.id);
                   }}
                   title={m.blurb}
-                  className={`flex flex-col md:flex-row items-center justify-center gap-0.5 md:gap-1.5 px-1 md:px-3 py-1.5 rounded-lg whitespace-nowrap text-[0.625rem] md:text-sm font-medium md:font-semibold transition-colors
+                  className={`flex flex-row items-center justify-center gap-1.5 px-2 py-1.5 rounded-lg whitespace-nowrap text-sm font-semibold transition-colors
                     ${!atHome && mode === m.id
                       ? 'bg-emerald-400/15 text-emerald-300'
                       : 'text-slate-400 hover:text-white hover:bg-white/5'}`}
                 >
-                  <Icon className="w-5 h-5 md:w-4 md:h-4" />
-                  <span>{m.label}</span>
+                  <Icon className="w-4 h-4" />
+                  <span>{m.short ?? m.label}</span>
                 </RouteLink>
               );
             })}
+          </div>
+
+          {/* the same nine games, one row high */}
+          <div className="lg:hidden flex-1 py-1.5">
+            <GameMenu
+              modes={MODES.filter((m) => shownModes.includes(m.id))}
+              icons={MODE_ICONS}
+              current={atHome ? null : mode}
+              href={(id) =>
+                pathOf({
+                  kind: 'game',
+                  view: currentView,
+                  slug: MODE_SLUG[id],
+                  daily: dailyByMode[id],
+                })
+              }
+              onGo={(id) => {
+                setAtHome(false);
+                setMode(id);
+              }}
+            />
           </div>
         </div>
       </nav>

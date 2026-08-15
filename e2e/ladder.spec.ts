@@ -6,6 +6,15 @@ import { expect, test } from './fixtures';
 const rungs = (page: import('@playwright/test').Page) =>
   page.getByRole('list', { name: /ladder from/ }).locator('li');
 
+// A rung is a row of one-letter boxes with the word beside it in an sr-only
+// span — the boxes are aria-hidden so a screen reader hears the word rather
+// than four separate letters. That means the row's innerText is the word AND
+// every letter on its own line, so read the span and not the row. Both tests
+// here derived a candidate from innerText and were quietly building rungs out
+// of "gill" plus four stray letters.
+const wordAt = async (page: import('@playwright/test').Page, i: number) =>
+  ((await rungs(page).nth(i).locator('span.sr-only').first().textContent()) ?? '').trim().toLowerCase();
+
 test('the board gives both ends and states a par', async ({ page }) => {
   await page.goto('/daily/ladder');
   const list = rungs(page);
@@ -21,17 +30,20 @@ test('a rung that breaks a rule is refused, and says which', async ({ page }) =>
 
   // two letters at once is the rule players break first, and the refusal has
   // to name it rather than just decline
-  const first = await rungs(page).first().innerText();
+  const first = await wordAt(page, 0);
   const twoOff =
-    first.toLowerCase().slice(0, -2) +
-    (first.toLowerCase().at(-2) === 'z' ? 'a' : 'z') +
-    (first.toLowerCase().at(-1) === 'z' ? 'a' : 'z');
+    first.slice(0, -2) +
+    (first.at(-2) === 'z' ? 'a' : 'z') +
+    (first.at(-1) === 'z' ? 'a' : 'z');
+  const before = await rungs(page).count();
   await input.fill(twoOff);
   await page.getByRole('button', { name: 'Add rung' }).click();
   await expect(page.getByText(/Change exactly one letter|not in the word list/)).toBeVisible();
 
-  // and the board did not keep it
-  await expect(rungs(page).filter({ hasText: twoOff.toUpperCase() })).toHaveCount(0);
+  // And the board did not keep it. Counting rows rather than searching for the
+  // word: the entry row draws what you typed into boxes, so a refused rung is
+  // legitimately still on the page — in the box, waiting to be corrected.
+  await expect(rungs(page)).toHaveCount(before);
 });
 
 test('the solver answers with a route, not a ranking', async ({ page }) => {
@@ -71,17 +83,24 @@ test('an accepted rung is announced, not just drawn', async ({ page }) => {
   // by date — a hardcoded rung would pass today and rot tomorrow. Walk the
   // first letter instead until one neighbour is taken; every legal ladder has
   // at least one, or the board would be unsolvable.
-  const first = (await rungs(page).first().innerText()).toLowerCase().trim();
+  const first = await wordAt(page, 0);
   const add = page.getByRole('button', { name: 'Add rung' });
+  const before = await rungs(page).count();
   let accepted = '';
   for (const c of 'abcdefghijklmnopqrstuvwxyz') {
     if (c === first[0]) continue;
     const candidate = c + first.slice(1);
     await input.fill(candidate);
     await add.click();
-    if (await rungs(page).filter({ hasText: candidate.toUpperCase() }).count()) {
+    // a refused rung leaves the board alone, so the row count is the signal —
+    // and it has to be waited for rather than read, since React commits after
+    // the click resolves
+    try {
+      await expect(rungs(page)).toHaveCount(before + 1, { timeout: 250 });
       accepted = candidate;
       break;
+    } catch {
+      // refused; try the next letter
     }
   }
   expect(accepted, `no one-letter neighbour of ${first} was accepted`).not.toBe('');

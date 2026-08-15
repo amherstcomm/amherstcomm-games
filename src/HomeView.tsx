@@ -6,7 +6,8 @@
 // Regulars who don't want a lobby can set Settings -> Site -> Start on to a
 // game and never see this again.
 
-import { ArrowDownUp, Grid3x3, Hexagon, KeyRound, LayoutGrid, Puzzle, Shuffle, Square, Table2, Trophy } from 'lucide-react';
+import { Grid3x3, Hexagon, KeyRound, LayoutGrid, Puzzle, Shuffle, Square, Table2, Trophy } from 'lucide-react';
+import LadderIcon from '@/LadderIcon';
 import { useEffect, useState } from 'react';
 import { MODE_SLUG, pathOf, SLUG_NAME, type Slug } from '@/routes';
 import { difficulty, onDifficultyChange } from '@/difficulty';
@@ -33,7 +34,7 @@ const ICONS: Record<Slug, typeof Grid3x3> = {
   weave: Puzzle,
   squares: Table2,
   cryptogram: KeyRound,
-  ladder: ArrowDownUp,
+  ladder: LadderIcon,
 };
 
 // One line each, written for somebody who has never seen the game.
