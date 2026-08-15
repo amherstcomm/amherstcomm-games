@@ -203,6 +203,19 @@ for (const p of pool) {
   }
 }
 
+// Nothing a player reads or types may be a blocked word: the two ends, the
+// answer, and both compounds. The filters above already do this, and asserting
+// it separately is the point — a filter that stops being applied fails
+// silently, and a bigger pool is indistinguishable from a better harvest unless
+// something checks the output rather than the intent.
+if (!process.env.BRIDGE_SKIP_GUARD) {
+  for (const p of pool) {
+    for (const w of [p.x, p.m, p.y, p.left, p.right]) {
+      if (blocked.has(w)) throw new Error(`blocked word ${w} in ${p.x} · ${p.m} · ${p.y}`);
+    }
+  }
+}
+
 const live = pool.filter((p) => !p.review);
 const liveAnswers = new Set(live.map((p) => p.m));
 console.log(
