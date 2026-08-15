@@ -17,19 +17,23 @@
 //      lemma is not a stem wearing a suffix.
 //   2. Both parts are content words. This is what removes `per`, tagged pp,
 //      which otherwise bridges HAM and CENT via percent.
-//   3. The whole is not derived from either part. WordNet's `+` pointer is
-//      the derivationally-related-form link and it is exactly the right tool:
-//      action from act, censorship from censor, bothersome from bother,
-//      flatten from flat. Each of those is a suffix that happens to also be a
-//      word, and no amount of length or frequency filtering separates them.
+//   3. The break does not fuse. This is the only place pronunciation gets a
+//      vote, and it gets one because the rule for this game is *spelling*: X+M
+//      and M+Y have to be words, and nothing requires them to be compounds.
+//      `reddish` is red+dish and `grimace` is grim+ace — neither is a compound
+//      and both are fair prompts, because a solver who thinks of the answer
+//      can check it. An earlier version filtered on WordNet's
+//      derivationally-related-form pointer, which answers a question the game
+//      does not ask: it threw out booklet, childhood, scholarship and coverage,
+//      all clean breaks and all perfectly good.
+//
+//      What is left is the case where the letters at the seam stop being the
+//      letters they were. In `abduction`, `suggestion`, `distortion`, the t or
+//      s merges with -ion into a single sound, so the split exists on paper and
+//      nowhere else. Ideally every break is clean by ear; this removes the ones
+//      that are not clean by any reading.
 //   4. One answer only. A prompt with two legal bridges is not a puzzle, and
 //      the player who finds the other one is right.
-//
-// What survives all four and still is not a compound is coincidence — `carrot`
-// really is car+rot and `mandate` really is man+date, both are base forms,
-// neither is derived from its parts. Morphology cannot see the difference;
-// only meaning can, and WordNet does not carry it in a form that helps. Those
-// come out by hand, the way the cryptogram passages did.
 import { readFileSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { join } from 'node:path';
@@ -62,48 +66,10 @@ for (const line of rows) {
   if (!/^[a-z]+$/.test(word)) continue;
   level.set(word, Math.min(Number(lvl), level.get(word) ?? 99));
   if (!lemma) base.add(word);
-  if ((pos ?? '').split('|').some((t) => ['n', 'v', 'aj', 'a'].includes(t))) content.add(word);
+  // 'aj' is adjective; 'a' is *article*, which is why THE was turning up as a
+  // clue word. A determiner is a word and is not a clue.
+  if ((pos ?? '').split('|').some((t) => ['n', 'v', 'aj'].includes(t))) content.add(word);
 }
-
-// ------------------------------------------------- derivationally related
-// A synset line is: offset lex_filenum ss_type w_cnt [word lex_id]... p_cnt
-// [ptr_symbol offset pos source/target]... | gloss. The source/target field is
-// four hex digits, source word then target word, and 0000 means the pointer is
-// between whole synsets rather than between two words.
-const synWords = new Map();
-const pending = [];
-for (const pos of ['noun', 'verb', 'adj', 'adv']) {
-  for (const line of readFileSync(join(DICT, `data.${pos}`), 'utf8').split('\n')) {
-    if (!line || line.startsWith(' ')) continue;
-    const cut = line.indexOf('|');
-    const head = line.slice(0, cut < 0 ? line.length : cut).trim().split(/\s+/);
-    const offset = head[0];
-    // adjective satellites are filed as 's' but live in the adjective file
-    const type = head[2] === 's' ? 'a' : head[2];
-    const wCnt = parseInt(head[3], 16);
-    const words = [];
-    for (let i = 0; i < wCnt; i++) words.push(head[4 + i * 2].toLowerCase().replace(/\(.*\)/, ''));
-    synWords.set(type + offset, words);
-    let at = 4 + wCnt * 2;
-    const pCnt = Number(head[at++]);
-    for (let i = 0; i < pCnt; i++, at += 4) {
-      if (head[at] === '+') pending.push([head[at + 1], head[at + 2], head[at + 3], words]);
-    }
-  }
-}
-const derived = new Set();
-for (const [offset, pos, slots, words] of pending) {
-  const target = synWords.get((pos === 's' ? 'a' : pos) + offset);
-  if (!target) continue;
-  const from = parseInt(slots.slice(0, 2), 16);
-  const to = parseInt(slots.slice(2), 16);
-  const a = from === 0 ? words : [words[from - 1]];
-  const b = to === 0 ? target : [target[to - 1]];
-  for (const x of a) for (const y of b) {
-    if (x && y) derived.add(x < y ? `${x}|${y}` : `${y}|${x}`);
-  }
-}
-const isDerived = (a, b) => derived.has(a < b ? `${a}|${b}` : `${b}|${a}`);
 
 // ------------------------------------------------------------- the prompts
 // One pool, with each prompt carrying the answer's degree — how many compounds
@@ -130,6 +96,11 @@ const XY_BAND = Number(process.env.BRIDGE_XY ?? 35);
 const ANSWER_BAND = Number(process.env.BRIDGE_ANSWER ?? 35);
 const WHOLE_BAND = Number(process.env.BRIDGE_WHOLE ?? 55);
 
+// The seam where the sound changes. -ion after t or s is the whole of it in
+// practice: the other fusing endings (-ial, -ious, -ure) are not words, so they
+// never appear as a part in the first place.
+const FUSES = /^ion$/;
+
 const ok = (w, l, band) =>
   l <= band && w.length >= 3 && base.has(w) && content.has(w) && !blocked.has(w);
 const ends = new Set([...level].filter(([w, l]) => ok(w, l, XY_BAND)).map(([w]) => w));
@@ -141,6 +112,7 @@ const after = new Map();
 const before = new Map();
 let splits = 0;
 let dropped = 0;
+const droppedList = [];
 for (const w of wholes) {
   if (w.length < 6 || w.length > 14) continue;
   if (blocked.has(w)) continue;
@@ -148,8 +120,9 @@ for (const w of wholes) {
     const a = w.slice(0, i);
     const b = w.slice(i);
     if (!parts.has(a) || !parts.has(b)) continue;
-    if (isDerived(w, a) || isDerived(w, b)) {
+    if (FUSES.test(b)) {
       dropped++;
+      if (process.env.BRIDGE_SHOW_DROPPED) droppedList.push(`${a}+${b} = ${w}`);
       continue;
     }
     splits++;
@@ -195,9 +168,13 @@ for (const [k, ms] of byPrompt) {
 }
 
 console.log(
-  `splits ${splits.toLocaleString()}  derived-dropped ${dropped.toLocaleString()}  prompts ${byPrompt.size.toLocaleString()}  one-answer ${pool.length.toLocaleString()}`
+  `splits ${splits.toLocaleString()}  fused-seam dropped ${dropped.toLocaleString()}  prompts ${byPrompt.size.toLocaleString()}  one-answer ${pool.length.toLocaleString()}`
 );
-console.log(`derivational pairs: ${derived.size.toLocaleString()}`);
+if (process.env.BRIDGE_SHOW_DROPPED) {
+  const step = Math.max(1, Math.floor(droppedList.length / 30));
+  console.log('dropped for a fused seam, a spread:');
+  for (let i = 0, n = 0; i < droppedList.length && n < 30; i += step, n++) console.log('   ' + droppedList[i]);
+}
 
 // Read a spread rather than the head of the list: the first N of anything
 // sorted is the least representative sample available. Sampled by degree band,
