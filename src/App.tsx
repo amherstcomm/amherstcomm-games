@@ -1838,7 +1838,7 @@ function App() {
             row, one height, however many games there are. The bar runs a
             little wider than the content at lg and above, which is the width
             at which nine full-size labels genuinely fit. */}
-        <div className="max-w-3xl lg:max-w-4xl mx-auto px-2 sm:px-5 flex items-center justify-center">
+        <div className="max-w-3xl lg:max-w-5xl mx-auto px-2 sm:px-5 flex items-center justify-center">
           <div className="hidden lg:grid flex-1 gap-1 py-1.5"
             style={{ gridTemplateColumns: `repeat(${shownModes.length}, minmax(0, 1fr))` }}
           >
@@ -1859,12 +1859,12 @@ function App() {
                     setMode(m.id);
                   }}
                   title={m.blurb}
-                  className={`flex flex-row items-center justify-center gap-1.5 px-2 py-1.5 rounded-lg whitespace-nowrap text-sm font-semibold transition-colors
+                  className={`flex flex-col items-center justify-center gap-0.5 px-1 py-1.5 rounded-lg whitespace-nowrap text-xs font-semibold transition-colors
                     ${!atHome && mode === m.id
                       ? 'bg-emerald-400/15 text-emerald-300'
                       : 'text-slate-400 hover:text-white hover:bg-white/5'}`}
                 >
-                  <Icon className="w-4 h-4" />
+                  <Icon className="w-5 h-5" />
                   <span>{m.short ?? m.label}</span>
                 </RouteLink>
               );

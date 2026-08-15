@@ -30,11 +30,13 @@ test('the game bar stays one row and fits its labels at every width', async ({ p
       return {
         navH,
         rows: new Set(cells.map((c) => Math.round(c.getBoundingClientRect().top))).size,
+        // Measure the item against itself. Comparing the label to the whole
+        // cell was too lenient by exactly the width of the icon and padding
+        // beside it, so a label that had already outgrown its share of the
+        // column still passed — until a runner with a wider font pushed it
+        // past even that.
         over: cells
-          .filter((c) => {
-            const s = c.querySelector('span');
-            return !!s && s.scrollWidth > Math.ceil(c.getBoundingClientRect().width) - 4;
-          })
+          .filter((c) => c.scrollWidth > c.clientWidth)
           .map((c) => c.querySelector('span')?.textContent ?? '?'),
         scrolls: document.documentElement.scrollWidth > document.documentElement.clientWidth,
         visibleTabs: [...nav.querySelectorAll('a')].filter(
