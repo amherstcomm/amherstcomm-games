@@ -131,6 +131,61 @@ $$;
 alter table public.blocked_names enable row level security;
 -- no policies: nothing but the definer functions below can read it
 
+-- ---------------------------------------------------------------------------
+-- The other half of a substring blocklist: the strings that legitimately
+-- contain one.
+--
+-- `cunt` is blocked anywhere in a name, correctly — every affixed variant of it
+-- is abuse. Scunthorpe is a town of eighty thousand people. The safety check in
+-- name-blocklist.mjs decides a substring pattern is safe by asking whether any
+-- *dictionary* word contains it, and no dictionary word contains that one; a
+-- place name does, and so do surnames no dictionary has heard of.
+--
+-- A fragment here is removed from the name before the patterns are matched, not
+-- exempted after. That distinction is the whole design: "scunthorpe" clears to
+-- nothing and passes, while "scunthorpecunt" clears to "cunt" and is still
+-- refused. An exemption on the finished name would have let the second one
+-- through.
+--
+-- Keep fragments long and specific. A short one weakens every pattern it
+-- contains, and this list is the only thing here that can make the blocklist
+-- *less* strict.
+create table if not exists public.allowed_names (
+  fragment text primary key,
+  note text,
+  added_at timestamptz not null default now()
+);
+alter table public.allowed_names enable row level security;
+-- no policies, same as blocked_names: only the definer functions read it
+
+insert into public.allowed_names (fragment, note)
+values ('scunthorpe', 'town in Lincolnshire; the canonical false positive')
+on conflict (fragment) do nothing;
+
+-- One matcher, called by both the claim path and the dry run. They had the
+-- same `like` twice, which is two places to forget the exception list.
+create or replace function public.name_is_blocked(p_name text)
+returns boolean
+language plpgsql
+stable
+security definer
+set search_path = ''
+as $$
+declare
+  squashed text := public.normalise_name(p_name);
+  frag text;
+begin
+  for frag in select a.fragment from public.allowed_names a loop
+    squashed := replace(squashed, frag, '');
+  end loop;
+  return exists (
+    select 1 from public.blocked_names b
+    where (b.match = 'substring' and squashed like '%' || b.pattern || '%')
+       or (b.match = 'exact' and squashed = b.pattern)
+  );
+end;
+$$;
+
 -- Claim or change a display name. A function rather than a column update so
 -- the rules live in one place the client can't skip — length, character set,
 -- the blocklist, and uniqueness are all checked here.
@@ -142,7 +197,6 @@ set search_path = ''
 as $$
 declare
   cleaned text;
-  squashed text;
 begin
   if (select auth.uid()) is null then
     return 'not signed in';
@@ -165,12 +219,7 @@ begin
     return 'characters';
   end if;
 
-  squashed := public.normalise_name(cleaned);
-  if exists (
-    select 1 from public.blocked_names b
-    where (b.match = 'substring' and squashed like '%' || b.pattern || '%')
-       or (b.match = 'exact' and squashed = b.pattern)
-  ) then
+  if public.name_is_blocked(cleaned) then
     return 'blocked';
   end if;
 
@@ -205,11 +254,7 @@ grant execute on function public.set_display_name(text) to authenticated;
 --   select n, public.would_block(n) from unnest(array['Sam','Scunthorpe']) n;
 create or replace function public.would_block(p_name text)
 returns boolean language sql stable security definer set search_path = '' as $$
-  select exists (
-    select 1 from public.blocked_names b
-    where (b.match = 'substring' and public.normalise_name(p_name) like '%' || b.pattern || '%')
-       or (b.match = 'exact' and public.normalise_name(p_name) = b.pattern)
-  );
+  select public.name_is_blocked(p_name);
 $$;
 
 -- Postgres grants EXECUTE on a new function to PUBLIC, and PostgREST exposes

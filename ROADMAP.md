@@ -609,17 +609,16 @@ obviously the one you are looking at.
 
 Not urgent, and worth doing before a third consumer appears.
 
-**One thing the merged table should carry: an exception list.** `scunthorpe`
-is refused as a display name today, because `cunt` is a substring pattern and
-the safety check in `name-blocklist.mjs` decides a pattern is safe by asking
-whether any *dictionary* word contains it. No word does. A town of eighty
-thousand people does, and so do surnames the dictionary has never heard of.
+**The exception list is built** (August 2026), ahead of the merge rather than
+with it, because `scunthorpe` was being refused today. `public.allowed_names`
+holds fragments that are removed from a name *before* the patterns are matched
+— strip-then-match rather than exempt-after, so "scunthorpe" clears to nothing
+and passes while "scunthorpecunt" clears to "cunt" and is still refused.
 
-The check is otherwise holding — Cockburn, Hancock, Penistone, Clitheroe and
-Shitterton all pass — so this is one known case rather than a broken rule, and
-the fix is a short allowlist of strings that are legitimate despite containing
-a pattern. It needs somewhere to live and a merged table is that somewhere,
-which is why it is filed here rather than as its own entry.
+It also collapsed the duplicate matcher: `set_display_name` and `would_block`
+each carried their own copy of the same `like`, and the first version of this
+change updated only one of them, so the dry run allowed a name the claim would
+have refused. Both call `name_is_blocked` now.
 
 ### Report a puzzle or a player — proposed August 2026
 
