@@ -936,13 +936,23 @@ That is what makes this a plan rather than a task. Adopting the Supabase CLI
 means linking the project, baselining the live schema, and deciding what to do
 about sixteen recorded versions with no local files — on a live database.
 
-The other half is the reason it needs care rather than speed. `schema.sql`
-carries most of this project's reasoning: why a definer function pins
-`search_path`, why `isOverlay` excludes stats, why the daily gate backs the
-clock up three hours and a quarter, why the report caps are per subject rather
-than per source. `supabase db pull` generates a baseline from the live schema
-and carries **none** of it, plus everything in Supabase's own internal schemas.
-A migration system that loses the comments would be a bad trade at any length.
+**Correction, same day:** an earlier draft of this entry said a migration system
+would lose the comments. That is wrong, and wrong in the direction of making
+this sound harder than it is. Migrations are files you write by hand, in the
+repo, with whatever prose you put in them. Only `supabase db pull` generates a
+baseline that carries none — and even that is avoidable by writing the baseline
+from `schema.sql`, which already has the prose, and marking it applied with
+`migration repair` rather than generating it.
+
+So the real tension is narrower: **migrations are organised by time,
+documentation is organised by concern.** `20260816_add_games_table.sql` is the
+right unit for applying a change and the wrong one for answering "how do reports
+work" — that answer would be spread across four migrations written months apart.
+Keeping both is the usual answer: migrations to apply, a current-schema
+reference to read. The question worth deciding is whether that reference is
+generated from the database or maintained by hand, because a maintained one is
+exactly the second source of truth this project has spent a day removing
+everywhere else.
 
 Worth doing, worth planning, and out of scope for the restructure it came up
 during.
