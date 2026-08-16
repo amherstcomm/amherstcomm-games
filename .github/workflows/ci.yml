@@ -21,6 +21,12 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.head_ref || github.ref_name }}
   cancel-in-progress: true
 
+# Least privilege: every job here only reads the repository. Without this
+# block a workflow gets the default token scope, which is wider than it
+# needs and is the blast radius if a step ever runs something hostile.
+permissions:
+  contents: read
+
 jobs:
   checks:
     name: typecheck, lint, unit, contract, build
