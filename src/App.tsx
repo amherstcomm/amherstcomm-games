@@ -3880,6 +3880,51 @@ function App() {
                   </div>
                   <div>
                     <p className="text-slate-300 font-medium">
+                      How do I report something?
+                    </p>
+                    <p>
+                      <strong className="text-slate-300">Report a problem</strong> at the
+                      bottom of any page. It covers a puzzle with something offensive on
+                      it, a display name, a privacy concern, a broken page, and anything
+                      else. You don&apos;t need an account, and for a puzzle or a player
+                      there is nothing to copy out — we look the board or the name up
+                      ourselves, so all you need to say is what&apos;s wrong with it.
+                    </p>
+                    <p className="mt-2">
+                      You get a reference back. Keep it and{' '}
+                      <a
+                        href="/report"
+                        className="text-amber-300 hover:text-amber-200 underline underline-offset-2"
+                      >
+                        look it up any time
+                      </a>{' '}
+                      to see whether it&apos;s still open and what was decided. Leave an
+                      email address as well and we&apos;ll write to you when it&apos;s
+                      dealt with — it&apos;s used for that and nothing else, and it goes
+                      when the report does.
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-slate-300 font-medium">
+                      I&apos;ve found a security problem.
+                    </p>
+                    <p>
+                      Please don&apos;t open a public issue for it.{' '}
+                      <a
+                        href="https://github.com/rptetzloff/anagrimoire/security/advisories/new"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-amber-300 hover:text-amber-200 underline underline-offset-2"
+                      >
+                        Open a private security advisory
+                      </a>{' '}
+                      — it stays private while it&apos;s being fixed and carries a
+                      disclosure process with it. If you&apos;d rather not use GitHub,
+                      the report form above has a security option and needs no account.
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-slate-300 font-medium">
                       Found a bug, or have an idea?
                     </p>
                     <p>
@@ -3891,7 +3936,8 @@ function App() {
                       >
                         Open an issue on GitHub
                       </a>{' '}
-                      — reports and suggestions are both welcome.
+                      — reports and suggestions are both welcome. The report form works
+                      too if you&apos;d rather not have an account.
                     </p>
                   </div>
                 </div>

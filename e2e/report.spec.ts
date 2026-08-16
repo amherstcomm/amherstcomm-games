@@ -213,3 +213,46 @@ for (const [name, path] of [
     expect(new URL(page.url()).pathname).toBe(path);
   });
 }
+
+test('privacy and security have their own doors, and security names a better one', async ({
+  page,
+  rpcCalls,
+}) => {
+  await page.goto('/');
+  await openReportMenu(page);
+  await page.getByRole('button', { name: /^A security problem/ }).click();
+
+  const dialog = page.getByRole('dialog', { name: /Report a security problem/i });
+  // The private advisory is offered first, because a report table can't give
+  // a disclosure process and GitHub's form can. The form stays open anyway —
+  // somebody who found a hole should not be turned away for lacking an account.
+  const advisory = dialog.getByRole('link', { name: /private security advisory/i });
+  await expect(advisory).toHaveAttribute(
+    'href',
+    'https://github.com/rptetzloff/anagrimoire/security/advisories/new'
+  );
+
+  await dialog.getByRole('textbox', { name: /What.s wrong with it/i }).fill('a way in');
+  await dialog.getByRole('button', { name: 'Send report' }).click();
+  await expect(dialog.getByText(/Thank you/)).toBeVisible();
+
+  const sent = rpcCalls.filter((c) => c.fn === 'report_general');
+  expect(sent).toHaveLength(1);
+  expect(sent[0].args.p_kind).toBe('security');
+});
+
+test('a filed report hands over a link, not just a code', async ({ page }) => {
+  // A ten-character string with a Copy button beside it is a code somebody has
+  // to work out what to do with. The address is the instruction and the
+  // reference at once, and it survives being pasted into a note to yourself.
+  await page.goto('/');
+  await openReportMenu(page);
+  await page.getByRole('button', { name: /^A problem with the site/ }).click();
+  const dialog = page.getByRole('dialog');
+  await dialog.getByRole('textbox', { name: /What.s wrong with it/i }).fill('something');
+  await dialog.getByRole('button', { name: 'Send report' }).click();
+
+  const link = dialog.getByRole('link', { name: /report\/4f2ba9c17d/ });
+  await expect(link).toBeVisible();
+  await expect(link).toHaveAttribute('href', '/report/4f2ba9c17d');
+});

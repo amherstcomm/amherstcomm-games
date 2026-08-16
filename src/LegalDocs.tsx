@@ -422,9 +422,14 @@ export function Terms() {
         <li>Submit fabricated results to distort the shared statistics or the leaderboards</li>
       </List>
       <P>
-        If you find a security problem, please report it via{' '}
-        <Ext href="https://github.com/rptetzloff/anagrimoire/issues">GitHub issues</Ext>{' '}
-        or to <Mail /> rather than exploiting it.
+        If you find a security problem, please report it rather than exploiting it —
+        and not as a public issue, which is what this used to say and was the wrong
+        advice: an open issue publishes the hole to everyone before it is fixed. Use{' '}
+        <Ext href="https://github.com/rptetzloff/anagrimoire/security/advisories/new">
+          a private security advisory
+        </Ext>
+        , the security option under <em>Report a problem</em> at the bottom of any page,
+        or <Mail />.
       </P>
 
       <H>No promises about availability</H>

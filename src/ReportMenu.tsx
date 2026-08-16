@@ -16,7 +16,13 @@
 import { useRef, useState } from 'react';
 import { Flag } from 'lucide-react';
 import ReportDialog from '@/ReportDialog';
-import { reportGeneral, reportPlayer, reportPuzzle, type ReportResult } from '@/reports';
+import {
+  reportGeneral,
+  reportPlayer,
+  reportPuzzle,
+  type GeneralKind,
+  type ReportResult,
+} from '@/reports';
 import { DIFFICULTIES, difficulty, type Difficulty } from '@/difficulty';
 import { useModalA11y } from '@/useModalA11y';
 
@@ -29,14 +35,36 @@ export type ReportContext = {
   level?: Difficulty;
 };
 
-type Choice = 'site' | 'puzzle' | 'player' | 'other';
+type Choice = 'site' | 'puzzle' | 'player' | 'privacy' | 'security' | 'other';
 
 const CHOICES: { id: Choice; label: string; hint: string }[] = [
   { id: 'site', label: 'A problem with the site', hint: 'Something broken, missing or wrong.' },
   { id: 'puzzle', label: 'A puzzle', hint: 'A board with something offensive on it.' },
   { id: 'player', label: 'A player', hint: 'A display name on a leaderboard.' },
+  // Privacy and security used to be a mailto and a line in the terms — a route
+  // with no ticket, no queue, and no way for the person reporting to tell
+  // whether anyone had read it. They are the two kinds where that matters most.
+  { id: 'privacy', label: 'A privacy concern', hint: 'Your data, or anyone else’s.' },
+  { id: 'security', label: 'A security problem', hint: 'A vulnerability or a way in.' },
   { id: 'other', label: 'Something else', hint: 'Anything the others don’t cover.' },
 ];
+
+/** Where a security report would rather go.
+ *
+ *  GitHub's advisory form is private by construction and gives a disclosure
+ *  process with it, which a report table cannot. The form here stays open
+ *  anyway — somebody who has found a hole should never be turned away for not
+ *  having a GitHub account — but the better door is named first. */
+const ADVISORY = 'https://github.com/rptetzloff/anagrimoire/security/advisories/new';
+
+const SUBJECT: Record<Choice, string> = {
+  site: 'a problem with the site',
+  puzzle: 'a puzzle',
+  player: 'a player',
+  privacy: 'a privacy concern',
+  security: 'a security problem',
+  other: 'something else',
+};
 
 export default function ReportMenu({ context }: { context: ReportContext }) {
   const [open, setOpen] = useState(false);
@@ -63,7 +91,7 @@ export default function ReportMenu({ context }: { context: ReportContext }) {
       if (!game || !context.date) return { state: 'unknown' };
       return reportPuzzle(game, context.date, level, reason, email);
     }
-    return reportGeneral(choice === 'site' ? 'site' : 'other', reason, window.location.pathname, email);
+    return reportGeneral(choice as GeneralKind, reason, window.location.pathname, email);
   };
 
   return (
@@ -87,25 +115,31 @@ export default function ReportMenu({ context }: { context: ReportContext }) {
 
       {open && choice && (
         <ReportDialog
-          subject={
-            choice === 'site'
-              ? 'a problem with the site'
-              : choice === 'puzzle'
-                ? 'a puzzle'
-                : choice === 'player'
-                  ? 'a player'
-                  : 'something else'
-          }
+          subject={SUBJECT[choice]}
           detail={
             choice === 'puzzle' && context.date
               ? `${context.gameLabel ?? game} · ${level} · ${context.date} — we read the board off the server.`
-              : choice === 'site' || choice === 'other'
-                ? 'There’s nothing for us to look up here, so please say as much as you can.'
-                : undefined
+              : choice === 'player'
+                ? undefined
+                : 'There’s nothing for us to look up here, so please say as much as you can.'
           }
-          reasonRequired={choice === 'site' || choice === 'other'}
+          reasonRequired={choice !== 'puzzle' && choice !== 'player'}
           extra={
-            choice === 'player' ? (
+            choice === 'security' ? (
+              <p className="mt-3 rounded-lg bg-white/5 border border-white/10 p-3 text-xs text-slate-400">
+                If you have a GitHub account,{' '}
+                <a
+                  href={ADVISORY}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-accent underline underline-offset-2 hover:brightness-110"
+                >
+                  open a private security advisory
+                </a>{' '}
+                instead — it stays private while it’s being fixed and carries a disclosure
+                process with it. This form works too, and doesn’t need an account.
+              </p>
+            ) : choice === 'player' ? (
               <>
                 <label htmlFor="report-name" className="mt-3 block text-xs text-slate-500">
                   The display name, as it appears on the board

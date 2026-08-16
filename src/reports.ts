@@ -211,8 +211,10 @@ export async function actOnReport(
  *  reporter's own account of where they were; it is a hint for whoever reads
  *  it and never evidence, which is why the server stores it under a key that
  *  says so. */
+export type GeneralKind = 'site' | 'other' | 'privacy' | 'security';
+
 export async function reportGeneral(
-  kind: 'site' | 'other',
+  kind: GeneralKind,
   reason: string,
   where: string,
   email?: string
