@@ -40,21 +40,17 @@ import TicketView from '@/TicketView';
 import ReportQueueView from '@/ReportQueueView';
 import ReportActionView from '@/ReportActionView';
 
-import { solveSquare } from '@/squares';
 import HomeView from '@/HomeView';
+import Tile from '@/Tile';
+import { COARSE_POINTER } from '@/coarsePointer';
 import BridgeSolver from '@/solvers/BridgeSolver';
+import LadderSolver from '@/solvers/LadderSolver';
+import SquaresSolver from '@/solvers/SquaresSolver';
+import CryptogramSolver from '@/solvers/CryptogramSolver';
 import RouteLink from '@/RouteLink';
 import SquaresGame, { type SquaresGameHandle } from '@/SquaresGame';
 import CryptogramGame, { type CryptogramGameHandle } from '@/CryptogramGame';
 import LadderGame, { type LadderGameHandle } from '@/LadderGame';
-import { shortestLadder } from '@/ladder';
-import {
-  analyse,
-  buildPatternIndex,
-  hunches,
-  parseCryptogram,
-  type InputMode,
-} from '@/cryptogramSolver';
 import {
   MODE_SLUG,
   modeOf,
@@ -235,107 +231,6 @@ function WordLockMark() {
 
 function normalizeLetters(s: string): string[] {
   return s.toLowerCase().replace(/[^a-z]/g, '').split('');
-}
-
-// iOS Safari ignores inputmode="none" and raises its keyboard on focus
-// anyway, stacking it on top of ours. These fields have to stay focusable so
-// the on-screen keyboard knows where to type, and read-only is the one state
-// that keeps focus while reliably suppressing the device keyboard — writes
-// still land, since the on-screen keyboard sets the value programmatically.
-// Only on touch pointers, so a desktop user with the panel open can still
-// type on a real keyboard.
-const COARSE_POINTER =
-  typeof window !== 'undefined' && !!window.matchMedia?.('(pointer: coarse)').matches;
-
-function Tile({
-  value,
-  onChange,
-  state,
-  index,
-  size,
-  group,
-  osk,
-  tone,
-}: {
-  value: string;
-  onChange: (v: string) => void;
-  state: 'known' | 'empty' | 'center';
-  index: number;
-  size: 'sm' | 'md';
-  group: string;
-  osk?: boolean; // on-screen keyboard active: suppress the device keyboard
-  tone?: { empty: string; filled: string }; // color override, e.g. boxed side hues
-}) {
-  const ref = useRef<HTMLInputElement>(null);
-  const dims =
-    size === 'sm'
-      ? 'w-9 h-11 sm:w-10 sm:h-12 text-xl sm:text-2xl'
-      : 'w-12 h-14 sm:w-14 sm:h-16 text-2xl sm:text-3xl';
-
-  const focusTile = (i: number) => {
-    const el = document.querySelector<HTMLInputElement>(
-      `input[data-tile-group="${group}"][data-tile-index="${i}"]`
-    );
-    el?.focus();
-    el?.select();
-  };
-
-  return (
-    <div className="relative">
-      <input
-        ref={ref}
-        data-tile-group={group}
-        data-tile-index={index}
-        value={value}
-        onChange={(e) => {
-          const raw = e.target.value.toLowerCase().replace(/[^a-z]/g, '');
-          const c = raw.slice(-1);
-          onChange(c);
-          if (c) focusTile(index + 1);
-        }}
-        onKeyDown={(e) => {
-          if (e.key === 'Backspace' && !value) focusTile(index - 1);
-          else if (e.key === 'ArrowLeft') focusTile(index - 1);
-          else if (e.key === 'ArrowRight') focusTile(index + 1);
-          // read-only fields swallow typing, so a physical keyboard on a
-          // touch device (an iPad with a case, say) is served here instead
-          else if (osk && COARSE_POINTER && /^[a-zA-Z]$/.test(e.key)) {
-            e.preventDefault();
-            onChange(e.key.toLowerCase());
-            focusTile(index + 1);
-          } else if (osk && COARSE_POINTER && e.key === 'Backspace' && value) {
-            e.preventDefault();
-            onChange('');
-          }
-        }}
-        maxLength={1}
-        inputMode={osk ? 'none' : undefined}
-        readOnly={osk && COARSE_POINTER}
-        aria-label={`Letter at position ${index + 1}`}
-        placeholder="·"
-        className={`${dims} text-center font-bold uppercase rounded-xl border-2 transition-all duration-150 outline-none
-          ${state === 'known'
-            ? tone?.filled ?? 'bg-emerald-500/15 border-emerald-400 text-emerald-200 shadow-[0_0_20px_-6px] shadow-emerald-500/40'
-            : state === 'center'
-              ? 'bg-amber-400/15 border-amber-400 text-amber-200 shadow-[0_0_20px_-6px] shadow-amber-400/50 placeholder-amber-200/30'
-              : tone?.empty ?? 'bg-white/5 border-white/55 text-white placeholder-white/25 hover:border-white/75'}
-          focus:border-amber-400 focus:bg-amber-400/10 focus:shadow-[0_0_24px_-6px] focus:shadow-amber-400/50`}
-      />
-      {value && (
-        <button
-          onClick={() => {
-            onChange('');
-            ref.current?.focus();
-          }}
-          tabIndex={-1}
-          aria-label={`Clear letter at position ${index + 1}`}
-          className="absolute -top-1.5 -right-1.5 w-5 h-5 flex items-center justify-center rounded-full bg-slate-800 border border-white/25 text-slate-300 hover:text-white hover:bg-slate-700 hover:border-white/50 transition-colors shadow-md"
-        >
-          <X className="w-3 h-3" />
-        </button>
-      )}
-    </div>
-  );
 }
 
 type ChainEntry = { w: string; m: number; last: string };
@@ -606,20 +501,6 @@ function App() {
   const [bridgeY, setBridgeY] = useState(initial.bridge.y);
   const [ladderFrom, setLadderFrom] = useState(initial.ladder.from);
   const [ladderTo, setLadderTo] = useState(initial.ladder.to);
-  const [cryptoText, setCryptoText] = useState('');
-  const [cryptoMode, setCryptoMode] = useState<InputMode>('letters');
-  // marks the player has settled by picking a reading; propagation takes these
-  // as fixed and narrows everything else against them
-  // Kept as the choices made, not as the letters they imply: a pick has to be
-  // undoable on its own, and a flat token->letter map has forgotten which
-  // choice put each letter there.
-  const [cryptoPicks, setCryptoPicks] = useState<
-    { key: string; tokens: string[]; plain: string }[]
-  >([]);
-  // words whose full candidate list the player has asked to see; keyed the way
-  // analyse keys them, so a word keeps its state as the lists narrow
-  const [cryptoOpen, setCryptoOpen] = useState<string[]>([]);
-
   const weaveDims = WEAVE_DIMS[weaveSize];
 
   function changeWeaveSize(size: WeaveSize) {
@@ -1159,93 +1040,6 @@ function App() {
     return ALL_VIEWS.filter((v) => vis.includes(v) || v === entryGame()?.view);
   }, [hiddenViews]);
 
-  // Words grouped by shape, built only while the cryptogram solver is on
-  // screen — it is a pass over the whole dictionary and no other mode wants it.
-  const patternIndex = useMemo(() => {
-    if (mode !== 'cryptogram' || cryptogramPlay) return null;
-    // Search wide, rank narrow — and the two must not be confused.
-    //
-    // Searching the common tier alone was tried and is a trap. It deduces far
-    // more, and some of what it deduces is wrong: propagation is only sound
-    // while the candidate lists are complete, so a passage using any word the
-    // tier lacks lets the intersection eliminate the true letter and "prove" a
-    // false one. On a real cryptogram it settled i as a. A solver that is
-    // confidently wrong is the thing this whole design exists to avoid.
-    //
-    // So the search stays over everything, which keeps every deduction sound,
-    // and the common tier only decides what each list offers first — which was
-    // the actual complaint: the was buried behind dye and ecu.
-    const words = acceptWordsArr ?? standardWordsArr;
-    return words ? buildPatternIndex(words, wordRank ?? undefined) : null;
-  }, [mode, cryptogramPlay, acceptWordsArr, standardWordsArr, wordRank]);
-
-  /** The solver's answer, or the reason there isn't one.
-   *
-   *  It refuses before it searches, because the three ways this can be asked
-   *  wrongly — different lengths, a word the list doesn't have, nothing typed
-   *  yet — are all cheaper to explain than a blank result. Searching over the
-   *  common tier rather than the accept tier keeps the route made of words a
-   *  person would use; a ladder through `esne` answers the question and helps
-   *  nobody. */
-  const ladderResult = useMemo((): 
-    | { kind: 'idle'; note: string }
-    | { kind: 'none'; note: string }
-    | { kind: 'route'; route: string[] } => {
-    if (!ladderFrom || !ladderTo) return { kind: 'idle', note: 'Enter two words.' };
-    if (ladderFrom.length !== ladderTo.length)
-      return { kind: 'none', note: 'Both words have to be the same length.' };
-    if (ladderFrom === ladderTo) return { kind: 'idle', note: 'Those are the same word.' };
-    if (!commonWordsArr) return { kind: 'idle', note: 'Loading the word list…' };
-    const words = new Set(commonWordsArr);
-    for (const w of [ladderFrom, ladderTo])
-      if (!words.has(w)) return { kind: 'none', note: `${w} is not in the word list.` };
-    const route = shortestLadder(ladderFrom, ladderTo, words);
-    return route
-      ? { kind: 'route', route }
-      : { kind: 'none', note: 'No ladder connects those two.' };
-  }, [ladderFrom, ladderTo, commonWordsArr]);
-
-  const cryptoWords = useMemo(
-    () => (cryptoText.trim() ? parseCryptogram(cryptoText, cryptoMode) : []),
-    [cryptoText, cryptoMode]
-  );
-
-  const cryptoPins = useMemo(() => {
-    const pins: Record<string, string> = {};
-    for (const p of cryptoPicks) p.tokens.forEach((t, i) => (pins[t] = p.plain[i]));
-    return pins;
-  }, [cryptoPicks]);
-
-  const cryptoAnalysis = useMemo(
-    () => (patternIndex && cryptoWords.length ? analyse(cryptoWords, patternIndex, cryptoPins) : null),
-    [patternIndex, cryptoWords, cryptoPins]
-  );
-
-  const cryptoHunches = useMemo(
-    () =>
-      cryptoAnalysis
-        ? hunches(cryptoAnalysis, wordRank ?? undefined)
-            // Half the weight agreeing is the floor for saying anything. It
-            // was set when a cold start put its top guess at 41% and wrong,
-            // and it still holds: measured over 150 boards at their opening
-            // move, what clears this bar is right 86% of the time and what
-            // falls below it 41%. The bar is doing the work it was put there
-            // for — a row of confident-looking noise is worse than an empty
-            // one.
-            .filter((h) => h.share >= 0.5)
-            .slice(0, 6)
-        : [],
-    [cryptoAnalysis, wordRank]
-  );
-
-  /** settle a word on one reading, which propagation then spreads. Choosing
-   *  again for the same word replaces that choice rather than stacking a
-   *  second one on top of it. */
-  function pinWord(tokens: string[], plain: string) {
-    const key = tokens.join(' ');
-    setCryptoPicks((prev) => [...prev.filter((p) => p.key !== key), { key, tokens, plain }]);
-  }
-
   const playFlags: Record<Mode, [boolean, (v: boolean) => void]> = {
     pattern: [patternPlay, setPatternPlay],
     descramble: [descramblePlay, setDescramblePlay],
@@ -1649,17 +1443,6 @@ function App() {
       setTodayStatus('error');
     }
   }
-
-  const squareFill = useMemo(() => {
-    if (mode !== 'squares' || squaresPlay) return null;
-    const n = squaresSize;
-    const grid = Array.from({ length: n * n }, (_, i) => {
-      const r = Math.floor(i / n);
-      const c = i % n;
-      return squaresLetters[r * 5 + c] || null;
-    });
-    return solveSquare(words, grid, n, 6);
-  }, [mode, squaresPlay, squaresSize, squaresLetters, words]);
 
   const sorted = useMemo(() => {
     const arr = [...results];
@@ -2165,258 +1948,17 @@ function App() {
               claim: breadth-first search returns the shortest route or proves
               there is none, so there is nothing to rank and nothing to guess. */}
           {mode === 'ladder' && !ladderPlay && (
-          <div className="mb-8 max-w-md mx-auto">
-            <p className="text-sm text-slate-300 mb-3">
-              Two words of the same length. The shortest ladder between them, if there is one.
-            </p>
-            <div className="flex items-center gap-2">
-              <label htmlFor="ladder-from" className="sr-only">from</label>
-              <input
-                id="ladder-from"
-                value={ladderFrom}
-                onChange={(e) => setLadderFrom(e.target.value.toLowerCase().replace(/[^a-z]/g, ''))}
-                placeholder="cold"
-                autoComplete="off"
-                spellCheck={false}
-                className="w-full text-center text-lg font-bold uppercase tracking-widest rounded-lg bg-white/5 border border-white/10 text-slate-200 px-3 py-2"
-              />
-              <span aria-hidden className="text-slate-500">to</span>
-              <label htmlFor="ladder-to" className="sr-only">to</label>
-              <input
-                id="ladder-to"
-                value={ladderTo}
-                onChange={(e) => setLadderTo(e.target.value.toLowerCase().replace(/[^a-z]/g, ''))}
-                placeholder="warm"
-                autoComplete="off"
-                spellCheck={false}
-                className="w-full text-center text-lg font-bold uppercase tracking-widest rounded-lg bg-white/5 border border-white/10 text-slate-200 px-3 py-2"
-              />
-            </div>
-            <div aria-live="polite" className="mt-4">
-              {ladderResult.kind === 'idle' && (
-                <p className="text-sm text-slate-500 text-center">{ladderResult.note}</p>
-              )}
-              {ladderResult.kind === 'none' && (
-                <p className="text-sm text-amber-300 text-center">{ladderResult.note}</p>
-              )}
-              {ladderResult.kind === 'route' && (
-                <>
-                  <p className="text-xs text-slate-400 text-center mb-2">
-                    {ladderResult.route.length - 1} steps
-                  </p>
-                  <ol className="space-y-1">
-                    {ladderResult.route.map((w, i) => (
-                      <li
-                        key={`${w}-${i}`}
-                        className="text-center text-lg font-bold uppercase tracking-widest text-slate-200"
-                      >
-                        {w}
-                      </li>
-                    ))}
-                  </ol>
-                </>
-              )}
-            </div>
-          </div>
+            <LadderSolver
+              from={ladderFrom}
+              to={ladderTo}
+              onFrom={setLadderFrom}
+              onTo={setLadderTo}
+              words={commonWordsArr}
+            />
           )}
 
-          {/* Deduce, then offer. This never picks a reading: it settles what the
-              word shapes force and hands back the choices for what they don't,
-              because a passage can have several readings where every word is
-              real and only a person can tell which one means anything. */}
           {mode === 'cryptogram' && !cryptogramPlay && (
-          <div className="mb-8 max-w-2xl mx-auto">
-            <label htmlFor="crypto-in" className="block text-sm text-slate-300 mb-2">
-              Paste a cryptogram. Every mark has to stand for the same letter throughout.
-            </label>
-            <textarea
-              id="crypto-in"
-              value={cryptoText}
-              onChange={(e) => {
-                setCryptoText(e.target.value);
-                setCryptoPicks([]);
-                setCryptoOpen([]);
-              }}
-              rows={3}
-              spellCheck={false}
-              placeholder={cryptoMode === 'letters' ? 'WKH TXLFN EURZQ IRA' : '17 42 42 / 8 9 3'}
-              className="w-full px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-slate-200 placeholder:text-slate-600 text-sm font-mono"
-            />
-
-            <div className="mt-3 flex flex-wrap items-center gap-2">
-              <div role="group" aria-label="How the marks are written" className="inline-flex rounded-lg bg-white/5 border border-white/10 p-0.5 gap-0.5">
-                {([['letters', 'Letters'], ['tokens', 'Numbers or symbols']] as const).map(([id, label]) => (
-                  <button
-                    key={id}
-                    onClick={() => { setCryptoMode(id); setCryptoPicks([]); setCryptoOpen([]); }}
-                    aria-pressed={cryptoMode === id}
-                    className={`px-3 py-1.5 rounded-md text-sm font-semibold transition-colors
-                      ${cryptoMode === id ? 'bg-emerald-400/15 text-emerald-300' : 'text-slate-400 hover:text-white'}`}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
-              {cryptoPicks.length > 1 && (
-                <button
-                  onClick={() => setCryptoPicks([])}
-                  className="inline-flex items-center gap-1.5 px-3 h-9 rounded-lg text-sm font-semibold bg-white/5 border border-white/10 text-slate-300 hover:bg-white/10 hover:text-white transition-colors"
-                >
-                  <Eraser className="w-4 h-4" />
-                  Undo all
-                </button>
-              )}
-            </div>
-
-            {/* The way in when nothing is offered. On a cold start every word
-                can still be thousands of readings, so there is nothing to click
-                and nothing worth suggesting — but the person asking usually
-                knows a letter already, and one is enough to start the cascade.
-                Typed here it becomes an ordinary pick, undoable like the rest. */}
-            <div className="mt-3 flex flex-wrap items-center gap-2">
-              <label htmlFor="crypto-known" className="text-xs text-slate-500">
-                Know one already?
-              </label>
-              <input
-                id="crypto-known"
-                defaultValue=""
-                placeholder={cryptoMode === 'letters' ? 'K=e' : '17=e'}
-                spellCheck={false}
-                onKeyDown={(e) => {
-                  if (e.key !== 'Enter') return;
-                  const raw = (e.target as HTMLInputElement).value;
-                  const m = raw.match(/^\s*(\S+)\s*=\s*([A-Za-z])\s*$/);
-                  if (!m) return;
-                  pinWord([cryptoMode === 'letters' ? m[1].toLowerCase() : m[1]], m[2].toLowerCase());
-                  (e.target as HTMLInputElement).value = '';
-                }}
-                className="w-24 px-2 h-8 rounded-lg bg-white/5 border border-white/10 text-slate-200 placeholder:text-slate-600 text-sm font-mono"
-              />
-              <span className="text-xs text-slate-600">then Enter</span>
-            </div>
-
-            {/* Each choice on its own, so a wrong turn costs one click rather
-                than the whole session. */}
-            {cryptoPicks.length > 0 && (
-              <div className="mt-3 flex flex-wrap items-center gap-2">
-                <span className="text-xs text-slate-500">Your picks:</span>
-                {cryptoPicks.map((p) => (
-                  <button
-                    key={p.key}
-                    onClick={() => setCryptoPicks((prev) => prev.filter((q) => q.key !== p.key))}
-                    aria-label={`Undo ${p.plain}`}
-                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-sm bg-emerald-400/15 text-emerald-300 hover:bg-rose-400/15 hover:text-rose-300 transition-colors"
-                  >
-                    {p.plain}
-                    <X className="w-3 h-3" />
-                  </button>
-                ))}
-              </div>
-            )}
-
-            {cryptoMode === 'tokens' && (
-              <p className="mt-2 text-xs text-slate-500">
-                Marks separated by spaces, words by a slash — nothing about &ldquo;17 42&rdquo;
-                says whether that is one word or two.
-              </p>
-            )}
-
-            {cryptoAnalysis && (
-              <div className="mt-5" aria-live="polite">
-                <p className="text-lg text-white leading-relaxed font-mono break-words">
-                  {cryptoWords
-                    .map((w) =>
-                      w
-                        // the apostrophe inside a contraction is the passage's
-                        // own punctuation, not a mark waiting to be solved, so
-                        // it reads through rather than showing as a blank
-                        .map((t) => (t === "'" ? "'" : (cryptoAnalysis.mapping[t] ?? '·')))
-                        .join('')
-                    )
-                    .join(' ')}
-                </p>
-                <p className="mt-2 text-xs text-slate-500">
-                  {cryptoAnalysis.contradiction
-                    ? 'No reading fits — one of your picks can’t be right. Undo them and try another.'
-                    : `${Object.keys(cryptoAnalysis.mapping).length} marks settled. A dot is a mark the shapes can’t pin yet.`}
-                </p>
-                {/* Guesses, and dressed as guesses. Everything above this line is
-                    proven; these are counted off the readings still standing, so
-                    they belong in their own row with their odds showing. */}
-                {!cryptoAnalysis.contradiction && cryptoHunches.length > 0 && (
-                  <div className="mt-3 flex flex-wrap items-center gap-2">
-                    <span className="text-xs text-slate-500">Probably:</span>
-                    {cryptoHunches.map((h) => (
-                      <button
-                        key={h.token}
-                        onClick={() => pinWord([h.token], h.plain)}
-                        className="inline-flex items-baseline gap-1 px-2 py-0.5 rounded-md text-sm bg-white/5 border border-dashed border-white/25 text-slate-300 hover:bg-amber-400/15 hover:text-accent transition-colors"
-                      >
-                        <span className="font-mono text-xs text-slate-500">{h.token}</span>
-                        <span>= {h.plain}</span>
-                        <span className="text-[0.625rem] text-slate-500">
-                          {Math.round(h.share * 100)}%
-                        </span>
-                      </button>
-                    ))}
-                  </div>
-                )}
-
-                {/* Most-constrained first, and only words narrow enough to act
-                    on. A five-letter word with three thousand readings is not a
-                    choice, it is a wall — and listing it buries the word with
-                    four, which is where the deduction actually is. */}
-                <div className="mt-4 space-y-2">
-                  {cryptoAnalysis.words
-                    .filter((w) => w.candidates.length > 1 && w.candidates.length <= 40)
-                    .sort((a, b) => a.candidates.length - b.candidates.length)
-                    .slice(0, 12)
-                    .map((w) => {
-                      const key = w.tokens.join(' ');
-                      const open = cryptoOpen.includes(key);
-                      // ten is enough to scan; the rest are a click away rather
-                      // than a number you can only look at
-                      const shown = open ? w.candidates : w.candidates.slice(0, 10);
-                      return (
-                        <div key={key} className="flex flex-wrap items-baseline gap-2">
-                          <span className="text-xs font-mono text-slate-500 shrink-0">
-                            {w.tokens.join(cryptoMode === 'letters' ? '' : ' ')}
-                          </span>
-                          {shown.map((c) => (
-                            <button
-                              key={c}
-                              onClick={() => pinWord(w.tokens, c)}
-                              className="px-2 py-0.5 rounded-md text-sm bg-white/5 border border-white/10 text-slate-300 hover:bg-emerald-400/15 hover:text-emerald-300 transition-colors"
-                            >
-                              {c}
-                            </button>
-                          ))}
-                          {w.candidates.length > 10 && (
-                            <button
-                              onClick={() =>
-                                setCryptoOpen((prev) =>
-                                  open ? prev.filter((k) => k !== key) : [...prev, key]
-                                )
-                              }
-                              className="px-2 py-0.5 rounded-md text-xs text-slate-500 hover:text-white hover:bg-white/10 transition-colors"
-                            >
-                              {open ? 'fewer' : `+${w.candidates.length - 10} more`}
-                            </button>
-                          )}
-                        </div>
-                      );
-                    })}
-                </div>
-
-                {!cryptoAnalysis.contradiction &&
-                  cryptoAnalysis.words.every((w) => w.candidates.length === 1) && (
-                    <p className="mt-3 text-xs text-emerald-300">
-                      Every word has one reading left, so that is the answer.
-                    </p>
-                  )}
-              </div>
-            )}
-          </div>
+            <CryptogramSolver words={acceptWordsArr ?? standardWordsArr} wordRank={wordRank} />
           )}
 
           {weavePlayActive && (
@@ -2426,104 +1968,14 @@ function App() {
           )}
 
           {mode === 'squares' && !squaresPlay && (
-          <div className="mb-8 text-center">
-            <label className="block text-xs font-medium text-slate-400 uppercase tracking-wider mb-2.5">
-              Grid size
-            </label>
-            <div className="mb-5 inline-flex rounded-lg bg-white/5 border border-white/10 p-0.5 gap-0.5">
-              {([4, 5] as SquareSolverSize[]).map((sz) => (
-                <button
-                  key={sz}
-                  onClick={() => setSquaresSize(sz)}
-                  className={`px-3 py-1.5 rounded-md text-sm font-semibold transition-colors
-                    ${squaresSize === sz ? 'bg-white/15 text-white' : 'text-slate-400 hover:text-white'}`}
-                >
-                  {sz}×{sz}
-                </button>
-              ))}
-            </div>
-
-            <label className="block text-xs font-medium text-slate-400 uppercase tracking-wider mb-2.5">
-              Known letters
-            </label>
-            {/* letters live in a 25-slot array indexed by row*5+col, so dropping
-                to 4×4 and back doesn't throw away what was typed */}
-            <div className="w-fit mx-auto">
-              <div
-                className="grid gap-2"
-                style={{ gridTemplateColumns: `repeat(${squaresSize}, auto)` }}
-              >
-                {Array.from({ length: squaresSize * squaresSize }, (_, i) => {
-                  const slot = Math.floor(i / squaresSize) * 5 + (i % squaresSize);
-                  return (
-                    <Tile
-                      key={slot}
-                      index={i}
-                      group="squares"
-                      osk={kbOpen}
-                      value={squaresLetters[slot]}
-                      state={squaresLetters[slot] ? 'known' : 'empty'}
-                      size="sm"
-                      onChange={(c) =>
-                        setSquaresLetters((prev) => prev.map((x, j) => (j === slot ? c : x)))
-                      }
-                    />
-                  );
-                })}
-              </div>
-            </div>
-
-            <p className="mt-4 text-sm text-slate-400">
-              Leave a cell blank and we&apos;ll fill it. Every row and every column
-              comes out a word.
-            </p>
-
-            {squareFill && (
-              <div className="mt-6">
-                {squareFill.solutions.length === 0 ? (
-                  <p className="text-sm text-slate-400">
-                    {squareFill.exhausted
-                      ? 'No square fits those letters.'
-                      : 'Gave up looking — pin down another letter or two and try again.'}
-                  </p>
-                ) : (
-                  <>
-                    <p className="text-sm text-slate-400 mb-4">
-                      {squareFill.solutions.length}
-                      {squareFill.exhausted ? '' : '+'}{' '}
-                      {squareFill.solutions.length === 1 ? 'square' : 'squares'} fit
-                    </p>
-                    <div className="flex flex-wrap justify-center gap-5">
-                      {squareFill.solutions.map((rows, k) => (
-                        <div
-                          key={k}
-                          className="grid gap-1"
-                          style={{ gridTemplateColumns: `repeat(${squaresSize}, auto)` }}
-                        >
-                          {rows.flatMap((w, r) =>
-                            w.split('').map((ch, c) => {
-                              const typed = !!squaresLetters[r * 5 + c];
-                              return (
-                                <span
-                                  key={`${r}-${c}`}
-                                  className={`w-7 h-8 flex items-center justify-center rounded-md border text-sm font-bold uppercase
-                                    ${typed
-                                      ? 'bg-white/15 border-white/25 text-white'
-                                      : 'bg-transparent border-white/10 text-accent'}`}
-                                >
-                                  {ch}
-                                </span>
-                              );
-                            })
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  </>
-                )}
-              </div>
-            )}
-          </div>
+            <SquaresSolver
+              size={squaresSize}
+              letters={squaresLetters}
+              onSize={setSquaresSize}
+              onLetters={setSquaresLetters}
+              words={words}
+              osk={kbOpen}
+            />
           )}
 
           {mode === 'weave' && !weavePlay && (
