@@ -13,7 +13,6 @@ import { PrefsContext } from '@/prefs';
 import OnboardingCard from '@/OnboardingCard';
 import { useModalA11y } from '@/useModalA11y';
 import { Combine, Flag as FlagIcon } from 'lucide-react';
-import { bridges } from '@/bridge';
 import BridgeGame, { type BridgeGameHandle } from '@/BridgeGame';
 import GameMenu from '@/GameMenu';
 import LadderIcon from '@/LadderIcon';
@@ -43,6 +42,7 @@ import ReportActionView from '@/ReportActionView';
 
 import { solveSquare } from '@/squares';
 import HomeView from '@/HomeView';
+import BridgeSolver from '@/solvers/BridgeSolver';
 import RouteLink from '@/RouteLink';
 import SquaresGame, { type SquaresGameHandle } from '@/SquaresGame';
 import CryptogramGame, { type CryptogramGameHandle } from '@/CryptogramGame';
@@ -1205,23 +1205,6 @@ function App() {
       : { kind: 'none', note: 'No ladder connects those two.' };
   }, [ladderFrom, ladderTo, commonWordsArr]);
 
-  /** Every word that bridges the two ends. Unlike the ladder's search this can
-   *  return several — the harvest only publishes prompts with one answer, but
-   *  the solver's job is to say what is true rather than what was published,
-   *  and a wider dictionary than the harvest used will sometimes find another. */
-  const bridgeAnswers = useMemo(():
-    | { kind: 'idle'; note: string }
-    | { kind: 'none'; note: string }
-    | { kind: 'words'; words: string[] } => {
-    if (!bridgeX || !bridgeY) return { kind: 'idle', note: 'Enter both ends.' };
-    if (!standardWordsArr) return { kind: 'idle', note: 'Loading the word list…' };
-    const words = new Set(standardWordsArr);
-    const found = bridges({ x: bridgeX, y: bridgeY }, words);
-    return found.length
-      ? { kind: 'words', words: found }
-      : { kind: 'none', note: `Nothing joins ${bridgeX.toUpperCase()} and ${bridgeY.toUpperCase()}.` };
-  }, [bridgeX, bridgeY, standardWordsArr]);
-
   const cryptoWords = useMemo(
     () => (cryptoText.trim() ? parseCryptogram(cryptoText, cryptoMode) : []),
     [cryptoText, cryptoMode]
@@ -2130,52 +2113,8 @@ function App() {
           </div>
           )}
 
-          {/* The bridge solver, which answers exactly: membership in the word
-              list is the whole rule, so there is nothing to rank. It lists every
-              word that joins the two ends rather than one, because more than one
-              can be right even where the daily pool kept only prompts with a
-              single answer. */}
           {mode === 'bridge' && !bridgePlay && (
-          <div className="mb-8">
-            <div className="flex items-end justify-center gap-2 mb-4">
-              <div>
-                <label htmlFor="bridge-x" className="block text-xs font-medium text-slate-400 uppercase tracking-wider mb-1.5">First</label>
-                <input
-                  id="bridge-x"
-                  aria-label="first"
-                  value={bridgeX}
-                  onChange={(e) => setBridgeX(e.target.value.toLowerCase().replace(/[^a-z]/g, '').slice(0, 12))}
-                  placeholder="snow"
-                  className="w-28 text-center text-lg font-bold uppercase tracking-widest rounded-lg bg-white/5 border border-white/10 text-white px-2 py-1.5"
-                />
-              </div>
-              <span aria-hidden className="pb-3 text-slate-600 text-lg">·</span>
-              <div>
-                <label htmlFor="bridge-y" className="block text-xs font-medium text-slate-400 uppercase tracking-wider mb-1.5">Second</label>
-                <input
-                  id="bridge-y"
-                  aria-label="second"
-                  value={bridgeY}
-                  onChange={(e) => setBridgeY(e.target.value.toLowerCase().replace(/[^a-z]/g, '').slice(0, 12))}
-                  placeholder="room"
-                  className="w-28 text-center text-lg font-bold uppercase tracking-widest rounded-lg bg-white/5 border border-white/10 text-white px-2 py-1.5"
-                />
-              </div>
-            </div>
-            {bridgeAnswers.kind === 'words' ? (
-              <ul className="flex flex-wrap justify-center gap-2">
-                {bridgeAnswers.words.map((w) => (
-                  <li key={w} className="px-3 py-1.5 rounded-lg bg-white/5 border border-white/10 text-sm">
-                    <span className="text-slate-500 uppercase">{bridgeX}</span>
-                    <span className="font-bold uppercase text-accent">{w}</span>
-                    <span className="text-slate-500 uppercase">{bridgeY}</span>
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <p className="text-center text-sm text-slate-400">{bridgeAnswers.note}</p>
-            )}
-          </div>
+            <BridgeSolver x={bridgeX} y={bridgeY} onX={setBridgeX} onY={setBridgeY} words={standardWordsArr} />
           )}
 
           {mode === 'ladder' && ladderPlay && (
