@@ -256,3 +256,84 @@ test('a filed report hands over a link, not just a code', async ({ page }) => {
   await expect(link).toBeVisible();
   await expect(link).toHaveAttribute('href', '/report/4f2ba9c17d');
 });
+
+// The claim the dialog makes about the address has to be true of the code, not
+// just of the sentence. The three surfaces a person could see it on are the
+// queue, the action page, and the digest — the first two never ask the server
+// for it, and the digest says only that somebody asked to be told.
+test('the address is not carried onto any surface that shows a report', async ({
+  page,
+  rpcCalls,
+}) => {
+  await page.goto('/');
+  await openReportMenu(page);
+  await page.getByRole('button', { name: /^A problem with the site/ }).click();
+  const dialog = page.getByRole('dialog');
+  await dialog.getByRole('textbox', { name: /What.s wrong with it/i }).fill('something');
+  await dialog.getByLabel(/Email, if you.d like/i).fill('someone@example.com');
+  await dialog.getByRole('button', { name: 'Send report' }).click();
+  await expect(dialog.getByText(/Thank you/)).toBeVisible();
+
+  // it goes to the server, because that is what it is for
+  const sent = rpcCalls.filter((c) => c.fn === 'report_general');
+  expect(sent[0].args.p_email).toBe('someone@example.com');
+
+  // and the two owner-facing reads never ask for it back
+  rpcCalls.length = 0;
+  await page.goto('/reports');
+  await page.goto('/report/act/00000000-0000-0000-0000-000000000001/deadbeef/dismiss');
+  const asked = rpcCalls.map((c) => c.fn);
+  expect(asked).not.toContain('open_reports');
+  expect(asked).not.toContain('unsent_outcomes');
+  await expect(page.getByText('someone@example.com')).toHaveCount(0);
+});
+
+test('About can open the report menu, and Escape closes only the top one', async ({ page }) => {
+  await page.goto('/about');
+  const about = page.getByRole('dialog', { name: 'About and FAQ' });
+  await expect(about).toBeVisible();
+
+  // named in the sentence rather than described, so it can be used from where
+  // it is explained
+  await about.getByRole('button', { name: 'Report a problem' }).click();
+  const chooser = page.getByRole('dialog', { name: /What would you like to report/ });
+  await expect(chooser).toBeVisible();
+
+  // Every open dialog listens for Escape on the document, so one press used to
+  // close the whole stack — losing the page you were reading as well as the
+  // thing you meant to cancel.
+  await page.keyboard.press('Escape');
+  await expect(chooser).toHaveCount(0);
+  await expect(about).toBeVisible();
+
+  await page.keyboard.press('Escape');
+  await expect(about).toHaveCount(0);
+});
+
+test('the legal pages route people to the form, and name the right addresses', async ({ page }) => {
+  await page.goto('/legal/privacy');
+  const privacy = page.getByRole('dialog', { name: 'Legal and licenses' });
+  await expect(privacy.getByRole('link', { name: 'privacy@anagrimoire.com' }).first()).toBeVisible();
+  await expect(privacy.getByRole('link', { name: 'support@anagrimoire.com' })).toBeVisible();
+
+  // and the form is openable from the sentence that names it
+  // three of them on this page, and role-name matching is case-insensitive, so
+  // "The report form" also matches the two lowercase mentions
+  await privacy.getByRole('button', { name: 'The report form' }).first().click();
+  const chooser = page.getByRole('dialog', { name: /What would you like to report/ });
+  await expect(chooser.getByRole('button', { name: /^A privacy concern/ })).toBeEnabled();
+  // no board behind a legal page, so that option says so rather than opening a
+  // form that cannot be sent
+  await expect(chooser.getByRole('button', { name: /^A puzzle/ })).toBeDisabled();
+  await page.keyboard.press('Escape');
+
+  await page.goto('/legal/terms');
+  const terms = page.getByRole('dialog', { name: 'Legal and licenses' });
+  // security has its own address and its own route, and no longer points at
+  // public issues — an open issue publishes the hole before it is fixed
+  await expect(terms.getByRole('link', { name: 'security@anagrimoire.com' })).toBeVisible();
+  await expect(
+    terms.getByRole('link', { name: /private security advisory/i })
+  ).toHaveAttribute('href', /security\/advisories\/new$/);
+  await expect(terms.getByRole('link', { name: /GitHub issues/ })).toHaveCount(0);
+});

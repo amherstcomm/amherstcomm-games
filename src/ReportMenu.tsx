@@ -66,7 +66,18 @@ const SUBJECT: Record<Choice, string> = {
   other: 'something else',
 };
 
-export default function ReportMenu({ context }: { context: ReportContext }) {
+export default function ReportMenu({
+  context,
+  label = 'Report a problem',
+  className = 'inline-flex items-center gap-1.5 hover:text-slate-300 transition-colors',
+  showIcon = true,
+}: {
+  context: ReportContext;
+  /** the trigger's words, so About can name it in a sentence */
+  label?: string;
+  className?: string;
+  showIcon?: boolean;
+}) {
   const [open, setOpen] = useState(false);
   const [choice, setChoice] = useState<Choice | null>(null);
   // what the chosen kind needs beyond a reason: a name, or a board
@@ -96,12 +107,14 @@ export default function ReportMenu({ context }: { context: ReportContext }) {
 
   return (
     <>
-      <button
-        onClick={() => setOpen(true)}
-        className="inline-flex items-center gap-1.5 hover:text-slate-300 transition-colors"
-      >
-        <Flag className="w-3.5 h-3.5" aria-hidden="true" />
-        Report a problem
+      {/* A button rather than a link, in both places it appears, because it
+          opens a dialog rather than going anywhere — an anchor here would
+          promise an address that does not exist, and would break a
+          middle-click. About renders it inline in a sentence, styled as the
+          links around it. */}
+      <button onClick={() => setOpen(true)} className={className}>
+        {showIcon && <Flag className="w-3.5 h-3.5" aria-hidden="true" />}
+        {label}
       </button>
 
       {open && !choice && (

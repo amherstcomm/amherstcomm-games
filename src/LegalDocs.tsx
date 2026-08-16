@@ -4,9 +4,18 @@
 // the wording.
 
 import type { ReactNode } from 'react';
+import ReportMenu from '@/ReportMenu';
 
-export const LEGAL_UPDATED = '5 August 2026';
+export const LEGAL_UPDATED = '16 August 2026';
+
+// Three addresses rather than one, because they are three different queues and
+// a single inbox makes the wrong one the default. Privacy requests have to
+// arrive by email when they are about somebody's own account — only the address
+// on the account can show whose account it is — which is why that one cannot
+// simply become a form.
 export const PRIVACY_EMAIL = 'privacy@anagrimoire.com';
+export const SECURITY_EMAIL = 'security@anagrimoire.com';
+export const SUPPORT_EMAIL = 'support@anagrimoire.com';
 
 function H({ children }: { children: ReactNode }) {
   return <h4 className="text-sm font-semibold text-slate-200 mt-5 mb-1.5">{children}</h4>;
@@ -20,14 +29,30 @@ function List({ children }: { children: ReactNode }) {
   return <ul className="text-slate-400 mb-2.5 space-y-1.5 list-disc list-outside pl-5">{children}</ul>;
 }
 
-function Mail() {
+function Mail({ to = PRIVACY_EMAIL }: { to?: string }) {
   return (
     <a
-      href={`mailto:${PRIVACY_EMAIL}`}
+      href={`mailto:${to}`}
       className="text-amber-300 hover:text-amber-200 underline underline-offset-2"
     >
-      {PRIVACY_EMAIL}
+      {to}
     </a>
+  );
+}
+
+/** The report form, named in a sentence and openable from it.
+ *
+ *  A button rather than a link because it opens a dialog rather than going
+ *  anywhere. The context is empty on purpose: there is no board behind a legal
+ *  page, so the chooser says as much and offers the other five kinds. */
+function Report({ children }: { children: ReactNode }) {
+  return (
+    <ReportMenu
+      context={{}}
+      label={String(children)}
+      showIcon={false}
+      className="text-amber-300 hover:text-amber-200 underline underline-offset-2"
+    />
   );
 }
 
@@ -146,8 +171,10 @@ export function PrivacyPolicy() {
         waiting for you to answer again.
       </P>
       <P>
-        Clearing this site&apos;s data in your browser erases all of it. If you have
-        no account, that is genuinely everything we hold.
+        Clearing this site&apos;s data in your browser erases all of it. If you have no
+        account and have never sent us a report, that is genuinely everything we hold —
+        a report is the one thing you can leave behind without an account, and it stays
+        until it is dealt with.
       </P>
 
       <H>What happens even without an account</H>
@@ -158,13 +185,23 @@ export function PrivacyPolicy() {
           server logs including IP addresses.
         </li>
         <li>
-          <strong className="text-slate-300">Puzzle data.</strong> Daily puzzles and
-          the practice pool are static files fetched from{' '}
+          <strong className="text-slate-300">Puzzle data.</strong> Today&apos;s boards
+          are asked for from our database at{' '}
+          <Ext href="https://supabase.com/privacy">Supabase</Ext>, which sees the
+          request and your IP address the way any server would. The request carries no
+          account and no identifier — it asks only for a game name, and the function it
+          calls will not serve a future day. If that fails or is slow, the browser falls
+          back to static files on{' '}
           <Ext href="https://docs.github.com/en/site-policy/privacy-policies/github-general-privacy-statement">
             GitHub
           </Ext>
-          , so GitHub sees the request and your IP address the way any web server
-          would.
+          , which then sees the request instead. The practice pools come the same two
+          ways.
+        </li>
+        <li>
+          <strong className="text-slate-300">Reporting something.</strong> If you use
+          the report form, what you write goes to the same database, with no account
+          needed. There is a section on that below.
         </li>
         <li>
           <strong className="text-slate-300">Analytics</strong>, described below.
@@ -203,6 +240,12 @@ export function PrivacyPolicy() {
           before signing in
         </li>
         <li>A display name, if you choose to set one — the next section is about that</li>
+        <li>
+          If you use invite links: who you are friends with, anyone you have blocked,
+          and any invite codes you have minted and not yet let expire. A friendship is
+          two names knowing about each other and nothing more — it changes whose scores
+          you can see on a board, not what is stored about either of you.
+        </li>
       </List>
       <P>
         We never see your password. Signing in with GitHub or Google tells us your
@@ -240,6 +283,27 @@ export function PrivacyPolicy() {
         return anyone&apos;s individual rows, and no player is identifiable from its
         output. Only results from signed-in accounts are counted, because they are
         the only ones we have.
+      </P>
+
+      <H>If you report something</H>
+      <P>
+        A report stores what you told us and, for a puzzle or a player, what the
+        server itself holds about the thing you reported — we look the board or
+        the name up rather than trusting what your browser says it saw, so the
+        report contains no record of your session. Nothing identifying about the
+        reporter is stored: no address, no fingerprint, and rate limits are
+        counted per reported thing rather than per reporter, precisely so there
+        is nothing to count you by.
+      </P>
+      <P>
+        The email address is optional and is the one exception. It is used to send
+        you a receipt and the outcome, and nothing else. It is never shown
+        alongside the report — not on the page where reports are handled, not in
+        the daily summary, which says only that someone asked to be told — and it
+        is deleted from the report once the outcome has been sent. We are not
+        claiming it is technically unreachable by whoever runs the database; we
+        are saying it is not put in front of anyone, not used for anything else,
+        and not kept.
       </P>
 
       <H>Analytics</H>
@@ -301,7 +365,10 @@ export function PrivacyPolicy() {
       <P>
         Both are immediate and neither can be undone. If you would rather we did it, or
         you want a copy of what we hold or something corrected, email <Mail /> from the
-        address you signed up with.
+        address you signed up with — that one has to be email, because the request only
+        means anything if it comes from the account it is about, and a form anyone can
+        fill in cannot show that. <Report>The report form</Report> is the right route
+        for a privacy question that is not about your own account.
       </P>
       <P>
         Two things are worth saying plainly about what deletion does and doesn&apos;t
@@ -332,14 +399,15 @@ export function PrivacyPolicy() {
       <P>
         Account data is kept until you delete it or ask us to. Analytics data ages
         out on Google&apos;s schedule. Local storage stays in your browser until you
-        clear it.
+        clear it. An address left on a report goes when that report is closed out.
       </P>
 
       <H>Children</H>
       <P>
         This site is not directed at children under 13, and we do not knowingly
         collect anything from them. If you believe a child has created an account,
-        email <Mail /> and we will remove it.
+        tell us through <Report>the report form</Report> or email{' '}
+        <Mail to={SUPPORT_EMAIL} />, and we will remove it.
       </P>
 
       <H>Where data goes</H>
@@ -356,7 +424,15 @@ export function PrivacyPolicy() {
 
       <H>Contact</H>
       <P>
-        <Mail />
+        The quickest route is <Report>the report form</Report> at the bottom of any
+        page, under <em>a privacy concern</em>. It needs no account, it gives you a
+        reference you can check, and it puts your message in a queue that is worked
+        through rather than an inbox that might not be — which is the honest
+        difference between the two. Leave an address if you want a reply.
+      </P>
+      <P>
+        You can also email <Mail /> if you would rather, and you should if what you
+        need to send us does not fit in a form.
       </P>
     </div>
   );
@@ -429,7 +505,7 @@ export function Terms() {
           a private security advisory
         </Ext>
         , the security option under <em>Report a problem</em> at the bottom of any page,
-        or <Mail />.
+        or <Mail to={SECURITY_EMAIL} />.
       </P>
 
       <H>No promises about availability</H>
@@ -466,7 +542,9 @@ export function Terms() {
 
       <H>Contact</H>
       <P>
-        <Mail />
+        <Report>The report form</Report> at the bottom of any page, or{' '}
+        <Mail to={SUPPORT_EMAIL} />. Security problems have their own route, above;
+        privacy has its own address under the privacy policy.
       </P>
     </div>
   );

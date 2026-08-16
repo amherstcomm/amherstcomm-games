@@ -37,6 +37,13 @@ export function useModalA11y(
 
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
+        // Only the dialog on top. Every open dialog listens on the document,
+        // so one Escape used to close the whole stack — opening the report
+        // chooser from inside About and pressing Escape dismissed both, losing
+        // the page you were reading as well as the thing you meant to cancel.
+        // Last in the DOM is topmost here: dialogs are appended as they open.
+        const stack = document.querySelectorAll('[role="dialog"]');
+        if (stack.length > 1 && node && stack[stack.length - 1] !== node) return;
         close.current();
         return;
       }

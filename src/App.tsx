@@ -3883,8 +3883,18 @@ function App() {
                       How do I report something?
                     </p>
                     <p>
-                      <strong className="text-slate-300">Report a problem</strong> at the
-                      bottom of any page. It covers a puzzle with something offensive on
+                      <ReportMenu
+                        context={{
+                          game: REPORT_SLUG[mode],
+                          gameLabel: MODES.find((m) => m.id === mode)?.label,
+                          date: dateByMode[mode],
+                          level,
+                        }}
+                        label="Report a problem"
+                        showIcon={false}
+                        className="font-medium text-amber-300 hover:text-amber-200 underline underline-offset-2"
+                      />{' '}
+                      at the bottom of any page. It covers a puzzle with something offensive on
                       it, a display name, a privacy concern, a broken page, and anything
                       else. You don&apos;t need an account, and for a puzzle or a player
                       there is nothing to copy out — we look the board or the name up
@@ -3900,8 +3910,17 @@ function App() {
                       </a>{' '}
                       to see whether it&apos;s still open and what was decided. Leave an
                       email address as well and we&apos;ll write to you when it&apos;s
-                      dealt with — it&apos;s used for that and nothing else, and it goes
-                      when the report does.
+                      dealt with.
+                    </p>
+                    <p className="mt-2">
+                      That address is used for those two emails and nothing else. It
+                      isn&apos;t attached to the report anyone reads — not on the page
+                      where reports get handled, and not in the daily summary, which says
+                      only that somebody asked to be told — and it&apos;s deleted once the
+                      outcome has gone out. Nothing else about a reporter is stored at
+                      all: even the limits on how many reports we take are counted per
+                      reported thing rather than per person, so there is nothing to count
+                      you by.
                     </p>
                   </div>
                   <div>

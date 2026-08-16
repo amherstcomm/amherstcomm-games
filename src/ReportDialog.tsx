@@ -197,7 +197,10 @@ export default function ReportDialog({
               className="mt-1 w-full rounded-lg bg-slate-950 border border-white/10 px-3 py-2 text-sm text-slate-200 placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-accent"
             />
             <p className="mt-1 text-xs text-slate-600">
-              Used only to send you the outcome, and deleted with the report.
+              Used only to send you a receipt and the outcome. It isn&apos;t shown with the
+              report — not on the page where these get handled, and not in the daily summary,
+              which says only that someone asked to be told — and it&apos;s deleted once the
+              outcome has been sent.
             </p>
 
             {(result?.state === 'error' || result?.state === 'offline') && (
