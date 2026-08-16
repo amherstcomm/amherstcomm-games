@@ -108,6 +108,12 @@ export default function TicketView({ ticket }: { ticket: string }) {
                 : (status.resolution && OUTCOME[status.resolution]) ||
                   'It has been dealt with.'}
             </p>
+            {/* What was actually written about it, which is more use than the
+                canned sentence above and is the same text the outcome email
+                carries. */}
+            {!status.open && status.note && (
+              <p className="mt-2 text-sm text-slate-400 break-words">{status.note}</p>
+            )}
           </div>
         )}
       </div>

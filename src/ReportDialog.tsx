@@ -111,9 +111,17 @@ export default function ReportDialog({
                       Your reference, if you want to check on it later:
                     </p>
                     <div className="mt-1.5 flex items-center gap-2">
-                      <code className="flex-1 min-w-0 truncate rounded-lg bg-slate-950 border border-white/10 px-3 py-2 font-mono text-sm text-accent">
-                        {ticket}
-                      </code>
+                      {/* The address, not just the code. A ten-character string
+                          with a Copy button beside it is a code somebody has to
+                          work out what to do with; the link is the instruction
+                          and the reference at once, and it survives being
+                          pasted into a note to yourself. */}
+                      <a
+                        href={`/report/${ticket}`}
+                        className="flex-1 min-w-0 truncate rounded-lg bg-slate-950 border border-white/10 px-3 py-2 font-mono text-sm text-accent hover:brightness-110"
+                      >
+                        {ticketUrl.replace(/^https?:\/\//, '')}
+                      </a>
                       <button
                         onClick={copy}
                         aria-label="Copy the link to this report"
@@ -189,7 +197,10 @@ export default function ReportDialog({
               className="mt-1 w-full rounded-lg bg-slate-950 border border-white/10 px-3 py-2 text-sm text-slate-200 placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-accent"
             />
             <p className="mt-1 text-xs text-slate-600">
-              Used only to send you the outcome, and deleted with the report.
+              Used only to send you a receipt and the outcome. It isn&apos;t shown with the
+              report — not on the page where these get handled, and not in the daily summary,
+              which says only that someone asked to be told — and it&apos;s deleted once the
+              outcome has been sent.
             </p>
 
             {(result?.state === 'error' || result?.state === 'offline') && (

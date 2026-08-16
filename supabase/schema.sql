@@ -1829,7 +1829,7 @@ grant execute on function public.is_owner() to authenticated;
 
 create table if not exists public.reports (
   id uuid primary key default gen_random_uuid(),
-  kind text not null check (kind in ('puzzle', 'player', 'site', 'other')),
+  kind text not null check (kind in ('puzzle', 'player', 'site', 'other', 'privacy', 'security')),
   -- what was reported, as the server resolved it — never as the client said it
   subject text not null,
   evidence jsonb not null,
@@ -1855,9 +1855,14 @@ create table if not exists public.reports (
 -- page, and everything nobody thought of. Those two carry no server-side
 -- evidence, which is exactly why they need the reason field the other two
 -- treat as optional.
+-- Widened twice. First past puzzles and players, which was the half a
+-- generator can produce and missed the half a person can. Then again for
+-- privacy and security, which had been living in a mailto and a sentence in
+-- the terms — a route with no ticket, no queue, and no way for anyone to tell
+-- whether it had been read.
 alter table public.reports drop constraint if exists reports_kind_check;
 alter table public.reports add constraint reports_kind_check
-  check (kind in ('puzzle', 'player', 'site', 'other'));
+  check (kind in ('puzzle', 'player', 'site', 'other', 'privacy', 'security'));
 
 alter table public.reports add column if not exists ticket text;
 alter table public.reports add column if not exists reporter_email text
@@ -2112,7 +2117,7 @@ as $fn$
 declare
   cleaned text := nullif(btrim(coalesce(p_reason, '')), '');
 begin
-  if p_kind is null or p_kind not in ('site', 'other') then
+  if p_kind is null or p_kind not in ('site', 'other', 'privacy', 'security') then
     return jsonb_build_object('ok', false, 'reason', 'no such kind');
   end if;
   if cleaned is null then
@@ -2154,6 +2159,12 @@ as $fn$
        'found', true,
        'status', r.status,
        'resolution', r.resolution,
+       -- The note too. It was left out at first and the email carried it
+       -- anyway, which made two different promises out of one field: a
+       -- reporter who gave an address was told why, and a reporter who didn't
+       -- got a note written for them that they could never read. The note is
+       -- written knowing the reporter sees it — one audience, one promise.
+       'note', r.resolution_note,
        'filed', r.created_at,
        'closed', r.resolved_at
      )

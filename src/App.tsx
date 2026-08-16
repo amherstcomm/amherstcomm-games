@@ -1373,9 +1373,15 @@ function App() {
     if (accountOpen) return { kind: 'account', tab: accountTab };
     const panel: Panel | null = keysOpen ? 'keys' : aboutOpen ? 'about' : null;
     if (panel) return { kind: 'panel', panel };
+    // Below the panels but above the games: a report page is where you are,
+    // not something laid over a board. Leaving it out meant /reports rendered
+    // correctly and then rewrote the address to the game underneath it — so
+    // the tab said "Weave — Daily", a refresh landed somewhere else, and a
+    // link to a ticket could not survive being copied.
+    if (reportPage) return reportPage;
     if (atHome) return { kind: 'home' };
     return { kind: 'game', view: currentView, slug: MODE_SLUG[mode], daily: dailyByMode[mode] };
-  }, [legalOpen, legalTab, statsOpen, statsTab, settingsOpen, settingsTab, keysOpen, accountOpen, accountTab, aboutOpen, atHome, currentView, mode, dailyByMode]);
+  }, [legalOpen, legalTab, statsOpen, statsTab, settingsOpen, settingsTab, keysOpen, accountOpen, accountTab, aboutOpen, reportPage, atHome, currentView, mode, dailyByMode]);
 
   // Did we put the panel in the history ourselves? Closing one we pushed is a
   // step back rather than a new address, so Back doesn't reopen what was just
@@ -2045,7 +2051,11 @@ function App() {
               Anagrimoire
             </span>
           </h1>
-          {!atHome && (
+          {/* The strapline describes whichever game is loaded behind all this,
+              which on a report page is a game nobody asked for — a ticket
+              opened from an email introduced itself as "Play the themed tiling
+              puzzle". The wordmark stays, since it is the way home. */}
+          {!atHome && !reportPage && (
             <p className="text-slate-400 max-w-md mx-auto text-sm sm:text-base">
               {shownViews.includes('solve')
                 ? MODES.find((m) => m.id === mode)?.description
@@ -2054,1447 +2064,1462 @@ function App() {
           )}
         </header>
 
-        {reportPage?.kind === 'ticket' && <TicketView ticket={reportPage.ticket} />}
-        {reportPage?.kind === 'reportQueue' && <ReportQueueView />}
-        {reportPage?.kind === 'reportAction' && (
-          <ReportActionView
-            id={reportPage.id}
-            token={reportPage.token}
-            action={reportPage.action}
-          />
-        )}
+        {/* A report page is the whole page. Gating the games and the home
+            view left every other section standing — the Solve/Play/Learn
+            switch, the difficulty tabs, the dictionary and length pickers —
+            so a reader arriving from an email got a report wearing the
+            chrome of a word game. One conditional rather than a dozen,
+            because a dozen is a list somebody will add the thirteenth to.
+            The header and footer stay: they are the way back out. */}
+        {reportPage ? (
+          <>
+          {reportPage?.kind === 'ticket' && <TicketView ticket={reportPage.ticket} />}
+          {reportPage?.kind === 'reportQueue' && <ReportQueueView />}
+          {reportPage?.kind === 'reportAction' && (
+            <ReportActionView
+              id={reportPage.id}
+              token={reportPage.token}
+              action={reportPage.action}
+            />
+          )}
 
-        {!reportPage && atHome && (
-          <HomeView
-            modes={shownModes}
-            onOpen={(m) => {
-              setAtHome(false);
-              setMode(m);
-              // not goToView: that reads `mode`, which is still the game we're
-              // leaving until this render commits, so it would flip the wrong
-              // game's tab
-              setLearnMode(false);
-              playFlags[m][1](true);
-              requestDaily(m, true);
-            }}
-            onBoards={() => {
-              setStatsTab('boards');
-              setStatsOpen(true);
-            }}
-          />
-        )}
+          </>
+        ) : (
+          <>
+          {atHome && (
+            <HomeView
+              modes={shownModes}
+              onOpen={(m) => {
+                setAtHome(false);
+                setMode(m);
+                // not goToView: that reads `mode`, which is still the game we're
+                // leaving until this render commits, so it would flip the wrong
+                // game's tab
+                setLearnMode(false);
+                playFlags[m][1](true);
+                requestDaily(m, true);
+              }}
+              onBoards={() => {
+                setStatsTab('boards');
+                setStatsOpen(true);
+              }}
+            />
+          )}
 
-        {!atHome && (
-        <>
-        {/* Only where there's a Learn tab to point at, and only until it's
-            been answered either way. `currentView` keeps it off the Learn tab
-            itself, where it would be telling someone about the page they're
-            already reading. */}
-        {!onboarded &&
-          // signed in, the account gets the deciding vote — wait for it rather
-          // than flashing "new here?" at someone who answered on another device
-          (!session || settingsPulled) &&
-          shownViews.includes('learn') &&
-          currentView !== 'learn' && (
-          <OnboardingCard
-            game={MODES.find((m) => m.id === mode)?.label ?? 'this game'}
-            onLearn={() => {
-              goToView('learn');
-              setOnboarded(true);
-            }}
-            onDismiss={() => setOnboarded(true)}
-          />
-        )}
+          {!atHome && (
+          <>
+          {/* Only where there's a Learn tab to point at, and only until it's
+              been answered either way. `currentView` keeps it off the Learn tab
+              itself, where it would be telling someone about the page they're
+              already reading. */}
+          {!onboarded &&
+            // signed in, the account gets the deciding vote — wait for it rather
+            // than flashing "new here?" at someone who answered on another device
+            (!session || settingsPulled) &&
+            shownViews.includes('learn') &&
+            currentView !== 'learn' && (
+            <OnboardingCard
+              game={MODES.find((m) => m.id === mode)?.label ?? 'this game'}
+              onLearn={() => {
+                goToView('learn');
+                setOnboarded(true);
+              }}
+              onDismiss={() => setOnboarded(true)}
+            />
+          )}
 
-        {/* solve / play / learn toggle — gone entirely when only one is left,
-            since a switch with one position is just clutter. Hiding Solve and
-            Learn is how the site becomes a game site rather than a tool with
-            games attached. */}
-        <section className={`mb-7 text-center ${shownViews.length > 1 ? '' : 'hidden'}`}>
-          {/* wraps rather than overflowing: at 320px with the largest text
-              this row is wider than the viewport, and the page clips its
-              horizontal overflow, so Learn was cut off with no way to reach
-              it */}
-          <div className="inline-flex flex-wrap justify-center max-w-full rounded-xl bg-white/5 border border-white/10 p-1 gap-1">
-              {(
-                [
-                  { view: 'solve', label: 'Solve', Icon: Search },
-                  { view: 'play', label: 'Play', Icon: Gamepad2 },
-                  { view: 'learn', label: 'Learn', Icon: BookOpen },
-                ] as const
-              )
-                .filter(({ view }) => shownViews.includes(view))
-                .map(({ view, label, Icon }) => {
-                const active = currentView === view;
-                return (
-                  <RouteLink
-                    key={label}
-                    to={pathOf({
-                      kind: 'game',
-                      view,
-                      slug: MODE_SLUG[mode],
-                      daily: dailyByMode[mode],
-                    })}
-                    onGo={() => goToView(view)}
-                    className={`inline-flex items-center gap-1.5 px-4 sm:px-5 h-10 rounded-lg text-sm font-semibold transition-all duration-150
-                      ${active
-                        ? 'bg-emerald-400 text-ink shadow-lg shadow-emerald-500/30'
+          {/* solve / play / learn toggle — gone entirely when only one is left,
+              since a switch with one position is just clutter. Hiding Solve and
+              Learn is how the site becomes a game site rather than a tool with
+              games attached. */}
+          <section className={`mb-7 text-center ${shownViews.length > 1 ? '' : 'hidden'}`}>
+            {/* wraps rather than overflowing: at 320px with the largest text
+                this row is wider than the viewport, and the page clips its
+                horizontal overflow, so Learn was cut off with no way to reach
+                it */}
+            <div className="inline-flex flex-wrap justify-center max-w-full rounded-xl bg-white/5 border border-white/10 p-1 gap-1">
+                {(
+                  [
+                    { view: 'solve', label: 'Solve', Icon: Search },
+                    { view: 'play', label: 'Play', Icon: Gamepad2 },
+                    { view: 'learn', label: 'Learn', Icon: BookOpen },
+                  ] as const
+                )
+                  .filter(({ view }) => shownViews.includes(view))
+                  .map(({ view, label, Icon }) => {
+                  const active = currentView === view;
+                  return (
+                    <RouteLink
+                      key={label}
+                      to={pathOf({
+                        kind: 'game',
+                        view,
+                        slug: MODE_SLUG[mode],
+                        daily: dailyByMode[mode],
+                      })}
+                      onGo={() => goToView(view)}
+                      className={`inline-flex items-center gap-1.5 px-4 sm:px-5 h-10 rounded-lg text-sm font-semibold transition-all duration-150
+                        ${active
+                          ? 'bg-emerald-400 text-ink shadow-lg shadow-emerald-500/30'
+                          : 'text-slate-300 hover:bg-white/10'}`}
+                    >
+                      <Icon className="w-4 h-4" />
+                      {label}
+                    </RouteLink>
+                  );
+                })}
+            </div>
+          </section>
+
+          {showDifficultySwitch && (
+            <section className="mb-7 text-center">
+              <label className="block text-xs font-medium text-slate-400 uppercase tracking-wider mb-2.5">
+                Difficulty
+              </label>
+              <div className="inline-flex flex-wrap justify-center max-w-full rounded-xl bg-white/5 border border-white/10 p-1 gap-1">
+                {DIFFICULTIES.map((id) => (
+                  <button
+                    key={id}
+                    onClick={() => setDifficulty(id)}
+                    aria-pressed={level === id}
+                    className={`px-3.5 h-9 rounded-lg text-sm font-semibold transition-colors
+                      ${level === id
+                        ? 'bg-amber-400 text-ink shadow-lg shadow-amber-500/30'
                         : 'text-slate-300 hover:bg-white/10'}`}
                   >
-                    <Icon className="w-4 h-4" />
-                    {label}
-                  </RouteLink>
-                );
-              })}
-          </div>
-        </section>
+                    {DIFFICULTY_LABEL[id]}
+                  </button>
+                ))}
+              </div>
+            </section>
+          )}
 
-        {showDifficultySwitch && (
-          <section className="mb-7 text-center">
-            <label className="block text-xs font-medium text-slate-400 uppercase tracking-wider mb-2.5">
-              Difficulty
+          {learnMode && (
+            <div className="mb-8">
+              <LearnMode
+                ref={learnRef}
+                mode={mode}
+                standardWords={standardWordsArr}
+                palette={palette}
+                theme={resolveTheme(theme)}
+              />
+            </div>
+          )}
+
+          {/* The report pages replace the board rather than sitting above it.
+              Gating only the home page left /report/<ticket> rendering a ticket
+              *and* a playable puzzle underneath it — which is what a reader on a
+              report page least expects to find. */}
+          {!learnMode && (
+          <>
+          {squaresPlayActive && (
+          <div className="mb-8">
+            <SquaresGame ref={squaresRef} standardWords={acceptWordsArr ?? standardWordsArr} />
+          </div>
+          )}
+
+          {cryptogramPlayActive && (
+          <div className="mb-8">
+            <CryptogramGame ref={cryptogramRef} />
+          </div>
+          )}
+
+          {mode === 'bridge' && bridgePlay && (
+          <div className="mb-8">
+            <BridgeGame ref={bridgeRef} />
+          </div>
+          )}
+
+          {/* The bridge solver, which answers exactly: membership in the word
+              list is the whole rule, so there is nothing to rank. It lists every
+              word that joins the two ends rather than one, because more than one
+              can be right even where the daily pool kept only prompts with a
+              single answer. */}
+          {mode === 'bridge' && !bridgePlay && (
+          <div className="mb-8">
+            <div className="flex items-end justify-center gap-2 mb-4">
+              <div>
+                <label htmlFor="bridge-x" className="block text-xs font-medium text-slate-400 uppercase tracking-wider mb-1.5">First</label>
+                <input
+                  id="bridge-x"
+                  aria-label="first"
+                  value={bridgeX}
+                  onChange={(e) => setBridgeX(e.target.value.toLowerCase().replace(/[^a-z]/g, '').slice(0, 12))}
+                  placeholder="snow"
+                  className="w-28 text-center text-lg font-bold uppercase tracking-widest rounded-lg bg-white/5 border border-white/10 text-white px-2 py-1.5"
+                />
+              </div>
+              <span aria-hidden className="pb-3 text-slate-600 text-lg">·</span>
+              <div>
+                <label htmlFor="bridge-y" className="block text-xs font-medium text-slate-400 uppercase tracking-wider mb-1.5">Second</label>
+                <input
+                  id="bridge-y"
+                  aria-label="second"
+                  value={bridgeY}
+                  onChange={(e) => setBridgeY(e.target.value.toLowerCase().replace(/[^a-z]/g, '').slice(0, 12))}
+                  placeholder="room"
+                  className="w-28 text-center text-lg font-bold uppercase tracking-widest rounded-lg bg-white/5 border border-white/10 text-white px-2 py-1.5"
+                />
+              </div>
+            </div>
+            {bridgeAnswers.kind === 'words' ? (
+              <ul className="flex flex-wrap justify-center gap-2">
+                {bridgeAnswers.words.map((w) => (
+                  <li key={w} className="px-3 py-1.5 rounded-lg bg-white/5 border border-white/10 text-sm">
+                    <span className="text-slate-500 uppercase">{bridgeX}</span>
+                    <span className="font-bold uppercase text-accent">{w}</span>
+                    <span className="text-slate-500 uppercase">{bridgeY}</span>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-center text-sm text-slate-400">{bridgeAnswers.note}</p>
+            )}
+          </div>
+          )}
+
+          {mode === 'ladder' && ladderPlay && (
+          <div className="mb-8">
+            <LadderGame ref={ladderRef} />
+          </div>
+          )}
+
+          {/* The ladder solver answers exactly, which no other solver here can
+              claim: breadth-first search returns the shortest route or proves
+              there is none, so there is nothing to rank and nothing to guess. */}
+          {mode === 'ladder' && !ladderPlay && (
+          <div className="mb-8 max-w-md mx-auto">
+            <p className="text-sm text-slate-300 mb-3">
+              Two words of the same length. The shortest ladder between them, if there is one.
+            </p>
+            <div className="flex items-center gap-2">
+              <label htmlFor="ladder-from" className="sr-only">from</label>
+              <input
+                id="ladder-from"
+                value={ladderFrom}
+                onChange={(e) => setLadderFrom(e.target.value.toLowerCase().replace(/[^a-z]/g, ''))}
+                placeholder="cold"
+                autoComplete="off"
+                spellCheck={false}
+                className="w-full text-center text-lg font-bold uppercase tracking-widest rounded-lg bg-white/5 border border-white/10 text-slate-200 px-3 py-2"
+              />
+              <span aria-hidden className="text-slate-500">to</span>
+              <label htmlFor="ladder-to" className="sr-only">to</label>
+              <input
+                id="ladder-to"
+                value={ladderTo}
+                onChange={(e) => setLadderTo(e.target.value.toLowerCase().replace(/[^a-z]/g, ''))}
+                placeholder="warm"
+                autoComplete="off"
+                spellCheck={false}
+                className="w-full text-center text-lg font-bold uppercase tracking-widest rounded-lg bg-white/5 border border-white/10 text-slate-200 px-3 py-2"
+              />
+            </div>
+            <div aria-live="polite" className="mt-4">
+              {ladderResult.kind === 'idle' && (
+                <p className="text-sm text-slate-500 text-center">{ladderResult.note}</p>
+              )}
+              {ladderResult.kind === 'none' && (
+                <p className="text-sm text-amber-300 text-center">{ladderResult.note}</p>
+              )}
+              {ladderResult.kind === 'route' && (
+                <>
+                  <p className="text-xs text-slate-400 text-center mb-2">
+                    {ladderResult.route.length - 1} steps
+                  </p>
+                  <ol className="space-y-1">
+                    {ladderResult.route.map((w, i) => (
+                      <li
+                        key={`${w}-${i}`}
+                        className="text-center text-lg font-bold uppercase tracking-widest text-slate-200"
+                      >
+                        {w}
+                      </li>
+                    ))}
+                  </ol>
+                </>
+              )}
+            </div>
+          </div>
+          )}
+
+          {/* Deduce, then offer. This never picks a reading: it settles what the
+              word shapes force and hands back the choices for what they don't,
+              because a passage can have several readings where every word is
+              real and only a person can tell which one means anything. */}
+          {mode === 'cryptogram' && !cryptogramPlay && (
+          <div className="mb-8 max-w-2xl mx-auto">
+            <label htmlFor="crypto-in" className="block text-sm text-slate-300 mb-2">
+              Paste a cryptogram. Every mark has to stand for the same letter throughout.
             </label>
-            <div className="inline-flex flex-wrap justify-center max-w-full rounded-xl bg-white/5 border border-white/10 p-1 gap-1">
-              {DIFFICULTIES.map((id) => (
+            <textarea
+              id="crypto-in"
+              value={cryptoText}
+              onChange={(e) => {
+                setCryptoText(e.target.value);
+                setCryptoPicks([]);
+                setCryptoOpen([]);
+              }}
+              rows={3}
+              spellCheck={false}
+              placeholder={cryptoMode === 'letters' ? 'WKH TXLFN EURZQ IRA' : '17 42 42 / 8 9 3'}
+              className="w-full px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-slate-200 placeholder:text-slate-600 text-sm font-mono"
+            />
+
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <div role="group" aria-label="How the marks are written" className="inline-flex rounded-lg bg-white/5 border border-white/10 p-0.5 gap-0.5">
+                {([['letters', 'Letters'], ['tokens', 'Numbers or symbols']] as const).map(([id, label]) => (
+                  <button
+                    key={id}
+                    onClick={() => { setCryptoMode(id); setCryptoPicks([]); setCryptoOpen([]); }}
+                    aria-pressed={cryptoMode === id}
+                    className={`px-3 py-1.5 rounded-md text-sm font-semibold transition-colors
+                      ${cryptoMode === id ? 'bg-emerald-400/15 text-emerald-300' : 'text-slate-400 hover:text-white'}`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+              {cryptoPicks.length > 1 && (
                 <button
-                  key={id}
-                  onClick={() => setDifficulty(id)}
-                  aria-pressed={level === id}
-                  className={`px-3.5 h-9 rounded-lg text-sm font-semibold transition-colors
-                    ${level === id
-                      ? 'bg-amber-400 text-ink shadow-lg shadow-amber-500/30'
-                      : 'text-slate-300 hover:bg-white/10'}`}
+                  onClick={() => setCryptoPicks([])}
+                  className="inline-flex items-center gap-1.5 px-3 h-9 rounded-lg text-sm font-semibold bg-white/5 border border-white/10 text-slate-300 hover:bg-white/10 hover:text-white transition-colors"
                 >
-                  {DIFFICULTY_LABEL[id]}
+                  <Eraser className="w-4 h-4" />
+                  Undo all
+                </button>
+              )}
+            </div>
+
+            {/* The way in when nothing is offered. On a cold start every word
+                can still be thousands of readings, so there is nothing to click
+                and nothing worth suggesting — but the person asking usually
+                knows a letter already, and one is enough to start the cascade.
+                Typed here it becomes an ordinary pick, undoable like the rest. */}
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <label htmlFor="crypto-known" className="text-xs text-slate-500">
+                Know one already?
+              </label>
+              <input
+                id="crypto-known"
+                defaultValue=""
+                placeholder={cryptoMode === 'letters' ? 'K=e' : '17=e'}
+                spellCheck={false}
+                onKeyDown={(e) => {
+                  if (e.key !== 'Enter') return;
+                  const raw = (e.target as HTMLInputElement).value;
+                  const m = raw.match(/^\s*(\S+)\s*=\s*([A-Za-z])\s*$/);
+                  if (!m) return;
+                  pinWord([cryptoMode === 'letters' ? m[1].toLowerCase() : m[1]], m[2].toLowerCase());
+                  (e.target as HTMLInputElement).value = '';
+                }}
+                className="w-24 px-2 h-8 rounded-lg bg-white/5 border border-white/10 text-slate-200 placeholder:text-slate-600 text-sm font-mono"
+              />
+              <span className="text-xs text-slate-600">then Enter</span>
+            </div>
+
+            {/* Each choice on its own, so a wrong turn costs one click rather
+                than the whole session. */}
+            {cryptoPicks.length > 0 && (
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                <span className="text-xs text-slate-500">Your picks:</span>
+                {cryptoPicks.map((p) => (
+                  <button
+                    key={p.key}
+                    onClick={() => setCryptoPicks((prev) => prev.filter((q) => q.key !== p.key))}
+                    aria-label={`Undo ${p.plain}`}
+                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-sm bg-emerald-400/15 text-emerald-300 hover:bg-rose-400/15 hover:text-rose-300 transition-colors"
+                  >
+                    {p.plain}
+                    <X className="w-3 h-3" />
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {cryptoMode === 'tokens' && (
+              <p className="mt-2 text-xs text-slate-500">
+                Marks separated by spaces, words by a slash — nothing about &ldquo;17 42&rdquo;
+                says whether that is one word or two.
+              </p>
+            )}
+
+            {cryptoAnalysis && (
+              <div className="mt-5" aria-live="polite">
+                <p className="text-lg text-white leading-relaxed font-mono break-words">
+                  {cryptoWords
+                    .map((w) =>
+                      w
+                        // the apostrophe inside a contraction is the passage's
+                        // own punctuation, not a mark waiting to be solved, so
+                        // it reads through rather than showing as a blank
+                        .map((t) => (t === "'" ? "'" : (cryptoAnalysis.mapping[t] ?? '·')))
+                        .join('')
+                    )
+                    .join(' ')}
+                </p>
+                <p className="mt-2 text-xs text-slate-500">
+                  {cryptoAnalysis.contradiction
+                    ? 'No reading fits — one of your picks can’t be right. Undo them and try another.'
+                    : `${Object.keys(cryptoAnalysis.mapping).length} marks settled. A dot is a mark the shapes can’t pin yet.`}
+                </p>
+                {/* Guesses, and dressed as guesses. Everything above this line is
+                    proven; these are counted off the readings still standing, so
+                    they belong in their own row with their odds showing. */}
+                {!cryptoAnalysis.contradiction && cryptoHunches.length > 0 && (
+                  <div className="mt-3 flex flex-wrap items-center gap-2">
+                    <span className="text-xs text-slate-500">Probably:</span>
+                    {cryptoHunches.map((h) => (
+                      <button
+                        key={h.token}
+                        onClick={() => pinWord([h.token], h.plain)}
+                        className="inline-flex items-baseline gap-1 px-2 py-0.5 rounded-md text-sm bg-white/5 border border-dashed border-white/25 text-slate-300 hover:bg-amber-400/15 hover:text-accent transition-colors"
+                      >
+                        <span className="font-mono text-xs text-slate-500">{h.token}</span>
+                        <span>= {h.plain}</span>
+                        <span className="text-[0.625rem] text-slate-500">
+                          {Math.round(h.share * 100)}%
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                {/* Most-constrained first, and only words narrow enough to act
+                    on. A five-letter word with three thousand readings is not a
+                    choice, it is a wall — and listing it buries the word with
+                    four, which is where the deduction actually is. */}
+                <div className="mt-4 space-y-2">
+                  {cryptoAnalysis.words
+                    .filter((w) => w.candidates.length > 1 && w.candidates.length <= 40)
+                    .sort((a, b) => a.candidates.length - b.candidates.length)
+                    .slice(0, 12)
+                    .map((w) => {
+                      const key = w.tokens.join(' ');
+                      const open = cryptoOpen.includes(key);
+                      // ten is enough to scan; the rest are a click away rather
+                      // than a number you can only look at
+                      const shown = open ? w.candidates : w.candidates.slice(0, 10);
+                      return (
+                        <div key={key} className="flex flex-wrap items-baseline gap-2">
+                          <span className="text-xs font-mono text-slate-500 shrink-0">
+                            {w.tokens.join(cryptoMode === 'letters' ? '' : ' ')}
+                          </span>
+                          {shown.map((c) => (
+                            <button
+                              key={c}
+                              onClick={() => pinWord(w.tokens, c)}
+                              className="px-2 py-0.5 rounded-md text-sm bg-white/5 border border-white/10 text-slate-300 hover:bg-emerald-400/15 hover:text-emerald-300 transition-colors"
+                            >
+                              {c}
+                            </button>
+                          ))}
+                          {w.candidates.length > 10 && (
+                            <button
+                              onClick={() =>
+                                setCryptoOpen((prev) =>
+                                  open ? prev.filter((k) => k !== key) : [...prev, key]
+                                )
+                              }
+                              className="px-2 py-0.5 rounded-md text-xs text-slate-500 hover:text-white hover:bg-white/10 transition-colors"
+                            >
+                              {open ? 'fewer' : `+${w.candidates.length - 10} more`}
+                            </button>
+                          )}
+                        </div>
+                      );
+                    })}
+                </div>
+
+                {!cryptoAnalysis.contradiction &&
+                  cryptoAnalysis.words.every((w) => w.candidates.length === 1) && (
+                    <p className="mt-3 text-xs text-emerald-300">
+                      Every word has one reading left, so that is the answer.
+                    </p>
+                  )}
+              </div>
+            )}
+          </div>
+          )}
+
+          {weavePlayActive && (
+          <div className="mb-8">
+            <WeaveGame ref={weaveRef} standardWords={acceptWordsArr ?? standardWordsArr} navKeys={navKeys} />
+          </div>
+          )}
+
+          {mode === 'squares' && !squaresPlay && (
+          <div className="mb-8 text-center">
+            <label className="block text-xs font-medium text-slate-400 uppercase tracking-wider mb-2.5">
+              Grid size
+            </label>
+            <div className="mb-5 inline-flex rounded-lg bg-white/5 border border-white/10 p-0.5 gap-0.5">
+              {([4, 5] as SquareSolverSize[]).map((sz) => (
+                <button
+                  key={sz}
+                  onClick={() => setSquaresSize(sz)}
+                  className={`px-3 py-1.5 rounded-md text-sm font-semibold transition-colors
+                    ${squaresSize === sz ? 'bg-white/15 text-white' : 'text-slate-400 hover:text-white'}`}
+                >
+                  {sz}×{sz}
                 </button>
               ))}
             </div>
-          </section>
-        )}
 
-        {learnMode && (
-          <div className="mb-8">
-            <LearnMode
-              ref={learnRef}
-              mode={mode}
-              standardWords={standardWordsArr}
-              palette={palette}
-              theme={resolveTheme(theme)}
-            />
-          </div>
-        )}
-
-        {/* The report pages replace the board rather than sitting above it.
-            Gating only the home page left /report/<ticket> rendering a ticket
-            *and* a playable puzzle underneath it — which is what a reader on a
-            report page least expects to find. */}
-        {!reportPage && !learnMode && (
-        <>
-        {squaresPlayActive && (
-        <div className="mb-8">
-          <SquaresGame ref={squaresRef} standardWords={acceptWordsArr ?? standardWordsArr} />
-        </div>
-        )}
-
-        {cryptogramPlayActive && (
-        <div className="mb-8">
-          <CryptogramGame ref={cryptogramRef} />
-        </div>
-        )}
-
-        {mode === 'bridge' && bridgePlay && (
-        <div className="mb-8">
-          <BridgeGame ref={bridgeRef} />
-        </div>
-        )}
-
-        {/* The bridge solver, which answers exactly: membership in the word
-            list is the whole rule, so there is nothing to rank. It lists every
-            word that joins the two ends rather than one, because more than one
-            can be right even where the daily pool kept only prompts with a
-            single answer. */}
-        {mode === 'bridge' && !bridgePlay && (
-        <div className="mb-8">
-          <div className="flex items-end justify-center gap-2 mb-4">
-            <div>
-              <label htmlFor="bridge-x" className="block text-xs font-medium text-slate-400 uppercase tracking-wider mb-1.5">First</label>
-              <input
-                id="bridge-x"
-                aria-label="first"
-                value={bridgeX}
-                onChange={(e) => setBridgeX(e.target.value.toLowerCase().replace(/[^a-z]/g, '').slice(0, 12))}
-                placeholder="snow"
-                className="w-28 text-center text-lg font-bold uppercase tracking-widest rounded-lg bg-white/5 border border-white/10 text-white px-2 py-1.5"
-              />
+            <label className="block text-xs font-medium text-slate-400 uppercase tracking-wider mb-2.5">
+              Known letters
+            </label>
+            {/* letters live in a 25-slot array indexed by row*5+col, so dropping
+                to 4×4 and back doesn't throw away what was typed */}
+            <div className="w-fit mx-auto">
+              <div
+                className="grid gap-2"
+                style={{ gridTemplateColumns: `repeat(${squaresSize}, auto)` }}
+              >
+                {Array.from({ length: squaresSize * squaresSize }, (_, i) => {
+                  const slot = Math.floor(i / squaresSize) * 5 + (i % squaresSize);
+                  return (
+                    <Tile
+                      key={slot}
+                      index={i}
+                      group="squares"
+                      osk={kbOpen}
+                      value={squaresLetters[slot]}
+                      state={squaresLetters[slot] ? 'known' : 'empty'}
+                      size="sm"
+                      onChange={(c) =>
+                        setSquaresLetters((prev) => prev.map((x, j) => (j === slot ? c : x)))
+                      }
+                    />
+                  );
+                })}
+              </div>
             </div>
-            <span aria-hidden className="pb-3 text-slate-600 text-lg">·</span>
-            <div>
-              <label htmlFor="bridge-y" className="block text-xs font-medium text-slate-400 uppercase tracking-wider mb-1.5">Second</label>
-              <input
-                id="bridge-y"
-                aria-label="second"
-                value={bridgeY}
-                onChange={(e) => setBridgeY(e.target.value.toLowerCase().replace(/[^a-z]/g, '').slice(0, 12))}
-                placeholder="room"
-                className="w-28 text-center text-lg font-bold uppercase tracking-widest rounded-lg bg-white/5 border border-white/10 text-white px-2 py-1.5"
-              />
-            </div>
+
+            <p className="mt-4 text-sm text-slate-400">
+              Leave a cell blank and we&apos;ll fill it. Every row and every column
+              comes out a word.
+            </p>
+
+            {squareFill && (
+              <div className="mt-6">
+                {squareFill.solutions.length === 0 ? (
+                  <p className="text-sm text-slate-400">
+                    {squareFill.exhausted
+                      ? 'No square fits those letters.'
+                      : 'Gave up looking — pin down another letter or two and try again.'}
+                  </p>
+                ) : (
+                  <>
+                    <p className="text-sm text-slate-400 mb-4">
+                      {squareFill.solutions.length}
+                      {squareFill.exhausted ? '' : '+'}{' '}
+                      {squareFill.solutions.length === 1 ? 'square' : 'squares'} fit
+                    </p>
+                    <div className="flex flex-wrap justify-center gap-5">
+                      {squareFill.solutions.map((rows, k) => (
+                        <div
+                          key={k}
+                          className="grid gap-1"
+                          style={{ gridTemplateColumns: `repeat(${squaresSize}, auto)` }}
+                        >
+                          {rows.flatMap((w, r) =>
+                            w.split('').map((ch, c) => {
+                              const typed = !!squaresLetters[r * 5 + c];
+                              return (
+                                <span
+                                  key={`${r}-${c}`}
+                                  className={`w-7 h-8 flex items-center justify-center rounded-md border text-sm font-bold uppercase
+                                    ${typed
+                                      ? 'bg-white/15 border-white/25 text-white'
+                                      : 'bg-transparent border-white/10 text-accent'}`}
+                                >
+                                  {ch}
+                                </span>
+                              );
+                            })
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
           </div>
-          {bridgeAnswers.kind === 'words' ? (
-            <ul className="flex flex-wrap justify-center gap-2">
-              {bridgeAnswers.words.map((w) => (
-                <li key={w} className="px-3 py-1.5 rounded-lg bg-white/5 border border-white/10 text-sm">
-                  <span className="text-slate-500 uppercase">{bridgeX}</span>
-                  <span className="font-bold uppercase text-accent">{w}</span>
-                  <span className="text-slate-500 uppercase">{bridgeY}</span>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className="text-center text-sm text-slate-400">{bridgeAnswers.note}</p>
           )}
-        </div>
-        )}
 
-        {mode === 'ladder' && ladderPlay && (
-        <div className="mb-8">
-          <LadderGame ref={ladderRef} />
-        </div>
-        )}
-
-        {/* The ladder solver answers exactly, which no other solver here can
-            claim: breadth-first search returns the shortest route or proves
-            there is none, so there is nothing to rank and nothing to guess. */}
-        {mode === 'ladder' && !ladderPlay && (
-        <div className="mb-8 max-w-md mx-auto">
-          <p className="text-sm text-slate-300 mb-3">
-            Two words of the same length. The shortest ladder between them, if there is one.
-          </p>
-          <div className="flex items-center gap-2">
-            <label htmlFor="ladder-from" className="sr-only">from</label>
-            <input
-              id="ladder-from"
-              value={ladderFrom}
-              onChange={(e) => setLadderFrom(e.target.value.toLowerCase().replace(/[^a-z]/g, ''))}
-              placeholder="cold"
-              autoComplete="off"
-              spellCheck={false}
-              className="w-full text-center text-lg font-bold uppercase tracking-widest rounded-lg bg-white/5 border border-white/10 text-slate-200 px-3 py-2"
-            />
-            <span aria-hidden className="text-slate-500">to</span>
-            <label htmlFor="ladder-to" className="sr-only">to</label>
-            <input
-              id="ladder-to"
-              value={ladderTo}
-              onChange={(e) => setLadderTo(e.target.value.toLowerCase().replace(/[^a-z]/g, ''))}
-              placeholder="warm"
-              autoComplete="off"
-              spellCheck={false}
-              className="w-full text-center text-lg font-bold uppercase tracking-widest rounded-lg bg-white/5 border border-white/10 text-slate-200 px-3 py-2"
-            />
-          </div>
-          <div aria-live="polite" className="mt-4">
-            {ladderResult.kind === 'idle' && (
-              <p className="text-sm text-slate-500 text-center">{ladderResult.note}</p>
-            )}
-            {ladderResult.kind === 'none' && (
-              <p className="text-sm text-amber-300 text-center">{ladderResult.note}</p>
-            )}
-            {ladderResult.kind === 'route' && (
-              <>
-                <p className="text-xs text-slate-400 text-center mb-2">
-                  {ladderResult.route.length - 1} steps
-                </p>
-                <ol className="space-y-1">
-                  {ladderResult.route.map((w, i) => (
-                    <li
-                      key={`${w}-${i}`}
-                      className="text-center text-lg font-bold uppercase tracking-widest text-slate-200"
-                    >
-                      {w}
-                    </li>
-                  ))}
-                </ol>
-              </>
-            )}
-          </div>
-        </div>
-        )}
-
-        {/* Deduce, then offer. This never picks a reading: it settles what the
-            word shapes force and hands back the choices for what they don't,
-            because a passage can have several readings where every word is
-            real and only a person can tell which one means anything. */}
-        {mode === 'cryptogram' && !cryptogramPlay && (
-        <div className="mb-8 max-w-2xl mx-auto">
-          <label htmlFor="crypto-in" className="block text-sm text-slate-300 mb-2">
-            Paste a cryptogram. Every mark has to stand for the same letter throughout.
-          </label>
-          <textarea
-            id="crypto-in"
-            value={cryptoText}
-            onChange={(e) => {
-              setCryptoText(e.target.value);
-              setCryptoPicks([]);
-              setCryptoOpen([]);
-            }}
-            rows={3}
-            spellCheck={false}
-            placeholder={cryptoMode === 'letters' ? 'WKH TXLFN EURZQ IRA' : '17 42 42 / 8 9 3'}
-            className="w-full px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-slate-200 placeholder:text-slate-600 text-sm font-mono"
-          />
-
-          <div className="mt-3 flex flex-wrap items-center gap-2">
-            <div role="group" aria-label="How the marks are written" className="inline-flex rounded-lg bg-white/5 border border-white/10 p-0.5 gap-0.5">
-              {([['letters', 'Letters'], ['tokens', 'Numbers or symbols']] as const).map(([id, label]) => (
+          {mode === 'weave' && !weavePlay && (
+          <div className="mb-8 text-center">
+            <label className="block text-xs font-medium text-slate-400 uppercase tracking-wider mb-2.5">
+              Board size
+            </label>
+            <div className="mb-5 inline-flex rounded-lg bg-white/5 border border-white/10 p-0.5 gap-0.5">
+              {(
+                [
+                  { id: '6x8', label: '6×8' },
+                  { id: '8x10', label: '8×10' },
+                ] as const
+              ).map(({ id, label }) => (
                 <button
                   key={id}
-                  onClick={() => { setCryptoMode(id); setCryptoPicks([]); setCryptoOpen([]); }}
-                  aria-pressed={cryptoMode === id}
-                  className={`px-3 py-1.5 rounded-md text-sm font-semibold transition-colors
-                    ${cryptoMode === id ? 'bg-emerald-400/15 text-emerald-300' : 'text-slate-400 hover:text-white'}`}
+                  onClick={() => changeWeaveSize(id)}
+                  className={`px-3 py-1.5 rounded-md text-sm font-semibold whitespace-nowrap transition-colors
+                    ${weaveSize === id ? 'bg-white/15 text-white' : 'text-slate-400 hover:text-white'}`}
                 >
                   {label}
                 </button>
               ))}
             </div>
-            {cryptoPicks.length > 1 && (
-              <button
-                onClick={() => setCryptoPicks([])}
-                className="inline-flex items-center gap-1.5 px-3 h-9 rounded-lg text-sm font-semibold bg-white/5 border border-white/10 text-slate-300 hover:bg-white/10 hover:text-white transition-colors"
-              >
-                <Eraser className="w-4 h-4" />
-                Undo all
-              </button>
-            )}
-          </div>
-
-          {/* The way in when nothing is offered. On a cold start every word
-              can still be thousands of readings, so there is nothing to click
-              and nothing worth suggesting — but the person asking usually
-              knows a letter already, and one is enough to start the cascade.
-              Typed here it becomes an ordinary pick, undoable like the rest. */}
-          <div className="mt-3 flex flex-wrap items-center gap-2">
-            <label htmlFor="crypto-known" className="text-xs text-slate-500">
-              Know one already?
+            <label className="block text-xs font-medium text-slate-400 uppercase tracking-wider mb-3">
+              The board
             </label>
-            <input
-              id="crypto-known"
-              defaultValue=""
-              placeholder={cryptoMode === 'letters' ? 'K=e' : '17=e'}
-              spellCheck={false}
-              onKeyDown={(e) => {
-                if (e.key !== 'Enter') return;
-                const raw = (e.target as HTMLInputElement).value;
-                const m = raw.match(/^\s*(\S+)\s*=\s*([A-Za-z])\s*$/);
-                if (!m) return;
-                pinWord([cryptoMode === 'letters' ? m[1].toLowerCase() : m[1]], m[2].toLowerCase());
-                (e.target as HTMLInputElement).value = '';
-              }}
-              className="w-24 px-2 h-8 rounded-lg bg-white/5 border border-white/10 text-slate-200 placeholder:text-slate-600 text-sm font-mono"
-            />
-            <span className="text-xs text-slate-600">then Enter</span>
+            <div ref={gridBoardRef} className="relative w-fit mx-auto">
+              <div className={`grid gap-1.5 ${weaveDims.cols === 8 ? 'grid-cols-8' : 'grid-cols-6'}`}>
+                {weaveLetters.map((v, i) => (
+                  <Tile
+                    key={i}
+                    index={i}
+                    group="weave"
+                    osk={kbOpen}
+                    value={v}
+                    state={v ? 'known' : 'empty'}
+                    size="sm"
+                    tone={gridTrace?.includes(i) ? GRID_TRACE_TONE : undefined}
+                    onChange={(c) =>
+                      setWeaveLetters((prev) => prev.map((x, j) => (j === i ? c : x)))
+                    }
+                  />
+                ))}
+              </div>
+              {gridTracePts.length > 1 && (
+                <svg className="absolute inset-0 w-full h-full pointer-events-none">
+                  <polyline
+                    points={gridTracePts.map((p) => `${p.x},${p.y}`).join(' ')}
+                    fill="none"
+                    stroke="rgb(var(--trace) / 0.9)"
+                    strokeWidth="4"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                  <circle cx={gridTracePts[0].x} cy={gridTracePts[0].y} r="6" fill="rgb(var(--trace))" />
+                </svg>
+              )}
+            </div>
+            <div className="mt-4 flex flex-wrap items-center justify-center gap-3">
+              <button
+                onClick={fillTodaysStrands}
+                disabled={todayStatus === 'loading'}
+                className="inline-flex items-center gap-1.5 px-4 h-10 rounded-lg text-sm font-semibold bg-white/5 border border-white/10 text-slate-300 hover:bg-white/10 hover:text-white transition-colors disabled:opacity-50"
+              >
+                <CalendarDays className="w-4 h-4" />
+                {todayStatus === 'loading' ? 'Fetching…' : "Today's NYT Strands"}
+              </button>
+              <button
+                onClick={fillTodaysWeave}
+                disabled={todayStatus === 'loading'}
+                className="inline-flex items-center gap-1.5 px-4 h-10 rounded-lg text-sm font-semibold bg-white/5 border border-white/10 text-slate-300 hover:bg-white/10 hover:text-white transition-colors disabled:opacity-50"
+              >
+                <CalendarDays className="w-4 h-4" />
+                {todayStatus === 'loading' ? 'Fetching…' : "Today's daily weave"}
+              </button>
+            </div>
+            {todayStatus === 'error' && (
+              <p className="mt-2 text-xs text-danger">
+                Couldn&apos;t fetch today&apos;s puzzle — try again in a minute.
+              </p>
+            )}
+            {strandsClue && (
+              <p className="mt-2 text-sm text-amber-300">
+                Theme: <span className="font-semibold">{strandsClue}</span>
+              </p>
+            )}
+            <p className="mt-3 text-xs text-slate-500">
+              Words are 3+ letters traced through adjacent cells (diagonals count), using each
+              cell once. Hover a result to trace it on the board. Today&apos;s Strands becomes
+              available here about 15 minutes after the NYT publishes it (3:00&nbsp;a.m. Eastern).
+            </p>
           </div>
+          )}
 
-          {/* Each choice on its own, so a wrong turn costs one click rather
-              than the whole session. */}
-          {cryptoPicks.length > 0 && (
-            <div className="mt-3 flex flex-wrap items-center gap-2">
-              <span className="text-xs text-slate-500">Your picks:</span>
-              {cryptoPicks.map((p) => (
+          {/* dictionary selector — hidden when one dictionary has been chosen
+              for the whole site, since there'd be nothing left for it to pick */}
+          {!playActive && solverDictionary === 'per-game' && (
+          <section className="mb-7 text-center">
+            <label className="block text-xs font-medium text-slate-400 uppercase tracking-wider mb-2.5">
+              Word list
+            </label>
+            <div className="inline-flex flex-wrap justify-center max-w-full rounded-xl bg-white/5 border border-white/10 p-1 gap-1">
+              {DICTIONARIES.map((d) => (
                 <button
-                  key={p.key}
-                  onClick={() => setCryptoPicks((prev) => prev.filter((q) => q.key !== p.key))}
-                  aria-label={`Undo ${p.plain}`}
-                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-sm bg-emerald-400/15 text-emerald-300 hover:bg-rose-400/15 hover:text-rose-300 transition-colors"
+                  key={d.id}
+                  onClick={() => setDictionaryId(d.id)}
+                  title={d.blurb}
+                  className={`inline-flex items-center gap-1.5 px-4 h-9 rounded-lg text-sm font-semibold transition-all duration-150
+                    ${dictionaryId === d.id
+                      ? 'bg-amber-400 text-ink shadow-lg shadow-amber-500/30'
+                      : 'text-slate-300 hover:bg-white/10'}`}
                 >
-                  {p.plain}
-                  <X className="w-3 h-3" />
+                  {d.id === 'easy' && <BookOpen className="w-3.5 h-3.5" />}
+                  {d.label}
                 </button>
               ))}
             </div>
-          )}
-
-          {cryptoMode === 'tokens' && (
             <p className="mt-2 text-xs text-slate-500">
-              Marks separated by spaces, words by a slash — nothing about &ldquo;17 42&rdquo;
-              says whether that is one word or two.
+              {DICTIONARIES.find((d) => d.id === dictionaryId)?.blurb}
             </p>
+          </section>
           )}
 
-          {cryptoAnalysis && (
-            <div className="mt-5" aria-live="polite">
-              <p className="text-lg text-white leading-relaxed font-mono break-words">
-                {cryptoWords
-                  .map((w) =>
-                    w
-                      // the apostrophe inside a contraction is the passage's
-                      // own punctuation, not a mark waiting to be solved, so
-                      // it reads through rather than showing as a blank
-                      .map((t) => (t === "'" ? "'" : (cryptoAnalysis.mapping[t] ?? '·')))
-                      .join('')
-                  )
-                  .join(' ')}
+          {mode === 'pattern' && (
+          <>
+          {/* length selector — gone when the range allows only one, the same way
+              the view switch goes when one tab is left */}
+          <section className={`mb-7 text-center ${shownLengths.length > 1 ? '' : 'hidden'}`}>
+            <label className="block text-xs font-medium text-slate-400 uppercase tracking-wider mb-2.5">
+              Word length
+            </label>
+            <div className="flex flex-wrap gap-2 justify-center">
+              {shownLengths.map((n) => (
+                <button
+                  key={n}
+                  onClick={() => setLength(n)}
+                  className={`w-11 h-11 rounded-xl text-sm font-semibold transition-all duration-150
+                    ${length === n
+                      ? 'bg-amber-400 text-ink shadow-lg shadow-amber-500/30 scale-105'
+                      : 'bg-white/5 border border-white/10 text-slate-300 hover:bg-white/10 hover:border-white/20'}`}
+                >
+                  {n}
+                </button>
+              ))}
+            </div>
+          </section>
+
+          {patternPlay ? (
+          <div className="mb-8">
+            <GuessGame
+              ref={gameRef}
+              length={length}
+              commonWords={commonWordsArr}
+              practiceWords={practiceWordsArr}
+              fullWords={acceptWordsArr ?? fullWordsArr}
+              onLetterStates={setLetterStates}
+              onReveal={!shownViews.includes('solve') || !helpAllowed ? undefined : ({ length: len, known: k, contains, excluded }) => {
+                setLength(len);
+                setKnown(k);
+                setContainsStr(contains);
+                setExcludedStr(excluded);
+                setPatternPlay(false);
+              }}
+            />
+          </div>
+          ) : (
+          <>
+          {/* known positions */}
+          <section className="mb-7 text-center">
+            <label className="block text-xs font-medium text-slate-400 uppercase tracking-wider mb-2.5">
+              Known positions
+            </label>
+            <div className="flex flex-wrap gap-2 justify-center">
+              {known.map((v, i) => (
+                <Tile
+                  key={i}
+                  index={i}
+                  group="known"
+                  osk={kbOpen}
+                  value={v}
+                  state={v ? 'known' : 'empty'}
+                  size={length > 10 ? 'sm' : 'md'}
+                  onChange={(c) =>
+                    setKnown((prev) => prev.map((x, j) => (j === i ? c : x)))
+                  }
+                />
+              ))}
+            </div>
+            <p className="mt-2 text-xs text-slate-500">
+              Fill a box only when you're certain of the letter in that spot.
+            </p>
+          </section>
+
+          {/* contains + excluded */}
+          <div className="grid sm:grid-cols-2 gap-5 mb-8">
+            <section>
+              <label className="block text-xs font-medium text-slate-400 uppercase tracking-wider mb-2.5">
+                Must contain <span className="text-accent normal-case">(position unknown)</span>
+              </label>
+              <LetterChipInput
+                value={containsStr}
+                onChange={setContainsStr}
+                ariaLabel="Letters the word must contain"
+                placeholder="e.g. d"
+                maxLen={15}
+                tone="amber"
+                osk={kbOpen}
+              />
+            </section>
+            <section>
+              <label className="block text-xs font-medium text-slate-400 uppercase tracking-wider mb-2.5">
+                Excluded letters
+              </label>
+              <LetterChipInput
+                value={excludedStr}
+                onChange={setExcludedStr}
+                ariaLabel="Excluded letters"
+                placeholder="letters not in the word"
+                maxLen={26}
+                tone="rose"
+                osk={kbOpen}
+              />
+            </section>
+          </div>
+          </>
+          )}
+          </>
+          )}
+
+          {descramblePlayActive && (
+          <div className="mb-8">
+            <ScrambleGame
+              ref={scrambleRef}
+              standardWords={acceptWordsArr ?? standardWordsArr}
+              commonWords={commonWordsArr}
+              practiceWords={practiceWordsArr}
+              onLetterStates={setLetterStates}
+              onReveal={!shownViews.includes('solve') || !helpAllowed ? undefined : (letters) => {
+                setRackStr(letters);
+                setUseAll(false);
+                setMinLength(3);
+                setDescramblePlay(false);
+              }}
+            />
+          </div>
+          )}
+
+          {mode === 'descramble' && !descramblePlay && (
+          <div className="mb-8">
+            <section className="mb-5">
+              <label className="block text-xs font-medium text-slate-400 uppercase tracking-wider mb-2.5 text-center">
+                Your letters <span className="text-accent normal-case">(use ? for a blank tile)</span>
+              </label>
+              <LetterChipInput
+                value={rackStr}
+                onChange={setRackStr}
+                ariaLabel="Letters to descramble"
+                placeholder="e.g. aetrsn?"
+                maxLen={MAX_LEN}
+                allowWildcard
+                tone="amber"
+                osk={kbOpen}
+              />
+            </section>
+            <div className="flex flex-wrap items-center justify-center gap-3">
+              <button
+                onClick={fillDailyRack}
+                disabled={todayStatus === 'loading'}
+                className="inline-flex items-center gap-1.5 px-4 h-10 rounded-lg text-sm font-semibold bg-white/5 border border-white/10 text-slate-300 hover:bg-white/10 hover:text-white transition-colors disabled:opacity-50"
+              >
+                <CalendarDays className="w-4 h-4" />
+                {todayStatus === 'loading' ? 'Fetching…' : "Today's daily rack"}
+              </button>
+              <button
+                onClick={() => setUseAll((v) => !v)}
+                className={`inline-flex items-center gap-1.5 px-4 h-10 rounded-lg text-sm font-semibold transition-all duration-150 border
+                  ${useAll
+                    ? 'bg-amber-400 text-ink border-amber-400 shadow-lg shadow-amber-500/30'
+                    : 'bg-white/5 border-white/10 text-slate-300 hover:bg-white/10'}`}
+              >
+                Use every letter
+              </button>
+              {!useAll && (
+                <label className="inline-flex items-center gap-2 text-sm text-slate-300">
+                  Min length
+                  <select
+                    value={minLength}
+                    onChange={(e) => setMinLength(Number(e.target.value))}
+                    className="h-10 px-3 rounded-lg bg-white/5 border border-white/10 text-sm font-semibold text-white outline-none focus:border-amber-400 [&>option]:bg-slate-900"
+                  >
+                    {[2, 3, 4, 5, 6, 7].map((n) => (
+                      <option key={n} value={n}>
+                        {n}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              )}
+            </div>
+            {todayStatus === 'error' && (
+              <p className="mt-2 text-xs text-danger text-center">
+                Couldn&apos;t fetch today&apos;s rack — try again in a minute.
               </p>
-              <p className="mt-2 text-xs text-slate-500">
-                {cryptoAnalysis.contradiction
-                  ? 'No reading fits — one of your picks can’t be right. Undo them and try another.'
-                  : `${Object.keys(cryptoAnalysis.mapping).length} marks settled. A dot is a mark the shapes can’t pin yet.`}
+            )}
+          </div>
+          )}
+
+          {beePlayActive && (
+          <div className="mb-8">
+            <HiveGame
+              ref={hiveRef}
+              standardWords={acceptWordsArr ?? standardWordsArr}
+              commonWords={commonWordsArr}
+              practiceWords={practiceWordsArr}
+              onLetterStates={setLetterStates}
+              onReveal={!shownViews.includes('solve') || !helpAllowed ? undefined : (center, outers) => {
+                setBeeCenter(center);
+                setBeeOuters(outers);
+                setBeePlay(false);
+              }}
+            />
+          </div>
+          )}
+
+          {mode === 'bee' && !beePlay && (
+          <div className="mb-8 text-center">
+            <label className="block text-xs font-medium text-slate-400 uppercase tracking-wider mb-3">
+              The hive
+            </label>
+            <div className="relative w-full max-w-[14rem] aspect-square mx-auto">
+              <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2">
+                <Tile
+                  index={0}
+                  group="bee"
+                  osk={kbOpen}
+                  value={beeCenter}
+                  state="center"
+                  size="sm"
+                  onChange={(c) => setBeeCenter(c)}
+                />
+              </div>
+              {BEE_POSITIONS.map(([x, y], i) => (
+                <div
+                  key={i}
+                  className="absolute -translate-x-1/2 -translate-y-1/2"
+                  style={{ left: `${x}%`, top: `${y}%` }}
+                >
+                  <Tile
+                    index={i + 1}
+                    group="bee"
+                    osk={kbOpen}
+                    value={beeOuters[i]}
+                    state={beeOuters[i] ? 'known' : 'empty'}
+                    size="sm"
+                    onChange={(c) =>
+                      setBeeOuters((prev) => prev.map((x2, j) => (j === i ? c : x2)))
+                    }
+                  />
+                </div>
+              ))}
+            </div>
+            <div className="mt-4 flex flex-wrap items-center justify-center gap-3">
+              <button
+                onClick={fillDailyHive}
+                disabled={todayStatus === 'loading'}
+                className="inline-flex items-center gap-1.5 px-4 h-10 rounded-lg text-sm font-semibold bg-white/5 border border-white/10 text-slate-300 hover:bg-white/10 hover:text-white transition-colors disabled:opacity-50"
+              >
+                <CalendarDays className="w-4 h-4" />
+                {todayStatus === 'loading' ? 'Fetching…' : "Today's daily hive"}
+              </button>
+              <button
+                onClick={fillTodaysBee}
+                disabled={todayStatus === 'loading'}
+                className="inline-flex items-center gap-1.5 px-4 h-10 rounded-lg text-sm font-semibold bg-white/5 border border-white/10 text-slate-300 hover:bg-white/10 hover:text-white transition-colors disabled:opacity-50"
+              >
+                <CalendarDays className="w-4 h-4" />
+                {todayStatus === 'loading' ? 'Fetching…' : "Today's NYT bee"}
+              </button>
+            </div>
+            {todayStatus === 'error' && (
+              <p className="mt-2 text-xs text-danger">
+                Couldn&apos;t fetch today&apos;s puzzle — try again in a minute.
               </p>
-              {/* Guesses, and dressed as guesses. Everything above this line is
-                  proven; these are counted off the readings still standing, so
-                  they belong in their own row with their odds showing. */}
-              {!cryptoAnalysis.contradiction && cryptoHunches.length > 0 && (
-                <div className="mt-3 flex flex-wrap items-center gap-2">
-                  <span className="text-xs text-slate-500">Probably:</span>
-                  {cryptoHunches.map((h) => (
+            )}
+            <p className="mt-3 text-xs text-slate-500">
+              Words are 4+ letters, must use the {colorWords(palette, resolveTheme(theme)).key} center letter, and may repeat letters.
+              Words using all seven letters are pangrams. Both today&apos;s puzzles become
+              available about 15 minutes after 3:00&nbsp;a.m. Eastern.
+            </p>
+          </div>
+          )}
+
+          {gridPlayActive && (
+          <div className="mb-8">
+            <GridGame
+              ref={gridRef}
+              standardWords={acceptWordsArr ?? standardWordsArr}
+              displayWord={showWord}
+              onLetterStates={setLetterStates}
+              onReveal={!shownViews.includes('solve') || !helpAllowed ? undefined : (cells) => {
+                setGridPreset(cells.length === 9 ? '3x3' : cells.length === 25 ? '5x5' : '4x4');
+                setGridLetters(cells);
+                setGridPlay(false);
+              }}
+            />
+          </div>
+          )}
+
+          {mode === 'grid' && !gridPlay && (
+          <div className="mb-8 text-center">
+            <label className="block text-xs font-medium text-slate-400 uppercase tracking-wider mb-2.5">
+              Grid size
+            </label>
+            <div className="mb-5 inline-flex rounded-lg bg-white/5 border border-white/10 p-0.5 gap-0.5">
+              {(
+                [
+                  { id: '3x3', label: '3×3' },
+                  { id: '4x4', label: '4×4' },
+                  { id: '5x5', label: '5×5' },
+                ] as const
+              ).map(({ id, label }) => (
+                <button
+                  key={id}
+                  onClick={() => changeGridPreset(id)}
+                  className={`px-3 py-1.5 rounded-md text-sm font-semibold whitespace-nowrap transition-colors
+                    ${gridPreset === id ? 'bg-white/15 text-white' : 'text-slate-400 hover:text-white'}`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            <label className="block text-xs font-medium text-slate-400 uppercase tracking-wider mb-3">
+              The grid
+            </label>
+            <div ref={gridBoardRef} className="relative w-fit mx-auto">
+              <div
+                className={`grid gap-2 ${
+                  gridDims.cols === 3 ? 'grid-cols-3' : gridDims.cols === 5 ? 'grid-cols-5' : 'grid-cols-4'
+                }`}
+              >
+                {gridLetters.map((v, i) => (
+                  <Tile
+                    key={i}
+                    index={i}
+                    group="grid"
+                    osk={kbOpen}
+                    value={v}
+                    state={v ? 'known' : 'empty'}
+                    size="sm"
+                    tone={gridTrace?.includes(i) ? GRID_TRACE_TONE : undefined}
+                    onChange={(c) =>
+                      setGridLetters((prev) => prev.map((x, j) => (j === i ? c : x)))
+                    }
+                  />
+                ))}
+              </div>
+              {gridTracePts.length > 1 && (
+                <svg className="absolute inset-0 w-full h-full pointer-events-none">
+                  <polyline
+                    points={gridTracePts.map((p) => `${p.x},${p.y}`).join(' ')}
+                    fill="none"
+                    stroke="rgb(var(--trace) / 0.9)"
+                    strokeWidth="4"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                  <circle cx={gridTracePts[0].x} cy={gridTracePts[0].y} r="6" fill="rgb(var(--trace))" />
+                </svg>
+              )}
+            </div>
+            <div className="mt-4 flex flex-wrap items-center justify-center gap-3">
+              <button
+                onClick={fillDailyGrid}
+                disabled={todayStatus === 'loading'}
+                className="inline-flex items-center gap-1.5 px-4 h-10 rounded-lg text-sm font-semibold bg-white/5 border border-white/10 text-slate-300 hover:bg-white/10 hover:text-white transition-colors disabled:opacity-50"
+              >
+                <CalendarDays className="w-4 h-4" />
+                {todayStatus === 'loading' ? 'Fetching…' : "Today's daily grid"}
+              </button>
+            </div>
+            {todayStatus === 'error' && (
+              <p className="mt-2 text-xs text-danger">
+                Couldn&apos;t fetch today&apos;s grid — try again in a minute.
+              </p>
+            )}
+            <p className="mt-3 text-xs text-slate-500">
+              Words are 3+ letters traced through adjacent cells (diagonals count), using each
+              cell once. Hover a result to trace it on the board.
+            </p>
+          </div>
+          )}
+
+          {boxedPlayActive && (
+          <div className="mb-8">
+            <BoxGame
+              ref={boxRef}
+              standardWords={acceptWordsArr ?? standardWordsArr}
+              commonWords={commonWordsArr}
+              practiceWords={practiceWordsArr}
+              onLetterStates={setLetterStates}
+              onReveal={!shownViews.includes('solve') || !helpAllowed ? undefined : (sides) => {
+                setBoxedLetters(sides.flatMap((s) => s.split('')).slice(0, 12));
+                setBoxedPlay(false);
+              }}
+            />
+          </div>
+          )}
+
+          {mode === 'boxed' && !boxedPlay && (() => {
+            const boxTile = (i: number) => (
+              <Tile
+                key={i}
+                index={i}
+                group="boxed"
+                osk={kbOpen}
+                value={boxedLetters[i]}
+                state={boxedLetters[i] ? 'known' : 'empty'}
+                size="sm"
+                tone={BOX_SIDE_TONES[Math.floor(i / 3)]}
+                onChange={(c) =>
+                  setBoxedLetters((prev) => prev.map((x, k) => (k === i ? c : x)))
+                }
+              />
+            );
+            return (
+              <div className="mb-8 text-center">
+                <label className="block text-xs font-medium text-slate-400 uppercase tracking-wider mb-3">
+                  Sides of the box
+                </label>
+                <div ref={boxedBoardRef} className="relative w-full max-w-[18rem] aspect-square mx-auto">
+                  <div className="absolute inset-14 rounded-xl border-2 border-white/15 bg-white/[0.02]" />
+                  {/* top */}
+                  <div className="absolute top-0 left-14 right-14 flex justify-around">
+                    {[0, 1, 2].map(boxTile)}
+                  </div>
+                  {/* right */}
+                  <div className="absolute right-0 top-14 bottom-14 flex flex-col justify-around items-end">
+                    {[3, 4, 5].map(boxTile)}
+                  </div>
+                  {/* bottom */}
+                  <div className="absolute bottom-0 left-14 right-14 flex justify-around">
+                    {[6, 7, 8].map(boxTile)}
+                  </div>
+                  {/* left */}
+                  <div className="absolute left-0 top-14 bottom-14 flex flex-col justify-around items-start">
+                    {[9, 10, 11].map(boxTile)}
+                  </div>
+                  {boxedTracePts.some((pts) => pts.length > 1) && (
+                    <svg className="absolute inset-0 w-full h-full pointer-events-none">
+                      {boxedTracePts.map((pts, wi) =>
+                        pts.length > 1 ? (
+                          <g key={wi}>
+                            <polyline
+                              points={pts.map((p) => `${p.x},${p.y}`).join(' ')}
+                              fill="none"
+                              stroke={BOX_TRACE_COLORS[wi % BOX_TRACE_COLORS.length]}
+                              strokeWidth="3"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                            />
+                            <circle
+                              cx={pts[0].x}
+                              cy={pts[0].y}
+                              r="5"
+                              fill={BOX_TRACE_COLORS[wi % BOX_TRACE_COLORS.length]}
+                            />
+                          </g>
+                        ) : null
+                      )}
+                    </svg>
+                  )}
+                </div>
+                <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
+                  <button
+                    onClick={fillDailyBox}
+                    disabled={todayStatus === 'loading'}
+                    className="inline-flex items-center gap-1.5 px-4 h-10 rounded-lg text-sm font-semibold bg-white/5 border border-white/10 text-slate-300 hover:bg-white/10 hover:text-white transition-colors disabled:opacity-50"
+                  >
+                    <CalendarDays className="w-4 h-4" />
+                    {todayStatus === 'loading' ? 'Fetching…' : "Today's daily box"}
+                  </button>
+                  <button
+                    onClick={fillTodaysPuzzle}
+                    disabled={todayStatus === 'loading'}
+                    className="inline-flex items-center gap-1.5 px-4 h-10 rounded-lg text-sm font-semibold bg-white/5 border border-white/10 text-slate-300 hover:bg-white/10 hover:text-white transition-colors disabled:opacity-50"
+                  >
+                    <CalendarDays className="w-4 h-4" />
+                    {todayStatus === 'loading' ? 'Fetching…' : "Today's NYT box"}
+                  </button>
+                  <label className="inline-flex items-center gap-2 text-sm text-slate-300">
+                    Solution words
+                    <span className="inline-flex rounded-lg bg-white/5 border border-white/10 p-0.5 gap-0.5">
+                      {[1, 2, 3, 4, 5].map((n) => (
+                        <button
+                          key={n}
+                          onClick={() => setSolutionWords(n)}
+                          className={`w-8 h-8 rounded-md text-sm font-semibold transition-colors
+                            ${solutionWords === n
+                              ? 'bg-white/15 text-white'
+                              : 'text-slate-400 hover:text-white'}`}
+                        >
+                          {n}
+                        </button>
+                      ))}
+                    </span>
+                  </label>
+                </div>
+                {todayStatus === 'error' && (
+                  <p className="mt-2 text-xs text-danger">
+                    Couldn&apos;t fetch today&apos;s puzzle — try again in a minute.
+                  </p>
+                )}
+                <p className="mt-3 text-xs text-slate-500">
+                  Words are 3+ letters and may reuse letters, but consecutive letters can&apos;t
+                  come from the same side. Both today&apos;s puzzles become available about
+                  15 minutes after the NYT publishes it (3:00&nbsp;a.m. Eastern).
+                </p>
+              </div>
+            );
+          })()}
+
+          {!playActive && WORD_LIST_SOLVERS.has(mode) && (
+          <>
+          {/* results header */}
+          <div className="flex items-center justify-between mb-4 flex-wrap gap-y-3">
+            <div className="flex items-center gap-2.5">
+              <div className="flex items-center justify-center w-9 h-9 rounded-lg bg-white/5 border border-white/10">
+                <Search className="w-4 h-4 text-slate-300" />
+              </div>
+              <div>
+                <p className="text-2xl font-bold leading-none">
+                  {results.length}
+                  <span className="text-base font-normal text-slate-400 ml-1.5">
+                    {results.length === 1 ? 'match' : 'matches'}
+                  </span>
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              {mode !== 'pattern' && (
+                <div className="inline-flex rounded-lg bg-white/5 border border-white/10 p-0.5 gap-0.5">
+                  {(['length', 'alpha'] as const).map((k) => (
                     <button
-                      key={h.token}
-                      onClick={() => pinWord([h.token], h.plain)}
-                      className="inline-flex items-baseline gap-1 px-2 py-0.5 rounded-md text-sm bg-white/5 border border-dashed border-white/25 text-slate-300 hover:bg-amber-400/15 hover:text-accent transition-colors"
+                      key={k}
+                      onClick={() => setSort({ key: k })}
+                      className={`px-2.5 py-1.5 rounded-md text-xs font-medium whitespace-nowrap transition-colors
+                        ${sort.key === k
+                          ? 'bg-white/15 text-white'
+                          : 'text-slate-400 hover:text-white'}`}
                     >
-                      <span className="font-mono text-xs text-slate-500">{h.token}</span>
-                      <span>= {h.plain}</span>
-                      <span className="text-[0.625rem] text-slate-500">
-                        {Math.round(h.share * 100)}%
-                      </span>
+                      {k === 'length' ? 'Length' : 'A–Z'}
                     </button>
                   ))}
                 </div>
               )}
-
-              {/* Most-constrained first, and only words narrow enough to act
-                  on. A five-letter word with three thousand readings is not a
-                  choice, it is a wall — and listing it buries the word with
-                  four, which is where the deduction actually is. */}
-              <div className="mt-4 space-y-2">
-                {cryptoAnalysis.words
-                  .filter((w) => w.candidates.length > 1 && w.candidates.length <= 40)
-                  .sort((a, b) => a.candidates.length - b.candidates.length)
-                  .slice(0, 12)
-                  .map((w) => {
-                    const key = w.tokens.join(' ');
-                    const open = cryptoOpen.includes(key);
-                    // ten is enough to scan; the rest are a click away rather
-                    // than a number you can only look at
-                    const shown = open ? w.candidates : w.candidates.slice(0, 10);
-                    return (
-                      <div key={key} className="flex flex-wrap items-baseline gap-2">
-                        <span className="text-xs font-mono text-slate-500 shrink-0">
-                          {w.tokens.join(cryptoMode === 'letters' ? '' : ' ')}
-                        </span>
-                        {shown.map((c) => (
-                          <button
-                            key={c}
-                            onClick={() => pinWord(w.tokens, c)}
-                            className="px-2 py-0.5 rounded-md text-sm bg-white/5 border border-white/10 text-slate-300 hover:bg-emerald-400/15 hover:text-emerald-300 transition-colors"
-                          >
-                            {c}
-                          </button>
-                        ))}
-                        {w.candidates.length > 10 && (
-                          <button
-                            onClick={() =>
-                              setCryptoOpen((prev) =>
-                                open ? prev.filter((k) => k !== key) : [...prev, key]
-                              )
-                            }
-                            className="px-2 py-0.5 rounded-md text-xs text-slate-500 hover:text-white hover:bg-white/10 transition-colors"
-                          >
-                            {open ? 'fewer' : `+${w.candidates.length - 10} more`}
-                          </button>
-                        )}
-                      </div>
-                    );
-                  })}
-              </div>
-
-              {!cryptoAnalysis.contradiction &&
-                cryptoAnalysis.words.every((w) => w.candidates.length === 1) && (
-                  <p className="mt-3 text-xs text-emerald-300">
-                    Every word has one reading left, so that is the answer.
-                  </p>
-                )}
-            </div>
-          )}
-        </div>
-        )}
-
-        {weavePlayActive && (
-        <div className="mb-8">
-          <WeaveGame ref={weaveRef} standardWords={acceptWordsArr ?? standardWordsArr} navKeys={navKeys} />
-        </div>
-        )}
-
-        {mode === 'squares' && !squaresPlay && (
-        <div className="mb-8 text-center">
-          <label className="block text-xs font-medium text-slate-400 uppercase tracking-wider mb-2.5">
-            Grid size
-          </label>
-          <div className="mb-5 inline-flex rounded-lg bg-white/5 border border-white/10 p-0.5 gap-0.5">
-            {([4, 5] as SquareSolverSize[]).map((sz) => (
               <button
-                key={sz}
-                onClick={() => setSquaresSize(sz)}
-                className={`px-3 py-1.5 rounded-md text-sm font-semibold transition-colors
-                  ${squaresSize === sz ? 'bg-white/15 text-white' : 'text-slate-400 hover:text-white'}`}
+                onClick={() => setSort({ dir: sort.dir === 'asc' ? 'desc' : 'asc' })}
+                title={
+                  sort.key === 'alpha'
+                    ? sort.dir === 'asc'
+                      ? 'A to Z — click for Z to A'
+                      : 'Z to A — click for A to Z'
+                    : sort.dir === 'asc'
+                      ? 'Shortest first — click for longest first'
+                      : 'Longest first — click for shortest first'
+                }
+                className="inline-flex items-center justify-center w-8 h-8 rounded-lg text-slate-400 hover:text-white bg-white/5 border border-white/10 hover:bg-white/10 transition-colors"
               >
-                {sz}×{sz}
+                {sort.dir === 'asc' ? <ArrowUp className="w-3.5 h-3.5" /> : <ArrowDown className="w-3.5 h-3.5" />}
               </button>
-            ))}
-          </div>
-
-          <label className="block text-xs font-medium text-slate-400 uppercase tracking-wider mb-2.5">
-            Known letters
-          </label>
-          {/* letters live in a 25-slot array indexed by row*5+col, so dropping
-              to 4×4 and back doesn't throw away what was typed */}
-          <div className="w-fit mx-auto">
-            <div
-              className="grid gap-2"
-              style={{ gridTemplateColumns: `repeat(${squaresSize}, auto)` }}
-            >
-              {Array.from({ length: squaresSize * squaresSize }, (_, i) => {
-                const slot = Math.floor(i / squaresSize) * 5 + (i % squaresSize);
-                return (
-                  <Tile
-                    key={slot}
-                    index={i}
-                    group="squares"
-                    osk={kbOpen}
-                    value={squaresLetters[slot]}
-                    state={squaresLetters[slot] ? 'known' : 'empty'}
-                    size="sm"
-                    onChange={(c) =>
-                      setSquaresLetters((prev) => prev.map((x, j) => (j === slot ? c : x)))
-                    }
-                  />
-                );
-              })}
+              <button
+                onClick={resetAll}
+                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium text-slate-400 hover:text-white bg-white/5 border border-white/10 hover:bg-white/10 transition-colors"
+              >
+                <Eraser className="w-3.5 h-3.5" />
+                Clear
+              </button>
             </div>
           </div>
 
-          <p className="mt-4 text-sm text-slate-400">
-            Leave a cell blank and we&apos;ll fill it. Every row and every column
-            comes out a word.
-          </p>
-
-          {squareFill && (
-            <div className="mt-6">
-              {squareFill.solutions.length === 0 ? (
-                <p className="text-sm text-slate-400">
-                  {squareFill.exhausted
-                    ? 'No square fits those letters.'
-                    : 'Gave up looking — pin down another letter or two and try again.'}
-                </p>
+          {/* results */}
+          {results.length === 0 ? (
+            <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-10 text-center">
+              <p className="text-slate-400">
+                {mode === 'descramble'
+                  ? rackLetters.length + wildcards === 0
+                    ? 'Type your letters above to see what they can spell.'
+                    : 'Nothing spells from those letters. Try adding a wildcard (?) or lowering the minimum length.'
+                  : mode === 'bee'
+                    ? beeCenter === ''
+                      ? 'Enter the center letter and the six outer letters to find words.'
+                      : 'No words found from those letters. Double-check the puzzle.'
+                    : mode === 'boxed'
+                      ? boxedLetters.filter(Boolean).length < 12
+                        ? 'Enter the twelve letters, three per side, to find words.'
+                        : 'No words fit this box. Double-check the puzzle.'
+                      : mode === 'grid'
+                        ? gridLetters.filter(Boolean).length < gridLetters.length
+                          ? `Fill in all ${gridLetters.length} grid letters to find words.`
+                          : 'No words can be traced on this grid.'
+                        : mode === 'weave'
+                          ? weaveLetters.filter(Boolean).length < weaveLetters.length
+                            ? `Fill in all ${weaveLetters.length} board letters to find words.`
+                            : 'No words can be traced on this board.'
+                          : 'No words fit those clues. Try loosening a constraint.'}
+              </p>
+            </div>
+          ) : (
+            <>
+              {mode === 'pattern' ? (
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2.5">
+                  {visible.map((w) => (
+                    <WordChip
+                      key={w}
+                      word={w}
+                      className="bg-white/[0.04] border border-white/10 hover:bg-white/[0.08] hover:border-white/20"
+                    >
+                      {highlight(w)}
+                    </WordChip>
+                  ))}
+                </div>
               ) : (
                 <>
-                  <p className="text-sm text-slate-400 mb-4">
-                    {squareFill.solutions.length}
-                    {squareFill.exhausted ? '' : '+'}{' '}
-                    {squareFill.solutions.length === 1 ? 'square' : 'squares'} fit
-                  </p>
-                  <div className="flex flex-wrap justify-center gap-5">
-                    {squareFill.solutions.map((rows, k) => (
-                      <div
-                        key={k}
-                        className="grid gap-1"
-                        style={{ gridTemplateColumns: `repeat(${squaresSize}, auto)` }}
-                      >
-                        {rows.flatMap((w, r) =>
-                          w.split('').map((ch, c) => {
-                            const typed = !!squaresLetters[r * 5 + c];
-                            return (
-                              <span
-                                key={`${r}-${c}`}
-                                className={`w-7 h-8 flex items-center justify-center rounded-md border text-sm font-bold uppercase
-                                  ${typed
-                                    ? 'bg-white/15 border-white/25 text-white'
-                                    : 'bg-transparent border-white/10 text-accent'}`}
-                              >
-                                {ch}
-                              </span>
-                            );
-                          })
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                </>
-              )}
-            </div>
-          )}
-        </div>
-        )}
-
-        {mode === 'weave' && !weavePlay && (
-        <div className="mb-8 text-center">
-          <label className="block text-xs font-medium text-slate-400 uppercase tracking-wider mb-2.5">
-            Board size
-          </label>
-          <div className="mb-5 inline-flex rounded-lg bg-white/5 border border-white/10 p-0.5 gap-0.5">
-            {(
-              [
-                { id: '6x8', label: '6×8' },
-                { id: '8x10', label: '8×10' },
-              ] as const
-            ).map(({ id, label }) => (
-              <button
-                key={id}
-                onClick={() => changeWeaveSize(id)}
-                className={`px-3 py-1.5 rounded-md text-sm font-semibold whitespace-nowrap transition-colors
-                  ${weaveSize === id ? 'bg-white/15 text-white' : 'text-slate-400 hover:text-white'}`}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-          <label className="block text-xs font-medium text-slate-400 uppercase tracking-wider mb-3">
-            The board
-          </label>
-          <div ref={gridBoardRef} className="relative w-fit mx-auto">
-            <div className={`grid gap-1.5 ${weaveDims.cols === 8 ? 'grid-cols-8' : 'grid-cols-6'}`}>
-              {weaveLetters.map((v, i) => (
-                <Tile
-                  key={i}
-                  index={i}
-                  group="weave"
-                  osk={kbOpen}
-                  value={v}
-                  state={v ? 'known' : 'empty'}
-                  size="sm"
-                  tone={gridTrace?.includes(i) ? GRID_TRACE_TONE : undefined}
-                  onChange={(c) =>
-                    setWeaveLetters((prev) => prev.map((x, j) => (j === i ? c : x)))
-                  }
-                />
-              ))}
-            </div>
-            {gridTracePts.length > 1 && (
-              <svg className="absolute inset-0 w-full h-full pointer-events-none">
-                <polyline
-                  points={gridTracePts.map((p) => `${p.x},${p.y}`).join(' ')}
-                  fill="none"
-                  stroke="rgb(var(--trace) / 0.9)"
-                  strokeWidth="4"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-                <circle cx={gridTracePts[0].x} cy={gridTracePts[0].y} r="6" fill="rgb(var(--trace))" />
-              </svg>
-            )}
-          </div>
-          <div className="mt-4 flex flex-wrap items-center justify-center gap-3">
-            <button
-              onClick={fillTodaysStrands}
-              disabled={todayStatus === 'loading'}
-              className="inline-flex items-center gap-1.5 px-4 h-10 rounded-lg text-sm font-semibold bg-white/5 border border-white/10 text-slate-300 hover:bg-white/10 hover:text-white transition-colors disabled:opacity-50"
-            >
-              <CalendarDays className="w-4 h-4" />
-              {todayStatus === 'loading' ? 'Fetching…' : "Today's NYT Strands"}
-            </button>
-            <button
-              onClick={fillTodaysWeave}
-              disabled={todayStatus === 'loading'}
-              className="inline-flex items-center gap-1.5 px-4 h-10 rounded-lg text-sm font-semibold bg-white/5 border border-white/10 text-slate-300 hover:bg-white/10 hover:text-white transition-colors disabled:opacity-50"
-            >
-              <CalendarDays className="w-4 h-4" />
-              {todayStatus === 'loading' ? 'Fetching…' : "Today's daily weave"}
-            </button>
-          </div>
-          {todayStatus === 'error' && (
-            <p className="mt-2 text-xs text-danger">
-              Couldn&apos;t fetch today&apos;s puzzle — try again in a minute.
-            </p>
-          )}
-          {strandsClue && (
-            <p className="mt-2 text-sm text-amber-300">
-              Theme: <span className="font-semibold">{strandsClue}</span>
-            </p>
-          )}
-          <p className="mt-3 text-xs text-slate-500">
-            Words are 3+ letters traced through adjacent cells (diagonals count), using each
-            cell once. Hover a result to trace it on the board. Today&apos;s Strands becomes
-            available here about 15 minutes after the NYT publishes it (3:00&nbsp;a.m. Eastern).
-          </p>
-        </div>
-        )}
-
-        {/* dictionary selector — hidden when one dictionary has been chosen
-            for the whole site, since there'd be nothing left for it to pick */}
-        {!playActive && solverDictionary === 'per-game' && (
-        <section className="mb-7 text-center">
-          <label className="block text-xs font-medium text-slate-400 uppercase tracking-wider mb-2.5">
-            Word list
-          </label>
-          <div className="inline-flex flex-wrap justify-center max-w-full rounded-xl bg-white/5 border border-white/10 p-1 gap-1">
-            {DICTIONARIES.map((d) => (
-              <button
-                key={d.id}
-                onClick={() => setDictionaryId(d.id)}
-                title={d.blurb}
-                className={`inline-flex items-center gap-1.5 px-4 h-9 rounded-lg text-sm font-semibold transition-all duration-150
-                  ${dictionaryId === d.id
-                    ? 'bg-amber-400 text-ink shadow-lg shadow-amber-500/30'
-                    : 'text-slate-300 hover:bg-white/10'}`}
-              >
-                {d.id === 'easy' && <BookOpen className="w-3.5 h-3.5" />}
-                {d.label}
-              </button>
-            ))}
-          </div>
-          <p className="mt-2 text-xs text-slate-500">
-            {DICTIONARIES.find((d) => d.id === dictionaryId)?.blurb}
-          </p>
-        </section>
-        )}
-
-        {mode === 'pattern' && (
-        <>
-        {/* length selector — gone when the range allows only one, the same way
-            the view switch goes when one tab is left */}
-        <section className={`mb-7 text-center ${shownLengths.length > 1 ? '' : 'hidden'}`}>
-          <label className="block text-xs font-medium text-slate-400 uppercase tracking-wider mb-2.5">
-            Word length
-          </label>
-          <div className="flex flex-wrap gap-2 justify-center">
-            {shownLengths.map((n) => (
-              <button
-                key={n}
-                onClick={() => setLength(n)}
-                className={`w-11 h-11 rounded-xl text-sm font-semibold transition-all duration-150
-                  ${length === n
-                    ? 'bg-amber-400 text-ink shadow-lg shadow-amber-500/30 scale-105'
-                    : 'bg-white/5 border border-white/10 text-slate-300 hover:bg-white/10 hover:border-white/20'}`}
-              >
-                {n}
-              </button>
-            ))}
-          </div>
-        </section>
-
-        {patternPlay ? (
-        <div className="mb-8">
-          <GuessGame
-            ref={gameRef}
-            length={length}
-            commonWords={commonWordsArr}
-            practiceWords={practiceWordsArr}
-            fullWords={acceptWordsArr ?? fullWordsArr}
-            onLetterStates={setLetterStates}
-            onReveal={!shownViews.includes('solve') || !helpAllowed ? undefined : ({ length: len, known: k, contains, excluded }) => {
-              setLength(len);
-              setKnown(k);
-              setContainsStr(contains);
-              setExcludedStr(excluded);
-              setPatternPlay(false);
-            }}
-          />
-        </div>
-        ) : (
-        <>
-        {/* known positions */}
-        <section className="mb-7 text-center">
-          <label className="block text-xs font-medium text-slate-400 uppercase tracking-wider mb-2.5">
-            Known positions
-          </label>
-          <div className="flex flex-wrap gap-2 justify-center">
-            {known.map((v, i) => (
-              <Tile
-                key={i}
-                index={i}
-                group="known"
-                osk={kbOpen}
-                value={v}
-                state={v ? 'known' : 'empty'}
-                size={length > 10 ? 'sm' : 'md'}
-                onChange={(c) =>
-                  setKnown((prev) => prev.map((x, j) => (j === i ? c : x)))
-                }
-              />
-            ))}
-          </div>
-          <p className="mt-2 text-xs text-slate-500">
-            Fill a box only when you're certain of the letter in that spot.
-          </p>
-        </section>
-
-        {/* contains + excluded */}
-        <div className="grid sm:grid-cols-2 gap-5 mb-8">
-          <section>
-            <label className="block text-xs font-medium text-slate-400 uppercase tracking-wider mb-2.5">
-              Must contain <span className="text-accent normal-case">(position unknown)</span>
-            </label>
-            <LetterChipInput
-              value={containsStr}
-              onChange={setContainsStr}
-              ariaLabel="Letters the word must contain"
-              placeholder="e.g. d"
-              maxLen={15}
-              tone="amber"
-              osk={kbOpen}
-            />
-          </section>
-          <section>
-            <label className="block text-xs font-medium text-slate-400 uppercase tracking-wider mb-2.5">
-              Excluded letters
-            </label>
-            <LetterChipInput
-              value={excludedStr}
-              onChange={setExcludedStr}
-              ariaLabel="Excluded letters"
-              placeholder="letters not in the word"
-              maxLen={26}
-              tone="rose"
-              osk={kbOpen}
-            />
-          </section>
-        </div>
-        </>
-        )}
-        </>
-        )}
-
-        {descramblePlayActive && (
-        <div className="mb-8">
-          <ScrambleGame
-            ref={scrambleRef}
-            standardWords={acceptWordsArr ?? standardWordsArr}
-            commonWords={commonWordsArr}
-            practiceWords={practiceWordsArr}
-            onLetterStates={setLetterStates}
-            onReveal={!shownViews.includes('solve') || !helpAllowed ? undefined : (letters) => {
-              setRackStr(letters);
-              setUseAll(false);
-              setMinLength(3);
-              setDescramblePlay(false);
-            }}
-          />
-        </div>
-        )}
-
-        {mode === 'descramble' && !descramblePlay && (
-        <div className="mb-8">
-          <section className="mb-5">
-            <label className="block text-xs font-medium text-slate-400 uppercase tracking-wider mb-2.5 text-center">
-              Your letters <span className="text-accent normal-case">(use ? for a blank tile)</span>
-            </label>
-            <LetterChipInput
-              value={rackStr}
-              onChange={setRackStr}
-              ariaLabel="Letters to descramble"
-              placeholder="e.g. aetrsn?"
-              maxLen={MAX_LEN}
-              allowWildcard
-              tone="amber"
-              osk={kbOpen}
-            />
-          </section>
-          <div className="flex flex-wrap items-center justify-center gap-3">
-            <button
-              onClick={fillDailyRack}
-              disabled={todayStatus === 'loading'}
-              className="inline-flex items-center gap-1.5 px-4 h-10 rounded-lg text-sm font-semibold bg-white/5 border border-white/10 text-slate-300 hover:bg-white/10 hover:text-white transition-colors disabled:opacity-50"
-            >
-              <CalendarDays className="w-4 h-4" />
-              {todayStatus === 'loading' ? 'Fetching…' : "Today's daily rack"}
-            </button>
-            <button
-              onClick={() => setUseAll((v) => !v)}
-              className={`inline-flex items-center gap-1.5 px-4 h-10 rounded-lg text-sm font-semibold transition-all duration-150 border
-                ${useAll
-                  ? 'bg-amber-400 text-ink border-amber-400 shadow-lg shadow-amber-500/30'
-                  : 'bg-white/5 border-white/10 text-slate-300 hover:bg-white/10'}`}
-            >
-              Use every letter
-            </button>
-            {!useAll && (
-              <label className="inline-flex items-center gap-2 text-sm text-slate-300">
-                Min length
-                <select
-                  value={minLength}
-                  onChange={(e) => setMinLength(Number(e.target.value))}
-                  className="h-10 px-3 rounded-lg bg-white/5 border border-white/10 text-sm font-semibold text-white outline-none focus:border-amber-400 [&>option]:bg-slate-900"
-                >
-                  {[2, 3, 4, 5, 6, 7].map((n) => (
-                    <option key={n} value={n}>
-                      {n}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            )}
-          </div>
-          {todayStatus === 'error' && (
-            <p className="mt-2 text-xs text-danger text-center">
-              Couldn&apos;t fetch today&apos;s rack — try again in a minute.
-            </p>
-          )}
-        </div>
-        )}
-
-        {beePlayActive && (
-        <div className="mb-8">
-          <HiveGame
-            ref={hiveRef}
-            standardWords={acceptWordsArr ?? standardWordsArr}
-            commonWords={commonWordsArr}
-            practiceWords={practiceWordsArr}
-            onLetterStates={setLetterStates}
-            onReveal={!shownViews.includes('solve') || !helpAllowed ? undefined : (center, outers) => {
-              setBeeCenter(center);
-              setBeeOuters(outers);
-              setBeePlay(false);
-            }}
-          />
-        </div>
-        )}
-
-        {mode === 'bee' && !beePlay && (
-        <div className="mb-8 text-center">
-          <label className="block text-xs font-medium text-slate-400 uppercase tracking-wider mb-3">
-            The hive
-          </label>
-          <div className="relative w-full max-w-[14rem] aspect-square mx-auto">
-            <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2">
-              <Tile
-                index={0}
-                group="bee"
-                osk={kbOpen}
-                value={beeCenter}
-                state="center"
-                size="sm"
-                onChange={(c) => setBeeCenter(c)}
-              />
-            </div>
-            {BEE_POSITIONS.map(([x, y], i) => (
-              <div
-                key={i}
-                className="absolute -translate-x-1/2 -translate-y-1/2"
-                style={{ left: `${x}%`, top: `${y}%` }}
-              >
-                <Tile
-                  index={i + 1}
-                  group="bee"
-                  osk={kbOpen}
-                  value={beeOuters[i]}
-                  state={beeOuters[i] ? 'known' : 'empty'}
-                  size="sm"
-                  onChange={(c) =>
-                    setBeeOuters((prev) => prev.map((x2, j) => (j === i ? c : x2)))
-                  }
-                />
-              </div>
-            ))}
-          </div>
-          <div className="mt-4 flex flex-wrap items-center justify-center gap-3">
-            <button
-              onClick={fillDailyHive}
-              disabled={todayStatus === 'loading'}
-              className="inline-flex items-center gap-1.5 px-4 h-10 rounded-lg text-sm font-semibold bg-white/5 border border-white/10 text-slate-300 hover:bg-white/10 hover:text-white transition-colors disabled:opacity-50"
-            >
-              <CalendarDays className="w-4 h-4" />
-              {todayStatus === 'loading' ? 'Fetching…' : "Today's daily hive"}
-            </button>
-            <button
-              onClick={fillTodaysBee}
-              disabled={todayStatus === 'loading'}
-              className="inline-flex items-center gap-1.5 px-4 h-10 rounded-lg text-sm font-semibold bg-white/5 border border-white/10 text-slate-300 hover:bg-white/10 hover:text-white transition-colors disabled:opacity-50"
-            >
-              <CalendarDays className="w-4 h-4" />
-              {todayStatus === 'loading' ? 'Fetching…' : "Today's NYT bee"}
-            </button>
-          </div>
-          {todayStatus === 'error' && (
-            <p className="mt-2 text-xs text-danger">
-              Couldn&apos;t fetch today&apos;s puzzle — try again in a minute.
-            </p>
-          )}
-          <p className="mt-3 text-xs text-slate-500">
-            Words are 4+ letters, must use the {colorWords(palette, resolveTheme(theme)).key} center letter, and may repeat letters.
-            Words using all seven letters are pangrams. Both today&apos;s puzzles become
-            available about 15 minutes after 3:00&nbsp;a.m. Eastern.
-          </p>
-        </div>
-        )}
-
-        {gridPlayActive && (
-        <div className="mb-8">
-          <GridGame
-            ref={gridRef}
-            standardWords={acceptWordsArr ?? standardWordsArr}
-            displayWord={showWord}
-            onLetterStates={setLetterStates}
-            onReveal={!shownViews.includes('solve') || !helpAllowed ? undefined : (cells) => {
-              setGridPreset(cells.length === 9 ? '3x3' : cells.length === 25 ? '5x5' : '4x4');
-              setGridLetters(cells);
-              setGridPlay(false);
-            }}
-          />
-        </div>
-        )}
-
-        {mode === 'grid' && !gridPlay && (
-        <div className="mb-8 text-center">
-          <label className="block text-xs font-medium text-slate-400 uppercase tracking-wider mb-2.5">
-            Grid size
-          </label>
-          <div className="mb-5 inline-flex rounded-lg bg-white/5 border border-white/10 p-0.5 gap-0.5">
-            {(
-              [
-                { id: '3x3', label: '3×3' },
-                { id: '4x4', label: '4×4' },
-                { id: '5x5', label: '5×5' },
-              ] as const
-            ).map(({ id, label }) => (
-              <button
-                key={id}
-                onClick={() => changeGridPreset(id)}
-                className={`px-3 py-1.5 rounded-md text-sm font-semibold whitespace-nowrap transition-colors
-                  ${gridPreset === id ? 'bg-white/15 text-white' : 'text-slate-400 hover:text-white'}`}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-          <label className="block text-xs font-medium text-slate-400 uppercase tracking-wider mb-3">
-            The grid
-          </label>
-          <div ref={gridBoardRef} className="relative w-fit mx-auto">
-            <div
-              className={`grid gap-2 ${
-                gridDims.cols === 3 ? 'grid-cols-3' : gridDims.cols === 5 ? 'grid-cols-5' : 'grid-cols-4'
-              }`}
-            >
-              {gridLetters.map((v, i) => (
-                <Tile
-                  key={i}
-                  index={i}
-                  group="grid"
-                  osk={kbOpen}
-                  value={v}
-                  state={v ? 'known' : 'empty'}
-                  size="sm"
-                  tone={gridTrace?.includes(i) ? GRID_TRACE_TONE : undefined}
-                  onChange={(c) =>
-                    setGridLetters((prev) => prev.map((x, j) => (j === i ? c : x)))
-                  }
-                />
-              ))}
-            </div>
-            {gridTracePts.length > 1 && (
-              <svg className="absolute inset-0 w-full h-full pointer-events-none">
-                <polyline
-                  points={gridTracePts.map((p) => `${p.x},${p.y}`).join(' ')}
-                  fill="none"
-                  stroke="rgb(var(--trace) / 0.9)"
-                  strokeWidth="4"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-                <circle cx={gridTracePts[0].x} cy={gridTracePts[0].y} r="6" fill="rgb(var(--trace))" />
-              </svg>
-            )}
-          </div>
-          <div className="mt-4 flex flex-wrap items-center justify-center gap-3">
-            <button
-              onClick={fillDailyGrid}
-              disabled={todayStatus === 'loading'}
-              className="inline-flex items-center gap-1.5 px-4 h-10 rounded-lg text-sm font-semibold bg-white/5 border border-white/10 text-slate-300 hover:bg-white/10 hover:text-white transition-colors disabled:opacity-50"
-            >
-              <CalendarDays className="w-4 h-4" />
-              {todayStatus === 'loading' ? 'Fetching…' : "Today's daily grid"}
-            </button>
-          </div>
-          {todayStatus === 'error' && (
-            <p className="mt-2 text-xs text-danger">
-              Couldn&apos;t fetch today&apos;s grid — try again in a minute.
-            </p>
-          )}
-          <p className="mt-3 text-xs text-slate-500">
-            Words are 3+ letters traced through adjacent cells (diagonals count), using each
-            cell once. Hover a result to trace it on the board.
-          </p>
-        </div>
-        )}
-
-        {boxedPlayActive && (
-        <div className="mb-8">
-          <BoxGame
-            ref={boxRef}
-            standardWords={acceptWordsArr ?? standardWordsArr}
-            commonWords={commonWordsArr}
-            practiceWords={practiceWordsArr}
-            onLetterStates={setLetterStates}
-            onReveal={!shownViews.includes('solve') || !helpAllowed ? undefined : (sides) => {
-              setBoxedLetters(sides.flatMap((s) => s.split('')).slice(0, 12));
-              setBoxedPlay(false);
-            }}
-          />
-        </div>
-        )}
-
-        {mode === 'boxed' && !boxedPlay && (() => {
-          const boxTile = (i: number) => (
-            <Tile
-              key={i}
-              index={i}
-              group="boxed"
-              osk={kbOpen}
-              value={boxedLetters[i]}
-              state={boxedLetters[i] ? 'known' : 'empty'}
-              size="sm"
-              tone={BOX_SIDE_TONES[Math.floor(i / 3)]}
-              onChange={(c) =>
-                setBoxedLetters((prev) => prev.map((x, k) => (k === i ? c : x)))
-              }
-            />
-          );
-          return (
-            <div className="mb-8 text-center">
-              <label className="block text-xs font-medium text-slate-400 uppercase tracking-wider mb-3">
-                Sides of the box
-              </label>
-              <div ref={boxedBoardRef} className="relative w-full max-w-[18rem] aspect-square mx-auto">
-                <div className="absolute inset-14 rounded-xl border-2 border-white/15 bg-white/[0.02]" />
-                {/* top */}
-                <div className="absolute top-0 left-14 right-14 flex justify-around">
-                  {[0, 1, 2].map(boxTile)}
-                </div>
-                {/* right */}
-                <div className="absolute right-0 top-14 bottom-14 flex flex-col justify-around items-end">
-                  {[3, 4, 5].map(boxTile)}
-                </div>
-                {/* bottom */}
-                <div className="absolute bottom-0 left-14 right-14 flex justify-around">
-                  {[6, 7, 8].map(boxTile)}
-                </div>
-                {/* left */}
-                <div className="absolute left-0 top-14 bottom-14 flex flex-col justify-around items-start">
-                  {[9, 10, 11].map(boxTile)}
-                </div>
-                {boxedTracePts.some((pts) => pts.length > 1) && (
-                  <svg className="absolute inset-0 w-full h-full pointer-events-none">
-                    {boxedTracePts.map((pts, wi) =>
-                      pts.length > 1 ? (
-                        <g key={wi}>
-                          <polyline
-                            points={pts.map((p) => `${p.x},${p.y}`).join(' ')}
-                            fill="none"
-                            stroke={BOX_TRACE_COLORS[wi % BOX_TRACE_COLORS.length]}
-                            strokeWidth="3"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                          />
-                          <circle
-                            cx={pts[0].x}
-                            cy={pts[0].y}
-                            r="5"
-                            fill={BOX_TRACE_COLORS[wi % BOX_TRACE_COLORS.length]}
-                          />
-                        </g>
-                      ) : null
-                    )}
-                  </svg>
-                )}
-              </div>
-              <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
-                <button
-                  onClick={fillDailyBox}
-                  disabled={todayStatus === 'loading'}
-                  className="inline-flex items-center gap-1.5 px-4 h-10 rounded-lg text-sm font-semibold bg-white/5 border border-white/10 text-slate-300 hover:bg-white/10 hover:text-white transition-colors disabled:opacity-50"
-                >
-                  <CalendarDays className="w-4 h-4" />
-                  {todayStatus === 'loading' ? 'Fetching…' : "Today's daily box"}
-                </button>
-                <button
-                  onClick={fillTodaysPuzzle}
-                  disabled={todayStatus === 'loading'}
-                  className="inline-flex items-center gap-1.5 px-4 h-10 rounded-lg text-sm font-semibold bg-white/5 border border-white/10 text-slate-300 hover:bg-white/10 hover:text-white transition-colors disabled:opacity-50"
-                >
-                  <CalendarDays className="w-4 h-4" />
-                  {todayStatus === 'loading' ? 'Fetching…' : "Today's NYT box"}
-                </button>
-                <label className="inline-flex items-center gap-2 text-sm text-slate-300">
-                  Solution words
-                  <span className="inline-flex rounded-lg bg-white/5 border border-white/10 p-0.5 gap-0.5">
-                    {[1, 2, 3, 4, 5].map((n) => (
-                      <button
-                        key={n}
-                        onClick={() => setSolutionWords(n)}
-                        className={`w-8 h-8 rounded-md text-sm font-semibold transition-colors
-                          ${solutionWords === n
-                            ? 'bg-white/15 text-white'
-                            : 'text-slate-400 hover:text-white'}`}
-                      >
-                        {n}
-                      </button>
-                    ))}
-                  </span>
-                </label>
-              </div>
-              {todayStatus === 'error' && (
-                <p className="mt-2 text-xs text-danger">
-                  Couldn&apos;t fetch today&apos;s puzzle — try again in a minute.
-                </p>
-              )}
-              <p className="mt-3 text-xs text-slate-500">
-                Words are 3+ letters and may reuse letters, but consecutive letters can&apos;t
-                come from the same side. Both today&apos;s puzzles become available about
-                15 minutes after the NYT publishes it (3:00&nbsp;a.m. Eastern).
-              </p>
-            </div>
-          );
-        })()}
-
-        {!playActive && WORD_LIST_SOLVERS.has(mode) && (
-        <>
-        {/* results header */}
-        <div className="flex items-center justify-between mb-4 flex-wrap gap-y-3">
-          <div className="flex items-center gap-2.5">
-            <div className="flex items-center justify-center w-9 h-9 rounded-lg bg-white/5 border border-white/10">
-              <Search className="w-4 h-4 text-slate-300" />
-            </div>
-            <div>
-              <p className="text-2xl font-bold leading-none">
-                {results.length}
-                <span className="text-base font-normal text-slate-400 ml-1.5">
-                  {results.length === 1 ? 'match' : 'matches'}
-                </span>
-              </p>
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
-            {mode !== 'pattern' && (
-              <div className="inline-flex rounded-lg bg-white/5 border border-white/10 p-0.5 gap-0.5">
-                {(['length', 'alpha'] as const).map((k) => (
-                  <button
-                    key={k}
-                    onClick={() => setSort({ key: k })}
-                    className={`px-2.5 py-1.5 rounded-md text-xs font-medium whitespace-nowrap transition-colors
-                      ${sort.key === k
-                        ? 'bg-white/15 text-white'
-                        : 'text-slate-400 hover:text-white'}`}
-                  >
-                    {k === 'length' ? 'Length' : 'A–Z'}
-                  </button>
-                ))}
-              </div>
-            )}
-            <button
-              onClick={() => setSort({ dir: sort.dir === 'asc' ? 'desc' : 'asc' })}
-              title={
-                sort.key === 'alpha'
-                  ? sort.dir === 'asc'
-                    ? 'A to Z — click for Z to A'
-                    : 'Z to A — click for A to Z'
-                  : sort.dir === 'asc'
-                    ? 'Shortest first — click for longest first'
-                    : 'Longest first — click for shortest first'
-              }
-              className="inline-flex items-center justify-center w-8 h-8 rounded-lg text-slate-400 hover:text-white bg-white/5 border border-white/10 hover:bg-white/10 transition-colors"
-            >
-              {sort.dir === 'asc' ? <ArrowUp className="w-3.5 h-3.5" /> : <ArrowDown className="w-3.5 h-3.5" />}
-            </button>
-            <button
-              onClick={resetAll}
-              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium text-slate-400 hover:text-white bg-white/5 border border-white/10 hover:bg-white/10 transition-colors"
-            >
-              <Eraser className="w-3.5 h-3.5" />
-              Clear
-            </button>
-          </div>
-        </div>
-
-        {/* results */}
-        {results.length === 0 ? (
-          <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-10 text-center">
-            <p className="text-slate-400">
-              {mode === 'descramble'
-                ? rackLetters.length + wildcards === 0
-                  ? 'Type your letters above to see what they can spell.'
-                  : 'Nothing spells from those letters. Try adding a wildcard (?) or lowering the minimum length.'
-                : mode === 'bee'
-                  ? beeCenter === ''
-                    ? 'Enter the center letter and the six outer letters to find words.'
-                    : 'No words found from those letters. Double-check the puzzle.'
-                  : mode === 'boxed'
-                    ? boxedLetters.filter(Boolean).length < 12
-                      ? 'Enter the twelve letters, three per side, to find words.'
-                      : 'No words fit this box. Double-check the puzzle.'
-                    : mode === 'grid'
-                      ? gridLetters.filter(Boolean).length < gridLetters.length
-                        ? `Fill in all ${gridLetters.length} grid letters to find words.`
-                        : 'No words can be traced on this grid.'
-                      : mode === 'weave'
-                        ? weaveLetters.filter(Boolean).length < weaveLetters.length
-                          ? `Fill in all ${weaveLetters.length} board letters to find words.`
-                          : 'No words can be traced on this board.'
-                        : 'No words fit those clues. Try loosening a constraint.'}
-            </p>
-          </div>
-        ) : (
-          <>
-            {mode === 'pattern' ? (
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2.5">
-                {visible.map((w) => (
-                  <WordChip
-                    key={w}
-                    word={w}
-                    className="bg-white/[0.04] border border-white/10 hover:bg-white/[0.08] hover:border-white/20"
-                  >
-                    {highlight(w)}
-                  </WordChip>
-                ))}
-              </div>
-            ) : (
-              <>
-              {boxedRecommended && (
-                <div className="mb-6">
-                  <p className="mb-2.5 text-xs font-medium text-accent uppercase tracking-wider inline-flex items-center gap-1.5">
-                    <Star className="w-3.5 h-3.5" />
-                    Recommended
-                    <span className="text-accent normal-case tracking-normal">
-                      · {boxedRecommended.words.length}{' '}
-                      {boxedRecommended.words.length === 1 ? 'word' : 'words'}
-                      {boxedRecommended.allCommon ? ', everyday vocabulary' : ''}
-                    </span>
-                  </p>
-                  <div className="grid grid-cols-1 gap-2.5">
-                    <WordChip
-                      word={boxedRecommended.words.join(' ')}
-                      hoverProps={boxedTraceHandlers(boxedRecommended.words)}
-                      className="bg-amber-400/10 border border-amber-400/30 text-amber-200 font-semibold hover:bg-amber-400/20"
-                    >
-                      {boxedRecommended.words.map((w, i) => (
-                        <span key={i}>
-                          {i > 0 && <span className="text-slate-500"> → </span>}
-                          <span className={BOX_TRACE_TEXT[i % BOX_TRACE_TEXT.length]}>{w}</span>
-                        </span>
-                      ))}
-                    </WordChip>
-                  </div>
-                </div>
-              )}
-              {mode === 'boxed' && boxedIndex && (
-                <div className="mb-6">
-                  <p className="mb-2.5 text-xs font-medium text-success uppercase tracking-wider">
-                    {solutionWords}-word solutions{' '}
-                    <span className="text-success">
-                      · {boxedChains.capped ? `${boxedChains.solutions.length}+` : boxedChains.solutions.length}
-                    </span>
-                  </p>
-                  {boxedChains.solutions.length === 0 ? (
-                    <p className="text-sm text-slate-500">
-                      No {solutionWords}-word solutions found — try allowing more words.
+                {boxedRecommended && (
+                  <div className="mb-6">
+                    <p className="mb-2.5 text-xs font-medium text-accent uppercase tracking-wider inline-flex items-center gap-1.5">
+                      <Star className="w-3.5 h-3.5" />
+                      Recommended
+                      <span className="text-accent normal-case tracking-normal">
+                        · {boxedRecommended.words.length}{' '}
+                        {boxedRecommended.words.length === 1 ? 'word' : 'words'}
+                        {boxedRecommended.allCommon ? ', everyday vocabulary' : ''}
+                      </span>
                     </p>
-                  ) : (
-                    <>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                        {boxedChains.solutions.slice(0, 24).map((s) => (
-                          <WordChip
-                            key={s.join(' ')}
-                            word={s.join(' ')}
-                            hoverProps={boxedTraceHandlers(s)}
-                            className="bg-emerald-400/10 border border-emerald-400/30 text-emerald-200 font-semibold hover:bg-emerald-400/20"
-                          >
-                            {s.map((w, i) => (
-                              <span key={i}>
-                                {i > 0 && <span className="text-slate-500"> → </span>}
-                                <span className={BOX_TRACE_TEXT[i % BOX_TRACE_TEXT.length]}>{w}</span>
-                              </span>
-                            ))}
-                          </WordChip>
-                        ))}
-                      </div>
-                      {boxedChains.solutions.length > 24 && (
-                        <p className="mt-2 text-xs text-slate-500">
-                          Showing the 24 shortest of{' '}
-                          {boxedChains.capped
-                            ? `${boxedChains.solutions.length}+ (search capped)`
-                            : boxedChains.solutions.length}{' '}
-                          solutions.
-                        </p>
-                      )}
-                    </>
-                  )}
-                </div>
-              )}
-              {pangrams.length > 0 && (
-                <div className="mb-6">
-                  <p className="mb-2.5 text-xs font-medium text-accent uppercase tracking-wider">
-                    Pangrams <span className="text-accent">· {pangrams.length}</span>
-                  </p>
-                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2.5">
-                    {pangrams.map((w) => (
+                    <div className="grid grid-cols-1 gap-2.5">
                       <WordChip
-                        key={w}
-                        word={w}
+                        word={boxedRecommended.words.join(' ')}
+                        hoverProps={boxedTraceHandlers(boxedRecommended.words)}
                         className="bg-amber-400/10 border border-amber-400/30 text-amber-200 font-semibold hover:bg-amber-400/20"
-                      />
-                    ))}
+                      >
+                        {boxedRecommended.words.map((w, i) => (
+                          <span key={i}>
+                            {i > 0 && <span className="text-slate-500"> → </span>}
+                            <span className={BOX_TRACE_TEXT[i % BOX_TRACE_TEXT.length]}>{w}</span>
+                          </span>
+                        ))}
+                      </WordChip>
+                    </div>
                   </div>
-                </div>
-              )}
-              {sort.key === 'length' ? (
-                [...groupSource.reduce((m, w) => {
-                  const g = m.get(w.length) ?? [];
-                  g.push(w);
-                  return m.set(w.length, g);
-                }, new Map<number, string[]>())].map(([len, ws]) => (
-                  <div key={len} className="mb-6">
-                    <p className="mb-2.5 text-xs font-medium text-slate-400 uppercase tracking-wider">
-                      {len} letters <span className="text-slate-600">· {ws.length}</span>
+                )}
+                {mode === 'boxed' && boxedIndex && (
+                  <div className="mb-6">
+                    <p className="mb-2.5 text-xs font-medium text-success uppercase tracking-wider">
+                      {solutionWords}-word solutions{' '}
+                      <span className="text-success">
+                        · {boxedChains.capped ? `${boxedChains.solutions.length}+` : boxedChains.solutions.length}
+                      </span>
+                    </p>
+                    {boxedChains.solutions.length === 0 ? (
+                      <p className="text-sm text-slate-500">
+                        No {solutionWords}-word solutions found — try allowing more words.
+                      </p>
+                    ) : (
+                      <>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                          {boxedChains.solutions.slice(0, 24).map((s) => (
+                            <WordChip
+                              key={s.join(' ')}
+                              word={s.join(' ')}
+                              hoverProps={boxedTraceHandlers(s)}
+                              className="bg-emerald-400/10 border border-emerald-400/30 text-emerald-200 font-semibold hover:bg-emerald-400/20"
+                            >
+                              {s.map((w, i) => (
+                                <span key={i}>
+                                  {i > 0 && <span className="text-slate-500"> → </span>}
+                                  <span className={BOX_TRACE_TEXT[i % BOX_TRACE_TEXT.length]}>{w}</span>
+                                </span>
+                              ))}
+                            </WordChip>
+                          ))}
+                        </div>
+                        {boxedChains.solutions.length > 24 && (
+                          <p className="mt-2 text-xs text-slate-500">
+                            Showing the 24 shortest of{' '}
+                            {boxedChains.capped
+                              ? `${boxedChains.solutions.length}+ (search capped)`
+                              : boxedChains.solutions.length}{' '}
+                            solutions.
+                          </p>
+                        )}
+                      </>
+                    )}
+                  </div>
+                )}
+                {pangrams.length > 0 && (
+                  <div className="mb-6">
+                    <p className="mb-2.5 text-xs font-medium text-accent uppercase tracking-wider">
+                      Pangrams <span className="text-accent">· {pangrams.length}</span>
                     </p>
                     <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2.5">
-                      {ws.map((w) => (
+                      {pangrams.map((w) => (
                         <WordChip
                           key={w}
                           word={w}
-                          hoverProps={mode === 'grid' ? gridTraceHandlers(w) : mode === 'weave' ? weaveTraceHandlers(w) : mode === 'boxed' ? boxedTraceHandlers([w]) : undefined}
-                          className="bg-white/[0.04] border border-white/10 text-slate-300 hover:bg-white/[0.08] hover:border-white/20"
+                          className="bg-amber-400/10 border border-amber-400/30 text-amber-200 font-semibold hover:bg-amber-400/20"
                         />
                       ))}
                     </div>
                   </div>
-                ))
-              ) : (
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2.5">
-                  {groupSource.map((w) => (
-                    <WordChip
-                      key={w}
-                      word={w}
-                      hoverProps={mode === 'grid' ? gridTraceHandlers(w) : mode === 'weave' ? weaveTraceHandlers(w) : mode === 'boxed' ? boxedTraceHandlers([w]) : undefined}
-                      className="bg-white/[0.04] border border-white/10 text-slate-300 hover:bg-white/[0.08] hover:border-white/20"
-                    />
-                  ))}
-                </div>
-              )}
-              </>
-            )}
-            {results.length > 200 && (
-              <button
-                onClick={() => setShowAll((s) => !s)}
-                className="mt-5 mx-auto flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium text-amber-300 bg-amber-400/10 border border-amber-400/20 hover:bg-amber-400/20 transition-colors"
-              >
-                {showAll ? (
-                  <>
-                    <X className="w-4 h-4" /> Show fewer
-                  </>
-                ) : (
-                  <>
-                    <ArrowDown className="w-4 h-4" /> Show all {results.length}
-                  </>
                 )}
-              </button>
-            )}
+                {sort.key === 'length' ? (
+                  [...groupSource.reduce((m, w) => {
+                    const g = m.get(w.length) ?? [];
+                    g.push(w);
+                    return m.set(w.length, g);
+                  }, new Map<number, string[]>())].map(([len, ws]) => (
+                    <div key={len} className="mb-6">
+                      <p className="mb-2.5 text-xs font-medium text-slate-400 uppercase tracking-wider">
+                        {len} letters <span className="text-slate-600">· {ws.length}</span>
+                      </p>
+                      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2.5">
+                        {ws.map((w) => (
+                          <WordChip
+                            key={w}
+                            word={w}
+                            hoverProps={mode === 'grid' ? gridTraceHandlers(w) : mode === 'weave' ? weaveTraceHandlers(w) : mode === 'boxed' ? boxedTraceHandlers([w]) : undefined}
+                            className="bg-white/[0.04] border border-white/10 text-slate-300 hover:bg-white/[0.08] hover:border-white/20"
+                          />
+                        ))}
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2.5">
+                    {groupSource.map((w) => (
+                      <WordChip
+                        key={w}
+                        word={w}
+                        hoverProps={mode === 'grid' ? gridTraceHandlers(w) : mode === 'weave' ? weaveTraceHandlers(w) : mode === 'boxed' ? boxedTraceHandlers([w]) : undefined}
+                        className="bg-white/[0.04] border border-white/10 text-slate-300 hover:bg-white/[0.08] hover:border-white/20"
+                      />
+                    ))}
+                  </div>
+                )}
+                </>
+              )}
+              {results.length > 200 && (
+                <button
+                  onClick={() => setShowAll((s) => !s)}
+                  className="mt-5 mx-auto flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium text-amber-300 bg-amber-400/10 border border-amber-400/20 hover:bg-amber-400/20 transition-colors"
+                >
+                  {showAll ? (
+                    <>
+                      <X className="w-4 h-4" /> Show fewer
+                    </>
+                  ) : (
+                    <>
+                      <ArrowDown className="w-4 h-4" /> Show all {results.length}
+                    </>
+                  )}
+                </button>
+              )}
+            </>
+          )}
           </>
-        )}
-        </>
-        )}
-        </>
-        )}
-        </>
+          )}
+          </>
+          )}
+          </>
+          )}
+
+          </>
         )}
 
         {/* pb keeps the last row clear of the floating keyboard button */}
@@ -3855,6 +3880,70 @@ function App() {
                   </div>
                   <div>
                     <p className="text-slate-300 font-medium">
+                      How do I report something?
+                    </p>
+                    <p>
+                      <ReportMenu
+                        context={{
+                          game: REPORT_SLUG[mode],
+                          gameLabel: MODES.find((m) => m.id === mode)?.label,
+                          date: dateByMode[mode],
+                          level,
+                        }}
+                        label="Report a problem"
+                        showIcon={false}
+                        className="font-medium text-amber-300 hover:text-amber-200 underline underline-offset-2"
+                      />{' '}
+                      at the bottom of any page. It covers a puzzle with something offensive on
+                      it, a display name, a privacy concern, a broken page, and anything
+                      else. You don&apos;t need an account, and for a puzzle or a player
+                      there is nothing to copy out — we look the board or the name up
+                      ourselves, so all you need to say is what&apos;s wrong with it.
+                    </p>
+                    <p className="mt-2">
+                      You get a reference back. Keep it and{' '}
+                      <a
+                        href="/report"
+                        className="text-amber-300 hover:text-amber-200 underline underline-offset-2"
+                      >
+                        look it up any time
+                      </a>{' '}
+                      to see whether it&apos;s still open and what was decided. Leave an
+                      email address as well and we&apos;ll write to you when it&apos;s
+                      dealt with.
+                    </p>
+                    <p className="mt-2">
+                      That address is used for those two emails and nothing else. It
+                      isn&apos;t attached to the report anyone reads — not on the page
+                      where reports get handled, and not in the daily summary, which says
+                      only that somebody asked to be told — and it&apos;s deleted once the
+                      outcome has gone out. Nothing else about a reporter is stored at
+                      all: even the limits on how many reports we take are counted per
+                      reported thing rather than per person, so there is nothing to count
+                      you by.
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-slate-300 font-medium">
+                      I&apos;ve found a security problem.
+                    </p>
+                    <p>
+                      Please don&apos;t open a public issue for it.{' '}
+                      <a
+                        href="https://github.com/rptetzloff/anagrimoire/security/advisories/new"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-amber-300 hover:text-amber-200 underline underline-offset-2"
+                      >
+                        Open a private security advisory
+                      </a>{' '}
+                      — it stays private while it&apos;s being fixed and carries a
+                      disclosure process with it. If you&apos;d rather not use GitHub,
+                      the report form above has a security option and needs no account.
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-slate-300 font-medium">
                       Found a bug, or have an idea?
                     </p>
                     <p>
@@ -3866,7 +3955,8 @@ function App() {
                       >
                         Open an issue on GitHub
                       </a>{' '}
-                      — reports and suggestions are both welcome.
+                      — reports and suggestions are both welcome. The report form works
+                      too if you&apos;d rather not have an account.
                     </p>
                   </div>
                 </div>

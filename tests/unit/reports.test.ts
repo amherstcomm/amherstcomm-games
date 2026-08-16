@@ -118,13 +118,23 @@ describe('the ticket', () => {
   it('answers open or closed and nothing else', async () => {
     const { ticketStatus } = await import('@/reports');
     rpc.mockResolvedValue({
-      data: { found: true, status: 'handled', resolution: 'blocked', filed: 'x', closed: 'y' },
+      data: {
+        found: true,
+        status: 'handled',
+        resolution: 'blocked',
+        note: 'Blocked the word.',
+        filed: 'x',
+        closed: 'y',
+      },
       error: null,
     });
+    // The note is part of it: it reached the reporter by email and not on
+    // their own ticket page, which made two promises out of one field.
     expect(await ticketStatus('4f2ba9c17d')).toEqual({
       found: true,
       open: false,
       resolution: 'blocked',
+      note: 'Blocked the word.',
       filed: 'x',
       closed: 'y',
     });

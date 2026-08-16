@@ -95,7 +95,15 @@ export async function reportPlayer(
 }
 
 export type TicketStatus =
-  | { found: true; open: boolean; resolution: string | null; filed: string; closed: string | null }
+  | {
+      found: true;
+      open: boolean;
+      resolution: string | null;
+      /** what the owner wrote when they closed it, if they wrote anything */
+      note: string | null;
+      filed: string;
+      closed: string | null;
+    }
   | { found: false };
 
 /** What a ticket answers: open or closed, and how it ended. Nothing else —
@@ -113,6 +121,7 @@ export async function ticketStatus(ticket: string): Promise<TicketStatus | null>
       found?: boolean;
       status?: string;
       resolution?: string | null;
+      note?: string | null;
       filed?: string;
       closed?: string | null;
     } | null;
@@ -121,6 +130,7 @@ export async function ticketStatus(ticket: string): Promise<TicketStatus | null>
       found: true,
       open: r.status === 'new',
       resolution: r.resolution ?? null,
+      note: r.note ?? null,
       filed: r.filed ?? '',
       closed: r.closed ?? null,
     };
@@ -201,8 +211,10 @@ export async function actOnReport(
  *  reporter's own account of where they were; it is a hint for whoever reads
  *  it and never evidence, which is why the server stores it under a key that
  *  says so. */
+export type GeneralKind = 'site' | 'other' | 'privacy' | 'security';
+
 export async function reportGeneral(
-  kind: 'site' | 'other',
+  kind: GeneralKind,
   reason: string,
   where: string,
   email?: string
