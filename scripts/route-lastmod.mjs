@@ -14,6 +14,7 @@
 
 import { execFileSync } from 'node:child_process';
 import { readFileSync, writeFileSync } from 'node:fs';
+import { SLUGS } from './games.mjs';
 
 // deliberately not under data/ — that whole directory is gitignored as
 // generated puzzle data, so a file written there is never committed, which is
@@ -23,23 +24,9 @@ const OUT = 'scripts/route-lastmod.json';
 // Read out of src/games.ts rather than kept in step with it by hand, which is
 // what this was and what it got wrong: the list here said eight while the site
 // had ten, so ladder and bridge went undated — and the build's warning about
-// missing dates never fired, because a path that is not in the list is not a
-// path the build asks about. Silent by construction.
-//
-// This file is .mjs and games.ts is TypeScript, so it is read as text. The
-// tuple it parses is plain string literals and the parse fails loudly rather
-// than falling back to a shorter list, which is the only property that matters
-// here — an undercount is exactly the failure being fixed.
-function slugsFromSource() {
-  const src = readFileSync('src/games.ts', 'utf8');
-  const block = src.match(/const SLUGS = \[([^\]]*)\] as const;/);
-  if (!block) throw new Error('could not find the SLUGS tuple in src/games.ts');
-  const slugs = [...block[1].matchAll(/'([a-z]+)'/g)].map((m) => m[1]);
-  if (slugs.length < 10) throw new Error(`only ${slugs.length} slugs parsed from src/games.ts`);
-  return slugs;
-}
-
-const GAME_SLUGS = slugsFromSource();
+// missing dates never fired, because a path not in the list is not a path the
+// build asks about. Silent by construction.
+const GAME_SLUGS = SLUGS;
 
 const GAME_FILES = {
   guess: 'src/GuessGame.tsx',

@@ -6,6 +6,7 @@
 // Auth is the service-role key, held only as a CI secret — it bypasses RLS,
 // which is the only way in, because the table grants nothing to web roles.
 import { readFileSync } from 'node:fs';
+import { FEED_NAMES, POOL_FEEDS } from './games.mjs';
 
 const SUPABASE_URL = process.env.SUPABASE_URL || 'https://kopsojnfqlzgyisexmrd.supabase.co';
 const KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -17,7 +18,10 @@ if (!KEY) {
   throw new Error('SUPABASE_SERVICE_ROLE_KEY is not set');
 }
 
-const GAMES = ['words', 'hive', 'box', 'scramble', 'grid', 'weave', 'squares', 'cryptogram', 'ladder', 'bridge'];
+// read from src/games.ts rather than kept in step with it — the copies of this
+// list that scripts kept by hand were all short, and a publish that silently
+// skips a game leaves that game with no daily at all
+const GAMES = FEED_NAMES;
 
 const rows = [];
 
@@ -32,8 +36,7 @@ for (const game of GAMES) {
   add(`dev-daily-${game}.json`, 'dev', game);
 }
 // the practice pools are shared by both sites
-const POOLS = ['weave', 'squares', 'cryptogram', 'ladder', 'bridge'];
-for (const pool of POOLS) add(`${pool}-pool.json`, 'shared', `${pool}-pool`);
+for (const pool of POOL_FEEDS) add(`${pool}-pool.json`, 'shared', `${pool}-pool`);
 
 const res = await fetch(`${SUPABASE_URL}/rest/v1/daily_puzzles`, {
   method: 'POST',
