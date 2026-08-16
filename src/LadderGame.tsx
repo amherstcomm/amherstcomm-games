@@ -31,6 +31,7 @@ import { dailyIntent } from '@/routing/entry';
 import { useDailySync } from '@/useDailySync';
 import { useUpTimer } from '@/useUpTimer';
 import ShareButton from '@/ShareButton';
+import { GAME_NAME } from '@/games';
 import { buildShare } from '@/share';
 import { recordLadderFinish } from '@/stats';
 import { loadState } from '@/storage';
@@ -478,7 +479,7 @@ const LadderGame = forwardRef<LadderGameHandle>(function LadderGame(_props, ref)
             <ShareButton
               build={() =>
                 buildShare({
-                  game: 'Word Ladder',
+                  game: GAME_NAME.ladder.full,
                   slug: 'ladder',
                   daily: store.dailyMode,
                   date: store.dailyDate,

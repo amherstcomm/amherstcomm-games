@@ -19,6 +19,7 @@ import { fetchDailyData } from '@/dailyData';
 import DailyStats from '@/DailyStats';
 import MobileKeyInput from '@/MobileKeyInput';
 import ShareButton from '@/ShareButton';
+import { GAME_NAME } from '@/games';
 import { dailyIntent } from '@/routing/entry';
 import { offerDailySwitch, reportDaily } from '@/dailyBus';
 import { usePrefs } from '@/prefs';
@@ -687,7 +688,7 @@ const BoxGame = forwardRef<
               <ShareButton
                 build={() =>
                   buildShare({
-                    game: 'Boxed',
+                    game: GAME_NAME.boxed.full,
                     slug: 'boxed',
                     daily: store.dailyMode,
                     date: store.dailyDate,

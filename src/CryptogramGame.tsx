@@ -11,6 +11,7 @@ import { fetchDailyData, fetchPool } from '@/dailyData';
 import { difficulty, isDifficulty, onDifficultyChange, type Difficulty } from '@/difficulty';
 import MobileKeyInput from '@/MobileKeyInput';
 import ShareButton from '@/ShareButton';
+import { GAME_NAME } from '@/games';
 import { buildShare } from '@/share';
 import { dailyIntent } from '@/routing/entry';
 import { offerDailySwitch, reportDaily } from '@/dailyBus';
@@ -712,7 +713,7 @@ const CryptogramGame = forwardRef<CryptogramGameHandle, object>(
                 <ShareButton
                   build={() =>
                     buildShare({
-                      game: 'Cryptogram',
+                      game: GAME_NAME.cryptogram.full,
                       slug: 'cryptogram',
                       daily: store.dailyMode,
                       date: store.dailyDate,

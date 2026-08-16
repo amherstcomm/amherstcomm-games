@@ -728,8 +728,19 @@ re-render tore down a child's effect, and in a component with 92 pieces of state
 every one of them re-renders the whole page.
 
 **The reason to do it is that development and troubleshooting get easier, not
-that a long file is ugly.** That is also the criterion for where to cut: go
-where the troubleshooting keeps landing, not where the line count is highest.
+that a long file is ugly.** That is one criterion for where to cut: go where the
+troubleshooting keeps landing, not where the line count is highest.
+
+**It is not the only one, and on its own it under-delivers.** The routing cut
+took `App.tsx` from 4,261 lines to 4,158 — a hundred lines, two per cent — while
+finding six real bugs. Good trade, and visibly nothing happened to the file.
+
+The second criterion is reading cost, and it is about locality rather than
+length: a four-thousand-line file makes every edit load context you have already
+decided is irrelevant, and you cannot tell it is irrelevant without reading it.
+Splitting buys the ability to *not look*. That value is real whether or not the
+total shrinks, and it points somewhere different — at the largest self-contained
+blocks, whether or not they have ever caused trouble.
 `LearnMode.tsx` is 2,195 lines and nothing has gone wrong inside it; the route
 and panel state machine is a fraction of that and is where two bugs landed this
 month. Line count puts LearnMode second on the list. This test puts it nowhere
@@ -753,8 +764,18 @@ The seams, in that order:
   `test.fixme` — Playwright reports "expected to fail, but passed".
 - **Dictionary loading and the solver allowlist** — where the dead bridge solver
   hid for a release.
-- **The ten solver surfaces** — the bulk of the file, and already ten separate
-  mental units with their own inputs and results.
+- **The ten solver surfaces** — 2,341 lines of the render, more than half the
+  file, and already ten separate units with their own inputs and results. Their
+  own files rather than folded into the `*Game.tsx` components: those are 650 to
+  890 lines each already, and Solve and Play are different surfaces with
+  different state and different failure modes. What they legitimately share is
+  the rules module — `src/bridge.ts`, `src/ladder.ts` — which both already
+  import.
+
+  Which gives a game a shape, arrived at from the opposite direction to the
+  acceptance test below and agreeing with it: **a rules module, a play surface,
+  a solve surface, a learn demo.** Adding the eleventh becomes filling that in,
+  rather than finding the ten places the tenth was mentioned.
 - **Chrome** — header, nav, footer. Small, and `GameMenu` shows the shape.
 
 ##### What "templatised" has to mean, to be worth doing

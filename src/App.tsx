@@ -32,7 +32,7 @@ import ConsentBanner from '@/ConsentBanner';
 import { PrivacyPolicy, Terms } from '@/LegalDocs';
 import { onDailyReport, requestDaily } from '@/dailyBus';
 import { entryGame, entryRoute } from '@/routing/entry';
-import { FEED_NAME } from '@/games';
+import { FEED_NAME, GAME_NAME } from '@/games';
 import { useAddressBar, useNav } from '@/routing/useRouting';
 import { routeOf, type Overlay } from '@/routing/nav';
 import ReportMenu from '@/ReportMenu';
@@ -101,12 +101,13 @@ const WORD_LIST_SOLVERS = new Set<Mode>([
   'weave',
 ]);
 
-const MODES: { id: Mode; label: string; short?: string; blurb: string; description: string; playDescription: string }[] = [
+// No label here. It lived in this table and in five other files, and disagreed:
+// this one said 'Guess' for one game and 'Word Ladder' for another, mixing the
+// short name and the full one inside a single column. @/games has both, and the
+// call sites below pick by how much room they have.
+const MODES: { id: Mode; blurb: string; description: string; playDescription: string }[] = [
   {
     id: 'pattern',
-    // the slug stays 'pattern' — it's in shared links — but nothing else calls
-    // it that, so the label matches Learn, the boards and the home page
-    label: 'Guess',
     blurb: 'Wordle, crosswords, hangman — clues about positions',
     description:
       "Lock in the letters you know, list the ones you've seen, and exclude the rest. We'll surface every dictionary word that fits.",
@@ -116,7 +117,6 @@ const MODES: { id: Mode; label: string; short?: string; blurb: string; descripti
   },
   {
     id: 'descramble',
-    label: 'Scramble',
     blurb: 'Scrabble, Jumble — what can these letters spell?',
     description:
       "Type the letters you're holding — with ? for blank tiles — and we'll show every word they can spell.",
@@ -125,7 +125,6 @@ const MODES: { id: Mode; label: string; short?: string; blurb: string; descripti
   },
   {
     id: 'bee',
-    label: 'Hive',
     blurb: 'Seven letters, 4+ letter words, center letter required — Spelling Bee style',
     description:
       "Enter the hive's seven letters and we'll find every word that uses the center — pangrams first.",
@@ -134,7 +133,6 @@ const MODES: { id: Mode; label: string; short?: string; blurb: string; descripti
   },
   {
     id: 'grid',
-    label: 'Grid',
     blurb: 'Boggle style — chain adjacent letters, each cell once',
     description:
       "Enter the grid letters and we'll find every word traceable through adjacent cells.",
@@ -143,7 +141,6 @@ const MODES: { id: Mode; label: string; short?: string; blurb: string; descripti
   },
   {
     id: 'boxed',
-    label: 'Boxed',
     blurb: "Twelve letters on four sides, no two in a row from the same side — Letter Boxed style",
     description:
       "Enter the twelve letters, three per side. We'll find every legal word and the two-word solutions that use all twelve.",
@@ -152,7 +149,6 @@ const MODES: { id: Mode; label: string; short?: string; blurb: string; descripti
   },
   {
     id: 'squares',
-    label: 'Squares',
     blurb: 'Fill the grid so every row and column is a word',
     description:
       "Type the letters you're sure of and we'll fill the rest, so every row and every column spells a word.",
@@ -161,7 +157,6 @@ const MODES: { id: Mode; label: string; short?: string; blurb: string; descripti
   },
   {
     id: 'weave',
-    label: 'Weave',
     blurb: 'Themed words tile the whole board — Strands style',
     description:
       'Play the themed tiling puzzle, or use Solve to list every traceable word on a Strands-style board.',
@@ -170,7 +165,6 @@ const MODES: { id: Mode; label: string; short?: string; blurb: string; descripti
   },
   {
     id: 'cryptogram',
-    label: 'Cryptogram',
     blurb: 'A passage in code — work out which letter is which',
     description:
       'Play the daily cipher. The solver is still being built: it has to offer the readings that fit rather than guess one, which is a different thing from the word solvers.',
@@ -179,8 +173,6 @@ const MODES: { id: Mode; label: string; short?: string; blurb: string; descripti
   },
   {
     id: 'ladder',
-    label: 'Word Ladder',
-    short: 'Ladder',
     blurb: 'Turn one word into another, a letter at a time',
     description:
       'Play the daily ladder, or use Solve to find the shortest route between any two words of the same length.',
@@ -189,7 +181,6 @@ const MODES: { id: Mode; label: string; short?: string; blurb: string; descripti
   },
   {
     id: 'bridge',
-    label: 'Bridge',
     blurb: 'Find the word that joins both sides',
     description:
       'Play the daily five, or use Solve to find every word that joins any two others.',
@@ -1901,7 +1892,7 @@ function App() {
                       : 'text-slate-400 hover:text-white hover:bg-white/5'}`}
                 >
                   <Icon className="w-5 h-5" />
-                  <span>{m.short ?? m.label}</span>
+                  <span>{GAME_NAME[m.id].short}</span>
                 </RouteLink>
               );
             })}
@@ -2028,7 +2019,7 @@ function App() {
             shownViews.includes('learn') &&
             currentView !== 'learn' && (
             <OnboardingCard
-              game={MODES.find((m) => m.id === mode)?.label ?? 'this game'}
+              game={GAME_NAME[mode].full}
               onLearn={() => {
                 goToView('learn');
                 setOnboarded(true);
@@ -3470,7 +3461,7 @@ function App() {
             <ReportMenu
               context={{
                 game: FEED_NAME[mode],
-                gameLabel: MODES.find((m) => m.id === mode)?.label,
+                gameLabel: GAME_NAME[mode].full,
                 date: dateByMode[mode],
                 level,
               }}
@@ -3792,7 +3783,7 @@ function App() {
                       <ReportMenu
                         context={{
                           game: FEED_NAME[mode],
-                          gameLabel: MODES.find((m) => m.id === mode)?.label,
+                          gameLabel: GAME_NAME[mode].full,
                           date: dateByMode[mode],
                           level,
                         }}

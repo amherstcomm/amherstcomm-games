@@ -8,9 +8,10 @@ import { useEffect, useRef, useState } from 'react';
 import { ChevronDown } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import RouteLink from '@/RouteLink';
+import { GAME_NAME } from '@/games';
 import type { Mode } from '@/storage';
 
-type ModeRow = { id: Mode; label: string; short?: string; blurb: string };
+type ModeRow = { id: Mode; blurb: string };
 
 export default function GameMenu({
   modes,
@@ -66,7 +67,7 @@ export default function GameMenu({
       >
         {Here && <Here className="w-4 h-4" />}
         {/* at home there is no current game, so the control names itself */}
-        <span>{here ? (here.short ?? here.label) : 'Games'}</span>
+        <span>{here ? GAME_NAME[here.id].short : 'Games'}</span>
         <ChevronDown
           className={`w-4 h-4 text-slate-500 transition-transform ${open ? 'rotate-180' : ''}`}
         />
@@ -99,7 +100,7 @@ export default function GameMenu({
                 }`}
               >
                 <Icon className="w-4 h-4 shrink-0" />
-                <span className="font-medium">{m.label}</span>
+                <span className="font-medium">{GAME_NAME[m.id].full}</span>
                 <span className="ml-auto text-xs text-slate-500 truncate hidden sm:block">
                   {m.blurb}
                 </span>

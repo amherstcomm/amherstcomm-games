@@ -18,6 +18,7 @@ import {
 import { fetchDailyData, fetchPool } from '@/dailyData';
 import DailyStats from '@/DailyStats';
 import ShareButton from '@/ShareButton';
+import { GAME_NAME } from '@/games';
 import { dailyIntent } from '@/routing/entry';
 import { offerDailySwitch, reportDaily } from '@/dailyBus';
 import { usePrefs } from '@/prefs';
@@ -792,7 +793,7 @@ const WeaveGame = forwardRef<
                   // deliberately no clue: working out the theme is half the
                   // puzzle, so posting it would spoil the board
                   return buildShare({
-                    game: 'Weave',
+                    game: GAME_NAME.weave.full,
                     slug: 'weave',
                     daily: store.dailyMode,
                     date: store.dailyDate,

@@ -19,6 +19,7 @@ import { fetchDailyData } from '@/dailyData';
 import DailyStats from '@/DailyStats';
 import MobileKeyInput from '@/MobileKeyInput';
 import ShareButton from '@/ShareButton';
+import { GAME_NAME } from '@/games';
 import { dailyIntent } from '@/routing/entry';
 import { offerDailySwitch, reportDaily } from '@/dailyBus';
 import { usePrefs } from '@/prefs';
@@ -568,7 +569,7 @@ const ScrambleGame = forwardRef<
                 <ShareButton
                   build={() =>
                     buildShare({
-                      game: 'Scramble',
+                      game: GAME_NAME.descramble.full,
                       slug: 'scramble',
                       daily: store.dailyMode,
                       date: store.dailyDate,

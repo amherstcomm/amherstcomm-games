@@ -9,6 +9,7 @@ import {
 } from '@/difficulty';
 import MobileKeyInput from '@/MobileKeyInput';
 import ShareButton from '@/ShareButton';
+import { GAME_NAME } from '@/games';
 import { buildShare, TILE_EMOJI } from '@/share';
 import { usePalette } from '@/theme';
 import { dailyIntent } from '@/routing/entry';
@@ -657,7 +658,7 @@ const SquaresGame = forwardRef<
               <ShareButton
                 build={() =>
                   buildShare({
-                    game: `Squares (${n}×${n})`,
+                    game: `${GAME_NAME.squares.full} (${n}×${n})`,
                     slug: 'squares',
                     daily: store.dailyMode,
                     date: store.dailyDate,

@@ -22,6 +22,7 @@ import { dailyIntent } from '@/routing/entry';
 import { useDailySync } from '@/useDailySync';
 import { useUpTimer } from '@/useUpTimer';
 import ShareButton from '@/ShareButton';
+import { GAME_NAME } from '@/games';
 import { buildShare } from '@/share';
 import { recordBridgeFinish } from '@/stats';
 import { revealed, spend, NO_HINTS, type PromptHints, type Prompt } from '@/bridge';
@@ -515,7 +516,7 @@ const BridgeGame = forwardRef<BridgeGameHandle>(function BridgeGame(_props, ref)
           <div className="mt-3 flex flex-wrap items-center justify-center gap-2">
             <ShareButton
               build={() => buildShare({
-                game: 'Bridge',
+                game: GAME_NAME.bridge.full,
                 slug: 'bridge',
                 daily: store.dailyMode,
                 date: store.dailyDate,

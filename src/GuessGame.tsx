@@ -17,6 +17,7 @@ import {
 import DailyStats from '@/DailyStats';
 import MobileKeyInput from '@/MobileKeyInput';
 import ShareButton from '@/ShareButton';
+import { GAME_NAME } from '@/games';
 import { asRecord, asRecords, type GameRecord } from '@/guessRecord';
 import { dailyIntent } from '@/routing/entry';
 import { offerDailySwitch, reportDaily } from '@/dailyBus';
@@ -607,7 +608,7 @@ const GuessGame = forwardRef<
               <ShareButton
                 build={() =>
                   buildShare({
-                    game: `Guess (${length})`,
+                    game: `${GAME_NAME.pattern.full} (${length})`,
                     slug: 'guess',
                     daily: dailyMode,
                     date: dailyData?.date,

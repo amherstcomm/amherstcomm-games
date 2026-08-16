@@ -19,6 +19,7 @@ import { fetchDailyData } from '@/dailyData';
 import DailyStats from '@/DailyStats';
 import MobileKeyInput from '@/MobileKeyInput';
 import ShareButton from '@/ShareButton';
+import { GAME_NAME } from '@/games';
 import { dailyIntent } from '@/routing/entry';
 import { offerDailySwitch, reportDaily } from '@/dailyBus';
 import { usePrefs } from '@/prefs';
@@ -551,7 +552,7 @@ const HiveGame = forwardRef<
               <ShareButton
                 build={() =>
                   buildShare({
-                    game: 'Hive',
+                    game: GAME_NAME.bee.full,
                     slug: 'hive',
                     daily: store.dailyMode,
                     date: store.dailyDate,
