@@ -725,20 +725,61 @@ Three strands that want doing together, because each makes the others cheaper.
 symptom; the state count is the disease, and it has already cost something
 measurable: the report dialog lost focus after every keystroke because a parent
 re-render tore down a child's effect, and in a component with 92 pieces of state
-every one of them re-renders the whole page. `LearnMode.tsx` at 2,195 is the
-same argument at half the size.
+every one of them re-renders the whole page.
 
-The seams, roughly in order of how much they'd pay back:
+**The reason to do it is that development and troubleshooting get easier, not
+that a long file is ugly.** That is also the criterion for where to cut: go
+where the troubleshooting keeps landing, not where the line count is highest.
+`LearnMode.tsx` is 2,195 lines and nothing has gone wrong inside it; the route
+and panel state machine is a fraction of that and is where two bugs landed this
+month. Line count puts LearnMode second on the list. This test puts it nowhere
+near.
+
+The seams, in that order:
 
 - **The route and panel state machine** — `currentRoute`, the panel booleans,
-  the history push/pop. Self-contained, testable with no DOM, and the site of
-  two bugs this month: report pages missing from `currentRoute`, and per-section
-  gating that had to be got right a dozen times instead of once.
-- **The ten solver surfaces** — the bulk of the file, and already ten separate
-  mental units with their own inputs and results.
+  the history push/pop. Every recent bug here was a *where does this live*
+  problem rather than a subtle-logic one: report pages missing from
+  `currentRoute` so the address got rewritten out from under the page, and
+  per-section gating that had to be got right a dozen times instead of once.
 - **Dictionary loading and the solver allowlist** — where the dead bridge solver
   hid for a release.
+- **The ten solver surfaces** — the bulk of the file, and already ten separate
+  mental units with their own inputs and results.
 - **Chrome** — header, nav, footer. Small, and `GameMenu` shows the shape.
+
+##### What "templatised" has to mean, to be worth doing
+
+Not tidier files. **No drift between the ten games** — and there is an unusually
+clear evidence base for what causes it. Every per-game list that was not
+exhaustively typed has drifted:
+
+- `MODES` is an array, so the bridge solver shipped dead.
+- `ORDER` in the leaderboard is an array, so ladder and bridge had boards with
+  ranked players on them and no way to see either.
+- The solver results panel was gated by a denylist naming two of the four
+  rule-based games, so two solvers printed the whole dictionary under their
+  answers.
+- `DailyStats` reaches six of ten games.
+- The report link reached four of ten, twice, in two different ways.
+
+Against that, one `Record<Mode, …>` caught eleven wiring sites in a single
+change, because the compiler asked. Every failure above is an array or a
+hand-kept list; every success is an exhaustive map.
+
+So the acceptance test is mechanical rather than aesthetic:
+
+1. **A new game is a value satisfying one interface** — what it needs to draw a
+   board, a solver, a Learn demo, a daily, a practice deal, a share line and a
+   leaderboard column. That shape currently exists only as a pattern across ten
+   files that mostly agree.
+2. **Every per-game enumeration is keyed by `Mode`, never listed.** Adding the
+   eleventh game becomes filling in a form the compiler grades, instead of
+   grepping for the tenth and copying what it did — which is exactly how the
+   drift above happened, since you only find the sites you remember to look for.
+
+If adding a game still requires remembering anywhere, the restructure has not
+finished.
 
 #### 2. Security as a stated requirement rather than a habit
 
