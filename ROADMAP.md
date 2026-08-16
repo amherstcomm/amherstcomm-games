@@ -695,6 +695,26 @@ is present, visible, and unclickable. Found by the report tests, which failed
 while a sibling test asserting the button was *visible* passed, which is a
 lesson about what `toBeVisible` does and does not promise.
 
+### Reporter addresses: a retention sweep — proposed August 2026
+
+An address left on a report is deleted when the outcome email is sent, which
+makes the promise on the form true for every report that gets closed. It is not
+true for one that doesn't: a report nobody ever handles keeps its address
+indefinitely, and that is exactly the report most likely to be forgotten.
+
+A sweep in the daily digest would close it — drop the address from anything
+closed but unsent after a few days, and from anything still open after ninety.
+Fifteen lines, no new moving parts.
+
+**Encrypting the column was considered and rejected.** It would only defend
+against reading the database without also holding the CI secrets — a
+Supabase-side compromise, or a leaked backup — because the mailer has to
+decrypt to send, so the key lives in Actions and the operator holds both. It
+would not touch the larger exposure either, which is that the address goes to
+Resend the moment an email is sent. Against that narrow gain: a key that, lost
+or rotated wrong, silently breaks the one thing the address exists for. Shorter
+retention is the better lever and has no key to lose.
+
 ### Admin portal — much later
 Everything owner-facing is SQL-editor-only today: clearing a display name,
 adding blocklist entries, reading `suspect_daily_results`. That's fine, and
