@@ -83,7 +83,7 @@ Words carry content flags: **slur** never scores and is never shown, at any diff
 - **Learn mode** — every game has a third Solve / Play / **Learn** tab: rules, scoring, daily/practice differences, tips, and a hands-on interactive demo (step through a worked Guess solve, tap out words on a mini rack/hive/box, drag-trace a mini grid or Weave board) validated against the real dictionary
 - **You choose what's remembered** — a first visit asks two separate questions, because they aren't the same question: what stays on this device, and whether analytics may leave it. Storage has two answers — **Keep essentials only** (just your privacy answers, which have to be remembered to be honoured; every game and solver still works in full, and closing the tab starts over) and **Keep my games and settings** (boards, settings, statistics and your sign-in kept in this browser). There's deliberately no third setting for whether anything may reach the server, because signing in already is that answer — so you can sign in under either, and under the first the session is simply held in memory. Changeable later under Settings → Privacy; choosing less clears what was already there. Everything in the app reads and writes through one gate, so the setting is enforced in a single place rather than in every game
 - **Statistics, history and boards** — a Stats panel (in the footer) with five tabs. **Overall / Daily / Practice** are lifetime totals: Guess win rate, streak and distribution; Hive words, pangrams, Genius and Queen Bee; Scramble and Grid sprint scores; Boxed solves with fewest words and best time; Weave solves, reveals and hints; Word Squares solves and best time, kept per board size. **History** plots your dailies day by day — Guess as a distribution plus a table per word length, the rest as sparklines, with streaks counted off puzzle dates rather than a stored counter. **Boards** ranks everyone who has set a display name, one board per difficulty — a time at Easy and a time at Extreme aren't the same event — with Easy/Hard/Extreme tabs there, on the home page, and in History. Signed out it's all local; signed in it's your account's.
-- **Real addresses** — every state has a URL and the address bar follows you: `/solve/guess`, `/play/hive`, `/daily/squares`, `/learn/grid`, `/stats/history`, `/settings/games`, `/legal/privacy`. Opening a panel puts it in the bar and Back closes it; closing one steps back rather than stacking a new entry. Older spellings still work and rewrite themselves on arrival — both the `?daily=hive` query links and `/solve/pattern`, from when Guess was called Pattern.
+- **Real addresses** — every state has a URL and the address bar follows you: `/solve/guess`, `/play/hive`, `/daily/squares`, `/learn/grid`, `/stats/history`, `/settings/games`, `/legal/privacy`, `/report/<ticket>`. Opening a panel puts it in the bar and Back closes it; closing one steps back rather than stacking a new entry. Older spellings still work and rewrite themselves on arrival — both the `?daily=hive` query links and `/solve/pattern`, from when Guess was called Pattern.
 - **A front page** — `/` lists the ten games with today's state on each (read from your own browser, so it works signed out) and the top of today's board. Regulars who'd rather skip it can set Settings → Site → Start on to a game, or to wherever they left off.
 
 ## Getting started
@@ -105,6 +105,7 @@ Other scripts:
 | `npm run test:e2e` | Browser tests incl. WCAG scans (Playwright) |
 | `npm run build-words` | Rebuild the word-list artifact: bands, flags, domains, CSV |
 | `npm run blocklist` | Refresh the generation blocklist from its sources |
+| `node scripts/report-digest.mjs` | The daily report round: digest, receipts, outcomes |
 
 ## Testing
 
@@ -129,6 +130,39 @@ The site is fully functional with no backend — solving and playing stay in the
 - **Settings.** Theme, palette, text size, which games are shown, and the start page.
 - **A display name**, which is the opt-in to the leaderboards and the only thing about an account any other player can see. Without one you don't appear at all.
 
+### Reporting
+
+A generator drawing from 240,000 words will eventually publish something
+offensive, and a display name field will eventually hold something worse. Both
+have preventive filters, and neither is a substitute for someone saying "this
+one is wrong" at the moment they see it. So every daily board carries a **Report
+this puzzle** link throughout play, and every name on a leaderboard carries a
+flag beside it. Anyone can file one, signed in or not — the site plays without
+an account, and the person who sees the bad word usually has none.
+
+What the browser sends is where the thing was, never what it said: a puzzle
+report is `(game, date, difficulty)` and the server reads the actual board out
+of `daily_puzzles`; a player report is a name the server resolves to a profile
+itself. Posting the board the client is holding would make a report of a puzzle
+that never existed worth exactly as much as a real one. The free-text reason is
+the only client-supplied field stored, and it's optional — a report with no
+words still says somebody looked at this and thought it was wrong.
+
+Filing one hands back a **ticket**, and `/report/<ticket>` answers for it: open
+or closed, and how it ended. Nothing else — not the board, not the name, not
+your own words back, and a wrong code reads the same as a real one. An email
+address is optional on top, used only to send a receipt and the eventual
+outcome, and deleted with the report.
+
+Reports are insert-only with no read-back, capped per subject and per day
+rather than per IP, and nothing about an anonymous reporter is stored beyond an
+address they chose to give. A daily workflow emails whatever is open — carrying
+the filing date and the days it has been waiting, so an ignored report reads
+louder each morning — and **nothing closes on its own**. Each report's mail
+carries links to dismiss it, block a word, or remove a name; those need two
+keys, the token in the link *and* an owner account signed in, so a forwarded
+digest or a mail scanner pre-clicking every URL can't ban anybody.
+
 There's also self-serve deletion under Account: one button clears your play record and keeps the account, another deletes the account outright. Both derive the account from `auth.uid()` and take no argument, because a function accepting a user id is a delete-anybody endpoint the moment somebody edits a uuid in the network tab.
 
 Signed out — or without the env vars below — every auth surface hides and everything stays local.
@@ -141,6 +175,12 @@ Setup:
 4. Copy the Project URL and anon/publishable key (**Settings → API**) into env vars — `.env.local` for local dev (see [.env.example](.env.example)), and environment variables on each Render static site. The anon key is public by design; row-level security protects the data.
 
 5. Optionally enable OAuth providers (**Authentication → Providers**): create a GitHub/Google OAuth app with the callback URL Supabase shows there, and paste in its client ID and secret. The sign-in modal offers both alongside email.
+
+Reporting needs one more step and two more optional secrets: seed
+`public.owners` with your own auth id in the SQL editor (nobody can act on a
+report until you do), then set `RESEND_API_KEY` and `REPORT_DIGEST_TO` for the
+digest. Without them the workflow still runs and prints what is open to its own
+log, and leaves everything open for a later run to send.
 
 Three GitHub Actions secrets complete the pipeline: `SUPABASE_SERVICE_ROLE_KEY` (an `sb_secret_` key; lets the daily workflow publish puzzle rows), `PUZZLES_SEED_SALT` (permanent; what keeps future boards uncomputable from this repo — rotate only on suspicion of leak, which reshuffles every unplayed day), and `SUPABASE_DB_URL` (the session-pooler connection string, for the word-list rebuild workflow). Each workflow skips politely when its secret is absent.
 

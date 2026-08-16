@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Grid3x3, Hexagon, KeyRound, LayoutGrid, Puzzle, Shuffle, Square, Table2 } from 'lucide-react';
+import { Flag, Grid3x3, Hexagon, KeyRound, LayoutGrid, Puzzle, Shuffle, Square, Table2 } from 'lucide-react';
 import { Combine } from 'lucide-react';
 import LadderIcon from '@/LadderIcon';
 import {
@@ -15,6 +15,8 @@ import { formatElapsed } from '@/useUpTimer';
 import { difficulty, onDifficultyChange, type Difficulty } from '@/difficulty';
 import DifficultyTabs from '@/DifficultyTabs';
 import { fetchFriendNames } from '@/friends';
+import ReportDialog from '@/ReportDialog';
+import { reportPlayer } from '@/reports';
 
 const ICONS: Record<BoardGame, typeof Grid3x3> = {
   guess: Grid3x3,
@@ -30,18 +32,37 @@ const ICONS: Record<BoardGame, typeof Grid3x3> = {
   bridge: Combine,
 };
 
-const ORDER: BoardGame[] = ['guess', 'scramble', 'hive', 'grid', 'box', 'weave', 'squares4', 'squares5', 'cryptogram'];
+// Order is data, not a listing. As a plain array this silently omitted every
+// game added after it was written — ladder and bridge both had boards in the
+// database, ranked players on them, and no way to see either. A Record is
+// exhaustive, so the compiler asks about the next one.
+const ORDER_RANK: Record<BoardGame, number> = {
+  guess: 0,
+  scramble: 1,
+  hive: 2,
+  grid: 3,
+  box: 4,
+  weave: 5,
+  squares4: 6,
+  squares5: 7,
+  cryptogram: 8,
+  ladder: 9,
+  bridge: 10,
+};
+const ORDER = (Object.keys(ORDER_RANK) as BoardGame[]).sort((a, b) => ORDER_RANK[a] - ORDER_RANK[b]);
 
 function Board({
   game,
   rows,
   me,
   friends,
+  onReport,
 }: {
   game: BoardGame;
   rows: Boards[BoardGame];
   me: string | null;
   friends: Set<string>;
+  onReport: (name: string) => void;
 }) {
   if (!rows.length) return null;
   const { label, value, detail } = BOARD_LABELS[game];
@@ -91,6 +112,21 @@ function Board({
                     : detail(r.detail)}
                 </span>
               )}
+              {/* Not on your own row — reporting yourself is the one case
+                  that can't be what the button is for. Always rendered
+                  otherwise rather than revealed on hover: a control that
+                  appears only under a pointer is a control a touch screen
+                  and a screen reader never find. */}
+              {!mine && (
+                <button
+                  onClick={() => onReport(r.name)}
+                  aria-label={`Report ${r.name}`}
+                  title={`Report ${r.name}`}
+                  className="shrink-0 p-1 -m-1 rounded text-slate-600 hover:text-rose-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent transition-colors"
+                >
+                  <Flag className="w-3 h-3" aria-hidden="true" />
+                </button>
+              )}
             </li>
           );
         })}
@@ -135,6 +171,11 @@ export default function LeaderboardView({ signedIn }: { signedIn: boolean }) {
   }, [signedIn]);
 
   const played = boards ? ORDER.filter((g) => boards[g].length) : [];
+
+  // One dialog for the whole view rather than one per row — the boards can
+  // run to hundreds of names, and every one of them would otherwise carry a
+  // mounted modal waiting to be opened.
+  const [reporting, setReporting] = useState<string | null>(null);
 
   return (
     <div className="space-y-3">
@@ -197,8 +238,17 @@ export default function LeaderboardView({ signedIn }: { signedIn: boolean }) {
         </p>
       )}
 
+      {reporting && (
+        <ReportDialog
+          subject="this player"
+          detail={`${reporting} — we look the name up ourselves, so it can't be reported as something it isn't.`}
+          onSend={(reason, email) => reportPlayer(reporting, reason, email)}
+          onClose={() => setReporting(null)}
+        />
+      )}
+
       {state === 'ready' && played.map((g) => (
-        <Board key={g} game={g} rows={boards![g]} me={me} friends={friends} />
+        <Board key={g} game={g} rows={boards![g]} me={me} friends={friends} onReport={setReporting} />
       ))}
 
       <p className="text-xs text-slate-500 pt-1">

@@ -26,6 +26,7 @@ export const LEADERBOARD = {
   squares5: [],
   cryptogram: [],
   ladder: [],
+  bridge: [],
 };
 
 export const test = base.extend<{ rpcCalls: { fn: string; args: Record<string, unknown> }[] }>({
@@ -71,6 +72,38 @@ export const test = base.extend<{ rpcCalls: { fn: string; args: Record<string, u
             body: JSON.stringify(LEADERBOARD),
           });
         }
+        // The report functions answer a shape, not null — a stub that says
+        // null makes every report read as a transport failure, which would
+        // have let the dialog's success path go untested.
+        if (rpc === 'report_puzzle' || rpc === 'report_player' || rpc === 'report_general') {
+          return route.fulfill({
+            status: 200,
+            contentType: 'application/json',
+            body: JSON.stringify({ ok: true, recorded: true, ticket: '4f2ba9c17d' }),
+          });
+        }
+        // The owner's door, from a browser with nobody signed in: the server
+        // says 'not allowed' and says nothing else, which is what the page has
+        // to be able to render without having seen the report.
+        if (rpc === 'report_for_action' || rpc === 'report_act') {
+          return route.fulfill({
+            status: 200,
+            contentType: 'application/json',
+            body: JSON.stringify({ ok: false, reason: 'not allowed' }),
+          });
+        }
+        if (rpc === 'report_status') {
+          const known = (args as { p_ticket?: string }).p_ticket === '4f2ba9c17d';
+          return route.fulfill({
+            status: 200,
+            contentType: 'application/json',
+            body: JSON.stringify(
+              known
+                ? { found: true, status: 'new', resolution: null, filed: '2026-08-15T00:00:00Z', closed: null }
+                : { found: false }
+            ),
+          });
+        }
         return route.fulfill({ status: 200, contentType: 'application/json', body: 'null' });
       }
       // profiles, game_results, auth — empty but well-formed
@@ -80,6 +113,14 @@ export const test = base.extend<{ rpcCalls: { fn: string; args: Record<string, u
     await page.addInitScript(() => {
       localStorage.setItem('anagrimoire:storage:v2', 'browser');
       localStorage.setItem('anagrimoire:v1', JSON.stringify({ onboarded: true }));
+      // And the analytics banner, which is a *fixed* card sitting over the
+      // bottom of the page — including the footer. Unanswered, it makes every
+      // footer control unclickable, which is how the report menu's own tests
+      // failed while its "is it visible" test passed.
+      localStorage.setItem(
+        'anagrimoire:analytics-consent:v2',
+        JSON.stringify({ value: 'denied', at: Date.now() })
+      );
     });
     await use(page);
   },

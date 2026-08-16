@@ -146,7 +146,7 @@ const BridgeGame = forwardRef<BridgeGameHandle>(function BridgeGame(_props, ref)
   const solvedCount = record ? record.entries.filter((e) => e).length : 0;
   const done = !!record && (record.revealed || solvedCount === record.prompts.length);
 
-  useEffect(() => reportDaily('bridge', store.dailyMode), [store.dailyMode]);
+  useEffect(() => reportDaily('bridge', store.dailyMode, store.dailyDate), [store.dailyMode, store.dailyDate]);
   useEffect(
     () => offerDailySwitch('bridge', (d) => setStore((prev) => ({ ...prev, dailyMode: d }))),
     []

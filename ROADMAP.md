@@ -620,7 +620,7 @@ each carried their own copy of the same `like`, and the first version of this
 change updated only one of them, so the dry run allowed a name the claim would
 have refused. Both call `name_is_blocked` now.
 
-### Report a puzzle or a player — proposed August 2026
+### Report a puzzle or a player — shipped August 2026
 
 A generator that draws from 240,000 words will eventually publish something
 offensive, and a display name field will eventually hold something worse. Both
@@ -650,6 +650,50 @@ The rest is the shape of any anonymous write path — an insert-only policy with
 no read-back, a rate limit per source, and a `status` column so a handled report
 stops appearing in the digest. Worth building before the pool of games gets
 larger rather than after, since every new generator widens the surface.
+
+**Built as described, with one clause overturned: the rate limit is not per
+source.** Per source means an IP, and an IP is something identifying about
+people the rest of the site is careful not to identify — for a privacy page
+written to describe what the code actually does, that is a real cost against a
+small benefit. The caps are on the subject (five per thirty days) and on the
+day (five hundred), and nothing about the reporter is stored beyond `auth.uid()`
+when they happen to be signed in. Per subject works because the goal is a
+signal: the sixth report of the same board carries none. What it does not do is
+stop one person filing against a thousand different names — that bounds volume,
+not intent, and the answer to intent is the admin portal below.
+
+The other thing the build learned: the report link belongs where a player is
+*reading*, not where they finish. It went into each game's completion panel
+first, which put it furthest away in Bridge and Ladder — the two games whose
+words are legible in the first second. It rides the daily bus now, so App draws
+it once for every game, on every daily board, throughout.
+
+### Reporting: what is still owed — August 2026
+
+Three things the first build does not do.
+
+**Practice boards cannot be reported.** The whole evidence design rests on the
+server being able to look the thing up, and a practice board was never
+published — there is nothing to look up. That makes it the one case where the
+browser has to send what it saw, which is exactly the input the rest of this
+refuses to trust. The answer is not to refuse the report; it is to keep the two
+apart and say which is which: `verified` for a board read out of
+`daily_puzzles`, `claimed` for one the browser handed over, marked as such in
+the row and in the digest. A claimed report is still worth having — the usual
+cause is a single word, and a word is checkable on its own.
+
+It needs each game to expose its current board, which is ten wiring sites and
+the reason it isn't done yet.
+
+**Ladder and Bridge have no practice mode at all.** Every other game deals
+unlimited boards; those two have only the daily. Worth fixing on its own terms,
+and it also removes half of what the paragraph above is for.
+
+**The consent banner covers the footer.** It is `fixed inset-x-0 bottom-0`, so
+until a visitor answers it, every footer control — including the report menu —
+is present, visible, and unclickable. Found by the report tests, which failed
+while a sibling test asserting the button was *visible* passed, which is a
+lesson about what `toBeVisible` does and does not promise.
 
 ### Admin portal — much later
 Everything owner-facing is SQL-editor-only today: clearing a display name,

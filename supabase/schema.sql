@@ -1777,3 +1777,580 @@ $$;
 
 revoke all on function public.daily_puzzle(text, text) from public;
 grant execute on function public.daily_puzzle(text, text) to anon, authenticated;
+
+-- ---------------------------------------------------------------------------
+-- Reports
+-- ---------------------------------------------------------------------------
+-- A generator drawing from 240,000 words will eventually publish something
+-- offensive, and a display name field will eventually hold something worse.
+-- Both have preventive filters — the blocklist through the bands, blocked_names
+-- for names — and neither is a substitute for someone being able to say "this
+-- one is wrong" at the moment they see it.
+--
+-- Anyone may file one, signed in or not, because the site plays without an
+-- account and the person who sees the bad word usually has none.
+--
+-- The evidence is the design point. The obvious version posts what the client
+-- saw, which is attacker-controlled and therefore worth very little: a report
+-- of a board that never existed would be indistinguishable from a report of a
+-- real one. So almost nothing is sent. A puzzle report is (game, date,
+-- difficulty) and the server reads the actual board out of daily_puzzles; a
+-- player report is a display name the server resolves to a profile itself. The
+-- free-text reason is the only client-supplied field that is stored, and it is
+-- the only one that should be.
+--
+-- That makes a report verifiable before anyone reads a word of it: the server
+-- confirms the reported thing exists and says what the reporter claims.
+
+-- Who may act on one. A table rather than a role check because Supabase's
+-- roles are about connection identity, not about people, and "the owner" is a
+-- person — one today, possibly two later, and the admin portal when it is
+-- more. Empty by default: seed it in the SQL editor with your own auth id,
+-- which is the one privileged act that stays where every other one already is.
+create table if not exists public.owners (
+  user_id uuid primary key references auth.users (id) on delete cascade,
+  added_at timestamptz not null default now()
+);
+alter table public.owners enable row level security;
+revoke all on public.owners from public, anon, authenticated;
+
+create or replace function public.is_owner()
+returns boolean
+language sql
+stable
+security definer
+set search_path = ''
+as $fn$
+  select exists (select 1 from public.owners o where o.user_id = (select auth.uid()))
+$fn$;
+
+revoke all on function public.is_owner() from public, anon;
+grant execute on function public.is_owner() to authenticated;
+
+create table if not exists public.reports (
+  id uuid primary key default gen_random_uuid(),
+  kind text not null check (kind in ('puzzle', 'player', 'site', 'other')),
+  -- what was reported, as the server resolved it — never as the client said it
+  subject text not null,
+  evidence jsonb not null,
+  reason text check (char_length(reason) <= 500),
+  -- null for an anonymous report, which is most of them
+  reporter uuid references auth.users (id) on delete set null,
+  status text not null default 'new' check (status in ('new', 'handled')),
+  created_at timestamptz not null default now()
+);
+
+-- The reporter's half of the transaction.
+--
+-- `ticket` is what they are given and what they can look up: short enough to
+-- read down a phone, random enough not to be walked. It is the only handle
+-- anyone outside gets, and it answers with a status and nothing else — not the
+-- board, not the name, not the reason, and never another ticket's anything.
+--
+-- `reporter_email` is optional and is the one piece of personal data this
+-- feature stores. It exists to send a receipt and the eventual outcome, it is
+-- never shown to anyone but the owner, and it is cleared when the report is.
+-- Widened after the fact: reporting started as puzzles and players, which was
+-- the half a generator can produce. It missed the half a person can — a broken
+-- page, and everything nobody thought of. Those two carry no server-side
+-- evidence, which is exactly why they need the reason field the other two
+-- treat as optional.
+alter table public.reports drop constraint if exists reports_kind_check;
+alter table public.reports add constraint reports_kind_check
+  check (kind in ('puzzle', 'player', 'site', 'other'));
+
+alter table public.reports add column if not exists ticket text;
+alter table public.reports add column if not exists reporter_email text
+  check (reporter_email is null or char_length(reporter_email) between 3 and 254);
+create unique index if not exists reports_ticket_idx on public.reports (ticket);
+
+-- The owner's half. `action_token` is the second of the two things an action
+-- link needs; the first is being signed in as an owner. Neither is sufficient,
+-- which is the point: a forwarded digest, a leaked inbox, or a corporate mail
+-- scanner pre-clicking every link in it — a thing that already happens here,
+-- and is why magic links needed a code fallback — cannot ban anybody.
+alter table public.reports add column if not exists action_token uuid not null default gen_random_uuid();
+alter table public.reports add column if not exists resolution text;
+alter table public.reports drop constraint if exists reports_resolution_check;
+alter table public.reports add constraint reports_resolution_check
+  check (resolution is null or resolution in ('dismissed', 'blocked', 'banned'));
+alter table public.reports add column if not exists resolution_note text check (char_length(resolution_note) <= 500);
+alter table public.reports add column if not exists resolved_at timestamptz;
+alter table public.reports add column if not exists resolved_by uuid references auth.users (id) on delete set null;
+
+-- What the digest has already told the reporter, so a rerun doesn't tell them
+-- twice. Nullable rather than boolean: the timestamp is the audit trail.
+alter table public.reports add column if not exists receipt_sent_at timestamptz;
+alter table public.reports add column if not exists outcome_sent_at timestamptz;
+
+create index if not exists reports_open_idx on public.reports (created_at) where status = 'new';
+create index if not exists reports_subject_idx on public.reports (subject, created_at desc);
+
+alter table public.reports enable row level security;
+
+-- Insert-only, and not even that directly: the functions below are the whole
+-- surface. No policy grants a read, because a report names a player and carries
+-- free text about them — that goes to the owner's digest, not to anyone who can
+-- open a network tab.
+revoke all on public.reports, public.owners from public, anon, authenticated;
+
+-- Rate limiting, deliberately not per reporter.
+--
+-- The roadmap said "a rate limit per source", which means an IP, which means
+-- storing something identifying about people who are otherwise anonymous. For
+-- a site whose privacy page is written to describe what the code actually
+-- does, that is a real cost for a small benefit. So the caps are on the
+-- subject and on the day instead, and nothing about the reporter is kept
+-- beyond an email they chose to give.
+--
+-- Per subject, because the goal is a signal and the sixth report of the same
+-- board carries none. Per day, because that bounds someone working across many
+-- subjects to a table a digest can still be read out of.
+--
+-- What this does not do: stop a determined person filing one report against
+-- each of a thousand names. It bounds the volume, not the intent — if that
+-- happens the answer is the admin portal, not a bigger number here.
+create or replace function public.report_limits()
+returns jsonb
+language sql
+immutable
+as $fn$
+  select jsonb_build_object('per_subject', 5, 'per_day', 500)
+$fn$;
+
+-- The shared tail of both report paths: cap, insert, hand back a ticket.
+-- Not security definer and not granted to the web roles — it is only ever
+-- called by the two functions below, which are.
+create or replace function public.file_report(
+  p_kind text,
+  p_subject text,
+  p_evidence jsonb,
+  p_reason text,
+  p_email text default null
+)
+returns jsonb
+language plpgsql
+set search_path = ''
+as $fn$
+declare
+  limits jsonb := public.report_limits();
+  cleaned text := nullif(btrim(coalesce(p_reason, '')), '');
+  email text := nullif(btrim(lower(coalesce(p_email, ''))), '');
+  code text;
+begin
+  -- Not validation so much as refusing to store a string that cannot be an
+  -- address. Anything stricter is the usual losing game, and the cost of a
+  -- wrong one here is an email that bounces, not a report that is lost.
+  if email is not null and email !~ '^[^@[:space:]]+@[^@[:space:]]+\.[^@[:space:]]+$' then
+    email := null;
+  end if;
+
+  if (select count(*) from public.reports
+      where subject = p_subject and created_at > now() - interval '30 days')
+     >= (limits->>'per_subject')::int then
+    -- Already reported enough to be seen. Answering ok rather than 'too many'
+    -- on purpose: the reporter did their part, and telling them it was dropped
+    -- invites them to file it again by another route. No ticket, because there
+    -- is no new report for one to name.
+    return jsonb_build_object('ok', true, 'recorded', false);
+  end if;
+
+  if (select count(*) from public.reports where created_at > now() - interval '1 day')
+     >= (limits->>'per_day')::int then
+    return jsonb_build_object('ok', true, 'recorded', false);
+  end if;
+
+  -- Ten hex from a uuid: 40 bits, which is not a secret and is not asked to
+  -- be one — it names a report whose only readable property is 'open' or
+  -- 'closed'. It is short enough to read off a screen and type on a phone,
+  -- which matters more, because the person holding it has no account.
+  code := left(replace(gen_random_uuid()::text, '-', ''), 10);
+
+  insert into public.reports (kind, subject, evidence, reason, reporter, ticket, reporter_email)
+  values (p_kind, p_subject, p_evidence, left(cleaned, 500), (select auth.uid()), code, email);
+
+  return jsonb_build_object('ok', true, 'recorded', true, 'ticket', code);
+end;
+$fn$;
+
+revoke all on function public.file_report(text, text, jsonb, text, text) from public, anon, authenticated;
+
+-- Report a daily puzzle. The client sends where it was, not what it saw.
+--
+-- The board is snapshotted rather than referenced because daily_puzzles is a
+-- rolling fortnight: by the time anyone reads the digest, the row that caused
+-- the complaint may have aged out, and a report whose evidence has expired is
+-- a report nobody can act on.
+create or replace function public.report_puzzle(
+  p_game text,
+  p_date date,
+  p_difficulty text,
+  p_env text default 'prod',
+  p_reason text default null,
+  p_email text default null
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $fn$
+declare
+  found jsonb;
+  board jsonb;
+begin
+  if p_difficulty is null or p_difficulty not in ('easy', 'hard', 'extreme') then
+    return jsonb_build_object('ok', false, 'reason', 'no such puzzle');
+  end if;
+  if p_env is null or p_env not in ('prod', 'dev', 'shared') then
+    return jsonb_build_object('ok', false, 'reason', 'no such puzzle');
+  end if;
+
+  select p.payload into found
+  from public.daily_puzzles p
+  where p.game = p_game and p.env = p_env and p.puzzle_date = p_date;
+
+  -- The one check that makes the rest worth storing. A board that isn't there
+  -- is not a report, it is someone typing into an insert endpoint.
+  if found is null then
+    return jsonb_build_object('ok', false, 'reason', 'no such puzzle');
+  end if;
+
+  board := coalesce(found->'byDifficulty'->p_difficulty, found);
+
+  return public.file_report(
+    'puzzle',
+    p_game || ':' || p_env || ':' || p_date::text || ':' || p_difficulty,
+    jsonb_build_object(
+      'game', p_game, 'env', p_env, 'date', p_date, 'difficulty', p_difficulty,
+      'board', board
+    ),
+    p_reason,
+    p_email
+  );
+end;
+$fn$;
+
+revoke all on function public.report_puzzle(text, date, text, text, text, text) from public;
+grant execute on function public.report_puzzle(text, date, text, text, text, text) to anon, authenticated;
+
+-- Report a display name. The client sends the name it saw on a board; the
+-- server resolves it to a profile and records the name as *it* holds it, so a
+-- rename between seeing and reporting doesn't produce a report about a string
+-- nobody ever had.
+--
+-- An unknown name reads the same as a known one. A report endpoint that says
+-- "no such player" is a way of asking whether a name is taken, which
+-- set_display_name is careful not to answer either.
+create or replace function public.report_player(
+  p_name text,
+  p_reason text default null,
+  p_email text default null
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $fn$
+declare
+  target_id uuid;
+  target_name text;
+begin
+  select id, display_name into target_id, target_name
+  from public.profiles
+  where display_name is not null
+    and public.normalise_name(display_name) = public.normalise_name(coalesce(p_name, ''))
+  limit 1;
+
+  if target_id is null then
+    return jsonb_build_object('ok', true, 'recorded', false);
+  end if;
+
+  return public.file_report(
+    'player',
+    'player:' || target_id::text,
+    jsonb_build_object(
+      'profile', target_id,
+      'name', target_name,
+      -- whether the preventive filter would have caught it, which is the
+      -- difference between "the blocklist has a gap" and "somebody found a
+      -- spelling it doesn't cover"
+      'blocked_by_filter', public.name_is_blocked(target_name)
+    ),
+    p_reason,
+    p_email
+  );
+end;
+$fn$;
+
+revoke all on function public.report_player(text, text, text) from public;
+grant execute on function public.report_player(text, text, text) to anon, authenticated;
+
+-- A site problem, or anything else.
+--
+-- The other two paths are strong because the server can check them: a board is
+-- in daily_puzzles or it isn't, a name resolves to a profile or it doesn't.
+-- There is nothing to check here, and pretending otherwise would be worse than
+-- admitting it — so these are stored as what they are, somebody's account of
+-- something, and the reason is required rather than optional because without
+-- it there is no report at all.
+--
+-- The subject carries a digest of the text so the per-subject cap dedupes
+-- identical complaints without capping unrelated ones. A flat 'site' subject
+-- would have meant the sixth distinct bug report of the month was dropped for
+-- looking like the first five.
+create or replace function public.report_general(
+  p_kind text,
+  p_reason text,
+  p_where text default null,
+  p_email text default null
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $fn$
+declare
+  cleaned text := nullif(btrim(coalesce(p_reason, '')), '');
+begin
+  if p_kind is null or p_kind not in ('site', 'other') then
+    return jsonb_build_object('ok', false, 'reason', 'no such kind');
+  end if;
+  if cleaned is null then
+    return jsonb_build_object('ok', false, 'reason', 'nothing said');
+  end if;
+
+  return public.file_report(
+    p_kind,
+    p_kind || ':' || left(md5(lower(cleaned)), 8),
+    -- Where they were, as they described it. Client-supplied and labelled as
+    -- such: it is a hint for whoever reads it, never evidence of anything.
+    jsonb_build_object('reported_from', left(coalesce(p_where, ''), 200)),
+    cleaned,
+    p_email
+  );
+end;
+$fn$;
+
+revoke all on function public.report_general(text, text, text, text) from public;
+grant execute on function public.report_general(text, text, text, text) to anon, authenticated;
+
+-- What a reporter can see with their ticket: whether it is still open, and how
+-- it ended if it isn't. Not the board, not the name, not their own words back,
+-- and nothing at all about any other report.
+--
+-- Deliberately not "no such ticket" either. A wrong code and a real one read
+-- the same, because otherwise this is an oracle for walking the space — which
+-- is only 40 bits, and 40 bits is fine for naming something and useless for
+-- guarding it.
+create or replace function public.report_status(p_ticket text)
+returns jsonb
+language sql
+stable
+security definer
+set search_path = ''
+as $fn$
+  select coalesce(
+    (select jsonb_build_object(
+       'found', true,
+       'status', r.status,
+       'resolution', r.resolution,
+       'filed', r.created_at,
+       'closed', r.resolved_at
+     )
+     from public.reports r
+     where r.ticket = p_ticket),
+    jsonb_build_object('found', false)
+  )
+$fn$;
+
+revoke all on function public.report_status(text) from public;
+grant execute on function public.report_status(text) to anon, authenticated;
+
+-- What the digest reads. Service role only — it is the one path that hands
+-- back a player's name alongside free text somebody wrote about them.
+--
+-- Open reports come back oldest first with their age, because the digest's
+-- job is partly to nag: a report nobody has touched in a week should read
+-- louder than one filed this morning, and the only way to say so is to keep
+-- sending it until somebody acts.
+create or replace function public.open_reports()
+returns table (
+  id uuid,
+  kind text,
+  ticket text,
+  subject text,
+  evidence jsonb,
+  reason text,
+  reporter_email text,
+  action_token uuid,
+  created_at timestamptz,
+  days_open int,
+  receipt_sent_at timestamptz
+)
+language sql
+stable
+security definer
+set search_path = ''
+as $fn$
+  select r.id, r.kind, r.ticket, r.subject, r.evidence, r.reason, r.reporter_email,
+         r.action_token, r.created_at,
+         greatest(0, (now()::date - r.created_at::date))::int as days_open,
+         r.receipt_sent_at
+  from public.reports r
+  where r.status = 'new'
+  order by r.created_at
+$fn$;
+
+revoke all on function public.open_reports() from public, anon, authenticated;
+
+-- Reports resolved but not yet told to the reporter who asked to be told.
+create or replace function public.unsent_outcomes()
+returns table (
+  id uuid,
+  ticket text,
+  reporter_email text,
+  resolution text,
+  resolution_note text,
+  resolved_at timestamptz
+)
+language sql
+stable
+security definer
+set search_path = ''
+as $fn$
+  select r.id, r.ticket, r.reporter_email, r.resolution, r.resolution_note, r.resolved_at
+  from public.reports r
+  where r.status = 'handled'
+    and r.reporter_email is not null
+    and r.outcome_sent_at is null
+  order by r.resolved_at
+$fn$;
+
+revoke all on function public.unsent_outcomes() from public, anon, authenticated;
+
+-- Acting on a report: the two-key lock.
+--
+-- The token proves the caller is holding the digest; `is_owner()` proves they
+-- are the person it was sent to. Either alone is not enough, which is the
+-- whole reason this is safe to put in an email — the one thing about email
+-- links that is reliably true is that other people read them.
+--
+-- Three actions, and each one has a real effect somewhere else:
+--   dismiss   nothing but closing it, for the reports that are wrong
+--   blocklist adds a word to blocked_words at 'both' scope — never generated,
+--             never accepted. The word is typed by the owner rather than read
+--             off the board, because the offending word on a board is not
+--             always the answer, and a rule that guessed would guess wrong.
+--   ban       clears the display name and blocks it exactly, so the account
+--             survives and the name does not. Nobody is deleted by a click.
+create or replace function public.report_act(
+  p_id uuid,
+  p_token uuid,
+  p_action text,
+  p_note text default null,
+  p_target text default null
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $fn$
+declare
+  r public.reports;
+  word text := nullif(btrim(lower(coalesce(p_target, ''))), '');
+  who uuid := (select auth.uid());
+begin
+  if not public.is_owner() then
+    return jsonb_build_object('ok', false, 'reason', 'not allowed');
+  end if;
+  if p_action is null or p_action not in ('dismiss', 'blocklist', 'ban') then
+    return jsonb_build_object('ok', false, 'reason', 'no such action');
+  end if;
+
+  select * into r from public.reports where id = p_id and action_token = p_token;
+  if r.id is null then
+    return jsonb_build_object('ok', false, 'reason', 'not allowed');
+  end if;
+  if r.status <> 'new' then
+    -- Already handled, by the other tab or the other click. Not an error:
+    -- saying so is more useful than pretending the second click did something.
+    return jsonb_build_object('ok', false, 'reason', 'already handled', 'resolution', r.resolution);
+  end if;
+
+  if p_action = 'blocklist' and r.kind not in ('puzzle', 'site', 'other') then
+    return jsonb_build_object('ok', false, 'reason', 'not a puzzle report');
+  end if;
+
+  if p_action = 'blocklist' then
+    if word is null or word !~ '^[a-z]{2,}$' then
+      return jsonb_build_object('ok', false, 'reason', 'no word given');
+    end if;
+    insert into public.blocked_words (word, scope, origin)
+    values (word, 'both', 'report:' || r.ticket)
+    on conflict (word) do update set scope = 'both', origin = excluded.origin;
+  elsif p_action = 'ban' then
+    if r.kind <> 'player' then
+      return jsonb_build_object('ok', false, 'reason', 'not a player report');
+    end if;
+    -- The name, not the person. Blocking it exactly rather than as a substring
+    -- because one abusive name is not evidence that every name containing it
+    -- is abusive, and that mistake is the one this whole table is careful not
+    -- to make.
+    insert into public.blocked_names (pattern, match)
+    values (public.normalise_name(r.evidence->>'name'), 'exact')
+    on conflict (pattern) do nothing;
+    update public.profiles set display_name = null where id = (r.evidence->>'profile')::uuid;
+  end if;
+
+  update public.reports
+  set status = 'handled',
+      resolution = case p_action when 'dismiss' then 'dismissed'
+                                 when 'blocklist' then 'blocked'
+                                 else 'banned' end,
+      resolution_note = left(nullif(btrim(coalesce(p_note, '')), ''), 500),
+      resolved_at = now(),
+      resolved_by = who
+  where id = r.id;
+
+  return jsonb_build_object('ok', true, 'ticket', r.ticket);
+end;
+$fn$;
+
+revoke all on function public.report_act(uuid, uuid, text, text, text) from public, anon;
+grant execute on function public.report_act(uuid, uuid, text, text, text) to authenticated;
+
+-- What the action page shows before it acts: enough to decide, and only to an
+-- owner holding the token. The same two keys as report_act, because a page
+-- that displayed the report to anyone holding the link would leak exactly what
+-- the token was protecting.
+create or replace function public.report_for_action(p_id uuid, p_token uuid)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $fn$
+declare
+  r public.reports;
+begin
+  if not public.is_owner() then
+    return jsonb_build_object('ok', false, 'reason', 'not allowed');
+  end if;
+  select * into r from public.reports where id = p_id and action_token = p_token;
+  if r.id is null then
+    return jsonb_build_object('ok', false, 'reason', 'not allowed');
+  end if;
+  return jsonb_build_object(
+    'ok', true,
+    'ticket', r.ticket,
+    'kind', r.kind,
+    'evidence', r.evidence,
+    'reason', r.reason,
+    'status', r.status,
+    'resolution', r.resolution,
+    'filed', r.created_at
+  );
+end;
+$fn$;
+
+revoke all on function public.report_for_action(uuid, uuid) from public, anon;
+grant execute on function public.report_for_action(uuid, uuid) to authenticated;

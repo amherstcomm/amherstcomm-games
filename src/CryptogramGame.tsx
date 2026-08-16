@@ -210,7 +210,7 @@ const CryptogramGame = forwardRef<CryptogramGameHandle, object>(
     useEffect(() => {
       if (!practiceAllowed && !store.dailyMode) setStore((prev) => ({ ...prev, dailyMode: true }));
     }, [practiceAllowed, store.dailyMode]);
-    useEffect(() => reportDaily('cryptogram', store.dailyMode), [store.dailyMode]);
+    useEffect(() => reportDaily('cryptogram', store.dailyMode, store.dailyDate), [store.dailyMode, store.dailyDate]);
     useEffect(
       () => offerDailySwitch('cryptogram', (d) => setStore((prev) => ({ ...prev, dailyMode: d }))),
       []

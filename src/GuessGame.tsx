@@ -124,7 +124,7 @@ const GuessGame = forwardRef<
     if (!practiceAllowed && !store.dailyMode) setStore((prev) => ({ ...prev, dailyMode: true }));
   }, [practiceAllowed, store.dailyMode]);
   // the address bar says which board is open, and can ask for the other
-  useEffect(() => reportDaily('pattern', store.dailyMode), [store.dailyMode]);
+  useEffect(() => reportDaily('pattern', store.dailyMode, store.dailyDate), [store.dailyMode, store.dailyDate]);
   useEffect(
     () => offerDailySwitch('pattern', (d) => setStore((prev) => ({ ...prev, dailyMode: d }))),
     []

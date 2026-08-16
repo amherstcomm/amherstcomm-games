@@ -1,4 +1,4 @@
-import { useEffect, type RefObject } from 'react';
+import { useEffect, useRef, type RefObject } from 'react';
 
 const FOCUSABLE = [
   'a[href]',
@@ -13,11 +13,22 @@ const FOCUSABLE = [
 // Tab cycles within it instead of escaping to the page behind, Escape
 // closes, and focus returns to whatever opened it. The dialog element needs
 // tabIndex={-1} so it can receive that initial focus.
+//
+// `onClose` is held in a ref rather than depended on, and that is not tidying.
+// Depending on it meant any parent that re-rendered while the dialog was open
+// — which is every parent holding a field's state — tore the effect down and
+// set it up again, and teardown *returns focus to the opener*. The visible
+// result was a text field that lost focus after every single character, in a
+// dialog whose own author had done nothing wrong. A hook that only works when
+// its caller memoises is a hook that will be used incorrectly.
 export function useModalA11y(
   ref: RefObject<HTMLElement | null>,
   onClose: () => void,
   enabled = true
 ): void {
+  const close = useRef(onClose);
+  close.current = onClose;
+
   useEffect(() => {
     if (!enabled) return;
     const opener = document.activeElement as HTMLElement | null;
@@ -26,7 +37,7 @@ export function useModalA11y(
 
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        onClose();
+        close.current();
         return;
       }
       if (e.key !== 'Tab' || !node) return;
@@ -55,5 +66,5 @@ export function useModalA11y(
       // the opener may be gone (e.g. a button that unmounted) — ignore then
       if (opener && document.contains(opener)) opener.focus();
     };
-  }, [ref, onClose, enabled]);
+  }, [ref, enabled]);
 }

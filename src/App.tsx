@@ -31,6 +31,26 @@ import { solvePattern, solveDescramble, solveBee, solveBoxed, solveGrid, findGri
 import ConsentBanner from '@/ConsentBanner';
 import { PrivacyPolicy, Terms } from '@/LegalDocs';
 import { onDailyReport, requestDaily } from '@/dailyBus';
+import ReportMenu from '@/ReportMenu';
+import TicketView from '@/TicketView';
+import ReportActionView from '@/ReportActionView';
+
+// What daily_puzzles calls each game, which is not what the URL calls it and
+// not what the results table calls it either — Guess is published as 'words'.
+// A Record so a new game cannot be quietly left unreportable; the compiler
+// asks, which is the only thing that has reliably caught this class of gap.
+const REPORT_SLUG: Record<Mode, string> = {
+  pattern: 'words',
+  descramble: 'scramble',
+  bee: 'hive',
+  grid: 'grid',
+  boxed: 'box',
+  squares: 'squares',
+  weave: 'weave',
+  cryptogram: 'cryptogram',
+  ladder: 'ladder',
+  bridge: 'bridge',
+};
 import { solveSquare } from '@/squares';
 import HomeView from '@/HomeView';
 import RouteLink from '@/RouteLink';
@@ -830,6 +850,12 @@ function App() {
     initialRoute.kind === 'home' && initial.startPage === 'home'
   );
   const [startPage, setStartPage] = useState(initial.startPage);
+  // The two report pages are whole views rather than panels: one is read by
+  // somebody with no account and no game open, the other by an owner coming
+  // straight from an email. Neither has anything behind it to put back.
+  const [reportPage, setReportPage] = useState<Route | null>(
+    initialRoute.kind === 'ticket' || initialRoute.kind === 'reportAction' ? initialRoute : null
+  );
   const [aboutOpen, setAboutOpen] = useState(panelAtLoad('about'));
   const [legalOpen, setLegalOpen] = useState(initialRoute.kind === 'legal');
   const [legalTab, setLegalTab] = useState<'notices' | 'privacy' | 'terms'>(
@@ -1302,11 +1328,18 @@ function App() {
   // when someone has asked to be left with one puzzle.
   const showDifficultySwitch = playActive && difficultyMode() === 'all';
 
+  // The date rides along so the report link can name the board a player is
+  // actually looking at. Empty for practice, which is nobody's problem but the
+  // dealer's — it was never published and there is nothing on the server to
+  // look up.
+  const [dateByMode, setDateByMode] = useState<Partial<Record<Mode, string>>>({});
+
   useEffect(
     () =>
-      onDailyReport((m, daily) =>
-        setDailyByMode((prev) => (prev[m] === daily ? prev : { ...prev, [m]: daily }))
-      ),
+      onDailyReport((m, daily, date) => {
+        setDailyByMode((prev) => (prev[m] === daily ? prev : { ...prev, [m]: daily }));
+        setDateByMode((prev) => (prev[m] === date ? prev : { ...prev, [m]: date }));
+      }),
     []
   );
 
@@ -1374,6 +1407,7 @@ function App() {
     setAboutOpen(r.kind === 'panel' && r.panel === 'about');
     setKeysOpen(r.kind === 'panel' && r.panel === 'keys');
     if (r.kind === 'friend') stashInvite(r.code);
+    setReportPage(r.kind === 'ticket' || r.kind === 'reportAction' ? r : null);
     setAccountOpen(r.kind === 'account' || r.kind === 'friend');
     if (r.kind === 'account') setAccountTab(r.tab);
     if (r.kind === 'friend') setAccountTab('friends');
@@ -1996,7 +2030,16 @@ function App() {
           )}
         </header>
 
-        {atHome && (
+        {reportPage?.kind === 'ticket' && <TicketView ticket={reportPage.ticket} />}
+        {reportPage?.kind === 'reportAction' && (
+          <ReportActionView
+            id={reportPage.id}
+            token={reportPage.token}
+            action={reportPage.action}
+          />
+        )}
+
+        {!reportPage && atHome && (
           <HomeView
             modes={shownModes}
             onOpen={(m) => {
@@ -3447,6 +3490,20 @@ function App() {
               <Home className="w-3.5 h-3.5" />
               Home
             </RouteLink>
+            {/* The footer is on every page by construction, which is the whole
+                reason this lives here: the previous home was a link on the
+                daily board, gated on a date the game had to volunteer, and six
+                of the ten games keep their date somewhere the gate never saw.
+                A control whose only job is to be findable cannot be somewhere
+                it might not appear. */}
+            <ReportMenu
+              context={{
+                game: REPORT_SLUG[mode],
+                gameLabel: MODES.find((m) => m.id === mode)?.label,
+                date: dateByMode[mode],
+                level,
+              }}
+            />
             <a
               href="https://github.com/rptetzloff/anagrimoire"
               target="_blank"

@@ -211,7 +211,7 @@ const BoxGame = forwardRef<
     if (!practiceAllowed && !store.dailyMode) setStore((prev) => ({ ...prev, dailyMode: true }));
   }, [practiceAllowed, store.dailyMode]);
   // the address bar says which board is open, and can ask for the other
-  useEffect(() => reportDaily('boxed', store.dailyMode), [store.dailyMode]);
+  useEffect(() => reportDaily('boxed', store.dailyMode, store.dailyDate), [store.dailyMode, store.dailyDate]);
   useEffect(
     () => offerDailySwitch('boxed', (d) => setStore((prev) => ({ ...prev, dailyMode: d }))),
     []
