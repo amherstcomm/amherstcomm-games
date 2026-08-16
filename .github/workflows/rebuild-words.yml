@@ -65,7 +65,7 @@ jobs:
             exit 0
           fi
           node -e "
-            const j = require('./scripts/blocked-words.json');
+            const j = require('./src/wordbands/blocked-words.json');
             const esc = (s) => String(s).replace(/'/g, \"''\");
             const vals = j.words.map((w) => \`('\${esc(w.word)}','\${esc(w.scope)}','\${esc(w.origin)}')\`).join(',');
             console.log(\`insert into public.blocked_words (word, scope, origin) values \${vals};\`);
@@ -88,7 +88,7 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add src/wordbands scripts/blocked-words.json
+          git add src/wordbands
           if git diff --cached --quiet; then
             echo "changed=no" >> "$GITHUB_OUTPUT"
             echo "The files on ${{ github.ref_name }} already are this build."
