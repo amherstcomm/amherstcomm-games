@@ -2077,6 +2077,44 @@ function App() {
             </section>
           )}
 
+          {/* The same rung as Difficulty above, and the reason the two sit
+              together: Difficulty is what a *play* board is built from, Word
+              list is what a *solve* answer is drawn from. One question, asked
+              once, in the wording the current view understands — which is why
+              they are mutually exclusive rather than stacked.
+
+              It used to render down among the game blocks, which put it above
+              the board for five games and below the first control for the other
+              five, purely by where each game happened to sit in this file.
+              Nobody chose that. Hidden when one dictionary has been set for the
+              whole site, since there'd be nothing left for it to pick. */}
+          {!playActive && solverDictionary === 'per-game' && (
+          <section className="mb-7 text-center">
+            <label className="block text-xs font-medium text-slate-400 uppercase tracking-wider mb-2.5">
+              Word list
+            </label>
+            <div className="inline-flex flex-wrap justify-center max-w-full rounded-xl bg-white/5 border border-white/10 p-1 gap-1">
+              {DICTIONARIES.map((d) => (
+                <button
+                  key={d.id}
+                  onClick={() => setDictionaryId(d.id)}
+                  title={d.blurb}
+                  className={`inline-flex items-center gap-1.5 px-4 h-9 rounded-lg text-sm font-semibold transition-all duration-150
+                    ${dictionaryId === d.id
+                      ? 'bg-amber-400 text-ink shadow-lg shadow-amber-500/30'
+                      : 'text-slate-300 hover:bg-white/10'}`}
+                >
+                  {d.id === 'easy' && <BookOpen className="w-3.5 h-3.5" />}
+                  {d.label}
+                </button>
+              ))}
+            </div>
+            <p className="mt-2 text-xs text-slate-500">
+              {DICTIONARIES.find((d) => d.id === dictionaryId)?.blurb}
+            </p>
+          </section>
+          )}
+
           {learnMode && (
             <div className="mb-8">
               <LearnMode
@@ -2579,35 +2617,6 @@ function App() {
               available here about 15 minutes after the NYT publishes it (3:00&nbsp;a.m. Eastern).
             </p>
           </div>
-          )}
-
-          {/* dictionary selector — hidden when one dictionary has been chosen
-              for the whole site, since there'd be nothing left for it to pick */}
-          {!playActive && solverDictionary === 'per-game' && (
-          <section className="mb-7 text-center">
-            <label className="block text-xs font-medium text-slate-400 uppercase tracking-wider mb-2.5">
-              Word list
-            </label>
-            <div className="inline-flex flex-wrap justify-center max-w-full rounded-xl bg-white/5 border border-white/10 p-1 gap-1">
-              {DICTIONARIES.map((d) => (
-                <button
-                  key={d.id}
-                  onClick={() => setDictionaryId(d.id)}
-                  title={d.blurb}
-                  className={`inline-flex items-center gap-1.5 px-4 h-9 rounded-lg text-sm font-semibold transition-all duration-150
-                    ${dictionaryId === d.id
-                      ? 'bg-amber-400 text-ink shadow-lg shadow-amber-500/30'
-                      : 'text-slate-300 hover:bg-white/10'}`}
-                >
-                  {d.id === 'easy' && <BookOpen className="w-3.5 h-3.5" />}
-                  {d.label}
-                </button>
-              ))}
-            </div>
-            <p className="mt-2 text-xs text-slate-500">
-              {DICTIONARIES.find((d) => d.id === dictionaryId)?.blurb}
-            </p>
-          </section>
           )}
 
           {mode === 'pattern' && (
