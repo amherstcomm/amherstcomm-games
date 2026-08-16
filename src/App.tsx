@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useReducer, useState, useEffect, useLayoutEffect, useRef, type ButtonHTMLAttributes, type ReactNode } from 'react';
+import { useCallback, useMemo, useState, useEffect, useLayoutEffect, useRef, type ButtonHTMLAttributes, type ReactNode } from 'react';
 import { Search, Eraser, ArrowDown, ArrowUp, X, BookOpen, Grid3x3, Shuffle, Hexagon, Check, Keyboard, Delete, Github, Info, Square, CalendarDays, Star, Gamepad2, CornerDownLeft, LayoutGrid, Puzzle, BarChart3, UserRound, Scale, Settings, Home, Table2, KeyRound } from 'lucide-react';
 import LearnMode, { type LearnModeHandle } from '@/LearnMode';
 import type { Session } from '@supabase/supabase-js';
@@ -31,8 +31,9 @@ import { solvePattern, solveDescramble, solveBee, solveBoxed, solveGrid, findGri
 import ConsentBanner from '@/ConsentBanner';
 import { PrivacyPolicy, Terms } from '@/LegalDocs';
 import { onDailyReport, requestDaily } from '@/dailyBus';
-import { FRESH, historyStep } from '@/routing/history';
-import { navOf, navReducer, routeOf, type Overlay, type Page } from '@/routing/nav';
+import { entryGame, entryRoute } from '@/routing/entry';
+import { useAddressBar, useNav } from '@/routing/useRouting';
+import { routeOf, type Overlay } from '@/routing/nav';
 import ReportMenu from '@/ReportMenu';
 import { amOwner } from '@/reports';
 import TicketView from '@/TicketView';
@@ -71,12 +72,8 @@ import {
 } from '@/cryptogramSolver';
 import {
   MODE_SLUG,
-  initialGame,
-  initialRoute,
   modeOf,
-  parsePath,
   pathOf,
-  titleOf,
   type Route,
 } from '@/routes';
 import {
@@ -579,7 +576,7 @@ const initial = loadState();
 // kind of instruction a link gives, so it travels the same path. 'home' stays
 // on the front page; 'last' falls through to whatever was stored.
 const startTarget =
-  initialRoute.kind === 'home' &&
+  entryRoute().kind === 'home' &&
   initial.startPage !== 'home' &&
   initial.startPage !== 'last'
     ? ({ view: 'play', slug: MODE_SLUG[initial.startPage] } as const)
@@ -587,9 +584,9 @@ const startTarget =
 
 // A link names both a game and a tab. It only overrides the game it names —
 // every other game keeps whatever the visitor last had open.
-const entryGame = initialGame ?? startTarget;
-const linkMode = entryGame ? modeOf(entryGame.slug) : null;
-const linkView = entryGame?.view === 'play' ? true : entryGame?.view === 'solve' ? false : null;
+const entry = entryGame() ?? startTarget;
+const linkMode = entry ? modeOf(entry.slug) : null;
+const linkView = entry?.view === 'play' ? true : entry?.view === 'solve' ? false : null;
 function initialPlay(mode: Mode, stored: boolean): boolean {
   return linkMode === mode && linkView !== null ? linkView : stored;
 }
@@ -599,7 +596,7 @@ function initialPlay(mode: Mode, stored: boolean): boolean {
 // An invite link stashes its code before anything else happens: accepting may
 // need a sign-in first, and OAuth leaves the page entirely — the stash is what
 // survives the round trip. The account panel picks it up from there.
-if (initialRoute.kind === 'friend') stashInvite(initialRoute.code);
+if (entryRoute().kind === 'friend') stashInvite((entryRoute() as { code: string }).code);
 
 function App() {
   const [mode, setMode] = useState<Mode>(linkMode ?? initial.mode);
@@ -844,22 +841,11 @@ function App() {
   const [sorts, setSorts] = useState(initial.sort);
   const [kbOpen, setKbOpen] = useState(initial.keyboard);
   // "/" is a page now, not a synonym for wherever you left off
-  // One value where there were nine booleans and a priority ladder. The ladder
-  // is gone: the address is whatever is on top of the overlay stack, or the
-  // page if nothing is — so a new kind of page cannot be left out of a list it
-  // never appeared in, which is how /reports came to rewrite its own address.
-  //
-  // The old names are re-derived immediately below, so the ninety-odd sites
-  // that only *read* them are untouched by this change. Only the mutations move.
-  const [nav, dispatch] = useReducer(navReducer, undefined, () => {
-    const { nav: seeded } = navOf(initialRoute);
-    // "/" is only the home page when the start page says so; otherwise it is a
-    // launcher on the way to a game, and the game is the page.
-    if (initialRoute.kind === 'home' && initial.startPage !== 'home') {
-      return { ...seeded, page: { kind: 'game' as const } };
-    }
-    return seeded;
-  });
+  // Where the app is. The nine booleans, the ladder, the three refs and both
+  // effects live in src/routing/useRouting.ts now — this is the seam: page and
+  // overlay identity there, which game and which view here.
+  const routing = useNav(entryRoute(), initial.startPage === 'home');
+  const { nav, open: openOverlay, close: closeOverlay, overlayLink, pageLink } = routing;
 
   function overlay<K extends Overlay['kind']>(kind: K): Extract<Overlay, { kind: K }> | undefined {
     return nav.overlays.find((o): o is Extract<Overlay, { kind: K }> => o.kind === kind);
@@ -886,33 +872,14 @@ function App() {
   const keysOpen = overlay('panel')?.panel === 'keys';
 
   const setAtHome = (v: boolean) =>
-    dispatch({ type: 'page', page: v ? { kind: 'home' } : { kind: 'game' } });
-  const openOverlay = (o: Overlay) => dispatch({ type: 'open', overlay: o });
-  const closeOverlay = () => dispatch({ type: 'close' });
-
-  // A link's address and its destination, from one value.
-  //
-  // Every nav site used to hand-pair a `to` string with an unrelated `onGo`,
-  // and four of them disagreed: the footer rendered `to="/stats/overall"` while
-  // the click opened whichever tab you last used, and the tab survives closing.
-  // So after one visit to Boards, middle-click and left-click went to different
-  // pages — the anchor advertised one address and the app went to another.
-  //
-  // Spreading these makes that unrepresentable rather than merely fixed. An
-  // Overlay and a Page are already Routes, so `pathOf` is the same computation
-  // the click will perform.
-  const overlayLink = (o: Overlay) => ({ to: pathOf(o), onGo: () => openOverlay(o) });
-  const pageLink = (page: Exclude<Page, { kind: 'game' }>) => ({
-    to: pathOf(page),
-    onGo: () => dispatch({ type: 'page', page }),
-  });
+    routing.dispatch({ type: 'page', page: v ? { kind: 'home' } : { kind: 'game' } });
 
   const [startPage, setStartPage] = useState(initial.startPage);
   // Whether to draw the queue link at all. False for everyone signed out and
   // for every ordinary account, and the server says so — this only decides a
   // link, and the RPCs behind it check again regardless.
   const [owner, setOwner] = useState(false);
-  const [learnMode, setLearnMode] = useState(initialGame?.view === 'learn');
+  const [learnMode, setLearnMode] = useState(entryGame()?.view === 'learn');
   const [theme, setTheme] = useState<ThemeMode>(initial.theme);
   const [palette, setPalette] = useState<Palette>(initial.palette);
   const [navKeys, setNavKeys] = useState<NavKeys>(initial.navKeys);
@@ -1178,8 +1145,8 @@ function App() {
 
   const aboutRef = useRef<HTMLDivElement>(null);
   const legalRef = useRef<HTMLDivElement>(null);
-  const closeAbout = useCallback(() => dispatch({ type: 'close' }), []);
-  const closeLegal = useCallback(() => dispatch({ type: 'close' }), []);
+  const closeAbout = closeOverlay;
+  const closeLegal = closeOverlay;
   useModalA11y(aboutRef, closeAbout, aboutOpen);
   useModalA11y(legalRef, closeLegal, legalOpen);
 
@@ -1213,7 +1180,7 @@ function App() {
 
   const shownViews = useMemo(() => {
     const vis = visibleViews(hiddenViews);
-    return ALL_VIEWS.filter((v) => vis.includes(v) || v === initialGame?.view);
+    return ALL_VIEWS.filter((v) => vis.includes(v) || v === entryGame()?.view);
   }, [hiddenViews]);
 
   // Words grouped by shape, built only while the cryptogram solver is on
@@ -1355,7 +1322,8 @@ function App() {
   // the player isn't currently on.
   const [dailyByMode, setDailyByMode] = useState<Record<Mode, boolean>>(() => {
     const seed = Object.fromEntries(ALL_MODES.map((m) => [m, true])) as Record<Mode, boolean>;
-    if (initialGame?.view === 'play') seed[modeOf(initialGame.slug)] = initialGame.daily;
+    const g = entryGame();
+    if (g?.view === 'play') seed[modeOf(g.slug)] = g.daily;
     return seed;
   });
 
@@ -1385,12 +1353,10 @@ function App() {
     []
   );
 
-  // Where the app is, written as an address.
-  //
-  // This was a priority ladder over nine booleans; it is `routeOf` now, which
-  // is "whatever is on top, or the page". The ladder's failure mode was that a
-  // new kind had to be remembered into it, and /reports was not — so the page
-  // rendered and the address then reverted to the game underneath.
+  // Where the app is, written as an address. `routeOf` is "whatever is on top,
+  // or the page" — the ladder this replaced had a rung per kind and /reports
+  // was never given one, so the page rendered and the address reverted to the
+  // game underneath.
   //
   // `daily` only means something under /play: pathOf drops it for solve and
   // learn, so emitting it there produced a Route that could not round-trip
@@ -1405,72 +1371,32 @@ function App() {
     [nav, mode, currentView, dailyByMode]
   );
 
-  // the tab, the bookmark, and what a search result would show
-  useEffect(() => {
-    document.title = titleOf(currentRoute);
-  }, [currentRoute]);
-
-  // The decision about what the address bar should do lives in
-  // src/routing/history.ts, where it can be enumerated. What is left here is
-  // the part that has to touch `window`: carry the memo, apply the op.
-  const memo = useRef(FRESH);
-
-  useEffect(() => {
-    const { op, memo: next } = historyStep(
-      memo.current,
-      currentRoute,
-      window.location.pathname,
-      window.location.hash
-    );
-    memo.current = next;
-    switch (op.op) {
-      case 'none':
-        return;
-      case 'replace':
-        history.replaceState(null, '', op.path);
-        return;
-      case 'push':
-        history.pushState(null, '', op.path);
-        return;
-      case 'back':
-        history.back();
-        return;
-    }
-  }, [currentRoute]);
-
-  // Back and Forward. The browser has already changed the URL by the time this
-  // runs, so the effect above sees a match and stays quiet.
-  function applyRoute(r: Route) {
-    // Seventeen setters, each of which had to remember to close what the route
-    // does not name. One dispatch: the reducer derives the whole state from the
-    // address, so "closes everything else" is a property of the function rather
-    // than a list to keep complete.
-    if (r.kind === 'friend') stashInvite(r.code);
-    dispatch({ type: 'apply', route: r });
-    if (r.kind === 'game') {
-      const m = modeOf(r.slug);
-      setMode(m);
-      if (r.view === 'learn') {
-        setLearnMode(true);
-      } else {
-        setLearnMode(false);
-        playFlags[m][1](r.view === 'play');
-        if (r.view === 'play') requestDaily(m, r.daily);
-      }
-    }
-    memo.current = { ...memo.current, ourOverlay: false };
-  }
-
-  // through a ref so the listener is registered once, but always runs the
-  // current closure rather than one holding last render's state
-  const applyRef = useRef(applyRoute);
-  applyRef.current = applyRoute;
-  useEffect(() => {
-    const onPop = () =>
-      applyRef.current(parsePath(window.location.pathname) ?? { kind: 'home' });
-    window.addEventListener('popstate', onPop);
-    return () => window.removeEventListener('popstate', onPop);
-  }, []);
+  // Back and Forward reach both halves: the nav reducer, and the game state
+  // that only App holds.
+  useAddressBar(
+    currentRoute,
+    useCallback(
+      (r: Route) => {
+        if (r.kind === 'friend') stashInvite(r.code);
+        routing.dispatch({ type: 'apply', route: r });
+        if (r.kind === 'game') {
+          const m = modeOf(r.slug);
+          setMode(m);
+          if (r.view === 'learn') {
+            setLearnMode(true);
+          } else {
+            setLearnMode(false);
+            playFlags[m][1](r.view === 'play');
+            if (r.view === 'play') requestDaily(m, r.daily);
+          }
+        }
+      },
+      // playFlags is rebuilt every render; the ref inside useAddressBar is what
+      // keeps the listener current, so this closure is allowed to be fresh
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+      [routing.dispatch, playFlags]
+    )
+  );
 
   const shownLengths = useMemo(() => lengthChoices(lengthRange), [lengthRange]);
 

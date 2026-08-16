@@ -12,7 +12,7 @@ import { difficulty, isDifficulty, onDifficultyChange, type Difficulty } from '@
 import MobileKeyInput from '@/MobileKeyInput';
 import ShareButton from '@/ShareButton';
 import { buildShare } from '@/share';
-import { dailyIntent } from '@/routes';
+import { dailyIntent } from '@/routing/entry';
 import { offerDailySwitch, reportDaily } from '@/dailyBus';
 import { usePrefs } from '@/prefs';
 import { formatElapsed, useUpTimer } from '@/useUpTimer';

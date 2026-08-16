@@ -27,7 +27,7 @@ import { getDictionary, getDisplayFilter } from '@/dictionaries';
 import { difficulty, onDifficultyChange, type Difficulty } from '@/difficulty';
 import { store as siteStore } from '@/siteStorage';
 import { offerDailySwitch, reportDaily } from '@/dailyBus';
-import { dailyIntent } from '@/routes';
+import { dailyIntent } from '@/routing/entry';
 import { useDailySync } from '@/useDailySync';
 import { useUpTimer } from '@/useUpTimer';
 import ShareButton from '@/ShareButton';

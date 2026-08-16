@@ -15,7 +15,7 @@
 // survive a refresh, they can be typed, and they mean the same thing tomorrow.
 
 import { ALL_VIEWS, MODE_SLUG, modeOf, SLUG_MODE, SLUG_NAME } from '@/games';
-import type { Mode, Slug, View } from '@/games';
+import type { Slug, View } from '@/games';
 
 // Re-exported so the ~50 modules that import these from here don't all have to
 // move. `src/games.ts` is the one declaration; this is a door onto it.
@@ -267,34 +267,8 @@ export function legacyRoute(search: string): Route | null {
 }
 
 // ---------------------------------------------------------------------------
-// Where this load starts
-// ---------------------------------------------------------------------------
-
-// Read once, at import: every game reads the incoming route while building its
-// initial state, and they must all see the same answer.
-export const initialRoute: Route = (() => {
-  if (typeof window === 'undefined') return { kind: 'home' };
-
-  const legacy = legacyRoute(window.location.search);
-  if (legacy) {
-    // Drop the query as we go, so a bookmark taken now is the new address and
-    // a reload doesn't keep re-reading a link the reader has moved on from.
-    history.replaceState(null, '', pathOf(legacy) + window.location.hash);
-    return legacy;
-  }
-
-  const route = parsePath(window.location.pathname);
-  if (route) return route;
-
-  history.replaceState(null, '', '/' + window.location.search + window.location.hash);
-  return { kind: 'home' };
-})();
-
-export const initialGame = initialRoute.kind === 'game' ? initialRoute : null;
-
-/** Games persist their own daily/practice toggle; an incoming link overrides it
- *  for the one game it names, and leaves the rest alone. */
-export function dailyIntent(mode: Mode): boolean | null {
-  if (!initialGame || initialGame.view !== 'play') return null;
-  return SLUG_MODE[initialGame.slug] === mode ? initialGame.daily : null;
-}
+// Where this load started now lives in src/routing/entry.ts, memoised rather
+// than computed at import. It ran here as a module-level IIFE, so importing
+// this file performed a history.replaceState as a side effect and froze the
+// answer — which made every address function below untestable without
+// resetting the module registry between scenarios.

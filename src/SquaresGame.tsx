@@ -11,7 +11,7 @@ import MobileKeyInput from '@/MobileKeyInput';
 import ShareButton from '@/ShareButton';
 import { buildShare, TILE_EMOJI } from '@/share';
 import { usePalette } from '@/theme';
-import { dailyIntent } from '@/routes';
+import { dailyIntent } from '@/routing/entry';
 import { offerDailySwitch, reportDaily } from '@/dailyBus';
 import { usePrefs } from '@/prefs';
 import { formatElapsed, useUpTimer } from '@/useUpTimer';
