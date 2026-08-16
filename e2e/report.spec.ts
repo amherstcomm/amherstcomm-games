@@ -170,3 +170,21 @@ test('the owner queue is invisible to everyone else', async ({ page }) => {
   await expect(page.getByRole('heading', { name: 'Open reports' })).toBeVisible();
   await expect(page.getByText('Nothing open.')).toBeVisible();
 });
+
+test('a closed ticket says what was decided, in the words that were written', async ({ page }) => {
+  // The note reached the reporter by email but not on their own ticket page,
+  // which made two promises out of one field: a reporter who left an address
+  // was told why, and one who didn't got a note written for them that they
+  // could never read.
+  await page.goto('/report/c105ed0000');
+  // exact, because getByText is a case-insensitive substring match and the
+  // date line underneath says "closed 8/16/2026"
+  await expect(page.getByText('Closed', { exact: true })).toBeVisible();
+  await expect(page.getByText(/won.t be published again/)).toBeVisible();
+  await expect(page.getByText('Blocked the word and rebuilt the bands.')).toBeVisible();
+
+  // and an open one has nothing to say beyond that it is open
+  await page.goto('/report/4f2ba9c17d');
+  await expect(page.getByText('Still open')).toBeVisible();
+  await expect(page.getByText(/Blocked the word/)).toHaveCount(0);
+});

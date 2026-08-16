@@ -166,7 +166,8 @@ export default function ReportActionView({
           )}
 
           <label htmlFor="action-note" className="mt-4 block text-xs text-slate-500">
-            Why — kept on the report, and sent to the reporter if they left an address
+            Why — the reporter sees this, on their ticket page and by email if
+            they left an address
           </label>
           <textarea
             id="action-note"

@@ -99,15 +99,22 @@ export const test = base.extend<{ rpcCalls: { fn: string; args: Record<string, u
           return route.fulfill({ status: 200, contentType: 'application/json', body: '[]' });
         }
         if (rpc === 'report_status') {
-          const known = (args as { p_ticket?: string }).p_ticket === '4f2ba9c17d';
+          const asked = (args as { p_ticket?: string }).p_ticket;
+          const answers: Record<string, unknown> = {
+            '4f2ba9c17d': {
+              found: true, status: 'new', resolution: null, note: null,
+              filed: '2026-08-15T00:00:00Z', closed: null,
+            },
+            c105ed0000: {
+              found: true, status: 'handled', resolution: 'blocked',
+              note: 'Blocked the word and rebuilt the bands.',
+              filed: '2026-08-15T00:00:00Z', closed: '2026-08-16T00:00:00Z',
+            },
+          };
           return route.fulfill({
             status: 200,
             contentType: 'application/json',
-            body: JSON.stringify(
-              known
-                ? { found: true, status: 'new', resolution: null, filed: '2026-08-15T00:00:00Z', closed: null }
-                : { found: false }
-            ),
+            body: JSON.stringify(answers[asked ?? ''] ?? { found: false }),
           });
         }
         return route.fulfill({ status: 200, contentType: 'application/json', body: 'null' });

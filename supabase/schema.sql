@@ -2154,6 +2154,12 @@ as $fn$
        'found', true,
        'status', r.status,
        'resolution', r.resolution,
+       -- The note too. It was left out at first and the email carried it
+       -- anyway, which made two different promises out of one field: a
+       -- reporter who gave an address was told why, and a reporter who didn't
+       -- got a note written for them that they could never read. The note is
+       -- written knowing the reporter sees it — one audience, one promise.
+       'note', r.resolution_note,
        'filed', r.created_at,
        'closed', r.resolved_at
      )
