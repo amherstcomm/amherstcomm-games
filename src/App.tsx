@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState, useEffect, useLayoutEffect, useRef, type ButtonHTMLAttributes, type ReactNode } from 'react';
+import { useCallback, useMemo, useState, useEffect, useRef, type ButtonHTMLAttributes, type ReactNode } from 'react';
 import { Search, Eraser, ArrowDown, ArrowUp, X, BookOpen, Grid3x3, Shuffle, Hexagon, Check, Keyboard, Delete, Github, Info, Square, CalendarDays, Star, Gamepad2, CornerDownLeft, LayoutGrid, Puzzle, BarChart3, UserRound, Scale, Settings, Home, Table2, KeyRound } from 'lucide-react';
 import LearnMode, { type LearnModeHandle } from '@/LearnMode';
 import type { Session } from '@supabase/supabase-js';
@@ -42,6 +42,7 @@ import ReportActionView from '@/ReportActionView';
 
 import HomeView from '@/HomeView';
 import Tile from '@/Tile';
+import { centreOf, useBoardTrace } from '@/solvers/useBoardTrace';
 import { COARSE_POINTER } from '@/coarsePointer';
 import BridgeSolver from '@/solvers/BridgeSolver';
 import LadderSolver from '@/solvers/LadderSolver';
@@ -580,42 +581,21 @@ function App() {
     }
   }
 
-  // hover-trace preview for grid solver results
-  const [gridTrace, setGridTrace] = useState<number[] | null>(null);
-  const [gridTracePts, setGridTracePts] = useState<{ x: number; y: number }[]>([]);
-  const gridBoardRef = useRef<HTMLDivElement>(null);
-
-  useLayoutEffect(() => {
-    if (!gridTrace || !gridBoardRef.current) {
-      setGridTracePts([]);
-      return;
-    }
-    const wrap = gridBoardRef.current.getBoundingClientRect();
-    setGridTracePts(
-      gridTrace.map((i) => {
-        const r = gridBoardRef.current!
-          .querySelector(`[data-tile-index="${i}"]`)!
-          .getBoundingClientRect();
-        return { x: r.left + r.width / 2 - wrap.left, y: r.top + r.height / 2 - wrap.top };
-      })
-    );
-  }, [gridTrace]);
+  // Hover a result to draw it back on the board. One hook instance per board:
+  // grid and weave used to share a single ref between two JSX blocks, which
+  // worked only because exactly one is ever mounted.
+  const gridT = useBoardTrace<number[]>((path, board) => {
+    const wrap = board.getBoundingClientRect();
+    return [path.map((i) => centreOf(board.querySelector(`[data-tile-index="${i}"]`)!, wrap))];
+  });
 
   useEffect(() => {
-    setGridTrace(null);
+    gridT.clear();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [gridLetters, gridPreset, weaveLetters, weaveSize, mode]);
 
-  function traceHandlersFor(word: string, letters: string[], cols: number): ButtonHTMLAttributes<HTMLButtonElement> {
-    const show = () => setGridTrace(findGridPath(letters, cols, word));
-    const hide = () => setGridTrace(null);
-    return {
-      onMouseEnter: show,
-      onMouseLeave: hide,
-      onPointerDown: show, // press-hold on touch
-      onPointerUp: hide,
-      onPointerCancel: hide,
-    };
-  }
+  const traceHandlersFor = (word: string, letters: string[], cols: number) =>
+    gridT.handlersFor(findGridPath(letters, cols, word) ?? []);
 
   const gridTraceHandlers = (word: string) => traceHandlersFor(word, gridLetters, gridDims.cols);
   const weaveTraceHandlers = (word: string) => traceHandlersFor(word, weaveLetters, weaveDims.cols);
@@ -637,44 +617,23 @@ function App() {
     'text-emerald-300',
     'text-amber-300',
   ];
-  const [boxedTrace, setBoxedTrace] = useState<string[] | null>(null);
-  const [boxedTracePts, setBoxedTracePts] = useState<{ x: number; y: number }[][]>([]);
-  const boxedBoardRef = useRef<HTMLDivElement>(null);
-  useLayoutEffect(() => {
-    if (!boxedTrace || !boxedBoardRef.current) {
-      setBoxedTracePts([]);
-      return;
-    }
-    const wrap = boxedBoardRef.current.getBoundingClientRect();
-    const measure = (word: string) => {
-      const pts: { x: number; y: number }[] = [];
-      for (const c of word) {
-        const idx = boxedLetters.findIndex((l) => l === c);
+  // Chords rather than a path: each word in a chain gets its own polyline, and
+  // its own colour from BOX_TRACE_COLORS above, so the chips double as a legend.
+  const boxedT = useBoardTrace<string[]>((chain, board) => {
+    const wrap = board.getBoundingClientRect();
+    return chain.map((word) => {
+      const pts = [];
+      for (const ch of word) {
+        const idx = boxedLetters.findIndex((l) => l === ch);
         if (idx === -1) continue;
-        const el = boxedBoardRef.current!.querySelector(
-          `input[data-tile-group="boxed"][data-tile-index="${idx}"]`
-        );
-        if (!el) continue;
-        const r = el.getBoundingClientRect();
-        pts.push({ x: r.left + r.width / 2 - wrap.left, y: r.top + r.height / 2 - wrap.top });
+        const el = board.querySelector(`input[data-tile-group="boxed"][data-tile-index="${idx}"]`);
+        if (el) pts.push(centreOf(el, wrap));
       }
       return pts;
-    };
-    setBoxedTracePts(boxedTrace.map(measure));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [boxedTrace]);
+    });
+  });
 
-  function boxedTraceHandlers(words: string[]): ButtonHTMLAttributes<HTMLButtonElement> {
-    const show = () => setBoxedTrace(words);
-    const hide = () => setBoxedTrace(null);
-    return {
-      onMouseEnter: show,
-      onMouseLeave: hide,
-      onPointerDown: show,
-      onPointerUp: hide,
-      onPointerCancel: hide,
-    };
-  }
+  const boxedTraceHandlers = (chain: string[]) => boxedT.handlersFor(chain);
 
   function changeGridPreset(preset: GridPreset) {
     setGridPreset(preset);
@@ -2003,7 +1962,7 @@ function App() {
             <label className="block text-xs font-medium text-slate-400 uppercase tracking-wider mb-3">
               The board
             </label>
-            <div ref={gridBoardRef} className="relative w-fit mx-auto">
+            <div ref={gridT.boardRef} className="relative w-fit mx-auto">
               <div className={`grid gap-1.5 ${weaveDims.cols === 8 ? 'grid-cols-8' : 'grid-cols-6'}`}>
                 {weaveLetters.map((v, i) => (
                   <Tile
@@ -2014,24 +1973,26 @@ function App() {
                     value={v}
                     state={v ? 'known' : 'empty'}
                     size="sm"
-                    tone={gridTrace?.includes(i) ? GRID_TRACE_TONE : undefined}
+                    tone={gridT.target?.includes(i) ? GRID_TRACE_TONE : undefined}
                     onChange={(c) =>
                       setWeaveLetters((prev) => prev.map((x, j) => (j === i ? c : x)))
                     }
                   />
                 ))}
               </div>
-              {gridTracePts.length > 1 && (
+              {/* one polyline: a path visits each cell once, so the hook's
+                  per-word list has exactly one entry here */}
+              {(gridT.points[0]?.length ?? 0) > 1 && (
                 <svg className="absolute inset-0 w-full h-full pointer-events-none">
                   <polyline
-                    points={gridTracePts.map((p) => `${p.x},${p.y}`).join(' ')}
+                    points={gridT.points[0].map((p) => `${p.x},${p.y}`).join(' ')}
                     fill="none"
                     stroke="rgb(var(--trace) / 0.9)"
                     strokeWidth="4"
                     strokeLinecap="round"
                     strokeLinejoin="round"
                   />
-                  <circle cx={gridTracePts[0].x} cy={gridTracePts[0].y} r="6" fill="rgb(var(--trace))" />
+                  <circle cx={gridT.points[0][0].x} cy={gridT.points[0][0].y} r="6" fill="rgb(var(--trace))" />
                 </svg>
               )}
             </div>
@@ -2382,7 +2343,7 @@ function App() {
             <label className="block text-xs font-medium text-slate-400 uppercase tracking-wider mb-3">
               The grid
             </label>
-            <div ref={gridBoardRef} className="relative w-fit mx-auto">
+            <div ref={gridT.boardRef} className="relative w-fit mx-auto">
               <div
                 className={`grid gap-2 ${
                   gridDims.cols === 3 ? 'grid-cols-3' : gridDims.cols === 5 ? 'grid-cols-5' : 'grid-cols-4'
@@ -2397,24 +2358,26 @@ function App() {
                     value={v}
                     state={v ? 'known' : 'empty'}
                     size="sm"
-                    tone={gridTrace?.includes(i) ? GRID_TRACE_TONE : undefined}
+                    tone={gridT.target?.includes(i) ? GRID_TRACE_TONE : undefined}
                     onChange={(c) =>
                       setGridLetters((prev) => prev.map((x, j) => (j === i ? c : x)))
                     }
                   />
                 ))}
               </div>
-              {gridTracePts.length > 1 && (
+              {/* one polyline: a path visits each cell once, so the hook's
+                  per-word list has exactly one entry here */}
+              {(gridT.points[0]?.length ?? 0) > 1 && (
                 <svg className="absolute inset-0 w-full h-full pointer-events-none">
                   <polyline
-                    points={gridTracePts.map((p) => `${p.x},${p.y}`).join(' ')}
+                    points={gridT.points[0].map((p) => `${p.x},${p.y}`).join(' ')}
                     fill="none"
                     stroke="rgb(var(--trace) / 0.9)"
                     strokeWidth="4"
                     strokeLinecap="round"
                     strokeLinejoin="round"
                   />
-                  <circle cx={gridTracePts[0].x} cy={gridTracePts[0].y} r="6" fill="rgb(var(--trace))" />
+                  <circle cx={gridT.points[0][0].x} cy={gridT.points[0][0].y} r="6" fill="rgb(var(--trace))" />
                 </svg>
               )}
             </div>
@@ -2477,7 +2440,7 @@ function App() {
                 <label className="block text-xs font-medium text-slate-400 uppercase tracking-wider mb-3">
                   Sides of the box
                 </label>
-                <div ref={boxedBoardRef} className="relative w-full max-w-[18rem] aspect-square mx-auto">
+                <div ref={boxedT.boardRef} className="relative w-full max-w-[18rem] aspect-square mx-auto">
                   <div className="absolute inset-14 rounded-xl border-2 border-white/15 bg-white/[0.02]" />
                   {/* top */}
                   <div className="absolute top-0 left-14 right-14 flex justify-around">
@@ -2495,9 +2458,9 @@ function App() {
                   <div className="absolute left-0 top-14 bottom-14 flex flex-col justify-around items-start">
                     {[9, 10, 11].map(boxTile)}
                   </div>
-                  {boxedTracePts.some((pts) => pts.length > 1) && (
+                  {boxedT.points.some((pts) => pts.length > 1) && (
                     <svg className="absolute inset-0 w-full h-full pointer-events-none">
-                      {boxedTracePts.map((pts, wi) =>
+                      {boxedT.points.map((pts, wi) =>
                         pts.length > 1 ? (
                           <g key={wi}>
                             <polyline
