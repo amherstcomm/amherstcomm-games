@@ -31,6 +31,7 @@ import { solvePattern, solveDescramble, solveBee, solveBoxed, solveGrid, findGri
 import ConsentBanner from '@/ConsentBanner';
 import { PrivacyPolicy, Terms } from '@/LegalDocs';
 import { onDailyReport, requestDaily } from '@/dailyBus';
+import { FRESH, historyStep } from '@/routing/history';
 import ReportMenu from '@/ReportMenu';
 import { amOwner } from '@/reports';
 import TicketView from '@/TicketView';
@@ -598,7 +599,6 @@ function initialPlay(mode: Mode, stored: boolean): boolean {
 
 // Panels and legal documents are addresses too, so arriving at one opens it.
 const panelAtLoad = (p: Panel) => initialRoute.kind === 'panel' && initialRoute.panel === p;
-const isOverlay = (r: Route) => r.kind === 'panel' || r.kind === 'account' || r.kind === 'legal';
 
 // An invite link stashes its code before anything else happens: accepting may
 // need a sign-in first, and OAuth leaves the page entirely — the stash is what
@@ -1383,50 +1383,37 @@ function App() {
     return { kind: 'game', view: currentView, slug: MODE_SLUG[mode], daily: dailyByMode[mode] };
   }, [legalOpen, legalTab, statsOpen, statsTab, settingsOpen, settingsTab, keysOpen, accountOpen, accountTab, aboutOpen, reportPage, atHome, currentView, mode, dailyByMode]);
 
-  // Did we put the panel in the history ourselves? Closing one we pushed is a
-  // step back rather than a new address, so Back doesn't reopen what was just
-  // dismissed. False at load: arriving straight at /stats leaves nothing of
-  // ours behind it, and going back from there should leave the site.
   // the tab, the bookmark, and what a search result would show
   useEffect(() => {
     document.title = titleOf(currentRoute);
   }, [currentRoute]);
 
-  const ourOverlay = useRef(false);
-  const settled = useRef(false);
-  const prevRoute = useRef<Route | null>(null);
+  // The decision about what the address bar should do lives in
+  // src/routing/history.ts, where it can be enumerated. What is left here is
+  // the part that has to touch `window`: carry the memo, apply the op.
+  const memo = useRef(FRESH);
 
   useEffect(() => {
-    const path = pathOf(currentRoute);
-    // "/" is a real page when it's the home page, and a placeholder when the
-    // start page sends you straight to a game. Leaving the first should be a
-    // step you can come back from; overwriting the second is the whole point.
-    const leavingHome = prevRoute.current?.kind === 'home';
-    prevRoute.current = currentRoute;
-    // The first render writes nothing: someone who typed "/" keeps the tidy
-    // link they typed, and a route asked for by hand is already on screen.
-    if (!settled.current) {
-      settled.current = true;
-      return;
+    const { op, memo: next } = historyStep(
+      memo.current,
+      currentRoute,
+      window.location.pathname,
+      window.location.hash
+    );
+    memo.current = next;
+    switch (op.op) {
+      case 'none':
+        return;
+      case 'replace':
+        history.replaceState(null, '', op.path);
+        return;
+      case 'push':
+        history.pushState(null, '', op.path);
+        return;
+      case 'back':
+        history.back();
+        return;
     }
-    if (path === window.location.pathname) return;
-
-    // one panel swapped for another replaces the entry rather than stacking it
-    if (isOverlay(currentRoute) && ourOverlay.current) {
-      history.replaceState(null, '', path + window.location.hash);
-      return;
-    }
-    if (!isOverlay(currentRoute) && ourOverlay.current) {
-      ourOverlay.current = false;
-      history.back();
-      return;
-    }
-    if (window.location.pathname === '/' && !leavingHome) {
-      history.replaceState(null, '', path + window.location.hash);
-    } else {
-      history.pushState(null, '', path + window.location.hash);
-    }
-    ourOverlay.current = isOverlay(currentRoute);
   }, [currentRoute]);
 
   // Back and Forward. The browser has already changed the URL by the time this
@@ -1459,7 +1446,7 @@ function App() {
         if (r.view === 'play') requestDaily(m, r.daily);
       }
     }
-    ourOverlay.current = false;
+    memo.current = { ...memo.current, ourOverlay: false };
   }
 
   // through a ref so the listener is registered once, but always runs the
