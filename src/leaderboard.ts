@@ -8,6 +8,7 @@
 import { DAILY_ENV } from '@/dailyData';
 import { supabase } from '@/supabase';
 import type { DailyState } from '@/dailyStatus';
+import { nameOfProgress } from '@/games';
 import type { Mode } from '@/storage';
 import { difficulty, type Difficulty } from '@/difficulty';
 
@@ -127,44 +128,44 @@ export const BOARD_LABELS: Record<
   { label: string; value: (n: number) => string; detail: (n: number) => string }
 > = {
   guess: {
-    label: 'Guess the Word',
+    label: nameOfProgress('guess'),
     value: (n) => `${n} won`,
     detail: (n) => `best ${n}/6`,
   },
-  hive: { label: 'Hive', value: (n) => `${n} pts`, detail: (n) => `${n} day${n === 1 ? '' : 's'}` },
+  hive: { label: nameOfProgress('hive'), value: (n) => `${n} pts`, detail: (n) => `${n} day${n === 1 ? '' : 's'}` },
   scramble: {
-    label: 'Scramble',
+    label: nameOfProgress('scramble'),
     value: (n) => `${n} pts`,
     detail: (n) => `${n} day${n === 1 ? '' : 's'}`,
   },
-  grid: { label: 'Grid', value: (n) => `${n} pts`, detail: (n) => `${n} day${n === 1 ? '' : 's'}` },
+  grid: { label: nameOfProgress('grid'), value: (n) => `${n} pts`, detail: (n) => `${n} day${n === 1 ? '' : 's'}` },
   box: {
-    label: 'Boxed',
+    label: nameOfProgress('box'),
     value: (n) => `${n} solved`,
     detail: (n) => `best ${n} word${n === 1 ? '' : 's'}`,
   },
-  weave: { label: 'Weave', value: (n) => `${n} solved`, detail: () => '' },
+  weave: { label: nameOfProgress('weave'), value: (n) => `${n} solved`, detail: () => '' },
   squares4: {
-    label: 'Word Squares (4×4)',
+    label: `${nameOfProgress('squares')} (4×4)`,
     value: (n) => `${n} solved`,
     detail: () => '',
   },
   squares5: {
-    label: 'Word Squares (5×5)',
+    label: `${nameOfProgress('squares')} (5×5)`,
     value: (n) => `${n} solved`,
     detail: () => '',
   },
-  cryptogram: { label: 'Cryptogram', value: (n) => `${n} solved`, detail: () => '' },
+  cryptogram: { label: nameOfProgress('cryptogram'), value: (n) => `${n} solved`, detail: () => '' },
   // ranked on boards finished, tie-broken on prompts found — a four-of-five
   // day beats a blank one, and one number cannot say both
   bridge: {
-    label: 'Bridge',
+    label: nameOfProgress('bridge'),
     value: (n) => `${n} board${n === 1 ? '' : 's'}`,
     detail: (n) => (n ? `${n} found` : ''),
   },
   // ranked on ladders finished, tie-broken on how many were done in par
   ladder: {
-    label: 'Word Ladder',
+    label: nameOfProgress('ladder'),
     value: (n) => `${n} solved`,
     detail: (n) => (n ? `${n} in par` : ''),
   },

@@ -172,6 +172,19 @@ export const PROGRESS_NAME = {
  *  them do: Guess, Scramble, Hive, Grid and Boxed generate their own. */
 export const POOL_MODES: Mode[] = ['weave', 'squares', 'cryptogram', 'ladder', 'bridge'];
 
+/** Mode, from the name the progress tables use. The leaderboard and the
+ *  history cards are keyed on that naming rather than on Mode, so this is how
+ *  they reach a display name without keeping their own copy of one. */
+export const MODE_BY_PROGRESS: Record<string, Mode> = Object.fromEntries(
+  ALL_MODES.map((m) => [PROGRESS_NAME[m], m])
+);
+
+/** What to call a game, given whichever of its names you happen to hold. */
+export function nameOfProgress(progress: string, which: 'short' | 'full' = 'full'): string {
+  const mode = MODE_BY_PROGRESS[progress];
+  return mode ? GAME_NAME[mode][which] : progress;
+}
+
 export function modeOf(slug: Slug): Mode {
   return SLUG_MODE[slug];
 }

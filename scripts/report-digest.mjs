@@ -17,6 +17,13 @@
 // revoked from every web role, because it is the one path that hands back a
 // player's name alongside free text somebody wrote about them.
 
+import { FEED_NAME, MODES, NAME_FULL } from './games.mjs';
+
+// keyed by feed name, which is what a puzzle report stores
+const GAME_NAME = Object.fromEntries(
+  MODES.map((m) => [FEED_NAME[m], NAME_FULL[m]])
+);
+
 const SUPABASE_URL = process.env.SUPABASE_URL || 'https://kopsojnfqlzgyisexmrd.supabase.co';
 const KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const RESEND_KEY = process.env.RESEND_API_KEY;
@@ -161,7 +168,11 @@ if (open.length) {
     // Four kinds became six, and this had two branches once — which is how a
     // site report came to print "name: undefined".
     if (r.kind === 'puzzle') {
-      lines.push(`  Board    ${e.game} · ${e.difficulty} · ${e.date} (${e.env})`);
+      // The feed name, made readable. A report about Guess arrived saying
+      // "words", which is what daily_puzzles calls it and not what anyone else
+      // does — the reader of this email is a person deciding whether a board is
+      // offensive, not someone who knows the feed's naming.
+      lines.push(`  Board    ${GAME_NAME[e.game] ?? e.game} · ${e.difficulty} · ${e.date} (${e.env})`);
       lines.push('');
       // As the server held it, which is the point of the whole design: not
       // what the reporter claimed, what was actually served.

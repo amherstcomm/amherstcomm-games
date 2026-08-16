@@ -36,7 +36,8 @@ function tuple(name) {
 
 /** The values of a `const NAME = { key: 'value', … }` table, in order. */
 function table(name) {
-  const m = source().match(new RegExp(`export const ${name} = \\{([^}]*)\\}`));
+  // tolerate an optional type annotation: `export const X: Record<…> = {`
+  const m = source().match(new RegExp(`export const ${name}(?::[^=]*)? = \\{([^}]*)\\}`));
   if (!m) throw new Error(`could not find the ${name} table in ${SRC}`);
   const out = Object.fromEntries(
     [...m[1].matchAll(/(\w+):\s*'([a-z]+)'/g)].map((x) => [x[1], x[2]])
@@ -45,6 +46,11 @@ function table(name) {
   if (n < 10) throw new Error(`only ${n} entries parsed from ${name}`);
   return out;
 }
+
+/** Slug to mode, which is the pairing the two tuples cannot express on their
+ *  own — they are ordered differently and pairing by position would work until
+ *  somebody reordered one. */
+export const SLUG_MODE = table('SLUG_MODE');
 
 /** How storage keys each game. */
 export const MODES = tuple('MODES');
@@ -72,6 +78,20 @@ export const POOL_FEEDS = (() => {
     return feed;
   });
 })();
+
+/** What a person is shown, keyed by mode. Parsed out of GAME_NAME's nested
+ *  shape, which is `{ short: 'Guess', full: 'Guess the Word' }` per mode. */
+function names(which) {
+  // Matches the rows directly rather than trying to bound the table first:
+  // one line per game, `mode: { short: '…', full: '…' },`. Less clever and
+  // less to go wrong.
+  const rows = [...source().matchAll(/(\w+): \{ short: '([^']*)', full: '([^']*)' \}/g)];
+  if (rows.length < 10) throw new Error(`only ${rows.length} entries parsed from GAME_NAME`);
+  return Object.fromEntries(rows.map((x) => [x[1], which === 'short' ? x[2] : x[3]]));
+}
+
+export const NAME_FULL = names('full');
+export const NAME_SHORT = names('short');
 
 /** Every game's feed name, in the order the modes are declared. */
 export const FEED_NAMES = MODES.map((m) => {
