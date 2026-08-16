@@ -188,3 +188,28 @@ test('a closed ticket says what was decided, in the words that were written', as
   await expect(page.getByText('Still open')).toBeVisible();
   await expect(page.getByText(/Blocked the word/)).toHaveCount(0);
 });
+
+// Every report page is the whole page. This began as "does it render a board",
+// which it no longer did — while the Solve/Play/Learn switch, the difficulty
+// tabs, the dictionary picker and the game's own strapline all carried on
+// underneath, because they were separate sections and only two were gated.
+// Asserting the chrome is gone, not just the board.
+for (const [name, path] of [
+  ['the queue', '/reports'],
+  ['a ticket', '/report/4f2ba9c17d'],
+  ['the action page', '/report/act/00000000-0000-0000-0000-000000000001/deadbeef/dismiss'],
+] as const) {
+  test(`${name} wears none of the game's chrome`, async ({ page }) => {
+    await page.goto(path);
+    const main = page.locator('main');
+    await expect(main.getByRole('button', { name: 'Solve', exact: true })).toHaveCount(0);
+    await expect(main.getByRole('button', { name: 'Play', exact: true })).toHaveCount(0);
+    await expect(main.getByRole('button', { name: 'Learn', exact: true })).toHaveCount(0);
+    await expect(main.getByText('Word list', { exact: true })).toHaveCount(0);
+    await expect(main.getByText('Difficulty', { exact: true })).toHaveCount(0);
+    await expect(main.getByText(/^Play the .*puzzle/)).toHaveCount(0);
+    // the address survives, which is the other half: it used to be rewritten
+    // to whichever game was loaded behind, so a refresh landed elsewhere
+    expect(new URL(page.url()).pathname).toBe(path);
+  });
+}
