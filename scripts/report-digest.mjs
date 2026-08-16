@@ -56,6 +56,34 @@ const send = async (to, subject, text) => {
   return true;
 };
 
+// The answers in a published board are base64'd JSON — that is the feed's own
+// obfuscation, so a curious player can't read tomorrow out of the file. It is
+// not obfuscation from *us*, and a digest that mailed the owner
+// "WyJ0aW1lIiwiZHJlYW0i..." would be a digest that hid the one thing it exists
+// to show: the word somebody objected to.
+//
+// Decoded by shape rather than by field name, because each generator names its
+// own: bridge has `answers`, others have `words` or `solution`. Anything that
+// isn't base64'd JSON is left exactly as it was.
+const readable = (value) => {
+  if (Array.isArray(value)) return value.map(readable);
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, readable(v)]));
+  }
+  if (typeof value !== 'string' || value.length < 8 || !/^[A-Za-z0-9+/=]+$/.test(value)) {
+    return value;
+  }
+  try {
+    const decoded = Buffer.from(value, 'base64').toString('utf8');
+    const parsed = JSON.parse(decoded);
+    // only worth swapping in if it decoded to something structured; a bare
+    // number that happens to survive the round trip is not a hidden answer
+    return typeof parsed === 'object' && parsed !== null ? parsed : value;
+  } catch {
+    return value;
+  }
+};
+
 const stamp = async (id, column) => {
   const res = await fetch(`${SUPABASE_URL}/rest/v1/reports?id=eq.${id}`, {
     method: 'PATCH',
@@ -81,16 +109,22 @@ if (open.length) {
         ? ''
         : `[open ${r.days_open} day${r.days_open === 1 ? '' : 's'}] `;
     lines.push(`${age}${r.kind} · ticket ${r.ticket} · filed ${r.created_at.slice(0, 10)}`);
+    // Four kinds, and this had two branches — so a site report printed
+    // "name: undefined" under a heading about the name filter. An if/else over
+    // an open set is the same mistake as an array where a Record belongs.
     if (r.kind === 'puzzle') {
       lines.push(`  ${e.game} · ${e.difficulty} · ${e.date} (${e.env})`);
       // The board as the server held it, which is the whole point of the
       // design: not what the reporter claimed, what was served.
-      lines.push(`  board: ${JSON.stringify(e.board).slice(0, 1200)}`);
-    } else {
+      lines.push(`  board: ${JSON.stringify(readable(e.board)).slice(0, 1500)}`);
+    } else if (r.kind === 'player') {
       lines.push(`  name: ${e.name}`);
       // 'false' is the interesting case — the preventive filter looked at this
       // name and let it through, so there is a gap to close.
       lines.push(`  caught by the name filter: ${e.blocked_by_filter}`);
+    } else {
+      // Nothing to look up, which is why the words below are the report.
+      lines.push(`  reported from: ${e.reported_from || '(not said)'} — as the browser said, unverified`);
     }
     lines.push(`  reason: ${r.reason ? r.reason : '(none given)'}`);
     if (r.reporter_email) lines.push(`  reporter asked to be told the outcome`);
@@ -98,8 +132,10 @@ if (open.length) {
     // report before it offers to act on it — and refuses either way unless an
     // owner account is signed in on the browser that opened it.
     const base = `${SITE}/report/act/${r.id}/${r.action_token}`;
-    lines.push(`  dismiss:   ${base}/dismiss`);
-    lines.push(`  block word: ${base}/blocklist`);
+    lines.push(`  dismiss:    ${base}/dismiss`);
+    // Only where there is a word to block. A site report has no board and no
+    // name, so offering to blocklist something off it is offering a wrong door.
+    if (r.kind === 'puzzle') lines.push(`  block word: ${base}/blocklist`);
     if (r.kind === 'player') lines.push(`  remove name: ${base}/ban`);
     lines.push('');
   }

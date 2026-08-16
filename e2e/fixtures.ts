@@ -92,6 +92,12 @@ export const test = base.extend<{ rpcCalls: { fn: string; args: Record<string, u
             body: JSON.stringify({ ok: false, reason: 'not allowed' }),
           });
         }
+        if (rpc === 'is_owner') {
+          return route.fulfill({ status: 200, contentType: 'application/json', body: 'false' });
+        }
+        if (rpc === 'owner_reports') {
+          return route.fulfill({ status: 200, contentType: 'application/json', body: '[]' });
+        }
         if (rpc === 'report_status') {
           const known = (args as { p_ticket?: string }).p_ticket === '4f2ba9c17d';
           return route.fulfill({

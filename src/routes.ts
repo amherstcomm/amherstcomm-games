@@ -113,7 +113,10 @@ export type Route =
   // the owner acting on one, from a link in the digest. Two keys: the token in
   // the address, and being signed in as an owner when the page asks. Neither
   // is sufficient, which is what makes it safe to put in an email.
-  | { kind: 'reportAction'; id: string; token: string; action: string };
+  | { kind: 'reportAction'; id: string; token: string; action: string }
+  // the owner's queue. A real address rather than a panel, because it is a
+  // page you leave open and come back to.
+  | { kind: 'reportQueue' };
 
 export function pathOf(route: Route): string {
   switch (route.kind) {
@@ -138,6 +141,8 @@ export function pathOf(route: Route): string {
       return `/report/${route.ticket}`;
     case 'reportAction':
       return `/report/act/${route.id}/${route.token}${route.action ? `/${route.action}` : ''}`;
+    case 'reportQueue':
+      return '/reports';
   }
 }
 
@@ -172,6 +177,8 @@ export function titleOf(route: Route): string {
       return `Report status${suffix}`;
     case 'reportAction':
       return `Handle a report${suffix}`;
+    case 'reportQueue':
+      return `Open reports${suffix}`;
   }
 }
 
@@ -213,6 +220,8 @@ export function parsePath(pathname: string): Route | null {
 
   // A ticket. Hex from the minting side too, so lowercasing is safe. A bare
   // /report is the lookup form with nothing typed into it yet.
+  if (first === 'reports') return { kind: 'reportQueue' };
+
   if (first === 'report') {
     // /report/act/<id>/<token>[/<action>] is the owner's door; anything else
     // under /report is a ticket, including nothing at all.

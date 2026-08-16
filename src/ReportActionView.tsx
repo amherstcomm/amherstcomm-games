@@ -125,7 +125,11 @@ export default function ReportActionView({
               What to do
             </legend>
             <div className="mt-2 space-y-2">
-              {ACTIONS.filter((a) => a.id !== 'ban' || report.kind === 'player').map((a) => (
+              {ACTIONS.filter(
+                (a) =>
+                  (a.id !== 'ban' || report.kind === 'player') &&
+                  (a.id !== 'blocklist' || report.kind === 'puzzle')
+              ).map((a) => (
                 <label key={a.id} className="flex gap-2 items-start cursor-pointer">
                   <input
                     type="radio"
