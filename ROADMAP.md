@@ -737,11 +737,20 @@ near.
 
 The seams, in that order:
 
-- **The route and panel state machine** — `currentRoute`, the panel booleans,
-  the history push/pop. Every recent bug here was a *where does this live*
-  problem rather than a subtle-logic one: report pages missing from
-  `currentRoute` so the address got rewritten out from under the page, and
-  per-section gating that had to be got right a dozen times instead of once.
+- ~~**The route and panel state machine**~~ — **done, August 2026.** It lives in
+  `src/routing/` now: `nav.ts` (a page and a stack of overlays, with `routeOf`
+  and `navOf` proved inverses over every address), `history.ts` (the push /
+  replace / back decision as a pure function with an exhaustive branch table),
+  `entry.ts` (the incoming address, memoised — it was an IIFE running
+  `history.replaceState` at import) and `useRouting.ts` (the two effects).
+  `App.tsx` went 92 `useState` calls to 80.
+
+  It found and fixed two live bugs, both invisible to every other check: a
+  footer link whose `href` and destination disagreed once a tab was remembered,
+  so middle-click and left-click went to different pages; and the close button
+  on a deep-linked panel doing nothing at all. Both were written as failing
+  tests first, and both announced their own fix by being `test.fail` rather than
+  `test.fixme` — Playwright reports "expected to fail, but passed".
 - **Dictionary loading and the solver allowlist** — where the dead bridge solver
   hid for a release.
 - **The ten solver surfaces** — the bulk of the file, and already ten separate
