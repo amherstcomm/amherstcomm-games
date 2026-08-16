@@ -8,11 +8,17 @@ export default defineConfig({
   testDir: 'e2e',
   globalSetup: './e2e/global-setup.ts',
   fullyParallel: true,
-  // Playwright takes half the cores by default, which on a four-core runner is
-  // two workers for 122 tests — the same suite that runs in about two and a
-  // half minutes locally took over ten. All four on CI; locally the default is
-  // left alone, since a laptop has other things to do.
-  workers: process.env.CI ? '100%' : undefined,
+  // Two workers on CI, not four.
+  //
+  // Taking all four cores starved the thing being tested: the web server here
+  // is Vite in dev mode, which transforms modules on demand, so it needs a core
+  // of its own. With four browsers competing for four cores, contrast.spec.ts —
+  // eight palette-and-theme combinations, each a fresh navigation — failed with
+  // net::ERR_ABORTED and goto timeouts, and failed again on retry.
+  //
+  // Parallelism comes from sharding the job instead, which gives each shard a
+  // whole runner. Three shards of two is six-way, and nothing has to share.
+  workers: process.env.CI ? 2 : undefined,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,
   reporter: process.env.CI ? [['github'], ['list']] : 'list',
