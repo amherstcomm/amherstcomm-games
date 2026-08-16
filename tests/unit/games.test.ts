@@ -19,6 +19,7 @@ import {
   GAME_NAME,
   MODE_SLUG,
   POOL_MODES,
+  PROGRESS_NAME,
   SLUG_MODE,
   SLUG_NAME,
   modeOf,
@@ -63,6 +64,24 @@ describe('the game tables', () => {
     const missing = ALL_MODES.filter((m) => !FEED_NAME[m]);
     expect(missing, `modes with no feed name: ${missing.join(', ')}`).toEqual([]);
     expect(new Set(ALL_MODES.map((m) => FEED_NAME[m])).size).toBe(ALL_MODES.length);
+  });
+
+  it('gives every mode a progress name, and keeps it distinct', () => {
+    // daily_progress and game_results are keyed on this, so a missing entry
+    // loses a game's cross-device sync and a collision merges two games' boards
+    for (const m of ALL_MODES) expect(PROGRESS_NAME[m], m).toBeTruthy();
+    expect(new Set(ALL_MODES.map((m) => PROGRESS_NAME[m])).size).toBe(ALL_MODES.length);
+  });
+
+  it('differs from the feed naming on exactly one game, on purpose', () => {
+    // The published board is `words` and the row recording that you played it
+    // is `guess`. That is a real inconsistency in the schema, not a typo here —
+    // pinned so that unifying them later is a deliberate migration rather than
+    // something someone "tidies" and breaks two tables with.
+    const differ = ALL_MODES.filter((m) => FEED_NAME[m] !== PROGRESS_NAME[m]);
+    expect(differ).toEqual(['pattern']);
+    expect(FEED_NAME.pattern).toBe('words');
+    expect(PROGRESS_NAME.pattern).toBe('guess');
   });
 
   it('only claims a pool for games that have one', () => {

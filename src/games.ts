@@ -124,7 +124,13 @@ export const SLUG_NAME: Record<Slug, string> = Object.fromEntries(
  *  It was written out four times before this — a string union in dailyData, a
  *  Record in App, and fourteen call-site literals — with nothing checking they
  *  agreed. */
-export const FEED_NAME: Record<Mode, string> = {
+//
+// `as const satisfies` rather than a plain annotation: the annotation would
+// widen every value to `string`, and things derive their own types from these
+// literals — dailySync's DailyGame is this table's values, and a switch cannot
+// be exhaustive over `string`. `satisfies` keeps the Record check that every
+// mode appears, while `as const` keeps the literals.
+export const FEED_NAME = {
   pattern: 'words',
   descramble: 'scramble',
   bee: 'hive',
@@ -135,7 +141,32 @@ export const FEED_NAME: Record<Mode, string> = {
   cryptogram: 'cryptogram',
   ladder: 'ladder',
   bridge: 'bridge',
-};
+} as const satisfies Record<Mode, string>;
+
+/** What the *progress* tables call each game — `daily_progress.game` and
+ *  `game_results.game`.
+ *
+ *  Yes, this is a fourth name, and yes it differs from FEED_NAME by exactly one
+ *  entry: the published board is `words` and the row recording that you played
+ *  it is `guess`. Both are internally consistent and neither was written down
+ *  anywhere, which is the part worth fixing — a reader with one of these in
+ *  hand had no way to know the other existed.
+ *
+ *  Unifying them is a database migration across two tables and their CHECK
+ *  constraints, so it is a decision rather than a tidy. Naming them both is
+ *  free and stops the next person guessing. */
+export const PROGRESS_NAME = {
+  pattern: 'guess',
+  descramble: 'scramble',
+  bee: 'hive',
+  grid: 'grid',
+  boxed: 'box',
+  weave: 'weave',
+  squares: 'squares',
+  cryptogram: 'cryptogram',
+  ladder: 'ladder',
+  bridge: 'bridge',
+} as const satisfies Record<Mode, string>;
 
 /** The games that deal practice boards from a pre-generated pool. Not all of
  *  them do: Guess, Scramble, Hive, Grid and Boxed generate their own. */
