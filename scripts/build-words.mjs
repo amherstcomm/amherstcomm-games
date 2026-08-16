@@ -21,7 +21,7 @@
 
 import { createRequire } from 'node:module';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { neverPublish } from './blocked.mjs';
+import { slurs } from './blocked.mjs';
 import { join } from 'node:path';
 
 const require = createRequire(import.meta.url);
@@ -49,11 +49,14 @@ const ESDB = 'https://raw.githubusercontent.com/en-wl/wordlist/v2/data/scowl-pre
 // yid among them, were unflagged here, which means they scored in every game
 // and the display filter had nothing to hide.
 //
-// `both` scope and the `slur` tier say the same thing from two directions —
-// never generated and never accepted, never scores and never shown — so one can
-// be read off the other. `generation` scope cannot: it is where the ordinary
-// words live.
-const blocklistSlurs = neverPublish();
+// Not the whole `both` tier, though — that was the next mistake. `both` and
+// `slur` are close enough to look like the same judgement from two directions,
+// and they are not: ESDB's vulgar-1 is strong swearing, refused everywhere we
+// publish and so correctly at scope `both`, but a swear is still an English
+// word a player may type. Reading the tiers as one promoted 44 of them — fuck,
+// shit, cunt, asshole — to a flag that never scores at any difficulty. The
+// ruling was slurs, not swearing. `slurs()` draws the line by origin.
+const blocklistSlurs = slurs();
 
 const SLURS = new Set([
   // ethnicity — the manual set the generator blocklist already carries

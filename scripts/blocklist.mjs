@@ -18,7 +18,12 @@ import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
 
-const OUT = 'scripts/blocked-words.json';
+// Beside the band files, because it is the same kind of thing: generated data
+// the app is built against, refreshed by the same workflow run and committed in
+// the same commit. It used to sit in scripts/ next to the program that writes
+// it, which put the output in with the tooling and left src/wordbands holding
+// only half the vocabulary.
+const OUT = 'src/wordbands/blocked-words.json';
 const ESDB =
   'https://raw.githubusercontent.com/en-wl/wordlist/v2/data/scowl-pre.txt';
 

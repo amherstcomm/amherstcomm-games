@@ -584,7 +584,7 @@ failure as a score that cannot be recomputed, one layer up.
 
 `blocked_words` and `blocked_names` hold **the same 349 words**. Measured:
 349 rows each, 349 shared, none unique to either. Both are projections of
-`scripts/blocked-words.json` — the words table is reloaded by
+`src/wordbands/blocked-words.json` — the words table is reloaded by
 `rebuild-words.yml`, the names table is seeded by `name-blocklist.mjs` — and
 they differ only in the column each carries.
 

@@ -1,6 +1,7 @@
 // Reading the blocklist, in one place.
 //
-// `blocklist.mjs` *writes* scripts/blocked-words.json, rarely and by hand. This
+// `blocklist.mjs` *writes* src/wordbands/blocked-words.json, rarely and by
+// hand — or as the first step of the word rebuild workflow. This
 // reads it, and everything that needs the list goes through here: the word
 // build, the three pool harvests, the daily generator, the name blocklist and
 // the contract tests.
@@ -24,7 +25,7 @@
 //               Scunthorpe bites.
 import { readFileSync } from 'node:fs';
 
-const FILE = new URL('./blocked-words.json', import.meta.url);
+const FILE = new URL('../src/wordbands/blocked-words.json', import.meta.url);
 
 let cached = null;
 
@@ -54,4 +55,27 @@ export function blockedSet(scope = null) {
  *  "we may hasten or we may retard" is not a problem to solve. */
 export function neverPublish() {
   return blockedSet('both');
+}
+
+/** The slurs among them: the `both` tier minus the swearing.
+ *
+ *  ESDB grades in two vocabularies and only one of them is about hate —
+ *  offensive-1 and offensive-2 are slurs, vulgar-1 is strong swearing. Both
+ *  sit at scope `both`, correctly, because neither is something to hand a
+ *  player as an answer or let into a display name. But they are not the same
+ *  judgement, and the word build must not read them as one.
+ *
+ *  It did. Taking `neverPublish()` as the slur flag promoted 44 swears — fuck,
+ *  shit, cunt, asshole and their inflections — into the tier that never scores
+ *  at any difficulty, which is not the ruling. The ruling was slurs, not
+ *  swearing: a player who types a swear has typed an English word.
+ *
+ *  So the two are separated by origin rather than by scope, because scope is
+ *  answering a different question. */
+export function slurs() {
+  return new Set(
+    blockedEntries()
+      .filter((e) => e.scope === 'both' && !/vulgar/.test(e.origin))
+      .map((e) => e.word)
+  );
 }
