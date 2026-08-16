@@ -221,3 +221,52 @@ export async function reportGeneral(
     return { state: 'error' };
   }
 }
+
+// ---- the owner's queue -----------------------------------------------------
+
+export type QueuedReport = {
+  id: string;
+  kind: string;
+  ticket: string;
+  evidence: Record<string, unknown>;
+  reason: string | null;
+  actionToken: string;
+  filed: string;
+  daysOpen: number;
+};
+
+/** Am I an owner? Answers false for everyone else, including signed out —
+ *  there is no error case worth telling apart, because the only use of this is
+ *  deciding whether to draw a link. */
+export async function amOwner(): Promise<boolean> {
+  if (!supabase) return false;
+  try {
+    const { data, error } = await supabase.rpc('is_owner');
+    return !error && data === true;
+  } catch {
+    return false;
+  }
+}
+
+/** Every open report, oldest first. Empty for everyone who isn't an owner —
+ *  the server decides that, and an empty list is the honest answer rather than
+ *  an error the caller has to special-case. */
+export async function ownerReports(): Promise<QueuedReport[]> {
+  if (!supabase) return [];
+  try {
+    const { data, error } = await supabase.rpc('owner_reports');
+    if (error || !Array.isArray(data)) return [];
+    return data.map((r: Record<string, unknown>) => ({
+      id: String(r.id),
+      kind: String(r.kind),
+      ticket: String(r.ticket),
+      evidence: (r.evidence ?? {}) as Record<string, unknown>,
+      reason: (r.reason as string) ?? null,
+      actionToken: String(r.action_token),
+      filed: String(r.created_at),
+      daysOpen: Number(r.days_open) || 0,
+    }));
+  } catch {
+    return [];
+  }
+}

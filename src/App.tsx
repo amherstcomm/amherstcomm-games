@@ -12,7 +12,7 @@ import { colorWords, PALETTES, PaletteContext, resolveTheme, TEXT_SCALES, THEME_
 import { PrefsContext } from '@/prefs';
 import OnboardingCard from '@/OnboardingCard';
 import { useModalA11y } from '@/useModalA11y';
-import { Combine } from 'lucide-react';
+import { Combine, Flag as FlagIcon } from 'lucide-react';
 import { bridges } from '@/bridge';
 import BridgeGame, { type BridgeGameHandle } from '@/BridgeGame';
 import GameMenu from '@/GameMenu';
@@ -32,7 +32,9 @@ import ConsentBanner from '@/ConsentBanner';
 import { PrivacyPolicy, Terms } from '@/LegalDocs';
 import { onDailyReport, requestDaily } from '@/dailyBus';
 import ReportMenu from '@/ReportMenu';
+import { amOwner } from '@/reports';
 import TicketView from '@/TicketView';
+import ReportQueueView from '@/ReportQueueView';
 import ReportActionView from '@/ReportActionView';
 
 // What daily_puzzles calls each game, which is not what the URL calls it and
@@ -854,8 +856,17 @@ function App() {
   // somebody with no account and no game open, the other by an owner coming
   // straight from an email. Neither has anything behind it to put back.
   const [reportPage, setReportPage] = useState<Route | null>(
-    initialRoute.kind === 'ticket' || initialRoute.kind === 'reportAction' ? initialRoute : null
+    initialRoute.kind === 'ticket' ||
+    initialRoute.kind === 'reportAction' ||
+    initialRoute.kind === 'reportQueue'
+      ? initialRoute
+      : null
   );
+  // Whether to draw the queue link at all. False for everyone signed out and
+  // for every ordinary account, and the server says so — this only decides a
+  // link, and the RPCs behind it check again regardless.
+  const [owner, setOwner] = useState(false);
+
   const [aboutOpen, setAboutOpen] = useState(panelAtLoad('about'));
   const [legalOpen, setLegalOpen] = useState(initialRoute.kind === 'legal');
   const [legalTab, setLegalTab] = useState<'notices' | 'privacy' | 'terms'>(
@@ -906,6 +917,17 @@ function App() {
   }, [wordFilter]);
   const [onboarded, setOnboarded] = useState(initial.onboarded);
   const [session, setSession] = useState<Session | null>(null);
+  useEffect(() => {
+    if (!session) {
+      setOwner(false);
+      return;
+    }
+    let alive = true;
+    amOwner().then((yes) => alive && setOwner(yes));
+    return () => {
+      alive = false;
+    };
+  }, [session]);
 
   useTheme(theme, palette, textScale);
 
@@ -1407,7 +1429,9 @@ function App() {
     setAboutOpen(r.kind === 'panel' && r.panel === 'about');
     setKeysOpen(r.kind === 'panel' && r.panel === 'keys');
     if (r.kind === 'friend') stashInvite(r.code);
-    setReportPage(r.kind === 'ticket' || r.kind === 'reportAction' ? r : null);
+    setReportPage(
+      r.kind === 'ticket' || r.kind === 'reportAction' || r.kind === 'reportQueue' ? r : null
+    );
     setAccountOpen(r.kind === 'account' || r.kind === 'friend');
     if (r.kind === 'account') setAccountTab(r.tab);
     if (r.kind === 'friend') setAccountTab('friends');
@@ -2031,6 +2055,7 @@ function App() {
         </header>
 
         {reportPage?.kind === 'ticket' && <TicketView ticket={reportPage.ticket} />}
+        {reportPage?.kind === 'reportQueue' && <ReportQueueView />}
         {reportPage?.kind === 'reportAction' && (
           <ReportActionView
             id={reportPage.id}
@@ -2159,7 +2184,11 @@ function App() {
           </div>
         )}
 
-        {!learnMode && (
+        {/* The report pages replace the board rather than sitting above it.
+            Gating only the home page left /report/<ticket> rendering a ticket
+            *and* a playable puzzle underneath it — which is what a reader on a
+            report page least expects to find. */}
+        {!reportPage && !learnMode && (
         <>
         {squaresPlayActive && (
         <div className="mb-8">
@@ -3496,6 +3525,19 @@ function App() {
                 of the ten games keep their date somewhere the gate never saw.
                 A control whose only job is to be findable cannot be somewhere
                 it might not appear. */}
+            {owner && (
+              <RouteLink
+                to="/reports"
+                onGo={() => {
+                  setAtHome(false);
+                  setReportPage({ kind: 'reportQueue' });
+                }}
+                className="inline-flex items-center gap-1.5 text-accent hover:brightness-110 transition"
+              >
+                <FlagIcon className="w-3.5 h-3.5" aria-hidden="true" />
+                Open reports
+              </RouteLink>
+            )}
             <ReportMenu
               context={{
                 game: REPORT_SLUG[mode],

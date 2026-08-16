@@ -89,6 +89,10 @@ test('the dialog closes on Escape and hands focus back', async ({ page }) => {
 test('a ticket looks itself up, and a wrong one says so plainly', async ({ page }) => {
   await page.goto('/report/4f2ba9c17d');
   await expect(page.getByText('Still open')).toBeVisible();
+  // and it replaces the board rather than sitting over it: gating only the
+  // home page left a playable puzzle rendered underneath the ticket
+  await expect(page.getByRole('textbox', { name: /next rung|Letters to/i })).toHaveCount(0);
+  await expect(page.locator('main').getByRole('button', { name: /^Start$/ })).toHaveCount(0);
 
   await page.goto('/report/notaticket');
   // A wrong code and a real one read alike on the server; this is as much as
@@ -101,6 +105,10 @@ test('the owner action page refuses without an owner signed in', async ({ page }
   await expect(page.getByText('Not allowed')).toBeVisible();
   // and it must not have shown the report on the way to refusing
   await expect(page.getByText(/The evidence/)).toHaveCount(0);
+  // nor a playable board underneath it — same gap as the ticket page, since
+  // both are whole views and only the home page was being stood down
+  await expect(page.getByRole('textbox', { name: /next rung|Letters to/i })).toHaveCount(0);
+  await expect(page.locator('main').getByRole('button', { name: /^Start$/ })).toHaveCount(0);
 });
 
 // The failure this replaced: the report link hung off a date the game had to
@@ -147,4 +155,18 @@ test('a site problem insists on words, because there is nothing to look up', asy
   const sent = rpcCalls.filter((c) => c.fn === 'report_general');
   expect(sent).toHaveLength(1);
   expect(sent[0].args.p_kind).toBe('site');
+});
+
+test('the owner queue is invisible to everyone else', async ({ page }) => {
+  // Signed out, which is how these tests run. The link is a link and the RPCs
+  // behind it check again on the server — but a queue advertised to visitors
+  // is an invitation to try the door, and there is no reason to extend one.
+  await page.goto('/');
+  await expect(page.getByRole('link', { name: 'Open reports' })).toHaveCount(0);
+
+  // and the page itself answers with nothing rather than an error, because an
+  // empty list is the honest reply to "show me what I may see"
+  await page.goto('/reports');
+  await expect(page.getByRole('heading', { name: 'Open reports' })).toBeVisible();
+  await expect(page.getByText('Nothing open.')).toBeVisible();
 });

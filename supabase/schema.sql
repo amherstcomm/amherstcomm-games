@@ -2277,7 +2277,9 @@ begin
     return jsonb_build_object('ok', false, 'reason', 'already handled', 'resolution', r.resolution);
   end if;
 
-  if p_action = 'blocklist' and r.kind not in ('puzzle', 'site', 'other') then
+  -- Blocking a word is a puzzle answer, so it only makes sense on a puzzle
+  -- report. A site report has no board to have printed one.
+  if p_action = 'blocklist' and r.kind <> 'puzzle' then
     return jsonb_build_object('ok', false, 'reason', 'not a puzzle report');
   end if;
 
@@ -2354,3 +2356,40 @@ $fn$;
 
 revoke all on function public.report_for_action(uuid, uuid) from public, anon;
 grant execute on function public.report_for_action(uuid, uuid) to authenticated;
+
+-- The owner's list, for the site rather than the inbox.
+--
+-- open_reports() is service-role only and stays that way — it is what the
+-- digest reads. This is its sibling for a signed-in owner, and the difference
+-- is not cosmetic: it carries no reporter_email, because a list on a screen is
+-- the surface most likely to be read over somebody's shoulder, and an address
+-- is not needed to decide what to do about a report.
+--
+-- Not is_owner() as a guard that errors: an empty list is the right answer for
+-- everyone else, and it means the caller needs no special handling for the
+-- ordinary case of not being an owner.
+create or replace function public.owner_reports()
+returns table (
+  id uuid,
+  kind text,
+  ticket text,
+  evidence jsonb,
+  reason text,
+  action_token uuid,
+  created_at timestamptz,
+  days_open int
+)
+language sql
+stable
+security definer
+set search_path = ''
+as $fn$
+  select r.id, r.kind, r.ticket, r.evidence, r.reason, r.action_token, r.created_at,
+         greatest(0, (now()::date - r.created_at::date))::int
+  from public.reports r
+  where r.status = 'new' and public.is_owner()
+  order by r.created_at
+$fn$;
+
+revoke all on function public.owner_reports() from public, anon;
+grant execute on function public.owner_reports() to authenticated;
