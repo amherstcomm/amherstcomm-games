@@ -4,6 +4,7 @@
 // here is necessary rather than sufficient.
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test } from './fixtures';
+import { ALL_SLUGS } from '../src/games';
 
 // Every route, not every daily.
 //
@@ -15,24 +16,19 @@ import { expect, test } from './fixtures';
 // looks complete is worse than coverage that admits what it skips, because
 // nobody goes back to check it.
 //
-// So the list is generated from the games rather than typed out. A ninth game
-// gets scanned on all four of its views the day it is added, without anyone
-// remembering to add it here.
-const SLUGS = [
-  'guess',
-  'scramble',
-  'hive',
-  'grid',
-  'boxed',
-  'weave',
-  'squares',
-  'cryptogram',
-] as const;
+// So the list is generated from the games rather than typed out. An eleventh
+// game gets scanned on all four of its views the day it is added, without
+// anyone remembering to add it here.
+//
+// That sentence was here before the list was actually generated, sitting above
+// eight hand-typed slugs — so ladder and bridge were never scanned at all,
+// under a comment promising they would be. A claim written when it was true of
+// the intention rather than the code.
 const VIEWS = ['daily', 'solve', 'play', 'learn'] as const;
 
 const PAGES = [
   ['home', '/'],
-  ...VIEWS.flatMap((view) => SLUGS.map((slug) => [`${view} ${slug}`, `/${view}/${slug}`] as const)),
+  ...VIEWS.flatMap((view) => ALL_SLUGS.map((slug) => [`${view} ${slug}`, `/${view}/${slug}`] as const)),
   ['settings site', '/settings/site'],
   ['settings games', '/settings/games'],
   ['settings privacy', '/settings/privacy'],

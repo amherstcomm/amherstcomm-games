@@ -20,9 +20,26 @@ import { readFileSync, writeFileSync } from 'node:fs';
 // exactly how the first attempt shipped a sitemap with no dates at all
 const OUT = 'scripts/route-lastmod.json';
 
-// Kept in step with SITEMAP_PATHS in vite.config.ts by hand. Drift is not
-// silent: the build warns about any page it can't find a date for.
-const GAME_SLUGS = ['guess', 'scramble', 'hive', 'grid', 'boxed', 'weave', 'squares', 'cryptogram'];
+// Read out of src/games.ts rather than kept in step with it by hand, which is
+// what this was and what it got wrong: the list here said eight while the site
+// had ten, so ladder and bridge went undated — and the build's warning about
+// missing dates never fired, because a path that is not in the list is not a
+// path the build asks about. Silent by construction.
+//
+// This file is .mjs and games.ts is TypeScript, so it is read as text. The
+// tuple it parses is plain string literals and the parse fails loudly rather
+// than falling back to a shorter list, which is the only property that matters
+// here — an undercount is exactly the failure being fixed.
+function slugsFromSource() {
+  const src = readFileSync('src/games.ts', 'utf8');
+  const block = src.match(/const SLUGS = \[([^\]]*)\] as const;/);
+  if (!block) throw new Error('could not find the SLUGS tuple in src/games.ts');
+  const slugs = [...block[1].matchAll(/'([a-z]+)'/g)].map((m) => m[1]);
+  if (slugs.length < 10) throw new Error(`only ${slugs.length} slugs parsed from src/games.ts`);
+  return slugs;
+}
+
+const GAME_SLUGS = slugsFromSource();
 
 const GAME_FILES = {
   guess: 'src/GuessGame.tsx',
@@ -33,7 +50,16 @@ const GAME_FILES = {
   weave: 'src/WeaveGame.tsx',
   squares: 'src/SquaresGame.tsx',
   cryptogram: 'src/CryptogramGame.tsx',
+  ladder: 'src/LadderGame.tsx',
+  bridge: 'src/BridgeGame.tsx',
 };
+
+const noFile = GAME_SLUGS.filter((g) => !GAME_FILES[g]);
+if (noFile.length) {
+  // A game with no source file mapped would silently get no date, which is the
+  // same shape of quiet as the short list above.
+  throw new Error(`no source file mapped for: ${noFile.join(', ')}`);
+}
 
 /** Which source files decide what a given page says. */
 function sourcesFor(path) {

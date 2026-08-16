@@ -2106,7 +2106,12 @@ function LearnLadder({
           <DemoButton onClick={() => setCurrent((c) => c.slice(0, -1))} ariaLabel="Delete letter">
             <Delete className="w-4 h-4" />
           </DemoButton>
-          <DemoButton onClick={submit}>
+          {/* Named, because it is the one submit button in Learn with no words
+              in it — the other three demos put "Enter" beside the icon, this
+              one has three buttons in a row and didn't. A screen reader read it
+              as "button". Called what the real game calls it, since the demo is
+              supposed to be the same game. */}
+          <DemoButton onClick={submit} ariaLabel="Add rung">
             <CornerDownLeft className="w-4 h-4" />
           </DemoButton>
           <DemoButton
