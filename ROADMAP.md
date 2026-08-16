@@ -781,6 +781,37 @@ So the acceptance test is mechanical rather than aesthetic:
 If adding a game still requires remembering anywhere, the restructure has not
 finished.
 
+##### And it is the whole project, not `App.tsx`
+
+Measured rather than guessed: Bridge was the last game added, so the files
+mentioning it by name *are* the cost of adding one. **28 files.** Five of them
+are Bridge — the game, its row, its rules module, its generator, its harvest
+script. The other **23 are places that had to be told Bridge exists**, across
+four layers:
+
+| layer | files | can the compiler help? |
+|---|---|---|
+| `src/` | 14 | yes, where the enumeration is a `Record<Mode, …>` — and no, where it is an array |
+| `scripts/` | 6 | no — plain JS, and the game list is a literal array in the publish step |
+| `supabase/` | 1 file, **4 identical hand-copied CHECK lists** | no, and nothing will |
+| `e2e/`, `tests/` | 7 | only by failing later |
+
+The schema is the sharpest case. The same ten game names are written out in
+full four times — `daily_progress`, `game_results`, and two `alter table`
+constraints — plus a branch in `result_is_plausible` and a board in the
+leaderboard. Nothing checks that those four lists agree with each other, or with
+`Mode` in the client. They agree today because someone was careful five times in
+a row.
+
+That has a fix, and it is the same fix as everywhere else: name the set once.
+A `games` reference table with foreign keys, or a domain, replaces four
+literals with one row per game — and the client's `Mode` union becomes something
+that can be checked against it rather than something that happens to match.
+
+So the acceptance test extends: adding a game should touch its own files, one
+list per layer, and nothing else. Twenty-three is the number to drive down, and
+it is the honest measure of whether any of this worked.
+
 #### 2. Security as a stated requirement rather than a habit
 
 Several good patterns exist and are nowhere written down as rules: definer
