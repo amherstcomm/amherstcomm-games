@@ -1,6 +1,6 @@
 # Anagrimoire
 
-Seven word games, each with a solver behind it, a fresh puzzle every morning, and a guided demo. Solve by pattern — lock in the letters you know by position, list the letters that must appear somewhere, exclude the rest — descramble a rack, crack a Spelling Bee hive, find two-word Letter Boxed solutions, trace a Strands-style board, or fill a word square.
+Ten word games, each with a solver behind it, a fresh puzzle every morning, and a guided demo. Solve by pattern — lock in the letters you know by position, list the letters that must appear somewhere, exclude the rest — descramble a rack, crack a Spelling Bee hive, find two-word Letter Boxed solutions, trace a Strands-style board, fill a word square, break a substitution cipher, climb a word ladder, or find the word that joins SNOW to ROOM.
 
 *Vibe-coded with [Claude](https://claude.com/claude-code).*
 
@@ -16,12 +16,15 @@ Seven word games, each with a solver behind it, a fresh puzzle every morning, an
 - **Grid** (Boggle-style) — enter the letters of a 3×3, 4×4, or 5×5 square and find every word traceable through adjacent cells (diagonals count), each cell used once per word
 - **Boxed** (Letter Boxed-style) — twelve letters entered around a square, 3+ letter words, letters reusable, but consecutive letters can't share a side. Pick a solution length (1–5 words) to see chains covering all twelve letters, get a starred recommendation (fewest words, everyday vocabulary, fewest letters), hover any word or solution chain to trace its criss-cross path on the box, or autofill today's NYT puzzle with one click (a daily GitHub Action publishes Letter Boxed and Spelling Bee data to the `puzzle-data` branch about 15 minutes after the NYT publishes at 3:00 a.m. Eastern)
 - **Squares** — type the letters you're sure of in a 4×4 or 5×5 grid and it fills the rest so that every row *and* every column spells a word, showing several ways where more than one fits
+- **Word Ladder** — give it two words of the same length and it finds the shortest route between them, every rung a real word one letter from the last
+- **Bridge** — give it two words and it finds every word that ends the first compound and starts the second
+- **Cryptogram** — still being built: a cipher solver has to offer the readings that fit rather than guess one, which is a different thing from the word solvers
 
-Every solver can autofill **today's daily puzzle** (ours) with one click; the Hive, Boxed, and Weave solvers can also load **today's NYT puzzle** (Spelling Bee, Letter Boxed, Strands).
+The Scramble, Hive, Grid, Boxed, and Weave solvers can autofill **today's daily puzzle** (ours) with one click; Hive, Boxed, and Weave can also load **today's NYT puzzle** (Spelling Bee, Letter Boxed, Strands).
 
 ### Play mode
 
-Every mode has a **Solve / Play** toggle.
+Every mode has a **Solve / Play / Learn** switch.
 
 - **Guess the Word**: six tries at any length from 3 to 12 letters, duplicate-aware coloring, physical and on-screen keyboard support (with letter coloring), and persistent boards and stats. **Daily** serves the same word to everyone per length — generated deterministically by the daily GitHub Action — with a win streak; **Practice** deals unlimited random words. Answers come from the word list one rung below what's accepted, so the answer is always recognisable while guesses get the benefit of the doubt.
 - **Scramble**: a three-minute sprint to find every word you can from a seven-letter rack (each letter usable once per word). Racks are shuffled real words, so a full-rack bonus word always exists; 3-letter words score 1, longer words their length, whole-rack +7. When time's up, one click reveals every answer in the solver. **Daily** rack for everyone; **Practice** deals unlimited racks.
@@ -31,6 +34,9 @@ Every mode has a **Solve / Play** toggle.
 
 - **Weave** (Strands-style): themed words tile the whole board — every letter used exactly once, with a spangram spanning the board. Drag to trace; theme words lock blue, the spangram gold, other dictionary words (4+ letters) bank toward hints that outline an unfound word, and a Reveal gives up gracefully. Completion (either way) draws every word's path as a line overlay. Puzzles are generated from a curated theme file with a subset-sum + backtracking packer. **Daily** boards are 6, 7 or 8 wide as the difficulty climbs; **Practice** draws from a daily pool at the same widths. Weave also has a Solve mode: enter any 6×8 Strands or 8×10 board (or autofill today's NYT Strands with its theme clue) to list every traceable word, hover to see its path.
 - **Word Squares**: fill a grid so every row and every column is a word. Some letters are given and the rest are yours; a bar beside each line turns green when that line is a word and red when it's full but isn't. The shape follows the difficulty — a 4×4 with eight letters given at Easy, a 5×5 with ten at Hard, and a 5×5 with six at Extreme — with boards kept per size, since a 4×4 and a 5×5 aren't the same puzzle. Boards are generated so that ten *different* words appear (five read twice would be half a puzzle) and exactly one filling works. **Practice** draws from a daily pool.
+- **Cryptogram**: a public-domain passage under a substitution cipher — every letter stands for another, the same way throughout, and passages are screened so the answer is actually deducible (and unique). Easy's key keeps a discoverable shortcut, Hard's takes it away, and Extreme also deals a shorter passage — fewer letters is less to reason from.
+- **Word Ladder**: turn the first word into the last, one letter at a time, every rung a real word, against a stated par. A wrong rung is refused rather than recorded, and the refusal names the rule it broke. The rungs climb with difficulty — 3–4 letters at Easy, 5–6 at Hard, 7–8 at Extreme.
+- **Bridge**: five prompts, each SNOW · ? · ROOM — the answer ends the first compound and starts the second. Hints spend from a budget, and each reveals one word's answer length or its next letter: Easy gets three, Hard one, Extreme none, so choose wisely.
 
 Daily content refreshes about 15 minutes after 3:00 a.m. Eastern. The dev site (and local development) gets its own independently generated daily set, so testing there never spoils the production puzzles.
 
@@ -38,27 +44,30 @@ Dailies are served from Postgres first and the published files second: a schedul
 
 #### Difficulty
 
-Every daily comes in three — **Easy**, **Hard** and **Extreme** — and they're three separate puzzles, not one puzzle with a setting: each keeps its own progress, statistics, streaks and leaderboards, and playing all three is the intended mode (a lock option pins one for people who want no decision). What changes depends on the game: Guess, Scramble, Hive and Boxed draw their answers from progressively less common word bands (exclusive bands, so Extreme practises Extreme rather than a third easy words); Squares and Weave grow their boards; Grid keeps its dice and widens what scores. What a difficulty *accepts* is one band wider than what it *asks*, so answers stay recognisable while long-shot guesses get the benefit of the doubt.
+Every daily comes in three — **Easy**, **Hard** and **Extreme** — and they're three separate puzzles, not one puzzle with a setting: each keeps its own progress, statistics, streaks and leaderboards, and playing all three is the intended mode (a lock option pins one for people who want no decision). What changes depends on the game: Guess, Scramble, Hive and Boxed draw their answers from progressively less common word bands (exclusive bands, so Extreme practises Extreme rather than a third easy words); Squares and Weave grow their boards; Grid keeps its dice and widens what scores; the Ladder's words lengthen; Cryptogram hardens its key and then shortens its passage; Bridge shrinks its hint budget from three to one to none. What a difficulty *accepts* is one band wider than what it *asks*, so answers stay recognisable while long-shot guesses get the benefit of the doubt.
 
 When accounts are configured, each daily also shows a one-line **global summary** once you finish (player count, solve rate, averages — e.g. "12 players · 75% solved · avg 2 hints"). The numbers are anonymous aggregates over signed-in players' synced results, computed by a security-definer SQL function that exposes only totals, and they're visible to everyone — signing in is how you contribute, not how you see them.
 
 ### Word lists
 
-One published, versioned artifact ([src/wordbands/](src/wordbands/)), built by `npm run build-words` from SCOWL and nothing else — via wordlist-english up to size 70, and SCOWL's own "huge" (80) list, vendored in [scripts/scowl/](scripts/scowl/), for the top tier: four exclusive bands that every pool is a union of. Generation is one band, acceptance is the bands up to a cut (55 / 70 / 80), and every tier is a size SCOWL itself defined. The same build seeds the Postgres `words` table, so the client and the database cannot disagree by construction. In production the bands come from jsDelivr at a pinned tag with the bundled copies as fallback; the solver's **Easy / Hard / Extreme** lists are exactly the difficulties' accept tiers, so a word the solver finds is a word that scores.
+One published, versioned artifact ([src/wordbands/](src/wordbands/)), built by `npm run build-words` from SCOWL and nothing else — via wordlist-english up to size 70, and SCOWL's own "huge" (80) list, vendored in [scripts/scowl/](scripts/scowl/), for the top tier: six exclusive bands that every pool is a union of. Generation is one band, acceptance is the bands up to a cut (55 / 70 / 80), and every tier is a size SCOWL itself defined. The same build seeds the Postgres `words` table, so the client and the database cannot disagree by construction. In production the bands come from jsDelivr at a pinned tag with the bundled copies as fallback; the solver's **Easy / Hard / Extreme** lists are exactly the difficulties' accept tiers, so a word the solver finds is a word that scores.
 
-The files are a public release channel — anyone can read them (these track `main` and update within hours of a release; pin a tag instead — `@words-v3` — if you need URLs whose content never changes (`WORDS_VERSION` in [src/dictionaries.ts](src/dictionaries.ts) names the current one)):
+The files are a public release channel — anyone can read them (these track `main` and update within hours of a release; pin a tag instead — `@words-v6` — if you need URLs whose content never changes (`WORDS_VERSION` in [src/dictionaries.ts](src/dictionaries.ts) names the current one)):
 
 | File | Contents |
 |---|---|
-| [band-35.json](https://cdn.jsdelivr.net/gh/rptetzloff/anagrimoire@main/src/wordbands/band-35.json) | SCOWL ≤ 35 — 39,098 everyday words |
+| [band-10.json](https://cdn.jsdelivr.net/gh/rptetzloff/anagrimoire@main/src/wordbands/band-10.json) | SCOWL ≤ 10 — 3,973 words everybody knows |
+| [band-20.json](https://cdn.jsdelivr.net/gh/rptetzloff/anagrimoire@main/src/wordbands/band-20.json) | 10 < level ≤ 20 — 6,928 words |
+| [band-35.json](https://cdn.jsdelivr.net/gh/rptetzloff/anagrimoire@main/src/wordbands/band-35.json) | 20 < level ≤ 35 — 28,197 words |
 | [band-55.json](https://cdn.jsdelivr.net/gh/rptetzloff/anagrimoire@main/src/wordbands/band-55.json) | 35 < level ≤ 55 — 28,072 words |
 | [band-70.json](https://cdn.jsdelivr.net/gh/rptetzloff/anagrimoire@main/src/wordbands/band-70.json) | 55 < level ≤ 70 — 44,236 words |
 | [band-80.json](https://cdn.jsdelivr.net/gh/rptetzloff/anagrimoire@main/src/wordbands/band-80.json) | 70 < level ≤ 80 — 131,250 words |
 | [domains.json](https://cdn.jsdelivr.net/gh/rptetzloff/anagrimoire@main/src/wordbands/domains.json) | WordNet noun categories for 73,031 words, as arrays |
+| [blocked-words.json](https://cdn.jsdelivr.net/gh/rptetzloff/anagrimoire@main/src/wordbands/blocked-words.json) | The generation blocklist — 593 entries, each with its origin, scope, and (for the hand-added ones) the reason |
 
 Each band is `{ version, words, flags }` — words alphabetical, flags a sparse map (`slur` / `strong` / `mild`) present only for flagged words. **Use them for anything** — no permission needed; they carry SCOWL's and WordNet's permissive notices ([scripts/scowl/Copyright.txt](scripts/scowl/Copyright.txt), and the credits in the site's Legal page), and our packaging is MIT like the rest of the repo.
 
-Words carry content flags: **slur** never scores and is never shown, at any difficulty under any setting; **strong** and **mild** score, and a Settings control lets a player hide them from solver results and missed-word lists — display only, so everyone on a board plays the same rules. A separate generation blocklist (in the repo and in Postgres, each entry with its reason) governs what we'll publish as an answer, which is a different question from what a player may type. WordNet noun categories for ~75k words ride along in a shared `domains.json` for other projects and, someday, themed generation.
+Words carry content flags: **slur** never scores and is never shown, at any difficulty under any setting; **strong** and **mild** score, and a Settings control lets a player hide them from solver results and missed-word lists — display only, so everyone on a board plays the same rules. The generation blocklist lives beside the bands and governs what we'll publish as an answer, which is a different question from what a player may type: its `both`-scope entries are refused in both directions, while `generation`-scope words (the ones with an ordinary sense — a chink of light, the verb retard) are never dealt but always accepted. The word build reads the blocklist's slurs to set the `slur` flag, so the two judgements cannot drift; the **Rebuild word lists** workflow refreshes blocklist, bands, CSV, and the Postgres tables in one run. WordNet noun categories for ~75k words ride along in a shared `domains.json` for other projects and, someday, themed generation.
 
 ### Quality of life
 
@@ -75,7 +84,7 @@ Words carry content flags: **slur** never scores and is never shown, at any diff
 - **You choose what's remembered** — a first visit asks two separate questions, because they aren't the same question: what stays on this device, and whether analytics may leave it. Storage has two answers — **Keep essentials only** (just your privacy answers, which have to be remembered to be honoured; every game and solver still works in full, and closing the tab starts over) and **Keep my games and settings** (boards, settings, statistics and your sign-in kept in this browser). There's deliberately no third setting for whether anything may reach the server, because signing in already is that answer — so you can sign in under either, and under the first the session is simply held in memory. Changeable later under Settings → Privacy; choosing less clears what was already there. Everything in the app reads and writes through one gate, so the setting is enforced in a single place rather than in every game
 - **Statistics, history and boards** — a Stats panel (in the footer) with five tabs. **Overall / Daily / Practice** are lifetime totals: Guess win rate, streak and distribution; Hive words, pangrams, Genius and Queen Bee; Scramble and Grid sprint scores; Boxed solves with fewest words and best time; Weave solves, reveals and hints; Word Squares solves and best time, kept per board size. **History** plots your dailies day by day — Guess as a distribution plus a table per word length, the rest as sparklines, with streaks counted off puzzle dates rather than a stored counter. **Boards** ranks everyone who has set a display name, one board per difficulty — a time at Easy and a time at Extreme aren't the same event — with Easy/Hard/Extreme tabs there, on the home page, and in History. Signed out it's all local; signed in it's your account's.
 - **Real addresses** — every state has a URL and the address bar follows you: `/solve/guess`, `/play/hive`, `/daily/squares`, `/learn/grid`, `/stats/history`, `/settings/games`, `/legal/privacy`. Opening a panel puts it in the bar and Back closes it; closing one steps back rather than stacking a new entry. Older spellings still work and rewrite themselves on arrival — both the `?daily=hive` query links and `/solve/pattern`, from when Guess was called Pattern.
-- **A front page** — `/` lists the seven games with today's state on each (read from your own browser, so it works signed out) and the top of today's board. Regulars who'd rather skip it can set Settings → Site → Start on to a game, or to wherever they left off.
+- **A front page** — `/` lists the ten games with today's state on each (read from your own browser, so it works signed out) and the top of today's board. Regulars who'd rather skip it can set Settings → Site → Start on to a game, or to wherever they left off.
 
 ## Getting started
 
@@ -99,7 +108,7 @@ Other scripts:
 
 ## Testing
 
-CI runs six gates on every push and pull request ([ci.yml](.github/workflows/ci.yml)): typecheck, lint, the unit rules (`tests/unit/`), the feed contract (`tests/contract/` — runs the real puzzle generator for a pinned date with the NYT fetches skipped, and asserts everything the client relies on, from board shapes to "no blocked word is ever published"), a production build, and a Playwright pass (`e2e/`) where every network the app talks to is stubbed, so a red run is ours rather than an outage's. The browser job scans every route against WCAG 2.1 A/AA with axe: all four views of all eight games, plus the panels, settings tabs and legal pages. That is the mechanical half of accessibility; the judgment half stays a human's. Merging to `main` requires both jobs green.
+CI runs six gates on every push and pull request ([ci.yml](.github/workflows/ci.yml)): typecheck, lint, the unit rules (`tests/unit/`), the feed contract (`tests/contract/` — runs the real puzzle generator for a pinned date with the NYT fetches skipped, and asserts everything the client relies on, from board shapes to "no blocked word is ever published"), a production build, and a Playwright pass (`e2e/`) where every network the app talks to is stubbed, so a red run is ours rather than an outage's. The browser job scans every route against WCAG 2.1 A/AA with axe: all four views of all ten games, plus the panels, settings tabs and legal pages. That is the mechanical half of accessibility; the judgment half stays a human's. Merging to `main` requires both jobs green.
 
 ## Tech stack
 
@@ -108,7 +117,7 @@ CI runs six gates on every push and pull request ([ci.yml](.github/workflows/ci.
 - [Tailwind CSS](https://tailwindcss.com/) for styling
 - [Lucide](https://lucide.dev/) icons
 - [wordlist-english](https://github.com/jacksonrayhamilton/wordlist-english) (MIT), built from [SCOWL](http://wordlist.aspell.net/) by Kevin Atkinson — the source of every word list band and every puzzle answer
-- [WordNet](https://wordnet.princeton.edu/) (via wordnet-db) for noun categories in the shared word-list files
+- [WordNet](https://wordnet.princeton.edu/) (via wordnet-db) for noun categories in the shared word-list files, and for harvesting the Ladder and Bridge pools
 - [Vitest](https://vitest.dev/) and [Playwright](https://playwright.dev/) (+ [axe-core](https://github.com/dequelabs/axe-core)) for the test suite
 
 ## Accounts & sync (optional)
