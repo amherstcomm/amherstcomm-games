@@ -1,5 +1,5 @@
-import { useCallback, useMemo, useState, useEffect, useRef, type ButtonHTMLAttributes, type ReactNode } from 'react';
-import { Search, Eraser, ArrowDown, ArrowUp, X, BookOpen, Grid3x3, Shuffle, Hexagon, Check, Keyboard, Delete, Github, Info, Square, CalendarDays, Star, Gamepad2, CornerDownLeft, LayoutGrid, Puzzle, BarChart3, UserRound, Scale, Settings, Home, Table2, KeyRound } from 'lucide-react';
+import { useCallback, useMemo, useState, useEffect, useRef } from 'react';
+import { Search, X, BookOpen, Grid3x3, Shuffle, Hexagon, Keyboard, Delete, Github, Info, Square, CalendarDays, Star, Gamepad2, CornerDownLeft, LayoutGrid, Puzzle, BarChart3, UserRound, Scale, Settings, Home, Table2, KeyRound } from 'lucide-react';
 import LearnMode, { type LearnModeHandle } from '@/LearnMode';
 import type { Session } from '@supabase/supabase-js';
 import StatsModal from '@/StatsModal';
@@ -42,6 +42,9 @@ import ReportActionView from '@/ReportActionView';
 
 import HomeView from '@/HomeView';
 import Tile from '@/Tile';
+import WordChip from '@/solvers/WordChip';
+import ResultsPanel, { CAP } from '@/solvers/ResultsPanel';
+import { sortResults } from '@/solvers/resultOrder';
 import { centreOf, useBoardTrace } from '@/solvers/useBoardTrace';
 import { COARSE_POINTER } from '@/coarsePointer';
 import BridgeSolver from '@/solvers/BridgeSolver';
@@ -403,42 +406,6 @@ function LetterChipInput({
         className={`h-8 bg-transparent outline-none text-white placeholder-slate-600 text-base text-center ${value ? 'w-2 p-0' : 'flex-1 min-w-[4rem] px-1'}`}
       />
     </div>
-  );
-}
-
-function WordChip({
-  word,
-  className,
-  children,
-  hoverProps,
-}: {
-  word: string;
-  className: string;
-  children?: ReactNode;
-  hoverProps?: ButtonHTMLAttributes<HTMLButtonElement>;
-}) {
-  const [copied, setCopied] = useState(false);
-
-  return (
-    <button
-      {...hoverProps}
-      onClick={() => {
-        navigator.clipboard.writeText(word).then(() => {
-          setCopied(true);
-          setTimeout(() => setCopied(false), 1000);
-        });
-      }}
-      title="Click to copy"
-      className={`px-3 py-2.5 rounded-lg text-center text-lg tracking-wide transition-colors ${className}`}
-    >
-      {copied ? (
-        <span className="inline-flex items-center gap-1.5 text-emerald-300 text-base font-medium">
-          <Check className="w-4 h-4" /> Copied
-        </span>
-      ) : (
-        children ?? word
-      )}
-    </button>
   );
 }
 
@@ -1403,19 +1370,9 @@ function App() {
     }
   }
 
-  const sorted = useMemo(() => {
-    const arr = [...results];
-    const dir = sort.dir === 'asc' ? 1 : -1;
-    if (sort.key === 'alpha') {
-      arr.sort((a, b) => (a < b ? -1 : a > b ? 1 : 0) * dir);
-    } else {
-      // direction applies to length; ties stay alphabetical
-      arr.sort((a, b) => (a.length - b.length) * dir || (a < b ? -1 : a > b ? 1 : 0));
-    }
-    return arr;
-  }, [results, sort]);
+  const sorted = useMemo(() => sortResults(results, sort), [results, sort]);
 
-  const visible = showAll ? sorted : sorted.slice(0, 200);
+  const visible = showAll ? sorted : sorted.slice(0, CAP);
 
   const pangrams =
     mode === 'bee' && beeAllowed.size === 7
@@ -1538,6 +1495,131 @@ function App() {
     setValue.call(target, isTile ? k : target.value + k);
     target.dispatchEvent(new Event('input', { bubbles: true }));
   }
+
+  // What the panel says when the answer is empty. Two different sentences hide
+  // in here and always did: "you have not finished typing" and "those letters
+  // spell nothing" mean opposite things to somebody stuck, so each solver gets
+  // to distinguish them. It reads as a ladder of ternaries because it is one —
+  // it moves to each solver as they come out, and the pattern solver's line is
+  // the fallback because it is the only one with no incomplete-board state.
+  const emptyNote =
+    mode === 'descramble'
+      ? rackLetters.length + wildcards === 0
+        ? 'Type your letters above to see what they can spell.'
+        : 'Nothing spells from those letters. Try adding a wildcard (?) or lowering the minimum length.'
+      : mode === 'bee'
+        ? beeCenter === ''
+          ? 'Enter the center letter and the six outer letters to find words.'
+          : 'No words found from those letters. Double-check the puzzle.'
+        : mode === 'boxed'
+          ? boxedLetters.filter(Boolean).length < 12
+            ? 'Enter the twelve letters, three per side, to find words.'
+            : 'No words fit this box. Double-check the puzzle.'
+          : mode === 'grid'
+            ? gridLetters.filter(Boolean).length < gridLetters.length
+              ? `Fill in all ${gridLetters.length} grid letters to find words.`
+              : 'No words can be traced on this grid.'
+            : mode === 'weave'
+              ? weaveLetters.filter(Boolean).length < weaveLetters.length
+                ? `Fill in all ${weaveLetters.length} board letters to find words.`
+                : 'No words can be traced on this board.'
+              : 'No words fit those clues. Try loosening a constraint.';
+
+  // Whatever a game wants shown above the plain list. No shape in common — a
+  // pangram is a word, a Boxed solution is an ordered chain of them in five
+  // colours — which is why the panel takes these as children rather than
+  // trying to describe both in one prop.
+  const featured = (
+    <>
+              {boxedRecommended && (
+                <div className="mb-6">
+                  <p className="mb-2.5 text-xs font-medium text-accent uppercase tracking-wider inline-flex items-center gap-1.5">
+                    <Star className="w-3.5 h-3.5" />
+                    Recommended
+                    <span className="text-accent normal-case tracking-normal">
+                      · {boxedRecommended.words.length}{' '}
+                      {boxedRecommended.words.length === 1 ? 'word' : 'words'}
+                      {boxedRecommended.allCommon ? ', everyday vocabulary' : ''}
+                    </span>
+                  </p>
+                  <div className="grid grid-cols-1 gap-2.5">
+                    <WordChip
+                      word={boxedRecommended.words.join(' ')}
+                      hoverProps={boxedTraceHandlers(boxedRecommended.words)}
+                      className="bg-amber-400/10 border border-amber-400/30 text-amber-200 font-semibold hover:bg-amber-400/20"
+                    >
+                      {boxedRecommended.words.map((w, i) => (
+                        <span key={i}>
+                          {i > 0 && <span className="text-slate-500"> → </span>}
+                          <span className={BOX_TRACE_TEXT[i % BOX_TRACE_TEXT.length]}>{w}</span>
+                        </span>
+                      ))}
+                    </WordChip>
+                  </div>
+                </div>
+              )}
+              {mode === 'boxed' && boxedIndex && (
+                <div className="mb-6">
+                  <p className="mb-2.5 text-xs font-medium text-success uppercase tracking-wider">
+                    {solutionWords}-word solutions{' '}
+                    <span className="text-success">
+                      · {boxedChains.capped ? `${boxedChains.solutions.length}+` : boxedChains.solutions.length}
+                    </span>
+                  </p>
+                  {boxedChains.solutions.length === 0 ? (
+                    <p className="text-sm text-slate-500">
+                      No {solutionWords}-word solutions found — try allowing more words.
+                    </p>
+                  ) : (
+                    <>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                        {boxedChains.solutions.slice(0, 24).map((s) => (
+                          <WordChip
+                            key={s.join(' ')}
+                            word={s.join(' ')}
+                            hoverProps={boxedTraceHandlers(s)}
+                            className="bg-emerald-400/10 border border-emerald-400/30 text-emerald-200 font-semibold hover:bg-emerald-400/20"
+                          >
+                            {s.map((w, i) => (
+                              <span key={i}>
+                                {i > 0 && <span className="text-slate-500"> → </span>}
+                                <span className={BOX_TRACE_TEXT[i % BOX_TRACE_TEXT.length]}>{w}</span>
+                              </span>
+                            ))}
+                          </WordChip>
+                        ))}
+                      </div>
+                      {boxedChains.solutions.length > 24 && (
+                        <p className="mt-2 text-xs text-slate-500">
+                          Showing the 24 shortest of{' '}
+                          {boxedChains.capped
+                            ? `${boxedChains.solutions.length}+ (search capped)`
+                            : boxedChains.solutions.length}{' '}
+                          solutions.
+                        </p>
+                      )}
+                    </>
+                  )}
+                </div>
+              )}
+              {pangrams.length > 0 && (
+                <div className="mb-6">
+                  <p className="mb-2.5 text-xs font-medium text-accent uppercase tracking-wider">
+                    Pangrams <span className="text-accent">· {pangrams.length}</span>
+                  </p>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2.5">
+                    {pangrams.map((w) => (
+                      <WordChip
+                        key={w}
+                        word={w}
+                        className="bg-amber-400/10 border border-amber-400/30 text-amber-200 font-semibold hover:bg-amber-400/20"
+                      />
+                    ))}
+                  </div>
+                </div>
+              )}
+    </>
+  );
 
   function resetAll() {
     setKnown(Array(length).fill(''));
@@ -2533,249 +2615,30 @@ function App() {
           })()}
 
           {!playActive && WORD_LIST_SOLVERS.has(mode) && (
-          <>
-          {/* results header */}
-          <div className="flex items-center justify-between mb-4 flex-wrap gap-y-3">
-            <div className="flex items-center gap-2.5">
-              <div className="flex items-center justify-center w-9 h-9 rounded-lg bg-white/5 border border-white/10">
-                <Search className="w-4 h-4 text-slate-300" />
-              </div>
-              <div>
-                <p className="text-2xl font-bold leading-none">
-                  {results.length}
-                  <span className="text-base font-normal text-slate-400 ml-1.5">
-                    {results.length === 1 ? 'match' : 'matches'}
-                  </span>
-                </p>
-              </div>
-            </div>
-            <div className="flex items-center gap-2">
-              {mode !== 'pattern' && (
-                <div className="inline-flex rounded-lg bg-white/5 border border-white/10 p-0.5 gap-0.5">
-                  {(['length', 'alpha'] as const).map((k) => (
-                    <button
-                      key={k}
-                      onClick={() => setSort({ key: k })}
-                      className={`px-2.5 py-1.5 rounded-md text-xs font-medium whitespace-nowrap transition-colors
-                        ${sort.key === k
-                          ? 'bg-white/15 text-white'
-                          : 'text-slate-400 hover:text-white'}`}
-                    >
-                      {k === 'length' ? 'Length' : 'A–Z'}
-                    </button>
-                  ))}
-                </div>
-              )}
-              <button
-                onClick={() => setSort({ dir: sort.dir === 'asc' ? 'desc' : 'asc' })}
-                title={
-                  sort.key === 'alpha'
-                    ? sort.dir === 'asc'
-                      ? 'A to Z — click for Z to A'
-                      : 'Z to A — click for A to Z'
-                    : sort.dir === 'asc'
-                      ? 'Shortest first — click for longest first'
-                      : 'Longest first — click for shortest first'
-                }
-                className="inline-flex items-center justify-center w-8 h-8 rounded-lg text-slate-400 hover:text-white bg-white/5 border border-white/10 hover:bg-white/10 transition-colors"
-              >
-                {sort.dir === 'asc' ? <ArrowUp className="w-3.5 h-3.5" /> : <ArrowDown className="w-3.5 h-3.5" />}
-              </button>
-              <button
-                onClick={resetAll}
-                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium text-slate-400 hover:text-white bg-white/5 border border-white/10 hover:bg-white/10 transition-colors"
-              >
-                <Eraser className="w-3.5 h-3.5" />
-                Clear
-              </button>
-            </div>
-          </div>
-
-          {/* results */}
-          {results.length === 0 ? (
-            <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-10 text-center">
-              <p className="text-slate-400">
-                {mode === 'descramble'
-                  ? rackLetters.length + wildcards === 0
-                    ? 'Type your letters above to see what they can spell.'
-                    : 'Nothing spells from those letters. Try adding a wildcard (?) or lowering the minimum length.'
-                  : mode === 'bee'
-                    ? beeCenter === ''
-                      ? 'Enter the center letter and the six outer letters to find words.'
-                      : 'No words found from those letters. Double-check the puzzle.'
+            <ResultsPanel
+              results={results}
+              words={groupSource}
+              sort={sort}
+              onSort={setSort}
+              onClear={resetAll}
+              showAll={showAll}
+              onShowAll={setShowAll}
+              emptyNote={emptyNote}
+              grouped={mode !== 'pattern' && sort.key === 'length'}
+              sortable={mode !== 'pattern'}
+              renderWord={mode === 'pattern' ? highlight : undefined}
+              hoverPropsFor={
+                mode === 'grid'
+                  ? gridTraceHandlers
+                  : mode === 'weave'
+                    ? weaveTraceHandlers
                     : mode === 'boxed'
-                      ? boxedLetters.filter(Boolean).length < 12
-                        ? 'Enter the twelve letters, three per side, to find words.'
-                        : 'No words fit this box. Double-check the puzzle.'
-                      : mode === 'grid'
-                        ? gridLetters.filter(Boolean).length < gridLetters.length
-                          ? `Fill in all ${gridLetters.length} grid letters to find words.`
-                          : 'No words can be traced on this grid.'
-                        : mode === 'weave'
-                          ? weaveLetters.filter(Boolean).length < weaveLetters.length
-                            ? `Fill in all ${weaveLetters.length} board letters to find words.`
-                            : 'No words can be traced on this board.'
-                          : 'No words fit those clues. Try loosening a constraint.'}
-              </p>
-            </div>
-          ) : (
-            <>
-              {mode === 'pattern' ? (
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2.5">
-                  {visible.map((w) => (
-                    <WordChip
-                      key={w}
-                      word={w}
-                      className="bg-white/[0.04] border border-white/10 hover:bg-white/[0.08] hover:border-white/20"
-                    >
-                      {highlight(w)}
-                    </WordChip>
-                  ))}
-                </div>
-              ) : (
-                <>
-                {boxedRecommended && (
-                  <div className="mb-6">
-                    <p className="mb-2.5 text-xs font-medium text-accent uppercase tracking-wider inline-flex items-center gap-1.5">
-                      <Star className="w-3.5 h-3.5" />
-                      Recommended
-                      <span className="text-accent normal-case tracking-normal">
-                        · {boxedRecommended.words.length}{' '}
-                        {boxedRecommended.words.length === 1 ? 'word' : 'words'}
-                        {boxedRecommended.allCommon ? ', everyday vocabulary' : ''}
-                      </span>
-                    </p>
-                    <div className="grid grid-cols-1 gap-2.5">
-                      <WordChip
-                        word={boxedRecommended.words.join(' ')}
-                        hoverProps={boxedTraceHandlers(boxedRecommended.words)}
-                        className="bg-amber-400/10 border border-amber-400/30 text-amber-200 font-semibold hover:bg-amber-400/20"
-                      >
-                        {boxedRecommended.words.map((w, i) => (
-                          <span key={i}>
-                            {i > 0 && <span className="text-slate-500"> → </span>}
-                            <span className={BOX_TRACE_TEXT[i % BOX_TRACE_TEXT.length]}>{w}</span>
-                          </span>
-                        ))}
-                      </WordChip>
-                    </div>
-                  </div>
-                )}
-                {mode === 'boxed' && boxedIndex && (
-                  <div className="mb-6">
-                    <p className="mb-2.5 text-xs font-medium text-success uppercase tracking-wider">
-                      {solutionWords}-word solutions{' '}
-                      <span className="text-success">
-                        · {boxedChains.capped ? `${boxedChains.solutions.length}+` : boxedChains.solutions.length}
-                      </span>
-                    </p>
-                    {boxedChains.solutions.length === 0 ? (
-                      <p className="text-sm text-slate-500">
-                        No {solutionWords}-word solutions found — try allowing more words.
-                      </p>
-                    ) : (
-                      <>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                          {boxedChains.solutions.slice(0, 24).map((s) => (
-                            <WordChip
-                              key={s.join(' ')}
-                              word={s.join(' ')}
-                              hoverProps={boxedTraceHandlers(s)}
-                              className="bg-emerald-400/10 border border-emerald-400/30 text-emerald-200 font-semibold hover:bg-emerald-400/20"
-                            >
-                              {s.map((w, i) => (
-                                <span key={i}>
-                                  {i > 0 && <span className="text-slate-500"> → </span>}
-                                  <span className={BOX_TRACE_TEXT[i % BOX_TRACE_TEXT.length]}>{w}</span>
-                                </span>
-                              ))}
-                            </WordChip>
-                          ))}
-                        </div>
-                        {boxedChains.solutions.length > 24 && (
-                          <p className="mt-2 text-xs text-slate-500">
-                            Showing the 24 shortest of{' '}
-                            {boxedChains.capped
-                              ? `${boxedChains.solutions.length}+ (search capped)`
-                              : boxedChains.solutions.length}{' '}
-                            solutions.
-                          </p>
-                        )}
-                      </>
-                    )}
-                  </div>
-                )}
-                {pangrams.length > 0 && (
-                  <div className="mb-6">
-                    <p className="mb-2.5 text-xs font-medium text-accent uppercase tracking-wider">
-                      Pangrams <span className="text-accent">· {pangrams.length}</span>
-                    </p>
-                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2.5">
-                      {pangrams.map((w) => (
-                        <WordChip
-                          key={w}
-                          word={w}
-                          className="bg-amber-400/10 border border-amber-400/30 text-amber-200 font-semibold hover:bg-amber-400/20"
-                        />
-                      ))}
-                    </div>
-                  </div>
-                )}
-                {sort.key === 'length' ? (
-                  [...groupSource.reduce((m, w) => {
-                    const g = m.get(w.length) ?? [];
-                    g.push(w);
-                    return m.set(w.length, g);
-                  }, new Map<number, string[]>())].map(([len, ws]) => (
-                    <div key={len} className="mb-6">
-                      <p className="mb-2.5 text-xs font-medium text-slate-400 uppercase tracking-wider">
-                        {len} letters <span className="text-slate-600">· {ws.length}</span>
-                      </p>
-                      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2.5">
-                        {ws.map((w) => (
-                          <WordChip
-                            key={w}
-                            word={w}
-                            hoverProps={mode === 'grid' ? gridTraceHandlers(w) : mode === 'weave' ? weaveTraceHandlers(w) : mode === 'boxed' ? boxedTraceHandlers([w]) : undefined}
-                            className="bg-white/[0.04] border border-white/10 text-slate-300 hover:bg-white/[0.08] hover:border-white/20"
-                          />
-                        ))}
-                      </div>
-                    </div>
-                  ))
-                ) : (
-                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2.5">
-                    {groupSource.map((w) => (
-                      <WordChip
-                        key={w}
-                        word={w}
-                        hoverProps={mode === 'grid' ? gridTraceHandlers(w) : mode === 'weave' ? weaveTraceHandlers(w) : mode === 'boxed' ? boxedTraceHandlers([w]) : undefined}
-                        className="bg-white/[0.04] border border-white/10 text-slate-300 hover:bg-white/[0.08] hover:border-white/20"
-                      />
-                    ))}
-                  </div>
-                )}
-                </>
-              )}
-              {results.length > 200 && (
-                <button
-                  onClick={() => setShowAll((s) => !s)}
-                  className="mt-5 mx-auto flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium text-amber-300 bg-amber-400/10 border border-amber-400/20 hover:bg-amber-400/20 transition-colors"
-                >
-                  {showAll ? (
-                    <>
-                      <X className="w-4 h-4" /> Show fewer
-                    </>
-                  ) : (
-                    <>
-                      <ArrowDown className="w-4 h-4" /> Show all {results.length}
-                    </>
-                  )}
-                </button>
-              )}
-            </>
-          )}
-          </>
+                      ? (w) => boxedTraceHandlers([w])
+                      : undefined
+              }
+            >
+              {featured}
+            </ResultsPanel>
           )}
           </>
           )}
