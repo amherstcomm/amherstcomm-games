@@ -56,6 +56,34 @@ const send = async (to, subject, text) => {
   return true;
 };
 
+// The answers in a published board are base64'd JSON — that is the feed's own
+// obfuscation, so a curious player can't read tomorrow out of the file. It is
+// not obfuscation from *us*, and a digest that mailed the owner
+// "WyJ0aW1lIiwiZHJlYW0i..." would be a digest that hid the one thing it exists
+// to show: the word somebody objected to.
+//
+// Decoded by shape rather than by field name, because each generator names its
+// own: bridge has `answers`, others have `words` or `solution`. Anything that
+// isn't base64'd JSON is left exactly as it was.
+const readable = (value) => {
+  if (Array.isArray(value)) return value.map(readable);
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, readable(v)]));
+  }
+  if (typeof value !== 'string' || value.length < 8 || !/^[A-Za-z0-9+/=]+$/.test(value)) {
+    return value;
+  }
+  try {
+    const decoded = Buffer.from(value, 'base64').toString('utf8');
+    const parsed = JSON.parse(decoded);
+    // only worth swapping in if it decoded to something structured; a bare
+    // number that happens to survive the round trip is not a hidden answer
+    return typeof parsed === 'object' && parsed !== null ? parsed : value;
+  } catch {
+    return value;
+  }
+};
+
 const stamp = async (id, column) => {
   const res = await fetch(`${SUPABASE_URL}/rest/v1/reports?id=eq.${id}`, {
     method: 'PATCH',
@@ -85,7 +113,7 @@ if (open.length) {
       lines.push(`  ${e.game} · ${e.difficulty} · ${e.date} (${e.env})`);
       // The board as the server held it, which is the whole point of the
       // design: not what the reporter claimed, what was served.
-      lines.push(`  board: ${JSON.stringify(e.board).slice(0, 1200)}`);
+      lines.push(`  board: ${JSON.stringify(readable(e.board)).slice(0, 1500)}`);
     } else {
       lines.push(`  name: ${e.name}`);
       // 'false' is the interesting case — the preventive filter looked at this
