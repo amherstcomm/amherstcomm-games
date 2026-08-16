@@ -915,6 +915,38 @@ PWABuilder, needing `assetlinks.json` on the domain and a PWA that clears the
 quality bar. iOS realistically needs Capacitor and something native to justify
 itself.
 
+### The schema, and two systems that already disagree — proposed August 2026
+
+`supabase/schema.sql` is 2,551 lines applied by pasting into a web SQL editor.
+The length is not the problem — it has section banners, and it has not been
+where the troubleshooting lands. The paste is: a truncated paste or an editor
+timeout leaves a half-applied schema with no signal, and that risk grows with
+every line while nothing about it announces itself.
+
+**The thing to know before planning this**: the database already has a migration
+history and the repo does not. Sixteen versions are recorded, from
+`20260808214634` to `20260816132434`, applied through tooling that records a
+version — while `schema.sql` is applied by hand and records nothing. So the
+`games` table added in August exists in the database and in `schema.sql` and in
+no migration at all, and several recorded migrations restate things
+`schema.sql` also declares. Two systems, running side by side, disagreeing about
+what exists.
+
+That is what makes this a plan rather than a task. Adopting the Supabase CLI
+means linking the project, baselining the live schema, and deciding what to do
+about sixteen recorded versions with no local files — on a live database.
+
+The other half is the reason it needs care rather than speed. `schema.sql`
+carries most of this project's reasoning: why a definer function pins
+`search_path`, why `isOverlay` excludes stats, why the daily gate backs the
+clock up three hours and a quarter, why the report caps are per subject rather
+than per source. `supabase db pull` generates a baseline from the live schema
+and carries **none** of it, plus everything in Supabase's own internal schemas.
+A migration system that loses the comments would be a bad trade at any length.
+
+Worth doing, worth planning, and out of scope for the restructure it came up
+during.
+
 ### Admin portal — much later
 Everything owner-facing is SQL-editor-only today: clearing a display name,
 adding blocklist entries, reading `suspect_daily_results`. That's fine, and
