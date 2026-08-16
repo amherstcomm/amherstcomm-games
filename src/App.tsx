@@ -32,7 +32,7 @@ import ConsentBanner from '@/ConsentBanner';
 import { PrivacyPolicy, Terms } from '@/LegalDocs';
 import { onDailyReport, requestDaily } from '@/dailyBus';
 import { FRESH, historyStep } from '@/routing/history';
-import { navOf, navReducer, routeOf, type Overlay } from '@/routing/nav';
+import { navOf, navReducer, routeOf, type Overlay, type Page } from '@/routing/nav';
 import ReportMenu from '@/ReportMenu';
 import { amOwner } from '@/reports';
 import TicketView from '@/TicketView';
@@ -887,16 +887,25 @@ function App() {
 
   const setAtHome = (v: boolean) =>
     dispatch({ type: 'page', page: v ? { kind: 'home' } : { kind: 'game' } });
-  const setReportPage = (r: Route | null) =>
-    dispatch({
-      type: 'page',
-      page:
-        r && (r.kind === 'ticket' || r.kind === 'reportAction' || r.kind === 'reportQueue')
-          ? r
-          : { kind: 'game' },
-    });
   const openOverlay = (o: Overlay) => dispatch({ type: 'open', overlay: o });
   const closeOverlay = () => dispatch({ type: 'close' });
+
+  // A link's address and its destination, from one value.
+  //
+  // Every nav site used to hand-pair a `to` string with an unrelated `onGo`,
+  // and four of them disagreed: the footer rendered `to="/stats/overall"` while
+  // the click opened whichever tab you last used, and the tab survives closing.
+  // So after one visit to Boards, middle-click and left-click went to different
+  // pages — the anchor advertised one address and the app went to another.
+  //
+  // Spreading these makes that unrepresentable rather than merely fixed. An
+  // Overlay and a Page are already Routes, so `pathOf` is the same computation
+  // the click will perform.
+  const overlayLink = (o: Overlay) => ({ to: pathOf(o), onGo: () => openOverlay(o) });
+  const pageLink = (page: Exclude<Page, { kind: 'game' }>) => ({
+    to: pathOf(page),
+    onGo: () => dispatch({ type: 'page', page }),
+  });
 
   const [startPage, setStartPage] = useState(initial.startPage);
   // Whether to draw the queue link at all. False for everyone signed out and
@@ -3526,8 +3535,7 @@ function App() {
           {/* wraps into centered rows rather than one overflowing line */}
           <div className="mt-3 flex flex-wrap items-center justify-center gap-x-5 gap-y-2.5">
             <RouteLink
-              to="/"
-              onGo={() => setAtHome(true)}
+              {...pageLink({ kind: 'home' })}
               className="inline-flex items-center gap-1.5 hover:text-slate-300 transition-colors"
             >
               <Home className="w-3.5 h-3.5" />
@@ -3541,11 +3549,7 @@ function App() {
                 it might not appear. */}
             {owner && (
               <RouteLink
-                to="/reports"
-                onGo={() => {
-                  setAtHome(false);
-                  setReportPage({ kind: 'reportQueue' });
-                }}
+                {...pageLink({ kind: 'reportQueue' })}
                 className="inline-flex items-center gap-1.5 text-accent hover:brightness-110 transition"
               >
                 <FlagIcon className="w-3.5 h-3.5" aria-hidden="true" />
@@ -3585,24 +3589,21 @@ function App() {
               WordLock
             </a>
             <RouteLink
-              to="/stats/overall"
-              onGo={() => openOverlay({ kind: 'stats', tab: nav.last.stats })}
+              {...overlayLink({ kind: 'stats', tab: nav.last.stats })}
               className="inline-flex items-center gap-1.5 hover:text-slate-300 transition-colors"
             >
               <BarChart3 className="w-3.5 h-3.5" />
               Stats
             </RouteLink>
             <RouteLink
-              to="/settings/site"
-              onGo={() => openOverlay({ kind: 'settings', tab: nav.last.settings })}
+              {...overlayLink({ kind: 'settings', tab: nav.last.settings })}
               className="inline-flex items-center gap-1.5 hover:text-slate-300 transition-colors"
             >
               <Settings className="w-3.5 h-3.5" />
               Settings
             </RouteLink>
             <RouteLink
-              to="/keys"
-              onGo={() => openOverlay({ kind: 'panel', panel: 'keys' })}
+              {...overlayLink({ kind: 'panel', panel: 'keys' })}
               className="inline-flex items-center gap-1.5 hover:text-slate-300 transition-colors"
             >
               <Keyboard className="w-3.5 h-3.5" />
@@ -3610,8 +3611,13 @@ function App() {
             </RouteLink>
             {supabase && (
               <RouteLink
-                to={session ? '/account' : '/sign-in'}
-                onGo={() => openOverlay({ kind: 'account', tab: nav.last.account })}
+                // Signed out there is only one tab to be on, and /sign-in is
+                // the friendlier address for it — but it has to be the address
+                // the click actually goes to, which is why the target is pinned
+                // rather than read from the remembered tab.
+                {...(session
+                  ? overlayLink({ kind: 'account', tab: nav.last.account })
+                  : { to: '/sign-in', onGo: () => openOverlay({ kind: 'account', tab: 'personal' }) })}
                 className="inline-flex items-center gap-1.5 hover:text-slate-300 transition-colors"
               >
                 <UserRound className="w-3.5 h-3.5" />
@@ -3619,16 +3625,14 @@ function App() {
               </RouteLink>
             )}
             <RouteLink
-              to="/about"
-              onGo={() => openOverlay({ kind: 'panel', panel: 'about' })}
+              {...overlayLink({ kind: 'panel', panel: 'about' })}
               className="inline-flex items-center gap-1.5 hover:text-slate-300 transition-colors"
             >
               <Info className="w-3.5 h-3.5" />
               About &amp; FAQ
             </RouteLink>
             <RouteLink
-              to="/legal/notices"
-              onGo={() => openOverlay({ kind: 'legal', doc: nav.last.legal })}
+              {...overlayLink({ kind: 'legal', doc: nav.last.legal })}
               className="inline-flex items-center gap-1.5 hover:text-slate-300 transition-colors"
             >
               <Scale className="w-3.5 h-3.5" />

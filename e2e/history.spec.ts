@@ -5,13 +5,14 @@
 // changes what Back does looks identical to one that doesn't. Nothing here
 // existed before — no test anywhere called `goBack`, and none asserted a title.
 //
-// Two of these fail today, on purpose. They are the reproductions of bugs the
-// extraction has to preserve, then fix deliberately, rather than absorb
-// silently:
+// One of these fails today, on purpose: the close button on a deep-linked panel
+// with tabs does nothing. It is a reproduction of a bug the extraction has to
+// preserve and then fix deliberately, rather than absorb silently.
 //
-//   - the close button on a deep-linked panel with tabs does nothing
-//   - a footer link's href and its destination disagree once a tab is
-//     remembered
+// The other — a footer link's href disagreeing with its destination — was fixed
+// in the stage that made an anchor's address and its action come from one
+// value, and this file is how that was noticed: Playwright reported "expected
+// to fail, but passed".
 //
 // They are marked `test.fail`, not `test.fixme`. The difference is the whole
 // point: fixme *skips*, which would make them decoration, while fail *runs*
@@ -144,10 +145,13 @@ test.fail('closing a deep-linked panel actually closes it', async ({ page }) => 
   await expect(page.getByRole('dialog')).toHaveCount(0);
 });
 
-test.fail('a footer link goes where its href says', async ({ page }) => {
-  // The anchor renders `to="/stats/overall"` while the click handler opens
-  // whichever tab was last used, and the tab survives closing. So after one
-  // visit to Boards, middle-click and left-click land on different pages.
+test('a footer link goes where its href says', async ({ page }) => {
+  // It didn't. The anchor rendered `to="/stats/overall"` while the click
+  // handler opened whichever tab was last used, and the tab survives closing —
+  // so after one visit to Boards, middle-click and left-click went to different
+  // pages. Fixed by computing the href from the same value the click uses, so
+  // the two cannot disagree; this test reported the fix itself, by being a
+  // `test.fail` that unexpectedly passed.
   await page.goto('/');
   await page.getByRole('link', { name: 'Stats' }).click();
   // plain buttons rather than a tablist — worth marking up properly one day,
