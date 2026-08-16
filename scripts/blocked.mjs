@@ -1,6 +1,7 @@
 // Reading the blocklist, in one place.
 //
-// `blocklist.mjs` *writes* scripts/blocked-words.json, rarely and by hand. This
+// `blocklist.mjs` *writes* src/wordbands/blocked-words.json, rarely and by
+// hand — or as the first step of the word rebuild workflow. This
 // reads it, and everything that needs the list goes through here: the word
 // build, the three pool harvests, the daily generator, the name blocklist and
 // the contract tests.
@@ -24,7 +25,7 @@
 //               Scunthorpe bites.
 import { readFileSync } from 'node:fs';
 
-const FILE = new URL('./blocked-words.json', import.meta.url);
+const FILE = new URL('../src/wordbands/blocked-words.json', import.meta.url);
 
 let cached = null;
 

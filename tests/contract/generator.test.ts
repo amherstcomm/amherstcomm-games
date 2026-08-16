@@ -585,7 +585,7 @@ describe('cryptogram', () => {
 describe('nothing blocked is published as an answer', () => {
   it('across guess words, weave answers and squares solutions, plain or encoded', async () => {
     const blocked = new Set<string>(
-      JSON.parse(await readFile('scripts/blocked-words.json', 'utf8')).words.map(
+      JSON.parse(await readFile('src/wordbands/blocked-words.json', 'utf8')).words.map(
         (w: { word: string }) => w.word
       )
     );
@@ -630,7 +630,7 @@ describe('ladder', () => {
   const rungs = new Set<string>();
   beforeAll(async () => {
     const blocked = new Set(
-      (JSON.parse(await readFile('scripts/blocked-words.json', 'utf8')) as Feed).words.map(
+      (JSON.parse(await readFile('src/wordbands/blocked-words.json', 'utf8')) as Feed).words.map(
         (w: Feed) => w.word as string
       )
     );
@@ -766,7 +766,7 @@ describe('bridge', () => {
   const words = new Set<string>();
   beforeAll(async () => {
     const blocked = new Set(
-      (JSON.parse(await readFile('scripts/blocked-words.json', 'utf8')) as Feed).words.map(
+      (JSON.parse(await readFile('src/wordbands/blocked-words.json', 'utf8')) as Feed).words.map(
         (w: Feed) => w.word as string
       )
     );
@@ -853,7 +853,7 @@ describe('bridge', () => {
   // place it can be checked after a generator change.
   it('publishes no blocked word, in a prompt or in a compound', async () => {
     const blocked = new Set(
-      (JSON.parse(await readFile('scripts/blocked-words.json', 'utf8')) as Feed).words.map(
+      (JSON.parse(await readFile('src/wordbands/blocked-words.json', 'utf8')) as Feed).words.map(
         (w: Feed) => w.word as string
       )
     );
