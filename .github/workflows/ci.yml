@@ -4,21 +4,33 @@
 # every network the app talks to, so a red run is ours, never an outage's.
 name: CI
 
+# Push only, deliberately.
+#
+# With `pull_request` as well, both events fired on the same commit and the
+# suite ran twice — two ten-minute browser jobs for one push. A concurrency
+# group covering both was not enough: the run that loses is marked cancelled,
+# but the work already dispatched carries on, and a cancelled run still posts
+# its checks, so the duplication both continued and went on looking untouched.
+#
+# Dropping the trigger removes the second run rather than racing it. Nothing is
+# lost by it: check runs attach to a commit, not to an event, so a
+# push-triggered run appears on any pull request whose head is that commit.
+# Development happens on `dev` here and a release is a pull request from it, so
+# every commit that could be reviewed has already been pushed and checked — and
+# it keeps the signal while the work is happening, which is the half that
+# matters when a branch takes twenty commits before it takes a PR.
+#
+# What this gives up is a pull request from a fork, where no push event reaches
+# us. There is one maintainer. If that changes, `pull_request` comes back, and
+# this paragraph is the reason it was ever gone.
 on:
   push:
     branches: ['**']
-  pull_request:
 
-# One run per branch, whichever event asked for it last.
-#
-# push and pull_request both fire on the same commit, so every PR was running
-# the whole suite twice — two ten-minute browser jobs for one commit, and two
-# of every line in `gh pr checks`. Grouping on head_ref for a PR and ref_name
-# for a push produces the same string for both ("dev"), so they land in one
-# group and the later one cancels the earlier. It also kills the run for a
-# commit you have already pushed past, which is most of them on a busy branch.
+# One run per branch. A commit already pushed past does not need its tests
+# finished, and on a branch like this one that is most of them.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.head_ref || github.ref_name }}
+  group: ${{ github.workflow }}-${{ github.ref_name }}
   cancel-in-progress: true
 
 # Least privilege: every job here only reads the repository. Without this
