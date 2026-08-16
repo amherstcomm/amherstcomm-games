@@ -8,7 +8,7 @@
 
 import type { Mode } from '@/storage';
 
-type Report = (mode: Mode, daily: boolean) => void;
+type Report = (mode: Mode, daily: boolean, date: string) => void;
 
 const reporters = new Set<Report>();
 const switches = new Map<Mode, (daily: boolean) => void>();
@@ -18,9 +18,14 @@ const switches = new Map<Mode, (daily: boolean) => void>();
 // page. So a request with nobody to hear it waits for whoever turns up.
 const pending = new Map<Mode, boolean>();
 
-/** A game saying which board it currently has open. */
-export function reportDaily(mode: Mode, daily: boolean): void {
-  for (const fn of reporters) fn(mode, daily);
+/** A game saying which board it currently has open, and which date that
+ *  board carries — the puzzle's own, which is not always today's: a tab left
+ *  open past the 3:15 a.m. roll is still showing yesterday. Anything acting on
+ *  the board a player is looking at has to use the board's date, not the
+ *  clock's. Empty for a practice board, which has no date because it was
+ *  never published. */
+export function reportDaily(mode: Mode, daily: boolean, date = ''): void {
+  for (const fn of reporters) fn(mode, daily, date);
 }
 
 /** App listening for the above. Returns an unsubscribe. */

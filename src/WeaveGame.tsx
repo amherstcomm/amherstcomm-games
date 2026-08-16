@@ -182,7 +182,7 @@ const WeaveGame = forwardRef<
     if (!practiceAllowed && !store.dailyMode) setStore((prev) => ({ ...prev, dailyMode: true }));
   }, [practiceAllowed, store.dailyMode]);
   // the address bar says which board is open, and can ask for the other
-  useEffect(() => reportDaily('weave', store.dailyMode), [store.dailyMode]);
+  useEffect(() => reportDaily('weave', store.dailyMode, store.dailyDate), [store.dailyMode, store.dailyDate]);
   useEffect(
     () => offerDailySwitch('weave', (d) => setStore((prev) => ({ ...prev, dailyMode: d }))),
     []

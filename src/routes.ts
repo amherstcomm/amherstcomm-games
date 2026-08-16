@@ -106,7 +106,14 @@ export type Route =
   | { kind: 'account'; tab: AccountTab }
   | { kind: 'legal'; doc: LegalDoc }
   // a friend invite landing: opens the account panel on its friends tab
-  | { kind: 'friend'; code: string };
+  | { kind: 'friend'; code: string }
+  // a reporter checking on their own ticket. Public, and it answers with a
+  // status and nothing else — the code names a report, it does not guard one.
+  | { kind: 'ticket'; ticket: string }
+  // the owner acting on one, from a link in the digest. Two keys: the token in
+  // the address, and being signed in as an owner when the page asks. Neither
+  // is sufficient, which is what makes it safe to put in an email.
+  | { kind: 'reportAction'; id: string; token: string; action: string };
 
 export function pathOf(route: Route): string {
   switch (route.kind) {
@@ -127,6 +134,10 @@ export function pathOf(route: Route): string {
       return `/legal/${route.doc}`;
     case 'friend':
       return `/friend/${route.code}`;
+    case 'ticket':
+      return `/report/${route.ticket}`;
+    case 'reportAction':
+      return `/report/act/${route.id}/${route.token}${route.action ? `/${route.action}` : ''}`;
   }
 }
 
@@ -157,6 +168,10 @@ export function titleOf(route: Route): string {
       return `${route.panel === 'about' ? 'About & FAQ' : 'Keyboard controls'}${suffix}`;
     case 'friend':
       return `Friend invite${suffix}`;
+    case 'ticket':
+      return `Report status${suffix}`;
+    case 'reportAction':
+      return `Handle a report${suffix}`;
   }
 }
 
@@ -194,6 +209,18 @@ export function parsePath(pathname: string): Route | null {
   // above can't damage it.
   if (first === 'friend') {
     return second ? { kind: 'friend', code: second } : null;
+  }
+
+  // A ticket. Hex from the minting side too, so lowercasing is safe. A bare
+  // /report is the lookup form with nothing typed into it yet.
+  if (first === 'report') {
+    // /report/act/<id>/<token>[/<action>] is the owner's door; anything else
+    // under /report is a ticket, including nothing at all.
+    if (second === 'act') {
+      const [, , id, token, action] = parts;
+      return id && token ? { kind: 'reportAction', id, token, action: action ?? '' } : null;
+    }
+    return { kind: 'ticket', ticket: second ?? '' };
   }
 
   if (first === 'account') {

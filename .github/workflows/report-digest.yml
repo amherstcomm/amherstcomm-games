@@ -1,0 +1,39 @@
+# The daily report round: nag about what's open, send receipts, tell reporters
+# what happened.
+#
+# Nothing here closes a report. They close when somebody follows one of the
+# links in the email and says what they did, which means an unhandled one comes
+# back every morning with its age on it. The run prints the digest to its own
+# log either way, so a missing RESEND_API_KEY costs the email, not the signal.
+#
+# Secrets: SUPABASE_SERVICE_ROLE_KEY (already set, for the daily publish),
+# RESEND_API_KEY, and REPORT_DIGEST_TO. Skips politely without the last two.
+name: Report digest
+
+on:
+  workflow_dispatch:
+  schedule:
+    # 8:00 a.m. Eastern, give or take the hour DST moves — reports are read
+    # over coffee, not at 3 a.m. with the puzzle generation.
+    - cron: '0 13 * * *'
+
+jobs:
+  digest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      - name: Read and send
+        env:
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          REPORT_DIGEST_TO: ${{ secrets.REPORT_DIGEST_TO }}
+          REPORT_DIGEST_FROM: ${{ secrets.REPORT_DIGEST_FROM }}
+        run: |
+          if [ -z "$SUPABASE_SERVICE_ROLE_KEY" ]; then
+            echo "::warning::SUPABASE_SERVICE_ROLE_KEY not set; nothing to read"
+            exit 0
+          fi
+          node scripts/report-digest.mjs

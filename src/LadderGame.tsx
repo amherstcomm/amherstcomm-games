@@ -130,7 +130,7 @@ const LadderGame = forwardRef<LadderGameHandle>(function LadderGame(_props, ref)
   const record = store.dailyMode ? store.daily[playedAt] : store.practice;
   const done = !!record && (record.solved || record.revealed);
 
-  useEffect(() => reportDaily('ladder', store.dailyMode), [store.dailyMode]);
+  useEffect(() => reportDaily('ladder', store.dailyMode, store.dailyDate), [store.dailyMode, store.dailyDate]);
   useEffect(
     () => offerDailySwitch('ladder', (d) => setStore((prev) => ({ ...prev, dailyMode: d }))),
     []
