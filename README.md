@@ -192,6 +192,19 @@ Set `VITE_GA_ID` to a Google Analytics 4 measurement ID (`G-…`) and the site l
 
 Every visitor is asked, wherever they are, and nothing loads until they agree — no geo-IP lookup, and no guessing the region from a time zone, which was the previous approach and could be defeated by a VPN. Declining is one click, the same as accepting, and is remembered. An answer lasts a year before it's asked again. A Global Privacy Control signal counts as a refusal without asking at all. Either way it can be switched off under Settings → Analytics, which also clears the cookies it had set. No account identifier is ever sent, so Google holds a browser-scoped id with nothing to tie it to a person.
 
+## Security
+
+[SECURITY.md](SECURITY.md) says what's in scope, what's a deliberate trade-off,
+and how to report something privately. The short version: the database is the
+part worth attacking — row-level security, the definer functions that bypass
+it, the daily gate that refuses to serve tomorrow, and the two-key lock on
+report actions. Every puzzle answer is already in the browser by design, so
+that isn't a finding; a way past a database policy is.
+
+Report privately via [GitHub's advisory form](https://github.com/rptetzloff/anagrimoire/security/advisories/new),
+the security option under **Report a problem** at the bottom of any page, or
+<security@anagrimoire.com>.
+
 ## Privacy and terms
 
 `/legal/privacy` and `/legal/terms`, written to describe what the code actually does — the rule being that if the two disagree, the code is right and the document is wrong. Both live in [src/LegalDocs.tsx](src/LegalDocs.tsx).

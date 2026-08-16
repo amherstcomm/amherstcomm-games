@@ -4,10 +4,40 @@
 # every network the app talks to, so a red run is ours, never an outage's.
 name: CI
 
+# Push only, deliberately.
+#
+# With `pull_request` as well, both events fired on the same commit and the
+# suite ran twice — two ten-minute browser jobs for one push. A concurrency
+# group covering both was not enough: the run that loses is marked cancelled,
+# but the work already dispatched carries on, and a cancelled run still posts
+# its checks, so the duplication both continued and went on looking untouched.
+#
+# Dropping the trigger removes the second run rather than racing it. Nothing is
+# lost by it: check runs attach to a commit, not to an event, so a
+# push-triggered run appears on any pull request whose head is that commit.
+# Development happens on `dev` here and a release is a pull request from it, so
+# every commit that could be reviewed has already been pushed and checked — and
+# it keeps the signal while the work is happening, which is the half that
+# matters when a branch takes twenty commits before it takes a PR.
+#
+# What this gives up is a pull request from a fork, where no push event reaches
+# us. There is one maintainer. If that changes, `pull_request` comes back, and
+# this paragraph is the reason it was ever gone.
 on:
   push:
     branches: ['**']
-  pull_request:
+
+# One run per branch. A commit already pushed past does not need its tests
+# finished, and on a branch like this one that is most of them.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref_name }}
+  cancel-in-progress: true
+
+# Least privilege: every job here only reads the repository. Without this
+# block a workflow gets the default token scope, which is wider than it
+# needs and is the blast radius if a step ever runs something hostile.
+permissions:
+  contents: read
 
 jobs:
   checks:
@@ -26,9 +56,19 @@ jobs:
       - run: npm run test:contract
       - run: npm run build
 
+  # Split three ways. The suite is ten minutes of browser on one runner and
+  # nothing about it is sequential — every test stubs its own network and
+  # brings its own storage — so thirds run at the same time for the same total
+  # work and a third of the wait. fail-fast is off because a failure in one
+  # shard says nothing about the other two, and finding out about all three at
+  # once beats three trips.
   e2e:
     name: browser + WCAG
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3]
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5
@@ -37,12 +77,13 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npx playwright install --with-deps chromium
-      - run: npm run test:e2e
+      - run: npm run test:e2e -- --shard=${{ matrix.shard }}/3
         env:
           CI: 'true'
       - uses: actions/upload-artifact@v4
         if: failure()
         with:
-          name: playwright-traces
+          # one name per shard, or the second upload fails on a taken name
+          name: playwright-traces-${{ matrix.shard }}
           path: test-results/
           retention-days: 7

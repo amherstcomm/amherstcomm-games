@@ -8,6 +8,17 @@ export default defineConfig({
   testDir: 'e2e',
   globalSetup: './e2e/global-setup.ts',
   fullyParallel: true,
+  // Two workers on CI, not four.
+  //
+  // Taking all four cores starved the thing being tested: the web server here
+  // is Vite in dev mode, which transforms modules on demand, so it needs a core
+  // of its own. With four browsers competing for four cores, contrast.spec.ts —
+  // eight palette-and-theme combinations, each a fresh navigation — failed with
+  // net::ERR_ABORTED and goto timeouts, and failed again on retry.
+  //
+  // Parallelism comes from sharding the job instead, which gives each shard a
+  // whole runner. Three shards of two is six-way, and nothing has to share.
+  workers: process.env.CI ? 2 : undefined,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,
   reporter: process.env.CI ? [['github'], ['list']] : 'list',

@@ -1,6 +1,6 @@
 # House rules
 
-Ten rules, so they get applied rather than rediscovered. Short on purpose.
+Twelve rules, so they get applied rather than rediscovered. Short on purpose.
 
 ## Measure, don't assert
 
@@ -12,6 +12,67 @@ the day. Reading the code would not have found any of them.
 
 Corollary: a test that reads the source proves the source, not the behaviour.
 Keep both.
+
+## Don't jump to conclusions
+
+The failure mode this repo actually suffers from is not being wrong about hard
+things. It is taking a plausible reading and stating it as established, when
+the check was one command away.
+
+Examples, all from one week: a run marked `cancelled` was reported as work that
+had stopped — the jobs were still going. A suite piped through `tail` was
+reported green — the pipe ate both the summary line and the exit code, so red
+and green looked identical. `npm audit`'s suggested fix version was read as the
+cost of fixing, and talked us out of a one-line upgrade that closed everything.
+A report link was described as being on every game when it was silently absent
+from six of them.
+
+So: **if a claim is checkable in one command, run the command before saying the
+thing.** When it isn't checkable, say which kind of claim it is. "The run list
+says cancelled" and "the work stopped" are different sentences, and collapsing
+them is how a wrong answer arrives sounding confident.
+
+Two habits that follow. Never pipe a command whose exit code matters — `set -o
+pipefail`, or don't pipe. And a tool's own report of what it did is a claim, not
+evidence: `npm audit fix` said it made no breaking changes in the same run that
+broke the build.
+
+## Docs are part of the change, not a follow-up
+
+Every PR checks the documents that make claims about the thing, and updates the
+ones the change made wrong: the readme, the security policy, the roadmap, the
+About and FAQ panel, and the privacy policy and terms in `src/LegalDocs.tsx`.
+Most changes touch two or three. Checking all of them is cheap; finding out
+months later which one went stale is not, and by then the wrong version has
+been read.
+
+This is a rule because nothing else catches it. A claim written when it was true
+does not announce that it stopped being true — no test fails, no build breaks,
+no page renders wrong. One pass found the privacy page describing the dailies as
+static files from GitHub, months after they started coming from Supabase first,
+so a reader with no account was told about the wrong company seeing their
+address; the readme offering to autofill today's puzzle from "every solver" when
+five of ten could; and three separate surfaces promising that a reporter's email
+address was deleted with the report, while nothing deleted it.
+
+The security policy is the one that must not drift. Its "known, not a
+vulnerability" list exists to tell a researcher not to report something, so an
+entry left there after the fix ships does not merely mislead — it suppresses the
+report. The terms had a live example of the same failure pointing the other way:
+they asked people to report security problems as public GitHub issues, which
+publishes the hole to everyone before there is a fix.
+
+Where a claim can be checked mechanically, prefer that to diligence. The accept-
+tier counts, the word-list version stamped into every band, the palette contrast
+floors and the assertion that a reporter's address never reaches an owner-facing
+surface are all tests for exactly this reason. Prose mostly cannot be, which is
+what the pass is for.
+
+Not every document says the same thing, and forcing them to match makes both
+worse. The readme is for someone deciding whether to run or fork it; the About
+panel is for someone deciding whether to trust it; the privacy page is for
+someone deciding what they are handing over. Same facts, three questions. What
+they may not do is disagree.
 
 ## Comments explain why, never what
 
@@ -71,10 +132,11 @@ including what was measured and what was rejected.
 
 ### Development happens on `dev`. Every PR is `dev` into `main`.
 
-No topic branches — the whole history is "from rptetzloff/dev", and CI costs
-~15 minutes a run, so a branch between you and `dev` buys a second run for
-nothing. Run whichever suite can catch the change locally before pushing;
-CI is for confirming, not discovering. The word-list rebuild workflow builds
+No topic branches — the whole history is "from rptetzloff/dev", and a branch
+between you and `dev` buys a second CI run for nothing. Run whichever suite can
+catch the change locally before pushing; CI is for confirming, not discovering.
+(This paragraph said "~15 minutes a run" until sharding took it to about six,
+which is the rule two sections up catching itself.) The word-list rebuild workflow builds
 from `main`: a change to that pipeline either lands on `main` before the
 dispatch, or the rebuilt files are generated locally and shipped in the same
 PR — which also collapses the two-dispatch dance into one.

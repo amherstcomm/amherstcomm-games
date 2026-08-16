@@ -17,6 +17,7 @@ import {
 import DailyStats from '@/DailyStats';
 import MobileKeyInput from '@/MobileKeyInput';
 import ShareButton from '@/ShareButton';
+import { asRecord, asRecords, type GameRecord } from '@/guessRecord';
 import { dailyIntent } from '@/routes';
 import { offerDailySwitch, reportDaily } from '@/dailyBus';
 import { usePrefs } from '@/prefs';
@@ -33,7 +34,6 @@ export type GuessGameHandle = { pressKey: (k: string) => void };
 const MAX_GUESSES = 6;
 const PLAY_KEY = 'anagrimoire:play:v1';
 
-type GameRecord = { secret: string; guesses: string[]; elapsedMs?: number }; // secret is base64
 type Stats = { played: number; won: number; streak: number; lastWinDate: string };
 type PlayStore = {
   dailyMode: boolean;
@@ -67,8 +67,8 @@ function readStore(): PlayStore {
     return {
       dailyMode: p?.dailyMode !== false,
       dailyDate: typeof p?.dailyDate === 'string' ? p.dailyDate : '',
-      daily: typeof p?.daily === 'object' && p.daily ? p.daily : {},
-      practice: typeof p?.practice === 'object' && p.practice ? p.practice : {},
+      daily: asRecords(p?.daily),
+      practice: asRecords(p?.practice),
       stats: {
         played: Number(p?.stats?.played) || 0,
         won: Number(p?.stats?.won) || 0,
@@ -81,13 +81,13 @@ function readStore(): PlayStore {
   }
 }
 
-function scoreGuess(secret: string, guess: string): LetterState[] {
-  const n = secret.length;
+function scoreGuess(answer: string, guess: string): LetterState[] {
+  const n = answer.length;
   const result: LetterState[] = Array(n).fill('absent');
   const counts: Record<string, number> = {};
   for (let i = 0; i < n; i++) {
-    if (guess[i] === secret[i]) result[i] = 'correct';
-    else counts[secret[i]] = (counts[secret[i]] ?? 0) + 1;
+    if (guess[i] === answer[i]) result[i] = 'correct';
+    else counts[answer[i]] = (counts[answer[i]] ?? 0) + 1;
   }
   for (let i = 0; i < n; i++) {
     if (result[i] !== 'correct' && (counts[guess[i]] ?? 0) > 0) {
@@ -178,14 +178,14 @@ const GuessGame = forwardRef<
         const d = { ...raw, ...chosen.board };
         if (typeof d?.date !== 'string' || typeof d?.words !== 'object') throw new Error('bad payload');
         setDailyData({ date: d.date, words: d.words });
-        // a new day resets all daily boards; same-day boards whose secret no
+        // a new day resets all daily boards; same-day boards whose answer no
         // longer matches the feed (e.g. the daily source changed) reset too
         setStore((prev) => {
           if (prev.dailyDate !== d.date) return { ...prev, dailyDate: d.date, daily: {} };
           const daily = { ...prev.daily };
           let changed = false;
           for (const [len, rec] of Object.entries(daily)) {
-            if (d.words[len] !== rec.secret) {
+            if (d.words[len] !== rec.answer) {
               delete daily[len];
               changed = true;
             }
@@ -231,7 +231,7 @@ const GuessGame = forwardRef<
       setStore((prev) =>
         prev.daily[lenKey]
           ? prev
-          : { ...prev, daily: { ...prev.daily, [lenKey]: { secret: encoded, guesses: [] } } }
+          : { ...prev, daily: { ...prev.daily, [lenKey]: { answer: encoded, guesses: [] } } }
       );
     } else {
       if (store.practice[lenKey] || !commonWords) return;
@@ -240,7 +240,7 @@ const GuessGame = forwardRef<
       setStore((prev) =>
         prev.practice[lenKey]
           ? prev
-          : { ...prev, practice: { ...prev.practice, [lenKey]: { secret: btoa(word), guesses: [] } } }
+          : { ...prev, practice: { ...prev.practice, [lenKey]: { answer: btoa(word), guesses: [] } } }
       );
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -264,19 +264,19 @@ const GuessGame = forwardRef<
   const noDailyAtLength = dailyMode && !!dailyData && !dailyData.words[lenKey];
 
   const record = dailyMode ? store.daily[lenKey] : store.practice[lenKey];
-  const secret = useMemo(() => {
+  const answer = useMemo(() => {
     if (!record) return null;
     try {
-      return atob(record.secret).toLowerCase();
+      return atob(record.answer).toLowerCase();
     } catch {
       return null;
     }
   }, [record]);
 
   const guesses = useMemo(() => record?.guesses ?? [], [record]);
-  const won = secret !== null && guesses.includes(secret);
+  const won = answer !== null && guesses.includes(answer);
   const lost = !won && guesses.length >= MAX_GUESSES;
-  const playing = secret !== null && !won && !lost;
+  const playing = answer !== null && !won && !lost;
 
   // Each word length is its own board on the same date, so the length is the
   // variant that keeps today's 5- and 6-letter puzzles apart.
@@ -287,7 +287,12 @@ const GuessGame = forwardRef<
     date: dailyData?.date ?? '',
     record: record ?? null,
     setRecord: (merged) =>
-      setStore((prev) => ({ ...prev, daily: { ...prev.daily, [lenKey]: merged as GameRecord } })),
+      setStore((prev) => {
+        // through asRecord because this one comes off the wire: the other
+        // device may be on a build that still writes `secret`
+        const rec = asRecord(merged);
+        return rec ? { ...prev, daily: { ...prev.daily, [lenKey]: rec } } : prev;
+      }),
     summary:
       won || lost
         ? { won, guesses: guesses.length, timeMs: record?.elapsedMs ?? 0, length }
@@ -311,21 +316,21 @@ const GuessGame = forwardRef<
 
   // aggregate keyboard letter states, correct > present > absent
   useEffect(() => {
-    if (!secret) {
+    if (!answer) {
       onLetterStates({});
       return;
     }
     const states: Record<string, LetterState> = {};
     const rank = { absent: 0, present: 1, correct: 2 };
     for (const g of guesses) {
-      const score = scoreGuess(secret, g);
+      const score = scoreGuess(answer, g);
       for (let i = 0; i < g.length; i++) {
         const prev = states[g[i]];
         if (!prev || rank[score[i]] > rank[prev]) states[g[i]] = score[i];
       }
     }
     onLetterStates(states);
-  }, [secret, guesses, onLetterStates]);
+  }, [answer, guesses, onLetterStates]);
 
   function showFlash(msg: string) {
     setFlash(msg);
@@ -355,7 +360,7 @@ const GuessGame = forwardRef<
   }
 
   function submit() {
-    if (!playing || !secret) return;
+    if (!playing || !answer) return;
     if (current.length !== length) {
       showFlash('Not enough letters');
       return;
@@ -364,12 +369,12 @@ const GuessGame = forwardRef<
       showFlash('Dictionary still loading…');
       return;
     }
-    if (current !== secret && !fullSetForLen.has(current)) {
+    if (current !== answer && !fullSetForLen.has(current)) {
       showFlash('Not in dictionary');
       return;
     }
     const next = [...guesses, current];
-    const didWin = current === secret;
+    const didWin = current === answer;
     const done = didWin || next.length >= MAX_GUESSES;
     setStore((prev) => {
       const bucket = dailyMode ? prev.daily : prev.practice;
@@ -394,12 +399,12 @@ const GuessGame = forwardRef<
 
   // translate the board's knowledge into solver clues
   function reveal() {
-    if (!secret) return;
+    if (!answer) return;
     const known = Array<string>(length).fill('');
     const present = new Set<string>();
     const absent = new Set<string>();
     for (const g of guesses) {
-      const score = scoreGuess(secret, g);
+      const score = scoreGuess(answer, g);
       for (let i = 0; i < g.length; i++) {
         if (score[i] === 'correct') known[i] = g[i];
         else if (score[i] === 'present') present.add(g[i]);
@@ -424,7 +429,7 @@ const GuessGame = forwardRef<
     setCurrent('');
     setStore((prev) => ({
       ...prev,
-      practice: { ...prev.practice, [lenKey]: { secret: btoa(word), guesses: [] } },
+      practice: { ...prev.practice, [lenKey]: { answer: btoa(word), guesses: [] } },
     }));
   }
 
@@ -546,14 +551,14 @@ const GuessGame = forwardRef<
         </p>
       )}
 
-      {secret && (
+      {answer && (
         <>
           <div className="relative flex flex-col items-center gap-1.5">
             {playing && <MobileKeyInput onKey={pressKey} label="Tap the board and type your guess" />}
             {Array.from({ length: MAX_GUESSES }, (_, row) => {
               const guess = guesses[row];
               const isCurrent = row === guesses.length && playing;
-              const score = guess && secret ? scoreGuess(secret, guess) : null;
+              const score = guess && answer ? scoreGuess(answer, guess) : null;
               return (
                 <div key={row} className="flex gap-1.5">
                   {Array.from({ length }, (_, col) => {
@@ -582,7 +587,7 @@ const GuessGame = forwardRef<
             )}
             {lost && (
               <p className="text-sm text-rose-300">
-                The word was <span className="font-bold uppercase">{secret}</span>
+                The word was <span className="font-bold uppercase">{answer}</span>
               </p>
             )}
           </div>
@@ -598,7 +603,7 @@ const GuessGame = forwardRef<
                 New word
               </button>
             )}
-            {(won || lost) && secret && (
+            {(won || lost) && answer && (
               <ShareButton
                 build={() =>
                   buildShare({
@@ -611,7 +616,7 @@ const GuessGame = forwardRef<
                       '',
                       // colours only — the letters stay secret
                       ...guesses.map((g) =>
-                        scoreGuess(secret, g)
+                        scoreGuess(answer, g)
                           .map((s) => TILE_EMOJI[palette][s])
                           .join('')
                       ),
