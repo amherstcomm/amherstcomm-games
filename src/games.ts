@@ -85,20 +85,34 @@ export const MODE_SLUG = Object.fromEntries(
   SLUGS.map((slug) => [SLUG_MODE[slug], slug])
 ) as Record<Mode, Slug>;
 
-/** How each game is named in an invitation — plainer than the result title,
- *  which carries board size and word length the reader doesn't need yet. */
-export const SLUG_NAME: Record<Slug, string> = {
-  guess: 'Guess the Word',
-  scramble: 'Scramble',
-  hive: 'Hive',
-  grid: 'Grid',
-  boxed: 'Boxed',
-  weave: 'Weave',
-  squares: 'Word Squares',
-  cryptogram: 'Cryptogram',
-  ladder: 'Word Ladder',
-  bridge: 'Bridge',
+/** What a game is called, in the two lengths the interface needs.
+ *
+ *  `short` is for a nav pill or a checkbox, where the row has to fit; `full` is
+ *  for a sentence, a settings label or an invitation. Most games have one name
+ *  and say it twice — only Guess, Squares and Ladder differ.
+ *
+ *  This was written out in six places and they disagreed. SettingsModal used
+ *  both forms in the same file, and a comment in App claimed the short label
+ *  "matches Learn, the boards and the home page" while three of those said the
+ *  long one. */
+export const GAME_NAME: Record<Mode, { short: string; full: string }> = {
+  pattern: { short: 'Guess', full: 'Guess the Word' },
+  descramble: { short: 'Scramble', full: 'Scramble' },
+  bee: { short: 'Hive', full: 'Hive' },
+  grid: { short: 'Grid', full: 'Grid' },
+  boxed: { short: 'Boxed', full: 'Boxed' },
+  weave: { short: 'Weave', full: 'Weave' },
+  squares: { short: 'Squares', full: 'Word Squares' },
+  cryptogram: { short: 'Cryptogram', full: 'Cryptogram' },
+  ladder: { short: 'Ladder', full: 'Word Ladder' },
+  bridge: { short: 'Bridge', full: 'Bridge' },
 };
+
+/** How each game is named in an invitation, keyed by the slug a link carries.
+ *  Derived, so it cannot disagree with the table above. */
+export const SLUG_NAME: Record<Slug, string> = Object.fromEntries(
+  SLUGS.map((slug) => [slug, GAME_NAME[SLUG_MODE[slug]].full])
+) as Record<Slug, string>;
 
 /** What the puzzle feed and the database call each game.
  *

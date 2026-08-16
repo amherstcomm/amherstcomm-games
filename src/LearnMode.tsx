@@ -16,6 +16,7 @@ import type { Prompt } from '@/bridge';
 import BridgeRow from '@/BridgeRow';
 import { LadderEntry, LadderWord } from '@/LadderRow';
 import { findGridPath, solveGrid, gridNeighbors } from '@/solvers';
+import { ALL_MODES, GAME_NAME } from '@/games';
 import type { Mode } from '@/storage';
 import { colorWords, type ColorWords, type Palette } from '@/theme';
 
@@ -1831,19 +1832,10 @@ const CIPHER_GUIDE = [
 // shell
 // ---------------------------------------------------------------------------
 
-const TITLES: Record<Mode, string> = {
-  pattern: 'Guess the Word',
-  descramble: 'Scramble',
-  bee: 'Hive',
-  grid: 'Grid',
-  boxed: 'Boxed',
-  weave: 'Weave',
-  squares: 'Word Squares',
-  cryptogram: 'Cryptogram',
-  ladder: 'Word Ladder',
-  bridge: 'Bridge',
-};
-
+/** Derived: the same ten names, written once in @/games. */
+const TITLES: Record<Mode, string> = Object.fromEntries(
+  ALL_MODES.map((m) => [m, GAME_NAME[m].full])
+) as Record<Mode, string>;
 function LearnBridge({
   dict,
   register,

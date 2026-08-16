@@ -16,6 +16,7 @@ import {
   ALL_SLUGS,
   ALL_VIEWS,
   FEED_NAME,
+  GAME_NAME,
   MODE_SLUG,
   POOL_MODES,
   SLUG_MODE,
@@ -72,6 +73,25 @@ describe('the game tables', () => {
       ['bridge', 'cryptogram', 'ladder', 'squares', 'weave'].sort()
     );
     for (const m of POOL_MODES) expect(ALL_MODES).toContain(m);
+  });
+
+  it('gives every mode both names, and never an empty one', () => {
+    for (const m of ALL_MODES) {
+      expect(GAME_NAME[m]?.short, `${m} short`).toBeTruthy();
+      expect(GAME_NAME[m]?.full, `${m} full`).toBeTruthy();
+    }
+  });
+
+  it('keeps the two names distinct per game, and unambiguous across games', () => {
+    // Two games sharing a short name would make the nav unreadable and the
+    // hide-a-game checkboxes ambiguous
+    expect(new Set(ALL_MODES.map((m) => GAME_NAME[m].short)).size).toBe(ALL_MODES.length);
+    expect(new Set(ALL_MODES.map((m) => GAME_NAME[m].full)).size).toBe(ALL_MODES.length);
+  });
+
+  it('derives the invitation name from the same table', () => {
+    // SLUG_NAME used to be a second hand-written list of the same ten names
+    for (const slug of ALL_SLUGS) expect(SLUG_NAME[slug]).toBe(GAME_NAME[SLUG_MODE[slug]].full);
   });
 
   it('names three views', () => {
