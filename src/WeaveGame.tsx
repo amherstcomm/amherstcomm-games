@@ -224,7 +224,7 @@ const WeaveGame = forwardRef<
   // fetch today's puzzle once
   useEffect(() => {
     let alive = true;
-    fetchDailyData('daily-weave')
+    fetchDailyData('weave')
       .then((raw) => {
         if (!alive) return;
         const chosen = resolveDifficulty(raw, difficulty());
@@ -255,7 +255,7 @@ const WeaveGame = forwardRef<
   // fetch the practice pool once
   useEffect(() => {
     let alive = true;
-    fetchPool('weave-pool')
+    fetchPool('weave')
       .then((d) => {
         // byDifficulty when the feed has it, the old size keys otherwise
         if (alive && (d?.byDifficulty || d?.pool)) setPool(d.byDifficulty ?? d.pool);

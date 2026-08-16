@@ -32,6 +32,7 @@ import ConsentBanner from '@/ConsentBanner';
 import { PrivacyPolicy, Terms } from '@/LegalDocs';
 import { onDailyReport, requestDaily } from '@/dailyBus';
 import { entryGame, entryRoute } from '@/routing/entry';
+import { FEED_NAME } from '@/games';
 import { useAddressBar, useNav } from '@/routing/useRouting';
 import { routeOf, type Overlay } from '@/routing/nav';
 import ReportMenu from '@/ReportMenu';
@@ -40,22 +41,6 @@ import TicketView from '@/TicketView';
 import ReportQueueView from '@/ReportQueueView';
 import ReportActionView from '@/ReportActionView';
 
-// What daily_puzzles calls each game, which is not what the URL calls it and
-// not what the results table calls it either — Guess is published as 'words'.
-// A Record so a new game cannot be quietly left unreportable; the compiler
-// asks, which is the only thing that has reliably caught this class of gap.
-const REPORT_SLUG: Record<Mode, string> = {
-  pattern: 'words',
-  descramble: 'scramble',
-  bee: 'hive',
-  grid: 'grid',
-  boxed: 'box',
-  squares: 'squares',
-  weave: 'weave',
-  cryptogram: 'cryptogram',
-  ladder: 'ladder',
-  bridge: 'bridge',
-};
 import { solveSquare } from '@/squares';
 import HomeView from '@/HomeView';
 import RouteLink from '@/RouteLink';
@@ -703,7 +688,7 @@ function App() {
   async function fillTodaysWeave() {
     setTodayStatus('loading');
     try {
-      const d = await fetchDailyData('daily-weave');
+      const d = await fetchDailyData('weave');
       const b = tierOf(d);
       const board = b.board as string[];
       // hard and extreme are wider boards, so the size comes off the payload
@@ -1625,7 +1610,7 @@ function App() {
   async function fillDailyHive() {
     setTodayStatus('loading');
     try {
-      const d = await fetchDailyData('daily-hive');
+      const d = await fetchDailyData('bee');
       const b = tierOf(d);
       const center = String(b.center).toLowerCase();
       const outers = (b.outers as string[]).map((c) => String(c).toLowerCase());
@@ -1643,7 +1628,7 @@ function App() {
   async function fillDailyBox() {
     setTodayStatus('loading');
     try {
-      const d = await fetchDailyData('daily-box');
+      const d = await fetchDailyData('boxed');
       const letters = (tierOf(d).sides as string[])
         .flatMap((s) => String(s).toLowerCase().replace(/[^a-z]/g, '').split(''))
         .slice(0, 12);
@@ -1658,7 +1643,7 @@ function App() {
   async function fillDailyGrid() {
     setTodayStatus('loading');
     try {
-      const d = await fetchDailyData('daily-grid');
+      const d = await fetchDailyData('grid');
       const cells = (tierOf(d).cells as string[]).map((c) => String(c).toLowerCase());
       // the tiers are different board sizes, so the preset follows the cells
       const preset = (Object.keys(GRID_PRESET_DIMS) as GridPreset[]).find(
@@ -1678,7 +1663,7 @@ function App() {
   async function fillDailyRack() {
     setTodayStatus('loading');
     try {
-      const d = await fetchDailyData('daily-scramble');
+      const d = await fetchDailyData('descramble');
       const letters = (tierOf(d).letters as string[]).map((c) => String(c).toLowerCase());
       if (letters.length !== 7 || !letters.every((c) => /^[a-z]$/.test(c))) {
         throw new Error('bad payload');
@@ -3484,7 +3469,7 @@ function App() {
             )}
             <ReportMenu
               context={{
-                game: REPORT_SLUG[mode],
+                game: FEED_NAME[mode],
                 gameLabel: MODES.find((m) => m.id === mode)?.label,
                 date: dateByMode[mode],
                 level,
@@ -3806,7 +3791,7 @@ function App() {
                     <p>
                       <ReportMenu
                         context={{
-                          game: REPORT_SLUG[mode],
+                          game: FEED_NAME[mode],
                           gameLabel: MODES.find((m) => m.id === mode)?.label,
                           date: dateByMode[mode],
                           level,

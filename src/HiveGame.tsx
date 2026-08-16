@@ -183,7 +183,7 @@ const HiveGame = forwardRef<
   // fetch today's generated hive once
   useEffect(() => {
     let alive = true;
-    fetchDailyData('daily-hive')
+    fetchDailyData('bee')
       .then((raw) => {
         if (!alive) return;
         const chosen = resolveDifficulty(raw, difficulty());

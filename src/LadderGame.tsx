@@ -164,7 +164,7 @@ const LadderGame = forwardRef<LadderGameHandle>(function LadderGame(_props, ref)
   // today's pair
   useEffect(() => {
     let alive = true;
-    fetchDailyData('daily-ladder')
+    fetchDailyData('ladder')
       .then((raw) => {
         if (!alive) return;
         if (typeof raw?.date !== 'string') throw new Error('bad payload');
@@ -193,7 +193,7 @@ const LadderGame = forwardRef<LadderGameHandle>(function LadderGame(_props, ref)
   // practice boards, drawn from the shared pool
   useEffect(() => {
     let alive = true;
-    fetchPool('ladder-pool')
+    fetchPool('ladder')
       .then((raw) => {
         if (!alive) return;
         const list = (raw?.byDifficulty?.[difficulty()] ?? []) as LadderRecord[];

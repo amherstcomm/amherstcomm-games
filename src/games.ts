@@ -100,6 +100,33 @@ export const SLUG_NAME: Record<Slug, string> = {
   bridge: 'Bridge',
 };
 
+/** What the puzzle feed and the database call each game.
+ *
+ *  A third name, after the storage key and the address slug, and not a spare:
+ *  `daily_puzzles` is keyed on it, `report_puzzle` looks a board up by it, and
+ *  the published files are named after it. Guess is `words` there for the same
+ *  historical reason it is `pattern` in storage and `guess` in the bar.
+ *
+ *  It was written out four times before this — a string union in dailyData, a
+ *  Record in App, and fourteen call-site literals — with nothing checking they
+ *  agreed. */
+export const FEED_NAME: Record<Mode, string> = {
+  pattern: 'words',
+  descramble: 'scramble',
+  bee: 'hive',
+  grid: 'grid',
+  boxed: 'box',
+  weave: 'weave',
+  squares: 'squares',
+  cryptogram: 'cryptogram',
+  ladder: 'ladder',
+  bridge: 'bridge',
+};
+
+/** The games that deal practice boards from a pre-generated pool. Not all of
+ *  them do: Guess, Scramble, Hive, Grid and Boxed generate their own. */
+export const POOL_MODES: Mode[] = ['weave', 'squares', 'cryptogram', 'ladder', 'bridge'];
+
 export function modeOf(slug: Slug): Mode {
   return SLUG_MODE[slug];
 }

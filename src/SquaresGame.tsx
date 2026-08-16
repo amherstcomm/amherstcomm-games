@@ -223,7 +223,7 @@ const SquaresGame = forwardRef<
   // today's boards
   useEffect(() => {
     let alive = true;
-    fetchDailyData('daily-squares')
+    fetchDailyData('squares')
       .then((raw) => {
         if (!alive) return;
         const d = raw;
@@ -257,7 +257,7 @@ const SquaresGame = forwardRef<
   // the practice pool, fetched once
   useEffect(() => {
     let alive = true;
-    fetchPool('squares-pool')
+    fetchPool('squares')
       .then((d) => {
         // byDifficulty when the feed has it, the old size keys otherwise
         if (alive && (d?.byDifficulty || d?.pool)) setPool(d.byDifficulty ?? d.pool);

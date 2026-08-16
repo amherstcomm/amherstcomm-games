@@ -162,7 +162,7 @@ const ScrambleGame = forwardRef<
   // fetch today's rack once
   useEffect(() => {
     let alive = true;
-    fetchDailyData('daily-scramble')
+    fetchDailyData('descramble')
       .then((raw) => {
         if (!alive) return;
         const chosen = resolveDifficulty(raw, difficulty());

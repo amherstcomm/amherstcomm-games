@@ -15,7 +15,9 @@ import {
   ALL_MODES,
   ALL_SLUGS,
   ALL_VIEWS,
+  FEED_NAME,
   MODE_SLUG,
+  POOL_MODES,
   SLUG_MODE,
   SLUG_NAME,
   modeOf,
@@ -50,6 +52,26 @@ describe('the game tables', () => {
 
   it('modeOf is SLUG_MODE, so callers need not know which to reach for', () => {
     for (const slug of ALL_SLUGS) expect(modeOf(slug)).toBe(SLUG_MODE[slug]);
+  });
+
+  it('gives every mode a feed name — the third naming, and the least visible', () => {
+    // Mode is what storage keys on, Slug is what the address says, and this is
+    // what daily_puzzles and the published files call it. Guess is `pattern`,
+    // `guess` and `words` in the three places, all for historical reasons, and
+    // nothing but this test says the third table is complete.
+    const missing = ALL_MODES.filter((m) => !FEED_NAME[m]);
+    expect(missing, `modes with no feed name: ${missing.join(', ')}`).toEqual([]);
+    expect(new Set(ALL_MODES.map((m) => FEED_NAME[m])).size).toBe(ALL_MODES.length);
+  });
+
+  it('only claims a pool for games that have one', () => {
+    // Guess, Scramble, Hive, Grid and Boxed generate their practice boards on
+    // the spot; the other five draw from a pre-generated pool. Asking for a
+    // pool that was never published is a 404 on every practice deal.
+    expect([...POOL_MODES].sort()).toEqual(
+      ['bridge', 'cryptogram', 'ladder', 'squares', 'weave'].sort()
+    );
+    for (const m of POOL_MODES) expect(ALL_MODES).toContain(m);
   });
 
   it('names three views', () => {

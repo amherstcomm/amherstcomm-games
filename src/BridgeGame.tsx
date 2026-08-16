@@ -181,7 +181,7 @@ const BridgeGame = forwardRef<BridgeGameHandle>(function BridgeGame(_props, ref)
   // today's board
   useEffect(() => {
     let alive = true;
-    fetchDailyData('daily-bridge')
+    fetchDailyData('bridge')
       .then((raw) => {
         if (!alive) return;
         if (typeof raw?.date !== 'string') throw new Error('bad payload');
@@ -214,7 +214,7 @@ const BridgeGame = forwardRef<BridgeGameHandle>(function BridgeGame(_props, ref)
   // practice boards from the shared pool
   useEffect(() => {
     let alive = true;
-    fetchPool('bridge-pool')
+    fetchPool('bridge')
       .then((raw) => {
         if (!alive) return;
         const list = ((raw?.byDifficulty?.[difficulty()] ?? []) as Record<string, unknown>[])

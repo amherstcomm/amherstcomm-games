@@ -11,28 +11,17 @@ const IS_DEV_SITE =
 
 const BASE = 'https://raw.githubusercontent.com/rptetzloff/anagrimoire/puzzle-data/data';
 
-export function dailyDataUrl(
-  name:
-    | 'daily-words'
-    | 'daily-hive'
-    | 'daily-box'
-    | 'daily-scramble'
-    | 'daily-grid'
-    | 'daily-weave'
-    | 'daily-squares'
-    | 'daily-cryptogram'
-    | 'daily-ladder'
-    | 'daily-bridge'
-): string {
-  return `${BASE}/${IS_DEV_SITE ? 'dev-' : ''}${name}.json`;
+/** Where a game's daily lives. The feed name comes from the one table that
+ *  has it, so a new game needs no line here. */
+export function dailyDataUrl(mode: Mode): string {
+  return `${BASE}/${IS_DEV_SITE ? 'dev-' : ''}daily-${FEED_NAME[mode]}.json`;
 }
 
-// practice puzzles are pre-generated server-side and shared by both sites
-export const WEAVE_POOL_URL = `${BASE}/weave-pool.json`;
-export const SQUARES_POOL_URL = `${BASE}/squares-pool.json`;
-export const CRYPTOGRAM_POOL_URL = `${BASE}/cryptogram-pool.json`;
-export const LADDER_POOL_URL = `${BASE}/ladder-pool.json`;
-export const BRIDGE_POOL_URL = `${BASE}/bridge-pool.json`;
+/** And its practice pool, for the games that have one. Shared by both sites —
+ *  the pools are pre-generated server-side and carry no date. */
+export function poolUrl(mode: Mode): string {
+  return `${BASE}/${FEED_NAME[mode]}-pool.json`;
+}
 
 // which daily set this site plays — synced results are tagged with it so
 // dev-site testing never pollutes production's global daily stats
@@ -49,6 +38,8 @@ export const DAILY_ENV: 'dev' | 'prod' = IS_DEV_SITE ? 'dev' : 'prod';
 // year; it only fires when the RPC errors, times out, or has nothing.
 
 import { supabase } from '@/supabase';
+import { FEED_NAME } from '@/games';
+import type { Mode } from '@/games';
 
 // A slow answer is an outage from the player's point of view. Four seconds,
 // then the file feed takes over — generous for a warm RPC, short enough that
@@ -79,22 +70,14 @@ async function viaFile(url: string): Promise<unknown> {
 /* eslint-disable @typescript-eslint/no-explicit-any --
    drop-in for fetch().json(), whose result is any; the games validate. */
 
-export async function fetchDailyData(name: Parameters<typeof dailyDataUrl>[0]): Promise<any> {
-  const db = await viaRpc(name.replace(/^daily-/, ''), DAILY_ENV);
-  return db ?? viaFile(dailyDataUrl(name));
+export async function fetchDailyData(mode: Mode): Promise<any> {
+  const db = await viaRpc(FEED_NAME[mode], DAILY_ENV);
+  return db ?? viaFile(dailyDataUrl(mode));
 }
 
-const POOL_URL = {
-  'weave-pool': WEAVE_POOL_URL,
-  'squares-pool': SQUARES_POOL_URL,
-  'cryptogram-pool': CRYPTOGRAM_POOL_URL,
-  'ladder-pool': LADDER_POOL_URL,
-  'bridge-pool': BRIDGE_POOL_URL,
-};
-
-export async function fetchPool(pool: keyof typeof POOL_URL): Promise<any> {
-  const db = await viaRpc(pool, 'shared');
-  return db ?? viaFile(POOL_URL[pool]);
+export async function fetchPool(mode: Mode): Promise<any> {
+  const db = await viaRpc(`${FEED_NAME[mode]}-pool`, 'shared');
+  return db ?? viaFile(poolUrl(mode));
 }
 
 /* eslint-enable @typescript-eslint/no-explicit-any */

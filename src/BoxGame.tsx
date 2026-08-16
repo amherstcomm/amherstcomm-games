@@ -252,7 +252,7 @@ const BoxGame = forwardRef<
   // fetch today's generated box once
   useEffect(() => {
     let alive = true;
-    fetchDailyData('daily-box')
+    fetchDailyData('boxed')
       .then((raw) => {
         if (!alive) return;
         const chosen = resolveDifficulty(raw, difficulty());

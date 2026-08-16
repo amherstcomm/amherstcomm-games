@@ -236,7 +236,7 @@ const CryptogramGame = forwardRef<CryptogramGameHandle, object>(
     // today's passage
     useEffect(() => {
       let alive = true;
-      fetchDailyData('daily-cryptogram')
+      fetchDailyData('cryptogram')
         .then((raw) => {
           if (!alive) return;
           const d = raw;
@@ -267,7 +267,7 @@ const CryptogramGame = forwardRef<CryptogramGameHandle, object>(
     // the practice pool, fetched once
     useEffect(() => {
       let alive = true;
-      fetchPool('cryptogram-pool')
+      fetchPool('cryptogram')
         .then((d) => {
           if (alive && d?.byDifficulty) setPool(d.byDifficulty);
         })

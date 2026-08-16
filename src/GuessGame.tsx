@@ -167,7 +167,7 @@ const GuessGame = forwardRef<
   // fetch today's daily words once
   useEffect(() => {
     let alive = true;
-    fetchDailyData('daily-words')
+    fetchDailyData('pattern')
       .then((raw) => {
         if (!alive) return;
         const chosen = resolveDifficulty(raw, difficulty());

@@ -213,7 +213,7 @@ const GridGame = forwardRef<
   // fetch today's grid once
   useEffect(() => {
     let alive = true;
-    fetchDailyData('daily-grid')
+    fetchDailyData('grid')
       .then((raw) => {
         if (!alive) return;
         const chosen = resolveDifficulty(raw, difficulty());
