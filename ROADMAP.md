@@ -715,6 +715,90 @@ Resend the moment an email is sent. Against that narrow gain: a key that, lost
 or rotated wrong, silently breaks the one thing the address exists for. Shorter
 retention is the better lever and has no key to lose.
 
+### The reconstruction: breaking up App.tsx, and standing up for a store — proposed August 2026
+
+Three strands that want doing together, because each makes the others cheaper.
+
+#### 1. The monolith
+
+`App.tsx` is 4,261 lines and holds **92 `useState` calls**. The line count is the
+symptom; the state count is the disease, and it has already cost something
+measurable: the report dialog lost focus after every keystroke because a parent
+re-render tore down a child's effect, and in a component with 92 pieces of state
+every one of them re-renders the whole page. `LearnMode.tsx` at 2,195 is the
+same argument at half the size.
+
+The seams, roughly in order of how much they'd pay back:
+
+- **The route and panel state machine** — `currentRoute`, the panel booleans,
+  the history push/pop. Self-contained, testable with no DOM, and the site of
+  two bugs this month: report pages missing from `currentRoute`, and per-section
+  gating that had to be got right a dozen times instead of once.
+- **The ten solver surfaces** — the bulk of the file, and already ten separate
+  mental units with their own inputs and results.
+- **Dictionary loading and the solver allowlist** — where the dead bridge solver
+  hid for a release.
+- **Chrome** — header, nav, footer. Small, and `GameMenu` shows the shape.
+
+#### 2. Security as a stated requirement rather than a habit
+
+Several good patterns exist and are nowhere written down as rules: definer
+functions pinned with `search_path = ''`, RLS tables with grants revoked
+outright rather than merely unpoliced, and the two-key model the report actions
+established. Those belong in CLAUDE.md as requirements.
+
+Two things that do not exist yet:
+
+- **A content security policy.** A static SPA with no inline-script needs can
+  take a strict one, and it is the single biggest lever available here.
+- **A dependency policy**, so the 27 open Dependabot alerts are a routine sweep
+  rather than an event. Triage by whether a package reaches the runtime bundle
+  or processes untrusted input — a build-only advisory in a toolchain does not
+  reach a player, and a forced major on Vite or Vitest can cost more than the
+  alert it closes.
+
+#### 3. App mode, and the store
+
+Nothing is in place: no manifest, no service worker, no maskable icons, and
+Vite's default `base: '/'` emits absolute asset paths — which is exactly what
+breaks inside a native shell serving from a non-http origin. Cheap now, painful
+after a restructure.
+
+What shapes decisions *before* the restructure rather than at submission:
+
+- **Asset paths and routing.** `base: './'`, and a router that does not assume
+  the server rewrites every path to `index.html`, because in a wrapper there is
+  no server to do it.
+- **OAuth redirects.** Sign-in currently returns to the visitor's origin. In a
+  wrapper the origin is a custom scheme, so the redirect allow-list and
+  deep-link handling both need work. This is the fiddliest part of the whole
+  track.
+- **Offline.** The word bands are already versioned, fetched from a pinned tag,
+  and shipped with a bundled fallback — which means bundling them in an app is a
+  short step and gives real offline play. That matters beyond convenience: a
+  repackaged website is the classic App Store rejection, and genuine offline is
+  the most honest answer to it.
+
+Already in hand, and worth knowing because they are the two things that most
+often sink a first submission: **in-app account deletion exists** (`delete_account`,
+a button under Account), and the privacy work of August maps almost directly onto
+Apple's privacy labels and Google's Data Safety form — the hard part of those
+forms is enumerating what you collect, which is now written down and checked
+against the code.
+
+To verify rather than assume: whether Apple's login rule obliges Sign in with
+Apple here. It applies to apps using a third-party service for the primary
+account, and there is an exemption where the app has its own account system —
+email one-time codes, which this has. It should be read against the current
+guidelines rather than guessed at, because adding it touches the auth UI and is
+much cheaper before a restructure than after. Analytics may also implicate
+Apple's tracking prompt in an app context.
+
+Google Play is the easier of the two: a Trusted Web Activity via Bubblewrap or
+PWABuilder, needing `assetlinks.json` on the domain and a PWA that clears the
+quality bar. iOS realistically needs Capacitor and something native to justify
+itself.
+
 ### Admin portal — much later
 Everything owner-facing is SQL-editor-only today: clearing a display name,
 adding blocklist entries, reading `suspect_daily_results`. That's fine, and
