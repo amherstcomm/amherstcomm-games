@@ -8,6 +8,11 @@ export default defineConfig({
   testDir: 'e2e',
   globalSetup: './e2e/global-setup.ts',
   fullyParallel: true,
+  // Playwright takes half the cores by default, which on a four-core runner is
+  // two workers for 122 tests — the same suite that runs in about two and a
+  // half minutes locally took over ten. All four on CI; locally the default is
+  // left alone, since a laptop has other things to do.
+  workers: process.env.CI ? '100%' : undefined,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,
   reporter: process.env.CI ? [['github'], ['list']] : 'list',
