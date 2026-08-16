@@ -31,6 +31,9 @@ import { solvePattern, solveDescramble, solveBee, solveBoxed, solveGrid, findGri
 import ConsentBanner from '@/ConsentBanner';
 import { PrivacyPolicy, Terms } from '@/LegalDocs';
 import { onDailyReport, requestDaily } from '@/dailyBus';
+import { entryGame, entryRoute } from '@/routing/entry';
+import { useAddressBar, useNav } from '@/routing/useRouting';
+import { routeOf, type Overlay } from '@/routing/nav';
 import ReportMenu from '@/ReportMenu';
 import { amOwner } from '@/reports';
 import TicketView from '@/TicketView';
@@ -69,17 +72,9 @@ import {
 } from '@/cryptogramSolver';
 import {
   MODE_SLUG,
-  initialGame,
-  initialRoute,
   modeOf,
-  parsePath,
   pathOf,
-  titleOf,
-  type AccountTab,
-  type Panel,
   type Route,
-  type SettingsTab,
-  type StatsTab,
 } from '@/routes';
 import {
   difficulty as currentDifficulty,
@@ -581,7 +576,7 @@ const initial = loadState();
 // kind of instruction a link gives, so it travels the same path. 'home' stays
 // on the front page; 'last' falls through to whatever was stored.
 const startTarget =
-  initialRoute.kind === 'home' &&
+  entryRoute().kind === 'home' &&
   initial.startPage !== 'home' &&
   initial.startPage !== 'last'
     ? ({ view: 'play', slug: MODE_SLUG[initial.startPage] } as const)
@@ -589,21 +584,19 @@ const startTarget =
 
 // A link names both a game and a tab. It only overrides the game it names —
 // every other game keeps whatever the visitor last had open.
-const entryGame = initialGame ?? startTarget;
-const linkMode = entryGame ? modeOf(entryGame.slug) : null;
-const linkView = entryGame?.view === 'play' ? true : entryGame?.view === 'solve' ? false : null;
+const entry = entryGame() ?? startTarget;
+const linkMode = entry ? modeOf(entry.slug) : null;
+const linkView = entry?.view === 'play' ? true : entry?.view === 'solve' ? false : null;
 function initialPlay(mode: Mode, stored: boolean): boolean {
   return linkMode === mode && linkView !== null ? linkView : stored;
 }
 
 // Panels and legal documents are addresses too, so arriving at one opens it.
-const panelAtLoad = (p: Panel) => initialRoute.kind === 'panel' && initialRoute.panel === p;
-const isOverlay = (r: Route) => r.kind === 'panel' || r.kind === 'account' || r.kind === 'legal';
 
 // An invite link stashes its code before anything else happens: accepting may
 // need a sign-in first, and OAuth leaves the page entirely — the stash is what
 // survives the round trip. The account panel picks it up from there.
-if (initialRoute.kind === 'friend') stashInvite(initialRoute.code);
+if (entryRoute().kind === 'friend') stashInvite((entryRoute() as { code: string }).code);
 
 function App() {
   const [mode, setMode] = useState<Mode>(linkMode ?? initial.mode);
@@ -848,51 +841,45 @@ function App() {
   const [sorts, setSorts] = useState(initial.sort);
   const [kbOpen, setKbOpen] = useState(initial.keyboard);
   // "/" is a page now, not a synonym for wherever you left off
-  const [atHome, setAtHome] = useState(
-    initialRoute.kind === 'home' && initial.startPage === 'home'
-  );
+  // Where the app is. The nine booleans, the ladder, the three refs and both
+  // effects live in src/routing/useRouting.ts now — this is the seam: page and
+  // overlay identity there, which game and which view here.
+  const routing = useNav(entryRoute(), initial.startPage === 'home');
+  const { nav, open: openOverlay, close: closeOverlay, overlayLink, pageLink } = routing;
+
+  function overlay<K extends Overlay['kind']>(kind: K): Extract<Overlay, { kind: K }> | undefined {
+    return nav.overlays.find((o): o is Extract<Overlay, { kind: K }> => o.kind === kind);
+  }
+
+  const atHome = nav.page.kind === 'home';
+  const reportPage: Route | null =
+    nav.page.kind === 'ticket' || nav.page.kind === 'reportAction' || nav.page.kind === 'reportQueue'
+      ? nav.page
+      : null;
+
+  // `some`, not `top` — the consent banner opens Legal over an open Settings,
+  // and both modals stay mounted. The address is the top; what renders is
+  // whatever is anywhere on the stack.
+  const legalOpen = !!overlay('legal');
+  const legalTab = overlay('legal')?.doc ?? nav.last.legal;
+  const statsOpen = !!overlay('stats');
+  const statsTab = overlay('stats')?.tab ?? nav.last.stats;
+  const settingsOpen = !!overlay('settings');
+  const settingsTab = overlay('settings')?.tab ?? nav.last.settings;
+  const accountOpen = !!overlay('account');
+  const accountTab = overlay('account')?.tab ?? nav.last.account;
+  const aboutOpen = overlay('panel')?.panel === 'about';
+  const keysOpen = overlay('panel')?.panel === 'keys';
+
+  const setAtHome = (v: boolean) =>
+    routing.dispatch({ type: 'page', page: v ? { kind: 'home' } : { kind: 'game' } });
+
   const [startPage, setStartPage] = useState(initial.startPage);
-  // The two report pages are whole views rather than panels: one is read by
-  // somebody with no account and no game open, the other by an owner coming
-  // straight from an email. Neither has anything behind it to put back.
-  const [reportPage, setReportPage] = useState<Route | null>(
-    initialRoute.kind === 'ticket' ||
-    initialRoute.kind === 'reportAction' ||
-    initialRoute.kind === 'reportQueue'
-      ? initialRoute
-      : null
-  );
   // Whether to draw the queue link at all. False for everyone signed out and
   // for every ordinary account, and the server says so — this only decides a
   // link, and the RPCs behind it check again regardless.
   const [owner, setOwner] = useState(false);
-
-  const [aboutOpen, setAboutOpen] = useState(panelAtLoad('about'));
-  const [legalOpen, setLegalOpen] = useState(initialRoute.kind === 'legal');
-  const [legalTab, setLegalTab] = useState<'notices' | 'privacy' | 'terms'>(
-    initialRoute.kind === 'legal' ? initialRoute.doc : 'notices'
-  );
-  const [statsOpen, setStatsOpen] = useState(initialRoute.kind === 'stats');
-  const [statsTab, setStatsTab] = useState<StatsTab>(
-    initialRoute.kind === 'stats' ? initialRoute.tab : 'overall'
-  );
-  const [learnMode, setLearnMode] = useState(initialGame?.view === 'learn');
-  const [accountOpen, setAccountOpen] = useState(
-    initialRoute.kind === 'account' || initialRoute.kind === 'friend'
-  );
-  // an invite link goes straight to the tab it's about
-  const [accountTab, setAccountTab] = useState<AccountTab>(
-    initialRoute.kind === 'account'
-      ? initialRoute.tab
-      : initialRoute.kind === 'friend'
-        ? 'friends'
-        : 'personal'
-  );
-  const [settingsOpen, setSettingsOpen] = useState(initialRoute.kind === 'settings');
-  const [settingsTab, setSettingsTab] = useState<SettingsTab>(
-    initialRoute.kind === 'settings' ? initialRoute.tab : 'site'
-  );
-  const [keysOpen, setKeysOpen] = useState(panelAtLoad('keys'));
+  const [learnMode, setLearnMode] = useState(entryGame()?.view === 'learn');
   const [theme, setTheme] = useState<ThemeMode>(initial.theme);
   const [palette, setPalette] = useState<Palette>(initial.palette);
   const [navKeys, setNavKeys] = useState<NavKeys>(initial.navKeys);
@@ -1158,8 +1145,8 @@ function App() {
 
   const aboutRef = useRef<HTMLDivElement>(null);
   const legalRef = useRef<HTMLDivElement>(null);
-  const closeAbout = useCallback(() => setAboutOpen(false), []);
-  const closeLegal = useCallback(() => setLegalOpen(false), []);
+  const closeAbout = closeOverlay;
+  const closeLegal = closeOverlay;
   useModalA11y(aboutRef, closeAbout, aboutOpen);
   useModalA11y(legalRef, closeLegal, legalOpen);
 
@@ -1193,7 +1180,7 @@ function App() {
 
   const shownViews = useMemo(() => {
     const vis = visibleViews(hiddenViews);
-    return ALL_VIEWS.filter((v) => vis.includes(v) || v === initialGame?.view);
+    return ALL_VIEWS.filter((v) => vis.includes(v) || v === entryGame()?.view);
   }, [hiddenViews]);
 
   // Words grouped by shape, built only while the cryptogram solver is on
@@ -1335,7 +1322,8 @@ function App() {
   // the player isn't currently on.
   const [dailyByMode, setDailyByMode] = useState<Record<Mode, boolean>>(() => {
     const seed = Object.fromEntries(ALL_MODES.map((m) => [m, true])) as Record<Mode, boolean>;
-    if (initialGame?.view === 'play') seed[modeOf(initialGame.slug)] = initialGame.daily;
+    const g = entryGame();
+    if (g?.view === 'play') seed[modeOf(g.slug)] = g.daily;
     return seed;
   });
 
@@ -1365,113 +1353,50 @@ function App() {
     []
   );
 
-  // Where the app is, written as an address.
-  const currentRoute: Route = useMemo(() => {
-    if (legalOpen) return { kind: 'legal', doc: legalTab };
-    if (statsOpen) return { kind: 'stats', tab: statsTab };
-    if (settingsOpen) return { kind: 'settings', tab: settingsTab };
-    if (accountOpen) return { kind: 'account', tab: accountTab };
-    const panel: Panel | null = keysOpen ? 'keys' : aboutOpen ? 'about' : null;
-    if (panel) return { kind: 'panel', panel };
-    // Below the panels but above the games: a report page is where you are,
-    // not something laid over a board. Leaving it out meant /reports rendered
-    // correctly and then rewrote the address to the game underneath it — so
-    // the tab said "Weave — Daily", a refresh landed somewhere else, and a
-    // link to a ticket could not survive being copied.
-    if (reportPage) return reportPage;
-    if (atHome) return { kind: 'home' };
-    return { kind: 'game', view: currentView, slug: MODE_SLUG[mode], daily: dailyByMode[mode] };
-  }, [legalOpen, legalTab, statsOpen, statsTab, settingsOpen, settingsTab, keysOpen, accountOpen, accountTab, aboutOpen, reportPage, atHome, currentView, mode, dailyByMode]);
+  // Where the app is, written as an address. `routeOf` is "whatever is on top,
+  // or the page" — the ladder this replaced had a rung per kind and /reports
+  // was never given one, so the page rendered and the address reverted to the
+  // game underneath.
+  //
+  // `daily` only means something under /play: pathOf drops it for solve and
+  // learn, so emitting it there produced a Route that could not round-trip
+  // through its own address.
+  const currentRoute: Route = useMemo(
+    () =>
+      routeOf(nav, {
+        slug: MODE_SLUG[mode],
+        view: currentView,
+        daily: currentView === 'play' && dailyByMode[mode],
+      }),
+    [nav, mode, currentView, dailyByMode]
+  );
 
-  // Did we put the panel in the history ourselves? Closing one we pushed is a
-  // step back rather than a new address, so Back doesn't reopen what was just
-  // dismissed. False at load: arriving straight at /stats leaves nothing of
-  // ours behind it, and going back from there should leave the site.
-  // the tab, the bookmark, and what a search result would show
-  useEffect(() => {
-    document.title = titleOf(currentRoute);
-  }, [currentRoute]);
-
-  const ourOverlay = useRef(false);
-  const settled = useRef(false);
-  const prevRoute = useRef<Route | null>(null);
-
-  useEffect(() => {
-    const path = pathOf(currentRoute);
-    // "/" is a real page when it's the home page, and a placeholder when the
-    // start page sends you straight to a game. Leaving the first should be a
-    // step you can come back from; overwriting the second is the whole point.
-    const leavingHome = prevRoute.current?.kind === 'home';
-    prevRoute.current = currentRoute;
-    // The first render writes nothing: someone who typed "/" keeps the tidy
-    // link they typed, and a route asked for by hand is already on screen.
-    if (!settled.current) {
-      settled.current = true;
-      return;
-    }
-    if (path === window.location.pathname) return;
-
-    // one panel swapped for another replaces the entry rather than stacking it
-    if (isOverlay(currentRoute) && ourOverlay.current) {
-      history.replaceState(null, '', path + window.location.hash);
-      return;
-    }
-    if (!isOverlay(currentRoute) && ourOverlay.current) {
-      ourOverlay.current = false;
-      history.back();
-      return;
-    }
-    if (window.location.pathname === '/' && !leavingHome) {
-      history.replaceState(null, '', path + window.location.hash);
-    } else {
-      history.pushState(null, '', path + window.location.hash);
-    }
-    ourOverlay.current = isOverlay(currentRoute);
-  }, [currentRoute]);
-
-  // Back and Forward. The browser has already changed the URL by the time this
-  // runs, so the effect above sees a match and stays quiet.
-  function applyRoute(r: Route) {
-    setAboutOpen(r.kind === 'panel' && r.panel === 'about');
-    setKeysOpen(r.kind === 'panel' && r.panel === 'keys');
-    if (r.kind === 'friend') stashInvite(r.code);
-    setReportPage(
-      r.kind === 'ticket' || r.kind === 'reportAction' || r.kind === 'reportQueue' ? r : null
-    );
-    setAccountOpen(r.kind === 'account' || r.kind === 'friend');
-    if (r.kind === 'account') setAccountTab(r.tab);
-    if (r.kind === 'friend') setAccountTab('friends');
-    setStatsOpen(r.kind === 'stats');
-    setSettingsOpen(r.kind === 'settings');
-    setLegalOpen(r.kind === 'legal');
-    if (r.kind === 'stats') setStatsTab(r.tab);
-    if (r.kind === 'settings') setSettingsTab(r.tab);
-    if (r.kind === 'legal') setLegalTab(r.doc);
-    setAtHome(r.kind === 'home');
-    if (r.kind === 'game') {
-      const m = modeOf(r.slug);
-      setMode(m);
-      if (r.view === 'learn') {
-        setLearnMode(true);
-      } else {
-        setLearnMode(false);
-        playFlags[m][1](r.view === 'play');
-        if (r.view === 'play') requestDaily(m, r.daily);
-      }
-    }
-    ourOverlay.current = false;
-  }
-
-  // through a ref so the listener is registered once, but always runs the
-  // current closure rather than one holding last render's state
-  const applyRef = useRef(applyRoute);
-  applyRef.current = applyRoute;
-  useEffect(() => {
-    const onPop = () =>
-      applyRef.current(parsePath(window.location.pathname) ?? { kind: 'home' });
-    window.addEventListener('popstate', onPop);
-    return () => window.removeEventListener('popstate', onPop);
-  }, []);
+  // Back and Forward reach both halves: the nav reducer, and the game state
+  // that only App holds.
+  useAddressBar(
+    currentRoute,
+    useCallback(
+      (r: Route) => {
+        if (r.kind === 'friend') stashInvite(r.code);
+        routing.dispatch({ type: 'apply', route: r });
+        if (r.kind === 'game') {
+          const m = modeOf(r.slug);
+          setMode(m);
+          if (r.view === 'learn') {
+            setLearnMode(true);
+          } else {
+            setLearnMode(false);
+            playFlags[m][1](r.view === 'play');
+            if (r.view === 'play') requestDaily(m, r.daily);
+          }
+        }
+      },
+      // playFlags is rebuilt every render; the ref inside useAddressBar is what
+      // keeps the listener current, so this closure is allowed to be fresh
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+      [routing.dispatch, playFlags]
+    )
+  );
 
   const shownLengths = useMemo(() => lengthChoices(lengthRange), [lengthRange]);
 
@@ -2100,8 +2025,7 @@ function App() {
                 requestDaily(m, true);
               }}
               onBoards={() => {
-                setStatsTab('boards');
-                setStatsOpen(true);
+                openOverlay({ kind: 'stats', tab: 'boards' });
               }}
             />
           )}
@@ -3537,8 +3461,7 @@ function App() {
           {/* wraps into centered rows rather than one overflowing line */}
           <div className="mt-3 flex flex-wrap items-center justify-center gap-x-5 gap-y-2.5">
             <RouteLink
-              to="/"
-              onGo={() => setAtHome(true)}
+              {...pageLink({ kind: 'home' })}
               className="inline-flex items-center gap-1.5 hover:text-slate-300 transition-colors"
             >
               <Home className="w-3.5 h-3.5" />
@@ -3552,11 +3475,7 @@ function App() {
                 it might not appear. */}
             {owner && (
               <RouteLink
-                to="/reports"
-                onGo={() => {
-                  setAtHome(false);
-                  setReportPage({ kind: 'reportQueue' });
-                }}
+                {...pageLink({ kind: 'reportQueue' })}
                 className="inline-flex items-center gap-1.5 text-accent hover:brightness-110 transition"
               >
                 <FlagIcon className="w-3.5 h-3.5" aria-hidden="true" />
@@ -3596,24 +3515,21 @@ function App() {
               WordLock
             </a>
             <RouteLink
-              to="/stats/overall"
-              onGo={() => setStatsOpen(true)}
+              {...overlayLink({ kind: 'stats', tab: nav.last.stats })}
               className="inline-flex items-center gap-1.5 hover:text-slate-300 transition-colors"
             >
               <BarChart3 className="w-3.5 h-3.5" />
               Stats
             </RouteLink>
             <RouteLink
-              to="/settings/site"
-              onGo={() => setSettingsOpen(true)}
+              {...overlayLink({ kind: 'settings', tab: nav.last.settings })}
               className="inline-flex items-center gap-1.5 hover:text-slate-300 transition-colors"
             >
               <Settings className="w-3.5 h-3.5" />
               Settings
             </RouteLink>
             <RouteLink
-              to="/keys"
-              onGo={() => setKeysOpen(true)}
+              {...overlayLink({ kind: 'panel', panel: 'keys' })}
               className="inline-flex items-center gap-1.5 hover:text-slate-300 transition-colors"
             >
               <Keyboard className="w-3.5 h-3.5" />
@@ -3621,8 +3537,13 @@ function App() {
             </RouteLink>
             {supabase && (
               <RouteLink
-                to={session ? '/account' : '/sign-in'}
-                onGo={() => setAccountOpen(true)}
+                // Signed out there is only one tab to be on, and /sign-in is
+                // the friendlier address for it — but it has to be the address
+                // the click actually goes to, which is why the target is pinned
+                // rather than read from the remembered tab.
+                {...(session
+                  ? overlayLink({ kind: 'account', tab: nav.last.account })
+                  : { to: '/sign-in', onGo: () => openOverlay({ kind: 'account', tab: 'personal' }) })}
                 className="inline-flex items-center gap-1.5 hover:text-slate-300 transition-colors"
               >
                 <UserRound className="w-3.5 h-3.5" />
@@ -3630,16 +3551,14 @@ function App() {
               </RouteLink>
             )}
             <RouteLink
-              to="/about"
-              onGo={() => setAboutOpen(true)}
+              {...overlayLink({ kind: 'panel', panel: 'about' })}
               className="inline-flex items-center gap-1.5 hover:text-slate-300 transition-colors"
             >
               <Info className="w-3.5 h-3.5" />
               About &amp; FAQ
             </RouteLink>
             <RouteLink
-              to="/legal/notices"
-              onGo={() => setLegalOpen(true)}
+              {...overlayLink({ kind: 'legal', doc: nav.last.legal })}
               className="inline-flex items-center gap-1.5 hover:text-slate-300 transition-colors"
             >
               <Scale className="w-3.5 h-3.5" />
@@ -3669,8 +3588,8 @@ function App() {
         <StatsModal
           signedIn={!!session}
           view={statsTab}
-          onView={setStatsTab}
-          onClose={() => setStatsOpen(false)}
+          onView={(tab) => openOverlay({ kind: 'stats', tab })}
+          onClose={closeOverlay}
         />
       )}
 
@@ -3678,15 +3597,17 @@ function App() {
         <AccountModal
           session={session}
           tab={accountTab}
-          onTab={setAccountTab}
-          onClose={() => setAccountOpen(false)}
+          onTab={(tab) => openOverlay({ kind: 'account', tab })}
+          onClose={closeOverlay}
         />
       )}
 
       <ConsentBanner
         onReadPolicy={() => {
-          setLegalTab('privacy');
-          setLegalOpen(true);
+          // over whatever is already open, rather than instead of it: the
+          // banner sits above the modals, so this is reachable with Settings
+          // open and closing it must put Settings back
+          openOverlay({ kind: 'legal', doc: 'privacy' });
         }}
       />
 
@@ -3694,14 +3615,14 @@ function App() {
         <KeyboardHelp
           navKeys={navKeys}
           shownModes={shownModes}
-          onClose={() => setKeysOpen(false)}
+          onClose={closeOverlay}
         />
       )}
 
       {settingsOpen && (
         <SettingsModal
           tab={settingsTab}
-          onTab={setSettingsTab}
+          onTab={(tab) => openOverlay({ kind: 'settings', tab })}
           startPage={startPage}
           onStartPage={setStartPage}
           theme={theme}
@@ -3737,7 +3658,7 @@ function App() {
               prev.includes(v) ? prev.filter((x) => x !== v) : [...prev, v]
             )
           }
-          onClose={() => setSettingsOpen(false)}
+          onClose={closeOverlay}
         />
       )}
 
@@ -3745,7 +3666,7 @@ function App() {
       {aboutOpen && (
         <div
           className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
-          onClick={() => setAboutOpen(false)}
+          onClick={closeOverlay}
         >
           <div
             role="dialog"
@@ -3758,7 +3679,7 @@ function App() {
           >
             {/* outside the scroll, so it can't slide away mid-read */}
             <button
-              onClick={() => setAboutOpen(false)}
+              onClick={closeOverlay}
               aria-label="Close"
               className="absolute top-4 right-4 z-10 w-8 h-8 flex items-center justify-center rounded-lg bg-slate-900/95 text-slate-400 hover:bg-slate-800 hover:text-white transition-colors"
             >
@@ -4019,7 +3940,7 @@ function App() {
       {legalOpen && (
         <div
           className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
-          onClick={() => setLegalOpen(false)}
+          onClick={closeOverlay}
         >
           <div
             role="dialog"
@@ -4033,7 +3954,7 @@ function App() {
             {/* outside the scroll — the privacy policy is the longest thing on
                 the site, and losing the close button partway down it is grim */}
             <button
-              onClick={() => setLegalOpen(false)}
+              onClick={closeOverlay}
               aria-label="Close"
               className="absolute top-4 right-4 z-10 w-8 h-8 flex items-center justify-center rounded-lg bg-slate-900/95 text-slate-400 hover:bg-slate-800 hover:text-white transition-colors"
             >
@@ -4053,7 +3974,7 @@ function App() {
               ).map(([id, label]) => (
                 <button
                   key={id}
-                  onClick={() => setLegalTab(id)}
+                  onClick={() => openOverlay({ kind: 'legal', doc: id })}
                   aria-current={legalTab === id ? 'page' : undefined}
                   className={`px-4 h-9 rounded-lg text-sm font-semibold transition-colors
                     ${legalTab === id

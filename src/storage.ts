@@ -2,18 +2,17 @@ import { DIFFICULTIES, type Difficulty } from '@/difficulty';
 import { PALETTES, TEXT_SCALES, THEME_MODES } from '@/theme';
 import type { Palette, TextScale, ThemeMode } from '@/theme';
 import { store as siteStore } from '@/siteStorage';
+import { ALL_MODES, ALL_VIEWS } from '@/games';
+import type { Mode, View } from '@/games';
 
-export type Mode =
-  | 'pattern'
-  | 'descramble'
-  | 'bee'
-  | 'boxed'
-  | 'grid'
-  | 'weave'
-  | 'squares'
-  | 'cryptogram'
-  | 'ladder'
-  | 'bridge';
+// One declaration, in `@/games`; re-exported here so the modules that have
+// always imported Mode from storage keep working. `View` used to be declared
+// twice — once here and once in routes.ts — structurally identical and
+// unrelated by declaration, which is the kind of coincidence that holds until
+// it doesn't.
+export { ALL_MODES, ALL_VIEWS };
+export type { Mode, View };
+
 
 /** 'home' is the front page, 'last' is wherever you left off, and a Mode is
  *  that game's daily — for people who came for one game and mean to keep
@@ -22,18 +21,6 @@ export type StartPage = 'home' | 'last' | Mode;
 
 const KEY = 'anagrimoire:v1';
 
-export const ALL_MODES: Mode[] = [
-  'pattern',
-  'descramble',
-  'bee',
-  'boxed',
-  'grid',
-  'weave',
-  'squares',
-  'cryptogram',
-  'ladder',
-  'bridge',
-];
 export const ALL_START_PAGES: StartPage[] = ['home', 'last', ...ALL_MODES];
 /** The solver's lists were Common/Standard/Full before they became the
  *  difficulties' accept tiers. Stored choices carry over rather than reset —
@@ -52,8 +39,6 @@ export function asDifficulty(v: unknown): Difficulty | null {
 
 // The three tabs a game can be shown in. Someone who only wants to play the
 // dailies shouldn't have to walk past a solver to get to them.
-export type View = 'solve' | 'play' | 'learn';
-export const ALL_VIEWS: View[] = ['solve', 'play', 'learn'];
 
 // Hiding is a display filter and nothing more: statistics, streaks and dailies
 // all keep accruing for a hidden game, and unhiding brings back exactly what

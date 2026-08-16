@@ -2,6 +2,11 @@ import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import { fileURLToPath, URL } from 'node:url';
 import { readFileSync } from 'node:fs';
+// A relative path, not the `@/` alias: esbuild bundles this config without the
+// app's resolver. `src/games.ts` imports nothing precisely so it can be read
+// from here — the sitemap is the list most likely to go stale unnoticed,
+// because nothing renders it and nothing tests it.
+import { ALL_SLUGS } from './src/games';
 
 // Link-preview tags have to carry absolute URLs — a scraper reads the HTML
 // without ever running our JS, so it can't work the origin out for itself.
@@ -9,13 +14,11 @@ import { readFileSync } from 'node:fs';
 // advertise production's card, which is a 404 until the branch merges.
 const SITE_ORIGIN = process.env.VITE_SITE_ORIGIN || 'https://anagrimoire.com';
 
-const GAME_SLUGS = ['guess', 'scramble', 'hive', 'grid', 'boxed', 'weave', 'squares', 'cryptogram'];
-
 // Panels that need an account — /stats, /settings, /account — are left out on
 // purpose: real addresses, but nothing on them to index.
 const SITEMAP_PATHS = [
   '/',
-  ...GAME_SLUGS.flatMap((g) => [`/daily/${g}`, `/play/${g}`, `/solve/${g}`, `/learn/${g}`]),
+  ...ALL_SLUGS.flatMap((g) => [`/daily/${g}`, `/play/${g}`, `/solve/${g}`, `/learn/${g}`]),
   '/about',
   '/legal/notices',
   '/legal/privacy',

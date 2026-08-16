@@ -14,66 +14,36 @@
 // Render rewrites every path to index.html, so these are ordinary URLs: they
 // survive a refresh, they can be typed, and they mean the same thing tomorrow.
 
-import type { Mode } from '@/storage';
+import { ALL_VIEWS, MODE_SLUG, modeOf, SLUG_MODE, SLUG_NAME } from '@/games';
+import type { Slug, View } from '@/games';
 
-export type View = 'solve' | 'play' | 'learn';
-export type Slug =
-  | 'guess'
-  | 'scramble'
-  | 'hive'
-  | 'grid'
-  | 'boxed'
-  | 'weave'
-  | 'squares'
-  | 'cryptogram'
-  | 'ladder'
-  | 'bridge';
-export type Panel = 'keys' | 'about';
-export type LegalDoc = 'notices' | 'privacy' | 'terms';
-export type StatsTab = 'overall' | 'daily' | 'practice' | 'history' | 'boards';
-export type SettingsTab = 'site' | 'games' | 'privacy';
-export type AccountTab = 'personal' | 'friends';
+// Re-exported so the ~50 modules that import these from here don't all have to
+// move. `src/games.ts` is the one declaration; this is a door onto it.
+export { MODE_SLUG, SLUG_NAME, modeOf, SLUG_MODE };
+export type { Slug, View };
 
-// the slug is what a person reads; the mode id is what storage is keyed on,
-// so they don't have to match and 'pattern' stays put internally
-const SLUG_MODE: Record<Slug, Mode> = {
-  guess: 'pattern',
-  scramble: 'descramble',
-  hive: 'bee',
-  grid: 'grid',
-  boxed: 'boxed',
-  weave: 'weave',
-  squares: 'squares',
-  cryptogram: 'cryptogram',
-  ladder: 'ladder',
-  bridge: 'bridge',
-};
+// Each of these is one list, read twice — once as the set of values the type
+// admits, once as the set `parsePath` will accept. They used to be a type and
+// a separate array, which is two places to add a tab and one to forget: add a
+// StatsTab without adding it to the array and `pathOf` emits an address that
+// `parsePath` then rejects, so a real link 404s to the front page and nothing
+// anywhere fails.
+export const PANELS = ['keys', 'about'] as const;
+export type Panel = (typeof PANELS)[number];
 
-export const MODE_SLUG = Object.fromEntries(
-  Object.entries(SLUG_MODE).map(([slug, mode]) => [mode, slug])
-) as Record<Mode, Slug>;
+export const DOCS = ['notices', 'privacy', 'terms'] as const;
+export type LegalDoc = (typeof DOCS)[number];
 
-// How each game is named in an invitation — plainer than the result title,
-// which carries board size and word length the reader doesn't need yet.
-export const SLUG_NAME: Record<Slug, string> = {
-  guess: 'Guess the Word',
-  scramble: 'Scramble',
-  hive: 'Hive',
-  grid: 'Grid',
-  boxed: 'Boxed',
-  weave: 'Weave',
-  squares: 'Word Squares',
-  cryptogram: 'Cryptogram',
-  ladder: 'Word Ladder',
-  bridge: 'Bridge',
-};
+export const STATS_TABS = ['overall', 'daily', 'practice', 'history', 'boards'] as const;
+export type StatsTab = (typeof STATS_TABS)[number];
 
-const VIEWS: View[] = ['solve', 'play', 'learn'];
-const PANELS: Panel[] = ['keys', 'about'];
-const DOCS: LegalDoc[] = ['notices', 'privacy', 'terms'];
-const STATS_TABS: StatsTab[] = ['overall', 'daily', 'practice', 'history', 'boards'];
-const SETTINGS_TABS: SettingsTab[] = ['site', 'games', 'privacy'];
-const ACCOUNT_TABS: AccountTab[] = ['personal', 'friends'];
+export const SETTINGS_TABS = ['site', 'games', 'privacy'] as const;
+export type SettingsTab = (typeof SETTINGS_TABS)[number];
+
+export const ACCOUNT_TABS = ['personal', 'friends'] as const;
+export type AccountTab = (typeof ACCOUNT_TABS)[number];
+
+const VIEWS = ALL_VIEWS;
 
 // A panel with tabs names the tab, always — /stats/overall rather than a bare
 // /stats that means the same thing. One state, one address, no exceptions to
@@ -264,10 +234,6 @@ function canonicalSlug(raw: string): Slug | null {
   return SLUG_ALIASES[raw] ?? null;
 }
 
-export function modeOf(slug: Slug): Mode {
-  return SLUG_MODE[slug];
-}
-
 /** The link that goes out with a shared result. */
 export function gameUrl(slug: Slug, view: View, daily: boolean): string {
   return urlOf({ kind: 'game', view, slug, daily });
@@ -301,34 +267,8 @@ export function legacyRoute(search: string): Route | null {
 }
 
 // ---------------------------------------------------------------------------
-// Where this load starts
-// ---------------------------------------------------------------------------
-
-// Read once, at import: every game reads the incoming route while building its
-// initial state, and they must all see the same answer.
-export const initialRoute: Route = (() => {
-  if (typeof window === 'undefined') return { kind: 'home' };
-
-  const legacy = legacyRoute(window.location.search);
-  if (legacy) {
-    // Drop the query as we go, so a bookmark taken now is the new address and
-    // a reload doesn't keep re-reading a link the reader has moved on from.
-    history.replaceState(null, '', pathOf(legacy) + window.location.hash);
-    return legacy;
-  }
-
-  const route = parsePath(window.location.pathname);
-  if (route) return route;
-
-  history.replaceState(null, '', '/' + window.location.search + window.location.hash);
-  return { kind: 'home' };
-})();
-
-export const initialGame = initialRoute.kind === 'game' ? initialRoute : null;
-
-/** Games persist their own daily/practice toggle; an incoming link overrides it
- *  for the one game it names, and leaves the rest alone. */
-export function dailyIntent(mode: Mode): boolean | null {
-  if (!initialGame || initialGame.view !== 'play') return null;
-  return SLUG_MODE[initialGame.slug] === mode ? initialGame.daily : null;
-}
+// Where this load started now lives in src/routing/entry.ts, memoised rather
+// than computed at import. It ran here as a module-level IIFE, so importing
+// this file performed a history.replaceState as a side effect and froze the
+// answer — which made every address function below untestable without
+// resetting the module registry between scenarios.

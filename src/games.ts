@@ -1,0 +1,105 @@
+// The ten games, named once.
+//
+// **This file imports nothing, on purpose.** It is read by `vite.config.ts`,
+// which esbuild bundles without the `@/` alias, so anything with an import
+// here becomes a build error over there — and the sitemap is exactly the kind
+// of list that goes stale when it cannot share a source. It is read by the e2e
+// suite for the same reason.
+//
+// It exists because every per-game list that was not exhaustively typed has
+// drifted. `MODES` was an array and the bridge solver shipped dead. `ORDER` in
+// the leaderboard was an array and two games had boards with ranked players on
+// them and no way to see either. The solver panel was gated by a denylist
+// naming two of the four rule-based games. The sitemap and the accessibility
+// sweep each kept their own list of eight, so ladder and bridge were in neither
+// — unlisted for search engines and never once scanned by axe.
+//
+// Against that, one `Record<Mode, …>` caught eleven wiring sites in a single
+// change, because the compiler asked. So: one list, and everything else derived
+// from it.
+
+/** How storage keys a game. Historical, and deliberately not the slug — the
+ *  address bar says `guess` because that is what the game is called, while
+ *  `pattern` stays put in every store that already used it. */
+const MODES = [
+  'pattern',
+  'descramble',
+  'bee',
+  'boxed',
+  'grid',
+  'weave',
+  'squares',
+  'cryptogram',
+  'ladder',
+  'bridge',
+] as const;
+export type Mode = (typeof MODES)[number];
+/** Spread rather than re-listed: the tuple above is the declaration, this is a
+ *  mutable copy for callers that filter it. One list, two shapes. */
+export const ALL_MODES: Mode[] = [...MODES];
+
+/** What a person reads in a link before they click it. */
+const SLUGS = [
+  'guess',
+  'scramble',
+  'hive',
+  'grid',
+  'boxed',
+  'weave',
+  'squares',
+  'cryptogram',
+  'ladder',
+  'bridge',
+] as const;
+export type Slug = (typeof SLUGS)[number];
+export const ALL_SLUGS: Slug[] = [...SLUGS];
+
+/** The three tabs a game can be shown in. */
+const VIEWS = ['solve', 'play', 'learn'] as const;
+export type View = (typeof VIEWS)[number];
+export const ALL_VIEWS: View[] = [...VIEWS];
+
+export const SLUG_MODE: Record<Slug, Mode> = {
+  guess: 'pattern',
+  scramble: 'descramble',
+  hive: 'bee',
+  grid: 'grid',
+  boxed: 'boxed',
+  weave: 'weave',
+  squares: 'squares',
+  cryptogram: 'cryptogram',
+  ladder: 'ladder',
+  bridge: 'bridge',
+};
+
+/** The inverse, built rather than written — two hand-kept tables are two
+ *  chances to disagree.
+ *
+ *  This used to be `Object.fromEntries(...) as Record<Mode, Slug>`, and the
+ *  cast was doing real damage: it *looked* exhaustive while promising nothing,
+ *  so a Mode with no slug compiled cleanly and produced `undefined` at runtime.
+ *  TypeScript cannot prove the inversion is total — that `SLUG_MODE` hits every
+ *  Mode — so a test does, in `tests/unit/games.test.ts`. The type says the
+ *  shape; the test says the coverage. */
+export const MODE_SLUG = Object.fromEntries(
+  SLUGS.map((slug) => [SLUG_MODE[slug], slug])
+) as Record<Mode, Slug>;
+
+/** How each game is named in an invitation — plainer than the result title,
+ *  which carries board size and word length the reader doesn't need yet. */
+export const SLUG_NAME: Record<Slug, string> = {
+  guess: 'Guess the Word',
+  scramble: 'Scramble',
+  hive: 'Hive',
+  grid: 'Grid',
+  boxed: 'Boxed',
+  weave: 'Weave',
+  squares: 'Word Squares',
+  cryptogram: 'Cryptogram',
+  ladder: 'Word Ladder',
+  bridge: 'Bridge',
+};
+
+export function modeOf(slug: Slug): Mode {
+  return SLUG_MODE[slug];
+}

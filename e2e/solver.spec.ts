@@ -20,16 +20,29 @@ test('descramble finds words, and the word list changes what it searches', async
   await page.goto('/solve/scramble');
 
   const footer = page.getByText(/Searching [\d,]+ English words/);
-  await expect(footer).toBeVisible();
-  const easy = await shown(footer); // easy is the default here
+
+  // Wait for a real count, not merely for the line to appear. The footer
+  // renders "0" while the word list is still arriving, and against a built
+  // preview that gap is long enough to read — the list is fetched rather than
+  // served warm by a dev server. A "wait until it changes" check then fires on
+  // the load itself and reads the previous tier's number, which is how this
+  // test once reported hard as larger than extreme.
+  const settled = async (): Promise<number> => {
+    await expect
+      .poll(async () => shown(footer), { timeout: 15000 })
+      .toBeGreaterThan(0);
+    return shown(footer);
+  };
+
+  const easy = await settled(); // easy is the default here
 
   await page.getByRole('button', { name: 'Extreme', exact: true }).click();
-  await expect(footer).not.toHaveText(new RegExp(easy.toLocaleString('en-US')));
-  const extreme = await shown(footer);
+  await expect.poll(async () => shown(footer), { timeout: 15000 }).not.toBe(easy);
+  const extreme = await settled();
 
   await page.getByRole('button', { name: 'Hard', exact: true }).click();
-  await expect(footer).not.toHaveText(new RegExp(extreme.toLocaleString('en-US')));
-  const hard = await shown(footer);
+  await expect.poll(async () => shown(footer), { timeout: 15000 }).not.toBe(extreme);
+  const hard = await settled();
 
   // each tier is the one below it plus more, which is the promise the accept
   // pools make and the reason the options are ordered as they are

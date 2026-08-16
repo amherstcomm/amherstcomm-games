@@ -18,7 +18,7 @@ import {
 import { fetchDailyData, fetchPool } from '@/dailyData';
 import DailyStats from '@/DailyStats';
 import ShareButton from '@/ShareButton';
-import { dailyIntent } from '@/routes';
+import { dailyIntent } from '@/routing/entry';
 import { offerDailySwitch, reportDaily } from '@/dailyBus';
 import { usePrefs } from '@/prefs';
 import { useDailySync } from '@/useDailySync';
