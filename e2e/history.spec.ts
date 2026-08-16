@@ -5,14 +5,11 @@
 // changes what Back does looks identical to one that doesn't. Nothing here
 // existed before — no test anywhere called `goBack`, and none asserted a title.
 //
-// One of these fails today, on purpose: the close button on a deep-linked panel
-// with tabs does nothing. It is a reproduction of a bug the extraction has to
-// preserve and then fix deliberately, rather than absorb silently.
-//
-// The other — a footer link's href disagreeing with its destination — was fixed
-// in the stage that made an anchor's address and its action come from one
-// value, and this file is how that was noticed: Playwright reported "expected
-// to fail, but passed".
+// Two of these started as `test.fail` — reproductions of bugs the extraction had
+// to preserve before fixing deliberately, rather than absorb silently. Both are
+// fixed now, and both announced it themselves: Playwright reports "expected to
+// fail, but passed", which is why they were `fail` and not `fixme`. They stay
+// here as ordinary tests, with a note on what each used to catch.
 //
 // They are marked `test.fail`, not `test.fixme`. The difference is the whole
 // point: fixme *skips*, which would make them decoration, while fail *runs*
@@ -127,22 +124,30 @@ test('the tab title follows the address', async ({ page }) => {
 });
 
 // ---------------------------------------------------------------------------
-// Known bugs, reproduced. Both are the same root cause: `history.back()` on
-// close assumes the entry behind is one we pushed, and a deep link means it
-// isn't ours at all.
+// Both known bugs, now fixed, kept as the tests that caught them.
 // ---------------------------------------------------------------------------
 
-test.fail('closing a deep-linked panel actually closes it', async ({ page }) => {
-  // Measured: land on /legal/notices, switch to Privacy, press Close — the URL
-  // returns to /legal/notices and the dialog is still open. The close button
-  // visibly does nothing, because the entry Back lands on is the one the
-  // visitor arrived at, and that entry says "legal panel, notices tab".
+test('closing a deep-linked panel actually closes it', async ({ page }) => {
+  // It didn't. Landing on /legal/notices and switching to Privacy fell through
+  // to a push — the replace branch required "we opened this panel", which a
+  // deep link is not — and Close then stepped back onto the arrival entry,
+  // which is *also* the panel. The button appeared to do nothing.
+  //
+  // Moving within a panel is a replace whoever opened it, so a deep-linked one
+  // is never mistaken for ours, and Close goes somewhere instead of back.
   await page.goto('/legal/notices');
   await page.getByRole('dialog').getByRole('button', { name: 'Privacy' }).click();
   await expect(page).toHaveURL(/\/legal\/privacy$/);
 
   await page.getByRole('dialog').getByRole('button', { name: 'Close' }).click();
   await expect(page.getByRole('dialog')).toHaveCount(0);
+  await expect(page).not.toHaveURL(/\/legal/);
+
+  // and Back returns to the panel, because they really were there — the
+  // deliberate choice over erasing a page somebody actually visited
+  await page.goBack();
+  await expect(page).toHaveURL(/\/legal\/privacy$/);
+  await expect(page.getByRole('dialog')).toBeVisible();
 });
 
 test('a footer link goes where its href says', async ({ page }) => {

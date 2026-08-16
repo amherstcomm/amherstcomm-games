@@ -82,6 +82,29 @@ describe('overlays', () => {
     expect(historyStep(ours(NOTICES), PRIVACY, '/legal/notices').memo.ourOverlay).toBe(true);
   });
 
+  it('replaces within a panel we did not open, which is the deep-link case', () => {
+    // The bug: arriving at /legal/notices leaves ourOverlay false, so switching
+    // tabs used to fall through to a push and set the flag — after which Close
+    // stepped back onto the arrival entry, which is also the panel, so it
+    // reopened and the button appeared dead. Moving within a panel is a replace
+    // whoever opened it.
+    const deepLinked: Memo = { settled: true, ourOverlay: false, prev: NOTICES };
+    const { op, memo } = historyStep(deepLinked, PRIVACY, '/legal/notices');
+    expect(op).toEqual({ op: 'replace', path: '/legal/privacy' });
+    expect(memo.ourOverlay, 'still not ours — we replaced, we did not push').toBe(false);
+  });
+
+  it('closes a deep-linked panel by going somewhere, not by going back', () => {
+    // Back would land on the visitor's own arrival entry. Pushing keeps the
+    // history honest — they really were on /legal/privacy — so Back reopens it,
+    // which is right for a place they actually visited.
+    const deepLinked: Memo = { settled: true, ourOverlay: false, prev: PRIVACY };
+    expect(historyStep(deepLinked, GAME, '/legal/privacy').op).toEqual({
+      op: 'push',
+      path: '/daily/hive',
+    });
+  });
+
   it('steps back when closing one we pushed', () => {
     // the one behaviour a close button must not have is leaving something for
     // Back to reopen

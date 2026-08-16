@@ -93,7 +93,19 @@ export function historyStep(memo: Memo, next: Route, here: string, hash = ''): {
   // One overlay swapped for another — most often a panel's own tabs — replaces
   // the entry rather than stacking it, so leaving takes one Back and not one
   // per tab you read.
-  if (IS_OVERLAY[next.kind] && memo.ourOverlay) {
+  //
+  // The condition is "the previous route was an overlay too", not "we pushed
+  // it". That distinction was the deep-linked-close bug: arriving straight at
+  // /legal/notices leaves ourOverlay false, so switching to the Privacy tab
+  // fell through to a push and set the flag true — and Close then stepped back
+  // onto the arrival entry, which is *also* the panel, so the panel reopened
+  // and the button appeared to do nothing.
+  //
+  // Moving within a panel is a replace whether or not we opened the panel. A
+  // deep-linked one therefore keeps ourOverlay false all the way through, and
+  // closing it takes the ordinary push below rather than stepping back onto
+  // somebody else's entry.
+  if (IS_OVERLAY[next.kind] && memo.prev && IS_OVERLAY[memo.prev.kind]) {
     return { op: { op: 'replace', path: path + hash }, memo: { ...memo, prev } };
   }
 
