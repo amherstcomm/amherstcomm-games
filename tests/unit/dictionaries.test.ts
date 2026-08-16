@@ -14,9 +14,14 @@ describe('accept tiers', () => {
     // minus the slurs. If one of these moves, rebuild the table and band
     // files together (npm run build-words) in the same change, or the server
     // will call honest players liars.
-    expect((await getAcceptPool('easy')).length).toBe(67_141);
-    expect((await getAcceptPool('hard')).length).toBe(111_370);
-    expect((await getAcceptPool('extreme')).length).toBe(242_602);
+    //
+    // Down 19/31/45 at words-v6, which is the August slur audit finally
+    // reaching the flags: 45 more words carry `slur` than did before the word
+    // build read the generator blocklist, and a slur is exactly what an accept
+    // tier subtracts.
+    expect((await getAcceptPool('easy')).length).toBe(67_122);
+    expect((await getAcceptPool('hard')).length).toBe(111_339);
+    expect((await getAcceptPool('extreme')).length).toBe(242_557);
   });
 
   it('each tier contains the one below it', async () => {
