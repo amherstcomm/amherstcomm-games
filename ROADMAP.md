@@ -818,8 +818,43 @@ literals with one row per game — and the client's `Mode` union becomes somethi
 that can be checked against it rather than something that happens to match.
 
 So the acceptance test extends: adding a game should touch its own files, one
-list per layer, and nothing else. Twenty-three is the number to drive down, and
-it is the honest measure of whether any of this worked.
+list per layer, and nothing else.
+
+##### The number above is wrong, and here is the right one
+
+**Overturned after the routing work, August 2026.** "Twenty-three files
+mentioning Bridge" was the measure, and it counts the wrong thing: a file that
+*mentions* a game is not the same as a file that *must be edited to add one*.
+
+Measured after stages 0–5 it read 33 — worse — because new test files use
+`bridge` as example data. Meanwhile `e2e/a11y.spec.ts` dropped out of the count
+entirely by deriving its routes from `ALL_SLUGS`, which is exactly the win the
+metric exists to reward. It punished writing tests and hid the one real
+improvement. A number that moves the wrong way under work that helped is not a
+measure, it is a mood.
+
+The honest target is the places carrying a **hand-maintained per-game list**,
+which have to gain a line for game eleven. There are nine:
+
+| where | what |
+|---|---|
+| `src/dailyData.ts` | the `dailyDataUrl` name union, and the pool URLs |
+| `src/dailySync.ts` | the per-game merge switch |
+| `src/leaderboard.ts` | `BoardGame`, `emptyBoards`, `MODE_BOARDS` |
+| `src/stats.ts` | the per-game stat shapes |
+| `src/App.tsx` | per-game literals outside the exhaustive Records |
+| `src/LearnMode.tsx` | the demo per game |
+| `scripts/publish-puzzles.mjs` | the `GAMES` array |
+| `scripts/themes.mjs` | its own list |
+| `supabase/schema.sql` | **four identical CHECK lists**, plus a `result_is_plausible` branch and a leaderboard board |
+
+The roughly fourteen `Record<Mode, …>` tables in `src/` are deliberately *not*
+on that list. The compiler already asks about those, so consolidating them into
+one `GameSpec` is tidying rather than safety — worth doing, but it is not what
+this number is for.
+
+**Nine is the number to drive down.** It counts places that can silently
+disagree, which is the thing that has actually gone wrong five times.
 
 #### 2. Security as a stated requirement rather than a habit
 
