@@ -51,6 +51,37 @@ test('hovering a grid result traces it on the board', async ({ page }) => {
   await expect(trace).toHaveCount(0);
 });
 
+// Weave is the reason the trace became a module: its board was inseparable
+// from the results panel while the trace state sat between them. Forty-eight
+// cells rather than sixteen, and it needs all of them — a part-filled weave
+// board reports nothing, which is how the first hand-check of this looked like
+// a broken trace when it was an unfinished board.
+test('hovering a weave result traces it on the larger board', async ({ page }) => {
+  test.slow();
+  await page.goto('/solve/weave');
+
+  const tiles = page.locator('input[data-tile-group="weave"]');
+  await expect(tiles).toHaveCount(48);
+  const letters = 'rstlneaioducmphgbyfwkvxzjq';
+  for (let i = 0; i < 48; i++) await tiles.nth(i).fill(letters[i % letters.length]);
+
+  const trace = page.locator('svg.absolute polyline');
+  const word = page.locator('main button').filter({ hasText: /^[a-z]{4,}$/ }).first();
+  await expect(word).toBeVisible({ timeout: 20_000 });
+
+  await word.hover();
+  await expect(trace).toHaveCount(1);
+
+  // as many cells lit as the word has letters — the polyline and the tinting
+  // are computed separately and have to agree
+  const letterCount = (await word.textContent())!.trim().length;
+  const points = (await trace.getAttribute('points'))!.trim().split(/\s+/);
+  expect(points).toHaveLength(letterCount);
+  await expect(page.locator('input[data-tile-group="weave"].border-sky-300')).toHaveCount(
+    letterCount
+  );
+});
+
 test('hovering a boxed solution draws a chord per word', async ({ page }) => {
   test.slow();
   await page.goto('/solve/boxed');

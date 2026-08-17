@@ -44,6 +44,8 @@ import HomeView from '@/HomeView';
 import Tile from '@/Tile';
 import WordChip from '@/solvers/WordChip';
 import ResultsPanel, { CAP } from '@/solvers/ResultsPanel';
+import GridSolver from '@/solvers/GridSolver';
+import WeaveSolver from '@/solvers/WeaveSolver';
 import { sortResults } from '@/solvers/resultOrder';
 import { centreOf, useBoardTrace } from '@/solvers/useBoardTrace';
 import { COARSE_POINTER } from '@/coarsePointer';
@@ -274,12 +276,6 @@ const BOX_SIDE_TONES = [
     filled: 'bg-amber-400/20 border-amber-400 text-amber-100 shadow-[0_0_20px_-6px] shadow-amber-400/40',
   },
 ];
-
-// highlight for grid solver tiles while a result word's path is previewed
-const GRID_TRACE_TONE = {
-  empty: 'bg-sky-400/25 border-sky-300 text-white',
-  filled: 'bg-sky-400/30 border-sky-300 text-white shadow-[0_0_20px_-6px] shadow-sky-400/50',
-};
 
 const CHAIN_CAP = 500;
 const CHAIN_BUDGET = 2_000_000;
@@ -2020,98 +2016,19 @@ function App() {
           )}
 
           {mode === 'weave' && !weavePlay && (
-          <div className="mb-8 text-center">
-            <label className="block text-xs font-medium text-slate-400 uppercase tracking-wider mb-2.5">
-              Board size
-            </label>
-            <div className="mb-5 inline-flex rounded-lg bg-white/5 border border-white/10 p-0.5 gap-0.5">
-              {(
-                [
-                  { id: '6x8', label: '6×8' },
-                  { id: '8x10', label: '8×10' },
-                ] as const
-              ).map(({ id, label }) => (
-                <button
-                  key={id}
-                  onClick={() => changeWeaveSize(id)}
-                  className={`px-3 py-1.5 rounded-md text-sm font-semibold whitespace-nowrap transition-colors
-                    ${weaveSize === id ? 'bg-white/15 text-white' : 'text-slate-400 hover:text-white'}`}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-            <label className="block text-xs font-medium text-slate-400 uppercase tracking-wider mb-3">
-              The board
-            </label>
-            <div ref={gridT.boardRef} className="relative w-fit mx-auto">
-              <div className={`grid gap-1.5 ${weaveDims.cols === 8 ? 'grid-cols-8' : 'grid-cols-6'}`}>
-                {weaveLetters.map((v, i) => (
-                  <Tile
-                    key={i}
-                    index={i}
-                    group="weave"
-                    osk={kbOpen}
-                    value={v}
-                    state={v ? 'known' : 'empty'}
-                    size="sm"
-                    tone={gridT.target?.includes(i) ? GRID_TRACE_TONE : undefined}
-                    onChange={(c) =>
-                      setWeaveLetters((prev) => prev.map((x, j) => (j === i ? c : x)))
-                    }
-                  />
-                ))}
-              </div>
-              {/* one polyline: a path visits each cell once, so the hook's
-                  per-word list has exactly one entry here */}
-              {(gridT.points[0]?.length ?? 0) > 1 && (
-                <svg className="absolute inset-0 w-full h-full pointer-events-none">
-                  <polyline
-                    points={gridT.points[0].map((p) => `${p.x},${p.y}`).join(' ')}
-                    fill="none"
-                    stroke="rgb(var(--trace) / 0.9)"
-                    strokeWidth="4"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                  <circle cx={gridT.points[0][0].x} cy={gridT.points[0][0].y} r="6" fill="rgb(var(--trace))" />
-                </svg>
-              )}
-            </div>
-            <div className="mt-4 flex flex-wrap items-center justify-center gap-3">
-              <button
-                onClick={fillTodaysStrands}
-                disabled={todayStatus === 'loading'}
-                className="inline-flex items-center gap-1.5 px-4 h-10 rounded-lg text-sm font-semibold bg-white/5 border border-white/10 text-slate-300 hover:bg-white/10 hover:text-white transition-colors disabled:opacity-50"
-              >
-                <CalendarDays className="w-4 h-4" />
-                {todayStatus === 'loading' ? 'Fetching…' : "Today's NYT Strands"}
-              </button>
-              <button
-                onClick={fillTodaysWeave}
-                disabled={todayStatus === 'loading'}
-                className="inline-flex items-center gap-1.5 px-4 h-10 rounded-lg text-sm font-semibold bg-white/5 border border-white/10 text-slate-300 hover:bg-white/10 hover:text-white transition-colors disabled:opacity-50"
-              >
-                <CalendarDays className="w-4 h-4" />
-                {todayStatus === 'loading' ? 'Fetching…' : "Today's daily weave"}
-              </button>
-            </div>
-            {todayStatus === 'error' && (
-              <p className="mt-2 text-xs text-danger">
-                Couldn&apos;t fetch today&apos;s puzzle — try again in a minute.
-              </p>
-            )}
-            {strandsClue && (
-              <p className="mt-2 text-sm text-amber-300">
-                Theme: <span className="font-semibold">{strandsClue}</span>
-              </p>
-            )}
-            <p className="mt-3 text-xs text-slate-500">
-              Words are 3+ letters traced through adjacent cells (diagonals count), using each
-              cell once. Hover a result to trace it on the board. Today&apos;s Strands becomes
-              available here about 15 minutes after the NYT publishes it (3:00&nbsp;a.m. Eastern).
-            </p>
-          </div>
+            <WeaveSolver
+              size={weaveSize}
+              onSize={changeWeaveSize}
+              letters={weaveLetters}
+              cols={weaveDims.cols}
+              onLetters={setWeaveLetters}
+              osk={kbOpen}
+              trace={gridT}
+              onFillStrands={fillTodaysStrands}
+              onFillWeave={fillTodaysWeave}
+              todayStatus={todayStatus}
+              strandsClue={strandsClue}
+            />
           )}
 
           {mode === 'pattern' && (
@@ -2400,89 +2317,17 @@ function App() {
           )}
 
           {mode === 'grid' && !gridPlay && (
-          <div className="mb-8 text-center">
-            <label className="block text-xs font-medium text-slate-400 uppercase tracking-wider mb-2.5">
-              Grid size
-            </label>
-            <div className="mb-5 inline-flex rounded-lg bg-white/5 border border-white/10 p-0.5 gap-0.5">
-              {(
-                [
-                  { id: '3x3', label: '3×3' },
-                  { id: '4x4', label: '4×4' },
-                  { id: '5x5', label: '5×5' },
-                ] as const
-              ).map(({ id, label }) => (
-                <button
-                  key={id}
-                  onClick={() => changeGridPreset(id)}
-                  className={`px-3 py-1.5 rounded-md text-sm font-semibold whitespace-nowrap transition-colors
-                    ${gridPreset === id ? 'bg-white/15 text-white' : 'text-slate-400 hover:text-white'}`}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-            <label className="block text-xs font-medium text-slate-400 uppercase tracking-wider mb-3">
-              The grid
-            </label>
-            <div ref={gridT.boardRef} className="relative w-fit mx-auto">
-              <div
-                className={`grid gap-2 ${
-                  gridDims.cols === 3 ? 'grid-cols-3' : gridDims.cols === 5 ? 'grid-cols-5' : 'grid-cols-4'
-                }`}
-              >
-                {gridLetters.map((v, i) => (
-                  <Tile
-                    key={i}
-                    index={i}
-                    group="grid"
-                    osk={kbOpen}
-                    value={v}
-                    state={v ? 'known' : 'empty'}
-                    size="sm"
-                    tone={gridT.target?.includes(i) ? GRID_TRACE_TONE : undefined}
-                    onChange={(c) =>
-                      setGridLetters((prev) => prev.map((x, j) => (j === i ? c : x)))
-                    }
-                  />
-                ))}
-              </div>
-              {/* one polyline: a path visits each cell once, so the hook's
-                  per-word list has exactly one entry here */}
-              {(gridT.points[0]?.length ?? 0) > 1 && (
-                <svg className="absolute inset-0 w-full h-full pointer-events-none">
-                  <polyline
-                    points={gridT.points[0].map((p) => `${p.x},${p.y}`).join(' ')}
-                    fill="none"
-                    stroke="rgb(var(--trace) / 0.9)"
-                    strokeWidth="4"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                  <circle cx={gridT.points[0][0].x} cy={gridT.points[0][0].y} r="6" fill="rgb(var(--trace))" />
-                </svg>
-              )}
-            </div>
-            <div className="mt-4 flex flex-wrap items-center justify-center gap-3">
-              <button
-                onClick={fillDailyGrid}
-                disabled={todayStatus === 'loading'}
-                className="inline-flex items-center gap-1.5 px-4 h-10 rounded-lg text-sm font-semibold bg-white/5 border border-white/10 text-slate-300 hover:bg-white/10 hover:text-white transition-colors disabled:opacity-50"
-              >
-                <CalendarDays className="w-4 h-4" />
-                {todayStatus === 'loading' ? 'Fetching…' : "Today's daily grid"}
-              </button>
-            </div>
-            {todayStatus === 'error' && (
-              <p className="mt-2 text-xs text-danger">
-                Couldn&apos;t fetch today&apos;s grid — try again in a minute.
-              </p>
-            )}
-            <p className="mt-3 text-xs text-slate-500">
-              Words are 3+ letters traced through adjacent cells (diagonals count), using each
-              cell once. Hover a result to trace it on the board.
-            </p>
-          </div>
+            <GridSolver
+              preset={gridPreset}
+              onPreset={changeGridPreset}
+              letters={gridLetters}
+              cols={gridDims.cols}
+              onLetters={setGridLetters}
+              osk={kbOpen}
+              trace={gridT}
+              onFillToday={fillDailyGrid}
+              todayStatus={todayStatus}
+            />
           )}
 
           {boxedPlayActive && (
