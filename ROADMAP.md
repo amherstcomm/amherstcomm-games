@@ -728,8 +728,19 @@ re-render tore down a child's effect, and in a component with 92 pieces of state
 every one of them re-renders the whole page.
 
 **The reason to do it is that development and troubleshooting get easier, not
-that a long file is ugly.** That is also the criterion for where to cut: go
-where the troubleshooting keeps landing, not where the line count is highest.
+that a long file is ugly.** That is one criterion for where to cut: go where the
+troubleshooting keeps landing, not where the line count is highest.
+
+**It is not the only one, and on its own it under-delivers.** The routing cut
+took `App.tsx` from 4,261 lines to 4,158 — a hundred lines, two per cent — while
+finding six real bugs. Good trade, and visibly nothing happened to the file.
+
+The second criterion is reading cost, and it is about locality rather than
+length: a four-thousand-line file makes every edit load context you have already
+decided is irrelevant, and you cannot tell it is irrelevant without reading it.
+Splitting buys the ability to *not look*. That value is real whether or not the
+total shrinks, and it points somewhere different — at the largest self-contained
+blocks, whether or not they have ever caused trouble.
 `LearnMode.tsx` is 2,195 lines and nothing has gone wrong inside it; the route
 and panel state machine is a fraction of that and is where two bugs landed this
 month. Line count puts LearnMode second on the list. This test puts it nowhere
@@ -753,8 +764,18 @@ The seams, in that order:
   `test.fixme` — Playwright reports "expected to fail, but passed".
 - **Dictionary loading and the solver allowlist** — where the dead bridge solver
   hid for a release.
-- **The ten solver surfaces** — the bulk of the file, and already ten separate
-  mental units with their own inputs and results.
+- **The ten solver surfaces** — 2,341 lines of the render, more than half the
+  file, and already ten separate units with their own inputs and results. Their
+  own files rather than folded into the `*Game.tsx` components: those are 650 to
+  890 lines each already, and Solve and Play are different surfaces with
+  different state and different failure modes. What they legitimately share is
+  the rules module — `src/bridge.ts`, `src/ladder.ts` — which both already
+  import.
+
+  Which gives a game a shape, arrived at from the opposite direction to the
+  acceptance test below and agreeing with it: **a rules module, a play surface,
+  a solve surface, a learn demo.** Adding the eleventh becomes filling that in,
+  rather than finding the ten places the tenth was mentioned.
 - **Chrome** — header, nav, footer. Small, and `GameMenu` shows the shape.
 
 ##### What "templatised" has to mean, to be worth doing
@@ -818,8 +839,43 @@ literals with one row per game — and the client's `Mode` union becomes somethi
 that can be checked against it rather than something that happens to match.
 
 So the acceptance test extends: adding a game should touch its own files, one
-list per layer, and nothing else. Twenty-three is the number to drive down, and
-it is the honest measure of whether any of this worked.
+list per layer, and nothing else.
+
+##### The number above is wrong, and here is the right one
+
+**Overturned after the routing work, August 2026.** "Twenty-three files
+mentioning Bridge" was the measure, and it counts the wrong thing: a file that
+*mentions* a game is not the same as a file that *must be edited to add one*.
+
+Measured after stages 0–5 it read 33 — worse — because new test files use
+`bridge` as example data. Meanwhile `e2e/a11y.spec.ts` dropped out of the count
+entirely by deriving its routes from `ALL_SLUGS`, which is exactly the win the
+metric exists to reward. It punished writing tests and hid the one real
+improvement. A number that moves the wrong way under work that helped is not a
+measure, it is a mood.
+
+The honest target is the places carrying a **hand-maintained per-game list**,
+which have to gain a line for game eleven. There are nine:
+
+| where | what |
+|---|---|
+| `src/dailyData.ts` | the `dailyDataUrl` name union, and the pool URLs |
+| `src/dailySync.ts` | the per-game merge switch |
+| `src/leaderboard.ts` | `BoardGame`, `emptyBoards`, `MODE_BOARDS` |
+| `src/stats.ts` | the per-game stat shapes |
+| `src/App.tsx` | per-game literals outside the exhaustive Records |
+| `src/LearnMode.tsx` | the demo per game |
+| `scripts/publish-puzzles.mjs` | the `GAMES` array |
+| `scripts/themes.mjs` | its own list |
+| `supabase/schema.sql` | **four identical CHECK lists**, plus a `result_is_plausible` branch and a leaderboard board |
+
+The roughly fourteen `Record<Mode, …>` tables in `src/` are deliberately *not*
+on that list. The compiler already asks about those, so consolidating them into
+one `GameSpec` is tidying rather than safety — worth doing, but it is not what
+this number is for.
+
+**Nine is the number to drive down.** It counts places that can silently
+disagree, which is the thing that has actually gone wrong five times.
 
 #### 2. Security as a stated requirement rather than a habit
 
@@ -879,6 +935,48 @@ Google Play is the easier of the two: a Trusted Web Activity via Bubblewrap or
 PWABuilder, needing `assetlinks.json` on the domain and a PWA that clears the
 quality bar. iOS realistically needs Capacitor and something native to justify
 itself.
+
+### The schema, and two systems that already disagree — proposed August 2026
+
+`supabase/schema.sql` is 2,551 lines applied by pasting into a web SQL editor.
+The length is not the problem — it has section banners, and it has not been
+where the troubleshooting lands. The paste is: a truncated paste or an editor
+timeout leaves a half-applied schema with no signal, and that risk grows with
+every line while nothing about it announces itself.
+
+**The thing to know before planning this**: the database already has a migration
+history and the repo does not. Sixteen versions are recorded, from
+`20260808214634` to `20260816132434`, applied through tooling that records a
+version — while `schema.sql` is applied by hand and records nothing. So the
+`games` table added in August exists in the database and in `schema.sql` and in
+no migration at all, and several recorded migrations restate things
+`schema.sql` also declares. Two systems, running side by side, disagreeing about
+what exists.
+
+That is what makes this a plan rather than a task. Adopting the Supabase CLI
+means linking the project, baselining the live schema, and deciding what to do
+about sixteen recorded versions with no local files — on a live database.
+
+**Correction, same day:** an earlier draft of this entry said a migration system
+would lose the comments. That is wrong, and wrong in the direction of making
+this sound harder than it is. Migrations are files you write by hand, in the
+repo, with whatever prose you put in them. Only `supabase db pull` generates a
+baseline that carries none — and even that is avoidable by writing the baseline
+from `schema.sql`, which already has the prose, and marking it applied with
+`migration repair` rather than generating it.
+
+So the real tension is narrower: **migrations are organised by time,
+documentation is organised by concern.** `20260816_add_games_table.sql` is the
+right unit for applying a change and the wrong one for answering "how do reports
+work" — that answer would be spread across four migrations written months apart.
+Keeping both is the usual answer: migrations to apply, a current-schema
+reference to read. The question worth deciding is whether that reference is
+generated from the database or maintained by hand, because a maintained one is
+exactly the second source of truth this project has spent a day removing
+everywhere else.
+
+Worth doing, worth planning, and out of scope for the restructure it came up
+during.
 
 ### Admin portal — much later
 Everything owner-facing is SQL-editor-only today: clearing a display name,

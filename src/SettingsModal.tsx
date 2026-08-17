@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react';
 import { BarChart3, Check, Contrast, EyeOff, Gauge, Keyboard, Monitor, Moon, Sun, Type, X } from 'lucide-react';
+import { ALL_MODES, GAME_NAME } from '@/games';
 import KeyDiagram from '@/KeyDiagram';
 import { GA_ID, disableAnalytics, initAnalytics } from '@/analytics';
 import {
@@ -42,29 +43,20 @@ import { useModalA11y } from '@/useModalA11y';
 // 'mode' marks the entries that disappear when that game is hidden — pointing
 // the front door at a game you've switched off would leave nowhere to land.
 
-const START_OPTIONS: { id: StartPage; label: string; mode?: Mode }[] = [
+// Both lists are built from ALL_MODES rather than typed out, and both were
+// short before that: eight games each, so Ladder and Bridge could be neither
+// chosen as a start page nor hidden from the nav. The one-survivor guard below
+// also counted against the short list, so it was measuring against eight.
+export const START_OPTIONS: { id: StartPage; label: string; mode?: Mode }[] = [
   { id: 'home', label: 'Home page' },
   { id: 'last', label: 'Where I left off' },
-  { id: 'pattern', label: 'Guess the Word', mode: 'pattern' },
-  { id: 'descramble', label: 'Scramble', mode: 'descramble' },
-  { id: 'bee', label: 'Hive', mode: 'bee' },
-  { id: 'grid', label: 'Grid', mode: 'grid' },
-  { id: 'boxed', label: 'Boxed', mode: 'boxed' },
-  { id: 'weave', label: 'Weave', mode: 'weave' },
-  { id: 'squares', label: 'Word Squares', mode: 'squares' },
-  { id: 'cryptogram', label: 'Cryptogram', mode: 'cryptogram' },
+  ...ALL_MODES.map((mode) => ({ id: mode as StartPage, label: GAME_NAME[mode].full, mode })),
 ];
 
-const MODE_LABELS: { id: Mode; label: string }[] = [
-  { id: 'pattern', label: 'Guess' },
-  { id: 'descramble', label: 'Scramble' },
-  { id: 'bee', label: 'Hive' },
-  { id: 'grid', label: 'Grid' },
-  { id: 'boxed', label: 'Boxed' },
-  { id: 'weave', label: 'Weave' },
-  { id: 'squares', label: 'Squares' },
-  { id: 'cryptogram', label: 'Cryptogram' },
-];
+export const MODE_LABELS: { id: Mode; label: string }[] = ALL_MODES.map((id) => ({
+  id,
+  label: GAME_NAME[id].short,
+}));
 
 const VIEW_LABELS: { id: View; label: string }[] = [
   { id: 'solve', label: 'Solve' },

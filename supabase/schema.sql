@@ -264,13 +264,160 @@ $$;
 revoke execute on function public.would_block(text) from public, anon, authenticated;
 
 -- ---------------------------------------------------------------------------
+-- The games, named once
+-- ---------------------------------------------------------------------------
+-- The same ten names were written out four times — daily_progress,
+-- game_results, and two alter-table constraints — with nothing checking those
+-- four agreed with each other, let alone with the client. They agree today
+-- because somebody was careful five times running. This is the layer where no
+-- compiler will ever help, so it needs a row per game instead.
+--
+-- A game has four names and they are all load-bearing:
+--
+--   mode      what the browser's storage is keyed on. Historical: 'pattern'.
+--   slug      what the address bar says, because a link is read before it is
+--             clicked: 'guess'.
+--   feed      what the published files and daily_puzzles call it: 'words'.
+--   progress  what daily_progress and game_results call it: 'guess'.
+--   name      what a person is shown: 'Guess the Word', and 'Guess' where a
+--             row has to fit. Presentation, mostly — but the report digest is
+--             server-side output read by a human, and it printed 'words'.
+--
+-- `feed` and `progress` differ on exactly one game, which is a real
+-- inconsistency rather than a typo: the published board is 'words' and the row
+-- saying you played it is 'guess'. Both are consistent within themselves and
+-- neither was written down anywhere. Unifying them means rewriting rows in two
+-- tables and is a separate decision; naming them both costs nothing and stops
+-- the next reader guessing.
+--
+-- Mirrors src/games.ts, which is the client's copy of the same table. Nothing
+-- enforces that the two agree — they are on opposite sides of a network — so
+-- `games_match_client` below is the check, run by CI rather than by hope.
+create table if not exists public.games (
+  mode text primary key,
+  slug text not null unique,
+  feed text not null unique,
+  progress text not null unique,
+  -- What to call it in front of someone. The client has these too and does the
+  -- rendering; they are here because the digest email names games and had only
+  -- the feed name to hand, so a report about Guess read "words".
+  name_full text not null,
+  name_short text not null,
+  -- display order, so a client that wants the canonical order can ask
+  ordinal int not null unique
+);
+
+-- Idempotent: re-running the schema updates the row rather than failing, and a
+-- game removed from this list is *not* deleted — dropping a game with rows in
+-- daily_progress would take somebody's history with it, and that should be a
+-- deliberate act rather than a side effect of editing an insert.
+insert into public.games (mode, slug, feed, progress, name_full, name_short, ordinal) values
+  ('pattern',    'guess',      'words',      'guess',      'Guess the Word', 'Guess',       1),
+  ('descramble', 'scramble',   'scramble',   'scramble',   'Scramble',       'Scramble',    2),
+  ('bee',        'hive',       'hive',       'hive',       'Hive',           'Hive',        3),
+  ('boxed',      'boxed',      'box',        'box',        'Boxed',          'Boxed',       4),
+  ('grid',       'grid',       'grid',       'grid',       'Grid',           'Grid',        5),
+  ('weave',      'weave',      'weave',      'weave',      'Weave',          'Weave',       6),
+  ('squares',    'squares',    'squares',    'squares',    'Word Squares',   'Squares',     7),
+  ('cryptogram', 'cryptogram', 'cryptogram', 'cryptogram', 'Cryptogram',     'Cryptogram',  8),
+  ('ladder',     'ladder',     'ladder',     'ladder',     'Word Ladder',    'Ladder',      9),
+  ('bridge',     'bridge',     'bridge',     'bridge',     'Bridge',         'Bridge',     10)
+on conflict (mode) do update
+  set slug = excluded.slug,
+      feed = excluded.feed,
+      progress = excluded.progress,
+      name_full = excluded.name_full,
+      name_short = excluded.name_short,
+      ordinal = excluded.ordinal;
+
+alter table public.games enable row level security;
+
+-- Reference data, and readable: the client already ships its own copy, so this
+-- is not a secret — but nothing needs it at runtime either, and a table the
+-- browser can read is a table whose shape becomes a promise. Kept closed until
+-- something actually asks.
+revoke all on public.games from public, anon, authenticated;
+
+-- The four hand-copied lists become one reference.
+--
+-- A foreign key rather than a shared CHECK or a domain, because a domain would
+-- still be a list of literals — better than four, and still something to edit
+-- in a place separate from where games are defined. This way adding a game is
+-- adding a row, and a typo in a game name fails on insert instead of years
+-- later when somebody notices a leaderboard is missing.
+--
+-- These run after the seed above, so the existing rows already satisfy them.
+-- If one does not, the constraint fails loudly here rather than admitting a
+-- name nothing else recognises.
+alter table public.daily_progress drop constraint if exists daily_progress_game_check;
+alter table public.daily_progress drop constraint if exists daily_progress_game_fkey;
+alter table public.daily_progress
+  add constraint daily_progress_game_fkey
+  foreign key (game) references public.games (progress);
+
+alter table public.game_results drop constraint if exists game_results_game_check;
+alter table public.game_results drop constraint if exists game_results_game_fkey;
+alter table public.game_results
+  add constraint game_results_game_fkey
+  foreign key (game) references public.games (progress);
+
+-- daily_puzzles is deliberately left unconstrained. Its `game` column holds the
+-- practice pools too — 'weave-pool', 'ladder-pool' — which are not games and
+-- have no row here. Constraining it would mean either inventing rows for things
+-- that are not games or splitting the column, and neither is worth it for a
+-- table only the service role writes.
+
+-- What CI asks, so the client's copy and this one cannot drift apart unnoticed.
+-- Returns the rows that disagree; an empty result is the passing case.
+create or replace function public.games_match_client(p_games jsonb)
+returns table (mode text, field text, here text, client text)
+language sql
+stable
+as $fn$
+  with client as (
+    select
+      x->>'mode' as mode,
+      x->>'slug' as slug,
+      x->>'feed' as feed,
+      x->>'progress' as progress,
+      x->>'name_full' as name_full,
+      x->>'name_short' as name_short
+    from jsonb_array_elements(p_games) x
+  )
+  select coalesce(g.mode, c.mode), 'slug', g.slug, c.slug
+    from public.games g full join client c on c.mode = g.mode
+    where g.slug is distinct from c.slug
+  union all
+  select coalesce(g.mode, c.mode), 'feed', g.feed, c.feed
+    from public.games g full join client c on c.mode = g.mode
+    where g.feed is distinct from c.feed
+  union all
+  select coalesce(g.mode, c.mode), 'progress', g.progress, c.progress
+    from public.games g full join client c on c.mode = g.mode
+    where g.progress is distinct from c.progress
+  union all
+  select coalesce(g.mode, c.mode), 'name_full', g.name_full, c.name_full
+    from public.games g full join client c on c.mode = g.mode
+    where g.name_full is distinct from c.name_full
+  union all
+  select coalesce(g.mode, c.mode), 'name_short', g.name_short, c.name_short
+    from public.games g full join client c on c.mode = g.mode
+    where g.name_short is distinct from c.name_short
+$fn$;
+
+revoke all on function public.games_match_client(jsonb) from public, anon, authenticated;
+
+
+-- ---------------------------------------------------------------------------
 -- game_results: append-only log of completed games. Aggregates (lifetime
 -- stats, leaderboards, "X% solved today") all derive from this.
 -- ---------------------------------------------------------------------------
 create table if not exists public.game_results (
   id bigint generated always as identity primary key,
   user_id uuid not null references auth.users (id) on delete cascade,
-  game text not null check (game in ('guess', 'hive', 'scramble', 'grid', 'box', 'weave', 'squares', 'cryptogram', 'ladder', 'bridge')),
+  -- constrained by a foreign key to public.games, added below: one row per
+  -- game rather than this list written out four times
+  game text not null,
   daily boolean not null,
   puzzle_date date, -- Eastern-time date of the daily puzzle; null for practice
   payload jsonb not null default '{}'::jsonb,
@@ -320,7 +467,9 @@ create policy "read own results"
 -- ---------------------------------------------------------------------------
 create table if not exists public.daily_progress (
   user_id uuid not null references auth.users (id) on delete cascade,
-  game text not null check (game in ('guess', 'hive', 'scramble', 'grid', 'box', 'weave', 'squares', 'cryptogram', 'ladder', 'bridge')),
+  -- constrained by a foreign key to public.games, added below: one row per
+  -- game rather than this list written out four times
+  game text not null,
   variant text not null default '',
   puzzle_date date not null,
   env text not null default 'prod',
@@ -1625,19 +1774,15 @@ $$;
 revoke execute on function public.friends_board(int, text, text) from public, anon;
 grant execute on function public.friends_board(int, text, text) to authenticated;
 
--- Adding a game means widening both of these, and `create table if not exists`
--- leaves an existing table exactly as it was — so the constraint has to be
--- replaced explicitly or every write for the new game comes back 400 and the
--- game silently never syncs. Idempotent, so re-running the file is safe.
-alter table public.game_results drop constraint if exists game_results_game_check;
-alter table public.game_results
-  add constraint game_results_game_check
-  check (game in ('guess', 'hive', 'scramble', 'grid', 'box', 'weave', 'squares', 'cryptogram', 'ladder', 'bridge'));
-
-alter table public.daily_progress drop constraint if exists daily_progress_game_check;
-alter table public.daily_progress
-  add constraint daily_progress_game_check
-  check (game in ('guess', 'hive', 'scramble', 'grid', 'box', 'weave', 'squares', 'cryptogram', 'ladder', 'bridge'));
+-- These two were a second copy of the game list, here because `create table if
+-- not exists` leaves an existing table alone — so adding a game meant widening
+-- the constraint explicitly, or every write for it came back 400 and the game
+-- silently never synced.
+--
+-- Both are foreign keys to public.games now, declared beside that table. The
+-- reason they were duplicated has not gone away: re-running this file still
+-- has to replace the constraint on an existing table, which is why the block
+-- up there drops and re-adds rather than assuming.
 
 -- ---------------------------------------------------------------------------
 -- stats_baselines: one-time import of the lifetime stats a browser

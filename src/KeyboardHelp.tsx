@@ -1,5 +1,6 @@
 import { useRef } from 'react';
 import { X } from 'lucide-react';
+import { GAME_NAME } from '@/games';
 import KeyDiagram from '@/KeyDiagram';
 import type { Mode, NavKeys } from '@/storage';
 import { useModalA11y } from '@/useModalA11y';
@@ -26,14 +27,11 @@ function Row({ keys, children }: { keys: React.ReactNode[]; children: React.Reac
 }
 
 // the games that take typed words — Weave is traced, not typed
-const TYPING_GAMES: { id: Mode; label: string }[] = [
-  { id: 'pattern', label: 'Guess the Word' },
-  { id: 'descramble', label: 'Scramble' },
-  { id: 'bee', label: 'Hive' },
-  { id: 'boxed', label: 'Boxed' },
-  { id: 'grid', label: 'Grid' },
-];
-
+const TYPING_MODES: Mode[] = ['pattern', 'descramble', 'bee', 'boxed', 'grid'];
+const TYPING_GAMES: { id: Mode; label: string }[] = TYPING_MODES.map((id) => ({
+  id,
+  label: GAME_NAME[id].full,
+}));
 function listOf(names: string[]): string {
   if (names.length <= 1) return names[0] ?? '';
   if (names.length === 2) return `${names[0]} and ${names[1]}`;

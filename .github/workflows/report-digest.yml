@@ -42,3 +42,16 @@ jobs:
             exit 0
           fi
           node scripts/report-digest.mjs
+      # After the digest, never before: a mismatch here should go red without
+      # holding up somebody's report. Daily rather than per-push because a
+      # push-time check would make CI depend on Supabase being up, and a red run
+      # is supposed to be ours rather than an outage's.
+      - name: Do the client and the database still agree about the games?
+        env:
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: |
+          if [ -z "$SUPABASE_SERVICE_ROLE_KEY" ]; then
+            echo "::warning::SUPABASE_SERVICE_ROLE_KEY not set; skipping the games check"
+            exit 0
+          fi
+          node scripts/check-games.mjs

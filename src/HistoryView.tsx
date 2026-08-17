@@ -2,7 +2,9 @@
 // already heavy, and a sparkline is a polyline.
 
 import { useEffect, useMemo, useState } from 'react';
-import { Grid3x3, Hexagon, KeyRound, LayoutGrid, Puzzle, Shuffle, Square, Table2 } from 'lucide-react';
+import { Combine, Grid3x3, Hexagon, KeyRound, LayoutGrid, Puzzle, Shuffle, Square, Table2 } from 'lucide-react';
+import LadderIcon from '@/LadderIcon';
+import { nameOfProgress } from '@/games';
 import {
   fetchHistory,
   guessByLength,
@@ -28,17 +30,26 @@ const GAMES: {
   /** when set, this card covers only that board of the day */
   variant?: string;
 }[] = [
-  { id: 'guess', label: 'Guess the Word', Icon: Grid3x3, unit: 'guesses', lowerIsBetter: true },
-  { id: 'hive', label: 'Hive', Icon: Hexagon, unit: 'points', lowerIsBetter: false },
-  { id: 'scramble', label: 'Scramble', Icon: Shuffle, unit: 'points', lowerIsBetter: false },
-  { id: 'grid', label: 'Grid', Icon: LayoutGrid, unit: 'points', lowerIsBetter: false },
-  { id: 'box', label: 'Boxed', Icon: Square, unit: 'words', lowerIsBetter: true },
-  { id: 'weave', label: 'Weave', Icon: Puzzle, unit: 'time', lowerIsBetter: true },
-  { id: 'squares', label: 'Word squares (4×4)', Icon: Table2, unit: 'time', lowerIsBetter: true, variant: '4' },
-  { id: 'squares', label: 'Word squares (5×5)', Icon: Table2, unit: 'time', lowerIsBetter: true, variant: '5' },
-  { id: 'cryptogram', label: 'Cryptogram', Icon: KeyRound, unit: 'time', lowerIsBetter: true },
+  // Labels come from @/games rather than being typed again — this file said
+  // "Word squares" while the leaderboard said "Word Squares", which is the kind
+  // of disagreement that only exists because both were written by hand.
+  //
+  // It was also two games short: ladder and bridge had dailies, leaderboards
+  // and stats, and no history card, so their day-by-day record was invisible.
+  { id: 'guess', label: nameOfProgress('guess'), Icon: Grid3x3, unit: 'guesses', lowerIsBetter: true },
+  { id: 'hive', label: nameOfProgress('hive'), Icon: Hexagon, unit: 'points', lowerIsBetter: false },
+  { id: 'scramble', label: nameOfProgress('scramble'), Icon: Shuffle, unit: 'points', lowerIsBetter: false },
+  { id: 'grid', label: nameOfProgress('grid'), Icon: LayoutGrid, unit: 'points', lowerIsBetter: false },
+  { id: 'box', label: nameOfProgress('box'), Icon: Square, unit: 'words', lowerIsBetter: true },
+  { id: 'weave', label: nameOfProgress('weave'), Icon: Puzzle, unit: 'time', lowerIsBetter: true },
+  { id: 'squares', label: `${nameOfProgress('squares')} (4×4)`, Icon: Table2, unit: 'time', lowerIsBetter: true, variant: '4' },
+  { id: 'squares', label: `${nameOfProgress('squares')} (5×5)`, Icon: Table2, unit: 'time', lowerIsBetter: true, variant: '5' },
+  { id: 'cryptogram', label: nameOfProgress('cryptogram'), Icon: KeyRound, unit: 'time', lowerIsBetter: true },
+  // A ladder is scored by how few steps it took, like Boxed's word count
+  { id: 'ladder', label: nameOfProgress('ladder'), Icon: LadderIcon, unit: 'steps', lowerIsBetter: true },
+  // and a bridge board by how many of its five prompts you found
+  { id: 'bridge', label: nameOfProgress('bridge'), Icon: Combine, unit: 'found', lowerIsBetter: false },
 ];
-
 function todayEt(): string {
   // the daily rolls at 3am Eastern; noon UTC lands on the right calendar day
   // either side of the boundary without pulling in a timezone library

@@ -110,6 +110,22 @@ twice: the `slur` flag is read out of the blocklist, not kept beside it. When
 two tiers look like the same judgement from two directions, check — scope
 `both` and flag `slur` were not.
 
+## The controls above a board are a ladder
+
+Every game climbs it in the same order: surface (solve / play / learn), then
+what the board is built from (`Difficulty` when playing, `Word list` when
+solving — one rung, two dialects, never both), then which board (daily /
+practice), then the game and its own parameters.
+
+The first rungs are shared, rendered once by `App` for whichever game is on
+screen. That does not make them consistent: `Word list` used to render *among*
+the game blocks, so it landed above the board for five games and below the
+first control for the other five, decided by where each game's JSX happened to
+sit. Source order is not render order — measure the page.
+
+`e2e/control-order.spec.ts` holds the rule. A new game placed wrongly turns it
+red; nothing else will notice, because both orders type check and both render.
+
 ## Colour and theme
 
 All colour through CSS variables in `index.css`; never a literal in a

@@ -10,8 +10,14 @@
 import { DAILY_ENV } from '@/dailyData';
 import { difficulty, type Difficulty } from '@/difficulty';
 import { supabase } from '@/supabase';
+import { ALL_MODES, PROGRESS_NAME } from '@/games';
+import type { Mode } from '@/games';
 
-export type HistoryGame = 'guess' | 'hive' | 'scramble' | 'grid' | 'box' | 'weave' | 'squares' | 'cryptogram';
+/** Derived, and it was a hand-written union of eight before — so Word Ladder
+ *  and Bridge had dailies, leaderboards and statistics, and no day-by-day
+ *  record at all. Not merely missing from the cards: the row was dropped here,
+ *  in the fetch, by a membership check against a list two games short. */
+export type HistoryGame = (typeof PROGRESS_NAME)[Mode];
 
 export type HistoryEntry = {
   date: string; // the puzzle's Eastern-time date, not when it was played
@@ -23,10 +29,10 @@ export type HistoryEntry = {
 
 export type History = Record<HistoryGame, HistoryEntry[]>;
 
-const GAMES: HistoryGame[] = ['guess', 'hive', 'scramble', 'grid', 'box', 'weave', 'squares', 'cryptogram'];
+const GAMES: HistoryGame[] = ALL_MODES.map((m) => PROGRESS_NAME[m]);
 
 export function emptyHistory(): History {
-  return { guess: [], hive: [], scramble: [], grid: [], box: [], weave: [], squares: [], cryptogram: [] };
+  return Object.fromEntries(GAMES.map((g) => [g, [] as HistoryEntry[]])) as History;
 }
 
 /** Your record at one difficulty.
@@ -128,6 +134,11 @@ export const STREAK_RULE: Record<HistoryGame, (e: HistoryEntry) => boolean> = {
   // giving up doesn't keep a streak alive, same as Guess and Weave
   squares: (e) => !!e.result.solved,
   cryptogram: (e) => !!e.result.solved,
+  // a ladder records solved as a boolean — revealing the route is not solving it
+  ladder: (e) => !!e.result.solved,
+  // a bridge records how many of its five prompts you got, so the bar is all of
+  // them: finding four is a good day, not a kept streak
+  bridge: (e) => Number(e.result.solved) >= 5,
 };
 
 // ---------------------------------------------------------------------------
@@ -146,6 +157,10 @@ export const SERIES_VALUE: Record<HistoryGame, (e: HistoryEntry) => number | nul
   weave: (e) => (e.result.solved ? Number(e.result.timeMs) || null : null),
   squares: (e) => (e.result.solved ? Number(e.result.timeMs) || null : null),
   cryptogram: (e) => (e.result.solved ? Number(e.result.timeMs) || null : null),
+  ladder: (e) => (e.result.solved ? Number(e.result.timeMs) || null : null),
+  // prompts found, which is the number the board is actually about — time is
+  // recorded too, but a bridge is a puzzle you finish rather than a race
+  bridge: (e) => Number(e.result.solved) || 0,
 };
 
 export function series(entries: HistoryEntry[], game: HistoryGame): Series {

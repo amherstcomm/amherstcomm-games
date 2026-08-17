@@ -1,5 +1,5 @@
-import { useCallback, useMemo, useState, useEffect, useLayoutEffect, useRef, type ButtonHTMLAttributes, type ReactNode } from 'react';
-import { Search, Eraser, ArrowDown, ArrowUp, X, BookOpen, Grid3x3, Shuffle, Hexagon, Check, Keyboard, Delete, Github, Info, Square, CalendarDays, Star, Gamepad2, CornerDownLeft, LayoutGrid, Puzzle, BarChart3, UserRound, Scale, Settings, Home, Table2, KeyRound } from 'lucide-react';
+import { useCallback, useMemo, useState, useEffect, useRef } from 'react';
+import { Search, X, BookOpen, Grid3x3, Shuffle, Hexagon, Keyboard, Delete, Github, Info, Square, CalendarDays, Star, Gamepad2, CornerDownLeft, LayoutGrid, Puzzle, BarChart3, UserRound, Scale, Settings, Home, Table2, KeyRound } from 'lucide-react';
 import LearnMode, { type LearnModeHandle } from '@/LearnMode';
 import type { Session } from '@supabase/supabase-js';
 import StatsModal from '@/StatsModal';
@@ -13,7 +13,6 @@ import { PrefsContext } from '@/prefs';
 import OnboardingCard from '@/OnboardingCard';
 import { useModalA11y } from '@/useModalA11y';
 import { Combine, Flag as FlagIcon } from 'lucide-react';
-import { bridges } from '@/bridge';
 import BridgeGame, { type BridgeGameHandle } from '@/BridgeGame';
 import GameMenu from '@/GameMenu';
 import LadderIcon from '@/LadderIcon';
@@ -32,6 +31,7 @@ import ConsentBanner from '@/ConsentBanner';
 import { PrivacyPolicy, Terms } from '@/LegalDocs';
 import { onDailyReport, requestDaily } from '@/dailyBus';
 import { entryGame, entryRoute } from '@/routing/entry';
+import { FEED_NAME, GAME_NAME } from '@/games';
 import { useAddressBar, useNav } from '@/routing/useRouting';
 import { routeOf, type Overlay } from '@/routing/nav';
 import ReportMenu from '@/ReportMenu';
@@ -40,36 +40,25 @@ import TicketView from '@/TicketView';
 import ReportQueueView from '@/ReportQueueView';
 import ReportActionView from '@/ReportActionView';
 
-// What daily_puzzles calls each game, which is not what the URL calls it and
-// not what the results table calls it either — Guess is published as 'words'.
-// A Record so a new game cannot be quietly left unreportable; the compiler
-// asks, which is the only thing that has reliably caught this class of gap.
-const REPORT_SLUG: Record<Mode, string> = {
-  pattern: 'words',
-  descramble: 'scramble',
-  bee: 'hive',
-  grid: 'grid',
-  boxed: 'box',
-  squares: 'squares',
-  weave: 'weave',
-  cryptogram: 'cryptogram',
-  ladder: 'ladder',
-  bridge: 'bridge',
-};
-import { solveSquare } from '@/squares';
 import HomeView from '@/HomeView';
+import Tile from '@/Tile';
+import WordChip from '@/solvers/WordChip';
+import ScrambleSolver from '@/solvers/ScrambleSolver';
+import HiveSolver from '@/solvers/HiveSolver';
+import GuessSolver from '@/solvers/GuessSolver';
+import ResultsPanel, { CAP } from '@/solvers/ResultsPanel';
+import GridSolver from '@/solvers/GridSolver';
+import WeaveSolver from '@/solvers/WeaveSolver';
+import { sortResults } from '@/solvers/resultOrder';
+import { centreOf, useBoardTrace } from '@/solvers/useBoardTrace';
+import BridgeSolver from '@/solvers/BridgeSolver';
+import LadderSolver from '@/solvers/LadderSolver';
+import SquaresSolver from '@/solvers/SquaresSolver';
+import CryptogramSolver from '@/solvers/CryptogramSolver';
 import RouteLink from '@/RouteLink';
 import SquaresGame, { type SquaresGameHandle } from '@/SquaresGame';
 import CryptogramGame, { type CryptogramGameHandle } from '@/CryptogramGame';
 import LadderGame, { type LadderGameHandle } from '@/LadderGame';
-import { shortestLadder } from '@/ladder';
-import {
-  analyse,
-  buildPatternIndex,
-  hunches,
-  parseCryptogram,
-  type InputMode,
-} from '@/cryptogramSolver';
 import {
   MODE_SLUG,
   modeOf,
@@ -116,12 +105,13 @@ const WORD_LIST_SOLVERS = new Set<Mode>([
   'weave',
 ]);
 
-const MODES: { id: Mode; label: string; short?: string; blurb: string; description: string; playDescription: string }[] = [
+// No label here. It lived in this table and in five other files, and disagreed:
+// this one said 'Guess' for one game and 'Word Ladder' for another, mixing the
+// short name and the full one inside a single column. @/games has both, and the
+// call sites below pick by how much room they have.
+const MODES: { id: Mode; blurb: string; description: string; playDescription: string }[] = [
   {
     id: 'pattern',
-    // the slug stays 'pattern' — it's in shared links — but nothing else calls
-    // it that, so the label matches Learn, the boards and the home page
-    label: 'Guess',
     blurb: 'Wordle, crosswords, hangman — clues about positions',
     description:
       "Lock in the letters you know, list the ones you've seen, and exclude the rest. We'll surface every dictionary word that fits.",
@@ -131,7 +121,6 @@ const MODES: { id: Mode; label: string; short?: string; blurb: string; descripti
   },
   {
     id: 'descramble',
-    label: 'Scramble',
     blurb: 'Scrabble, Jumble — what can these letters spell?',
     description:
       "Type the letters you're holding — with ? for blank tiles — and we'll show every word they can spell.",
@@ -140,7 +129,6 @@ const MODES: { id: Mode; label: string; short?: string; blurb: string; descripti
   },
   {
     id: 'bee',
-    label: 'Hive',
     blurb: 'Seven letters, 4+ letter words, center letter required — Spelling Bee style',
     description:
       "Enter the hive's seven letters and we'll find every word that uses the center — pangrams first.",
@@ -149,7 +137,6 @@ const MODES: { id: Mode; label: string; short?: string; blurb: string; descripti
   },
   {
     id: 'grid',
-    label: 'Grid',
     blurb: 'Boggle style — chain adjacent letters, each cell once',
     description:
       "Enter the grid letters and we'll find every word traceable through adjacent cells.",
@@ -158,7 +145,6 @@ const MODES: { id: Mode; label: string; short?: string; blurb: string; descripti
   },
   {
     id: 'boxed',
-    label: 'Boxed',
     blurb: "Twelve letters on four sides, no two in a row from the same side — Letter Boxed style",
     description:
       "Enter the twelve letters, three per side. We'll find every legal word and the two-word solutions that use all twelve.",
@@ -167,7 +153,6 @@ const MODES: { id: Mode; label: string; short?: string; blurb: string; descripti
   },
   {
     id: 'squares',
-    label: 'Squares',
     blurb: 'Fill the grid so every row and column is a word',
     description:
       "Type the letters you're sure of and we'll fill the rest, so every row and every column spells a word.",
@@ -176,7 +161,6 @@ const MODES: { id: Mode; label: string; short?: string; blurb: string; descripti
   },
   {
     id: 'weave',
-    label: 'Weave',
     blurb: 'Themed words tile the whole board — Strands style',
     description:
       'Play the themed tiling puzzle, or use Solve to list every traceable word on a Strands-style board.',
@@ -185,7 +169,6 @@ const MODES: { id: Mode; label: string; short?: string; blurb: string; descripti
   },
   {
     id: 'cryptogram',
-    label: 'Cryptogram',
     blurb: 'A passage in code — work out which letter is which',
     description:
       'Play the daily cipher. The solver is still being built: it has to offer the readings that fit rather than guess one, which is a different thing from the word solvers.',
@@ -194,8 +177,6 @@ const MODES: { id: Mode; label: string; short?: string; blurb: string; descripti
   },
   {
     id: 'ladder',
-    label: 'Word Ladder',
-    short: 'Ladder',
     blurb: 'Turn one word into another, a letter at a time',
     description:
       'Play the daily ladder, or use Solve to find the shortest route between any two words of the same length.',
@@ -204,7 +185,6 @@ const MODES: { id: Mode; label: string; short?: string; blurb: string; descripti
   },
   {
     id: 'bridge',
-    label: 'Bridge',
     blurb: 'Find the word that joins both sides',
     description:
       'Play the daily five, or use Solve to find every word that joins any two others.',
@@ -261,107 +241,6 @@ function normalizeLetters(s: string): string[] {
   return s.toLowerCase().replace(/[^a-z]/g, '').split('');
 }
 
-// iOS Safari ignores inputmode="none" and raises its keyboard on focus
-// anyway, stacking it on top of ours. These fields have to stay focusable so
-// the on-screen keyboard knows where to type, and read-only is the one state
-// that keeps focus while reliably suppressing the device keyboard — writes
-// still land, since the on-screen keyboard sets the value programmatically.
-// Only on touch pointers, so a desktop user with the panel open can still
-// type on a real keyboard.
-const COARSE_POINTER =
-  typeof window !== 'undefined' && !!window.matchMedia?.('(pointer: coarse)').matches;
-
-function Tile({
-  value,
-  onChange,
-  state,
-  index,
-  size,
-  group,
-  osk,
-  tone,
-}: {
-  value: string;
-  onChange: (v: string) => void;
-  state: 'known' | 'empty' | 'center';
-  index: number;
-  size: 'sm' | 'md';
-  group: string;
-  osk?: boolean; // on-screen keyboard active: suppress the device keyboard
-  tone?: { empty: string; filled: string }; // color override, e.g. boxed side hues
-}) {
-  const ref = useRef<HTMLInputElement>(null);
-  const dims =
-    size === 'sm'
-      ? 'w-9 h-11 sm:w-10 sm:h-12 text-xl sm:text-2xl'
-      : 'w-12 h-14 sm:w-14 sm:h-16 text-2xl sm:text-3xl';
-
-  const focusTile = (i: number) => {
-    const el = document.querySelector<HTMLInputElement>(
-      `input[data-tile-group="${group}"][data-tile-index="${i}"]`
-    );
-    el?.focus();
-    el?.select();
-  };
-
-  return (
-    <div className="relative">
-      <input
-        ref={ref}
-        data-tile-group={group}
-        data-tile-index={index}
-        value={value}
-        onChange={(e) => {
-          const raw = e.target.value.toLowerCase().replace(/[^a-z]/g, '');
-          const c = raw.slice(-1);
-          onChange(c);
-          if (c) focusTile(index + 1);
-        }}
-        onKeyDown={(e) => {
-          if (e.key === 'Backspace' && !value) focusTile(index - 1);
-          else if (e.key === 'ArrowLeft') focusTile(index - 1);
-          else if (e.key === 'ArrowRight') focusTile(index + 1);
-          // read-only fields swallow typing, so a physical keyboard on a
-          // touch device (an iPad with a case, say) is served here instead
-          else if (osk && COARSE_POINTER && /^[a-zA-Z]$/.test(e.key)) {
-            e.preventDefault();
-            onChange(e.key.toLowerCase());
-            focusTile(index + 1);
-          } else if (osk && COARSE_POINTER && e.key === 'Backspace' && value) {
-            e.preventDefault();
-            onChange('');
-          }
-        }}
-        maxLength={1}
-        inputMode={osk ? 'none' : undefined}
-        readOnly={osk && COARSE_POINTER}
-        aria-label={`Letter at position ${index + 1}`}
-        placeholder="·"
-        className={`${dims} text-center font-bold uppercase rounded-xl border-2 transition-all duration-150 outline-none
-          ${state === 'known'
-            ? tone?.filled ?? 'bg-emerald-500/15 border-emerald-400 text-emerald-200 shadow-[0_0_20px_-6px] shadow-emerald-500/40'
-            : state === 'center'
-              ? 'bg-amber-400/15 border-amber-400 text-amber-200 shadow-[0_0_20px_-6px] shadow-amber-400/50 placeholder-amber-200/30'
-              : tone?.empty ?? 'bg-white/5 border-white/55 text-white placeholder-white/25 hover:border-white/75'}
-          focus:border-amber-400 focus:bg-amber-400/10 focus:shadow-[0_0_24px_-6px] focus:shadow-amber-400/50`}
-      />
-      {value && (
-        <button
-          onClick={() => {
-            onChange('');
-            ref.current?.focus();
-          }}
-          tabIndex={-1}
-          aria-label={`Clear letter at position ${index + 1}`}
-          className="absolute -top-1.5 -right-1.5 w-5 h-5 flex items-center justify-center rounded-full bg-slate-800 border border-white/25 text-slate-300 hover:text-white hover:bg-slate-700 hover:border-white/50 transition-colors shadow-md"
-        >
-          <X className="w-3 h-3" />
-        </button>
-      )}
-    </div>
-  );
-}
-
 type ChainEntry = { w: string; m: number; last: string };
 
 type ChainIndex = {
@@ -369,16 +248,6 @@ type ChainIndex = {
   byFirst: Map<string, ChainEntry[]>;
   fullMask: number;
 };
-
-// outer hive cells, clockwise from the top, as [left%, top%] of the container
-const BEE_POSITIONS: [number, number][] = [
-  [50, 14],
-  [81, 32],
-  [81, 68],
-  [50, 86],
-  [19, 68],
-  [19, 32],
-];
 
 // boxed solver tiles share the play board's side hues (top, right, bottom, left)
 const BOX_SIDE_TONES = [
@@ -399,12 +268,6 @@ const BOX_SIDE_TONES = [
     filled: 'bg-amber-400/20 border-amber-400 text-amber-100 shadow-[0_0_20px_-6px] shadow-amber-400/40',
   },
 ];
-
-// highlight for grid solver tiles while a result word's path is previewed
-const GRID_TRACE_TONE = {
-  empty: 'bg-sky-400/25 border-sky-300 text-white',
-  filled: 'bg-sky-400/30 border-sky-300 text-white shadow-[0_0_20px_-6px] shadow-sky-400/50',
-};
 
 const CHAIN_CAP = 500;
 const CHAIN_BUDGET = 2_000_000;
@@ -446,128 +309,6 @@ function findChains(index: ChainIndex, k: number, cap = CHAIN_CAP, budget = CHAI
   const total = (s: string[]) => s.reduce((n, w) => n + w.length, 0);
   solutions.sort((a, b) => total(a) - total(b) || (a.join(' ') < b.join(' ') ? -1 : 1));
   return { solutions, capped };
-}
-
-function LetterChipInput({
-  value,
-  onChange,
-  ariaLabel,
-  placeholder,
-  maxLen,
-  allowWildcard = false,
-  tone,
-  osk,
-}: {
-  value: string;
-  onChange: (v: string) => void;
-  ariaLabel: string;
-  placeholder: string;
-  maxLen: number;
-  allowWildcard?: boolean;
-  tone: 'amber' | 'rose';
-  osk?: boolean;
-}) {
-  const inputRef = useRef<HTMLInputElement>(null);
-  const tones = {
-    amber: {
-      container: 'focus-within:border-amber-400 focus-within:bg-amber-400/5',
-      pill: 'bg-amber-400/15 border-amber-400/30 text-amber-200',
-    },
-    rose: {
-      container: 'focus-within:border-rose-400 focus-within:bg-rose-400/5',
-      pill: 'bg-rose-400/15 border-rose-400/30 text-rose-300',
-    },
-  }[tone];
-
-  return (
-    <div
-      onClick={() => inputRef.current?.focus()}
-      className={`w-full min-h-[3rem] px-2.5 py-2 rounded-xl bg-white/5 border-2 border-white/10 flex flex-wrap items-center justify-center gap-x-2 gap-y-2.5 cursor-text transition-all ${tones.container}`}
-    >
-      {value.split('').map((c, i) => (
-        <span
-          key={i}
-          className={`relative inline-flex items-center justify-center w-8 h-8 rounded-lg border text-base font-bold uppercase ${tones.pill}`}
-        >
-          {c}
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              onChange(value.slice(0, i) + value.slice(i + 1));
-              inputRef.current?.focus();
-            }}
-            tabIndex={-1}
-            aria-label={`Remove ${c === '?' ? 'wildcard' : c}`}
-            className="absolute -top-1.5 -right-1.5 w-4 h-4 flex items-center justify-center rounded-full bg-slate-800 border border-white/25 text-slate-300 hover:text-white hover:bg-slate-700 hover:border-white/50 transition-colors"
-          >
-            <X className="w-2.5 h-2.5" />
-          </button>
-        </span>
-      ))}
-      <input
-        ref={inputRef}
-        value=""
-        onChange={(e) => {
-          const add = e.target.value
-            .toLowerCase()
-            .replace(allowWildcard ? /[^a-z?]/g : /[^a-z]/g, '');
-          if (add) onChange((value + add).slice(0, maxLen));
-        }}
-        onKeyDown={(e) => {
-          if (e.key === 'Backspace' && value) onChange(value.slice(0, -1));
-          // as above: read-only swallows typing, so accept it from the key event
-          else if (osk && COARSE_POINTER) {
-            const ok = allowWildcard ? /^[a-zA-Z?]$/ : /^[a-zA-Z]$/;
-            if (ok.test(e.key)) {
-              e.preventDefault();
-              onChange((value + e.key.toLowerCase()).slice(0, maxLen));
-            }
-          }
-        }}
-        inputMode={osk ? 'none' : undefined}
-        readOnly={osk && COARSE_POINTER}
-        aria-label={ariaLabel}
-        placeholder={value ? '' : placeholder}
-        className={`h-8 bg-transparent outline-none text-white placeholder-slate-600 text-base text-center ${value ? 'w-2 p-0' : 'flex-1 min-w-[4rem] px-1'}`}
-      />
-    </div>
-  );
-}
-
-function WordChip({
-  word,
-  className,
-  children,
-  hoverProps,
-}: {
-  word: string;
-  className: string;
-  children?: ReactNode;
-  hoverProps?: ButtonHTMLAttributes<HTMLButtonElement>;
-}) {
-  const [copied, setCopied] = useState(false);
-
-  return (
-    <button
-      {...hoverProps}
-      onClick={() => {
-        navigator.clipboard.writeText(word).then(() => {
-          setCopied(true);
-          setTimeout(() => setCopied(false), 1000);
-        });
-      }}
-      title="Click to copy"
-      className={`px-3 py-2.5 rounded-lg text-center text-lg tracking-wide transition-colors ${className}`}
-    >
-      {copied ? (
-        <span className="inline-flex items-center gap-1.5 text-emerald-300 text-base font-medium">
-          <Check className="w-4 h-4" /> Copied
-        </span>
-      ) : (
-        children ?? word
-      )}
-    </button>
-  );
 }
 
 const initial = loadState();
@@ -630,20 +371,6 @@ function App() {
   const [bridgeY, setBridgeY] = useState(initial.bridge.y);
   const [ladderFrom, setLadderFrom] = useState(initial.ladder.from);
   const [ladderTo, setLadderTo] = useState(initial.ladder.to);
-  const [cryptoText, setCryptoText] = useState('');
-  const [cryptoMode, setCryptoMode] = useState<InputMode>('letters');
-  // marks the player has settled by picking a reading; propagation takes these
-  // as fixed and narrows everything else against them
-  // Kept as the choices made, not as the letters they imply: a pick has to be
-  // undoable on its own, and a flat token->letter map has forgotten which
-  // choice put each letter there.
-  const [cryptoPicks, setCryptoPicks] = useState<
-    { key: string; tokens: string[]; plain: string }[]
-  >([]);
-  // words whose full candidate list the player has asked to see; keyed the way
-  // analyse keys them, so a word keeps its state as the lists narrow
-  const [cryptoOpen, setCryptoOpen] = useState<string[]>([]);
-
   const weaveDims = WEAVE_DIMS[weaveSize];
 
   function changeWeaveSize(size: WeaveSize) {
@@ -703,7 +430,7 @@ function App() {
   async function fillTodaysWeave() {
     setTodayStatus('loading');
     try {
-      const d = await fetchDailyData('daily-weave');
+      const d = await fetchDailyData('weave');
       const b = tierOf(d);
       const board = b.board as string[];
       // hard and extreme are wider boards, so the size comes off the payload
@@ -723,42 +450,21 @@ function App() {
     }
   }
 
-  // hover-trace preview for grid solver results
-  const [gridTrace, setGridTrace] = useState<number[] | null>(null);
-  const [gridTracePts, setGridTracePts] = useState<{ x: number; y: number }[]>([]);
-  const gridBoardRef = useRef<HTMLDivElement>(null);
-
-  useLayoutEffect(() => {
-    if (!gridTrace || !gridBoardRef.current) {
-      setGridTracePts([]);
-      return;
-    }
-    const wrap = gridBoardRef.current.getBoundingClientRect();
-    setGridTracePts(
-      gridTrace.map((i) => {
-        const r = gridBoardRef.current!
-          .querySelector(`[data-tile-index="${i}"]`)!
-          .getBoundingClientRect();
-        return { x: r.left + r.width / 2 - wrap.left, y: r.top + r.height / 2 - wrap.top };
-      })
-    );
-  }, [gridTrace]);
+  // Hover a result to draw it back on the board. One hook instance per board:
+  // grid and weave used to share a single ref between two JSX blocks, which
+  // worked only because exactly one is ever mounted.
+  const gridT = useBoardTrace<number[]>((path, board) => {
+    const wrap = board.getBoundingClientRect();
+    return [path.map((i) => centreOf(board.querySelector(`[data-tile-index="${i}"]`)!, wrap))];
+  });
 
   useEffect(() => {
-    setGridTrace(null);
+    gridT.clear();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [gridLetters, gridPreset, weaveLetters, weaveSize, mode]);
 
-  function traceHandlersFor(word: string, letters: string[], cols: number): ButtonHTMLAttributes<HTMLButtonElement> {
-    const show = () => setGridTrace(findGridPath(letters, cols, word));
-    const hide = () => setGridTrace(null);
-    return {
-      onMouseEnter: show,
-      onMouseLeave: hide,
-      onPointerDown: show, // press-hold on touch
-      onPointerUp: hide,
-      onPointerCancel: hide,
-    };
-  }
+  const traceHandlersFor = (word: string, letters: string[], cols: number) =>
+    gridT.handlersFor(findGridPath(letters, cols, word) ?? []);
 
   const gridTraceHandlers = (word: string) => traceHandlersFor(word, gridLetters, gridDims.cols);
   const weaveTraceHandlers = (word: string) => traceHandlersFor(word, weaveLetters, weaveDims.cols);
@@ -780,44 +486,23 @@ function App() {
     'text-emerald-300',
     'text-amber-300',
   ];
-  const [boxedTrace, setBoxedTrace] = useState<string[] | null>(null);
-  const [boxedTracePts, setBoxedTracePts] = useState<{ x: number; y: number }[][]>([]);
-  const boxedBoardRef = useRef<HTMLDivElement>(null);
-  useLayoutEffect(() => {
-    if (!boxedTrace || !boxedBoardRef.current) {
-      setBoxedTracePts([]);
-      return;
-    }
-    const wrap = boxedBoardRef.current.getBoundingClientRect();
-    const measure = (word: string) => {
-      const pts: { x: number; y: number }[] = [];
-      for (const c of word) {
-        const idx = boxedLetters.findIndex((l) => l === c);
+  // Chords rather than a path: each word in a chain gets its own polyline, and
+  // its own colour from BOX_TRACE_COLORS above, so the chips double as a legend.
+  const boxedT = useBoardTrace<string[]>((chain, board) => {
+    const wrap = board.getBoundingClientRect();
+    return chain.map((word) => {
+      const pts = [];
+      for (const ch of word) {
+        const idx = boxedLetters.findIndex((l) => l === ch);
         if (idx === -1) continue;
-        const el = boxedBoardRef.current!.querySelector(
-          `input[data-tile-group="boxed"][data-tile-index="${idx}"]`
-        );
-        if (!el) continue;
-        const r = el.getBoundingClientRect();
-        pts.push({ x: r.left + r.width / 2 - wrap.left, y: r.top + r.height / 2 - wrap.top });
+        const el = board.querySelector(`input[data-tile-group="boxed"][data-tile-index="${idx}"]`);
+        if (el) pts.push(centreOf(el, wrap));
       }
       return pts;
-    };
-    setBoxedTracePts(boxedTrace.map(measure));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [boxedTrace]);
+    });
+  });
 
-  function boxedTraceHandlers(words: string[]): ButtonHTMLAttributes<HTMLButtonElement> {
-    const show = () => setBoxedTrace(words);
-    const hide = () => setBoxedTrace(null);
-    return {
-      onMouseEnter: show,
-      onMouseLeave: hide,
-      onPointerDown: show,
-      onPointerUp: hide,
-      onPointerCancel: hide,
-    };
-  }
+  const boxedTraceHandlers = (chain: string[]) => boxedT.handlersFor(chain);
 
   function changeGridPreset(preset: GridPreset) {
     setGridPreset(preset);
@@ -1183,110 +868,6 @@ function App() {
     return ALL_VIEWS.filter((v) => vis.includes(v) || v === entryGame()?.view);
   }, [hiddenViews]);
 
-  // Words grouped by shape, built only while the cryptogram solver is on
-  // screen — it is a pass over the whole dictionary and no other mode wants it.
-  const patternIndex = useMemo(() => {
-    if (mode !== 'cryptogram' || cryptogramPlay) return null;
-    // Search wide, rank narrow — and the two must not be confused.
-    //
-    // Searching the common tier alone was tried and is a trap. It deduces far
-    // more, and some of what it deduces is wrong: propagation is only sound
-    // while the candidate lists are complete, so a passage using any word the
-    // tier lacks lets the intersection eliminate the true letter and "prove" a
-    // false one. On a real cryptogram it settled i as a. A solver that is
-    // confidently wrong is the thing this whole design exists to avoid.
-    //
-    // So the search stays over everything, which keeps every deduction sound,
-    // and the common tier only decides what each list offers first — which was
-    // the actual complaint: the was buried behind dye and ecu.
-    const words = acceptWordsArr ?? standardWordsArr;
-    return words ? buildPatternIndex(words, wordRank ?? undefined) : null;
-  }, [mode, cryptogramPlay, acceptWordsArr, standardWordsArr, wordRank]);
-
-  /** The solver's answer, or the reason there isn't one.
-   *
-   *  It refuses before it searches, because the three ways this can be asked
-   *  wrongly — different lengths, a word the list doesn't have, nothing typed
-   *  yet — are all cheaper to explain than a blank result. Searching over the
-   *  common tier rather than the accept tier keeps the route made of words a
-   *  person would use; a ladder through `esne` answers the question and helps
-   *  nobody. */
-  const ladderResult = useMemo((): 
-    | { kind: 'idle'; note: string }
-    | { kind: 'none'; note: string }
-    | { kind: 'route'; route: string[] } => {
-    if (!ladderFrom || !ladderTo) return { kind: 'idle', note: 'Enter two words.' };
-    if (ladderFrom.length !== ladderTo.length)
-      return { kind: 'none', note: 'Both words have to be the same length.' };
-    if (ladderFrom === ladderTo) return { kind: 'idle', note: 'Those are the same word.' };
-    if (!commonWordsArr) return { kind: 'idle', note: 'Loading the word list…' };
-    const words = new Set(commonWordsArr);
-    for (const w of [ladderFrom, ladderTo])
-      if (!words.has(w)) return { kind: 'none', note: `${w} is not in the word list.` };
-    const route = shortestLadder(ladderFrom, ladderTo, words);
-    return route
-      ? { kind: 'route', route }
-      : { kind: 'none', note: 'No ladder connects those two.' };
-  }, [ladderFrom, ladderTo, commonWordsArr]);
-
-  /** Every word that bridges the two ends. Unlike the ladder's search this can
-   *  return several — the harvest only publishes prompts with one answer, but
-   *  the solver's job is to say what is true rather than what was published,
-   *  and a wider dictionary than the harvest used will sometimes find another. */
-  const bridgeAnswers = useMemo(():
-    | { kind: 'idle'; note: string }
-    | { kind: 'none'; note: string }
-    | { kind: 'words'; words: string[] } => {
-    if (!bridgeX || !bridgeY) return { kind: 'idle', note: 'Enter both ends.' };
-    if (!standardWordsArr) return { kind: 'idle', note: 'Loading the word list…' };
-    const words = new Set(standardWordsArr);
-    const found = bridges({ x: bridgeX, y: bridgeY }, words);
-    return found.length
-      ? { kind: 'words', words: found }
-      : { kind: 'none', note: `Nothing joins ${bridgeX.toUpperCase()} and ${bridgeY.toUpperCase()}.` };
-  }, [bridgeX, bridgeY, standardWordsArr]);
-
-  const cryptoWords = useMemo(
-    () => (cryptoText.trim() ? parseCryptogram(cryptoText, cryptoMode) : []),
-    [cryptoText, cryptoMode]
-  );
-
-  const cryptoPins = useMemo(() => {
-    const pins: Record<string, string> = {};
-    for (const p of cryptoPicks) p.tokens.forEach((t, i) => (pins[t] = p.plain[i]));
-    return pins;
-  }, [cryptoPicks]);
-
-  const cryptoAnalysis = useMemo(
-    () => (patternIndex && cryptoWords.length ? analyse(cryptoWords, patternIndex, cryptoPins) : null),
-    [patternIndex, cryptoWords, cryptoPins]
-  );
-
-  const cryptoHunches = useMemo(
-    () =>
-      cryptoAnalysis
-        ? hunches(cryptoAnalysis, wordRank ?? undefined)
-            // Half the weight agreeing is the floor for saying anything. It
-            // was set when a cold start put its top guess at 41% and wrong,
-            // and it still holds: measured over 150 boards at their opening
-            // move, what clears this bar is right 86% of the time and what
-            // falls below it 41%. The bar is doing the work it was put there
-            // for — a row of confident-looking noise is worse than an empty
-            // one.
-            .filter((h) => h.share >= 0.5)
-            .slice(0, 6)
-        : [],
-    [cryptoAnalysis, wordRank]
-  );
-
-  /** settle a word on one reading, which propagation then spreads. Choosing
-   *  again for the same word replaces that choice rather than stacking a
-   *  second one on top of it. */
-  function pinWord(tokens: string[], plain: string) {
-    const key = tokens.join(' ');
-    setCryptoPicks((prev) => [...prev.filter((p) => p.key !== key), { key, tokens, plain }]);
-  }
-
   const playFlags: Record<Mode, [boolean, (v: boolean) => void]> = {
     pattern: [patternPlay, setPatternPlay],
     descramble: [descramblePlay, setDescramblePlay],
@@ -1625,7 +1206,7 @@ function App() {
   async function fillDailyHive() {
     setTodayStatus('loading');
     try {
-      const d = await fetchDailyData('daily-hive');
+      const d = await fetchDailyData('bee');
       const b = tierOf(d);
       const center = String(b.center).toLowerCase();
       const outers = (b.outers as string[]).map((c) => String(c).toLowerCase());
@@ -1643,7 +1224,7 @@ function App() {
   async function fillDailyBox() {
     setTodayStatus('loading');
     try {
-      const d = await fetchDailyData('daily-box');
+      const d = await fetchDailyData('boxed');
       const letters = (tierOf(d).sides as string[])
         .flatMap((s) => String(s).toLowerCase().replace(/[^a-z]/g, '').split(''))
         .slice(0, 12);
@@ -1658,7 +1239,7 @@ function App() {
   async function fillDailyGrid() {
     setTodayStatus('loading');
     try {
-      const d = await fetchDailyData('daily-grid');
+      const d = await fetchDailyData('grid');
       const cells = (tierOf(d).cells as string[]).map((c) => String(c).toLowerCase());
       // the tiers are different board sizes, so the preset follows the cells
       const preset = (Object.keys(GRID_PRESET_DIMS) as GridPreset[]).find(
@@ -1678,7 +1259,7 @@ function App() {
   async function fillDailyRack() {
     setTodayStatus('loading');
     try {
-      const d = await fetchDailyData('daily-scramble');
+      const d = await fetchDailyData('descramble');
       const letters = (tierOf(d).letters as string[]).map((c) => String(c).toLowerCase());
       if (letters.length !== 7 || !letters.every((c) => /^[a-z]$/.test(c))) {
         throw new Error('bad payload');
@@ -1691,30 +1272,9 @@ function App() {
     }
   }
 
-  const squareFill = useMemo(() => {
-    if (mode !== 'squares' || squaresPlay) return null;
-    const n = squaresSize;
-    const grid = Array.from({ length: n * n }, (_, i) => {
-      const r = Math.floor(i / n);
-      const c = i % n;
-      return squaresLetters[r * 5 + c] || null;
-    });
-    return solveSquare(words, grid, n, 6);
-  }, [mode, squaresPlay, squaresSize, squaresLetters, words]);
+  const sorted = useMemo(() => sortResults(results, sort), [results, sort]);
 
-  const sorted = useMemo(() => {
-    const arr = [...results];
-    const dir = sort.dir === 'asc' ? 1 : -1;
-    if (sort.key === 'alpha') {
-      arr.sort((a, b) => (a < b ? -1 : a > b ? 1 : 0) * dir);
-    } else {
-      // direction applies to length; ties stay alphabetical
-      arr.sort((a, b) => (a.length - b.length) * dir || (a < b ? -1 : a > b ? 1 : 0));
-    }
-    return arr;
-  }, [results, sort]);
-
-  const visible = showAll ? sorted : sorted.slice(0, 200);
+  const visible = showAll ? sorted : sorted.slice(0, CAP);
 
   const pangrams =
     mode === 'bee' && beeAllowed.size === 7
@@ -1764,43 +1324,44 @@ function App() {
     return tiles.find((t) => !t.value) ?? tiles[0] ?? null;
   }
 
+  // Where an on-screen key goes. Learn first if it is open; then the mounted
+  // play board, if there is one; then — and this is the part that is easy to
+  // miss — straight into whatever input the solver surfaces have focused,
+  // which is what the rest of this function does.
+  //
+  // The board step was an if-chain naming eight of the ten games, so pressing
+  // a key on Ladder or Bridge did nothing at all: both expose `pressKey`, App
+  // already held both refs, and neither was ever called. A Record<Mode, …> is
+  // the difference between the eleventh game failing to compile and failing
+  // silently, which is exactly how these two got missed.
+  const KEY_TARGETS: Record<Mode, { current: { pressKey: (k: string) => void } | null }> = {
+    pattern: gameRef,
+    bee: hiveRef,
+    boxed: boxRef,
+    descramble: scrambleRef,
+    grid: gridRef,
+    weave: weaveRef,
+    squares: squaresRef,
+    cryptogram: cryptogramRef,
+    ladder: ladderRef,
+    bridge: bridgeRef,
+  };
+
   function pressKey(k: string) {
     if (learnMode) {
       learnRef.current?.pressKey(k);
       return;
     }
-    if (weavePlayActive) {
-      weaveRef.current?.pressKey(k);
+    // `playFlags[mode][0]` is the same test the ten `*PlayActive` flags make;
+    // `!learnMode` is already settled by the return above.
+    const board = playFlags[mode][0] ? KEY_TARGETS[mode].current : null;
+    if (board) {
+      board.pressKey(k);
       return;
     }
-    if (squaresPlayActive) {
-      squaresRef.current?.pressKey(k);
-      return;
-    }
-    if (cryptogramPlayActive) {
-      cryptogramRef.current?.pressKey(k);
-      return;
-    }
-    if (patternPlayActive) {
-      gameRef.current?.pressKey(k);
-      return;
-    }
-    if (beePlayActive) {
-      hiveRef.current?.pressKey(k);
-      return;
-    }
-    if (boxedPlayActive) {
-      boxRef.current?.pressKey(k);
-      return;
-    }
-    if (descramblePlayActive) {
-      scrambleRef.current?.pressKey(k);
-      return;
-    }
-    if (gridPlayActive) {
-      gridRef.current?.pressKey(k);
-      return;
-    }
+
+    // No board: a solver is on screen, and its inputs are ordinary DOM. Drive
+    // the one last focused, or the one this game starts at.
     const remembered =
       lastFocused.current && document.contains(lastFocused.current) ? lastFocused.current : null;
     const target = remembered ?? pickDefaultTarget();
@@ -1837,6 +1398,131 @@ function App() {
     setValue.call(target, isTile ? k : target.value + k);
     target.dispatchEvent(new Event('input', { bubbles: true }));
   }
+
+  // What the panel says when the answer is empty. Two different sentences hide
+  // in here and always did: "you have not finished typing" and "those letters
+  // spell nothing" mean opposite things to somebody stuck, so each solver gets
+  // to distinguish them. It reads as a ladder of ternaries because it is one —
+  // it moves to each solver as they come out, and the pattern solver's line is
+  // the fallback because it is the only one with no incomplete-board state.
+  const emptyNote =
+    mode === 'descramble'
+      ? rackLetters.length + wildcards === 0
+        ? 'Type your letters above to see what they can spell.'
+        : 'Nothing spells from those letters. Try adding a wildcard (?) or lowering the minimum length.'
+      : mode === 'bee'
+        ? beeCenter === ''
+          ? 'Enter the center letter and the six outer letters to find words.'
+          : 'No words found from those letters. Double-check the puzzle.'
+        : mode === 'boxed'
+          ? boxedLetters.filter(Boolean).length < 12
+            ? 'Enter the twelve letters, three per side, to find words.'
+            : 'No words fit this box. Double-check the puzzle.'
+          : mode === 'grid'
+            ? gridLetters.filter(Boolean).length < gridLetters.length
+              ? `Fill in all ${gridLetters.length} grid letters to find words.`
+              : 'No words can be traced on this grid.'
+            : mode === 'weave'
+              ? weaveLetters.filter(Boolean).length < weaveLetters.length
+                ? `Fill in all ${weaveLetters.length} board letters to find words.`
+                : 'No words can be traced on this board.'
+              : 'No words fit those clues. Try loosening a constraint.';
+
+  // Whatever a game wants shown above the plain list. No shape in common — a
+  // pangram is a word, a Boxed solution is an ordered chain of them in five
+  // colours — which is why the panel takes these as children rather than
+  // trying to describe both in one prop.
+  const featured = (
+    <>
+              {boxedRecommended && (
+                <div className="mb-6">
+                  <p className="mb-2.5 text-xs font-medium text-accent uppercase tracking-wider inline-flex items-center gap-1.5">
+                    <Star className="w-3.5 h-3.5" />
+                    Recommended
+                    <span className="text-accent normal-case tracking-normal">
+                      · {boxedRecommended.words.length}{' '}
+                      {boxedRecommended.words.length === 1 ? 'word' : 'words'}
+                      {boxedRecommended.allCommon ? ', everyday vocabulary' : ''}
+                    </span>
+                  </p>
+                  <div className="grid grid-cols-1 gap-2.5">
+                    <WordChip
+                      word={boxedRecommended.words.join(' ')}
+                      hoverProps={boxedTraceHandlers(boxedRecommended.words)}
+                      className="bg-amber-400/10 border border-amber-400/30 text-amber-200 font-semibold hover:bg-amber-400/20"
+                    >
+                      {boxedRecommended.words.map((w, i) => (
+                        <span key={i}>
+                          {i > 0 && <span className="text-slate-500"> → </span>}
+                          <span className={BOX_TRACE_TEXT[i % BOX_TRACE_TEXT.length]}>{w}</span>
+                        </span>
+                      ))}
+                    </WordChip>
+                  </div>
+                </div>
+              )}
+              {mode === 'boxed' && boxedIndex && (
+                <div className="mb-6">
+                  <p className="mb-2.5 text-xs font-medium text-success uppercase tracking-wider">
+                    {solutionWords}-word solutions{' '}
+                    <span className="text-success">
+                      · {boxedChains.capped ? `${boxedChains.solutions.length}+` : boxedChains.solutions.length}
+                    </span>
+                  </p>
+                  {boxedChains.solutions.length === 0 ? (
+                    <p className="text-sm text-slate-500">
+                      No {solutionWords}-word solutions found — try allowing more words.
+                    </p>
+                  ) : (
+                    <>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                        {boxedChains.solutions.slice(0, 24).map((s) => (
+                          <WordChip
+                            key={s.join(' ')}
+                            word={s.join(' ')}
+                            hoverProps={boxedTraceHandlers(s)}
+                            className="bg-emerald-400/10 border border-emerald-400/30 text-emerald-200 font-semibold hover:bg-emerald-400/20"
+                          >
+                            {s.map((w, i) => (
+                              <span key={i}>
+                                {i > 0 && <span className="text-slate-500"> → </span>}
+                                <span className={BOX_TRACE_TEXT[i % BOX_TRACE_TEXT.length]}>{w}</span>
+                              </span>
+                            ))}
+                          </WordChip>
+                        ))}
+                      </div>
+                      {boxedChains.solutions.length > 24 && (
+                        <p className="mt-2 text-xs text-slate-500">
+                          Showing the 24 shortest of{' '}
+                          {boxedChains.capped
+                            ? `${boxedChains.solutions.length}+ (search capped)`
+                            : boxedChains.solutions.length}{' '}
+                          solutions.
+                        </p>
+                      )}
+                    </>
+                  )}
+                </div>
+              )}
+              {pangrams.length > 0 && (
+                <div className="mb-6">
+                  <p className="mb-2.5 text-xs font-medium text-accent uppercase tracking-wider">
+                    Pangrams <span className="text-accent">· {pangrams.length}</span>
+                  </p>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2.5">
+                    {pangrams.map((w) => (
+                      <WordChip
+                        key={w}
+                        word={w}
+                        className="bg-amber-400/10 border border-amber-400/30 text-amber-200 font-semibold hover:bg-amber-400/20"
+                      />
+                    ))}
+                  </div>
+                </div>
+              )}
+    </>
+  );
 
   function resetAll() {
     setKnown(Array(length).fill(''));
@@ -1916,7 +1602,7 @@ function App() {
                       : 'text-slate-400 hover:text-white hover:bg-white/5'}`}
                 >
                   <Icon className="w-5 h-5" />
-                  <span>{m.short ?? m.label}</span>
+                  <span>{GAME_NAME[m.id].short}</span>
                 </RouteLink>
               );
             })}
@@ -2043,7 +1729,7 @@ function App() {
             shownViews.includes('learn') &&
             currentView !== 'learn' && (
             <OnboardingCard
-              game={MODES.find((m) => m.id === mode)?.label ?? 'this game'}
+              game={GAME_NAME[mode].full}
               onLearn={() => {
                 goToView('learn');
                 setOnboarded(true);
@@ -2118,6 +1804,44 @@ function App() {
             </section>
           )}
 
+          {/* The same rung as Difficulty above, and the reason the two sit
+              together: Difficulty is what a *play* board is built from, Word
+              list is what a *solve* answer is drawn from. One question, asked
+              once, in the wording the current view understands — which is why
+              they are mutually exclusive rather than stacked.
+
+              It used to render down among the game blocks, which put it above
+              the board for five games and below the first control for the other
+              five, purely by where each game happened to sit in this file.
+              Nobody chose that. Hidden when one dictionary has been set for the
+              whole site, since there'd be nothing left for it to pick. */}
+          {!playActive && solverDictionary === 'per-game' && (
+          <section className="mb-7 text-center">
+            <label className="block text-xs font-medium text-slate-400 uppercase tracking-wider mb-2.5">
+              Word list
+            </label>
+            <div className="inline-flex flex-wrap justify-center max-w-full rounded-xl bg-white/5 border border-white/10 p-1 gap-1">
+              {DICTIONARIES.map((d) => (
+                <button
+                  key={d.id}
+                  onClick={() => setDictionaryId(d.id)}
+                  title={d.blurb}
+                  className={`inline-flex items-center gap-1.5 px-4 h-9 rounded-lg text-sm font-semibold transition-all duration-150
+                    ${dictionaryId === d.id
+                      ? 'bg-amber-400 text-ink shadow-lg shadow-amber-500/30'
+                      : 'text-slate-300 hover:bg-white/10'}`}
+                >
+                  {d.id === 'easy' && <BookOpen className="w-3.5 h-3.5" />}
+                  {d.label}
+                </button>
+              ))}
+            </div>
+            <p className="mt-2 text-xs text-slate-500">
+              {DICTIONARIES.find((d) => d.id === dictionaryId)?.blurb}
+            </p>
+          </section>
+          )}
+
           {learnMode && (
             <div className="mb-8">
               <LearnMode
@@ -2154,52 +1878,8 @@ function App() {
           </div>
           )}
 
-          {/* The bridge solver, which answers exactly: membership in the word
-              list is the whole rule, so there is nothing to rank. It lists every
-              word that joins the two ends rather than one, because more than one
-              can be right even where the daily pool kept only prompts with a
-              single answer. */}
           {mode === 'bridge' && !bridgePlay && (
-          <div className="mb-8">
-            <div className="flex items-end justify-center gap-2 mb-4">
-              <div>
-                <label htmlFor="bridge-x" className="block text-xs font-medium text-slate-400 uppercase tracking-wider mb-1.5">First</label>
-                <input
-                  id="bridge-x"
-                  aria-label="first"
-                  value={bridgeX}
-                  onChange={(e) => setBridgeX(e.target.value.toLowerCase().replace(/[^a-z]/g, '').slice(0, 12))}
-                  placeholder="snow"
-                  className="w-28 text-center text-lg font-bold uppercase tracking-widest rounded-lg bg-white/5 border border-white/10 text-white px-2 py-1.5"
-                />
-              </div>
-              <span aria-hidden className="pb-3 text-slate-600 text-lg">·</span>
-              <div>
-                <label htmlFor="bridge-y" className="block text-xs font-medium text-slate-400 uppercase tracking-wider mb-1.5">Second</label>
-                <input
-                  id="bridge-y"
-                  aria-label="second"
-                  value={bridgeY}
-                  onChange={(e) => setBridgeY(e.target.value.toLowerCase().replace(/[^a-z]/g, '').slice(0, 12))}
-                  placeholder="room"
-                  className="w-28 text-center text-lg font-bold uppercase tracking-widest rounded-lg bg-white/5 border border-white/10 text-white px-2 py-1.5"
-                />
-              </div>
-            </div>
-            {bridgeAnswers.kind === 'words' ? (
-              <ul className="flex flex-wrap justify-center gap-2">
-                {bridgeAnswers.words.map((w) => (
-                  <li key={w} className="px-3 py-1.5 rounded-lg bg-white/5 border border-white/10 text-sm">
-                    <span className="text-slate-500 uppercase">{bridgeX}</span>
-                    <span className="font-bold uppercase text-accent">{w}</span>
-                    <span className="text-slate-500 uppercase">{bridgeY}</span>
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <p className="text-center text-sm text-slate-400">{bridgeAnswers.note}</p>
-            )}
-          </div>
+            <BridgeSolver x={bridgeX} y={bridgeY} onX={setBridgeX} onY={setBridgeY} words={standardWordsArr} />
           )}
 
           {mode === 'ladder' && ladderPlay && (
@@ -2212,258 +1892,17 @@ function App() {
               claim: breadth-first search returns the shortest route or proves
               there is none, so there is nothing to rank and nothing to guess. */}
           {mode === 'ladder' && !ladderPlay && (
-          <div className="mb-8 max-w-md mx-auto">
-            <p className="text-sm text-slate-300 mb-3">
-              Two words of the same length. The shortest ladder between them, if there is one.
-            </p>
-            <div className="flex items-center gap-2">
-              <label htmlFor="ladder-from" className="sr-only">from</label>
-              <input
-                id="ladder-from"
-                value={ladderFrom}
-                onChange={(e) => setLadderFrom(e.target.value.toLowerCase().replace(/[^a-z]/g, ''))}
-                placeholder="cold"
-                autoComplete="off"
-                spellCheck={false}
-                className="w-full text-center text-lg font-bold uppercase tracking-widest rounded-lg bg-white/5 border border-white/10 text-slate-200 px-3 py-2"
-              />
-              <span aria-hidden className="text-slate-500">to</span>
-              <label htmlFor="ladder-to" className="sr-only">to</label>
-              <input
-                id="ladder-to"
-                value={ladderTo}
-                onChange={(e) => setLadderTo(e.target.value.toLowerCase().replace(/[^a-z]/g, ''))}
-                placeholder="warm"
-                autoComplete="off"
-                spellCheck={false}
-                className="w-full text-center text-lg font-bold uppercase tracking-widest rounded-lg bg-white/5 border border-white/10 text-slate-200 px-3 py-2"
-              />
-            </div>
-            <div aria-live="polite" className="mt-4">
-              {ladderResult.kind === 'idle' && (
-                <p className="text-sm text-slate-500 text-center">{ladderResult.note}</p>
-              )}
-              {ladderResult.kind === 'none' && (
-                <p className="text-sm text-amber-300 text-center">{ladderResult.note}</p>
-              )}
-              {ladderResult.kind === 'route' && (
-                <>
-                  <p className="text-xs text-slate-400 text-center mb-2">
-                    {ladderResult.route.length - 1} steps
-                  </p>
-                  <ol className="space-y-1">
-                    {ladderResult.route.map((w, i) => (
-                      <li
-                        key={`${w}-${i}`}
-                        className="text-center text-lg font-bold uppercase tracking-widest text-slate-200"
-                      >
-                        {w}
-                      </li>
-                    ))}
-                  </ol>
-                </>
-              )}
-            </div>
-          </div>
+            <LadderSolver
+              from={ladderFrom}
+              to={ladderTo}
+              onFrom={setLadderFrom}
+              onTo={setLadderTo}
+              words={commonWordsArr}
+            />
           )}
 
-          {/* Deduce, then offer. This never picks a reading: it settles what the
-              word shapes force and hands back the choices for what they don't,
-              because a passage can have several readings where every word is
-              real and only a person can tell which one means anything. */}
           {mode === 'cryptogram' && !cryptogramPlay && (
-          <div className="mb-8 max-w-2xl mx-auto">
-            <label htmlFor="crypto-in" className="block text-sm text-slate-300 mb-2">
-              Paste a cryptogram. Every mark has to stand for the same letter throughout.
-            </label>
-            <textarea
-              id="crypto-in"
-              value={cryptoText}
-              onChange={(e) => {
-                setCryptoText(e.target.value);
-                setCryptoPicks([]);
-                setCryptoOpen([]);
-              }}
-              rows={3}
-              spellCheck={false}
-              placeholder={cryptoMode === 'letters' ? 'WKH TXLFN EURZQ IRA' : '17 42 42 / 8 9 3'}
-              className="w-full px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-slate-200 placeholder:text-slate-600 text-sm font-mono"
-            />
-
-            <div className="mt-3 flex flex-wrap items-center gap-2">
-              <div role="group" aria-label="How the marks are written" className="inline-flex rounded-lg bg-white/5 border border-white/10 p-0.5 gap-0.5">
-                {([['letters', 'Letters'], ['tokens', 'Numbers or symbols']] as const).map(([id, label]) => (
-                  <button
-                    key={id}
-                    onClick={() => { setCryptoMode(id); setCryptoPicks([]); setCryptoOpen([]); }}
-                    aria-pressed={cryptoMode === id}
-                    className={`px-3 py-1.5 rounded-md text-sm font-semibold transition-colors
-                      ${cryptoMode === id ? 'bg-emerald-400/15 text-emerald-300' : 'text-slate-400 hover:text-white'}`}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
-              {cryptoPicks.length > 1 && (
-                <button
-                  onClick={() => setCryptoPicks([])}
-                  className="inline-flex items-center gap-1.5 px-3 h-9 rounded-lg text-sm font-semibold bg-white/5 border border-white/10 text-slate-300 hover:bg-white/10 hover:text-white transition-colors"
-                >
-                  <Eraser className="w-4 h-4" />
-                  Undo all
-                </button>
-              )}
-            </div>
-
-            {/* The way in when nothing is offered. On a cold start every word
-                can still be thousands of readings, so there is nothing to click
-                and nothing worth suggesting — but the person asking usually
-                knows a letter already, and one is enough to start the cascade.
-                Typed here it becomes an ordinary pick, undoable like the rest. */}
-            <div className="mt-3 flex flex-wrap items-center gap-2">
-              <label htmlFor="crypto-known" className="text-xs text-slate-500">
-                Know one already?
-              </label>
-              <input
-                id="crypto-known"
-                defaultValue=""
-                placeholder={cryptoMode === 'letters' ? 'K=e' : '17=e'}
-                spellCheck={false}
-                onKeyDown={(e) => {
-                  if (e.key !== 'Enter') return;
-                  const raw = (e.target as HTMLInputElement).value;
-                  const m = raw.match(/^\s*(\S+)\s*=\s*([A-Za-z])\s*$/);
-                  if (!m) return;
-                  pinWord([cryptoMode === 'letters' ? m[1].toLowerCase() : m[1]], m[2].toLowerCase());
-                  (e.target as HTMLInputElement).value = '';
-                }}
-                className="w-24 px-2 h-8 rounded-lg bg-white/5 border border-white/10 text-slate-200 placeholder:text-slate-600 text-sm font-mono"
-              />
-              <span className="text-xs text-slate-600">then Enter</span>
-            </div>
-
-            {/* Each choice on its own, so a wrong turn costs one click rather
-                than the whole session. */}
-            {cryptoPicks.length > 0 && (
-              <div className="mt-3 flex flex-wrap items-center gap-2">
-                <span className="text-xs text-slate-500">Your picks:</span>
-                {cryptoPicks.map((p) => (
-                  <button
-                    key={p.key}
-                    onClick={() => setCryptoPicks((prev) => prev.filter((q) => q.key !== p.key))}
-                    aria-label={`Undo ${p.plain}`}
-                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-sm bg-emerald-400/15 text-emerald-300 hover:bg-rose-400/15 hover:text-rose-300 transition-colors"
-                  >
-                    {p.plain}
-                    <X className="w-3 h-3" />
-                  </button>
-                ))}
-              </div>
-            )}
-
-            {cryptoMode === 'tokens' && (
-              <p className="mt-2 text-xs text-slate-500">
-                Marks separated by spaces, words by a slash — nothing about &ldquo;17 42&rdquo;
-                says whether that is one word or two.
-              </p>
-            )}
-
-            {cryptoAnalysis && (
-              <div className="mt-5" aria-live="polite">
-                <p className="text-lg text-white leading-relaxed font-mono break-words">
-                  {cryptoWords
-                    .map((w) =>
-                      w
-                        // the apostrophe inside a contraction is the passage's
-                        // own punctuation, not a mark waiting to be solved, so
-                        // it reads through rather than showing as a blank
-                        .map((t) => (t === "'" ? "'" : (cryptoAnalysis.mapping[t] ?? '·')))
-                        .join('')
-                    )
-                    .join(' ')}
-                </p>
-                <p className="mt-2 text-xs text-slate-500">
-                  {cryptoAnalysis.contradiction
-                    ? 'No reading fits — one of your picks can’t be right. Undo them and try another.'
-                    : `${Object.keys(cryptoAnalysis.mapping).length} marks settled. A dot is a mark the shapes can’t pin yet.`}
-                </p>
-                {/* Guesses, and dressed as guesses. Everything above this line is
-                    proven; these are counted off the readings still standing, so
-                    they belong in their own row with their odds showing. */}
-                {!cryptoAnalysis.contradiction && cryptoHunches.length > 0 && (
-                  <div className="mt-3 flex flex-wrap items-center gap-2">
-                    <span className="text-xs text-slate-500">Probably:</span>
-                    {cryptoHunches.map((h) => (
-                      <button
-                        key={h.token}
-                        onClick={() => pinWord([h.token], h.plain)}
-                        className="inline-flex items-baseline gap-1 px-2 py-0.5 rounded-md text-sm bg-white/5 border border-dashed border-white/25 text-slate-300 hover:bg-amber-400/15 hover:text-accent transition-colors"
-                      >
-                        <span className="font-mono text-xs text-slate-500">{h.token}</span>
-                        <span>= {h.plain}</span>
-                        <span className="text-[0.625rem] text-slate-500">
-                          {Math.round(h.share * 100)}%
-                        </span>
-                      </button>
-                    ))}
-                  </div>
-                )}
-
-                {/* Most-constrained first, and only words narrow enough to act
-                    on. A five-letter word with three thousand readings is not a
-                    choice, it is a wall — and listing it buries the word with
-                    four, which is where the deduction actually is. */}
-                <div className="mt-4 space-y-2">
-                  {cryptoAnalysis.words
-                    .filter((w) => w.candidates.length > 1 && w.candidates.length <= 40)
-                    .sort((a, b) => a.candidates.length - b.candidates.length)
-                    .slice(0, 12)
-                    .map((w) => {
-                      const key = w.tokens.join(' ');
-                      const open = cryptoOpen.includes(key);
-                      // ten is enough to scan; the rest are a click away rather
-                      // than a number you can only look at
-                      const shown = open ? w.candidates : w.candidates.slice(0, 10);
-                      return (
-                        <div key={key} className="flex flex-wrap items-baseline gap-2">
-                          <span className="text-xs font-mono text-slate-500 shrink-0">
-                            {w.tokens.join(cryptoMode === 'letters' ? '' : ' ')}
-                          </span>
-                          {shown.map((c) => (
-                            <button
-                              key={c}
-                              onClick={() => pinWord(w.tokens, c)}
-                              className="px-2 py-0.5 rounded-md text-sm bg-white/5 border border-white/10 text-slate-300 hover:bg-emerald-400/15 hover:text-emerald-300 transition-colors"
-                            >
-                              {c}
-                            </button>
-                          ))}
-                          {w.candidates.length > 10 && (
-                            <button
-                              onClick={() =>
-                                setCryptoOpen((prev) =>
-                                  open ? prev.filter((k) => k !== key) : [...prev, key]
-                                )
-                              }
-                              className="px-2 py-0.5 rounded-md text-xs text-slate-500 hover:text-white hover:bg-white/10 transition-colors"
-                            >
-                              {open ? 'fewer' : `+${w.candidates.length - 10} more`}
-                            </button>
-                          )}
-                        </div>
-                      );
-                    })}
-                </div>
-
-                {!cryptoAnalysis.contradiction &&
-                  cryptoAnalysis.words.every((w) => w.candidates.length === 1) && (
-                    <p className="mt-3 text-xs text-emerald-300">
-                      Every word has one reading left, so that is the answer.
-                    </p>
-                  )}
-              </div>
-            )}
-          </div>
+            <CryptogramSolver words={acceptWordsArr ?? standardWordsArr} wordRank={wordRank} />
           )}
 
           {weavePlayActive && (
@@ -2473,226 +1912,30 @@ function App() {
           )}
 
           {mode === 'squares' && !squaresPlay && (
-          <div className="mb-8 text-center">
-            <label className="block text-xs font-medium text-slate-400 uppercase tracking-wider mb-2.5">
-              Grid size
-            </label>
-            <div className="mb-5 inline-flex rounded-lg bg-white/5 border border-white/10 p-0.5 gap-0.5">
-              {([4, 5] as SquareSolverSize[]).map((sz) => (
-                <button
-                  key={sz}
-                  onClick={() => setSquaresSize(sz)}
-                  className={`px-3 py-1.5 rounded-md text-sm font-semibold transition-colors
-                    ${squaresSize === sz ? 'bg-white/15 text-white' : 'text-slate-400 hover:text-white'}`}
-                >
-                  {sz}×{sz}
-                </button>
-              ))}
-            </div>
-
-            <label className="block text-xs font-medium text-slate-400 uppercase tracking-wider mb-2.5">
-              Known letters
-            </label>
-            {/* letters live in a 25-slot array indexed by row*5+col, so dropping
-                to 4×4 and back doesn't throw away what was typed */}
-            <div className="w-fit mx-auto">
-              <div
-                className="grid gap-2"
-                style={{ gridTemplateColumns: `repeat(${squaresSize}, auto)` }}
-              >
-                {Array.from({ length: squaresSize * squaresSize }, (_, i) => {
-                  const slot = Math.floor(i / squaresSize) * 5 + (i % squaresSize);
-                  return (
-                    <Tile
-                      key={slot}
-                      index={i}
-                      group="squares"
-                      osk={kbOpen}
-                      value={squaresLetters[slot]}
-                      state={squaresLetters[slot] ? 'known' : 'empty'}
-                      size="sm"
-                      onChange={(c) =>
-                        setSquaresLetters((prev) => prev.map((x, j) => (j === slot ? c : x)))
-                      }
-                    />
-                  );
-                })}
-              </div>
-            </div>
-
-            <p className="mt-4 text-sm text-slate-400">
-              Leave a cell blank and we&apos;ll fill it. Every row and every column
-              comes out a word.
-            </p>
-
-            {squareFill && (
-              <div className="mt-6">
-                {squareFill.solutions.length === 0 ? (
-                  <p className="text-sm text-slate-400">
-                    {squareFill.exhausted
-                      ? 'No square fits those letters.'
-                      : 'Gave up looking — pin down another letter or two and try again.'}
-                  </p>
-                ) : (
-                  <>
-                    <p className="text-sm text-slate-400 mb-4">
-                      {squareFill.solutions.length}
-                      {squareFill.exhausted ? '' : '+'}{' '}
-                      {squareFill.solutions.length === 1 ? 'square' : 'squares'} fit
-                    </p>
-                    <div className="flex flex-wrap justify-center gap-5">
-                      {squareFill.solutions.map((rows, k) => (
-                        <div
-                          key={k}
-                          className="grid gap-1"
-                          style={{ gridTemplateColumns: `repeat(${squaresSize}, auto)` }}
-                        >
-                          {rows.flatMap((w, r) =>
-                            w.split('').map((ch, c) => {
-                              const typed = !!squaresLetters[r * 5 + c];
-                              return (
-                                <span
-                                  key={`${r}-${c}`}
-                                  className={`w-7 h-8 flex items-center justify-center rounded-md border text-sm font-bold uppercase
-                                    ${typed
-                                      ? 'bg-white/15 border-white/25 text-white'
-                                      : 'bg-transparent border-white/10 text-accent'}`}
-                                >
-                                  {ch}
-                                </span>
-                              );
-                            })
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  </>
-                )}
-              </div>
-            )}
-          </div>
+            <SquaresSolver
+              size={squaresSize}
+              letters={squaresLetters}
+              onSize={setSquaresSize}
+              onLetters={setSquaresLetters}
+              words={words}
+              osk={kbOpen}
+            />
           )}
 
           {mode === 'weave' && !weavePlay && (
-          <div className="mb-8 text-center">
-            <label className="block text-xs font-medium text-slate-400 uppercase tracking-wider mb-2.5">
-              Board size
-            </label>
-            <div className="mb-5 inline-flex rounded-lg bg-white/5 border border-white/10 p-0.5 gap-0.5">
-              {(
-                [
-                  { id: '6x8', label: '6×8' },
-                  { id: '8x10', label: '8×10' },
-                ] as const
-              ).map(({ id, label }) => (
-                <button
-                  key={id}
-                  onClick={() => changeWeaveSize(id)}
-                  className={`px-3 py-1.5 rounded-md text-sm font-semibold whitespace-nowrap transition-colors
-                    ${weaveSize === id ? 'bg-white/15 text-white' : 'text-slate-400 hover:text-white'}`}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-            <label className="block text-xs font-medium text-slate-400 uppercase tracking-wider mb-3">
-              The board
-            </label>
-            <div ref={gridBoardRef} className="relative w-fit mx-auto">
-              <div className={`grid gap-1.5 ${weaveDims.cols === 8 ? 'grid-cols-8' : 'grid-cols-6'}`}>
-                {weaveLetters.map((v, i) => (
-                  <Tile
-                    key={i}
-                    index={i}
-                    group="weave"
-                    osk={kbOpen}
-                    value={v}
-                    state={v ? 'known' : 'empty'}
-                    size="sm"
-                    tone={gridTrace?.includes(i) ? GRID_TRACE_TONE : undefined}
-                    onChange={(c) =>
-                      setWeaveLetters((prev) => prev.map((x, j) => (j === i ? c : x)))
-                    }
-                  />
-                ))}
-              </div>
-              {gridTracePts.length > 1 && (
-                <svg className="absolute inset-0 w-full h-full pointer-events-none">
-                  <polyline
-                    points={gridTracePts.map((p) => `${p.x},${p.y}`).join(' ')}
-                    fill="none"
-                    stroke="rgb(var(--trace) / 0.9)"
-                    strokeWidth="4"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                  <circle cx={gridTracePts[0].x} cy={gridTracePts[0].y} r="6" fill="rgb(var(--trace))" />
-                </svg>
-              )}
-            </div>
-            <div className="mt-4 flex flex-wrap items-center justify-center gap-3">
-              <button
-                onClick={fillTodaysStrands}
-                disabled={todayStatus === 'loading'}
-                className="inline-flex items-center gap-1.5 px-4 h-10 rounded-lg text-sm font-semibold bg-white/5 border border-white/10 text-slate-300 hover:bg-white/10 hover:text-white transition-colors disabled:opacity-50"
-              >
-                <CalendarDays className="w-4 h-4" />
-                {todayStatus === 'loading' ? 'Fetching…' : "Today's NYT Strands"}
-              </button>
-              <button
-                onClick={fillTodaysWeave}
-                disabled={todayStatus === 'loading'}
-                className="inline-flex items-center gap-1.5 px-4 h-10 rounded-lg text-sm font-semibold bg-white/5 border border-white/10 text-slate-300 hover:bg-white/10 hover:text-white transition-colors disabled:opacity-50"
-              >
-                <CalendarDays className="w-4 h-4" />
-                {todayStatus === 'loading' ? 'Fetching…' : "Today's daily weave"}
-              </button>
-            </div>
-            {todayStatus === 'error' && (
-              <p className="mt-2 text-xs text-danger">
-                Couldn&apos;t fetch today&apos;s puzzle — try again in a minute.
-              </p>
-            )}
-            {strandsClue && (
-              <p className="mt-2 text-sm text-amber-300">
-                Theme: <span className="font-semibold">{strandsClue}</span>
-              </p>
-            )}
-            <p className="mt-3 text-xs text-slate-500">
-              Words are 3+ letters traced through adjacent cells (diagonals count), using each
-              cell once. Hover a result to trace it on the board. Today&apos;s Strands becomes
-              available here about 15 minutes after the NYT publishes it (3:00&nbsp;a.m. Eastern).
-            </p>
-          </div>
-          )}
-
-          {/* dictionary selector — hidden when one dictionary has been chosen
-              for the whole site, since there'd be nothing left for it to pick */}
-          {!playActive && solverDictionary === 'per-game' && (
-          <section className="mb-7 text-center">
-            <label className="block text-xs font-medium text-slate-400 uppercase tracking-wider mb-2.5">
-              Word list
-            </label>
-            <div className="inline-flex flex-wrap justify-center max-w-full rounded-xl bg-white/5 border border-white/10 p-1 gap-1">
-              {DICTIONARIES.map((d) => (
-                <button
-                  key={d.id}
-                  onClick={() => setDictionaryId(d.id)}
-                  title={d.blurb}
-                  className={`inline-flex items-center gap-1.5 px-4 h-9 rounded-lg text-sm font-semibold transition-all duration-150
-                    ${dictionaryId === d.id
-                      ? 'bg-amber-400 text-ink shadow-lg shadow-amber-500/30'
-                      : 'text-slate-300 hover:bg-white/10'}`}
-                >
-                  {d.id === 'easy' && <BookOpen className="w-3.5 h-3.5" />}
-                  {d.label}
-                </button>
-              ))}
-            </div>
-            <p className="mt-2 text-xs text-slate-500">
-              {DICTIONARIES.find((d) => d.id === dictionaryId)?.blurb}
-            </p>
-          </section>
+            <WeaveSolver
+              size={weaveSize}
+              onSize={changeWeaveSize}
+              letters={weaveLetters}
+              cols={weaveDims.cols}
+              onLetters={setWeaveLetters}
+              osk={kbOpen}
+              trace={gridT}
+              onFillStrands={fillTodaysStrands}
+              onFillWeave={fillTodaysWeave}
+              todayStatus={todayStatus}
+              strandsClue={strandsClue}
+            />
           )}
 
           {mode === 'pattern' && (
@@ -2738,65 +1981,16 @@ function App() {
             />
           </div>
           ) : (
-          <>
-          {/* known positions */}
-          <section className="mb-7 text-center">
-            <label className="block text-xs font-medium text-slate-400 uppercase tracking-wider mb-2.5">
-              Known positions
-            </label>
-            <div className="flex flex-wrap gap-2 justify-center">
-              {known.map((v, i) => (
-                <Tile
-                  key={i}
-                  index={i}
-                  group="known"
-                  osk={kbOpen}
-                  value={v}
-                  state={v ? 'known' : 'empty'}
-                  size={length > 10 ? 'sm' : 'md'}
-                  onChange={(c) =>
-                    setKnown((prev) => prev.map((x, j) => (j === i ? c : x)))
-                  }
-                />
-              ))}
-            </div>
-            <p className="mt-2 text-xs text-slate-500">
-              Fill a box only when you're certain of the letter in that spot.
-            </p>
-          </section>
-
-          {/* contains + excluded */}
-          <div className="grid sm:grid-cols-2 gap-5 mb-8">
-            <section>
-              <label className="block text-xs font-medium text-slate-400 uppercase tracking-wider mb-2.5">
-                Must contain <span className="text-accent normal-case">(position unknown)</span>
-              </label>
-              <LetterChipInput
-                value={containsStr}
-                onChange={setContainsStr}
-                ariaLabel="Letters the word must contain"
-                placeholder="e.g. d"
-                maxLen={15}
-                tone="amber"
-                osk={kbOpen}
-              />
-            </section>
-            <section>
-              <label className="block text-xs font-medium text-slate-400 uppercase tracking-wider mb-2.5">
-                Excluded letters
-              </label>
-              <LetterChipInput
-                value={excludedStr}
-                onChange={setExcludedStr}
-                ariaLabel="Excluded letters"
-                placeholder="letters not in the word"
-                maxLen={26}
-                tone="rose"
-                osk={kbOpen}
-              />
-            </section>
-          </div>
-          </>
+            <GuessSolver
+              known={known}
+              onKnown={setKnown}
+              length={length}
+              contains={containsStr}
+              onContains={setContainsStr}
+              excluded={excludedStr}
+              onExcluded={setExcludedStr}
+              osk={kbOpen}
+            />
           )}
           </>
           )}
@@ -2820,63 +2014,18 @@ function App() {
           )}
 
           {mode === 'descramble' && !descramblePlay && (
-          <div className="mb-8">
-            <section className="mb-5">
-              <label className="block text-xs font-medium text-slate-400 uppercase tracking-wider mb-2.5 text-center">
-                Your letters <span className="text-accent normal-case">(use ? for a blank tile)</span>
-              </label>
-              <LetterChipInput
-                value={rackStr}
-                onChange={setRackStr}
-                ariaLabel="Letters to descramble"
-                placeholder="e.g. aetrsn?"
-                maxLen={MAX_LEN}
-                allowWildcard
-                tone="amber"
-                osk={kbOpen}
-              />
-            </section>
-            <div className="flex flex-wrap items-center justify-center gap-3">
-              <button
-                onClick={fillDailyRack}
-                disabled={todayStatus === 'loading'}
-                className="inline-flex items-center gap-1.5 px-4 h-10 rounded-lg text-sm font-semibold bg-white/5 border border-white/10 text-slate-300 hover:bg-white/10 hover:text-white transition-colors disabled:opacity-50"
-              >
-                <CalendarDays className="w-4 h-4" />
-                {todayStatus === 'loading' ? 'Fetching…' : "Today's daily rack"}
-              </button>
-              <button
-                onClick={() => setUseAll((v) => !v)}
-                className={`inline-flex items-center gap-1.5 px-4 h-10 rounded-lg text-sm font-semibold transition-all duration-150 border
-                  ${useAll
-                    ? 'bg-amber-400 text-ink border-amber-400 shadow-lg shadow-amber-500/30'
-                    : 'bg-white/5 border-white/10 text-slate-300 hover:bg-white/10'}`}
-              >
-                Use every letter
-              </button>
-              {!useAll && (
-                <label className="inline-flex items-center gap-2 text-sm text-slate-300">
-                  Min length
-                  <select
-                    value={minLength}
-                    onChange={(e) => setMinLength(Number(e.target.value))}
-                    className="h-10 px-3 rounded-lg bg-white/5 border border-white/10 text-sm font-semibold text-white outline-none focus:border-amber-400 [&>option]:bg-slate-900"
-                  >
-                    {[2, 3, 4, 5, 6, 7].map((n) => (
-                      <option key={n} value={n}>
-                        {n}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-              )}
-            </div>
-            {todayStatus === 'error' && (
-              <p className="mt-2 text-xs text-danger text-center">
-                Couldn&apos;t fetch today&apos;s rack — try again in a minute.
-              </p>
-            )}
-          </div>
+            <ScrambleSolver
+              rack={rackStr}
+              onRack={setRackStr}
+              maxLen={MAX_LEN}
+              useAll={useAll}
+              onUseAll={setUseAll}
+              minLength={minLength}
+              onMinLength={setMinLength}
+              osk={kbOpen}
+              onFillToday={fillDailyRack}
+              todayStatus={todayStatus}
+            />
           )}
 
           {beePlayActive && (
@@ -2897,71 +2046,17 @@ function App() {
           )}
 
           {mode === 'bee' && !beePlay && (
-          <div className="mb-8 text-center">
-            <label className="block text-xs font-medium text-slate-400 uppercase tracking-wider mb-3">
-              The hive
-            </label>
-            <div className="relative w-full max-w-[14rem] aspect-square mx-auto">
-              <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2">
-                <Tile
-                  index={0}
-                  group="bee"
-                  osk={kbOpen}
-                  value={beeCenter}
-                  state="center"
-                  size="sm"
-                  onChange={(c) => setBeeCenter(c)}
-                />
-              </div>
-              {BEE_POSITIONS.map(([x, y], i) => (
-                <div
-                  key={i}
-                  className="absolute -translate-x-1/2 -translate-y-1/2"
-                  style={{ left: `${x}%`, top: `${y}%` }}
-                >
-                  <Tile
-                    index={i + 1}
-                    group="bee"
-                    osk={kbOpen}
-                    value={beeOuters[i]}
-                    state={beeOuters[i] ? 'known' : 'empty'}
-                    size="sm"
-                    onChange={(c) =>
-                      setBeeOuters((prev) => prev.map((x2, j) => (j === i ? c : x2)))
-                    }
-                  />
-                </div>
-              ))}
-            </div>
-            <div className="mt-4 flex flex-wrap items-center justify-center gap-3">
-              <button
-                onClick={fillDailyHive}
-                disabled={todayStatus === 'loading'}
-                className="inline-flex items-center gap-1.5 px-4 h-10 rounded-lg text-sm font-semibold bg-white/5 border border-white/10 text-slate-300 hover:bg-white/10 hover:text-white transition-colors disabled:opacity-50"
-              >
-                <CalendarDays className="w-4 h-4" />
-                {todayStatus === 'loading' ? 'Fetching…' : "Today's daily hive"}
-              </button>
-              <button
-                onClick={fillTodaysBee}
-                disabled={todayStatus === 'loading'}
-                className="inline-flex items-center gap-1.5 px-4 h-10 rounded-lg text-sm font-semibold bg-white/5 border border-white/10 text-slate-300 hover:bg-white/10 hover:text-white transition-colors disabled:opacity-50"
-              >
-                <CalendarDays className="w-4 h-4" />
-                {todayStatus === 'loading' ? 'Fetching…' : "Today's NYT bee"}
-              </button>
-            </div>
-            {todayStatus === 'error' && (
-              <p className="mt-2 text-xs text-danger">
-                Couldn&apos;t fetch today&apos;s puzzle — try again in a minute.
-              </p>
-            )}
-            <p className="mt-3 text-xs text-slate-500">
-              Words are 4+ letters, must use the {colorWords(palette, resolveTheme(theme)).key} center letter, and may repeat letters.
-              Words using all seven letters are pangrams. Both today&apos;s puzzles become
-              available about 15 minutes after 3:00&nbsp;a.m. Eastern.
-            </p>
-          </div>
+            <HiveSolver
+              center={beeCenter}
+              outers={beeOuters}
+              onCenter={setBeeCenter}
+              onOuters={setBeeOuters}
+              osk={kbOpen}
+              onFillDaily={fillDailyHive}
+              onFillNyt={fillTodaysBee}
+              todayStatus={todayStatus}
+              centreColour={colorWords(palette, resolveTheme(theme)).key}
+            />
           )}
 
           {gridPlayActive && (
@@ -2981,87 +2076,17 @@ function App() {
           )}
 
           {mode === 'grid' && !gridPlay && (
-          <div className="mb-8 text-center">
-            <label className="block text-xs font-medium text-slate-400 uppercase tracking-wider mb-2.5">
-              Grid size
-            </label>
-            <div className="mb-5 inline-flex rounded-lg bg-white/5 border border-white/10 p-0.5 gap-0.5">
-              {(
-                [
-                  { id: '3x3', label: '3×3' },
-                  { id: '4x4', label: '4×4' },
-                  { id: '5x5', label: '5×5' },
-                ] as const
-              ).map(({ id, label }) => (
-                <button
-                  key={id}
-                  onClick={() => changeGridPreset(id)}
-                  className={`px-3 py-1.5 rounded-md text-sm font-semibold whitespace-nowrap transition-colors
-                    ${gridPreset === id ? 'bg-white/15 text-white' : 'text-slate-400 hover:text-white'}`}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-            <label className="block text-xs font-medium text-slate-400 uppercase tracking-wider mb-3">
-              The grid
-            </label>
-            <div ref={gridBoardRef} className="relative w-fit mx-auto">
-              <div
-                className={`grid gap-2 ${
-                  gridDims.cols === 3 ? 'grid-cols-3' : gridDims.cols === 5 ? 'grid-cols-5' : 'grid-cols-4'
-                }`}
-              >
-                {gridLetters.map((v, i) => (
-                  <Tile
-                    key={i}
-                    index={i}
-                    group="grid"
-                    osk={kbOpen}
-                    value={v}
-                    state={v ? 'known' : 'empty'}
-                    size="sm"
-                    tone={gridTrace?.includes(i) ? GRID_TRACE_TONE : undefined}
-                    onChange={(c) =>
-                      setGridLetters((prev) => prev.map((x, j) => (j === i ? c : x)))
-                    }
-                  />
-                ))}
-              </div>
-              {gridTracePts.length > 1 && (
-                <svg className="absolute inset-0 w-full h-full pointer-events-none">
-                  <polyline
-                    points={gridTracePts.map((p) => `${p.x},${p.y}`).join(' ')}
-                    fill="none"
-                    stroke="rgb(var(--trace) / 0.9)"
-                    strokeWidth="4"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                  <circle cx={gridTracePts[0].x} cy={gridTracePts[0].y} r="6" fill="rgb(var(--trace))" />
-                </svg>
-              )}
-            </div>
-            <div className="mt-4 flex flex-wrap items-center justify-center gap-3">
-              <button
-                onClick={fillDailyGrid}
-                disabled={todayStatus === 'loading'}
-                className="inline-flex items-center gap-1.5 px-4 h-10 rounded-lg text-sm font-semibold bg-white/5 border border-white/10 text-slate-300 hover:bg-white/10 hover:text-white transition-colors disabled:opacity-50"
-              >
-                <CalendarDays className="w-4 h-4" />
-                {todayStatus === 'loading' ? 'Fetching…' : "Today's daily grid"}
-              </button>
-            </div>
-            {todayStatus === 'error' && (
-              <p className="mt-2 text-xs text-danger">
-                Couldn&apos;t fetch today&apos;s grid — try again in a minute.
-              </p>
-            )}
-            <p className="mt-3 text-xs text-slate-500">
-              Words are 3+ letters traced through adjacent cells (diagonals count), using each
-              cell once. Hover a result to trace it on the board.
-            </p>
-          </div>
+            <GridSolver
+              preset={gridPreset}
+              onPreset={changeGridPreset}
+              letters={gridLetters}
+              cols={gridDims.cols}
+              onLetters={setGridLetters}
+              osk={kbOpen}
+              trace={gridT}
+              onFillToday={fillDailyGrid}
+              todayStatus={todayStatus}
+            />
           )}
 
           {boxedPlayActive && (
@@ -3101,7 +2126,7 @@ function App() {
                 <label className="block text-xs font-medium text-slate-400 uppercase tracking-wider mb-3">
                   Sides of the box
                 </label>
-                <div ref={boxedBoardRef} className="relative w-full max-w-[18rem] aspect-square mx-auto">
+                <div ref={boxedT.boardRef} className="relative w-full max-w-[18rem] aspect-square mx-auto">
                   <div className="absolute inset-14 rounded-xl border-2 border-white/15 bg-white/[0.02]" />
                   {/* top */}
                   <div className="absolute top-0 left-14 right-14 flex justify-around">
@@ -3119,9 +2144,9 @@ function App() {
                   <div className="absolute left-0 top-14 bottom-14 flex flex-col justify-around items-start">
                     {[9, 10, 11].map(boxTile)}
                   </div>
-                  {boxedTracePts.some((pts) => pts.length > 1) && (
+                  {boxedT.points.some((pts) => pts.length > 1) && (
                     <svg className="absolute inset-0 w-full h-full pointer-events-none">
-                      {boxedTracePts.map((pts, wi) =>
+                      {boxedT.points.map((pts, wi) =>
                         pts.length > 1 ? (
                           <g key={wi}>
                             <polyline
@@ -3194,249 +2219,30 @@ function App() {
           })()}
 
           {!playActive && WORD_LIST_SOLVERS.has(mode) && (
-          <>
-          {/* results header */}
-          <div className="flex items-center justify-between mb-4 flex-wrap gap-y-3">
-            <div className="flex items-center gap-2.5">
-              <div className="flex items-center justify-center w-9 h-9 rounded-lg bg-white/5 border border-white/10">
-                <Search className="w-4 h-4 text-slate-300" />
-              </div>
-              <div>
-                <p className="text-2xl font-bold leading-none">
-                  {results.length}
-                  <span className="text-base font-normal text-slate-400 ml-1.5">
-                    {results.length === 1 ? 'match' : 'matches'}
-                  </span>
-                </p>
-              </div>
-            </div>
-            <div className="flex items-center gap-2">
-              {mode !== 'pattern' && (
-                <div className="inline-flex rounded-lg bg-white/5 border border-white/10 p-0.5 gap-0.5">
-                  {(['length', 'alpha'] as const).map((k) => (
-                    <button
-                      key={k}
-                      onClick={() => setSort({ key: k })}
-                      className={`px-2.5 py-1.5 rounded-md text-xs font-medium whitespace-nowrap transition-colors
-                        ${sort.key === k
-                          ? 'bg-white/15 text-white'
-                          : 'text-slate-400 hover:text-white'}`}
-                    >
-                      {k === 'length' ? 'Length' : 'A–Z'}
-                    </button>
-                  ))}
-                </div>
-              )}
-              <button
-                onClick={() => setSort({ dir: sort.dir === 'asc' ? 'desc' : 'asc' })}
-                title={
-                  sort.key === 'alpha'
-                    ? sort.dir === 'asc'
-                      ? 'A to Z — click for Z to A'
-                      : 'Z to A — click for A to Z'
-                    : sort.dir === 'asc'
-                      ? 'Shortest first — click for longest first'
-                      : 'Longest first — click for shortest first'
-                }
-                className="inline-flex items-center justify-center w-8 h-8 rounded-lg text-slate-400 hover:text-white bg-white/5 border border-white/10 hover:bg-white/10 transition-colors"
-              >
-                {sort.dir === 'asc' ? <ArrowUp className="w-3.5 h-3.5" /> : <ArrowDown className="w-3.5 h-3.5" />}
-              </button>
-              <button
-                onClick={resetAll}
-                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium text-slate-400 hover:text-white bg-white/5 border border-white/10 hover:bg-white/10 transition-colors"
-              >
-                <Eraser className="w-3.5 h-3.5" />
-                Clear
-              </button>
-            </div>
-          </div>
-
-          {/* results */}
-          {results.length === 0 ? (
-            <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-10 text-center">
-              <p className="text-slate-400">
-                {mode === 'descramble'
-                  ? rackLetters.length + wildcards === 0
-                    ? 'Type your letters above to see what they can spell.'
-                    : 'Nothing spells from those letters. Try adding a wildcard (?) or lowering the minimum length.'
-                  : mode === 'bee'
-                    ? beeCenter === ''
-                      ? 'Enter the center letter and the six outer letters to find words.'
-                      : 'No words found from those letters. Double-check the puzzle.'
+            <ResultsPanel
+              results={results}
+              words={groupSource}
+              sort={sort}
+              onSort={setSort}
+              onClear={resetAll}
+              showAll={showAll}
+              onShowAll={setShowAll}
+              emptyNote={emptyNote}
+              grouped={mode !== 'pattern' && sort.key === 'length'}
+              sortable={mode !== 'pattern'}
+              renderWord={mode === 'pattern' ? highlight : undefined}
+              hoverPropsFor={
+                mode === 'grid'
+                  ? gridTraceHandlers
+                  : mode === 'weave'
+                    ? weaveTraceHandlers
                     : mode === 'boxed'
-                      ? boxedLetters.filter(Boolean).length < 12
-                        ? 'Enter the twelve letters, three per side, to find words.'
-                        : 'No words fit this box. Double-check the puzzle.'
-                      : mode === 'grid'
-                        ? gridLetters.filter(Boolean).length < gridLetters.length
-                          ? `Fill in all ${gridLetters.length} grid letters to find words.`
-                          : 'No words can be traced on this grid.'
-                        : mode === 'weave'
-                          ? weaveLetters.filter(Boolean).length < weaveLetters.length
-                            ? `Fill in all ${weaveLetters.length} board letters to find words.`
-                            : 'No words can be traced on this board.'
-                          : 'No words fit those clues. Try loosening a constraint.'}
-              </p>
-            </div>
-          ) : (
-            <>
-              {mode === 'pattern' ? (
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2.5">
-                  {visible.map((w) => (
-                    <WordChip
-                      key={w}
-                      word={w}
-                      className="bg-white/[0.04] border border-white/10 hover:bg-white/[0.08] hover:border-white/20"
-                    >
-                      {highlight(w)}
-                    </WordChip>
-                  ))}
-                </div>
-              ) : (
-                <>
-                {boxedRecommended && (
-                  <div className="mb-6">
-                    <p className="mb-2.5 text-xs font-medium text-accent uppercase tracking-wider inline-flex items-center gap-1.5">
-                      <Star className="w-3.5 h-3.5" />
-                      Recommended
-                      <span className="text-accent normal-case tracking-normal">
-                        · {boxedRecommended.words.length}{' '}
-                        {boxedRecommended.words.length === 1 ? 'word' : 'words'}
-                        {boxedRecommended.allCommon ? ', everyday vocabulary' : ''}
-                      </span>
-                    </p>
-                    <div className="grid grid-cols-1 gap-2.5">
-                      <WordChip
-                        word={boxedRecommended.words.join(' ')}
-                        hoverProps={boxedTraceHandlers(boxedRecommended.words)}
-                        className="bg-amber-400/10 border border-amber-400/30 text-amber-200 font-semibold hover:bg-amber-400/20"
-                      >
-                        {boxedRecommended.words.map((w, i) => (
-                          <span key={i}>
-                            {i > 0 && <span className="text-slate-500"> → </span>}
-                            <span className={BOX_TRACE_TEXT[i % BOX_TRACE_TEXT.length]}>{w}</span>
-                          </span>
-                        ))}
-                      </WordChip>
-                    </div>
-                  </div>
-                )}
-                {mode === 'boxed' && boxedIndex && (
-                  <div className="mb-6">
-                    <p className="mb-2.5 text-xs font-medium text-success uppercase tracking-wider">
-                      {solutionWords}-word solutions{' '}
-                      <span className="text-success">
-                        · {boxedChains.capped ? `${boxedChains.solutions.length}+` : boxedChains.solutions.length}
-                      </span>
-                    </p>
-                    {boxedChains.solutions.length === 0 ? (
-                      <p className="text-sm text-slate-500">
-                        No {solutionWords}-word solutions found — try allowing more words.
-                      </p>
-                    ) : (
-                      <>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                          {boxedChains.solutions.slice(0, 24).map((s) => (
-                            <WordChip
-                              key={s.join(' ')}
-                              word={s.join(' ')}
-                              hoverProps={boxedTraceHandlers(s)}
-                              className="bg-emerald-400/10 border border-emerald-400/30 text-emerald-200 font-semibold hover:bg-emerald-400/20"
-                            >
-                              {s.map((w, i) => (
-                                <span key={i}>
-                                  {i > 0 && <span className="text-slate-500"> → </span>}
-                                  <span className={BOX_TRACE_TEXT[i % BOX_TRACE_TEXT.length]}>{w}</span>
-                                </span>
-                              ))}
-                            </WordChip>
-                          ))}
-                        </div>
-                        {boxedChains.solutions.length > 24 && (
-                          <p className="mt-2 text-xs text-slate-500">
-                            Showing the 24 shortest of{' '}
-                            {boxedChains.capped
-                              ? `${boxedChains.solutions.length}+ (search capped)`
-                              : boxedChains.solutions.length}{' '}
-                            solutions.
-                          </p>
-                        )}
-                      </>
-                    )}
-                  </div>
-                )}
-                {pangrams.length > 0 && (
-                  <div className="mb-6">
-                    <p className="mb-2.5 text-xs font-medium text-accent uppercase tracking-wider">
-                      Pangrams <span className="text-accent">· {pangrams.length}</span>
-                    </p>
-                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2.5">
-                      {pangrams.map((w) => (
-                        <WordChip
-                          key={w}
-                          word={w}
-                          className="bg-amber-400/10 border border-amber-400/30 text-amber-200 font-semibold hover:bg-amber-400/20"
-                        />
-                      ))}
-                    </div>
-                  </div>
-                )}
-                {sort.key === 'length' ? (
-                  [...groupSource.reduce((m, w) => {
-                    const g = m.get(w.length) ?? [];
-                    g.push(w);
-                    return m.set(w.length, g);
-                  }, new Map<number, string[]>())].map(([len, ws]) => (
-                    <div key={len} className="mb-6">
-                      <p className="mb-2.5 text-xs font-medium text-slate-400 uppercase tracking-wider">
-                        {len} letters <span className="text-slate-600">· {ws.length}</span>
-                      </p>
-                      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2.5">
-                        {ws.map((w) => (
-                          <WordChip
-                            key={w}
-                            word={w}
-                            hoverProps={mode === 'grid' ? gridTraceHandlers(w) : mode === 'weave' ? weaveTraceHandlers(w) : mode === 'boxed' ? boxedTraceHandlers([w]) : undefined}
-                            className="bg-white/[0.04] border border-white/10 text-slate-300 hover:bg-white/[0.08] hover:border-white/20"
-                          />
-                        ))}
-                      </div>
-                    </div>
-                  ))
-                ) : (
-                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2.5">
-                    {groupSource.map((w) => (
-                      <WordChip
-                        key={w}
-                        word={w}
-                        hoverProps={mode === 'grid' ? gridTraceHandlers(w) : mode === 'weave' ? weaveTraceHandlers(w) : mode === 'boxed' ? boxedTraceHandlers([w]) : undefined}
-                        className="bg-white/[0.04] border border-white/10 text-slate-300 hover:bg-white/[0.08] hover:border-white/20"
-                      />
-                    ))}
-                  </div>
-                )}
-                </>
-              )}
-              {results.length > 200 && (
-                <button
-                  onClick={() => setShowAll((s) => !s)}
-                  className="mt-5 mx-auto flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium text-amber-300 bg-amber-400/10 border border-amber-400/20 hover:bg-amber-400/20 transition-colors"
-                >
-                  {showAll ? (
-                    <>
-                      <X className="w-4 h-4" /> Show fewer
-                    </>
-                  ) : (
-                    <>
-                      <ArrowDown className="w-4 h-4" /> Show all {results.length}
-                    </>
-                  )}
-                </button>
-              )}
-            </>
-          )}
-          </>
+                      ? (w) => boxedTraceHandlers([w])
+                      : undefined
+              }
+            >
+              {featured}
+            </ResultsPanel>
           )}
           </>
           )}
@@ -3484,8 +2290,8 @@ function App() {
             )}
             <ReportMenu
               context={{
-                game: REPORT_SLUG[mode],
-                gameLabel: MODES.find((m) => m.id === mode)?.label,
+                game: FEED_NAME[mode],
+                gameLabel: GAME_NAME[mode].full,
                 date: dateByMode[mode],
                 level,
               }}
@@ -3806,8 +2612,8 @@ function App() {
                     <p>
                       <ReportMenu
                         context={{
-                          game: REPORT_SLUG[mode],
-                          gameLabel: MODES.find((m) => m.id === mode)?.label,
+                          game: FEED_NAME[mode],
+                          gameLabel: GAME_NAME[mode].full,
                           date: dateByMode[mode],
                           level,
                         }}

@@ -15,7 +15,11 @@ import {
   ALL_MODES,
   ALL_SLUGS,
   ALL_VIEWS,
+  FEED_NAME,
+  GAME_NAME,
   MODE_SLUG,
+  POOL_MODES,
+  PROGRESS_NAME,
   SLUG_MODE,
   SLUG_NAME,
   modeOf,
@@ -50,6 +54,63 @@ describe('the game tables', () => {
 
   it('modeOf is SLUG_MODE, so callers need not know which to reach for', () => {
     for (const slug of ALL_SLUGS) expect(modeOf(slug)).toBe(SLUG_MODE[slug]);
+  });
+
+  it('gives every mode a feed name — the third naming, and the least visible', () => {
+    // Mode is what storage keys on, Slug is what the address says, and this is
+    // what daily_puzzles and the published files call it. Guess is `pattern`,
+    // `guess` and `words` in the three places, all for historical reasons, and
+    // nothing but this test says the third table is complete.
+    const missing = ALL_MODES.filter((m) => !FEED_NAME[m]);
+    expect(missing, `modes with no feed name: ${missing.join(', ')}`).toEqual([]);
+    expect(new Set(ALL_MODES.map((m) => FEED_NAME[m])).size).toBe(ALL_MODES.length);
+  });
+
+  it('gives every mode a progress name, and keeps it distinct', () => {
+    // daily_progress and game_results are keyed on this, so a missing entry
+    // loses a game's cross-device sync and a collision merges two games' boards
+    for (const m of ALL_MODES) expect(PROGRESS_NAME[m], m).toBeTruthy();
+    expect(new Set(ALL_MODES.map((m) => PROGRESS_NAME[m])).size).toBe(ALL_MODES.length);
+  });
+
+  it('differs from the feed naming on exactly one game, on purpose', () => {
+    // The published board is `words` and the row recording that you played it
+    // is `guess`. That is a real inconsistency in the schema, not a typo here —
+    // pinned so that unifying them later is a deliberate migration rather than
+    // something someone "tidies" and breaks two tables with.
+    const differ = ALL_MODES.filter((m) => FEED_NAME[m] !== PROGRESS_NAME[m]);
+    expect(differ).toEqual(['pattern']);
+    expect(FEED_NAME.pattern).toBe('words');
+    expect(PROGRESS_NAME.pattern).toBe('guess');
+  });
+
+  it('only claims a pool for games that have one', () => {
+    // Guess, Scramble, Hive, Grid and Boxed generate their practice boards on
+    // the spot; the other five draw from a pre-generated pool. Asking for a
+    // pool that was never published is a 404 on every practice deal.
+    expect([...POOL_MODES].sort()).toEqual(
+      ['bridge', 'cryptogram', 'ladder', 'squares', 'weave'].sort()
+    );
+    for (const m of POOL_MODES) expect(ALL_MODES).toContain(m);
+  });
+
+  it('gives every mode both names, and never an empty one', () => {
+    for (const m of ALL_MODES) {
+      expect(GAME_NAME[m]?.short, `${m} short`).toBeTruthy();
+      expect(GAME_NAME[m]?.full, `${m} full`).toBeTruthy();
+    }
+  });
+
+  it('keeps the two names distinct per game, and unambiguous across games', () => {
+    // Two games sharing a short name would make the nav unreadable and the
+    // hide-a-game checkboxes ambiguous
+    expect(new Set(ALL_MODES.map((m) => GAME_NAME[m].short)).size).toBe(ALL_MODES.length);
+    expect(new Set(ALL_MODES.map((m) => GAME_NAME[m].full)).size).toBe(ALL_MODES.length);
+  });
+
+  it('derives the invitation name from the same table', () => {
+    // SLUG_NAME used to be a second hand-written list of the same ten names
+    for (const slug of ALL_SLUGS) expect(SLUG_NAME[slug]).toBe(GAME_NAME[SLUG_MODE[slug]].full);
   });
 
   it('names three views', () => {

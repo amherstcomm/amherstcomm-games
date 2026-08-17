@@ -85,20 +85,105 @@ export const MODE_SLUG = Object.fromEntries(
   SLUGS.map((slug) => [SLUG_MODE[slug], slug])
 ) as Record<Mode, Slug>;
 
-/** How each game is named in an invitation — plainer than the result title,
- *  which carries board size and word length the reader doesn't need yet. */
-export const SLUG_NAME: Record<Slug, string> = {
-  guess: 'Guess the Word',
-  scramble: 'Scramble',
-  hive: 'Hive',
-  grid: 'Grid',
-  boxed: 'Boxed',
-  weave: 'Weave',
-  squares: 'Word Squares',
-  cryptogram: 'Cryptogram',
-  ladder: 'Word Ladder',
-  bridge: 'Bridge',
+/** What a game is called, in the two lengths the interface needs.
+ *
+ *  `short` is for a nav pill or a checkbox, where the row has to fit; `full` is
+ *  for a sentence, a settings label or an invitation. Most games have one name
+ *  and say it twice — only Guess, Squares and Ladder differ.
+ *
+ *  This was written out in six places and they disagreed. SettingsModal used
+ *  both forms in the same file, and a comment in App claimed the short label
+ *  "matches Learn, the boards and the home page" while three of those said the
+ *  long one. */
+export const GAME_NAME: Record<Mode, { short: string; full: string }> = {
+  pattern: { short: 'Guess', full: 'Guess the Word' },
+  descramble: { short: 'Scramble', full: 'Scramble' },
+  bee: { short: 'Hive', full: 'Hive' },
+  grid: { short: 'Grid', full: 'Grid' },
+  boxed: { short: 'Boxed', full: 'Boxed' },
+  weave: { short: 'Weave', full: 'Weave' },
+  squares: { short: 'Squares', full: 'Word Squares' },
+  cryptogram: { short: 'Cryptogram', full: 'Cryptogram' },
+  ladder: { short: 'Ladder', full: 'Word Ladder' },
+  bridge: { short: 'Bridge', full: 'Bridge' },
 };
+
+/** How each game is named in an invitation, keyed by the slug a link carries.
+ *  Derived, so it cannot disagree with the table above. */
+export const SLUG_NAME: Record<Slug, string> = Object.fromEntries(
+  SLUGS.map((slug) => [slug, GAME_NAME[SLUG_MODE[slug]].full])
+) as Record<Slug, string>;
+
+/** What the puzzle feed and the database call each game.
+ *
+ *  A third name, after the storage key and the address slug, and not a spare:
+ *  `daily_puzzles` is keyed on it, `report_puzzle` looks a board up by it, and
+ *  the published files are named after it. Guess is `words` there for the same
+ *  historical reason it is `pattern` in storage and `guess` in the bar.
+ *
+ *  It was written out four times before this — a string union in dailyData, a
+ *  Record in App, and fourteen call-site literals — with nothing checking they
+ *  agreed. */
+//
+// `as const satisfies` rather than a plain annotation: the annotation would
+// widen every value to `string`, and things derive their own types from these
+// literals — dailySync's DailyGame is this table's values, and a switch cannot
+// be exhaustive over `string`. `satisfies` keeps the Record check that every
+// mode appears, while `as const` keeps the literals.
+export const FEED_NAME = {
+  pattern: 'words',
+  descramble: 'scramble',
+  bee: 'hive',
+  grid: 'grid',
+  boxed: 'box',
+  weave: 'weave',
+  squares: 'squares',
+  cryptogram: 'cryptogram',
+  ladder: 'ladder',
+  bridge: 'bridge',
+} as const satisfies Record<Mode, string>;
+
+/** What the *progress* tables call each game — `daily_progress.game` and
+ *  `game_results.game`.
+ *
+ *  Yes, this is a fourth name, and yes it differs from FEED_NAME by exactly one
+ *  entry: the published board is `words` and the row recording that you played
+ *  it is `guess`. Both are internally consistent and neither was written down
+ *  anywhere, which is the part worth fixing — a reader with one of these in
+ *  hand had no way to know the other existed.
+ *
+ *  Unifying them is a database migration across two tables and their CHECK
+ *  constraints, so it is a decision rather than a tidy. Naming them both is
+ *  free and stops the next person guessing. */
+export const PROGRESS_NAME = {
+  pattern: 'guess',
+  descramble: 'scramble',
+  bee: 'hive',
+  grid: 'grid',
+  boxed: 'box',
+  weave: 'weave',
+  squares: 'squares',
+  cryptogram: 'cryptogram',
+  ladder: 'ladder',
+  bridge: 'bridge',
+} as const satisfies Record<Mode, string>;
+
+/** The games that deal practice boards from a pre-generated pool. Not all of
+ *  them do: Guess, Scramble, Hive, Grid and Boxed generate their own. */
+export const POOL_MODES: Mode[] = ['weave', 'squares', 'cryptogram', 'ladder', 'bridge'];
+
+/** Mode, from the name the progress tables use. The leaderboard and the
+ *  history cards are keyed on that naming rather than on Mode, so this is how
+ *  they reach a display name without keeping their own copy of one. */
+export const MODE_BY_PROGRESS: Record<string, Mode> = Object.fromEntries(
+  ALL_MODES.map((m) => [PROGRESS_NAME[m], m])
+);
+
+/** What to call a game, given whichever of its names you happen to hold. */
+export function nameOfProgress(progress: string, which: 'short' | 'full' = 'full'): string {
+  const mode = MODE_BY_PROGRESS[progress];
+  return mode ? GAME_NAME[mode][which] : progress;
+}
 
 export function modeOf(slug: Slug): Mode {
   return SLUG_MODE[slug];

@@ -14,18 +14,19 @@ import { DAILY_ENV } from '@/dailyData';
 import type { Difficulty } from '@/difficulty';
 import { supabase } from '@/supabase';
 import { store as siteStore } from '@/siteStorage';
+import { PROGRESS_NAME } from '@/games';
+import type { Mode } from '@/games';
 
-export type DailyGame =
-  | 'guess'
-  | 'hive'
-  | 'scramble'
-  | 'grid'
-  | 'box'
-  | 'weave'
-  | 'squares'
-  | 'cryptogram'
-  | 'ladder'
-  | 'bridge';
+/** What daily_progress calls a game, derived rather than listed again.
+ *
+ *  Not the feed naming, which the compiler pointed out when this was first
+ *  wired to it: a published board is `words` and the row saying you played it
+ *  is `guess`. Both tables are in @/games now, with a note on why they differ.
+ *
+ *  The switch below is exhaustive-checked, which is why it has never drifted —
+ *  a missing case is TS2366. This type is what tells it what to be exhaustive
+ *  over, so it is the half that could. */
+export type DailyGame = (typeof PROGRESS_NAME)[Mode];
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Rec = Record<string, any>;
