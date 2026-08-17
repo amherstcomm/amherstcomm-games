@@ -12,6 +12,7 @@
 // can buy your way through most of a board, at extreme you cannot buy
 // anything, and in between the question is which of the five is worth it.
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react';
+import DailyToggle from '@/DailyToggle';
 import { CornerDownLeft, Lightbulb, Ruler, Timer, Trophy } from 'lucide-react';
 import { fetchDailyData, fetchPool } from '@/dailyData';
 import { getDictionary } from '@/dictionaries';
@@ -52,6 +53,9 @@ type BridgeStore = {
   dailyDate: string;
   daily: Partial<Record<Difficulty, BridgeRecord>>;
   practice: BridgeRecord | null;
+  /** the difficulty the held practice board was dealt at, so changing tier
+   *  deals a new one instead of leaving you on the old tier's board */
+  practiceAt?: Difficulty;
 };
 
 const DEFAULT_STORE: BridgeStore = { dailyMode: true, dailyDate: '', daily: {}, practice: null };
@@ -111,6 +115,10 @@ function readStore(): BridgeStore {
       dailyDate: typeof p.dailyDate === 'string' ? p.dailyDate : '',
       daily,
       practice: sanitizeRecord(p.practice),
+      // without this the tier is forgotten on reload and the seeding effect
+      // deals a fresh board every time the page opens, throwing away a
+      // half-finished practice bridge
+      practiceAt: p.practiceAt,
     };
   } catch {
     return DEFAULT_STORE;
@@ -358,24 +366,64 @@ const BridgeGame = forwardRef<BridgeGameHandle>(function BridgeGame(_props, ref)
 
   const reveal = () => update((r) => ({ ...r, revealed: true }));
 
-  const newPractice = () => {
+  const newPractice = useCallback(() => {
     if (!pool?.length) return;
     const pick = pool[Math.floor(Math.random() * pool.length)];
-    setStore((prev) => ({ ...prev, practice: { ...pick, entries: pick.prompts.map(() => ''), hints: pick.prompts.map(() => ({ ...NO_HINTS })), spent: 0, elapsedMs: 0, revealed: false } }));
+    setStore((prev) => ({ ...prev, practice: { ...pick, entries: pick.prompts.map(() => ''), hints: pick.prompts.map(() => ({ ...NO_HINTS })), spent: 0, elapsedMs: 0, revealed: false }, practiceAt: playedAt }));
     setAt(0);
     setEntry('');
     setRefusal('');
     setSpoken('');
-  };
+  }, [pool, playedAt, setStore]);
+
+  // Deal the first practice board — see the twin of this in LadderGame. Bridge
+  // was worse off than Ladder: it had no control that sets dailyMode false at
+  // all, so the only way in was a /play/bridge link, and that landed on a
+  // permanent loading line because nothing dealt a board.
+  //
+  // Guarded on what we hold rather than on practice being null: newPractice
+  // picks at random, so an unguarded effect deals a new bridge every render.
+  useEffect(() => {
+    if (store.dailyMode || !pool?.length) return;
+    if (store.practice && store.practiceAt === playedAt) return;
+    newPractice();
+  }, [store.dailyMode, store.practice, store.practiceAt, pool, playedAt, newPractice]);
+
+  // Bridge had no control for this at all — not a text link, not a pill. Its
+  // practice mode was reachable only by a /play/bridge link, and that landed on
+  // a loading line with no way back. Rendered in every branch below for the
+  // same reason it is here at all.
+  const toggle = (
+    <DailyToggle
+      daily={store.dailyMode}
+      onChange={(d) => {
+        setStore((prev) => ({ ...prev, dailyMode: d }));
+        setAt(0);
+        setEntry('');
+        setRefusal('');
+      }}
+    />
+  );
 
   if (dailyError && store.dailyMode && !record) {
     return (
-      <p className="text-center text-sm text-danger">
-        Couldn&apos;t fetch today&apos;s bridges — try again in a minute.
-      </p>
+      <div className="max-w-md mx-auto">
+        {toggle}
+        <p className="text-center text-sm text-danger">
+          Couldn&apos;t fetch today&apos;s bridges — try again in a minute.
+        </p>
+      </div>
     );
   }
-  if (!record) return <p className="text-center text-sm text-slate-400">Loading…</p>;
+  if (!record)
+    return (
+      <div className="max-w-md mx-auto">
+        {toggle}
+        <p className="text-center text-sm text-slate-400">
+          {store.dailyMode ? 'Loading today’s bridges…' : 'Dealing a practice bridge…'}
+        </p>
+      </div>
+    );
 
   const left = Math.max(0, record.budget - record.spent);
   const current = record.prompts[at];
@@ -383,6 +431,7 @@ const BridgeGame = forwardRef<BridgeGameHandle>(function BridgeGame(_props, ref)
 
   return (
     <div className="max-w-md mx-auto">
+      {toggle}
       <div className="mb-3 flex items-center justify-center gap-4 text-xs text-slate-400">
         <span className="inline-flex items-center gap-1.5 tabular-nums">
           <Timer className="w-3.5 h-3.5 text-slate-500" />

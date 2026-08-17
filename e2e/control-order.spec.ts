@@ -26,6 +26,26 @@ import { ALL_SLUGS } from '../src/games';
 /** the label of every rung, in the order they must appear */
 const RUNG = { play: 'Difficulty', solve: 'Word list' } as const;
 
+// Rung three, asserted for every game rather than for the eight that had it.
+//
+// Ladder offered a grey text link below the board instead, and Bridge had no
+// control at all — its practice mode could not be reached from the page. Both
+// rendered fine and neither showed up in any suite, because "this game is
+// missing a control the other eight have" is not a thing a per-game test asks.
+test('every game offers the daily/practice choice the same way', async ({ page }) => {
+  test.slow();
+  const missing: string[] = [];
+
+  for (const slug of ALL_SLUGS) {
+    await page.goto(`/play/${slug}`);
+    const daily = page.getByRole('button', { name: 'Daily', exact: true });
+    const practice = page.getByRole('button', { name: 'Practice', exact: true });
+    if (!(await daily.isVisible()) || !(await practice.isVisible())) missing.push(slug);
+  }
+
+  expect(missing, `these games have no daily/practice control: ${missing.join(', ')}`).toEqual([]);
+});
+
 for (const view of ['solve', 'play'] as const) {
   test(`${view}: the shared controls come before the game, for every game`, async ({ page }) => {
     test.slow();

@@ -21,6 +21,7 @@ import {
   useRef,
   useState,
 } from 'react';
+import DailyToggle from '@/DailyToggle';
 import { CornerDownLeft, Delete, RotateCcw, Timer, Trophy } from 'lucide-react';
 import { fetchDailyData, fetchPool } from '@/dailyData';
 import { getDictionary, getDisplayFilter } from '@/dictionaries';
@@ -309,14 +310,30 @@ const LadderGame = forwardRef<LadderGameHandle>(function LadderGame(_props, ref)
     update((r) => ({ ...r, revealed: true, shown: route ?? undefined }));
   };
 
-  const newPractice = () => {
+  const newPractice = useCallback(() => {
     if (!pool?.length) return;
     const pick = pool[Math.floor(Math.random() * pool.length)];
-    setStore((prev) => ({ ...prev, practice: { ...pick, chain: [] } }));
+    setStore((prev) => ({ ...prev, practice: { ...pick, chain: [] }, practiceAt: playedAt }));
     setEntry('');
     setRefusal('');
     setSpoken('');
-  };
+  }, [pool, playedAt, setStore]);
+
+  // Deal the first practice board. Nothing did, and that made practice mode
+  // unreachable rather than merely empty: `record` is null with no practice
+  // board, `!record` returns the loading line below, and the "Another ladder"
+  // button that calls this renders *after* that return. No board, so no button;
+  // no button, so no board.
+  //
+  // Guarded on what we already hold, not run whenever practice is null:
+  // newPractice picks at random, so an effect depending on `store.practice`
+  // without a stop condition deals a new ladder on every render forever.
+  // Squares shipped exactly that bug, which is why its guard has a comment too.
+  useEffect(() => {
+    if (store.dailyMode || !pool?.length) return;
+    if (store.practice && store.practiceAt === playedAt) return;
+    newPractice();
+  }, [store.dailyMode, store.practice, store.practiceAt, pool, playedAt, newPractice]);
 
   const steps = record?.chain.length ?? 0;
   const solved = !!record?.solved;
@@ -340,22 +357,50 @@ const LadderGame = forwardRef<LadderGameHandle>(function LadderGame(_props, ref)
     counted.current = false;
   }, [record?.from, record?.to, store.dailyMode]);
 
+  // Rung three, and it renders in every branch below — including the waits.
+  // A control that disappears while the board is loading is a control you
+  // cannot use to leave a board that never loads, which is exactly how
+  // practice was stuck.
+  const toggle = (
+    <DailyToggle
+      daily={store.dailyMode}
+      onChange={(d) => {
+        setStore((prev) => ({ ...prev, dailyMode: d }));
+        setEntry('');
+        setRefusal('');
+      }}
+    />
+  );
+
   if (dailyError && store.dailyMode) {
     return (
-      <p className="text-center text-sm text-slate-400">
-        Today&apos;s ladder could not be loaded. Try again shortly.
-      </p>
+      <div className="max-w-md mx-auto">
+        {toggle}
+        <p className="text-center text-sm text-slate-400">
+          Today&apos;s ladder could not be loaded. Try again shortly.
+        </p>
+      </div>
     );
   }
 
   if (!record) {
-    return <p className="text-center text-sm text-slate-400">Loading today&apos;s ladder…</p>;
+    // Two different waits, and saying "today's" during the practice one was
+    // both wrong and the only thing on screen while practice was stuck.
+    return (
+      <div className="max-w-md mx-auto">
+        {toggle}
+        <p className="text-center text-sm text-slate-400">
+          {store.dailyMode ? 'Loading today’s ladder…' : 'Dealing a practice ladder…'}
+        </p>
+      </div>
+    );
   }
 
   const rungs = record.revealed && record.shown ? record.shown.slice(1, -1) : record.chain;
 
   return (
     <div className="max-w-md mx-auto">
+      {toggle}
       <div className="mb-3 flex items-center justify-center gap-4 text-xs text-slate-400">
         <span className="inline-flex items-center gap-1.5 tabular-nums">
           <Timer className="w-3.5 h-3.5 text-slate-500" />
@@ -506,18 +551,6 @@ const LadderGame = forwardRef<LadderGameHandle>(function LadderGame(_props, ref)
         </div>
       )}
 
-      <div className="mt-4 text-center">
-        <button
-          onClick={() => {
-            setStore((prev) => ({ ...prev, dailyMode: !prev.dailyMode }));
-            setEntry('');
-            setRefusal('');
-          }}
-          className="text-xs text-slate-500 hover:text-slate-300"
-        >
-          {store.dailyMode ? 'Practice instead' : "Back to today's ladder"}
-        </button>
-      </div>
     </div>
   );
 });
