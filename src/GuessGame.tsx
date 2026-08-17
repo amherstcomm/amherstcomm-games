@@ -6,7 +6,7 @@ import {
   useRef,
   useState,
 } from 'react';
-import { CalendarDays, RefreshCw, Search, Timer, Trophy } from 'lucide-react';
+import { RefreshCw, Search, Timer, Trophy } from 'lucide-react';
 import { fetchDailyData } from '@/dailyData';
 import {
   difficulty,
@@ -21,6 +21,7 @@ import { GAME_NAME } from '@/games';
 import { asRecord, asRecords, type GameRecord } from '@/guessRecord';
 import { dailyIntent } from '@/routing/entry';
 import { offerDailySwitch, reportDaily } from '@/dailyBus';
+import DailyToggle from '@/DailyToggle';
 import { usePrefs } from '@/prefs';
 import { useDailySync } from '@/useDailySync';
 import { buildShare, TILE_EMOJI } from '@/share';
@@ -491,30 +492,12 @@ const GuessGame = forwardRef<
 
   return (
     <div className="text-center">
-      {/* daily / practice toggle */}
-      <div
-        className={`mb-5 inline-flex flex-wrap justify-center max-w-full rounded-xl bg-white/5 border border-white/10 p-1 gap-1 ${
-          practiceAllowed ? '' : 'hidden'
-        }`}
-      >
-        {(
-          [
-            { id: true, label: 'Daily', Icon: CalendarDays },
-            { id: false, label: 'Practice', Icon: RefreshCw },
-          ] as const
-        ).map(({ id, label, Icon }) => (
-          <button
-            key={label}
-            onMouseDown={(e) => e.preventDefault()}
-            onClick={() => setStore((prev) => ({ ...prev, dailyMode: id }))}
-            className={`inline-flex items-center gap-1.5 px-4 h-9 rounded-lg text-sm font-semibold transition-colors
-              ${dailyMode === id ? 'bg-emerald-400/15 text-emerald-300' : 'text-slate-400 hover:text-white'}`}
-          >
-            <Icon className="w-4 h-4" />
-            {label}
-          </button>
-        ))}
-      </div>
+      <DailyToggle
+        daily={dailyMode}
+        onChange={(d) => {
+          setStore((prev) => ({ ...prev, dailyMode: d }));
+        }}
+      />
 
       <div className="mb-4 flex items-center justify-center gap-4 text-xs text-slate-400">
         {record && (

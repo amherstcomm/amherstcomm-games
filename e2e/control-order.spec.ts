@@ -40,10 +40,18 @@ test('every game offers the daily/practice choice the same way', async ({ page }
     await page.goto(`/play/${slug}`);
     const daily = page.getByRole('button', { name: 'Daily', exact: true });
     const practice = page.getByRole('button', { name: 'Practice', exact: true });
-    if (!(await daily.isVisible()) || !(await practice.isVisible())) missing.push(slug);
+    if (!(await daily.isVisible()) || !(await practice.isVisible())) {
+      missing.push(`${slug} (no control)`);
+      continue;
+    }
+    // aria-pressed is the cheapest proof the ten are one component rather than
+    // ten look-alikes. Eight copies of this markup never had it — a screen
+    // reader was told "Daily, button" with no way to know which board was on.
+    // Squares and Cryptogram were the last two without it.
+    if ((await daily.getAttribute('aria-pressed')) === null) missing.push(`${slug} (no pressed state)`);
   }
 
-  expect(missing, `these games have no daily/practice control: ${missing.join(', ')}`).toEqual([]);
+  expect(missing, `daily/practice control problems: ${missing.join(', ')}`).toEqual([]);
 });
 
 for (const view of ['solve', 'play'] as const) {

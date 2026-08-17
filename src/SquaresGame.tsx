@@ -1,5 +1,5 @@
 import { forwardRef, Fragment, useCallback, useEffect, useImperativeHandle, useMemo, useState } from 'react';
-import { CalendarDays, Eye, RefreshCw, Timer } from 'lucide-react';
+import { Eye, RefreshCw, Timer } from 'lucide-react';
 import { fetchDailyData, fetchPool } from '@/dailyData';
 import {
   difficulty,
@@ -14,6 +14,7 @@ import { buildShare, TILE_EMOJI } from '@/share';
 import { usePalette } from '@/theme';
 import { dailyIntent } from '@/routing/entry';
 import { offerDailySwitch, reportDaily } from '@/dailyBus';
+import DailyToggle from '@/DailyToggle';
 import { usePrefs } from '@/prefs';
 import { formatElapsed, useUpTimer } from '@/useUpTimer';
 import { recordSquaresFinish } from '@/stats';
@@ -499,26 +500,10 @@ const SquaresGame = forwardRef<
 
   return (
     <div className="text-center">
-      {/* daily / practice */}
-      <div
-        className={`mb-4 inline-flex flex-wrap justify-center max-w-full rounded-xl bg-white/5 border border-white/10 p-1 gap-1 ${
-          practiceAllowed ? '' : 'hidden'
-        }`}
-      >
-        {([true, false] as const).map((id) => (
-          <button
-            key={String(id)}
-            onClick={() => setStore((prev) => ({ ...prev, dailyMode: id }))}
-            className={`inline-flex items-center gap-1.5 px-4 h-9 rounded-lg text-sm font-semibold transition-colors
-              ${store.dailyMode === id
-                ? 'bg-emerald-400 text-ink shadow-lg shadow-emerald-500/30'
-                : 'text-slate-300 hover:bg-white/10'}`}
-          >
-            {id && <CalendarDays className="w-4 h-4" />}
-            {id ? 'Daily' : 'Practice'}
-          </button>
-        ))}
-      </div>
+      <DailyToggle
+        daily={store.dailyMode}
+        onChange={(d) => setStore((prev) => ({ ...prev, dailyMode: d }))}
+      />
 
       {/* Hidden everywhere. Practice is the daily generated on the fly and not
           recorded, so its size comes from the difficulty just as the daily's

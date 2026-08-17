@@ -6,7 +6,7 @@ import {
   useMemo,
   useState,
 } from 'react';
-import { CalendarDays, Eye, RefreshCw, Timer } from 'lucide-react';
+import { Eye, RefreshCw, Timer } from 'lucide-react';
 import { fetchDailyData, fetchPool } from '@/dailyData';
 import { difficulty, isDifficulty, onDifficultyChange, type Difficulty } from '@/difficulty';
 import MobileKeyInput from '@/MobileKeyInput';
@@ -15,6 +15,7 @@ import { GAME_NAME } from '@/games';
 import { buildShare } from '@/share';
 import { dailyIntent } from '@/routing/entry';
 import { offerDailySwitch, reportDaily } from '@/dailyBus';
+import DailyToggle from '@/DailyToggle';
 import { usePrefs } from '@/prefs';
 import { formatElapsed, useUpTimer } from '@/useUpTimer';
 import { recordCryptogramFinish } from '@/stats';
@@ -507,26 +508,10 @@ const CryptogramGame = forwardRef<CryptogramGameHandle, object>(
 
     return (
       <div className="text-center">
-        {/* daily / practice */}
-        <div
-          className={`mb-4 inline-flex flex-wrap justify-center max-w-full rounded-xl bg-white/5 border border-white/10 p-1 gap-1 ${
-            practiceAllowed ? '' : 'hidden'
-          }`}
-        >
-          {([true, false] as const).map((id) => (
-            <button
-              key={String(id)}
-              onClick={() => setStore((prev) => ({ ...prev, dailyMode: id }))}
-              className={`inline-flex items-center gap-1.5 px-4 h-9 rounded-lg text-sm font-semibold transition-colors
-                ${store.dailyMode === id
-                  ? 'bg-emerald-400 text-ink shadow-lg shadow-emerald-500/30'
-                  : 'text-slate-300 hover:bg-white/10'}`}
-            >
-              {id && <CalendarDays className="w-4 h-4" />}
-              {id ? 'Daily' : 'Practice'}
-            </button>
-          ))}
-        </div>
+        <DailyToggle
+          daily={store.dailyMode}
+          onChange={(d) => setStore((prev) => ({ ...prev, dailyMode: d }))}
+        />
 
         {record && (
           <div className="mb-5 flex items-center justify-center">

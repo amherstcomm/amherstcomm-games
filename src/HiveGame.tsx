@@ -6,7 +6,7 @@ import {
   useRef,
   useState,
 } from 'react';
-import { CalendarDays, CornerDownLeft, Delete, Eye, LifeBuoy, RefreshCw, Shuffle, Timer } from 'lucide-react';
+import { CornerDownLeft, Delete, Eye, LifeBuoy, RefreshCw, Shuffle, Timer } from 'lucide-react';
 import { formatElapsed, useUpTimer } from '@/useUpTimer';
 import {
   difficulty,
@@ -22,6 +22,7 @@ import ShareButton from '@/ShareButton';
 import { GAME_NAME } from '@/games';
 import { dailyIntent } from '@/routing/entry';
 import { offerDailySwitch, reportDaily } from '@/dailyBus';
+import DailyToggle from '@/DailyToggle';
 import { usePrefs } from '@/prefs';
 import { useDailySync } from '@/useDailySync';
 import { buildShare } from '@/share';
@@ -424,33 +425,13 @@ const HiveGame = forwardRef<
 
   return (
     <div className="text-center">
-      {/* daily / practice toggle */}
-      <div
-        className={`mb-5 inline-flex flex-wrap justify-center max-w-full rounded-xl bg-white/5 border border-white/10 p-1 gap-1 ${
-          practiceAllowed ? '' : 'hidden'
-        }`}
-      >
-        {(
-          [
-            { id: true, label: 'Daily', Icon: CalendarDays },
-            { id: false, label: 'Practice', Icon: RefreshCw },
-          ] as const
-        ).map(({ id, label, Icon }) => (
-          <button
-            key={label}
-            onMouseDown={(e) => e.preventDefault()}
-            onClick={() => {
-              setCurrent('');
-              setStore((prev) => ({ ...prev, dailyMode: id }));
-            }}
-            className={`inline-flex items-center gap-1.5 px-4 h-9 rounded-lg text-sm font-semibold transition-colors
-              ${store.dailyMode === id ? 'bg-emerald-400/15 text-emerald-300' : 'text-slate-400 hover:text-white'}`}
-          >
-            <Icon className="w-4 h-4" />
-            {label}
-          </button>
-        ))}
-      </div>
+      <DailyToggle
+        daily={store.dailyMode}
+        onChange={(d) => {
+          setCurrent('');
+          setStore((prev) => ({ ...prev, dailyMode: d }));
+        }}
+      />
 
       {loading && <p className="text-sm text-slate-400 py-8">Loading…</p>}
       {store.dailyMode && dailyError && !record && (
