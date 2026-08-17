@@ -93,9 +93,11 @@ test('hovering a boxed solution draws a chord per word', async ({ page }) => {
   const trace = page.locator('svg.absolute polyline');
   const first = page.locator('button[class*="rounded"]:visible').filter({ hasText: /^[a-z]{3,}$/ }).first();
 
-  if ((await first.count()) === 0) {
-    test.skip(true, 'those twelve letters spell nothing — pick another set if this ever fires');
-  }
+  // toBeVisible, not a count()-guarded skip. The first version of this skipped
+  // itself when the search had not finished — count() does not wait — so on a
+  // slow run it reported "skipped" and the suite stayed green. A test that can
+  // quietly excuse itself is worse than no test: it looks like coverage.
+  await expect(first).toBeVisible({ timeout: 20_000 });
 
   await first.hover();
   await expect(trace.first()).toBeVisible();

@@ -1324,43 +1324,44 @@ function App() {
     return tiles.find((t) => !t.value) ?? tiles[0] ?? null;
   }
 
+  // Where an on-screen key goes. Learn first if it is open; then the mounted
+  // play board, if there is one; then — and this is the part that is easy to
+  // miss — straight into whatever input the solver surfaces have focused,
+  // which is what the rest of this function does.
+  //
+  // The board step was an if-chain naming eight of the ten games, so pressing
+  // a key on Ladder or Bridge did nothing at all: both expose `pressKey`, App
+  // already held both refs, and neither was ever called. A Record<Mode, …> is
+  // the difference between the eleventh game failing to compile and failing
+  // silently, which is exactly how these two got missed.
+  const KEY_TARGETS: Record<Mode, { current: { pressKey: (k: string) => void } | null }> = {
+    pattern: gameRef,
+    bee: hiveRef,
+    boxed: boxRef,
+    descramble: scrambleRef,
+    grid: gridRef,
+    weave: weaveRef,
+    squares: squaresRef,
+    cryptogram: cryptogramRef,
+    ladder: ladderRef,
+    bridge: bridgeRef,
+  };
+
   function pressKey(k: string) {
     if (learnMode) {
       learnRef.current?.pressKey(k);
       return;
     }
-    if (weavePlayActive) {
-      weaveRef.current?.pressKey(k);
+    // `playFlags[mode][0]` is the same test the ten `*PlayActive` flags make;
+    // `!learnMode` is already settled by the return above.
+    const board = playFlags[mode][0] ? KEY_TARGETS[mode].current : null;
+    if (board) {
+      board.pressKey(k);
       return;
     }
-    if (squaresPlayActive) {
-      squaresRef.current?.pressKey(k);
-      return;
-    }
-    if (cryptogramPlayActive) {
-      cryptogramRef.current?.pressKey(k);
-      return;
-    }
-    if (patternPlayActive) {
-      gameRef.current?.pressKey(k);
-      return;
-    }
-    if (beePlayActive) {
-      hiveRef.current?.pressKey(k);
-      return;
-    }
-    if (boxedPlayActive) {
-      boxRef.current?.pressKey(k);
-      return;
-    }
-    if (descramblePlayActive) {
-      scrambleRef.current?.pressKey(k);
-      return;
-    }
-    if (gridPlayActive) {
-      gridRef.current?.pressKey(k);
-      return;
-    }
+
+    // No board: a solver is on screen, and its inputs are ordinary DOM. Drive
+    // the one last focused, or the one this game starts at.
     const remembered =
       lastFocused.current && document.contains(lastFocused.current) ? lastFocused.current : null;
     const target = remembered ?? pickDefaultTarget();
