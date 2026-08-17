@@ -43,12 +43,14 @@ import ReportActionView from '@/ReportActionView';
 import HomeView from '@/HomeView';
 import Tile from '@/Tile';
 import WordChip from '@/solvers/WordChip';
+import ScrambleSolver from '@/solvers/ScrambleSolver';
+import HiveSolver from '@/solvers/HiveSolver';
+import GuessSolver from '@/solvers/GuessSolver';
 import ResultsPanel, { CAP } from '@/solvers/ResultsPanel';
 import GridSolver from '@/solvers/GridSolver';
 import WeaveSolver from '@/solvers/WeaveSolver';
 import { sortResults } from '@/solvers/resultOrder';
 import { centreOf, useBoardTrace } from '@/solvers/useBoardTrace';
-import { COARSE_POINTER } from '@/coarsePointer';
 import BridgeSolver from '@/solvers/BridgeSolver';
 import LadderSolver from '@/solvers/LadderSolver';
 import SquaresSolver from '@/solvers/SquaresSolver';
@@ -247,16 +249,6 @@ type ChainIndex = {
   fullMask: number;
 };
 
-// outer hive cells, clockwise from the top, as [left%, top%] of the container
-const BEE_POSITIONS: [number, number][] = [
-  [50, 14],
-  [81, 32],
-  [81, 68],
-  [50, 86],
-  [19, 68],
-  [19, 32],
-];
-
 // boxed solver tiles share the play board's side hues (top, right, bottom, left)
 const BOX_SIDE_TONES = [
   {
@@ -317,92 +309,6 @@ function findChains(index: ChainIndex, k: number, cap = CHAIN_CAP, budget = CHAI
   const total = (s: string[]) => s.reduce((n, w) => n + w.length, 0);
   solutions.sort((a, b) => total(a) - total(b) || (a.join(' ') < b.join(' ') ? -1 : 1));
   return { solutions, capped };
-}
-
-function LetterChipInput({
-  value,
-  onChange,
-  ariaLabel,
-  placeholder,
-  maxLen,
-  allowWildcard = false,
-  tone,
-  osk,
-}: {
-  value: string;
-  onChange: (v: string) => void;
-  ariaLabel: string;
-  placeholder: string;
-  maxLen: number;
-  allowWildcard?: boolean;
-  tone: 'amber' | 'rose';
-  osk?: boolean;
-}) {
-  const inputRef = useRef<HTMLInputElement>(null);
-  const tones = {
-    amber: {
-      container: 'focus-within:border-amber-400 focus-within:bg-amber-400/5',
-      pill: 'bg-amber-400/15 border-amber-400/30 text-amber-200',
-    },
-    rose: {
-      container: 'focus-within:border-rose-400 focus-within:bg-rose-400/5',
-      pill: 'bg-rose-400/15 border-rose-400/30 text-rose-300',
-    },
-  }[tone];
-
-  return (
-    <div
-      onClick={() => inputRef.current?.focus()}
-      className={`w-full min-h-[3rem] px-2.5 py-2 rounded-xl bg-white/5 border-2 border-white/10 flex flex-wrap items-center justify-center gap-x-2 gap-y-2.5 cursor-text transition-all ${tones.container}`}
-    >
-      {value.split('').map((c, i) => (
-        <span
-          key={i}
-          className={`relative inline-flex items-center justify-center w-8 h-8 rounded-lg border text-base font-bold uppercase ${tones.pill}`}
-        >
-          {c}
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              onChange(value.slice(0, i) + value.slice(i + 1));
-              inputRef.current?.focus();
-            }}
-            tabIndex={-1}
-            aria-label={`Remove ${c === '?' ? 'wildcard' : c}`}
-            className="absolute -top-1.5 -right-1.5 w-4 h-4 flex items-center justify-center rounded-full bg-slate-800 border border-white/25 text-slate-300 hover:text-white hover:bg-slate-700 hover:border-white/50 transition-colors"
-          >
-            <X className="w-2.5 h-2.5" />
-          </button>
-        </span>
-      ))}
-      <input
-        ref={inputRef}
-        value=""
-        onChange={(e) => {
-          const add = e.target.value
-            .toLowerCase()
-            .replace(allowWildcard ? /[^a-z?]/g : /[^a-z]/g, '');
-          if (add) onChange((value + add).slice(0, maxLen));
-        }}
-        onKeyDown={(e) => {
-          if (e.key === 'Backspace' && value) onChange(value.slice(0, -1));
-          // as above: read-only swallows typing, so accept it from the key event
-          else if (osk && COARSE_POINTER) {
-            const ok = allowWildcard ? /^[a-zA-Z?]$/ : /^[a-zA-Z]$/;
-            if (ok.test(e.key)) {
-              e.preventDefault();
-              onChange((value + e.key.toLowerCase()).slice(0, maxLen));
-            }
-          }
-        }}
-        inputMode={osk ? 'none' : undefined}
-        readOnly={osk && COARSE_POINTER}
-        aria-label={ariaLabel}
-        placeholder={value ? '' : placeholder}
-        className={`h-8 bg-transparent outline-none text-white placeholder-slate-600 text-base text-center ${value ? 'w-2 p-0' : 'flex-1 min-w-[4rem] px-1'}`}
-      />
-    </div>
-  );
 }
 
 const initial = loadState();
@@ -2074,65 +1980,16 @@ function App() {
             />
           </div>
           ) : (
-          <>
-          {/* known positions */}
-          <section className="mb-7 text-center">
-            <label className="block text-xs font-medium text-slate-400 uppercase tracking-wider mb-2.5">
-              Known positions
-            </label>
-            <div className="flex flex-wrap gap-2 justify-center">
-              {known.map((v, i) => (
-                <Tile
-                  key={i}
-                  index={i}
-                  group="known"
-                  osk={kbOpen}
-                  value={v}
-                  state={v ? 'known' : 'empty'}
-                  size={length > 10 ? 'sm' : 'md'}
-                  onChange={(c) =>
-                    setKnown((prev) => prev.map((x, j) => (j === i ? c : x)))
-                  }
-                />
-              ))}
-            </div>
-            <p className="mt-2 text-xs text-slate-500">
-              Fill a box only when you're certain of the letter in that spot.
-            </p>
-          </section>
-
-          {/* contains + excluded */}
-          <div className="grid sm:grid-cols-2 gap-5 mb-8">
-            <section>
-              <label className="block text-xs font-medium text-slate-400 uppercase tracking-wider mb-2.5">
-                Must contain <span className="text-accent normal-case">(position unknown)</span>
-              </label>
-              <LetterChipInput
-                value={containsStr}
-                onChange={setContainsStr}
-                ariaLabel="Letters the word must contain"
-                placeholder="e.g. d"
-                maxLen={15}
-                tone="amber"
-                osk={kbOpen}
-              />
-            </section>
-            <section>
-              <label className="block text-xs font-medium text-slate-400 uppercase tracking-wider mb-2.5">
-                Excluded letters
-              </label>
-              <LetterChipInput
-                value={excludedStr}
-                onChange={setExcludedStr}
-                ariaLabel="Excluded letters"
-                placeholder="letters not in the word"
-                maxLen={26}
-                tone="rose"
-                osk={kbOpen}
-              />
-            </section>
-          </div>
-          </>
+            <GuessSolver
+              known={known}
+              onKnown={setKnown}
+              length={length}
+              contains={containsStr}
+              onContains={setContainsStr}
+              excluded={excludedStr}
+              onExcluded={setExcludedStr}
+              osk={kbOpen}
+            />
           )}
           </>
           )}
@@ -2156,63 +2013,18 @@ function App() {
           )}
 
           {mode === 'descramble' && !descramblePlay && (
-          <div className="mb-8">
-            <section className="mb-5">
-              <label className="block text-xs font-medium text-slate-400 uppercase tracking-wider mb-2.5 text-center">
-                Your letters <span className="text-accent normal-case">(use ? for a blank tile)</span>
-              </label>
-              <LetterChipInput
-                value={rackStr}
-                onChange={setRackStr}
-                ariaLabel="Letters to descramble"
-                placeholder="e.g. aetrsn?"
-                maxLen={MAX_LEN}
-                allowWildcard
-                tone="amber"
-                osk={kbOpen}
-              />
-            </section>
-            <div className="flex flex-wrap items-center justify-center gap-3">
-              <button
-                onClick={fillDailyRack}
-                disabled={todayStatus === 'loading'}
-                className="inline-flex items-center gap-1.5 px-4 h-10 rounded-lg text-sm font-semibold bg-white/5 border border-white/10 text-slate-300 hover:bg-white/10 hover:text-white transition-colors disabled:opacity-50"
-              >
-                <CalendarDays className="w-4 h-4" />
-                {todayStatus === 'loading' ? 'Fetching…' : "Today's daily rack"}
-              </button>
-              <button
-                onClick={() => setUseAll((v) => !v)}
-                className={`inline-flex items-center gap-1.5 px-4 h-10 rounded-lg text-sm font-semibold transition-all duration-150 border
-                  ${useAll
-                    ? 'bg-amber-400 text-ink border-amber-400 shadow-lg shadow-amber-500/30'
-                    : 'bg-white/5 border-white/10 text-slate-300 hover:bg-white/10'}`}
-              >
-                Use every letter
-              </button>
-              {!useAll && (
-                <label className="inline-flex items-center gap-2 text-sm text-slate-300">
-                  Min length
-                  <select
-                    value={minLength}
-                    onChange={(e) => setMinLength(Number(e.target.value))}
-                    className="h-10 px-3 rounded-lg bg-white/5 border border-white/10 text-sm font-semibold text-white outline-none focus:border-amber-400 [&>option]:bg-slate-900"
-                  >
-                    {[2, 3, 4, 5, 6, 7].map((n) => (
-                      <option key={n} value={n}>
-                        {n}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-              )}
-            </div>
-            {todayStatus === 'error' && (
-              <p className="mt-2 text-xs text-danger text-center">
-                Couldn&apos;t fetch today&apos;s rack — try again in a minute.
-              </p>
-            )}
-          </div>
+            <ScrambleSolver
+              rack={rackStr}
+              onRack={setRackStr}
+              maxLen={MAX_LEN}
+              useAll={useAll}
+              onUseAll={setUseAll}
+              minLength={minLength}
+              onMinLength={setMinLength}
+              osk={kbOpen}
+              onFillToday={fillDailyRack}
+              todayStatus={todayStatus}
+            />
           )}
 
           {beePlayActive && (
@@ -2233,71 +2045,17 @@ function App() {
           )}
 
           {mode === 'bee' && !beePlay && (
-          <div className="mb-8 text-center">
-            <label className="block text-xs font-medium text-slate-400 uppercase tracking-wider mb-3">
-              The hive
-            </label>
-            <div className="relative w-full max-w-[14rem] aspect-square mx-auto">
-              <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2">
-                <Tile
-                  index={0}
-                  group="bee"
-                  osk={kbOpen}
-                  value={beeCenter}
-                  state="center"
-                  size="sm"
-                  onChange={(c) => setBeeCenter(c)}
-                />
-              </div>
-              {BEE_POSITIONS.map(([x, y], i) => (
-                <div
-                  key={i}
-                  className="absolute -translate-x-1/2 -translate-y-1/2"
-                  style={{ left: `${x}%`, top: `${y}%` }}
-                >
-                  <Tile
-                    index={i + 1}
-                    group="bee"
-                    osk={kbOpen}
-                    value={beeOuters[i]}
-                    state={beeOuters[i] ? 'known' : 'empty'}
-                    size="sm"
-                    onChange={(c) =>
-                      setBeeOuters((prev) => prev.map((x2, j) => (j === i ? c : x2)))
-                    }
-                  />
-                </div>
-              ))}
-            </div>
-            <div className="mt-4 flex flex-wrap items-center justify-center gap-3">
-              <button
-                onClick={fillDailyHive}
-                disabled={todayStatus === 'loading'}
-                className="inline-flex items-center gap-1.5 px-4 h-10 rounded-lg text-sm font-semibold bg-white/5 border border-white/10 text-slate-300 hover:bg-white/10 hover:text-white transition-colors disabled:opacity-50"
-              >
-                <CalendarDays className="w-4 h-4" />
-                {todayStatus === 'loading' ? 'Fetching…' : "Today's daily hive"}
-              </button>
-              <button
-                onClick={fillTodaysBee}
-                disabled={todayStatus === 'loading'}
-                className="inline-flex items-center gap-1.5 px-4 h-10 rounded-lg text-sm font-semibold bg-white/5 border border-white/10 text-slate-300 hover:bg-white/10 hover:text-white transition-colors disabled:opacity-50"
-              >
-                <CalendarDays className="w-4 h-4" />
-                {todayStatus === 'loading' ? 'Fetching…' : "Today's NYT bee"}
-              </button>
-            </div>
-            {todayStatus === 'error' && (
-              <p className="mt-2 text-xs text-danger">
-                Couldn&apos;t fetch today&apos;s puzzle — try again in a minute.
-              </p>
-            )}
-            <p className="mt-3 text-xs text-slate-500">
-              Words are 4+ letters, must use the {colorWords(palette, resolveTheme(theme)).key} center letter, and may repeat letters.
-              Words using all seven letters are pangrams. Both today&apos;s puzzles become
-              available about 15 minutes after 3:00&nbsp;a.m. Eastern.
-            </p>
-          </div>
+            <HiveSolver
+              center={beeCenter}
+              outers={beeOuters}
+              onCenter={setBeeCenter}
+              onOuters={setBeeOuters}
+              osk={kbOpen}
+              onFillDaily={fillDailyHive}
+              onFillNyt={fillTodaysBee}
+              todayStatus={todayStatus}
+              centreColour={colorWords(palette, resolveTheme(theme)).key}
+            />
           )}
 
           {gridPlayActive && (
