@@ -25,6 +25,10 @@ services:
         VITE_SUPABASE_URL: ${VITE_SUPABASE_URL:-}
         VITE_SUPABASE_ANON_KEY: ${VITE_SUPABASE_ANON_KEY:-}
         VITE_GA_ID: ${VITE_GA_ID:-}
+        VITE_SSO_PROVIDER: ${VITE_SSO_PROVIDER:-}
+        VITE_SSO_SAML_DOMAIN: ${VITE_SSO_SAML_DOMAIN:-}
+        VITE_SSO_SAML_PROVIDER_ID: ${VITE_SSO_SAML_PROVIDER_ID:-}
+        VITE_SSO_LABEL: ${VITE_SSO_LABEL:-}
         # No default here on purpose. Compose errors on an unset variable with
         # this syntax, which is the right outcome: the Dockerfile's fallback
         # keeps a hand-run `docker build` safe, and this keeps a compose

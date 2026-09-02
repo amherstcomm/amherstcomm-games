@@ -49,10 +49,26 @@ ARG VITE_SUPABASE_URL=""
 ARG VITE_SUPABASE_ANON_KEY=""
 ARG VITE_SITE_ORIGIN="http://localhost:8080"
 ARG VITE_GA_ID=""
+# Sign-in routing. Every one of these has to be declared here as well as in
+# .env.example, because a VITE_ value that never reaches the build is not an
+# error anywhere: Vite compiles `undefined` in, the app reads it as "not
+# configured", and the page renders the pre-SSO sign-in surfaces as though
+# nothing had been set. That shipped once — documented in .env.example and
+# never wired through, so a correct .env produced a build that ignored it.
+# tests/unit/buildArgs.test.ts asserts this list against .env.example and
+# compose.yaml so the next variable cannot repeat it.
+ARG VITE_SSO_PROVIDER=""
+ARG VITE_SSO_SAML_DOMAIN=""
+ARG VITE_SSO_SAML_PROVIDER_ID=""
+ARG VITE_SSO_LABEL=""
 ENV VITE_SUPABASE_URL=$VITE_SUPABASE_URL \
     VITE_SUPABASE_ANON_KEY=$VITE_SUPABASE_ANON_KEY \
     VITE_SITE_ORIGIN=$VITE_SITE_ORIGIN \
-    VITE_GA_ID=$VITE_GA_ID
+    VITE_GA_ID=$VITE_GA_ID \
+    VITE_SSO_PROVIDER=$VITE_SSO_PROVIDER \
+    VITE_SSO_SAML_DOMAIN=$VITE_SSO_SAML_DOMAIN \
+    VITE_SSO_SAML_PROVIDER_ID=$VITE_SSO_SAML_PROVIDER_ID \
+    VITE_SSO_LABEL=$VITE_SSO_LABEL
 
 RUN npm run build
 
