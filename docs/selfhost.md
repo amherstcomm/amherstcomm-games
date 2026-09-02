@@ -195,38 +195,66 @@ dates stop reproducing.
 
 ## Stage 5 — sign-in through Zitadel
 
-The client side is a build arg, so which GoTrue route works can be settled by
-rebuilding rather than by editing code:
+### `keycloak` does not reach Zitadel
+
+Worth stating first, because it is the obvious thing to try and it fails in a
+way that looks like a misconfiguration. GoTrue's Keycloak provider does **not**
+do OIDC discovery — it appends fixed Keycloak paths to whatever URL you give
+it:
+
+```
+AuthURL   = <GOTRUE_EXTERNAL_KEYCLOAK_URL> + /protocol/openid-connect/auth
+TokenURL  = <GOTRUE_EXTERNAL_KEYCLOAK_URL> + /protocol/openid-connect/token
+userinfo  = <host>                         + /protocol/openid-connect/userinfo
+```
+
+Read out of `supabase/auth`'s `internal/api/provider/keycloak.go`. Zitadel
+serves `/oauth/v2/authorize`, `/oauth/v2/token` and `/oidc/v1/userinfo`, so
+those requests 404.
+
+Two ways past it:
+
+- **SAML** — GoTrue's native SSO, which Zitadel also speaks. The supported
+  route, and its attribute mapping is the natural carrier for group claims.
+- **A proxy shim** — GoTrue only ever appends those three paths, so a vhost on
+  the proxy you already run can rewrite them onto Zitadel's. Nothing in the app
+  changes. Cheap, and it breaks silently if GoTrue ever moves those paths.
+
+### Configuring the app
+
+The client supports all three routes; pick one in `.env` and rebuild.
 
 ```sh
-VITE_SSO_PROVIDER=custom:zitadel        # or: keycloak
+# SAML by email domain — the usual Zitadel route
+VITE_SSO_SAML_DOMAIN=amherstcomm.net
+# or by the provider's UUID, when no domain is mapped
+VITE_SSO_SAML_PROVIDER_ID=<uuid>
+# or the OAuth route, which needs the proxy shim above for Zitadel
+VITE_SSO_PROVIDER=keycloak
+
 VITE_SSO_LABEL=Amherst Communications
 docker compose up -d --build
 ```
 
-Set it and the modal offers exactly one way in — the GitHub and Google buttons
-and the magic-link form all come down. That is deliberate: leaving the email
-form up leaves a second door open to anyone with an address GoTrue would mail,
-which is the opposite of what a single sign-on deployment is for.
+If more than one is set the order is provider id, then domain, then OAuth
+provider — fixed, and pinned in `tests/unit/sso.test.ts` so a double
+configuration picks a route rather than silently reopening the email form.
+
+Setting any of them takes the other routes away: the GitHub and Google buttons
+and the magic-link form all come down. Leaving the email form up would leave a
+second door open to anyone with an address GoTrue would mail.
 
 **Closing that door properly is a server-side job too.** The app hiding the
 form only stops people using this page; GoTrue will still honour a magic-link
 request made directly against the API. Disable its email provider as well.
 
-### Which provider string
+### What Zitadel needs
 
-Both are in supabase-js's `Provider` union, so the client cannot tell them
-apart and neither can be ruled out from here:
-
-- `keycloak` — the long-standing generic-OIDC provider. Not Keycloak-specific
-  despite the name; it takes an issuer URL, so it points at Zitadel.
-- `custom:zitadel` — newer GoTrue's named generic-OIDC providers. Cleaner, and
-  honest about what it is, if the server build has it.
-
-Which exists is a property of the GoTrue image, so check its version rather
-than assuming. The redirect URI Zitadel needs is GoTrue's callback —
-`<supabase-url>/auth/v1/callback` — and the app passes `window.location.origin`
-as the post-sign-in return, so that origin has to be allowed too.
+- Redirect URI: `<supabase-url>/auth/v1/callback` — GoTrue's callback, not the
+  app's.
+- `https://games.amherstcomm.net` allowed as a return, since the app passes
+  `window.location.origin`. `GOTRUE_SITE_URL` and the additional-redirect list
+  have to allow it too, or the hop back after a successful sign-in is refused.
 
 ### What this does not do yet
 

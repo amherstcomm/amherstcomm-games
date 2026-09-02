@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { Provider, Session } from '@supabase/supabase-js';
 import { AlertTriangle, Github, KeyRound, LogOut, Mail, Users, X } from 'lucide-react';
 import { supabase } from '@/supabase';
-import { SSO_LABEL, SSO_ONLY, SSO_PROVIDER } from '@/sso';
+import { SSO_LABEL, SSO_ONLY, SSO_ROUTE } from '@/sso';
 import { clearMyStats, deleteAccount } from '@/account';
 import {
   fetchDisplayName,
@@ -212,6 +212,26 @@ export default function AccountModal({
       provider,
       options: { redirectTo: window.location.origin },
     });
+    if (err) {
+      setStatus('error');
+      setError(err.message || 'Something went wrong starting the sign-in — please try again.');
+    }
+  }
+
+  // The configured route, whichever kind it is. SAML goes through a different
+  // client call than OAuth — signInWithSSO, not signInWithOAuth — so the two
+  // cannot share one code path, which is the whole reason SSO_ROUTE is a
+  // discriminated union rather than a string.
+  async function startSso() {
+    if (!supabase || !SSO_ROUTE) return;
+    setError('');
+    const back = { redirectTo: window.location.origin };
+    const { error: err } =
+      SSO_ROUTE.kind === 'oauth'
+        ? await supabase.auth.signInWithOAuth({ provider: SSO_ROUTE.provider, options: back })
+        : SSO_ROUTE.by === 'domain'
+          ? await supabase.auth.signInWithSSO({ domain: SSO_ROUTE.domain, options: back })
+          : await supabase.auth.signInWithSSO({ providerId: SSO_ROUTE.providerId, options: back });
     if (err) {
       setStatus('error');
       setError(err.message || 'Something went wrong starting the sign-in — please try again.');
@@ -670,7 +690,7 @@ export default function AccountModal({
                   between devices, so you can start on a phone and finish on a laptop.
                 </p>
                 <button
-                  onClick={() => oauth(SSO_PROVIDER as Provider)}
+                  onClick={startSso}
                   className="w-full inline-flex items-center justify-center gap-2 h-11 rounded-lg text-sm font-semibold bg-emerald-400 text-ink shadow-lg shadow-emerald-500/30 hover:bg-emerald-300 transition-colors"
                 >
                   <KeyRound className="w-4 h-4" />
