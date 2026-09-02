@@ -1,0 +1,162 @@
+{
+  "date": "2026-09-02",
+  "byDifficulty": {
+    "easy": [
+      {
+        "from": "buck",
+        "to": "dash",
+        "par": 4
+      },
+      {
+        "from": "chips",
+        "to": "fries",
+        "par": 4
+      },
+      {
+        "from": "gist",
+        "to": "meat",
+        "par": 4
+      },
+      {
+        "from": "howl",
+        "to": "wail",
+        "par": 4
+      },
+      {
+        "from": "roam",
+        "to": "swan",
+        "par": 4
+      },
+      {
+        "from": "pare",
+        "to": "peel",
+        "par": 4
+      },
+      {
+        "from": "clang",
+        "to": "crash",
+        "par": 4
+      },
+      {
+        "from": "race",
+        "to": "rush",
+        "par": 4
+      },
+      {
+        "from": "cram",
+        "to": "drum",
+        "par": 4
+      },
+      {
+        "from": "furled",
+        "to": "rolled",
+        "par": 4
+      }
+    ],
+    "hard": [
+      {
+        "from": "goon",
+        "to": "lump",
+        "par": 6
+      },
+      {
+        "from": "hiss",
+        "to": "hoot",
+        "par": 5
+      },
+      {
+        "from": "rump",
+        "to": "seat",
+        "par": 5
+      },
+      {
+        "from": "mate",
+        "to": "pair",
+        "par": 5
+      },
+      {
+        "from": "hock",
+        "to": "pawn",
+        "par": 6
+      },
+      {
+        "from": "heel",
+        "to": "shoe",
+        "par": 5
+      },
+      {
+        "from": "beam",
+        "to": "wood",
+        "par": 6
+      },
+      {
+        "from": "frame",
+        "to": "shape",
+        "par": 5
+      },
+      {
+        "from": "dope",
+        "to": "weed",
+        "par": 6
+      },
+      {
+        "from": "goad",
+        "to": "spur",
+        "par": 5
+      }
+    ],
+    "extreme": [
+      {
+        "from": "cloak",
+        "to": "drape",
+        "par": 8
+      },
+      {
+        "from": "dirt",
+        "to": "poop",
+        "par": 7
+      },
+      {
+        "from": "heater",
+        "to": "warmer",
+        "par": 8
+      },
+      {
+        "from": "pout",
+        "to": "sulk",
+        "par": 7
+      },
+      {
+        "from": "bland",
+        "to": "suave",
+        "par": 7
+      },
+      {
+        "from": "hart",
+        "to": "stag",
+        "par": 7
+      },
+      {
+        "from": "plume",
+        "to": "pride",
+        "par": 8
+      },
+      {
+        "from": "fine",
+        "to": "thin",
+        "par": 7
+      },
+      {
+        "from": "bang",
+        "to": "clap",
+        "par": 7
+      },
+      {
+        "from": "grip",
+        "to": "stem",
+        "par": 8
+      }
+    ]
+  },
+  "fetchedAt": "2026-09-02T12:46:03.552Z"
+}

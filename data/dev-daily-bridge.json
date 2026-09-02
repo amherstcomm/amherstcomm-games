@@ -1,0 +1,84 @@
+{
+  "date": "2026-09-02",
+  "byDifficulty": {
+    "easy": {
+      "prompts": [
+        {
+          "x": "alter",
+          "y": "ally"
+        },
+        {
+          "x": "cross",
+          "y": "dose"
+        },
+        {
+          "x": "play",
+          "y": "fire"
+        },
+        {
+          "x": "horse",
+          "y": "slaughter"
+        },
+        {
+          "x": "work",
+          "y": "worm"
+        }
+      ],
+      "answers": "WyJuYXRpb24iLCJvdmVyIiwiYmFjayIsIm1hbiIsImJvb2siXQ==",
+      "hints": 3
+    },
+    "hard": {
+      "prompts": [
+        {
+          "x": "home",
+          "y": "bench"
+        },
+        {
+          "x": "cook",
+          "y": "back"
+        },
+        {
+          "x": "cheer",
+          "y": "ship"
+        },
+        {
+          "x": "sand",
+          "y": "work"
+        },
+        {
+          "x": "broad",
+          "y": "walk"
+        }
+      ],
+      "answers": "WyJ3b3JrIiwib3V0IiwibGVhZGVyIiwicGFwZXIiLCJzaWRlIl0=",
+      "hints": 1
+    },
+    "extreme": {
+      "prompts": [
+        {
+          "x": "river",
+          "y": "room"
+        },
+        {
+          "x": "stand",
+          "y": "spring"
+        },
+        {
+          "x": "whole",
+          "y": "way"
+        },
+        {
+          "x": "over",
+          "y": "scale"
+        },
+        {
+          "x": "free",
+          "y": "gun"
+        }
+      ],
+      "answers": "WyJiZWQiLCJvZmYiLCJzb21lIiwidGltZSIsImhhbmQiXQ==",
+      "hints": 0
+    }
+  },
+  "fetchedAt": "2026-09-02T12:45:29.851Z"
+}

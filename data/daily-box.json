@@ -1,0 +1,33 @@
+{
+  "date": "2026-09-02",
+  "byDifficulty": {
+    "easy": {
+      "sides": [
+        "dms",
+        "fup",
+        "lig",
+        "eot"
+      ],
+      "par": 2
+    },
+    "hard": {
+      "sides": [
+        "nky",
+        "udt",
+        "isc",
+        "eal"
+      ],
+      "par": 2
+    },
+    "extreme": {
+      "sides": [
+        "sbm",
+        "aot",
+        "zvy",
+        "eil"
+      ],
+      "par": 2
+    }
+  },
+  "fetchedAt": "2026-09-02T12:45:26.505Z"
+}

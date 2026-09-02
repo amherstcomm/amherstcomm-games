@@ -1,0 +1,42 @@
+{
+  "date": "2026-09-02",
+  "byDifficulty": {
+    "easy": {
+      "center": "i",
+      "outers": [
+        "y",
+        "l",
+        "b",
+        "a",
+        "t",
+        "r"
+      ],
+      "words": 46
+    },
+    "hard": {
+      "center": "b",
+      "outers": [
+        "i",
+        "d",
+        "r",
+        "z",
+        "u",
+        "e"
+      ],
+      "words": 42
+    },
+    "extreme": {
+      "center": "a",
+      "outers": [
+        "f",
+        "p",
+        "w",
+        "o",
+        "r",
+        "e"
+      ],
+      "words": 37
+    }
+  },
+  "fetchedAt": "2026-09-02T12:45:29.851Z"
+}

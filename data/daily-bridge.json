@@ -1,0 +1,84 @@
+{
+  "date": "2026-09-02",
+  "byDifficulty": {
+    "easy": {
+      "prompts": [
+        {
+          "x": "turn",
+          "y": "draw"
+        },
+        {
+          "x": "play",
+          "y": "spring"
+        },
+        {
+          "x": "turn",
+          "y": "spoon"
+        },
+        {
+          "x": "sword",
+          "y": "bowl"
+        },
+        {
+          "x": "lumber",
+          "y": "stick"
+        }
+      ],
+      "answers": "WyJvdmVyIiwib2ZmIiwidGFibGUiLCJmaXNoIiwieWFyZCJd",
+      "hints": 3
+    },
+    "hard": {
+      "prompts": [
+        {
+          "x": "body",
+          "y": "shop"
+        },
+        {
+          "x": "care",
+          "y": "thinker"
+        },
+        {
+          "x": "chairman",
+          "y": "load"
+        },
+        {
+          "x": "spring",
+          "y": "zone"
+        },
+        {
+          "x": "hard",
+          "y": "stroke"
+        }
+      ],
+      "answers": "WyJ3b3JrIiwiZnJlZSIsInNoaXAiLCJ0aW1lIiwiYmFjayJd",
+      "hints": 1
+    },
+    "extreme": {
+      "prompts": [
+        {
+          "x": "sup",
+          "y": "hole"
+        },
+        {
+          "x": "text",
+          "y": "shelf"
+        },
+        {
+          "x": "black",
+          "y": "patient"
+        },
+        {
+          "x": "basket",
+          "y": "room"
+        },
+        {
+          "x": "bread",
+          "y": "ball"
+        }
+      ],
+      "answers": "WyJwb3J0IiwiYm9vayIsIm91dCIsImJhbGwiLCJiYXNrZXQiXQ==",
+      "hints": 0
+    }
+  },
+  "fetchedAt": "2026-09-02T12:45:26.505Z"
+}

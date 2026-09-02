@@ -1,0 +1,21 @@
+{
+  "date": "2026-09-02",
+  "byDifficulty": {
+    "easy": {
+      "from": "mint",
+      "to": "peck",
+      "par": 4
+    },
+    "hard": {
+      "from": "fast",
+      "to": "slow",
+      "par": 6
+    },
+    "extreme": {
+      "from": "loins",
+      "to": "trunk",
+      "par": 8
+    }
+  },
+  "fetchedAt": "2026-09-02T12:45:26.505Z"
+}

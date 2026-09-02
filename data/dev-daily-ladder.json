@@ -1,0 +1,21 @@
+{
+  "date": "2026-09-02",
+  "byDifficulty": {
+    "easy": {
+      "from": "lash",
+      "to": "welt",
+      "par": 4
+    },
+    "hard": {
+      "from": "inner",
+      "to": "outer",
+      "par": 6
+    },
+    "extreme": {
+      "from": "beefy",
+      "to": "burly",
+      "par": 7
+    }
+  },
+  "fetchedAt": "2026-09-02T12:45:29.851Z"
+}

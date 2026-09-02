@@ -1,0 +1,33 @@
+{
+  "date": "2026-09-02",
+  "byDifficulty": {
+    "easy": {
+      "sides": [
+        "ags",
+        "mrz",
+        "nlo",
+        "iep"
+      ],
+      "par": 2
+    },
+    "hard": {
+      "sides": [
+        "nes",
+        "rua",
+        "oil",
+        "ctm"
+      ],
+      "par": 2
+    },
+    "extreme": {
+      "sides": [
+        "gru",
+        "noz",
+        "ahs",
+        "eti"
+      ],
+      "par": 2
+    }
+  },
+  "fetchedAt": "2026-09-02T12:45:29.851Z"
+}
