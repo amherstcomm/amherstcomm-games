@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
-import type { Session } from '@supabase/supabase-js';
-import { AlertTriangle, Github, LogOut, Mail, Users, X } from 'lucide-react';
+import type { Provider, Session } from '@supabase/supabase-js';
+import { AlertTriangle, Github, KeyRound, LogOut, Mail, Users, X } from 'lucide-react';
 import { supabase } from '@/supabase';
+import { SSO_LABEL, SSO_ONLY, SSO_PROVIDER } from '@/sso';
 import { clearMyStats, deleteAccount } from '@/account';
 import {
   fetchDisplayName,
@@ -204,7 +205,7 @@ export default function AccountModal({
   }
 
   // OAuth needs no email at all — the whole page redirects to the provider
-  async function oauth(provider: 'github' | 'google') {
+  async function oauth(provider: Provider) {
     if (!supabase) return;
     setError('');
     const { error: err } = await supabase.auth.signInWithOAuth({
@@ -662,6 +663,23 @@ export default function AccountModal({
         ) : (
           <>
             <h2 className="text-xl font-bold mb-1">Sign in</h2>
+            {SSO_ONLY ? (
+              <>
+                <p className="text-sm text-slate-400 mb-5">
+                  Signing in carries your statistics and today&apos;s unfinished puzzles
+                  between devices, so you can start on a phone and finish on a laptop.
+                </p>
+                <button
+                  onClick={() => oauth(SSO_PROVIDER as Provider)}
+                  className="w-full inline-flex items-center justify-center gap-2 h-11 rounded-lg text-sm font-semibold bg-emerald-400 text-ink shadow-lg shadow-emerald-500/30 hover:bg-emerald-300 transition-colors"
+                >
+                  <KeyRound className="w-4 h-4" />
+                  Continue with {SSO_LABEL}
+                </button>
+                {status === 'error' && <p className="text-sm text-danger mt-3">{error}</p>}
+              </>
+            ) : (
+              <>
             <p className="text-sm text-slate-400 mb-5">
               No password needed. Accounts are optional — they carry your statistics
               and today&apos;s unfinished puzzles between devices, so you can start on
@@ -740,6 +758,8 @@ export default function AccountModal({
                 </button>
                 {status === 'error' && <p className="text-sm text-danger">{error}</p>}
               </form>
+            )}
+              </>
             )}
           </>
         )}
