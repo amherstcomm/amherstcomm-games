@@ -265,6 +265,62 @@ separate work from getting Zitadel accepted.
 
 ---
 
+## Stage 6 — privileges from Zitadel roles
+
+Zitadel names three: `games.view` plays, `games.edit` sets games up and sees
+winners, `games.admin` does everything. Holding one implies everything below
+it, so nobody needs more than one grant.
+
+### The roles in the token are not trustworthy
+
+GoTrue writes SAML attributes into `raw_user_meta_data` —
+`userProvidedData.Metadata = providerClaims`, in `samlacs.go` — and
+`user_metadata` is writable by the user it describes:
+
+```js
+await supabase.auth.updateUser({ data: { roles: ['games.admin'] } })
+```
+
+So a policy reading `auth.jwt() -> 'user_metadata' -> 'roles'` hands admin to
+anyone who opens a browser console. The source also does not clearly refresh
+that metadata on repeat sign-ins, so a role revoked in Zitadel may not
+propagate — it is stale as well as forgeable.
+
+**Authorization therefore reads `public.role_grants`, never the token.** That
+matches what the schema already did: `owners` is a table, `is_owner()` reads
+it, and there are no `auth.jwt()` reads anywhere.
+
+### Granting
+
+`games.view` needs no row. Zitadel grants the application to holders of one of
+the three roles, so reaching the site at all already proves it — enforced
+upstream where a browser cannot reach. Rows exist for the two that raise
+privilege:
+
+```sql
+insert into public.role_grants (user_id, role)
+values ('<auth user id>', 'games.admin');
+```
+
+By hand is right while that is a handful of people, and it is auditable. When
+the set grows, sync it from Zitadel's management API with a service
+credential — the point being that whatever writes the table must not be the
+session the table grants privilege to.
+
+`is_owner()` is widened rather than replaced, so `games.admin` reaches the
+report queue and everything else `owners` already gated, and existing rows in
+`owners` keep working.
+
+### If you later want roles in the JWT
+
+The safe route is the custom access token hook
+(`GOTRUE_HOOK_CUSTOM_ACCESS_TOKEN_*`), which calls a Postgres function at mint
+time — so it can read `role_grants` and inject a claim the user cannot touch.
+That buys freshness on refresh rather than on sign-in. Policies can read the
+table directly, so it is an optimisation, not a requirement.
+
+---
+
 ## What is still missing after Stage 4
 
 - **Required login.** Stage 5 makes SSO the only *offered* route; it does not

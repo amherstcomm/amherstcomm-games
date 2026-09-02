@@ -1959,6 +1959,96 @@ create table if not exists public.owners (
 alter table public.owners enable row level security;
 revoke all on public.owners from public, anon, authenticated;
 
+-- The three privileges, as Zitadel names them: view plays, edit sets games up
+-- and sees winners, admin does everything including acting on other people.
+--
+-- Deliberately *not* read out of the token. GoTrue writes SAML attributes into
+-- raw_user_meta_data — `userProvidedData.Metadata = providerClaims`, in
+-- samlacs.go — and user_metadata is writable by the very user it describes:
+--
+--   await supabase.auth.updateUser({ data: { roles: ['games.admin'] } })
+--
+-- A policy reading that claim would hand admin to anyone who opens a console.
+-- So the role in the token is a hint the interface may use to decide what to
+-- draw, and this table is the authority every decision that matters reads.
+-- It is written by hand or by a service credential — never by the session it
+-- grants privilege to.
+--
+-- games.view is not expected to appear here. Zitadel grants the application to
+-- holders of one of the three roles, so reaching the site at all already
+-- proves it, enforced where a browser cannot reach. Rows exist for the two
+-- that raise privilege above the floor.
+create table if not exists public.role_grants (
+  user_id uuid not null references auth.users (id) on delete cascade,
+  role text not null check (role in ('games.view', 'games.edit', 'games.admin')),
+  granted_at timestamptz not null default now(),
+  primary key (user_id, role)
+);
+alter table public.role_grants enable row level security;
+revoke all on public.role_grants from public, anon, authenticated;
+
+-- Rank, so holding one privilege implies everything below it. An admin should
+-- not need three rows to see what an editor sees, and Zitadel should not have
+-- to grant three roles to one person for the obvious thing to happen.
+create or replace function public.role_rank(p_role text)
+returns int
+language sql
+immutable
+as $fn$
+  select case p_role
+    when 'games.view' then 1
+    when 'games.edit' then 2
+    when 'games.admin' then 3
+    else 0
+  end
+$fn$;
+
+-- Does the caller hold this privilege, or one above it?
+--
+-- The `> 0` guard is the entire reason rank is a function rather than an
+-- inline case expression. An unrecognised argument ranks 0, and without the
+-- guard every real grant would out-rank it — so has_role('gaems.admin') would
+-- return true for everybody, and a typo in a policy would open the thing that
+-- policy was written to close.
+create or replace function public.has_role(p_role text)
+returns boolean
+language sql
+stable
+security definer
+set search_path = ''
+as $fn$
+  select public.role_rank(p_role) > 0
+     and exists (
+       select 1 from public.role_grants g
+       where g.user_id = (select auth.uid())
+         and public.role_rank(g.role) >= public.role_rank(p_role)
+     )
+$fn$;
+
+revoke all on function public.has_role(text) from public, anon;
+grant execute on function public.has_role(text) to authenticated;
+
+-- What the interface asks so it knows what to draw. The caller's own roles,
+-- names only, and never anyone else's — who the admins are is not a thing a
+-- player needs to be able to list.
+create or replace function public.my_roles()
+returns text[]
+language sql
+stable
+security definer
+set search_path = ''
+as $fn$
+  select coalesce(array_agg(g.role order by public.role_rank(g.role) desc), '{}')
+  from public.role_grants g
+  where g.user_id = (select auth.uid())
+$fn$;
+
+revoke all on function public.my_roles() from public, anon;
+grant execute on function public.my_roles() to authenticated;
+
+-- Widened rather than replaced: `owners` predates the roles and still works,
+-- so the four existing call sites and the whole report queue keep their
+-- meaning. games.admin is the same authority arriving by a different door.
 create or replace function public.is_owner()
 returns boolean
 language sql
@@ -1967,6 +2057,7 @@ security definer
 set search_path = ''
 as $fn$
   select exists (select 1 from public.owners o where o.user_id = (select auth.uid()))
+      or public.has_role('games.admin')
 $fn$;
 
 revoke all on function public.is_owner() from public, anon;
