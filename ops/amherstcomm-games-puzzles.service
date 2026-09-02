@@ -1,0 +1,21 @@
+# Publish the rolling fortnight of daily puzzles.
+#
+# Install (edit the two paths and the user if your checkout differs):
+#   sudo cp ops/amherstcomm-games-puzzles.* /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now amherstcomm-games-puzzles.timer
+#
+# Run it once by hand before trusting the timer:
+#   sudo systemctl start amherstcomm-games-puzzles.service
+#   journalctl -u amherstcomm-games-puzzles -n 50
+
+[Unit]
+Description=Publish the daily puzzle window to Postgres
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+User=rtetzloff
+WorkingDirectory=/home/rtetzloff/git/amherstcomm-games
+ExecStart=/home/rtetzloff/git/amherstcomm-games/ops/publish-puzzles.sh
