@@ -17,7 +17,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { ROLES, atLeast, rank } from '@/roles';
+import { CAPABILITIES, ROLES, allows, atLeast, rank } from '@/roles';
 
 const schema = readFileSync(join(process.cwd(), 'supabase/schema.sql'), 'utf8');
 
@@ -87,5 +87,69 @@ describe('the schema agrees', () => {
   it('keeps is_owner reachable by games.admin', () => {
     const fn = schema.slice(schema.indexOf('function public.is_owner'));
     expect(fn).toContain("public.has_role('games.admin')");
+  });
+});
+
+describe('capabilities', () => {
+  /** The seed block, which is the declaration of what capabilities exist. */
+  const seed = schema.slice(
+    schema.indexOf('insert into public.capabilities'),
+    schema.indexOf('on conflict (capability) do nothing')
+  );
+  const seeded = [...seed.matchAll(/\('([a-z.]+)',\s*'(games\.[a-z]+)'/g)].map((m) => ({
+    capability: m[1],
+    minRole: m[2],
+  }));
+
+  it('seeds exactly the capabilities the app names', () => {
+    expect(seeded.map((s) => s.capability)).toEqual([...CAPABILITIES]);
+  });
+
+  it('gives every capability a role that exists on the ladder', () => {
+    for (const { capability, minRole } of seeded) {
+      expect(rank(minRole), `${capability} maps to an unknown role`).toBeGreaterThan(0);
+    }
+  });
+
+  it('will not let permissions.manage be seeded below admin', () => {
+    const row = seeded.find((s) => s.capability === 'permissions.manage');
+    expect(row?.minRole).toBe('games.admin');
+  });
+
+  it('guards permissions.manage in the database, not just in the seed', () => {
+    // A seed value is a starting point; the trigger is what stops the one row
+    // that decides who may edit the rows from being handed to everybody.
+    const fn = schema.slice(schema.indexOf('function public.capabilities_guard'));
+    expect(fn).toContain("new.capability = 'permissions.manage'");
+    expect(fn).toContain('public.role_rank(new.min_role) < 3');
+    expect(schema).toContain('create trigger capabilities_guard');
+  });
+
+  it('fails closed on a capability with no row', () => {
+    // coalesce(..., false) is the whole property: absent must mean no. The
+    // tempting alternative — "nothing forbids it, so allow" — turns every
+    // unseeded capability into an open door.
+    const fn = schema.slice(
+      schema.indexOf('function public.can('),
+      schema.indexOf('function public.my_capabilities')
+    );
+    // The shape, not just the words: a coalesce whose fallback is literally
+    // false. `toContain('false')` would pass on a function that never had one.
+    expect(fn).toMatch(/coalesce\([\s\S]*?,\s*false\s*\)/);
+    expect(fn).not.toMatch(/coalesce\([\s\S]*?,\s*true\s*\)/);
+  });
+
+  it('refuses to invent a capability that no gate reads', () => {
+    const fn = schema.slice(schema.indexOf('function public.set_capability'));
+    expect(fn).toContain('no such capability');
+    expect(fn).toContain("public.can('permissions.manage')");
+  });
+});
+
+describe('the client-side capability set', () => {
+  it('treats absent as no', () => {
+    expect(allows([], 'reports.act')).toBe(false);
+    expect(allows(['games.play'], 'reports.act')).toBe(false);
+    expect(allows(['reports.act'], 'reports.act')).toBe(true);
   });
 });

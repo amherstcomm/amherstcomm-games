@@ -47,6 +47,45 @@ export function atLeast(held: readonly string[], needed: string): boolean {
   return held.some((r) => rank(r) >= want);
 }
 
+/** What each privilege unlocks is data, not code — the rows in
+ *  public.capabilities, editable by an admin without a deploy. These names are
+ *  the vocabulary: a gate asks for one of them, and a row says which privilege
+ *  reaches it.
+ *
+ *  Read twice like ROLES is, and asserted against the seed in schema.sql by
+ *  tests/unit/roles.test.ts. A capability the interface asks about but nothing
+ *  seeds is not an error at either end — `can()` returns false, the button
+ *  never appears, and nobody finds out why. */
+export const CAPABILITIES = [
+  'games.play',
+  'winners.view',
+  'games.setup',
+  'reports.read',
+  'reports.act',
+  'users.manage',
+  'permissions.manage',
+] as const;
+export type Capability = (typeof CAPABILITIES)[number];
+
+/** Everything the caller may do, asked once rather than per button.
+ *
+ *  Empty for a signed-out visitor and for a deployment with no Supabase, which
+ *  is the same interface either way — so neither is distinguished here. */
+export async function myCapabilities(): Promise<Capability[]> {
+  if (!supabase) return [];
+  const { data, error } = await supabase.rpc('my_capabilities');
+  if (error || !Array.isArray(data)) return [];
+  const known = new Set<string>(CAPABILITIES);
+  return (data as string[]).filter((c): c is Capability => known.has(c));
+}
+
+/** Whether a fetched set allows something. Absent means no — the same rule the
+ *  SQL uses, and for the same reason: a gate that is silently always-false
+ *  gets reported, a gate that is silently always-true does not. */
+export function allows(held: readonly string[], capability: Capability): boolean {
+  return held.includes(capability);
+}
+
 /** The caller's own roles, from the database rather than from the token.
  *
  *  Empty is the honest answer for a signed-out visitor, for a deployment with

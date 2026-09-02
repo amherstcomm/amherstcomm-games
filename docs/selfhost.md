@@ -311,6 +311,38 @@ session the table grants privilege to.
 report queue and everything else `owners` already gated, and existing rows in
 `owners` keep working.
 
+### What each privilege unlocks is data
+
+Hardcoding "reports are admin-only" into a gate means a schema change and a
+deploy the day somebody decides editors should see them. So the mapping is
+rows in `public.capabilities`, seeded with a starting map and editable through
+`set_capability()`:
+
+| capability | default | what it is |
+|---|---|---|
+| `games.play` | `games.view` | play, and appear on the leaderboard |
+| `winners.view` | `games.edit` | see who won, across everyone |
+| `games.setup` | `games.edit` | set up games, sessions and puzzle content |
+| `reports.read` | `games.admin` | read the abuse report queue |
+| `reports.act` | `games.admin` | dismiss, blocklist, ban |
+| `users.manage` | `games.admin` | grant and revoke privileges |
+| `permissions.manage` | `games.admin` | change this table |
+
+Re-running `schema.sql` will not overwrite a decision made in the portal — the
+seed is `on conflict do nothing`, so it says where a capability comes from, not
+what it must stay.
+
+Two properties worth knowing, both enforced in the database rather than in the
+interface:
+
+- **`permissions.manage` cannot be set below `games.admin`.** It is the row
+  that decides who may edit the rows; lowering it lets every signed-in player
+  rewrite the map, including locking admins out of it. A trigger refuses.
+- **An unknown capability is denied, never allowed.** `can()` coalesces a
+  missing row to false. The tempting reading — "nothing forbids it" — turns
+  every unseeded capability and every typo in a gate into an open door, and a
+  gate that is silently always-true is a bug nobody reports.
+
 ### If you later want roles in the JWT
 
 The safe route is the custom access token hook
