@@ -17,6 +17,7 @@ import BridgeGame, { type BridgeGameHandle } from '@/BridgeGame';
 import GameMenu from '@/GameMenu';
 import LadderIcon from '@/LadderIcon';
 import { supabase } from '@/supabase';
+import { autoSignIn } from '@/signIn';
 import { importBaselineOnce } from '@/stats';
 import GuessGame, { type GuessGameHandle, type LetterState } from '@/GuessGame';
 import HiveGame, { type HiveGameHandle } from '@/HiveGame';
@@ -604,9 +605,16 @@ function App() {
   useTheme(theme, palette, textScale);
 
   // track the auth session when Supabase is configured
+  //
+  // The auto sign-in hangs off getSession rather than off the session state,
+  // because it has to run exactly once on the answer to "is anyone signed in",
+  // and not again on every later change to it. Signing out is a later change.
   useEffect(() => {
     if (!supabase) return;
-    supabase.auth.getSession().then(({ data }) => setSession(data.session));
+    supabase.auth.getSession().then(({ data }) => {
+      setSession(data.session);
+      void autoSignIn(!!data.session);
+    });
     const { data: sub } = supabase.auth.onAuthStateChange((_event, s) => setSession(s));
     return () => sub.subscription.unsubscribe();
   }, []);
