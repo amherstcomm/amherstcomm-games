@@ -366,7 +366,7 @@ database. Cron on the VM is less machinery for the same result.
 
 ```sh
 cp ops/publish.env.example ops/publish.env    # gitignored; fill it in
-./ops/publish-puzzles.sh                      # run once by hand first
+bash ops/publish-puzzles.sh                   # run once by hand first
 
 sudo cp ops/amherstcomm-games-puzzles.* /etc/systemd/system/
 sudo systemctl daemon-reload
