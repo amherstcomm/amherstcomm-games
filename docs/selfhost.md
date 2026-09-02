@@ -193,11 +193,54 @@ dates stop reproducing.
 
 ---
 
+## Stage 5 — sign-in through Zitadel
+
+The client side is a build arg, so which GoTrue route works can be settled by
+rebuilding rather than by editing code:
+
+```sh
+VITE_SSO_PROVIDER=custom:zitadel        # or: keycloak
+VITE_SSO_LABEL=Amherst Communications
+docker compose up -d --build
+```
+
+Set it and the modal offers exactly one way in — the GitHub and Google buttons
+and the magic-link form all come down. That is deliberate: leaving the email
+form up leaves a second door open to anyone with an address GoTrue would mail,
+which is the opposite of what a single sign-on deployment is for.
+
+**Closing that door properly is a server-side job too.** The app hiding the
+form only stops people using this page; GoTrue will still honour a magic-link
+request made directly against the API. Disable its email provider as well.
+
+### Which provider string
+
+Both are in supabase-js's `Provider` union, so the client cannot tell them
+apart and neither can be ruled out from here:
+
+- `keycloak` — the long-standing generic-OIDC provider. Not Keycloak-specific
+  despite the name; it takes an issuer URL, so it points at Zitadel.
+- `custom:zitadel` — newer GoTrue's named generic-OIDC providers. Cleaner, and
+  honest about what it is, if the server build has it.
+
+Which exists is a property of the GoTrue image, so check its version rather
+than assuming. The redirect URI Zitadel needs is GoTrue's callback —
+`<supabase-url>/auth/v1/callback` — and the app passes `window.location.origin`
+as the post-sign-in return, so that origin has to be allowed too.
+
+### What this does not do yet
+
+Sign-in still isn't *required*. The app renders fine with no session, so an
+employee can play without signing in — they just get browser-local progress and
+no leaderboard. Requiring it is a gate that does not exist yet, and it is
+separate work from getting Zitadel accepted.
+
+---
+
 ## What is still missing after Stage 4
 
-- **SSO.** Sign-in is still GoTrue's magic link and OAuth. Zitadel is separate
-  work.
-- **Required login.** The app renders fine with no session today; a gate does
-  not exist yet.
+- **Required login.** Stage 5 makes SSO the only *offered* route; it does not
+  make signing in mandatory. The app still renders with no session, and that
+  gate does not exist yet.
 - **Rebrand.** `vite.config.ts` still falls back to the upstream origin, and
   `src/LegalDocs.tsx` still names Render as the host.
