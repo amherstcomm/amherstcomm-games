@@ -211,7 +211,33 @@ the security option under **Report a problem** at the bottom of any page, or
 
 ## Deployment
 
-The repo includes a [Render](https://render.com/) blueprint ([render.yaml](render.yaml)) that provisions a static site: it builds with `npm ci && npm run build`, publishes `dist/`, rewrites all routes to `index.html`, and sets long-lived cache headers on hashed assets.
+### Docker
+
+The build output is static, so the image is a two-stage build — Node compiles
+the SPA, nginx serves it ([Dockerfile](Dockerfile),
+[docker/nginx.conf](docker/nginx.conf)). It applies the same two rules the
+Render blueprint does: every route rewrites to `index.html`, and hashed assets
+under `/assets/` cache for a year as `immutable`. `index.html` itself is
+`no-store`, because caching it is how a deploy fails to take effect.
+
+```sh
+cp .env.example .env      # then edit it — VITE_SITE_ORIGIN is required
+docker compose up -d --build
+```
+
+`--build` is not optional on a config change. Every `VITE_*` value is compiled
+into the bundle, so an edited `.env` does nothing until the image is rebuilt —
+unlike Render, which rebuilt on an environment-variable change by itself. One
+command covers both, so the forgetful path is not reachable.
+
+Supabase is not defined in [compose.yaml](compose.yaml). The self-hosted stack
+has its own compose file maintained upstream, and vendoring a copy here would
+go stale silently; run it from its own directory and either join the two
+networks or point `VITE_SUPABASE_URL` at wherever Kong is published.
+
+### Render
+
+The repo also includes a [Render](https://render.com/) blueprint ([render.yaml](render.yaml)) that provisions a static site: it builds with `npm ci && npm run build`, publishes `dist/`, rewrites all routes to `index.html`, and sets long-lived cache headers on hashed assets.
 
 Two environments are deployed on Render:
 
