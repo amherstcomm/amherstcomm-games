@@ -233,7 +233,13 @@ command covers both, so the forgetful path is not reachable.
 Supabase is not defined in [compose.yaml](compose.yaml). The self-hosted stack
 has its own compose file maintained upstream, and vendoring a copy here would
 go stale silently; run it from its own directory and either join the two
-networks or point `VITE_SUPABASE_URL` at wherever Kong is published.
+networks or point `VITE_SUPABASE_URL` at wherever its gateway is published.
+
+[docs/selfhost.md](docs/selfhost.md) is the runbook for standing the whole
+thing up on an internal VM — which Supabase services are actually needed, and
+the two steps that fail *silently* when skipped (an unseeded `words` table
+empties every leaderboard; an unpublished `daily_puzzles` serves the upstream
+project's dailies instead of yours).
 
 ### Render
 
