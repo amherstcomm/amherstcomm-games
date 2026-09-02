@@ -42,3 +42,6 @@ scripts/words.csv
 e2e/.data/
 test-results/
 playwright-report/
+
+# Server-side secrets for the puzzle publish cron
+ops/publish.env

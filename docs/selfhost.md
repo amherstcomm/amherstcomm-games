@@ -353,6 +353,52 @@ table directly, so it is an optimisation, not a requirement.
 
 ---
 
+## Keeping the puzzle window fresh
+
+`daily_puzzles` holds a rolling fortnight, so it goes stale rather than
+breaking loudly. Something has to re-publish it.
+
+**Not GitHub Actions.** The database answers only on the internal network, and
+a hosted runner is not on it. A self-hosted runner would work, but its entire
+job would be to be inside a network the VM is already inside — and it is a
+persistent agent with repository access sitting on the box that holds the
+database. Cron on the VM is less machinery for the same result.
+
+```sh
+cp ops/publish.env.example ops/publish.env    # gitignored; fill it in
+./ops/publish-puzzles.sh                      # run once by hand first
+
+sudo cp ops/amherstcomm-games-puzzles.* /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now amherstcomm-games-puzzles.timer
+```
+
+Edit the paths and user in the `.service` file if the checkout is not at
+`/home/rtetzloff/git/amherstcomm-games`.
+
+`Persistent=true` on the timer matters more than the hour does: the VM being
+off at 03:15 would otherwise silently skip a night. Every run overwrites rather
+than appends — `publish-puzzles.mjs` sends
+`Prefer: resolution=merge-duplicates` — so a catch-up run repairs rather than
+duplicates.
+
+### The other workflows
+
+All four of the remaining ones were written for a public deployment and cannot
+reach this one:
+
+| workflow | internally |
+|---|---|
+| `daily-puzzle-data` | superseded by the timer above |
+| `rebuild-words` | run by hand; it changes rarely and deliberately |
+| `report-digest` | needs the database and an external mail provider — a judgement call for an internal tool |
+| `route-lastmod` | force-pushes a sitemap for a site that serves `Disallow: /` |
+
+Leaving Actions disabled on the fork is the honest state. Workflows that can
+only fail teach people to ignore failures.
+
+---
+
 ## What is still missing after Stage 4
 
 - **Required login.** Stage 5 makes SSO the only *offered* route; it does not

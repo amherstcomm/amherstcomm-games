@@ -1,0 +1,21 @@
+# Nightly, with a jitter so it is not competing with every other 03:15 job.
+#
+# Persistent=true matters more than the hour does: the VM being off or
+# rebooting at the wrong moment would otherwise silently skip a night, and the
+# window only runs fourteen days ahead. A missed run is caught up on the next
+# boot instead.
+#
+# Missing a night is survivable either way — the window is a fortnight deep and
+# every run overwrites rather than appends — but silence is exactly how the
+# feed would go stale without anyone noticing.
+
+[Unit]
+Description=Nightly daily-puzzle publish
+
+[Timer]
+OnCalendar=*-*-* 03:15:00
+RandomizedDelaySec=15m
+Persistent=true
+
+[Install]
+WantedBy=timers.target
