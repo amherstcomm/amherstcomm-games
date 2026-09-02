@@ -1,0 +1,48 @@
+# The app, built and served on the internal VM.
+#
+#   docker compose up -d --build
+#
+# One command because the values below are build args, not runtime env: Vite
+# compiles them into the bundle, so `--build` is what makes an edited .env
+# take effect. Restarting alone would serve the previous values.
+#
+# Compose reads `.env` beside this file automatically, and `.env` is already
+# gitignored. Copy .env.example to .env and fill it in.
+#
+# Supabase is not defined here. The self-hosted stack has its own compose file
+# (Postgres, PostgREST, GoTrue, Realtime, Kong, Studio) maintained upstream,
+# and vendoring a copy here would go stale silently. Run it from its own
+# directory and join the two with the external network below, or point
+# VITE_SUPABASE_URL at wherever Kong is published and drop the network stanza.
+
+services:
+  web:
+    build:
+      context: .
+      args:
+        # Compose passes these through from .env. They are compiled in, so a
+        # change to any of them requires --build, not restart.
+        VITE_SUPABASE_URL: ${VITE_SUPABASE_URL:-}
+        VITE_SUPABASE_ANON_KEY: ${VITE_SUPABASE_ANON_KEY:-}
+        VITE_GA_ID: ${VITE_GA_ID:-}
+        # No default here on purpose. Compose errors on an unset variable with
+        # this syntax, which is the right outcome: the Dockerfile's fallback
+        # keeps a hand-run `docker build` safe, and this keeps a compose
+        # deploy from quietly shipping localhost as its origin.
+        VITE_SITE_ORIGIN: ${VITE_SITE_ORIGIN:?set VITE_SITE_ORIGIN in .env — see .env.example}
+    image: amherstcomm-games:local
+    restart: unless-stopped
+    ports:
+      # Host-side port only; put TLS on a reverse proxy in front rather than
+      # in this container. Staff reach it over the VPN.
+      - "${WEB_PORT:-8080}:80"
+
+# Uncomment to put this container on the Supabase stack's own network, so the
+# two can reach each other by service name rather than only through the host.
+# Leave it commented if Supabase publishes its ports on the host — the browser
+# is the client that matters here, and it reaches Kong over the VPN either way.
+#
+# networks:
+#   default:
+#     name: supabase_default
+#     external: true

@@ -1,0 +1,29 @@
+# Keep the build context small and hermetic. node_modules especially: it holds
+# platform-native binaries built for the host, and copying it in would either
+# be shadowed by `npm ci` or break the build outright on an arch mismatch.
+node_modules
+dist
+dist-ssr
+
+.git
+.github
+.vite
+
+# Never let a real environment file reach a layer. Everything the build needs
+# arrives as a build arg.
+.env
+.env.*
+!.env.example
+
+# Test and tooling surface that the built artifact does not need.
+e2e
+tests
+playwright-report
+test-results
+coverage
+scripts/scowl
+
+*.log
+.DS_Store
+.claude
+.bolt
