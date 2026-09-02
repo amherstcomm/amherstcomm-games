@@ -1959,6 +1959,96 @@ create table if not exists public.owners (
 alter table public.owners enable row level security;
 revoke all on public.owners from public, anon, authenticated;
 
+-- The three privileges, as Zitadel names them: view plays, edit sets games up
+-- and sees winners, admin does everything including acting on other people.
+--
+-- Deliberately *not* read out of the token. GoTrue writes SAML attributes into
+-- raw_user_meta_data — `userProvidedData.Metadata = providerClaims`, in
+-- samlacs.go — and user_metadata is writable by the very user it describes:
+--
+--   await supabase.auth.updateUser({ data: { roles: ['games.admin'] } })
+--
+-- A policy reading that claim would hand admin to anyone who opens a console.
+-- So the role in the token is a hint the interface may use to decide what to
+-- draw, and this table is the authority every decision that matters reads.
+-- It is written by hand or by a service credential — never by the session it
+-- grants privilege to.
+--
+-- games.view is not expected to appear here. Zitadel grants the application to
+-- holders of one of the three roles, so reaching the site at all already
+-- proves it, enforced where a browser cannot reach. Rows exist for the two
+-- that raise privilege above the floor.
+create table if not exists public.role_grants (
+  user_id uuid not null references auth.users (id) on delete cascade,
+  role text not null check (role in ('games.view', 'games.edit', 'games.admin')),
+  granted_at timestamptz not null default now(),
+  primary key (user_id, role)
+);
+alter table public.role_grants enable row level security;
+revoke all on public.role_grants from public, anon, authenticated;
+
+-- Rank, so holding one privilege implies everything below it. An admin should
+-- not need three rows to see what an editor sees, and Zitadel should not have
+-- to grant three roles to one person for the obvious thing to happen.
+create or replace function public.role_rank(p_role text)
+returns int
+language sql
+immutable
+as $fn$
+  select case p_role
+    when 'games.view' then 1
+    when 'games.edit' then 2
+    when 'games.admin' then 3
+    else 0
+  end
+$fn$;
+
+-- Does the caller hold this privilege, or one above it?
+--
+-- The `> 0` guard is the entire reason rank is a function rather than an
+-- inline case expression. An unrecognised argument ranks 0, and without the
+-- guard every real grant would out-rank it — so has_role('gaems.admin') would
+-- return true for everybody, and a typo in a policy would open the thing that
+-- policy was written to close.
+create or replace function public.has_role(p_role text)
+returns boolean
+language sql
+stable
+security definer
+set search_path = ''
+as $fn$
+  select public.role_rank(p_role) > 0
+     and exists (
+       select 1 from public.role_grants g
+       where g.user_id = (select auth.uid())
+         and public.role_rank(g.role) >= public.role_rank(p_role)
+     )
+$fn$;
+
+revoke all on function public.has_role(text) from public, anon;
+grant execute on function public.has_role(text) to authenticated;
+
+-- What the interface asks so it knows what to draw. The caller's own roles,
+-- names only, and never anyone else's — who the admins are is not a thing a
+-- player needs to be able to list.
+create or replace function public.my_roles()
+returns text[]
+language sql
+stable
+security definer
+set search_path = ''
+as $fn$
+  select coalesce(array_agg(g.role order by public.role_rank(g.role) desc), '{}')
+  from public.role_grants g
+  where g.user_id = (select auth.uid())
+$fn$;
+
+revoke all on function public.my_roles() from public, anon;
+grant execute on function public.my_roles() to authenticated;
+
+-- Widened rather than replaced: `owners` predates the roles and still works,
+-- so the four existing call sites and the whole report queue keep their
+-- meaning. games.admin is the same authority arriving by a different door.
 create or replace function public.is_owner()
 returns boolean
 language sql
@@ -1967,10 +2057,161 @@ security definer
 set search_path = ''
 as $fn$
   select exists (select 1 from public.owners o where o.user_id = (select auth.uid()))
+      or public.has_role('games.admin')
 $fn$;
 
 revoke all on function public.is_owner() from public, anon;
 grant execute on function public.is_owner() to authenticated;
+
+-- What each privilege actually unlocks, as data rather than as code.
+--
+-- The alternative was a rank written into every gate — is_owner() here,
+-- has_role('games.edit') there — which works right up until somebody decides
+-- editors should see the report queue after all, and then it is a schema
+-- change, a deploy, and a conversation about who can do that. A row is a
+-- better answer to a question whose answer is going to move.
+--
+-- Rows are seeded, not created by the app: a capability that exists only
+-- because somebody typed it into a form is a capability no gate reads.
+create table if not exists public.capabilities (
+  capability text primary key,
+  min_role text not null check (min_role in ('games.view', 'games.edit', 'games.admin')),
+  description text not null
+);
+alter table public.capabilities enable row level security;
+revoke all on public.capabilities from public, anon, authenticated;
+
+-- The starting map. `on conflict do nothing`, so re-running this file never
+-- overwrites a decision somebody made in the portal — the seed is where a
+-- capability comes from, not what it must stay.
+insert into public.capabilities (capability, min_role, description) values
+  ('games.play',         'games.view',  'Play the games and appear on the leaderboard'),
+  ('winners.view',       'games.edit',  'See who won, across everyone'),
+  ('games.setup',        'games.edit',  'Set up games, sessions and puzzle content'),
+  ('reports.read',       'games.admin', 'Read the abuse report queue'),
+  ('reports.act',        'games.admin', 'Act on a report — dismiss, blocklist, ban'),
+  ('users.manage',       'games.admin', 'Grant and revoke privileges'),
+  ('permissions.manage', 'games.admin', 'Change what each privilege unlocks')
+on conflict (capability) do nothing;
+
+-- permissions.manage cannot be handed below admin.
+--
+-- Not paternalism about what an admin may decide — it is the one row that
+-- decides who may edit the rows. Lower it to games.view and every signed-in
+-- player can rewrite the whole map, including locking admins out of it. That
+-- is a one-way door reachable by a single dropdown, so it is closed here
+-- rather than in the interface, where it would only be closed for people
+-- using the interface.
+create or replace function public.capabilities_guard()
+returns trigger
+language plpgsql
+set search_path = ''
+as $fn$
+begin
+  if new.capability = 'permissions.manage' and public.role_rank(new.min_role) < 3 then
+    raise exception 'permissions.manage cannot be set below games.admin';
+  end if;
+  return new;
+end;
+$fn$;
+
+drop trigger if exists capabilities_guard on public.capabilities;
+create trigger capabilities_guard
+  before insert or update on public.capabilities
+  for each row execute function public.capabilities_guard();
+
+-- May the caller do this?
+--
+-- An unknown capability is false, and deliberately so. The tempting version
+-- returns true when no row constrains the action — "nothing forbids it" — and
+-- that turns every typo in a gate, and every capability someone forgot to
+-- seed, into an open door. Absent means no, and a gate that is silently
+-- always-false is a bug someone reports; a gate that is silently always-true
+-- is a bug nobody sees.
+create or replace function public.can(p_capability text)
+returns boolean
+language sql
+stable
+security definer
+set search_path = ''
+as $fn$
+  select coalesce(
+    (select public.has_role(c.min_role)
+     from public.capabilities c
+     where c.capability = p_capability),
+    false
+  )
+$fn$;
+
+revoke all on function public.can(text) from public, anon;
+grant execute on function public.can(text) to authenticated;
+
+-- Everything the caller may do, so the interface asks once rather than per
+-- button. Names only — the map itself is admin-visible, not player-visible.
+create or replace function public.my_capabilities()
+returns text[]
+language sql
+stable
+security definer
+set search_path = ''
+as $fn$
+  select coalesce(array_agg(c.capability order by c.capability), '{}')
+  from public.capabilities c
+  where public.has_role(c.min_role)
+$fn$;
+
+revoke all on function public.my_capabilities() from public, anon;
+grant execute on function public.my_capabilities() to authenticated;
+
+-- The whole map, for the portal that edits it. Gated on reading permissions
+-- rather than on being an admin, so the gate moves with the map.
+create or replace function public.capability_map()
+returns table (capability text, min_role text, description text)
+language sql
+stable
+security definer
+set search_path = ''
+as $fn$
+  select c.capability, c.min_role, c.description
+  from public.capabilities c
+  where public.can('permissions.manage')
+  order by c.capability
+$fn$;
+
+revoke all on function public.capability_map() from public, anon;
+grant execute on function public.capability_map() to authenticated;
+
+-- Change what a privilege unlocks. Existing rows only: the set of capabilities
+-- is decided by what the code actually gates, so inventing one here would
+-- produce a row no gate reads and a promise nothing keeps.
+create or replace function public.set_capability(p_capability text, p_min_role text)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $fn$
+begin
+  if not public.can('permissions.manage') then
+    return jsonb_build_object('ok', false, 'reason', 'not allowed');
+  end if;
+  if public.role_rank(p_min_role) = 0 then
+    return jsonb_build_object('ok', false, 'reason', 'no such role');
+  end if;
+
+  update public.capabilities set min_role = p_min_role where capability = p_capability;
+  if not found then
+    return jsonb_build_object('ok', false, 'reason', 'no such capability');
+  end if;
+
+  return jsonb_build_object('ok', true, 'capability', p_capability, 'min_role', p_min_role);
+exception when others then
+  -- the guard trigger, most likely
+  return jsonb_build_object('ok', false, 'reason', sqlerrm);
+end;
+$fn$;
+
+revoke all on function public.set_capability(text, text) from public, anon;
+grant execute on function public.set_capability(text, text) to authenticated;
 
 create table if not exists public.reports (
   id uuid primary key default gen_random_uuid(),
