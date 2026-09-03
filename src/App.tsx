@@ -569,6 +569,13 @@ function App() {
   const [learnMode, setLearnMode] = useState(entryGame()?.view === 'learn');
   const [theme, setTheme] = useState<ThemeMode>(initial.theme);
   const [palette, setPalette] = useState<Palette>(initial.palette);
+  // Recorded so the one-time move onto the company palette can tell "never
+  // chose" from "chose Default". Set by the picker, never by the migration.
+  const [paletteChosen, setPaletteChosen] = useState<boolean>(initial.paletteChosen);
+  const choosePalette = (next: Palette) => {
+    setPaletteChosen(true);
+    setPalette(next);
+  };
   const [navKeys, setNavKeys] = useState<NavKeys>(initial.navKeys);
   const [textScale, setTextScale] = useState<TextScale>(initial.textScale);
   const [hiddenModes, setHiddenModes] = useState<Mode[]>(initial.hiddenModes);
@@ -667,7 +674,10 @@ function App() {
         }
       | null;
     if (s?.theme && THEME_MODES.includes(s.theme)) setTheme(s.theme);
-    if (s?.palette && PALETTES.includes(s.palette)) setPalette(s.palette);
+    // A palette arriving from the account is somebody's deliberate choice made
+    // on another device, so it counts as chosen — otherwise signing in on a
+    // fresh browser would migrate a saved 'default' away from under them.
+    if (s?.palette && PALETTES.includes(s.palette)) choosePalette(s.palette);
     if (s?.navKeys === 'numpad' || s?.navKeys === 'wasd') setNavKeys(s.navKeys);
     if (s?.textScale && TEXT_SCALES.includes(s.textScale)) setTextScale(s.textScale);
     if (Array.isArray(s?.hiddenModes)) setHiddenModes(s.hiddenModes.filter((m) => ALL_MODES.includes(m)));
@@ -1013,6 +1023,7 @@ function App() {
       mode,
       dictionaries,
       sort: sorts,
+      paletteChosen,
       keyboard: kbOpen,
       theme,
       palette,
@@ -2466,7 +2477,7 @@ function App() {
           solverDictionary={solverDictionary}
           signedIn={!!session}
           onTheme={setTheme}
-          onPalette={setPalette}
+          onPalette={choosePalette}
           onNavKeys={setNavKeys}
           onTextScale={setTextScale}
           onToggleMode={(m) =>
