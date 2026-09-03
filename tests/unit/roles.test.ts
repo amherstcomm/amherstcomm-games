@@ -116,13 +116,37 @@ describe('capabilities', () => {
     expect(row?.minRole).toBe('games.admin');
   });
 
-  it('guards permissions.manage in the database, not just in the seed', () => {
-    // A seed value is a starting point; the trigger is what stops the one row
-    // that decides who may edit the rows from being handed to everybody.
-    const fn = schema.slice(schema.indexOf('function public.capabilities_guard'));
-    expect(fn).toContain("new.capability = 'permissions.manage'");
-    expect(fn).toContain('public.role_rank(new.min_role) < 3');
+  it('guards both floor rows in the database, not just in the seed', () => {
+    // A seed value is a starting point; the trigger is what stops the two rows
+    // that decide who may edit the rows, and who may hand out the privileges
+    // the rows are keyed on, from being handed to everybody. Guarding only the
+    // first was an omission: lower users.manage and any player can grant
+    // themselves games.admin, which is_owner() also satisfies.
+    const fn = schema.slice(
+      schema.indexOf('function public.capabilities_guard'),
+      schema.indexOf('create trigger capabilities_guard')
+    );
+    expect(fn).toContain("'permissions.manage'");
+    expect(fn).toContain("'users.manage'");
+    // by rank, not by the literal 3 — correct today, silently wrong the day
+    // the ladder gains a tier
+    expect(fn).toContain("public.role_rank('games.admin')");
+    expect(fn).not.toMatch(/role_rank\(new\.min_role\) < 3\b/);
     expect(schema).toContain('create trigger capabilities_guard');
+  });
+
+  it('lets a session alone satisfy the floor, so games.play is not denied to everyone', () => {
+    // games.view is never granted a row — Zitadel granting the application is
+    // what proves it. Reading the floor out of role_grants like the tiers
+    // above it made can('games.play') true only for admins and editors, which
+    // is the inverse of what it describes. Fails closed, so it was a lockout
+    // waiting for the first gate rather than a way in.
+    const fn = schema.slice(
+      schema.indexOf('function public.has_role'),
+      schema.indexOf('function public.my_roles')
+    );
+    expect(fn).toContain('public.role_rank(p_role) = 1');
+    expect(fn).toContain('auth.uid()) is not null');
   });
 
   it('fails closed on a capability with no row', () => {

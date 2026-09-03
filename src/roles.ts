@@ -34,8 +34,18 @@ export function rank(role: string): number {
   return i < 0 ? 0 : i + 1;
 }
 
-/** Does a held set satisfy a requirement? Holding one privilege implies every
- *  privilege below it, so an admin needs no separate editor grant.
+/** Does a held *set of grants* satisfy a requirement?
+ *
+ *  Grants, not privileges — the two differ at the bottom of the ladder.
+ *  games.view is never granted a row, because Zitadel granting the application
+ *  is what proves it, so `atLeast([], 'games.view')` is false here while
+ *  has_role('games.view') is true in Postgres for any session. That is not a
+ *  disagreement to fix by mirroring the floor: a gate should ask what someone
+ *  may *do* — `allows(capabilities, 'games.play')` — rather than what tier
+ *  they were filed under. This function is for reasoning about grants.
+ *
+ *  Holding one privilege implies every privilege below it, so an admin needs
+ *  no separate editor grant.
  *
  *  An unrecognised requirement is never satisfied. The naive version — compare
  *  the highest held rank against the required rank — says yes to everybody
