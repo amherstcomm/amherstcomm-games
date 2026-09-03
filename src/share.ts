@@ -2,6 +2,7 @@
 // answers — blocks and counts only, never letters or words. The emoji follow
 // the sharer's palette, so what they post matches what they saw.
 import type { Palette } from '@/theme';
+import { SITE_NAME } from '@/brand';
 import { SITE, SLUG_NAME, gameUrl, type Slug } from '@/routes';
 
 export type TileKind = 'correct' | 'present' | 'absent';
@@ -51,9 +52,11 @@ type ShareOpts = {
   body: string[];
 };
 
-// "Anagrimoire Weave · 2026-08-03" for a daily, "· Practice" otherwise
+// "Amherst Games Weave · 2026-08-03" for a daily, "· Practice" otherwise.
+// The name is here rather than hardcoded because this string is the one that
+// leaves the site — it lands in whatever someone pastes their result into.
 export function resultTitle(game: string, daily: boolean, date?: string | null): string {
-  return `Anagrimoire ${game} · ${daily && date ? date : 'Practice'}`;
+  return `${SITE_NAME} ${game} · ${daily && date ? date : 'Practice'}`;
 }
 
 export function buildShare({ game, slug, daily, date, body }: ShareOpts): SharePayload {

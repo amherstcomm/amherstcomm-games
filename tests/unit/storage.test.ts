@@ -35,6 +35,51 @@ describe('asDifficulty', () => {
   });
 });
 
+describe('the palette moves onto the brand, once', () => {
+  // Changing DEFAULT_STATE governs a first visit and nothing else, so every
+  // person who had already loaded the site kept the pre-rebrand colours and
+  // the rebrand appeared not to have happened. That is how it was reported.
+  //
+  // The rule has two halves and the second is the one that would be rude:
+  // move a 'default' nobody chose, and never touch a palette anybody picked —
+  // including Default picked on purpose.
+  it('moves a never-chosen default onto the company palette', async () => {
+    localStorage.setItem('anagrimoire:v1', JSON.stringify({ palette: 'default' }));
+    const m = await fresh();
+    expect(m.loadState().palette).toBe('amherst');
+  });
+
+  it('leaves Default alone once it has been chosen on purpose', async () => {
+    localStorage.setItem(
+      'anagrimoire:v1',
+      JSON.stringify({ palette: 'default', paletteChosen: true })
+    );
+    const m = await fresh();
+    expect(m.loadState().palette).toBe('default');
+  });
+
+  it('never touches any other palette, chosen or not', async () => {
+    for (const palette of ['mono', 'deuter', 'ocean', 'garnet']) {
+      localStorage.setItem('anagrimoire:v1', JSON.stringify({ palette }));
+      const m = await fresh();
+      expect(m.loadState().palette).toBe(palette);
+    }
+  });
+
+  it('still renames the old cvd palette rather than migrating it', async () => {
+    localStorage.setItem('anagrimoire:v1', JSON.stringify({ palette: 'cvd' }));
+    const m = await fresh();
+    expect(m.loadState().palette).toBe('deuter');
+  });
+
+  it('gives a blank browser the company palette without claiming it was chosen', async () => {
+    const m = await fresh();
+    const s = m.loadState();
+    expect(s.palette).toBe('amherst');
+    expect(s.paletteChosen).toBe(false);
+  });
+});
+
 describe('loadState', () => {
   it('returns defaults for a blank browser', async () => {
     const m = await fresh();

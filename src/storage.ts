@@ -110,6 +110,9 @@ export type PersistedState = {
   keyboard: boolean;
   theme: ThemeMode;
   palette: Palette;
+  /** Set the first time anyone picks a palette, so the one-time move onto the
+   *  company palette can tell "never chose" from "chose Default". */
+  paletteChosen: boolean;
   textScale: TextScale;
   navKeys: NavKeys;
   hiddenModes: Mode[];
@@ -191,6 +194,7 @@ export const DEFAULT_STATE: PersistedState = {
   // sees unless they go looking for it is not a brand — and the accessibility
   // palettes stay one click away, which is where they were anyway.
   palette: 'amherst',
+  paletteChosen: false,
   textScale: 'normal',
   navKeys: 'numpad',
   hiddenModes: [],
@@ -248,6 +252,23 @@ function sanitizeHidden<T extends string>(value: unknown, all: T[]): T[] {
 
 function clampInt(v: unknown, min: number, max: number, fallback: number): number {
   return typeof v === 'number' && Number.isInteger(v) && v >= min && v <= max ? v : fallback;
+}
+
+/** The stored palette, moving a never-chosen 'default' onto the company one.
+ *
+ *  Runs once per browser: `paletteChosen` is written the moment the picker is
+ *  used, so this can never overwrite a deliberate choice — including a
+ *  deliberate choice of Default. It exists because DEFAULT_STATE only governs
+ *  a first visit, and everyone who had already opened the site therefore kept
+ *  the pre-rebrand colours. */
+function migratePalette(p: Record<string, unknown> | undefined): Palette {
+  const saved = (p as { palette?: unknown } | undefined)?.palette;
+  if (saved === 'cvd') return 'deuter';
+  if (!PALETTES.includes(saved as Palette)) return DEFAULT_STATE.palette;
+  if (saved === 'default' && (p as { paletteChosen?: unknown } | undefined)?.paletteChosen !== true) {
+    return 'amherst';
+  }
+  return saved as Palette;
 }
 
 export function loadState(): PersistedState {
@@ -345,8 +366,19 @@ export function loadState(): PersistedState {
       // it and quietly resetting to default — a setting that could be chosen,
       // saved, and then lost on the next load.
       theme: THEME_MODES.includes(p?.theme) ? p.theme : 'system',
-      // 'cvd' was the original name for the red-green palette
-      palette: p?.palette === 'cvd' ? 'deuter' : PALETTES.includes(p?.palette) ? p.palette : 'default',
+      // 'cvd' was the original name for the red-green palette.
+      //
+      // 'default' moves to the company palette once, and only for someone who
+      // has never opened the picker. Changing DEFAULT_STATE governs a first
+      // visit and nothing else, so without this every person who had already
+      // loaded the site kept the old colours and the rebrand appeared not to
+      // have happened — which is exactly how it was reported.
+      //
+      // `paletteChosen` is what stops it being rude: the moment anyone picks a
+      // palette, including picking Default on purpose, the flag is set and
+      // this never touches their choice again.
+      palette: migratePalette(p),
+      paletteChosen: p?.paletteChosen === true,
       textScale: TEXT_SCALES.includes(p?.textScale) ? p.textScale : 'normal',
       navKeys: p?.navKeys === 'wasd' ? 'wasd' : 'numpad',
       hiddenModes: sanitizeHidden(p?.hiddenModes, ALL_MODES),

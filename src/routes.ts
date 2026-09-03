@@ -14,6 +14,7 @@
 // Render rewrites every path to index.html, so these are ordinary URLs: they
 // survive a refresh, they can be typed, and they mean the same thing tomorrow.
 
+import { SITE_NAME } from '@/brand';
 import { ALL_VIEWS, MODE_SLUG, modeOf, SLUG_MODE, SLUG_NAME } from '@/games';
 import type { Slug, View } from '@/games';
 
@@ -122,10 +123,14 @@ const VIEW_WORD: Record<View, string> = { solve: 'Solver', play: 'Play', learn: 
  *  returning one title makes 33 sitemap entries look like 33 copies of the
  *  same page. */
 export function titleOf(route: Route): string {
-  const suffix = ' · Anagrimoire';
+  // The tab title is set here on every route change, which means it overrides
+  // the one index.html ships with. Renaming the static title alone left the
+  // site introducing itself correctly for a few milliseconds and then calling
+  // itself something else for the rest of the visit.
+  const suffix = ` · ${SITE_NAME}`;
   switch (route.kind) {
     case 'home':
-      return 'Anagrimoire — word game solvers and daily puzzles';
+      return SITE_NAME;
     case 'game': {
       const name = SLUG_NAME[route.slug];
       if (route.view === 'play') return `${name} — ${route.daily ? 'Daily' : 'Practice'}${suffix}`;
