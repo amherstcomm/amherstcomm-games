@@ -44,6 +44,21 @@ export const PALETTES: Palette[] = [
 /** the ones that exist for colour vision, as opposed to for looks */
 export const ACCESSIBLE_PALETTES: Palette[] = ['default', 'deuter', 'tritan', 'mono'];
 
+/** The palette that dresses this deployment as its company, and the one class
+ *  allowed to move the hues that carry meaning.
+ *
+ *  Decorative palettes may not, and the reason is in tests/unit/palettes.test.ts:
+ *  Ocean set amber to a teal because it suited the mood, and Weave paints its
+ *  spangram amber and its theme words sky — so on a pale blue page the two
+ *  became one colour and the board stopped saying which words had been found.
+ *
+ *  A brand palette has a reason a mood does not: this is the whole site's
+ *  identity, not one of eleven looks, and green-and-yellow on navy is not what
+ *  the company looks like. The licence is narrow, and it is paid for — the
+ *  distinctions those hues carry are asserted separately, because "may change
+ *  them" must not become "may collapse them". */
+export const BRAND_PALETTES: Palette[] = ['amherst'];
+
 /** What to call a colour in copy, per palette — and, for one of them, per
  *  theme as well.
  *
@@ -97,7 +112,12 @@ const BASE_WORDS: Record<Palette, ColorWords> = {
   graphite: { right: 'green', wrong: 'amber', span: 'gold', theme: 'blue', key: 'amber' },
   ember: { right: 'green', wrong: 'amber', span: 'gold', theme: 'blue', key: 'amber' },
   garnet: { right: 'green', wrong: 'amber', span: 'gold', theme: 'blue', key: 'amber' },
-  amherst: { right: 'green', wrong: 'amber', span: 'gold', theme: 'blue', key: 'amber' },
+  // The one decorative-looking palette that is not: it moves emerald to teal
+  // and amber to orange, so the words have to move with them. Learn mode says
+  // "green is the right letter, amber is a letter placed wrong" in prose, and
+  // that sentence reads perfectly well while describing tiles of a different
+  // colour — which is the entire reason this table exists.
+  amherst: { right: 'teal', wrong: 'orange', span: 'orange', theme: 'blue', key: 'orange' },
 };
 
 /** Monochrome on a light page, where every lightness above is upside down. */
@@ -144,7 +164,8 @@ export const PALETTE_SWATCHES: Record<Palette, string[]> = {
   ember: ['240 150 118', '188 166 158', '86 55 46', '43 25 21'],
   garnet: ['255 196 205', '188 162 168', '88 43 51', '44 20 25'],
   // accent, then the ramp: the brand sky over three depths of the brand navy
-  amherst: ['156 195 223', '166 176 206', '46 58 118', '20 26 62'],
+  // accent, found, present, and the navy the room is made of
+  amherst: ['156 195 223', '45 212 191', '251 146 60', '20 26 62'],
 };
 export const TEXT_SCALES: TextScale[] = ['normal', 'large', 'larger'];
 export const TEXT_SCALE_PCT: Record<TextScale, string> = {

@@ -726,6 +726,39 @@
   --c-ink: 10 14 40;
   --c-focus: 156 195 223;
   --c-accent: 156 195 223;
+
+  /* The one class of palette allowed to move the hues that carry meaning, and
+   * the reason it is allowed: mint green and lemon amber are not what this
+   * company looks like on navy. Emerald becomes teal and amber becomes a
+   * warmer gold — both shifted along their own hue, neither swapped for the
+   * other's.
+   *
+   * The distinction each pair has to keep is asserted, not assumed. Found
+   * against present is the one a player reads every turn; the spangram
+   * against a theme word is the one Ocean broke. Warm against cool survives
+   * both shifts, which is why they move in the directions they do rather than
+   * toward each other. */
+  --c-emerald-100: 204 251 241;
+  --c-emerald-200: 153 246 228;
+  --c-emerald-300: 94 234 212;
+  --c-emerald-400: 45 212 191;
+  --c-emerald-500: 20 184 166;
+
+  --c-amber-100: 255 237 213;
+  --c-amber-200: 254 215 170;
+  --c-amber-300: 253 186 116;
+  --c-amber-400: 251 146 60;
+  --c-amber-500: 234 110 20;
+
+  /* These are copies of the two hues above rather than references to them —
+   * success repeats emerald-400, span and chord-5 repeat amber-400, chord-4
+   * repeats emerald-400. Moving the ramps without moving these would put two
+   * different greens and two different golds on the same board, which is the
+   * kind of wrong that looks like a rendering bug rather than a decision. */
+  --c-success: 45 212 191;
+  --span: 251 146 60;
+  --chord-4: 45 212 191;
+  --chord-5: 251 146 60;
 }
 
 /* By day the ground inverts to a paper that still carries the hue, and the
@@ -746,6 +779,31 @@
   --c-white: 25 29 92;
   --c-focus: 25 29 92;
   --c-accent: 25 29 92;
+
+  /* By day these tiers invert: 100-300 are ink on a pale ground rather than
+   * fills on a dark one, so they go dark. amber-400 has to be restated here
+   * even though the block above sets it — both selectors are one attribute on
+   * :root, so specificity ties and the later block wins, which would leave a
+   * pale gold as text on white. */
+  --c-emerald-100: 4 71 68;
+  --c-emerald-200: 4 71 68;
+  --c-emerald-300: 6 88 82;
+
+  --c-amber-100: 124 45 18;
+  --c-amber-200: 124 45 18;
+  --c-amber-300: 138 52 14;
+  /* This fill carries dark ink, so it is bounded from both sides: light enough
+   * for ink at 4.5:1, dark enough to read as an edge against the page at 3:1.
+   * 186 88 12 was the first try and axe measured it at 4.05 — the band is
+   * narrower for orange than it was for the amber this replaced, because
+   * orange is darker at the same saturation. */
+  --c-amber-400: 204 102 18;
+
+  /* the same copies, in their light-theme depths */
+  --c-success: 6 88 82;
+  --span: 180 84 10;
+  --chord-4: 6 100 94;
+  --chord-5: 180 84 10;
 }
 
 /* keep overscroll and the area behind the app in the active theme */

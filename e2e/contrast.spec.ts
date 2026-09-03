@@ -31,7 +31,14 @@ for (const palette of PALETTES) {
       // combination rather than rendering twice
       await page.addInitScript(
         ([t, p]) => {
-          localStorage.setItem('anagrimoire:v1', JSON.stringify({ theme: t, palette: p }));
+          // paletteChosen, because this is a person who picked one. Without it
+          // a seeded 'default' is a never-chosen default, which loadState
+          // migrates onto the company palette — so the sweep would render
+          // amherst while claiming to be testing default, and pass.
+          localStorage.setItem(
+            'anagrimoire:v1',
+            JSON.stringify({ theme: t, palette: p, paletteChosen: true })
+          );
         },
         [theme, palette] as const
       );
