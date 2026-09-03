@@ -3328,3 +3328,308 @@ $fn$;
 
 revoke all on function public.advance_session(uuid, text, uuid) from public, anon;
 grant execute on function public.advance_session(uuid, text, uuid) to authenticated;
+
+-- ---------------------------------------------------------------------------
+-- Authoring a session
+--
+-- Writing goes through functions rather than grants on the tables, for the same
+-- reason reading does: the answer lives in item_answers, which no web role can
+-- touch, so the only way to set one is a function that checks who is asking
+-- first. A grant broad enough to let an editor write an answer would be broad
+-- enough to let a participant read one.
+--
+-- An item that has already been shown cannot be edited. Not tidiness — a
+-- question people have answered is a question whose answers mean something, and
+-- quietly changing its wording or its correct option rewrites what those
+-- answers were. Delete it and add another if it was wrong; that at least leaves
+-- the responses attached to the thing that was actually asked.
+-- ---------------------------------------------------------------------------
+
+-- The column the sessions table has described since it was written and never
+-- had. The comment there said the choice would be "stored from the first
+-- session rather than retrofitted onto one", which was true of the intent and
+-- false of the schema: `create table if not exists` cannot add a column to the
+-- table already standing on the VM, so it has to arrive as an alter either way.
+-- Still nothing reads it — answering is limited to the open item, which is
+-- 'strict' by accident — but authoring can now set it, so the value is real.
+alter table public.sessions add column if not exists late_join text not null
+  default 'strict' check (late_join in ('strict', 'open'));
+
+-- The sessions this person may run, newest first. Empty rather than an error
+-- for everyone else, which is the shape owner_reports() already uses: a list
+-- that refuses is a list every caller has to special-case.
+--
+-- Every session, not only your own, because hosts_session() already lets anyone
+-- with games.setup open and edit any of them. Listing less than that would hide
+-- sessions the person can still reach by address, which is the worst of both —
+-- no privacy gained, and a screen that disagrees with what the buttons on it
+-- will do. If editors should only see their own, hosts_session is the place to
+-- say so and this follows it.
+create or replace function public.my_sessions()
+returns jsonb
+language sql
+stable
+security definer
+set search_path = ''
+as $fn$
+  select coalesce(
+    (select jsonb_agg(jsonb_build_object(
+       'id', s.id, 'title', s.title, 'state', s.state, 'late_join', s.late_join,
+       'items', (select count(*) from public.items i where i.session_id = s.id),
+       'created_at', s.created_at
+     ) order by s.created_at desc)
+     from public.sessions s
+     where public.can('games.setup')),
+    '[]'::jsonb)
+$fn$;
+
+revoke all on function public.my_sessions() from public, anon;
+grant execute on function public.my_sessions() to authenticated;
+
+create or replace function public.create_session(p_title text, p_late_join text default 'strict')
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $fn$
+declare new_id uuid;
+begin
+  if not public.can('games.setup') then
+    return jsonb_build_object('ok', false, 'reason', 'not allowed');
+  end if;
+  if coalesce(btrim(p_title), '') = '' then
+    return jsonb_build_object('ok', false, 'reason', 'a session needs a name');
+  end if;
+  insert into public.sessions (title, host, late_join)
+  values (left(btrim(p_title), 120), (select auth.uid()),
+          case when p_late_join = 'open' then 'open' else 'strict' end)
+  returning id into new_id;
+  return jsonb_build_object('ok', true, 'id', new_id);
+end;
+$fn$;
+
+revoke all on function public.create_session(text, text) from public, anon;
+grant execute on function public.create_session(text, text) to authenticated;
+
+-- The whole session as its author sees it: every item including the ones not
+-- yet shown, and the answers. Gated on hosting, which is what makes it safe to
+-- return the thing current_item() spends its length withholding. `kinds` comes
+-- back with it because item_kinds is a table and the authoring screen has to
+-- offer whatever is in it rather than a list compiled into the bundle.
+create or replace function public.session_sheet(p_session uuid)
+returns jsonb
+language sql
+stable
+security definer
+set search_path = ''
+as $fn$
+  select case
+    when not public.hosts_session(p_session)
+      then jsonb_build_object('ok', false, 'reason', 'not allowed')
+    else jsonb_build_object(
+      'ok', true,
+      'session', (select jsonb_build_object(
+                    'id', s.id, 'title', s.title, 'state', s.state,
+                    'late_join', s.late_join, 'current_item', s.current_item)
+                  from public.sessions s where s.id = p_session),
+      'kinds', (select jsonb_agg(jsonb_build_object(
+                  'kind', k.kind, 'description', k.description, 'scored', k.scored)
+                  order by k.kind)
+                from public.item_kinds k),
+      'items', coalesce(
+        (select jsonb_agg(jsonb_build_object(
+           'id', i.id, 'position', i.position, 'kind', i.kind, 'prompt', i.prompt,
+           'payload', i.payload, 'state', i.state,
+           'answer', (select a.answer from public.item_answers a where a.item_id = i.id),
+           'responses', (select count(*) from public.responses r where r.item_id = i.id)
+         ) order by i.position)
+         from public.items i where i.session_id = p_session),
+        '[]'::jsonb)
+    )
+  end
+$fn$;
+
+revoke all on function public.session_sheet(uuid) from public, anon;
+grant execute on function public.session_sheet(uuid) to authenticated;
+
+-- Create or update one item, answer included. One function rather than two
+-- because the answer has to be written in the same breath as the item that
+-- owns it: a save that stored the question and then failed to store its answer
+-- would leave a scored question with nothing to score against, and the room
+-- would not find out until the reveal.
+create or replace function public.save_item(
+  p_session uuid,
+  p_item uuid,
+  p_kind text,
+  p_prompt text,
+  p_payload jsonb default '{}'::jsonb,
+  p_answer jsonb default null
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $fn$
+declare
+  target uuid;
+  prior_state text;
+  is_scored boolean;
+begin
+  if not public.hosts_session(p_session) then
+    return jsonb_build_object('ok', false, 'reason', 'not allowed');
+  end if;
+  select k.scored into is_scored from public.item_kinds k where k.kind = p_kind;
+  if is_scored is null then
+    return jsonb_build_object('ok', false, 'reason', 'no such kind of question');
+  end if;
+  if coalesce(btrim(p_prompt), '') = '' then
+    return jsonb_build_object('ok', false, 'reason', 'a question needs to say something');
+  end if;
+
+  if p_item is not null then
+    select i.state into prior_state
+    from public.items i where i.id = p_item and i.session_id = p_session;
+    if prior_state is null then
+      return jsonb_build_object('ok', false, 'reason', 'no such question in this session');
+    end if;
+    -- see the note at the top of this section
+    if prior_state <> 'pending' then
+      return jsonb_build_object('ok', false, 'reason',
+        'this one has already been shown - delete it and add another instead');
+    end if;
+    update public.items
+      set kind = p_kind,
+          prompt = left(btrim(p_prompt), 500),
+          payload = coalesce(p_payload, '{}'::jsonb)
+    where id = p_item;
+    target := p_item;
+  else
+    insert into public.items (session_id, position, kind, prompt, payload)
+    values (p_session,
+            coalesce((select max(i.position) + 1 from public.items i
+                      where i.session_id = p_session), 1),
+            p_kind, left(btrim(p_prompt), 500), coalesce(p_payload, '{}'::jsonb))
+    returning id into target;
+  end if;
+
+  -- An unscored kind has no answer, and storing one would be inventing a right
+  -- answer to a question that did not have one. Changing a question from choice
+  -- to survey therefore drops the answer rather than leaving it behind where
+  -- item_tally would still find it.
+  if p_answer is null or p_answer = 'null'::jsonb or not is_scored then
+    delete from public.item_answers where item_id = target;
+  else
+    insert into public.item_answers (item_id, answer) values (target, p_answer)
+    on conflict (item_id) do update set answer = excluded.answer;
+  end if;
+
+  return jsonb_build_object('ok', true, 'id', target);
+end;
+$fn$;
+
+revoke all on function public.save_item(uuid, uuid, text, text, jsonb, jsonb) from public, anon;
+grant execute on function public.save_item(uuid, uuid, text, text, jsonb, jsonb) to authenticated;
+
+create or replace function public.delete_item(p_item uuid)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $fn$
+declare sess uuid;
+begin
+  select i.session_id into sess from public.items i where i.id = p_item;
+  if sess is null or not public.hosts_session(sess) then
+    return jsonb_build_object('ok', false, 'reason', 'not allowed');
+  end if;
+  -- Deleting takes the responses with it, which is the honest outcome: they
+  -- were answers to a question that no longer exists. Refusing once somebody
+  -- has answered would be worse — a question that has just gone wrong in front
+  -- of the room is exactly the one you need to remove, and it is never the one
+  -- nobody has answered.
+  --
+  -- The session's current_item is a plain column, so a delete could leave it
+  -- pointing at nothing; current_item() joins and finds no row, which reads as
+  -- 'waiting'. Clearing it explicitly says so rather than relying on that.
+  update public.sessions set current_item = null, moved_at = now()
+  where id = sess and current_item = p_item;
+  delete from public.items where id = p_item;
+  return jsonb_build_object('ok', true);
+end;
+$fn$;
+
+revoke all on function public.delete_item(uuid) from public, anon;
+grant execute on function public.delete_item(uuid) to authenticated;
+
+-- Move an item up or down. Positions are unique per session, so a swap cannot
+-- be two plain updates — the first collides with the row it is passing.
+--
+-- Nor can it be one update touching both rows: a unique *constraint* that is
+-- not declared deferrable is checked per row as the update walks them, not once
+-- at the end, so `set position = case when id = a then b else a end` fails on
+-- the first row it rewrites. (Measured, having written it the other way first.)
+-- The alternative is making the constraint deferrable, which means dropping and
+-- recreating an index on a table that is already live for the sake of one
+-- function — so this parks the row somewhere no real position can be instead.
+-- Positions are always >= 1, and only one row is ever negative, inside this
+-- one transaction.
+create or replace function public.move_item(p_item uuid, p_delta int)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $fn$
+declare
+  sess uuid;
+  here int;
+  other_id uuid;
+  there int;
+begin
+  select i.session_id, i.position into sess, here from public.items i where i.id = p_item;
+  if sess is null or not public.hosts_session(sess) then
+    return jsonb_build_object('ok', false, 'reason', 'not allowed');
+  end if;
+  -- the neighbour in that direction, not here + 1: positions have gaps once
+  -- anything has been deleted
+  select i.id, i.position into other_id, there
+  from public.items i
+  where i.session_id = sess
+    and case when p_delta < 0 then i.position < here else i.position > here end
+  order by case when p_delta < 0 then -i.position else i.position end
+  limit 1;
+  if other_id is null then
+    return jsonb_build_object('ok', false, 'reason', 'it is already at the end');
+  end if;
+  update public.items set position = -here where id = p_item;
+  update public.items set position = here where id = other_id;
+  update public.items set position = there where id = p_item;
+  return jsonb_build_object('ok', true);
+end;
+$fn$;
+
+revoke all on function public.move_item(uuid, int) from public, anon;
+grant execute on function public.move_item(uuid, int) to authenticated;
+
+create or replace function public.delete_session(p_session uuid)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $fn$
+begin
+  if not public.hosts_session(p_session) then
+    return jsonb_build_object('ok', false, 'reason', 'not allowed');
+  end if;
+  -- A session that has run is a record of what the room answered, and the
+  -- responses go with it. Draft only; close it instead.
+  if exists (select 1 from public.sessions s where s.id = p_session and s.state <> 'draft') then
+    return jsonb_build_object('ok', false, 'reason',
+      'this one has already run - close it rather than deleting it');
+  end if;
+  delete from public.sessions where id = p_session;
+  return jsonb_build_object('ok', true);
+end;
+$fn$;
+
+revoke all on function public.delete_session(uuid) from public, anon;
+grant execute on function public.delete_session(uuid) to authenticated;

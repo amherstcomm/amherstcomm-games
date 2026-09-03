@@ -12,7 +12,7 @@ import { colorWords, PALETTES, PaletteContext, resolveTheme, TEXT_SCALES, THEME_
 import { PrefsContext } from '@/prefs';
 import OnboardingCard from '@/OnboardingCard';
 import { useModalA11y } from '@/useModalA11y';
-import { Combine, Flag as FlagIcon } from 'lucide-react';
+import { Combine, Flag as FlagIcon, Radio } from 'lucide-react';
 import BridgeGame, { type BridgeGameHandle } from '@/BridgeGame';
 import GameMenu from '@/GameMenu';
 import LadderIcon from '@/LadderIcon';
@@ -41,6 +41,8 @@ import { amOwner } from '@/reports';
 import TicketView from '@/TicketView';
 import ReportQueueView from '@/ReportQueueView';
 import LiveSession from '@/LiveSession';
+import SessionEditor from '@/SessionEditor';
+import { allows, myCapabilities } from '@/roles';
 import ReportActionView from '@/ReportActionView';
 
 import HomeView from '@/HomeView';
@@ -520,7 +522,8 @@ function App() {
     nav.page.kind === 'ticket' ||
     nav.page.kind === 'reportAction' ||
     nav.page.kind === 'reportQueue' ||
-    nav.page.kind === 'live'
+    nav.page.kind === 'live' ||
+    nav.page.kind === 'sessions'
       ? nav.page
       : null;
 
@@ -546,6 +549,11 @@ function App() {
   // for every ordinary account, and the server says so — this only decides a
   // link, and the RPCs behind it check again regardless.
   const [owner, setOwner] = useState(false);
+  // Same idea for the sessions link, and read from the same place the SQL
+  // reads: can('games.setup'). A capability rather than a role, so moving
+  // which role may set games up is one row in `capabilities` and not a
+  // redeploy.
+  const [canSetUp, setCanSetUp] = useState(false);
   const [learnMode, setLearnMode] = useState(entryGame()?.view === 'learn');
   const [theme, setTheme] = useState<ThemeMode>(initial.theme);
   const [palette, setPalette] = useState<Palette>(initial.palette);
@@ -575,10 +583,12 @@ function App() {
   useEffect(() => {
     if (!session) {
       setOwner(false);
+      setCanSetUp(false);
       return;
     }
     let alive = true;
     amOwner().then((yes) => alive && setOwner(yes));
+    myCapabilities().then((held) => alive && setCanSetUp(allows(held, 'games.setup')));
     return () => {
       alive = false;
     };
@@ -1693,6 +1703,7 @@ function App() {
           {reportPage?.kind === 'live' && (
             <LiveSession session={reportPage.session} host={reportPage.host} />
           )}
+          {reportPage?.kind === 'sessions' && <SessionEditor session={reportPage.session} />}
           {reportPage?.kind === 'reportAction' && (
             <ReportActionView
               id={reportPage.id}
@@ -2286,6 +2297,15 @@ function App() {
               >
                 <FlagIcon className="w-3.5 h-3.5" aria-hidden="true" />
                 Open reports
+              </RouteLink>
+            )}
+            {canSetUp && (
+              <RouteLink
+                {...pageLink({ kind: 'sessions' })}
+                className="inline-flex items-center gap-1.5 text-accent hover:brightness-110 transition"
+              >
+                <Radio className="w-3.5 h-3.5" aria-hidden="true" />
+                Sessions
               </RouteLink>
             )}
             <ReportMenu

@@ -159,6 +159,9 @@ describe('the overlay table', () => {
       'account', 'legal', 'friend', 'ticket', 'reportAction', 'reportQueue',
       // a live session is a page you stay on, not something over a board
       'live',
+      // and so is building one — Back from the editor should leave it, not
+      // uncover a game that was never underneath
+      'sessions',
     ];
     for (const k of kinds) expect(IS_OVERLAY[k], k).toBeTypeOf('boolean');
     expect(Object.keys(IS_OVERLAY).sort()).toEqual([...kinds].sort());

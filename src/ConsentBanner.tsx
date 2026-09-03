@@ -42,7 +42,7 @@ export default function ConsentBanner() {
                 <strong className="font-semibold text-slate-200">
                   What may we keep on this device?
                 </strong>{' '}
-                Every game and solver works in full either way. Keeping things here is
+                Every game works in full either way. Keeping things here is
                 what lets today&apos;s board still be there tomorrow; the alternative
                 forgets it all when you close the tab.
               </span>

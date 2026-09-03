@@ -198,6 +198,16 @@ for (const [name, path] of [
   ['the queue', '/reports'],
   ['a ticket', '/report/4f2ba9c17d'],
   ['the action page', '/report/act/00000000-0000-0000-0000-000000000001/deadbeef/dismiss'],
+  // Not report pages, but the same law: every full page goes through the one
+  // conditional in App, and a page left out of it renders a word game behind
+  // the content and then rewrites its own address to that game. For a
+  // presenter's screen that is the quiz on the projector; for the editor it is
+  // a link you cannot send anyone. A full page missing from this list is how
+  // that comes back.
+  ['a live session', '/live/00000000-0000-0000-0000-000000000000'],
+  ['the presenter screen', '/live/00000000-0000-0000-0000-000000000000/host'],
+  ['the session list', '/sessions'],
+  ['the session editor', '/sessions/00000000-0000-0000-0000-000000000000'],
 ] as const) {
   test(`${name} wears none of the game's chrome`, async ({ page }) => {
     await page.goto(path);

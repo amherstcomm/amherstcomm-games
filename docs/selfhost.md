@@ -358,6 +358,67 @@ table directly, so it is an optimisation, not a requirement.
 
 ---
 
+## Running a live session
+
+Four addresses, and the difference between two of them matters:
+
+| address | who | what |
+|---|---|---|
+| `/sessions` | anyone with `games.setup` | the list, and where a new one is made |
+| `/sessions/<id>` | the same | its questions — add, edit, reorder, delete |
+| `/live/<id>` | everybody | what the room answers on |
+| `/live/<id>/host` | the presenter | the same screen plus the controls, the count, and the answer |
+
+**`/live/<id>/host` shows the correct answer.** It is a separate address rather
+than a mode on one page precisely so it can be checked before a projector cable
+goes in. The footer link to `/sessions` appears only for accounts holding
+`games.setup`, and it decides a link and nothing else — every RPC behind it
+checks again, in the database.
+
+Three kinds of question work today: **multiple choice** (single or multiple, and
+the speed tiebreak is recorded but not yet scored), **survey** (the same control
+with nothing to be right about) and **open question** (people submit, optionally
+without their name attached to what the room sees). `item_kinds` also holds
+`match`, `number` and `rank`; the authoring screen does not offer them and says
+so, because a question the play view cannot draw fails on the projector at the
+one moment there is nothing to be done about it.
+
+**"Anonymous" is anonymous to the room, not to you.** The presenter's screen and
+the scoreboard show no name; an account with `users.manage` can still see who
+submitted what, which is what makes prizes and follow-ups possible. The
+interface says that where the box is ticked rather than promising more than the
+database keeps.
+
+**A question that has been shown cannot be edited.** Delete it and add another
+instead — deleting takes its answers with it, which is honest, whereas editing
+would silently change what those answers were answers to. A session that has
+already run cannot be deleted at all; close it.
+
+### Applying the schema
+
+`supabase/schema.sql` is idempotent on a database that already has it, so
+re-running is the update path. This change adds a `late_join` column to
+`sessions` and seven functions, all through `alter … add column if not exists`
+and `create or replace`.
+
+On a **fresh** database, run it twice. Six statements fail the first time —
+`daily_progress` and `game_results` are altered above the point where they are
+created, so their foreign keys to `games(progress)` have nothing to attach to
+yet. The second pass is clean. This is asserted rather than remembered:
+
+```sh
+bash supabase/tests/run.sh
+```
+
+That starts a throwaway Postgres, applies the schema twice, checks the error
+counts are 6 and 0, and runs the SQL tests in `supabase/tests/`. It needs Docker
+and is not in CI — it is a thing to run when you change `schema.sql`, which is
+the only time it can tell you anything. It earned its place on its first run by
+finding that every reorder failed: a unique constraint is checked per row, not
+per statement, unless it is declared deferrable.
+
+---
+
 ## Keeping the puzzle window fresh
 
 `daily_puzzles` holds a rolling fortnight, so it goes stale rather than
