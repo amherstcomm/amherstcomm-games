@@ -39,6 +39,13 @@ const EVERY_ROUTE: Route[] = [
   { kind: 'reportAction', id: 'b0a1', token: 'deadbeef', action: 'dismiss' },
   { kind: 'reportAction', id: 'b0a1', token: 'deadbeef', action: '' },
   { kind: 'friend', code: '61e45286c813' },
+  // The live and authoring addresses, which were not under this law when they
+  // were written — the round trip is the only thing that catches a kind added
+  // to pathOf and not to parsePath, and it caught nothing for either of them.
+  { kind: 'live', session: '5f7c2a10-3b4d-4e8f-9a12-6c0d1e2f3a4b', host: false },
+  { kind: 'live', session: '5f7c2a10-3b4d-4e8f-9a12-6c0d1e2f3a4b', host: true },
+  { kind: 'sessions' },
+  { kind: 'sessions', session: '5f7c2a10-3b4d-4e8f-9a12-6c0d1e2f3a4b' },
   ...PANELS.map((panel) => ({ kind: 'panel', panel }) as const),
   ...DOCS.map((doc) => ({ kind: 'legal', doc }) as const),
   ...STATS_TABS.map((tab) => ({ kind: 'stats', tab }) as const),
@@ -166,5 +173,19 @@ describe('the parts that are easy to get subtly wrong', () => {
   it('keeps /reports and /report/<code> apart', () => {
     expect(parsePath('/reports')).toEqual({ kind: 'reportQueue' });
     expect(parsePath('/report/reports')).toEqual({ kind: 'ticket', ticket: 'reports' });
+  });
+
+  it('treats a bare /sessions as the list, not as a missing session', () => {
+    // unlike /live, which is nothing without one — there is no room to open
+    expect(parsePath('/sessions')).toEqual({ kind: 'sessions', session: undefined });
+    expect(parsePath('/live')).toBeNull();
+  });
+
+  it('tells the presenter address apart from what the room opens', () => {
+    // the whole reason they are two addresses: one of them goes on a projector
+    const id = '5f7c2a10-3b4d-4e8f-9a12-6c0d1e2f3a4b';
+    expect(parsePath(`/live/${id}`)).toEqual({ kind: 'live', session: id, host: false });
+    expect(parsePath(`/live/${id}/host`)).toEqual({ kind: 'live', session: id, host: true });
+    expect(titleOf({ kind: 'live', session: id, host: true })).toMatch(/Presenting/);
   });
 });

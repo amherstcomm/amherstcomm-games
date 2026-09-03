@@ -47,6 +47,10 @@ const PAGES = [
   // Tailwind's near-white and was invisible on the light theme.
   ['live', '/live/00000000-0000-0000-0000-000000000000'],
   ['live host', '/live/00000000-0000-0000-0000-000000000000/host'],
+  // Signed out, so this is the empty list rather than the editor — but it is
+  // still a page with its own headings, inputs and labels, and the editor
+  // reuses every one of those classes.
+  ['sessions', '/sessions'],
 ] as const;
 
 for (const [name, path] of PAGES) {

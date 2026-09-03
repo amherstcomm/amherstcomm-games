@@ -39,7 +39,7 @@ export const STORAGE_OPTIONS: {
     id: 'essential',
     label: 'Keep essentials only',
     blurb:
-      'Only your privacy answers, which we have to remember in order to honour them. Every game and solver still works in full; close the tab and it starts over, sign-in included.',
+      'Only your privacy answers, which we have to remember in order to honour them. Every game still works in full; close the tab and it starts over, sign-in included.',
   },
   {
     id: 'browser',

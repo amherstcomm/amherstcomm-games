@@ -37,7 +37,8 @@ export type Page =
   | { kind: 'ticket'; ticket: string }
   | { kind: 'reportAction'; id: string; token: string; action: string }
   | { kind: 'reportQueue' }
-  | { kind: 'live'; session: string; host: boolean };
+  | { kind: 'live'; session: string; host: boolean }
+  | { kind: 'sessions'; session?: string };
 
 export type Overlay =
   | { kind: 'panel'; panel: Panel }
@@ -125,9 +126,27 @@ export function navOf(route: Route, last: Tabs = DEFAULT_TABS): { nav: Nav; game
       };
     case 'legal':
       return { nav: over({ kind: 'legal', doc: route.doc }, { ...last, legal: route.doc }), game: null };
+    case 'sessions':
+      return { nav: page({ kind: 'sessions', session: route.session }), game: null };
     case 'friend':
       return { nav: over({ kind: 'account', tab: 'friends' }, { ...last, account: 'friends' }), game: null };
   }
+  // Unreachable, and that is the point: `route` is `never` here only while
+  // every kind is handled above, so adding one to Route without adding it here
+  // fails to compile.
+  //
+  // It did not, once. `sessions` was added to Route, parsePath and pathOf, all
+  // three typechecked, and navOf fell out of the bottom returning undefined —
+  // so the address did not render wrong, it took the whole application down
+  // with "cannot destructure property 'nav'". tsc allows a switch to fall
+  // through a missing case because noImplicitReturns is off, and the round-trip
+  // test in routes.test.ts covers pathOf against parsePath, neither of which is
+  // this function. Nothing in the repo would have caught it; a blank page did.
+  return assertNever(route);
+}
+
+function assertNever(route: never): never {
+  throw new Error(`unhandled route: ${JSON.stringify(route)}`);
 }
 
 export type NavAction =

@@ -93,7 +93,12 @@ export type Route =
   // addresses rather than a mode on one page, because the presenter's screen
   // goes on a projector and the wrong one being there is the whole game
   // spoiled — an address is something you can check before you plug in.
-  | { kind: 'live'; session: string; host: boolean };
+  | { kind: 'live'; session: string; host: boolean }
+  // Building one. `session` absent is the list; present is that session's
+  // questions. One address either way, because the list exists to get you into
+  // the editor and a separate /sessions/list would be a second name for the
+  // same page.
+  | { kind: 'sessions'; session?: string };
 
 export function pathOf(route: Route): string {
   switch (route.kind) {
@@ -122,6 +127,8 @@ export function pathOf(route: Route): string {
       return '/reports';
     case 'live':
       return route.host ? `/live/${route.session}/host` : `/live/${route.session}`;
+    case 'sessions':
+      return route.session ? `/sessions/${route.session}` : '/sessions';
   }
 }
 
@@ -166,6 +173,8 @@ export function titleOf(route: Route): string {
       // The presenter's title says so, because this address goes on a
       // projector and the tab is the last thing anyone checks before it does.
       return route.host ? `Presenting${suffix}` : `Live${suffix}`;
+    case 'sessions':
+      return `Sessions${suffix}`;
   }
 }
 
@@ -213,6 +222,10 @@ export function parsePath(pathname: string): Route | null {
     if (!second) return null;
     return { kind: 'live', session: second, host: parts[2] === 'host' };
   }
+
+  // /sessions and /sessions/<id>. A bare /sessions is the list, so unlike
+  // /live it does not need an id to mean something.
+  if (first === 'sessions') return { kind: 'sessions', session: second || undefined };
 
   if (first === 'report') {
     // /report/act/<id>/<token>[/<action>] is the owner's door; anything else
