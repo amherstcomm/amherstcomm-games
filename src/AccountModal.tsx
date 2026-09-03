@@ -3,6 +3,7 @@ import type { Provider, Session } from '@supabase/supabase-js';
 import { AlertTriangle, Github, KeyRound, LogOut, Mail, Users, X } from 'lucide-react';
 import { supabase } from '@/supabase';
 import { SSO_LABEL, SSO_ONLY } from '@/sso';
+import { CONTACT_EMAIL } from '@/brand';
 import { beginSso, releaseAutoAttempt } from '@/signIn';
 import { clearMyStats, deleteAccount } from '@/account';
 import {
@@ -305,7 +306,9 @@ export default function AccountModal({
     if (!ok) {
       setBusy(false);
       setDangerError(
-        'Couldn’t delete the account just now. Try again, or email privacy@anagrimoire.com and it will be done by hand.'
+        CONTACT_EMAIL
+          ? `Couldn’t delete the account just now. Try again, or email ${CONTACT_EMAIL} and it will be done by hand.`
+          : 'Couldn’t delete the account just now. Try again, or ask whoever administers this site and it will be done by hand.'
       );
       return;
     }

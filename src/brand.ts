@@ -32,3 +32,18 @@ export const SITE_NAME: string = trimmed(import.meta.env.VITE_SITE_NAME) || SITE
  *  empty, which is the ordinary state and renders nothing at all rather than
  *  an empty line. */
 export const SITE_SUBTITLE: string = trimmed(import.meta.env.VITE_SITE_SUBTITLE);
+
+/** Where a person writes when a form will not do.
+ *
+ *  One address rather than the three the upstream project used — privacy,
+ *  security and support at its own domain. Those are somebody else's domain
+ *  here, so leaving them in place would have told employees to email a company
+ *  that is not theirs about their own data.
+ *
+ *  Empty is a supported state and the default: the prose then points at the
+ *  in-app report form, which needs no mailbox to exist and gives the reporter a
+ *  reference they can look up. The one thing a form cannot do is answer a
+ *  question about a specific account — only the address on the account can show
+ *  whose account it is — so that route says plainly that it needs an address
+ *  configured. */
+export const CONTACT_EMAIL: string = trimmed(import.meta.env.VITE_CONTACT_EMAIL);

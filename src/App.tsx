@@ -646,7 +646,7 @@ function App() {
       .eq('id', session.user.id)
       .maybeSingle();
     if (error) {
-      console.warn('Anagrimoire settings pull failed:', error.message);
+      console.warn('settings pull failed:', error.message);
       return;
     }
     const s = data?.settings as
@@ -720,7 +720,7 @@ function App() {
         .eq('id', session.user.id)
         .select('id');
       if (error) {
-        console.warn('Anagrimoire settings sync failed:', error.message);
+        console.warn('settings sync failed:', error.message);
       } else if (!data?.length) {
         // no profile row yet (the signup trigger never fired) — create one
         const { error: insertError } = await supabase!
@@ -728,7 +728,7 @@ function App() {
           .insert({ id: session.user.id, settings });
         if (insertError) {
           console.warn(
-            'Anagrimoire settings sync failed: no profile row, and creating one was refused —',
+            'settings sync failed: no profile row, and creating one was refused —',
             insertError.message
           );
         }
@@ -2516,17 +2516,18 @@ function App() {
             </button>
 
             <div className="overflow-y-auto p-6 sm:p-8">
-            <h2 className="text-xl font-bold mb-5">About Anagrimoire</h2>
+            <h2 className="text-xl font-bold mb-5">About {SITE_NAME}</h2>
 
             <div className="space-y-5 text-sm text-slate-300">
               <p>
-                Anagrimoire is a free companion for word games: solvers for seven kinds of
-                puzzles, our own daily and practice versions of each to play, and
-                interactive guides to learn them.
+                {SITE_NAME} is a word game site for Amherst Communications staff: a fresh
+                puzzle every morning, practice boards whenever you want one, solvers for
+                when a puzzle beats you, and interactive guides for the games you have
+                not met before.
               </p>
               <p className="text-slate-400">
-                The name is a portmanteau of <em>anagram</em> and <em>grimoire</em> — a
-                grimoire being an old book of spells. A spellbook for words, more or less.
+                It runs on our own server, reachable only from inside the company. It is
+                for fun — play it, ignore it, or take the leaderboard far too seriously.
               </p>
 
               <div>
@@ -2535,20 +2536,11 @@ function App() {
                 </h3>
                 <div className="space-y-3 text-slate-400">
                   <div>
-                    <p className="text-slate-300 font-medium">How do you say it?</p>
-                    <p>
-                      <span className="whitespace-nowrap">/ ˈæn ə grimˈwɑr /</span> —{' '}
-                      <em>AN-uh-grim-WAHR</em>. <em>Anagram</em> up front, then{' '}
-                      <em>grimoire</em> the French way, rhyming with <em>memoir</em>.
-                      Stress on the first syllable and the last.
-                    </p>
-                  </div>
-                  <div>
                     <p className="text-slate-300 font-medium">
                       Are the daily puzzles the same as the NYT&apos;s?
                     </p>
                     <p>
-                      No — every daily here is our own, generated fresh each morning, so
+                      No — every daily here is ours, generated on our own server, so
                       playing never spoils (or copies) anyone else&apos;s puzzle. The solvers
                       can load today&apos;s NYT Spelling Bee, Letter Boxed, and Strands where
                       noted.
@@ -2589,8 +2581,8 @@ function App() {
                       see Legal for credits), lowercase letters only: no proper nouns,
                       no hyphens or apostrophes, no accents. Nothing is checked against
                       any publisher&apos;s list, so our Hive and the NYT&apos;s bee will
-                      disagree at the margins. If a real word is missing, open an issue
-                      — the lists do get amended.
+                      disagree at the margins. If a real word is missing, report it —
+                      the lists do get amended.
                     </p>
                   </div>
                   <div>
@@ -2607,26 +2599,31 @@ function App() {
                   <div>
                     <p className="text-slate-300 font-medium">Do I need an account?</p>
                     <p>
-                      No. Everything works without one. Signing in carries your
-                      statistics <em>and</em> today&apos;s unfinished puzzles between
-                      devices — start on a phone, finish on a laptop, and a daily you
-                      have already played won&apos;t come back as a fresh board
-                      somewhere else. Without an account each browser keeps its own
-                      separate progress, which can look like syncing until you compare
-                      two of them. The site-wide daily numbers (&quot;across all
-                      registered players&quot;) accumulate only from signed-in accounts.
+                      You already have one. Reaching this site at all means signing in
+                      with your Amherst account, and the site signs you in again behind
+                      the scenes so your statistics <em>and</em> today&apos;s unfinished
+                      puzzles follow you between devices — start on a phone, finish on a
+                      laptop, and a daily you have already played won&apos;t come back as
+                      a fresh board somewhere else. There is no separate password to
+                      remember and nothing to create.
                     </p>
                   </div>
                   <div>
                     <p className="text-slate-300 font-medium">Where does my data live?</p>
                     <p>
-                      In your browser. Solving never leaves your device; if you sign in,
-                      your completed games sync to your account.
+                      On a server inside the company, and in your browser. What you type
+                      into a solver never leaves your device at all. Your completed games
+                      sync to your account, which lives on the same internal server —
+                      nothing about how you play goes to anyone outside Amherst.
                     </p>
                   </div>
                   <div>
                     <p className="text-slate-300 font-medium">When do new dailies arrive?</p>
-                    <p>About 15 minutes after 3:00&nbsp;a.m. Eastern, every day.</p>
+                    <p>
+                      At 2:00&nbsp;a.m. Central, every day — the boards themselves are
+                      generated a fortnight ahead, so a new one is waiting the moment the
+                      date turns over.
+                    </p>
                   </div>
                   <div>
                     <p className="text-slate-300 font-medium">
@@ -2678,18 +2675,10 @@ function App() {
                       I&apos;ve found a security problem.
                     </p>
                     <p>
-                      Please don&apos;t open a public issue for it.{' '}
-                      <a
-                        href="https://github.com/rptetzloff/anagrimoire/security/advisories/new"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-amber-300 hover:text-amber-200 underline underline-offset-2"
-                      >
-                        Open a private security advisory
-                      </a>{' '}
-                      — it stays private while it&apos;s being fixed and carries a
-                      disclosure process with it. If you&apos;d rather not use GitHub,
-                      the report form above has a security option and needs no account.
+                      Please tell us rather than anywhere public — that publishes the
+                      hole to everyone before it is fixed. The report form above has a
+                      security option; it goes straight to the internal queue and gives
+                      you a reference you can check. Nothing about it leaves the company.
                     </p>
                   </div>
                   <div>
@@ -2697,16 +2686,9 @@ function App() {
                       Found a bug, or have an idea?
                     </p>
                     <p>
-                      <a
-                        href="https://github.com/rptetzloff/anagrimoire/issues"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-amber-300 hover:text-amber-200 underline underline-offset-2"
-                      >
-                        Open an issue on GitHub
-                      </a>{' '}
-                      — reports and suggestions are both welcome. The report form works
-                      too if you&apos;d rather not have an account.
+                      Use the report form above — <em>a problem with the site</em> or{' '}
+                      <em>something else</em>. It reaches the same queue, needs nothing
+                      installed, and you get a reference back.
                     </p>
                   </div>
                 </div>
@@ -2824,12 +2806,12 @@ function App() {
                   Disclaimer
                 </h3>
                 <p className="text-slate-400">
-                  Anagrimoire is an independent project. It is not affiliated with,
-                  endorsed by, or sponsored by The New York Times Company (Wordle, Spelling
-                  Bee, Letter Boxed, Strands), Hasbro or Mattel (Scrabble, Boggle), Tribune Content Agency (Jumble), or any
-                  other puzzle publisher. All game names and trademarks are the property of
-                  their respective owners and are used here only to describe the kinds of
-                  puzzles this tool can help with.
+                  Amherst Communications is not affiliated with, endorsed by, or sponsored
+                  by The New York Times Company (Wordle, Spelling Bee, Letter Boxed,
+                  Strands), Hasbro or Mattel (Scrabble, Boggle), Tribune Content Agency
+                  (Jumble), or any other puzzle publisher. All game names and trademarks
+                  are the property of their respective owners and are used here only to
+                  describe the kinds of puzzles this site offers.
                 </p>
               </div>
 

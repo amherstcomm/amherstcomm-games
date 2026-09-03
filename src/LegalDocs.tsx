@@ -5,6 +5,8 @@
 
 import type { ReactNode } from 'react';
 import ReportMenu from '@/ReportMenu';
+import { GA_ID } from '@/analytics';
+import { CONTACT_EMAIL } from '@/brand';
 
 export const LEGAL_UPDATED = '16 August 2026';
 
@@ -13,9 +15,11 @@ export const LEGAL_UPDATED = '16 August 2026';
 // arrive by email when they are about somebody's own account — only the address
 // on the account can show whose account it is — which is why that one cannot
 // simply become a form.
-export const PRIVACY_EMAIL = 'privacy@anagrimoire.com';
-export const SECURITY_EMAIL = 'security@anagrimoire.com';
-export const SUPPORT_EMAIL = 'support@anagrimoire.com';
+// The upstream project had three addresses at its own domain — privacy,
+// security, support. One configured address stands in for all of them now; see
+// CONTACT_EMAIL in brand.ts for why, and for what the prose does when none is
+// set. Aliasing it three ways would only be indirection with no second value
+// behind it.
 
 function H({ children }: { children: ReactNode }) {
   return <h4 className="text-sm font-semibold text-slate-200 mt-5 mb-1.5">{children}</h4>;
@@ -29,7 +33,13 @@ function List({ children }: { children: ReactNode }) {
   return <ul className="text-slate-400 mb-2.5 space-y-1.5 list-disc list-outside pl-5">{children}</ul>;
 }
 
-function Mail({ to = PRIVACY_EMAIL }: { to?: string }) {
+function Mail({ to = CONTACT_EMAIL }: { to?: string }) {
+  // An unset address rendered <a href="mailto:"></a> — a link with no target
+  // and no text, which axe caught as a link-name violation on the privacy page.
+  // Guarding each call site would have been the fragile fix, and was: I wrote
+  // two guards and missed two. The component refuses instead, and the prose
+  // around it is written so its absence still reads.
+  if (!to) return null;
   return (
     <a
       href={`mailto:${to}`}
@@ -79,17 +89,18 @@ export function PrivacyPolicy() {
       <Updated />
 
       <P>
-        Anagrimoire is an independent hobby project, not a company. This describes
-        everything it does with data — there is no longer version.
+        This site is run by Amherst Communications for its own staff. It describes
+        everything the site does with data — there is no longer version.
       </P>
 
       <div className="rounded-xl bg-white/5 border border-white/10 p-4 my-4">
         <p className="text-slate-300">
           <strong className="font-semibold">The short version.</strong> What you type
-          into a solver never leaves your device. You can play every game and use
-          every solver without an account. If you make one, we store your email
-          address, your results, and the daily boards you have in progress — so they
-          follow you between devices. Nothing about you is public unless you choose a
+          into a solver never leaves your device. Everything runs on a server inside
+          the company; nothing about how you play is sent to anyone outside it. Signing
+          in happens through your Amherst account, and we store your results and the
+          daily boards you have in progress so they follow you between devices. Nothing
+          about you is visible to colleagues unless you choose a
           display name, which puts you on the leaderboards and can be cleared again
           at any time.
         </p>
@@ -180,23 +191,16 @@ export function PrivacyPolicy() {
       <H>What happens even without an account</H>
       <List>
         <li>
-          <strong className="text-slate-300">Hosting.</strong> The site is served by{' '}
-          <Ext href="https://render.com/privacy">Render</Ext>, which keeps ordinary
-          server logs including IP addresses.
+          <strong className="text-slate-300">Hosting.</strong> The site and its database
+          both run on a server inside the company, reachable only from the internal
+          network. It keeps ordinary server logs, including IP addresses, the way any
+          web server does.
         </li>
         <li>
           <strong className="text-slate-300">Puzzle data.</strong> Today&apos;s boards
-          are asked for from our database at{' '}
-          <Ext href="https://supabase.com/privacy">Supabase</Ext>, which sees the
-          request and your IP address the way any server would. The request carries no
+          are asked for from that same internal database. The request carries no
           account and no identifier — it asks only for a game name, and the function it
-          calls will not serve a future day. If that fails or is slow, the browser falls
-          back to static files on{' '}
-          <Ext href="https://docs.github.com/en/site-policy/privacy-policies/github-general-privacy-statement">
-            GitHub
-          </Ext>
-          , which then sees the request instead. The practice pools come the same two
-          ways.
+          calls will not serve a future day. The practice pools come the same way.
         </li>
         <li>
           <strong className="text-slate-300">Reporting something.</strong> If you use
@@ -212,9 +216,8 @@ export function PrivacyPolicy() {
       <P>
         Accounts are optional, and exist so your statistics, settings and
         half-finished dailies follow you from one device to the next. You can sign in
-        with GitHub, with Google, or with a code emailed to you. Authentication is handled by{' '}
-        <Ext href="https://supabase.com/privacy">Supabase</Ext>, and sign-in emails
-        are delivered by <Ext href="https://resend.com/legal/privacy-policy">Resend</Ext>.
+        with your Amherst account, through the company&apos;s own single sign-on. No
+        separate password exists for this site, and no sign-in email is ever sent.
       </P>
       <P>We receive and store:</P>
       <List>
@@ -306,43 +309,62 @@ export function PrivacyPolicy() {
         and not kept.
       </P>
 
-      <H>Analytics</H>
-      <P>
-        We use Google Analytics to count visits and see which games get played. It
-        records page views, an approximate location derived from your IP address,
-        and basic device and browser information. It never receives your letters,
-        boards, or results. Google&apos;s handling is covered by its own{' '}
-        <Ext href="https://policies.google.com/privacy">privacy policy</Ext>, and
-        data is retained for the period configured in our property.
-      </P>
-      <P>
-        We ask everyone, wherever they are, and nothing loads until you say yes.
-        That used to depend on guessing your region from your time zone — right
-        often enough, but a VPN or a holiday was enough to track someone who had
-        never been asked, and that's the only failure here that costs anything.
-        Declining is a single click, the same as accepting, and we remember it. If
-        your browser sends a{' '}
-        <Ext href="https://globalprivacycontrol.org/">Global Privacy Control</Ext>{' '}
-        signal we treat that as a no without asking at all.
-      </P>
-      <P>
-        An answer lasts a year, then we ask again — a yes from two years ago
-        isn&apos;t really a current one. The date you answered is shown under
-        Settings → Analytics, where you can also change it.
-      </P>
-      <P>
-        Either way you can turn it off at any time under Settings → Analytics, with
-        no account needed. Doing so stops it for the rest of the visit and clears
-        the cookies it had already set. We keep that choice per browser, because
-        that is where the cookies are.
-      </P>
+      {/* Gated on the same value the code is. This section asserted "We use
+          Google Analytics" unconditionally while ConsentBanner and SettingsModal
+          both checked GA_ID before loading anything — so a deployment with no
+          measurement ID, which is this one, had a privacy policy describing
+          analytics that never ran. One truth, read twice. */}
+      {GA_ID && (
+        <>
+        <H>Analytics</H>
+        <P>
+          We use Google Analytics to count visits and see which games get played. It
+          records page views, an approximate location derived from your IP address,
+          and basic device and browser information. It never receives your letters,
+          boards, or results. Google&apos;s handling is covered by its own{' '}
+          <Ext href="https://policies.google.com/privacy">privacy policy</Ext>, and
+          data is retained for the period configured in our property.
+        </P>
+        <P>
+          We ask everyone, wherever they are, and nothing loads until you say yes.
+          That used to depend on guessing your region from your time zone — right
+          often enough, but a VPN or a holiday was enough to track someone who had
+          never been asked, and that's the only failure here that costs anything.
+          Declining is a single click, the same as accepting, and we remember it. If
+          your browser sends a{' '}
+          <Ext href="https://globalprivacycontrol.org/">Global Privacy Control</Ext>{' '}
+          signal we treat that as a no without asking at all.
+        </P>
+        <P>
+          An answer lasts a year, then we ask again — a yes from two years ago
+          isn&apos;t really a current one. The date you answered is shown under
+          Settings → Analytics, where you can also change it.
+        </P>
+        <P>
+          Either way you can turn it off at any time under Settings → Analytics, with
+          no account needed. Doing so stops it for the rest of the visit and clears
+          the cookies it had already set. We keep that choice per browser, because
+          that is where the cookies are.
+        </P>
+        </>
+      )}
+      {!GA_ID && (
+        <>
+          <H>Analytics</H>
+          <P>
+            There are none. No analytics service is configured for this site, so no
+            page views, locations or device details are collected or sent anywhere.
+            There is nothing to consent to and nothing to switch off.
+          </P>
+        </>
+      )}
 
       <H>What we don&apos;t do</H>
       <List>
         <li>No advertising, and no ad networks</li>
         <li>No selling or sharing of personal information, in any sense of those words</li>
         <li>No profiling you across other websites</li>
-        <li>No third-party trackers beyond the analytics described above</li>
+        <li>No third-party trackers of any kind</li>
       </List>
 
       <H>Deleting your data</H>
@@ -364,11 +386,20 @@ export function PrivacyPolicy() {
       </List>
       <P>
         Both are immediate and neither can be undone. If you would rather we did it, or
-        you want a copy of what we hold or something corrected, email <Mail /> from the
-        address you signed up with — that one has to be email, because the request only
-        means anything if it comes from the account it is about, and a form anyone can
-        fill in cannot show that. <Report>The report form</Report> is the right route
-        for a privacy question that is not about your own account.
+        you want a copy of what we hold or something corrected,{' '}
+        {CONTACT_EMAIL ? (
+          <>
+            email <Mail /> from your Amherst address — that one has to be email, because
+            the request only means anything if it comes from the account it is about,
+            and a form anyone can fill in cannot show that.
+          </>
+        ) : (
+          <>ask whoever administers this site directly — a request about your own account
+          only means anything if it comes from you, and a form anyone can fill in cannot
+          show that.</>
+        )}{' '}
+        <Report>The report form</Report> is the right route for a privacy question that
+        is not about your own account.
       </P>
       <P>
         Two things are worth saying plainly about what deletion does and doesn&apos;t
@@ -404,16 +435,15 @@ export function PrivacyPolicy() {
 
       <H>Children</H>
       <P>
-        This site is not directed at children under 13, and we do not knowingly
-        collect anything from them. If you believe a child has created an account,
-        tell us through <Report>the report form</Report> or email{' '}
-        <Mail to={SUPPORT_EMAIL} />, and we will remove it.
+        This site is for Amherst Communications staff and is reachable only from inside
+        the company, so it is not directed to children and does not knowingly collect
+        anything from them.
       </P>
 
       <H>Where data goes</H>
       <P>
-        Our hosting, database, email and analytics providers may process data in the
-        United States and other countries.
+        Nowhere. The site and its database run on company hardware on the internal
+        network, and your play is not sent to any outside provider.
       </P>
 
       <H>Changes</H>
@@ -430,10 +460,12 @@ export function PrivacyPolicy() {
         through rather than an inbox that might not be — which is the honest
         difference between the two. Leave an address if you want a reply.
       </P>
-      <P>
-        You can also email <Mail /> if you would rather, and you should if what you
-        need to send us does not fit in a form.
-      </P>
+      {CONTACT_EMAIL && (
+        <P>
+          You can also email <Mail /> if you would rather, and you should if what you
+          need to send us does not fit in a form.
+        </P>
+      )}
     </div>
   );
 }
@@ -444,24 +476,25 @@ export function Terms() {
       <Updated />
 
       <P>
-        Anagrimoire is free, and using it means accepting the following. There
-        isn&apos;t much of it.
+        This site is run by Amherst Communications for its staff, and using it means
+        accepting the following. There isn&apos;t much of it.
       </P>
 
       <H>What this is</H>
       <P>
-        A set of word game solvers and playable puzzles, run as an independent hobby
-        project. No account is required for any of it. Nothing here is sold, and
+        A set of word games, daily puzzles and solvers, run internally for Amherst
+        Communications staff. It is offered for enjoyment, not as part of anyone&apos;s
+        job, and playing or not playing is entirely up to you. Nothing here is sold and
         nothing is charged for.
       </P>
 
       <H>Not affiliated with anyone</H>
       <P>
-        Anagrimoire is not affiliated with, endorsed by, or sponsored by The New York
-        Times Company (Wordle, Spelling Bee, Letter Boxed, Strands), Hasbro or Mattel
-        (Scrabble, Boggle), Tribune Content Agency (Jumble), or any other puzzle
+        Amherst Communications is not affiliated with, endorsed by, or sponsored by The
+        New York Times Company (Wordle, Spelling Bee, Letter Boxed, Strands), Hasbro or
+        Mattel (Scrabble, Boggle), Tribune Content Agency (Jumble), or any other puzzle
         publisher. Those names are trademarks of their owners, used here only to
-        describe the kinds of puzzles this tool can help with.
+        describe the kinds of puzzles this site offers.
       </P>
 
       <H>The word lists are ours, not theirs</H>
@@ -498,14 +531,11 @@ export function Terms() {
         <li>Submit fabricated results to distort the shared statistics or the leaderboards</li>
       </List>
       <P>
-        If you find a security problem, please report it rather than exploiting it —
-        and not as a public issue, which is what this used to say and was the wrong
-        advice: an open issue publishes the hole to everyone before it is fixed. Use{' '}
-        <Ext href="https://github.com/rptetzloff/anagrimoire/security/advisories/new">
-          a private security advisory
-        </Ext>
-        , the security option under <em>Report a problem</em> at the bottom of any page,
-        or <Mail to={SECURITY_EMAIL} />.
+        If you find a security problem, please report it rather than exploiting it, and
+        please not anywhere public — that publishes the hole to everyone before it is
+        fixed. Use the security option under <em>Report a problem</em> at the bottom of
+        any page{CONTACT_EMAIL ? <>, or <Mail /></> : null}. It goes
+        to the same internal queue, and you get a reference you can check.
       </P>
 
       <H>No promises about availability</H>
@@ -518,7 +548,7 @@ export function Terms() {
 
       <H>Provided as-is</H>
       <P>
-        To the fullest extent the law allows, Anagrimoire is provided without
+        To the fullest extent the law allows, this site is provided without
         warranties of any kind, express or implied, including fitness for a
         particular purpose. We are not liable for any loss arising from using it —
         including lost statistics, lost streaks, or a puzzle answer that turned out
@@ -527,7 +557,9 @@ export function Terms() {
 
       <H>The code</H>
       <P>
-        The site&apos;s source is released under the{' '}
+        This site is built on{' '}
+        <Ext href="https://github.com/rptetzloff/anagrimoire">Anagrimoire</Ext>, an
+        open-source project released under the{' '}
         <Ext href="https://github.com/rptetzloff/anagrimoire/blob/main/LICENSE">
           MIT License
         </Ext>
@@ -542,9 +574,9 @@ export function Terms() {
 
       <H>Contact</H>
       <P>
-        <Report>The report form</Report> at the bottom of any page, or{' '}
-        <Mail to={SUPPORT_EMAIL} />. Security problems have their own route, above;
-        privacy has its own address under the privacy policy.
+        <Report>The report form</Report> at the bottom of any page
+        {CONTACT_EMAIL ? <>, or <Mail /></> : null}. Security problems
+        have their own route, above.
       </P>
     </div>
   );

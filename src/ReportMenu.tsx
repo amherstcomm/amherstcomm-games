@@ -49,14 +49,6 @@ const CHOICES: { id: Choice; label: string; hint: string }[] = [
   { id: 'other', label: 'Something else', hint: 'Anything the others don’t cover.' },
 ];
 
-/** Where a security report would rather go.
- *
- *  GitHub's advisory form is private by construction and gives a disclosure
- *  process with it, which a report table cannot. The form here stays open
- *  anyway — somebody who has found a hole should never be turned away for not
- *  having a GitHub account — but the better door is named first. */
-const ADVISORY = 'https://github.com/rptetzloff/anagrimoire/security/advisories/new';
-
 const SUBJECT: Record<Choice, string> = {
   site: 'a problem with the site',
   puzzle: 'a puzzle',
@@ -139,18 +131,15 @@ export default function ReportMenu({
           reasonRequired={choice !== 'puzzle' && choice !== 'player'}
           extra={
             choice === 'security' ? (
+              /* The upstream project named GitHub's advisory form first, because
+                 it is private by construction and carries a disclosure process a
+                 report table does not. Neither applies here: this queue is already
+                 inside the company, and pointing an employee at a public code host
+                 to report a hole in an internal tool is the opposite of private. */
               <p className="mt-3 rounded-lg bg-white/5 border border-white/10 p-3 text-xs text-slate-400">
-                If you have a GitHub account,{' '}
-                <a
-                  href={ADVISORY}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-accent underline underline-offset-2 hover:brightness-110"
-                >
-                  open a private security advisory
-                </a>{' '}
-                instead — it stays private while it’s being fixed and carries a disclosure
-                process with it. This form works too, and doesn’t need an account.
+                This goes to the internal queue and nowhere else. Please don’t post it
+                anywhere public while it is unfixed — you’ll get a reference back you can
+                check, and an answer when it is dealt with.
               </p>
             ) : choice === 'player' ? (
               <>
