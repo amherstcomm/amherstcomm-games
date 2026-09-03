@@ -85,11 +85,22 @@ describe('what an incoming link says about the daily toggle', () => {
   });
 
   it('says nothing at all when the link is not a play link', () => {
-    at('/solve/hive');
-    expect(dailyIntent('bee')).toBeNull();
     at('/learn/hive');
     expect(dailyIntent('bee')).toBeNull();
     at('/legal/terms');
     expect(dailyIntent('bee')).toBeNull();
+  });
+
+  it('reads a retired /solve link as the practice board', () => {
+    // /solve used to say nothing about the daily toggle, because a solver was
+    // neither. The view is gone and the address now resolves to the board — so
+    // it expresses an opinion it did not used to, and practice is the closer
+    // equivalent of a solver than a daily is.
+    //
+    // Harmless here because no /solve link was ever shared from this
+    // deployment; it exists so an address that used to work still lands
+    // somewhere rather than nowhere.
+    at('/solve/hive');
+    expect(dailyIntent('bee')).toBe(false);
   });
 });

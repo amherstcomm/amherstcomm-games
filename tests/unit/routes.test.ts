@@ -102,9 +102,12 @@ describe('the forms people actually type', () => {
 
   it('corrects the old slug rather than refusing it', () => {
     // /solve/pattern is out there in shared results
+    // Both aliases at once: 'pattern' was the old slug and 'solve' was a view
+    // that no longer exists. The address resolves to the board and corrects
+    // itself, because a link somebody already holds is not their mistake.
     const r = parsePath('/solve/pattern');
-    expect(r).toEqual({ kind: 'game', view: 'solve', slug: 'guess', daily: false });
-    expect(pathOf(r!)).toBe('/solve/guess');
+    expect(r).toEqual({ kind: 'game', view: 'play', slug: 'guess', daily: false });
+    expect(pathOf(r!)).toBe('/play/guess');
   });
 
   it('treats an unknown address as nothing rather than as something wrong', () => {
@@ -118,7 +121,7 @@ describe('the forms people actually type', () => {
   it('reads the query forms the site used to use', () => {
     expect(legacyRoute('?daily=hive')).toEqual({ kind: 'game', view: 'play', slug: 'hive', daily: true });
     expect(legacyRoute('?play=weave')).toEqual({ kind: 'game', view: 'play', slug: 'weave', daily: false });
-    expect(legacyRoute('?solve=boxed')).toEqual({ kind: 'game', view: 'solve', slug: 'boxed', daily: false });
+    expect(legacyRoute('?solve=boxed')).toEqual({ kind: 'game', view: 'play', slug: 'boxed', daily: false });
     expect(legacyRoute('?learn=grid')).toEqual({ kind: 'game', view: 'learn', slug: 'grid', daily: false });
     expect(legacyRoute('?legal=terms')).toEqual({ kind: 'legal', doc: 'terms' });
     expect(legacyRoute('?nothing=here')).toBeNull();

@@ -113,8 +113,12 @@ describe('the game tables', () => {
     for (const slug of ALL_SLUGS) expect(SLUG_NAME[slug]).toBe(GAME_NAME[SLUG_MODE[slug]].full);
   });
 
-  it('names three views', () => {
-    expect(ALL_VIEWS).toEqual(['solve', 'play', 'learn']);
+  it('names the two views, play first', () => {
+    // 'solve' was the third and is gone: this deployment is for playing, and a
+    // solver is a way to win a prize without playing. Order matters — App
+    // sends anyone on a hidden view to shownViews[0], so play has to be first
+    // or a stored solver state would land people in the tutorial.
+    expect(ALL_VIEWS).toEqual(['play', 'learn']);
   });
 
   it('hands out copies, so a caller sorting the list cannot reorder it for everyone', () => {

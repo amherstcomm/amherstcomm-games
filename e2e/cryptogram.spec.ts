@@ -91,25 +91,6 @@ test('revealing fills the board and names the author', async ({ page }) => {
   await expect(page.locator('main')).toContainText('—');
 });
 
-test('the solver deduces from a pasted passage', async ({ page }) => {
-  await page.goto('/solve/cryptogram');
-  // a shift of 11, so the answer is known and the board is a real cryptogram
-  const plain = 'success is counted sweetest by those who never succeed';
-  const cipher = plain.replace(/[a-z]/g, (c) =>
-    String.fromCharCode(((c.charCodeAt(0) - 97 + 11) % 26) + 97)
-  );
-  await page.locator('#crypto-in').fill(cipher.toUpperCase());
-
-  // the words with distinctive shapes settle on their own; the dots are the
-  // marks the shapes genuinely cannot pin
-  await expect(page.locator('main')).toContainText(/[1-9]\d* marks settled/, { timeout: 20000 });
-  await expect(page.locator('main p.font-mono').first()).toContainText('success');
-});
-
-// The used-letter tracker is a row of struck-through glyphs, each aria-hidden
-// because read aloud it is twenty-six letters and no information. Hiding it
-// left nothing in its place, so the crossing-off a sighted player gets for
-// free was unavailable rather than differently available.
 test('the crossed-off alphabet has a spoken equivalent', async ({ page }) => {
   await page.goto('/daily/cryptogram');
   // easy is never homophonic, and the tracker is hidden on a board that is —

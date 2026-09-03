@@ -46,28 +46,6 @@ test('a rung that breaks a rule is refused, and says which', async ({ page }) =>
   await expect(rungs(page)).toHaveCount(before);
 });
 
-test('the solver answers with a route, not a ranking', async ({ page }) => {
-  await page.goto('/solve/ladder');
-  await page.getByRole('textbox', { name: 'from' }).fill('cold');
-  await page.getByRole('textbox', { name: 'to' }).fill('warm');
-  // every rung one letter apart, ending where it should
-  const list = page.locator('ol li');
-  await expect(list.first()).toHaveText(/COLD/i, { timeout: 15000 });
-  await expect(list.last()).toHaveText(/WARM/i);
-  const words = (await list.allInnerTexts()).map((w) => w.trim().toLowerCase());
-  for (let i = 1; i < words.length; i++) {
-    const differ = [...words[i]].filter((c, k) => c !== words[i - 1][k]).length;
-    expect(differ, `${words[i - 1]} -> ${words[i]}`).toBe(1);
-  }
-});
-
-test('mismatched lengths are refused before any search', async ({ page }) => {
-  await page.goto('/solve/ladder');
-  await page.getByRole('textbox', { name: 'from' }).fill('cold');
-  await page.getByRole('textbox', { name: 'to' }).fill('warmer');
-  await expect(page.getByText('Both words have to be the same length.')).toBeVisible();
-});
-
 // The game used to speak only when it said no. Rungs land in a list that is
 // not a live region, and the one region it had was cleared to empty on a good
 // word — so a screen reader heard every rejection and never heard an

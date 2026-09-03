@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState, useEffect, useRef } from 'react';
-import { Search, X, BookOpen, Grid3x3, Shuffle, Hexagon, Keyboard, Delete, Github, Info, Square, CalendarDays, Star, Gamepad2, CornerDownLeft, LayoutGrid, Puzzle, BarChart3, UserRound, Scale, Settings, Home, Table2, KeyRound } from 'lucide-react';
+import { X, BookOpen, Grid3x3, Shuffle, Hexagon, Keyboard, Delete, Github, Info, Square, CalendarDays, Star, Gamepad2, CornerDownLeft, LayoutGrid, Puzzle, BarChart3, UserRound, Scale, Settings, Home, Table2, KeyRound } from 'lucide-react';
 import LearnMode, { type LearnModeHandle } from '@/LearnMode';
 import type { Session } from '@supabase/supabase-js';
 import StatsModal from '@/StatsModal';
@@ -329,7 +329,9 @@ const startTarget =
 // every other game keeps whatever the visitor last had open.
 const entry = entryGame() ?? startTarget;
 const linkMode = entry ? modeOf(entry.slug) : null;
-const linkView = entry?.view === 'play' ? true : entry?.view === 'solve' ? false : null;
+// Was three-valued when a link could point at a solver. Now a game link
+// either names the board or says nothing about it.
+const linkView = entry?.view === 'play' ? true : null;
 function initialPlay(mode: Mode, stored: boolean): boolean {
   return linkMode === mode && linkView !== null ? linkView : stored;
 }
@@ -896,7 +898,10 @@ function App() {
     [practiceAllowed, highlightMatches]
   );
 
-  const currentView: View = learnMode ? 'learn' : playFlags[mode][0] ? 'play' : 'solve';
+  // Two views left, so the play flags no longer choose between them. They are
+  // still read and written — the stored ones are what step 2 of this removal
+  // will clear out with the solver JSX they used to switch.
+  const currentView: View = learnMode ? 'learn' : 'play';
 
   function goToView(view: View) {
     if (view === 'learn') {
@@ -1691,9 +1696,7 @@ function App() {
               puzzle". The wordmark stays, since it is the way home. */}
           {!atHome && !reportPage && (
             <p className="text-slate-400 max-w-md mx-auto text-sm sm:text-base">
-              {shownViews.includes('solve')
-                ? MODES.find((m) => m.id === mode)?.description
-                : MODES.find((m) => m.id === mode)?.playDescription}
+              {MODES.find((m) => m.id === mode)?.playDescription}
             </p>
           )}
         </header>
@@ -1773,7 +1776,6 @@ function App() {
             <div className="inline-flex flex-wrap justify-center max-w-full rounded-xl bg-white/5 border border-white/10 p-1 gap-1">
                 {(
                   [
-                    { view: 'solve', label: 'Solve', Icon: Search },
                     { view: 'play', label: 'Play', Icon: Gamepad2 },
                     { view: 'learn', label: 'Learn', Icon: BookOpen },
                   ] as const
@@ -1994,7 +1996,7 @@ function App() {
               practiceWords={practiceWordsArr}
               fullWords={acceptWordsArr ?? fullWordsArr}
               onLetterStates={setLetterStates}
-              onReveal={!shownViews.includes('solve') || !helpAllowed ? undefined : ({ length: len, known: k, contains, excluded }) => {
+              onReveal={!helpAllowed ? undefined : ({ length: len, known: k, contains, excluded }) => {
                 setLength(len);
                 setKnown(k);
                 setContainsStr(contains);
@@ -2026,7 +2028,7 @@ function App() {
               commonWords={commonWordsArr}
               practiceWords={practiceWordsArr}
               onLetterStates={setLetterStates}
-              onReveal={!shownViews.includes('solve') || !helpAllowed ? undefined : (letters) => {
+              onReveal={!helpAllowed ? undefined : (letters) => {
                 setRackStr(letters);
                 setUseAll(false);
                 setMinLength(3);
@@ -2059,7 +2061,7 @@ function App() {
               commonWords={commonWordsArr}
               practiceWords={practiceWordsArr}
               onLetterStates={setLetterStates}
-              onReveal={!shownViews.includes('solve') || !helpAllowed ? undefined : (center, outers) => {
+              onReveal={!helpAllowed ? undefined : (center, outers) => {
                 setBeeCenter(center);
                 setBeeOuters(outers);
                 setBeePlay(false);
@@ -2089,7 +2091,7 @@ function App() {
               standardWords={acceptWordsArr ?? standardWordsArr}
               displayWord={showWord}
               onLetterStates={setLetterStates}
-              onReveal={!shownViews.includes('solve') || !helpAllowed ? undefined : (cells) => {
+              onReveal={!helpAllowed ? undefined : (cells) => {
                 setGridPreset(cells.length === 9 ? '3x3' : cells.length === 25 ? '5x5' : '4x4');
                 setGridLetters(cells);
                 setGridPlay(false);
@@ -2120,7 +2122,7 @@ function App() {
               commonWords={commonWordsArr}
               practiceWords={practiceWordsArr}
               onLetterStates={setLetterStates}
-              onReveal={!shownViews.includes('solve') || !helpAllowed ? undefined : (sides) => {
+              onReveal={!helpAllowed ? undefined : (sides) => {
                 setBoxedLetters(sides.flatMap((s) => s.split('')).slice(0, 12));
                 setBoxedPlay(false);
               }}
@@ -2459,7 +2461,6 @@ function App() {
           practiceAllowed={practiceAllowed}
           highlightMatches={highlightMatches}
           helpAllowed={helpAllowed}
-          solverDictionary={solverDictionary}
           signedIn={!!session}
           onTheme={setTheme}
           onPalette={setPalette}
@@ -2474,7 +2475,6 @@ function App() {
           onPracticeAllowed={setPracticeAllowed}
           onHighlightMatches={setHighlightMatches}
           onHelpAllowed={setHelpAllowed}
-          onSolverDictionary={setSolverDictionary}
           wordFilter={wordFilter}
           onWordFilter={setWordFilter}
           onToggleView={(v) =>
@@ -2516,9 +2516,8 @@ function App() {
             <div className="space-y-5 text-sm text-slate-300">
               <p>
                 {SITE_NAME} is a word game site for Amherst Communications staff: a fresh
-                puzzle every morning, practice boards whenever you want one, solvers for
-                when a puzzle beats you, and interactive guides for the games you have
-                not met before.
+                puzzle every morning, practice boards whenever you want one, and
+                interactive guides for the games you have not met before.
               </p>
               <p className="text-slate-400">
                 It runs on our own server, reachable only from inside the company. It is
@@ -2536,9 +2535,7 @@ function App() {
                     </p>
                     <p>
                       No — every daily here is ours, generated on our own server, so
-                      playing never spoils (or copies) anyone else&apos;s puzzle. The solvers
-                      can load today&apos;s NYT Spelling Bee, Letter Boxed, and Strands where
-                      noted.
+                      playing never spoils (or copies) anyone else&apos;s puzzle.
                     </p>
                   </div>
                   <div>
@@ -2562,9 +2559,7 @@ function App() {
                       nearly everything. What a puzzle <em>accepts</em> is deliberately
                       one size more generous than the list its <em>answers</em> come
                       from, so the answer is always something you might recognise while
-                      your long shots get the benefit of the doubt. The solvers use the
-                      same three lists under the same names, so a word the solver finds
-                      at Hard is a word Hard accepts.
+                      your long shots get the benefit of the doubt.
                     </p>
                   </div>
                   <div>
@@ -2606,10 +2601,11 @@ function App() {
                   <div>
                     <p className="text-slate-300 font-medium">Where does my data live?</p>
                     <p>
-                      On a server inside the company, and in your browser. What you type
-                      into a solver never leaves your device at all. Your completed games
-                      sync to your account, which lives on the same internal server —
-                      nothing about how you play goes to anyone outside Amherst.
+                      On a server inside the company, and in your browser. The letters
+                      you type are checked where you type them and never leave your
+                      device — only the result does, once you finish. Your completed
+                      games sync to your account on the same internal server; nothing
+                      about how you play goes to anyone outside Amherst.
                     </p>
                   </div>
                   <div>

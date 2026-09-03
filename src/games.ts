@@ -54,8 +54,15 @@ const SLUGS = [
 export type Slug = (typeof SLUGS)[number];
 export const ALL_SLUGS: Slug[] = [...SLUGS];
 
-/** The three tabs a game can be shown in. */
-const VIEWS = ['solve', 'play', 'learn'] as const;
+/** The tabs a game can be shown in.
+ *
+ *  'solve' was the third, and it is gone: this deployment is for playing, not
+ *  for cracking somebody else's puzzle, and a solver on a staff site is a way
+ *  to win a prize without playing. Removing it from here is what makes it
+ *  unreachable — App derives the current view from this list, and the effect
+ *  that redirects away from a view nobody can see carries anyone whose stored
+ *  state left them on a solver back to the board. */
+const VIEWS = ['play', 'learn'] as const;
 export type View = (typeof VIEWS)[number];
 export const ALL_VIEWS: View[] = [...VIEWS];
 
