@@ -18,4 +18,9 @@ Requires=docker.service
 Type=oneshot
 User=rtetzloff
 WorkingDirectory=/home/rtetzloff/git/amherstcomm-games
-ExecStart=/home/rtetzloff/git/amherstcomm-games/ops/publish-puzzles.sh
+# Invoked through bash rather than directly, so the unit does not depend on the
+# executable bit surviving. The bit is set in the index (100755) and should
+# stay, but this repository is authored on Windows where core.fileMode is
+# false — a `chmod +x` there records nothing, and the failure lands here as a
+# unit that will not start rather than as anything that mentions permissions.
+ExecStart=/bin/bash /home/rtetzloff/git/amherstcomm-games/ops/publish-puzzles.sh
