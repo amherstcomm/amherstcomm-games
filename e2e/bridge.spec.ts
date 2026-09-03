@@ -15,45 +15,28 @@ test('the board gives five prompts and a hint budget', async ({ page }) => {
   await expect(page.getByText(/\d+ left/)).toBeVisible();
 });
 
-test('a word that joins both sides is taken, and one that does not is refused', async ({
-  page,
-}) => {
+test('a word that joins neither side is refused', async ({ page }) => {
   await page.goto('/daily/bridge');
   const input = page.getByRole('textbox', { name: /joins/ });
   await expect(input).toBeVisible();
-
-  // The prompt is whatever the fixture holds today, so the answer is derived
-  // rather than hardcoded: read the two ends off the row and search the same
-  // way the game does. A hardcoded word would rot the day the feed moved.
-  const first = await rows(page).first().locator('span.sr-only').innerText();
-  const [x, , y] = first.trim().split(/\s+/);
 
   // something that is certainly not a word on either side
   await input.fill('zzz');
   await page.getByRole('button', { name: 'Add', exact: true }).click();
   await expect(page.getByText(/is not a word/)).toBeVisible();
   await expect(rows(page).filter({ hasText: 'found' })).toHaveCount(0);
-
-  // and the real answer, found by asking the page's own solver for it
-  await page.goto('/solve/bridge');
-  await page.getByRole('textbox', { name: 'first' }).fill(x);
-  await page.getByRole('textbox', { name: 'second' }).fill(y);
-  const answer = await page
-    .locator('ul li')
-    .first()
-    .innerText({ timeout: 20000 })
-    .then((t) => t.trim().slice(x.length, t.trim().length - y.length));
-
-  await page.goto('/daily/bridge');
-  const again = page.getByRole('textbox', { name: /joins/ });
-  await again.fill(answer);
-  await page.getByRole('button', { name: 'Add', exact: true }).click();
-  await expect(page.getByText(/1 \/ 5 found/)).toBeVisible();
-  await expect(rows(page).filter({ hasText: 'found' })).toHaveCount(1);
 });
 
-// The whole difficulty setting, so it gets a check: a hint applies to the row
-// you are on and comes out of a budget, rather than lighting up the board.
+// Coverage deliberately lost, and worth naming rather than quietly dropping:
+// this test also used to prove that a *correct* word is accepted. It found one
+// by asking the site's own Bridge solver, because the prompt is whatever the
+// day's board holds and a hardcoded answer would rot the moment the feed
+// moved. With the solver gone there is no cheap way for a test to discover a
+// valid answer for an arbitrary prompt.
+//
+// Restoring it needs a fixture that pins the bridge daily to a known prompt —
+// worth doing, but it is a change to the fixtures rather than to this file.
+
 test('a hint is spent on one prompt and comes out of the budget', async ({ page }) => {
   await page.goto('/daily/bridge');
   await expect(page.getByText(/3 left/)).toBeVisible();
@@ -61,18 +44,6 @@ test('a hint is spent on one prompt and comes out of the budget', async ({ page 
   await expect(page.getByText(/2 left/)).toBeVisible();
   // exactly one row now states a length; the other four are untouched
   await expect(rows(page).filter({ hasText: /\d+ letters/ })).toHaveCount(1);
-});
-
-test('the solver lists every word that joins two ends, not just one', async ({ page }) => {
-  await page.goto('/solve/bridge');
-  await page.getByRole('textbox', { name: 'first' }).fill('snow');
-  await page.getByRole('textbox', { name: 'second' }).fill('room');
-  // snowball/ballroom and snowboard/boardroom are both real, which is the
-  // reason the solver returns a list: the daily only publishes prompts with a
-  // single answer, and the solver says what is true rather than what shipped
-  const results = page.locator('ul li');
-  await expect(results).toHaveCount(2, { timeout: 20000 });
-  await expect(results.first()).toHaveText(/snow\s*ball\s*room/i);
 });
 
 test('Learn is the real board, played', async ({ page }) => {

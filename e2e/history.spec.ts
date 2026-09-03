@@ -83,9 +83,11 @@ test('forward works too, which is the half people forget', async ({ page }) => {
 });
 
 test('the view switch is an address, and Back returns the board', async ({ page }) => {
+  // Learn rather than Solve: two views left, and this asserts that switching
+  // between them is a real navigation rather than local state.
   await page.goto('/daily/hive');
-  await page.getByRole('link', { name: 'Solve', exact: true }).click();
-  await expect(page).toHaveURL(/\/solve\/hive$/);
+  await page.getByRole('link', { name: 'Learn', exact: true }).click();
+  await expect(page).toHaveURL(/\/learn\/hive$/);
 
   await page.goBack();
   await expect(page).toHaveURL(/\/daily\/hive$/);
@@ -113,7 +115,7 @@ test('the tab title follows the address', async ({ page }) => {
   // titleOf has never been asserted anywhere, including that it is wired up
   for (const [path, title] of [
     ['/daily/hive', /Hive/],
-    ['/solve/guess', /Guess/],
+    ['/play/guess', /Guess/],
     ['/about', /About/],
     ['/legal/privacy', /Privacy/],
     ['/reports', /Open reports/],

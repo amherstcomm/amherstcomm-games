@@ -94,9 +94,9 @@ export function PrivacyPolicy() {
 
       <div className="rounded-xl bg-white/5 border border-white/10 p-4 my-4">
         <p className="text-slate-300">
-          <strong className="font-semibold">The short version.</strong> What you type
-          into a solver never leaves your device. Everything runs on a server inside
-          the company; nothing about how you play is sent to anyone outside it. Signing
+          <strong className="font-semibold">The short version.</strong> Everything runs
+          on a server inside the company; nothing about how you play is sent to anyone
+          outside it. Signing
           in happens through your Amherst account, and we store your results and the
           daily boards you have in progress so they follow you between devices. Nothing
           about you is visible to colleagues unless you choose a
@@ -107,18 +107,16 @@ export function PrivacyPolicy() {
 
       <H>What never leaves your device</H>
       <P>
-        Every solver and every game runs entirely in your browser. The dictionaries
-        are downloaded to your device and searched there, so nothing you type is
-        sent anywhere to be answered.
+        Every game runs entirely in your browser. The dictionaries are downloaded to
+        your device and searched there, so the letters you type are checked where you
+        typed them and are never sent anywhere to be answered.
       </P>
       <P>
         <strong className="text-slate-300">
-          What you type into a solver never leaves your device — ever, account or
-          not.
+          What you type into a board never leaves your device — ever, account or not.
         </strong>{' '}
-        That is the one we consider absolute: a solver query says what puzzle
-        you&apos;re stuck on, and it is nobody&apos;s business but yours. Signing in
-        does sync your progress on the daily games, which is described below.
+        Only the result does, and only once you finish: which puzzle, whether you won,
+        the score and the time. Not the guesses that got you there.
       </P>
       <P>These things are kept in your browser&apos;s local storage:</P>
       <List>
@@ -146,7 +144,7 @@ export function PrivacyPolicy() {
       <List>
         <li>
           <strong className="text-slate-300">Keep essentials only</strong> — your
-          answers on this page, and nothing else. Every game and every solver works
+          answers on this page, and nothing else. Every game works
           exactly as it does otherwise; close the tab and it starts over, sign-in
           included, because staying signed in is itself a thing kept on your device.
         </li>
@@ -443,7 +441,7 @@ export function Terms() {
 
       <H>What this is</H>
       <P>
-        A set of word games, daily puzzles and solvers, run internally for Amherst
+        A set of word games and daily puzzles, run internally for Amherst
         Communications staff. It is offered for enjoyment, not as part of anyone&apos;s
         job, and playing or not playing is entirely up to you. Nothing here is sold and
         nothing is charged for.
@@ -512,8 +510,24 @@ export function Terms() {
         To the fullest extent the law allows, this site is provided without
         warranties of any kind, express or implied, including fitness for a
         particular purpose. We are not liable for any loss arising from using it —
-        including lost statistics, lost streaks, or a puzzle answer that turned out
-        to be wrong. Nothing here limits liability that cannot legally be limited.
+        including lost statistics, lost streaks, a board that would not load, or a
+        puzzle answer that turned out to be wrong. Nothing here limits liability that
+        cannot legally be limited.
+      </P>
+
+      <H>Prizes</H>
+      <P>
+        Prizes given out in connection with this site are offered in the same spirit
+        and on the same terms: no warranty, and no guarantee that any particular
+        prize will be awarded, that a leaderboard is a complete or accurate record of
+        who played, or that a result the site recorded is the one you meant to send.
+        Scores are written by your own browser and checked for plausibility on the
+        way in; that is a filter, not a proof.
+      </P>
+      <P>
+        Playing is voluntary and outside your job. Nothing here creates an
+        entitlement to a prize, and how prizes are decided and handed out is up to
+        Amherst Communications rather than to the site.
       </P>
 
       <H>The code</H>

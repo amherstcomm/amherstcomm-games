@@ -44,13 +44,3 @@ test('the keyboard types into a play board', async ({ page }) => {
   await expect(rung).toHaveValue('cord');
 });
 
-test('the keyboard still types into a solver, which has no board at all', async ({ page }) => {
-  await page.goto('/solve/grid');
-
-  await showKeyboard(page);
-  const first = page.locator('input[data-tile-group="grid"]').first();
-  await first.focus();
-  await key(page, 'q').click();
-
-  await expect(first).toHaveValue('q');
-});

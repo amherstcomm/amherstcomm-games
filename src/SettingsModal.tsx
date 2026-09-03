@@ -13,7 +13,6 @@ import {
   type View,
   type WordFilterLevel,
 } from '@/storage';
-import { DICTIONARIES } from '@/dictionaries';
 import type { SettingsTab } from '@/routes';
 import { level as storageLevel, setLevel as setStorageLevel, STORAGE_OPTIONS, type StorageLevel } from '@/siteStorage';
 import {
@@ -50,7 +49,6 @@ export const MODE_LABELS: { id: Mode; label: string }[] = ALL_MODES.map((id) => 
 }));
 
 const VIEW_LABELS: { id: View; label: string }[] = [
-  { id: 'solve', label: 'Solve' },
   { id: 'play', label: 'Play' },
   { id: 'learn', label: 'Learn' },
 ];
@@ -196,7 +194,6 @@ export default function SettingsModal({
   practiceAllowed,
   highlightMatches,
   helpAllowed,
-  solverDictionary,
   wordFilter,
   signedIn,
   onTheme,
@@ -209,7 +206,6 @@ export default function SettingsModal({
   onPracticeAllowed,
   onHighlightMatches,
   onHelpAllowed,
-  onSolverDictionary,
   onWordFilter,
   startPage,
   onStartPage,
@@ -227,7 +223,6 @@ export default function SettingsModal({
   practiceAllowed: boolean;
   highlightMatches: boolean;
   helpAllowed: boolean;
-  solverDictionary: Difficulty | 'per-game';
   wordFilter: WordFilterLevel;
   signedIn: boolean;
   onTheme: (t: ThemeMode) => void;
@@ -240,7 +235,6 @@ export default function SettingsModal({
   onPracticeAllowed: (v: boolean) => void;
   onHighlightMatches: (v: boolean) => void;
   onHelpAllowed: (v: boolean) => void;
-  onSolverDictionary: (d: Difficulty | 'per-game') => void;
   onWordFilter: (w: WordFilterLevel) => void;
   startPage: StartPage;
   onStartPage: (s: StartPage) => void;
@@ -557,51 +551,19 @@ export default function SettingsModal({
               >
                 Practice
               </Pill>
-              {/* only meaningful while there's a solver to reach */}
-              {!hiddenViews.includes('solve') && (
-                <Pill on={helpAllowed} onClick={() => onHelpAllowed(!helpAllowed)} tone="emerald">
-                  Help &amp; reveal
-                </Pill>
-              )}
+              <Pill on={helpAllowed} onClick={() => onHelpAllowed(!helpAllowed)} tone="emerald">
+                Help &amp; reveal
+              </Pill>
             </div>
             <p className="mt-2 text-xs text-slate-500">
-              Tap to hide a game, a tab, the practice boards, or the buttons that
-              hand a game to the solver. Nothing is deleted — statistics and
-              streaks keep accruing, and unhiding brings everything back. One
-              game and one tab have to stay.
+              Tap to hide a game, a tab, the practice boards, or the help and
+              reveal buttons. Nothing is deleted — statistics and streaks keep
+              accruing, and unhiding brings everything back. One game and one
+              tab have to stay.
             </p>
 
           </div>
 
-          {!hiddenViews.includes('solve') && (
-            <div>
-              <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2.5">
-                Solver word list
-              </h3>
-                <select
-                  aria-label="Solver word list"
-                  value={solverDictionary}
-                  onChange={(e) =>
-                    onSolverDictionary(e.target.value as Difficulty | 'per-game')
-                  }
-                  className="h-9 px-2 rounded-lg bg-white/5 border border-white/10 text-slate-200 text-sm font-semibold"
-                >
-                  <option value="per-game" className="bg-slate-900">
-                    Per game
-                  </option>
-                  {DICTIONARIES.map(({ id, label }) => (
-                    <option key={id} value={id} className="bg-slate-900">
-                      {label}
-                    </option>
-                  ))}
-                </select>
-                <p className="mt-2 text-xs text-slate-500">
-                  {solverDictionary === 'per-game'
-                    ? 'Each solver remembers its own, which is what the picker above each one sets.'
-                    : 'Every solver uses this one, and the per-solver picker goes away.'}
-                </p>
-            </div>
-          )}
 
           <div>
             <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2.5">

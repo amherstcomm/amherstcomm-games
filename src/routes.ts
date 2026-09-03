@@ -117,7 +117,7 @@ export function pathOf(route: Route): string {
   }
 }
 
-const VIEW_WORD: Record<View, string> = { solve: 'Solver', play: 'Play', learn: 'How to play' };
+const VIEW_WORD: Record<View, string> = { play: 'Play', learn: 'How to play' };
 
 /** What the tab says, and what a search result would show. Every address
  *  returning one title makes 33 sitemap entries look like 33 copies of the
@@ -218,11 +218,15 @@ export function parsePath(pathname: string): Route | null {
   if (first === 'sign-in' || first === 'signin') return { kind: 'account', tab: DEFAULT_ACCOUNT };
   if (PANELS.includes(first as Panel)) return { kind: 'panel', panel: first as Panel };
 
-  if (first === 'daily' || VIEWS.includes(first as View)) {
+  // 'solve' is not a view any more, but the address is out there in shared
+  // results — it resolves to the board, and the URL corrects itself because
+  // the address bar follows state.
+  if (first === 'daily' || first === 'solve' || VIEWS.includes(first as View)) {
     const slug = second ? canonicalSlug(second) : null;
     if (!slug) return null;
     if (first === 'daily') return { kind: 'game', view: 'play', slug, daily: true };
-    // daily is only meaningful under /play; solve and learn carry it as false
+    if (first === 'solve') return { kind: 'game', view: 'play', slug, daily: false };
+    // daily is only meaningful under /play; learn carries it as false
     return { kind: 'game', view: first as View, slug, daily: false };
   }
 
@@ -255,7 +259,10 @@ export function gameUrl(slug: Slug, view: View, daily: boolean): string {
 const LEGACY: { param: string; make: (slug: Slug) => Route }[] = [
   { param: 'daily', make: (slug) => ({ kind: 'game', view: 'play', slug, daily: true }) },
   { param: 'play', make: (slug) => ({ kind: 'game', view: 'play', slug, daily: false }) },
-  { param: 'solve', make: (slug) => ({ kind: 'game', view: 'solve', slug, daily: false }) },
+  // The solve view is gone, but an address that names it should still land
+  // somewhere sensible rather than nowhere. Both spellings resolve to the
+  // board — a link somebody already has is not their mistake.
+  { param: 'solve', make: (slug) => ({ kind: 'game', view: 'play', slug, daily: false }) },
   { param: 'learn', make: (slug) => ({ kind: 'game', view: 'learn', slug, daily: false }) },
 ];
 
