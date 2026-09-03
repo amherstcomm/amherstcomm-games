@@ -2431,14 +2431,9 @@ function App() {
         />
       )}
 
-      <ConsentBanner
-        onReadPolicy={() => {
-          // over whatever is already open, rather than instead of it: the
-          // banner sits above the modals, so this is reachable with Settings
-          // open and closing it must put Settings back
-          openOverlay({ kind: 'legal', doc: 'privacy' });
-        }}
-      />
+      {/* One question now, and it needs no link out: the analytics half was
+          the part that had a privacy policy to read before answering. */}
+      <ConsentBanner />
 
       {keysOpen && (
         <KeyboardHelp

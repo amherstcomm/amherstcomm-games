@@ -5,7 +5,6 @@
 
 import type { ReactNode } from 'react';
 import ReportMenu from '@/ReportMenu';
-import { GA_ID } from '@/analytics';
 import { CONTACT_EMAIL } from '@/brand';
 
 export const LEGAL_UPDATED = '16 August 2026';
@@ -309,55 +308,17 @@ export function PrivacyPolicy() {
         and not kept.
       </P>
 
-      {/* Gated on the same value the code is. This section asserted "We use
-          Google Analytics" unconditionally while ConsentBanner and SettingsModal
-          both checked GA_ID before loading anything — so a deployment with no
-          measurement ID, which is this one, had a privacy policy describing
-          analytics that never ran. One truth, read twice. */}
-      {GA_ID && (
-        <>
-        <H>Analytics</H>
-        <P>
-          We use Google Analytics to count visits and see which games get played. It
-          records page views, an approximate location derived from your IP address,
-          and basic device and browser information. It never receives your letters,
-          boards, or results. Google&apos;s handling is covered by its own{' '}
-          <Ext href="https://policies.google.com/privacy">privacy policy</Ext>, and
-          data is retained for the period configured in our property.
-        </P>
-        <P>
-          We ask everyone, wherever they are, and nothing loads until you say yes.
-          That used to depend on guessing your region from your time zone — right
-          often enough, but a VPN or a holiday was enough to track someone who had
-          never been asked, and that's the only failure here that costs anything.
-          Declining is a single click, the same as accepting, and we remember it. If
-          your browser sends a{' '}
-          <Ext href="https://globalprivacycontrol.org/">Global Privacy Control</Ext>{' '}
-          signal we treat that as a no without asking at all.
-        </P>
-        <P>
-          An answer lasts a year, then we ask again — a yes from two years ago
-          isn&apos;t really a current one. The date you answered is shown under
-          Settings → Analytics, where you can also change it.
-        </P>
-        <P>
-          Either way you can turn it off at any time under Settings → Analytics, with
-          no account needed. Doing so stops it for the rest of the visit and clears
-          the cookies it had already set. We keep that choice per browser, because
-          that is where the cookies are.
-        </P>
-        </>
-      )}
-      {!GA_ID && (
-        <>
-          <H>Analytics</H>
-          <P>
-            There are none. No analytics service is configured for this site, so no
-            page views, locations or device details are collected or sent anywhere.
-            There is nothing to consent to and nothing to switch off.
-          </P>
-        </>
-      )}
+      <H>Analytics</H>
+      <P>
+        There are none. No analytics service runs on this site — no page views,
+        locations or device details are collected, and nothing is sent anywhere. There
+        is nothing to consent to and nothing to switch off.
+      </P>
+      <P>
+        The code that would have loaded Google Analytics is gone rather than switched
+        off, which is a stronger statement than a policy can make: there is no
+        measurement ID to set and no script to enable.
+      </P>
 
       <H>What we don&apos;t do</H>
       <List>

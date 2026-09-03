@@ -190,7 +190,7 @@ Note: Supabase's built-in email service is rate-limited (a few magic links per h
 
 ## Analytics (optional)
 
-Set `VITE_GA_ID` to a Google Analytics 4 measurement ID (`G-…`) and the site loads gtag and reports pageviews; leave it unset and nothing is injected. Use one GA4 property with a separate web data stream (and measurement ID) for each environment, set on the matching Render site, so prod and dev numbers stay separable.
+There is no analytics. The code that loaded Google Analytics was removed when this became an internal staff tool — there is no measurement ID to set and no script to enable.
 
 Every visitor is asked, wherever they are, and nothing loads until they agree — no geo-IP lookup, and no guessing the region from a time zone, which was the previous approach and could be defeated by a VPN. Declining is one click, the same as accepting, and is remembered. An answer lasts a year before it's asked again. A Global Privacy Control signal counts as a refusal without asking at all. Either way it can be switched off under Settings → Analytics, which also clears the cookies it had set. No account identifier is ever sent, so Google holds a browser-scoped id with nothing to tie it to a person.
 

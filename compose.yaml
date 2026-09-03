@@ -24,7 +24,6 @@ services:
         # change to any of them requires --build, not restart.
         VITE_SUPABASE_URL: ${VITE_SUPABASE_URL:-}
         VITE_SUPABASE_ANON_KEY: ${VITE_SUPABASE_ANON_KEY:-}
-        VITE_GA_ID: ${VITE_GA_ID:-}
         VITE_SSO_PROVIDER: ${VITE_SSO_PROVIDER:-}
         VITE_SSO_SAML_DOMAIN: ${VITE_SSO_SAML_DOMAIN:-}
         VITE_SSO_SAML_PROVIDER_ID: ${VITE_SSO_SAML_PROVIDER_ID:-}
