@@ -214,7 +214,7 @@ for (const [name, path] of [
   });
 }
 
-test('privacy and security have their own doors, and security names a better one', async ({
+test('privacy and security have their own doors, and security keeps its report inside', async ({
   page,
   rpcCalls,
 }) => {
@@ -223,14 +223,14 @@ test('privacy and security have their own doors, and security names a better one
   await page.getByRole('button', { name: /^A security problem/ }).click();
 
   const dialog = page.getByRole('dialog', { name: /Report a security problem/i });
-  // The private advisory is offered first, because a report table can't give
-  // a disclosure process and GitHub's form can. The form stays open anyway —
-  // somebody who found a hole should not be turned away for lacking an account.
-  const advisory = dialog.getByRole('link', { name: /private security advisory/i });
-  await expect(advisory).toHaveAttribute(
-    'href',
-    'https://github.com/rptetzloff/anagrimoire/security/advisories/new'
-  );
+  // The upstream project named GitHub's advisory form first, because it is
+  // private by construction and carries a disclosure process a report table
+  // cannot. Neither applies to an internal tool: this queue is already inside
+  // the company, and sending an employee to a public code host to report a hole
+  // is the opposite of the privacy that route existed to give. So the security
+  // panel must offer no way out at all.
+  await expect(dialog.getByRole('link')).toHaveCount(0);
+  await expect(dialog.getByText(/internal queue and nowhere else/i)).toBeVisible();
 
   await dialog.getByRole('textbox', { name: /What.s wrong with it/i }).fill('a way in');
   await dialog.getByRole('button', { name: 'Send report' }).click();
@@ -310,13 +310,17 @@ test('About can open the report menu, and Escape closes only the top one', async
   await expect(about).toHaveCount(0);
 });
 
-test('the legal pages route people to the form, and name the right addresses', async ({ page }) => {
+test('the legal pages route people to the form, and keep security off public code hosts', async ({ page }) => {
+  // This used to assert three literal addresses at the upstream project's own
+  // domain. They are gone: one configured address stands in for all three, and
+  // it is empty unless a deployment sets VITE_CONTACT_EMAIL — so a test naming
+  // a mailbox pins a build value rather than a rule.
+  //
+  // The rule worth pinning is that the form is always reachable, because it is
+  // the route that needs no mailbox to exist.
   await page.goto('/legal/privacy');
   const privacy = page.getByRole('dialog', { name: 'Legal and licenses' });
-  await expect(privacy.getByRole('link', { name: 'privacy@anagrimoire.com' }).first()).toBeVisible();
-  await expect(privacy.getByRole('link', { name: 'support@anagrimoire.com' })).toBeVisible();
 
-  // and the form is openable from the sentence that names it
   // three of them on this page, and role-name matching is case-insensitive, so
   // "The report form" also matches the two lowercase mentions
   await privacy.getByRole('button', { name: 'The report form' }).first().click();
@@ -329,11 +333,17 @@ test('the legal pages route people to the form, and name the right addresses', a
 
   await page.goto('/legal/terms');
   const terms = page.getByRole('dialog', { name: 'Legal and licenses' });
-  // security has its own address and its own route, and no longer points at
-  // public issues — an open issue publishes the hole before it is fixed
-  await expect(terms.getByRole('link', { name: 'security@anagrimoire.com' })).toBeVisible();
-  await expect(
-    terms.getByRole('link', { name: /private security advisory/i })
-  ).toHaveAttribute('href', /security\/advisories\/new$/);
-  await expect(terms.getByRole('link', { name: /GitHub issues/ })).toHaveCount(0);
+  // Security reporting stays inside the company. Sending an employee to a
+  // public code host to report a hole in an internal tool is the opposite of
+  // the privacy the old advisory route existed to provide.
+  await expect(terms.getByRole('link', { name: /security advisory/i })).toHaveCount(0);
+  // No link anywhere on this page may lead to a public code host. The terms
+  // still credit the open-source project this is built on, so the check is on
+  // hrefs that would carry a *report* out of the company — issues and
+  // advisories — rather than on the word GitHub appearing at all.
+  const hrefs = await terms.getByRole('link').evaluateAll((els) =>
+    els.map((el) => el.getAttribute('href') ?? '')
+  );
+  expect(hrefs.filter((h) => /\/(issues|security\/advisories)/.test(h))).toEqual([]);
+  await expect(terms.getByText(/security option under/i)).toBeVisible();
 });

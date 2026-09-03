@@ -4,7 +4,9 @@ Ten word games, each with a solver behind it, a fresh puzzle every morning, and 
 
 *Vibe-coded with [Claude](https://claude.com/claude-code).*
 
-**Live site:** [anagrimoire.com](https://anagrimoire.com) · **Dev preview:** [dev.anagrimoire.com](https://dev.anagrimoire.com)
+**Live site:** games.amherstcomm.net — internal, reachable over the VPN only.
+
+*A fork of [Anagrimoire](https://github.com/rptetzloff/anagrimoire), rebranded and self-hosted for Amherst Communications. See [docs/selfhost.md](docs/selfhost.md).*
 
 ## Features
 
@@ -171,7 +173,7 @@ Setup:
 
 1. Create a free Supabase project.
 2. Run [supabase/schema.sql](supabase/schema.sql) in the SQL Editor (safe to re-run — re-run it after pulling changes, since it also adds new columns like `profiles.settings`), then [supabase/words.sql](supabase/words.sql) and load `scripts/words.csv` (from `npm run build-words`) into the `words` table — or dispatch the **Rebuild word lists** workflow, which does the whole thing in one transaction.
-3. In **Authentication → URL Configuration**, set the Site URL to `https://anagrimoire.com` and add `https://www.anagrimoire.com` (the alias), `https://dev.anagrimoire.com`, and `http://localhost:5173` as additional redirect URLs — sign-in redirects back to whichever origin the visitor is on, so both spellings of production must be allowed.
+3. In **Authentication → URL Configuration**, set the Site URL to `https://games.amherstcomm.net` and add `http://localhost:5173` as an additional redirect URL — sign-in redirects back to whichever origin the visitor is on. See [docs/selfhost.md](docs/selfhost.md) for the self-hosted setup this deployment actually uses.
 4. Copy the Project URL and anon/publishable key (**Settings → API**) into env vars — `.env.local` for local dev (see [.env.example](.env.example)), and environment variables on each Render static site. The anon key is public by design; row-level security protects the data.
 
 5. Optionally enable OAuth providers (**Authentication → Providers**): create a GitHub/Google OAuth app with the callback URL Supabase shows there, and paste in its client ID and secret. The sign-in modal offers both alongside email.
@@ -188,7 +190,7 @@ Note: Supabase's built-in email service is rate-limited (a few magic links per h
 
 ## Analytics (optional)
 
-Set `VITE_GA_ID` to a Google Analytics 4 measurement ID (`G-…`) and the site loads gtag and reports pageviews; leave it unset and nothing is injected. Use one GA4 property with a separate web data stream (and measurement ID) for each environment, set on the matching Render site, so prod and dev numbers stay separable.
+There is no analytics. The code that loaded Google Analytics was removed when this became an internal staff tool — there is no measurement ID to set and no script to enable.
 
 Every visitor is asked, wherever they are, and nothing loads until they agree — no geo-IP lookup, and no guessing the region from a time zone, which was the previous approach and could be defeated by a VPN. Declining is one click, the same as accepting, and is remembered. An answer lasts a year before it's asked again. A Global Privacy Control signal counts as a refusal without asking at all. Either way it can be switched off under Settings → Analytics, which also clears the cookies it had set. No account identifier is ever sent, so Google holds a browser-scoped id with nothing to tie it to a person.
 
@@ -201,9 +203,9 @@ it, the daily gate that refuses to serve tomorrow, and the two-key lock on
 report actions. Every puzzle answer is already in the browser by design, so
 that isn't a finding; a way past a database policy is.
 
-Report privately via [GitHub's advisory form](https://github.com/rptetzloff/anagrimoire/security/advisories/new),
-the security option under **Report a problem** at the bottom of any page, or
-<security@anagrimoire.com>.
+Report through the site's own **Report a problem** form at the bottom of any
+page, under *a security problem*. It reaches the internal queue and gives you a
+reference you can check.
 
 ## Privacy and terms
 
@@ -249,8 +251,7 @@ Two environments are deployed on Render:
 
 | Environment | URL | Branch |
 |---|---|---|
-| Production | [anagrimoire.com](https://anagrimoire.com) (www is an alias) | `main` |
-| Dev | [dev.anagrimoire.com](https://dev.anagrimoire.com) | `dev` |
+| Production | games.amherstcomm.net — internal, VPN only | `main` |
 
 Pushes to each branch auto-deploy to the matching environment.
 

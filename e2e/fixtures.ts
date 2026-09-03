@@ -126,14 +126,11 @@ export const test = base.extend<{ rpcCalls: { fn: string; args: Record<string, u
     await page.addInitScript(() => {
       localStorage.setItem('anagrimoire:storage:v2', 'browser');
       localStorage.setItem('anagrimoire:v1', JSON.stringify({ onboarded: true }));
-      // And the analytics banner, which is a *fixed* card sitting over the
-      // bottom of the page — including the footer. Unanswered, it makes every
-      // footer control unclickable, which is how the report menu's own tests
-      // failed while its "is it visible" test passed.
-      localStorage.setItem(
-        'anagrimoire:analytics-consent:v2',
-        JSON.stringify({ value: 'denied', at: Date.now() })
-      );
+      // The analytics consent this used to seed is gone with the analytics.
+      // It was seeded because the unanswered banner is fixed to the bottom of
+      // the page and made every footer control unclickable — which is how the
+      // report menu's own tests failed while its "is it visible" test passed.
+      // The storage question above still has a banner, and is still answered.
     });
     await use(page);
   },

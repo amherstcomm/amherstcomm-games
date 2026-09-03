@@ -1,14 +1,11 @@
 import { useState } from 'react';
-import { BarChart3, HardDrive } from 'lucide-react';
-import { GA_ID, disableAnalytics, initAnalytics } from '@/analytics';
-import { clearAnalyticsCookies, gpcEnabled, readConsent, writeConsent } from '@/consent';
+import { HardDrive } from 'lucide-react';
 import { readLevel, setLevel, STORAGE_OPTIONS, type StorageLevel } from '@/siteStorage';
 
-// Two questions, asked separately, because they are not the same question.
-// One is the site remembering what you did here; the other is data going to
-// Google. Bundling them into one accept/reject makes "yes" the only easy
-// answer, and quietly costs someone their saved games when they meant to
-// refuse the tracking.
+// One question: may the site remember what you did here. There used to be a
+// second, about data going to Google, deliberately asked separately so that
+// bundling them could not make "yes" the only easy answer. There is no
+// analytics on this deployment at all now, so there is nothing to ask.
 //
 // Not a modal: nothing is being tracked while it sits there, so there's no
 // reason to hold the page hostage. And declining is exactly as easy as
@@ -16,28 +13,14 @@ import { readLevel, setLevel, STORAGE_OPTIONS, type StorageLevel } from '@/siteS
 // Every button here is deliberately identical: highlighting the one that
 // shares the most would be a nudge dressed up as a default, and "equally
 // easy" is meant to include how the choices look.
-export default function ConsentBanner({ onReadPolicy }: { onReadPolicy: () => void }) {
+export default function ConsentBanner() {
   const [askStorage, setAskStorage] = useState(() => readLevel() === null);
-  // A browser sending GPC has already answered the analytics question.
-  const [askAnalytics, setAskAnalytics] = useState(
-    () => !!GA_ID && !gpcEnabled() && readConsent() === null
-  );
 
-  if (!askStorage && !askAnalytics) return null;
+  if (!askStorage) return null;
 
   function chooseStorage(next: StorageLevel) {
     setLevel(next);
     setAskStorage(false);
-  }
-
-  function chooseAnalytics(value: 'granted' | 'denied') {
-    writeConsent(value);
-    if (value === 'granted') initAnalytics();
-    else {
-      disableAnalytics();
-      clearAnalyticsCookies();
-    }
-    setAskAnalytics(false);
   }
 
   const choice =
@@ -74,36 +57,6 @@ export default function ConsentBanner({ onReadPolicy }: { onReadPolicy: () => vo
           </div>
         )}
 
-        {askStorage && askAnalytics && <div className="h-px bg-white/10" />}
-
-        {askAnalytics && (
-          <div className="flex flex-wrap items-center justify-center sm:justify-between gap-x-5 gap-y-3">
-            <p className="flex items-start gap-2.5 text-sm text-slate-300 max-w-lg">
-              <BarChart3 className="w-4 h-4 mt-0.5 shrink-0 text-accent" aria-hidden="true" />
-              <span>
-                <strong className="font-semibold text-slate-200">
-                  May we use Google Analytics to count visits?
-                </strong>{' '}
-                This one leaves your device. Playing and solving work exactly the same
-                either way, and we never send it the letters you type.{' '}
-                <button
-                  onClick={onReadPolicy}
-                  className="text-amber-300 hover:text-amber-200 underline underline-offset-2"
-                >
-                  Privacy policy
-                </button>
-              </span>
-            </p>
-            <div className="flex flex-wrap items-center justify-center gap-2">
-              <button onClick={() => chooseAnalytics('denied')} className={choice}>
-                No thanks
-              </button>
-              <button onClick={() => chooseAnalytics('granted')} className={choice}>
-                Allow
-              </button>
-            </div>
-          </div>
-        )}
       </div>
     </div>
   );

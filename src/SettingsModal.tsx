@@ -1,16 +1,7 @@
 import { useRef, useState } from 'react';
-import { BarChart3, Check, Contrast, EyeOff, Gauge, Keyboard, Monitor, Moon, Sun, Type, X } from 'lucide-react';
+import { Check, Contrast, EyeOff, Gauge, Keyboard, Monitor, Moon, Sun, Type, X } from 'lucide-react';
 import { ALL_MODES, GAME_NAME } from '@/games';
 import KeyDiagram from '@/KeyDiagram';
-import { GA_ID, disableAnalytics, initAnalytics } from '@/analytics';
-import {
-  clearAnalyticsCookies,
-  consentGivenAt,
-  gpcEnabled,
-  readConsent,
-  writeConsent,
-  type Consent,
-} from '@/consent';
 import {
   lengthChoices,
   MAX_WORD_LEN,
@@ -263,31 +254,9 @@ export default function SettingsModal({
 
   // the open tab lives in App so it can live in the address bar too
 
-  // Somewhere that requires asking, an unanswered visitor is off; everywhere
-  // else analytics runs unless it's been turned off, which is the state this
-  // control exists to make reachable.
-  const gpc = gpcEnabled();
-  // Unanswered is off. Nothing loads before a yes, so the control has to show
-  // that state rather than a cheerful default.
   const [storage, setStorageState] = useState<StorageLevel>(storageLevel);
   const [level, setLevel] = useState<Difficulty>(difficulty);
   const [diffMode, setDiffMode] = useState(difficultyMode);
-  const [analytics, setAnalyticsState] = useState<Consent>(() => readConsent() ?? 'denied');
-  const [answeredAt, setAnsweredAt] = useState<Date | null>(consentGivenAt);
-
-  function setAnalytics(value: Consent) {
-    if (gpc) return;
-    writeConsent(value);
-    setAnalyticsState(value);
-    setAnsweredAt(consentGivenAt());
-    if (value === 'granted') {
-      initAnalytics();
-    } else {
-      disableAnalytics();
-      clearAnalyticsCookies();
-    }
-  }
-
   return (
     <div
       className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
@@ -476,52 +445,6 @@ export default function SettingsModal({
             </p>
           </div>
 
-          {GA_ID && (
-            <div>
-              <h3 className="flex items-center gap-2 text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2.5">
-                <BarChart3 className="w-3.5 h-3.5" />
-                Analytics
-              </h3>
-              <div className="inline-flex flex-wrap justify-center max-w-full rounded-xl bg-white/5 border border-white/10 p-1 gap-1">
-                {(
-                  [
-                    { id: 'granted' as const, label: 'Allowed' },
-                    { id: 'denied' as const, label: 'Off' },
-                  ]
-                ).map(({ id, label }) => (
-                  <button
-                    key={id}
-                    onClick={() => setAnalytics(id)}
-                    aria-pressed={analytics === id}
-                    disabled={gpc}
-                    className={`px-3 h-9 rounded-lg text-sm font-semibold transition-colors
-                      ${analytics === id
-                        ? 'bg-amber-400 text-ink shadow-lg shadow-amber-500/30'
-                        : 'text-slate-300 hover:bg-white/10'}`}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
-              <p className="mt-2 text-xs text-slate-500">
-                {gpc
-                  ? 'Your browser sends a Global Privacy Control signal, so analytics is off and stays off.'
-                  : 'Counts visits, never your letters or results. Turning it off also clears the cookies it left behind. Kept per browser, since cookies are.'}
-              </p>
-              {!gpc && answeredAt && (
-                <p className="mt-1 text-xs text-slate-500">
-                  You answered on{' '}
-                  {answeredAt.toLocaleDateString(undefined, {
-                    year: 'numeric',
-                    month: 'long',
-                    day: 'numeric',
-                  })}
-                  . We ask again after a year — an answer from long ago isn&apos;t really
-                  a current one.
-                </p>
-              )}
-            </div>
-          )}
         </div>
 
         <div className={`space-y-6 ${tab === 'games' ? '' : 'hidden'}`}>

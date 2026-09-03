@@ -1,26 +1,30 @@
 # Security policy
 
-Anagrimoire is a word-game site: a static bundle in the browser, and an
-optional Supabase project behind it for accounts, synced progress and
-leaderboards. Everything works signed out, so most of what a visitor touches is
-files on a CDN. What remains worth attacking is the database — whether one
-account can reach another's rows, whether a leaderboard can be lied to, and
+Amherst Games is a word-game site for Amherst Communications staff: a static
+bundle in the browser and a self-hosted Supabase behind it for accounts, synced
+progress and leaderboards. It runs on an internal VM, reachable only over the
+VPN and only after signing in, so the first line of defence is that a stranger
+cannot reach it at all. What remains worth attacking is the database — whether
+one account can reach another's rows, whether a leaderboard can be lied to, and
 whether tomorrow's puzzle can be read today.
+
+Report a problem through the site's own report form, under *a security
+problem*. It goes to the internal queue and gives you a reference. Please don't
+post it anywhere public while it is unfixed.
 
 ## Reporting a vulnerability
 
-**Use GitHub's private vulnerability reporting**, on the
-[Security tab](https://github.com/rptetzloff/anagrimoire/security/advisories/new).
-It opens a private thread with the maintainer and can become a published
-advisory when the fix ships.
+**Report a problem** at the bottom of any page has a security option. It goes
+to the internal queue and gives you a reference you can check later.
 
-If you would rather not use GitHub, **Report a problem** at the bottom of any
-page has a security option, needs no account, and gives you a reference you can
-check later. Or email <security@anagrimoire.com>.
+The upstream project names GitHub's private advisory form first, because it is
+private by construction and carries a disclosure process a report table cannot.
+Neither applies here. This deployment is internal, the queue is already inside
+the company, and sending an employee to a public code host to report a hole in
+a staff tool is the opposite of the privacy that route exists to provide.
 
-Please don't open a public issue for anything exploitable before there is a
-fix — an issue publishes it to everyone first. Anything already listed below as
-known is fine to raise publicly.
+Please don't post anything exploitable anywhere public before there is a fix.
+Anything already listed below as known is fine to raise internally.
 
 There is no bug bounty and no payment. This is a personal project with one
 maintainer; the honest expectation is a first reply within a week rather than

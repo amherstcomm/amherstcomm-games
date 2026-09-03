@@ -5,20 +5,18 @@
 // from the token, never from anything the client says. See schema.sql.
 //
 // The client's job afterwards is the half the database can't reach: the
-// session, the analytics cookies, and whatever this browser is still holding.
+// session and whatever this browser is still holding.
 
-import { clearAnalyticsCookies } from '@/consent';
 import { clearLocalStats } from '@/stats';
 import { supabase } from '@/supabase';
 import { store as siteStore } from '@/siteStorage';
 
-/** Keys that survive a local wipe: how the site looks, and the analytics
- *  answer. Resetting a privacy choice as a side effect of a privacy action
- *  would be a poor trade, and nobody asked us to forget their theme. */
-const KEEP = ['anagrimoire:v1', 'anagrimoire:analytics-consent'];
+/** Keys that survive a local wipe: how the site looks. Nobody asked us to
+ *  forget their theme as a side effect of clearing their play data. */
+const KEEP = ['anagrimoire:v1'];
 
 /** Everything this browser holds about playing — boards, totals, the sync
- *  base, the device id and its baseline flags. Not settings, not consent. */
+ *  base, the device id and its baseline flags. Not settings. */
 export function wipeLocalPlayData(): void {
   try {
     const doomed = siteStore
@@ -68,7 +66,6 @@ export async function deleteAccount(wipeLocal: boolean): Promise<boolean> {
     // GA4 never received an account id, so there's nothing on Google's side
     // filed under this account to delete. Clearing the cookies drops the
     // browser-scoped id that is the only thing tying these visits together.
-    clearAnalyticsCookies();
 
     await supabase.auth.signOut({ scope: 'local' });
     return true;
