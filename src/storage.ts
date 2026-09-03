@@ -187,7 +187,10 @@ export const DEFAULT_STATE: PersistedState = {
   },
   keyboard: false,
   theme: 'system',
-  palette: 'default',
+  // The company palette, because almost nobody opens Settings. A brand nobody
+  // sees unless they go looking for it is not a brand — and the accessibility
+  // palettes stay one click away, which is where they were anyway.
+  palette: 'amherst',
   textScale: 'normal',
   navKeys: 'numpad',
   hiddenModes: [],

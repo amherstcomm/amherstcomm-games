@@ -13,6 +13,11 @@ import { ALL_SLUGS } from './src/games';
 // Each deployment stamps its own: without VITE_SITE_ORIGIN, dev would
 // advertise production's card, which is a 404 until the branch merges.
 const SITE_ORIGIN = process.env.VITE_SITE_ORIGIN || 'https://anagrimoire.com';
+// The same default as SITE_NAME_FALLBACK in src/brand.ts, and a unit test holds
+// the two together. They are read at different times — this one while
+// generating index.html, that one in the browser — so nothing else would stop
+// the tab title and the masthead naming the site differently.
+const SITE_NAME = process.env.VITE_SITE_NAME || 'Amherst Games';
 
 // Panels that need an account — /stats, /settings, /account — are left out on
 // purpose: real addresses, but nothing on them to index.
@@ -69,7 +74,8 @@ export default defineConfig({
     react(),
     {
       name: 'site-origin',
-      transformIndexHtml: (html) => html.replaceAll('%SITE_ORIGIN%', SITE_ORIGIN),
+      transformIndexHtml: (html) =>
+        html.replaceAll('%SITE_ORIGIN%', SITE_ORIGIN).replaceAll('%SITE_NAME%', SITE_NAME),
     },
     {
       // A sitemap earns its keep here more than on most sites: every control in

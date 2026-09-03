@@ -18,6 +18,7 @@ import GameMenu from '@/GameMenu';
 import LadderIcon from '@/LadderIcon';
 import { supabase } from '@/supabase';
 import { autoSignIn } from '@/signIn';
+import { SITE_NAME, SITE_SUBTITLE } from '@/brand';
 import { importBaselineOnce } from '@/stats';
 import GuessGame, { type GuessGameHandle, type LetterState } from '@/GuessGame';
 import HiveGame, { type HiveGameHandle } from '@/HiveGame';
@@ -1655,21 +1656,34 @@ function App() {
               Dimensions on the tag so it can't shove the page down as it
               loads. */}
           <h1 className="mb-4 flex flex-wrap items-center justify-center gap-x-3 sm:gap-x-4 gap-y-1">
+            {/* The mark is the company swish, drawn transparent — so the
+                rounded tile and drop shadow that framed the old filled logo
+                are gone. Framing a glyph that has no edges only draws a box
+                around empty corners. */}
             <img
-              src="/logo.png"
+              src="/mark.svg"
               alt=""
-              width={512}
-              height={512}
-              className="w-12 h-12 sm:w-16 sm:h-16 rounded-2xl shadow-lg shadow-black/30 shrink-0"
+              width={500}
+              height={500}
+              className="w-12 h-12 sm:w-16 sm:h-16 shrink-0"
             />
-            {/* bg-clip-text paints inside the element's box, so the g's tail
+            {/* bg-clip-text paints inside the element's box, so a descender
                 needs padding below the line or it gets sliced off. The
                 matching negative margin keeps that padding out of the layout,
                 so the name still sits centred against the mark. */}
             <span className="pb-[0.4em] -mb-[0.4em] text-4xl sm:text-5xl font-bold tracking-tight bg-gradient-to-br from-white via-white to-slate-400 bg-clip-text text-transparent">
-              Anagrimoire
+              {SITE_NAME}
             </span>
           </h1>
+          {/* The event this run is for, when there is one. Empty is the
+              ordinary state and renders nothing rather than an empty line —
+              which is why this is a guard and not a string that defaults to
+              something cheerful. */}
+          {SITE_SUBTITLE && (
+            <p className="-mt-2 mb-4 text-sm sm:text-base font-semibold uppercase tracking-[0.18em] text-accent">
+              {SITE_SUBTITLE}
+            </p>
+          )}
           {/* The strapline describes whichever game is loaded behind all this,
               which on a report page is a game nobody asked for — a ticket
               opened from an email introduced itself as "Play the themed tiling
