@@ -3355,6 +3355,18 @@ grant execute on function public.advance_session(uuid, text, uuid) to authentica
 alter table public.sessions add column if not exists late_join text not null
   default 'strict' check (late_join in ('strict', 'open'));
 
+-- The join code. Short enough to read off a projector, and drawn from an
+-- alphabet with no 0/O/1/I/L in it — those are the characters that turn a code
+-- somebody read correctly into a code that does not exist. Four characters of a
+-- 31-letter alphabet is about 920,000, which is not a secret and is not meant
+-- to be: the site is behind SSO and a VPN, so the code saves typing rather than
+-- guarding anything. Generated below, in "Getting into the room"; the column
+-- has to be here because my_sessions() and session_sheet() select it, and on a
+-- fresh database a function cannot be created against a column that does not
+-- exist yet. (Measured — it cost six extra first-apply errors, which the error
+-- count in supabase/tests/run.sh is there to notice.)
+alter table public.sessions add column if not exists code text;
+
 -- The sessions this person may run, newest first. Empty rather than an error
 -- for everyone else, which is the shape owner_reports() already uses: a list
 -- that refuses is a list every caller has to special-case.
@@ -3375,6 +3387,7 @@ as $fn$
   select coalesce(
     (select jsonb_agg(jsonb_build_object(
        'id', s.id, 'title', s.title, 'state', s.state, 'late_join', s.late_join,
+       'code', s.code,
        'items', (select count(*) from public.items i where i.session_id = s.id),
        'created_at', s.created_at
      ) order by s.created_at desc)
@@ -3430,7 +3443,8 @@ as $fn$
       'ok', true,
       'session', (select jsonb_build_object(
                     'id', s.id, 'title', s.title, 'state', s.state,
-                    'late_join', s.late_join, 'current_item', s.current_item)
+                    'late_join', s.late_join, 'current_item', s.current_item,
+                    'code', s.code)
                   from public.sessions s where s.id = p_session),
       'kinds', (select jsonb_agg(jsonb_build_object(
                   'kind', k.kind, 'description', k.description, 'scored', k.scored)
@@ -3633,3 +3647,156 @@ $fn$;
 
 revoke all on function public.delete_session(uuid) from public, anon;
 grant execute on function public.delete_session(uuid) to authenticated;
+
+-- ---------------------------------------------------------------------------
+-- Getting into the room
+--
+-- Everything below this point in the file was about running a session and
+-- answering in one, and all of it worked — measured end to end in
+-- supabase/tests/lifecycle.sql, twenty-eight checks, answering included. What
+-- did not exist was any way for a participant to arrive. The only two links to
+-- /live/<id> were on the authoring screen, which needs games.setup to see, so
+-- the room's route in was somebody pasting a URL with a raw UUID in it. A
+-- feature nobody can reach is not a feature.
+--
+-- Two ways in, because they fail differently. A list is right when everyone is
+-- already signed in at their own screen and nobody should have to type
+-- anything; a code is right when the answer to "how do I get in" has to fit on
+-- a slide or be said out loud across a room. Both resolve to the same address.
+-- ---------------------------------------------------------------------------
+
+create or replace function public.new_session_code()
+returns text
+language plpgsql
+security definer
+set search_path = ''
+as $fn$
+declare
+  alphabet constant text := 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
+  candidate text;
+  attempt int;
+  ch int;
+begin
+  for attempt in 1..50 loop
+    candidate := '';
+    for ch in 1..4 loop
+      candidate := candidate || substr(alphabet, 1 + floor(random() * length(alphabet))::int, 1);
+    end loop;
+    -- Free if no session that anyone could still join is using it. Closed
+    -- sessions release their code: a month of weekly trivia would otherwise
+    -- burn through four-character codes for no reason, and a code that points
+    -- at something finished is not a collision anybody experiences.
+    if not exists (
+      select 1 from public.sessions s where s.code = candidate and s.state <> 'closed'
+    ) then
+      return candidate;
+    end if;
+  end loop;
+  -- 50 collisions means the space is genuinely full rather than unlucky.
+  return null;
+end;
+$fn$;
+
+revoke all on function public.new_session_code() from public, anon, authenticated;
+
+-- Existing sessions predate the column.
+update public.sessions set code = public.new_session_code() where code is null;
+
+create unique index if not exists sessions_open_code_key
+  on public.sessions (code) where state <> 'closed';
+
+create or replace function public.create_session(p_title text, p_late_join text default 'strict')
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $fn$
+declare new_id uuid;
+begin
+  if not public.can('games.setup') then
+    return jsonb_build_object('ok', false, 'reason', 'not allowed');
+  end if;
+  if coalesce(btrim(p_title), '') = '' then
+    return jsonb_build_object('ok', false, 'reason', 'a session needs a name');
+  end if;
+  insert into public.sessions (title, host, late_join, code)
+  values (left(btrim(p_title), 120), (select auth.uid()),
+          case when p_late_join = 'open' then 'open' else 'strict' end,
+          public.new_session_code())
+  returning id into new_id;
+  return jsonb_build_object('ok', true, 'id', new_id);
+end;
+$fn$;
+
+revoke all on function public.create_session(text, text) from public, anon;
+grant execute on function public.create_session(text, text) to authenticated;
+
+-- What is running, for anybody signed in.
+--
+-- Live only. A draft is not a thing to join — it is somebody's half-built
+-- questions — and a closed one is over. Title and code, never the questions:
+-- this is the door, not the room.
+create or replace function public.live_sessions()
+returns jsonb
+language sql
+stable
+security definer
+set search_path = ''
+as $fn$
+  select coalesce(
+    (select jsonb_agg(jsonb_build_object('id', s.id, 'title', s.title, 'code', s.code)
+                      order by s.started_at desc)
+     from public.sessions s
+     where s.state = 'live' and (select auth.uid()) is not null),
+    '[]'::jsonb)
+$fn$;
+
+revoke all on function public.live_sessions() from public, anon;
+grant execute on function public.live_sessions() to authenticated;
+
+-- A code typed off a slide. Case and spacing are whatever the person typing
+-- them felt like, so neither is allowed to be the reason it fails.
+create or replace function public.session_by_code(p_code text)
+returns jsonb
+language sql
+stable
+security definer
+set search_path = ''
+as $fn$
+  select coalesce(
+    (select jsonb_build_object('ok', true, 'id', s.id, 'title', s.title)
+     from public.sessions s
+     where s.state = 'live'
+       and s.code = upper(regexp_replace(coalesce(p_code, ''), '[^A-Za-z0-9]', '', 'g'))
+       and (select auth.uid()) is not null),
+    jsonb_build_object('ok', false, 'reason', 'no session is running with that code'))
+$fn$;
+
+revoke all on function public.session_by_code(text) from public, anon;
+grant execute on function public.session_by_code(text) to authenticated;
+
+-- The presenter's header: the name of the session and the code to read out.
+--
+-- Separate from session_sheet(), which returns every question and every answer,
+-- because the presenter screen wants this before a session starts and on every
+-- load, and pulling the whole sheet to display four characters would put the
+-- answers on the wire for no reason. Separate from live_sessions() because a
+-- draft is not listed there and a draft is exactly when the code goes up.
+create or replace function public.session_door(p_session uuid)
+returns jsonb
+language sql
+stable
+security definer
+set search_path = ''
+as $fn$
+  select case
+    when not public.hosts_session(p_session)
+      then jsonb_build_object('ok', false, 'reason', 'not allowed')
+    else (select jsonb_build_object('ok', true, 'title', s.title, 'code', s.code,
+                                    'state', s.state)
+          from public.sessions s where s.id = p_session)
+  end
+$fn$;
+
+revoke all on function public.session_door(uuid) from public, anon;
+grant execute on function public.session_door(uuid) to authenticated;

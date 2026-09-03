@@ -38,7 +38,8 @@ export type Page =
   | { kind: 'reportAction'; id: string; token: string; action: string }
   | { kind: 'reportQueue' }
   | { kind: 'live'; session: string; host: boolean }
-  | { kind: 'sessions'; session?: string };
+  | { kind: 'sessions'; session?: string }
+  | { kind: 'join'; code?: string };
 
 export type Overlay =
   | { kind: 'panel'; panel: Panel }
@@ -128,6 +129,8 @@ export function navOf(route: Route, last: Tabs = DEFAULT_TABS): { nav: Nav; game
       return { nav: over({ kind: 'legal', doc: route.doc }, { ...last, legal: route.doc }), game: null };
     case 'sessions':
       return { nav: page({ kind: 'sessions', session: route.session }), game: null };
+    case 'join':
+      return { nav: page({ kind: 'join', code: route.code }), game: null };
     case 'friend':
       return { nav: over({ kind: 'account', tab: 'friends' }, { ...last, account: 'friends' }), game: null };
   }

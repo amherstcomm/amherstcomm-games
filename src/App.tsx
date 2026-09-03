@@ -42,7 +42,9 @@ import TicketView from '@/TicketView';
 import ReportQueueView from '@/ReportQueueView';
 import LiveSession from '@/LiveSession';
 import SessionEditor from '@/SessionEditor';
+import JoinSession from '@/JoinSession';
 import { allows, myCapabilities } from '@/roles';
+import { readLiveSessions } from '@/live';
 import ReportActionView from '@/ReportActionView';
 
 import HomeView from '@/HomeView';
@@ -523,7 +525,8 @@ function App() {
     nav.page.kind === 'reportAction' ||
     nav.page.kind === 'reportQueue' ||
     nav.page.kind === 'live' ||
-    nav.page.kind === 'sessions'
+    nav.page.kind === 'sessions' ||
+    nav.page.kind === 'join'
       ? nav.page
       : null;
 
@@ -554,6 +557,11 @@ function App() {
   // which role may set games up is one row in `capabilities` and not a
   // redeploy.
   const [canSetUp, setCanSetUp] = useState(false);
+  // Whether anything is running, so the way in is on every page rather than
+  // only for people who were sent a link. Not a poll — see the note in
+  // JoinSession; this refetches when the tab is focused, which is when somebody
+  // has just been told it is starting.
+  const [liveNow, setLiveNow] = useState(0);
   const [learnMode, setLearnMode] = useState(entryGame()?.view === 'learn');
   const [theme, setTheme] = useState<ThemeMode>(initial.theme);
   const [palette, setPalette] = useState<Palette>(initial.palette);
@@ -584,13 +592,18 @@ function App() {
     if (!session) {
       setOwner(false);
       setCanSetUp(false);
+      setLiveNow(0);
       return;
     }
     let alive = true;
     amOwner().then((yes) => alive && setOwner(yes));
     myCapabilities().then((held) => alive && setCanSetUp(allows(held, 'games.setup')));
+    const count = () => readLiveSessions().then((live) => alive && setLiveNow(live.length));
+    void count();
+    window.addEventListener('focus', count);
     return () => {
       alive = false;
+      window.removeEventListener('focus', count);
     };
   }, [session]);
 
@@ -1704,6 +1717,7 @@ function App() {
             <LiveSession session={reportPage.session} host={reportPage.host} />
           )}
           {reportPage?.kind === 'sessions' && <SessionEditor session={reportPage.session} />}
+          {reportPage?.kind === 'join' && <JoinSession code={reportPage.code} />}
           {reportPage?.kind === 'reportAction' && (
             <ReportActionView
               id={reportPage.id}
@@ -2297,6 +2311,19 @@ function App() {
               >
                 <FlagIcon className="w-3.5 h-3.5" aria-hidden="true" />
                 Open reports
+              </RouteLink>
+            )}
+            {/* The way into a session, on every page. Only while something is
+                running: a link that is usually a dead end teaches people to
+                ignore it, and this one has to be believed on the one afternoon
+                a month it matters. */}
+            {liveNow > 0 && (
+              <RouteLink
+                {...pageLink({ kind: 'join' })}
+                className="inline-flex items-center gap-1.5 text-accent hover:brightness-110 transition"
+              >
+                <Radio className="w-3.5 h-3.5" aria-hidden="true" />
+                {liveNow === 1 ? 'Join the session' : `Join a session (${liveNow})`}
               </RouteLink>
             )}
             {canSetUp && (

@@ -17,11 +17,13 @@ import {
   onSessionMoved,
   readCurrentItem,
   readPresenterView,
+  readSessionDoor,
   readTally,
   sendAnswer,
   type LiveItem,
   type PresenterView,
 } from '@/live';
+import { JOIN_HOST } from '@/routes';
 
 /** How often the presenter's count refreshes while answers are arriving.
  *
@@ -169,6 +171,9 @@ export default function LiveSession({ session, host }: { session: string; host: 
   const [tally, setTally] = useState<Record<string, number> | null>(null);
   const [sending, setSending] = useState(false);
   const [note, setNote] = useState('');
+  // The presenter's header — the code to read out. Only fetched on the host
+  // screen, because only the host is allowed it and only the host needs it.
+  const [door, setDoor] = useState<{ code?: string | null; title?: string } | null>(null);
   const itemId = useRef<string | undefined>(undefined);
 
   const pull = useCallback(async () => {
@@ -189,6 +194,15 @@ export default function LiveSession({ session, host }: { session: string; host: 
     void pull();
     return onSessionMoved(session, () => void pull());
   }, [session, pull]);
+
+  useEffect(() => {
+    if (!host) return;
+    let alive = true;
+    readSessionDoor(session).then((d) => alive && d.ok && setDoor(d));
+    return () => {
+      alive = false;
+    };
+  }, [host, session]);
 
   // The presenter's count, which the doorbell cannot provide — see COUNT_MS.
   useEffect(() => {
@@ -232,8 +246,18 @@ export default function LiveSession({ session, host }: { session: string; host: 
       {host && (
         <div className="mb-6 rounded-xl border border-accent/40 bg-accent/5 p-3">
           <p className="text-xs uppercase tracking-wider text-accent font-semibold mb-2">
-            Presenting
+            Presenting{door?.title ? ` — ${door.title}` : ''}
           </p>
+          {/* The code, on the screen that is already pointed at the room. It is
+              here as well as on the editor because this is the one somebody is
+              looking at when they say "go to the site and type this". */}
+          {door?.code && (
+            <p className="text-sm text-slate-300 mb-2">
+              To join:{' '}
+              <span className="text-white font-bold tracking-[0.25em]">{door.code}</span>
+              <span className="text-slate-500"> at {JOIN_HOST}/join</span>
+            </p>
+          )}
           <div className="flex flex-wrap gap-2">
             {(['start', 'show', 'lock', 'reveal', 'close'] as const).map((a) => (
               <button

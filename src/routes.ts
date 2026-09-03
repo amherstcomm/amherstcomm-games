@@ -98,7 +98,10 @@ export type Route =
   // questions. One address either way, because the list exists to get you into
   // the editor and a separate /sessions/list would be a second name for the
   // same page.
-  | { kind: 'sessions'; session?: string };
+  | { kind: 'sessions'; session?: string }
+  // The way in. `/join` is the list and the code box; `/join/<code>` is the
+  // short address that fits on a slide and lands straight in the room.
+  | { kind: 'join'; code?: string };
 
 export function pathOf(route: Route): string {
   switch (route.kind) {
@@ -129,6 +132,8 @@ export function pathOf(route: Route): string {
       return route.host ? `/live/${route.session}/host` : `/live/${route.session}`;
     case 'sessions':
       return route.session ? `/sessions/${route.session}` : '/sessions';
+    case 'join':
+      return route.code ? `/join/${route.code}` : '/join';
   }
 }
 
@@ -175,8 +180,15 @@ export function titleOf(route: Route): string {
       return route.host ? `Presenting${suffix}` : `Live${suffix}`;
     case 'sessions':
       return `Sessions${suffix}`;
+    case 'join':
+      return `Join a session${suffix}`;
   }
 }
+
+/** The address to read out loud, without the scheme — nobody types "https://"
+ *  off a projector. Derived from ORIGIN so it is whatever this deployment
+ *  actually answers on, rather than a hostname compiled in twice. */
+export const JOIN_HOST = ORIGIN.replace(/^https?:\/\//, '');
 
 export function urlOf(route: Route): string {
   return ORIGIN + pathOf(route);
@@ -219,13 +231,27 @@ export function parsePath(pathname: string): Route | null {
   if (first === 'reports') return { kind: 'reportQueue' };
 
   if (first === 'live') {
-    if (!second) return null;
+    // A bare /live is somebody guessing at the address for "the thing that is
+    // running". Send them to the door rather than silently to the front page —
+    // same treatment /solve/pattern gets, for the same reason: a link somebody
+    // already holds, or a reasonable guess, is not their mistake.
+    if (!second) return { kind: 'join' };
     return { kind: 'live', session: second, host: parts[2] === 'host' };
   }
 
   // /sessions and /sessions/<id>. A bare /sessions is the list, so unlike
   // /live it does not need an id to mean something.
   if (first === 'sessions') return { kind: 'sessions', session: second || undefined };
+
+  // /join and /join/<code>. Bare is the form; with a code it resolves and goes.
+  //
+  // Upper-cased, because parsePath lower-cases the whole address and codes are
+  // upper-case — so /join/k4tp typed off a slide resolves, and the address then
+  // corrects itself to /join/K4TP rather than being an address the app produced
+  // and cannot parse back. (Caught by the round-trip law, which is what it is
+  // for.) The server normalises too; neither half is allowed to be the reason
+  // somebody cannot get in.
+  if (first === 'join') return { kind: 'join', code: second ? second.toUpperCase() : undefined };
 
   if (first === 'report') {
     // /report/act/<id>/<token>[/<action>] is the owner's door; anything else

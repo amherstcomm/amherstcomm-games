@@ -37,6 +37,8 @@ export type Sheet = {
     state: 'draft' | 'live' | 'closed';
     late_join: 'strict' | 'open';
     current_item: string | null;
+    /** the four characters that go on the slide */
+    code: string | null;
   };
   kinds?: ItemKind[];
   items?: SheetItem[];
@@ -47,6 +49,7 @@ export type SessionSummary = {
   title: string;
   state: 'draft' | 'live' | 'closed';
   late_join: 'strict' | 'open';
+  code: string | null;
   items: number;
   created_at: string;
 };

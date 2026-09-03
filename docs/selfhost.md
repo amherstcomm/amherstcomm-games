@@ -364,10 +364,31 @@ Four addresses, and the difference between two of them matters:
 
 | address | who | what |
 |---|---|---|
+| `/join` | anyone signed in | the way in: what is running, and a box for the code |
+| `/join/<code>` | the same | the short address for a slide — resolves and goes straight in |
 | `/sessions` | anyone with `games.setup` | the list, and where a new one is made |
 | `/sessions/<id>` | the same | its questions — add, edit, reorder, delete |
 | `/live/<id>` | everybody | what the room answers on |
 | `/live/<id>/host` | the presenter | the same screen plus the controls, the count, and the answer |
+
+**Every session gets a four-character code**, shown on the editor and on the
+presenter screen. It is four characters from an alphabet with no `0`, `O`, `1`,
+`I` or `L` — the characters that turn a code somebody read correctly into a code
+that does not exist. It is not a secret and is not meant to be: the site is
+behind SSO and the VPN, so the code saves typing rather than guarding anything.
+Case, spaces and dashes are all stripped before it is looked up.
+
+A code only resolves while its session is **live**, and a closed session
+releases its code for reuse — a month of weekly trivia would otherwise burn
+through four-character codes for no reason. Two joinable sessions cannot share
+one; a partial unique index enforces that.
+
+A **Join** link appears in the footer of every page while something is running,
+for anyone signed in. It is fetched when the page loads and again when the tab
+regains focus — which is when somebody has just been told it is starting —
+rather than polled, because a session going live is a once-a-week event and
+every signed-in browser asking every few seconds would be the room's traffic
+spent on a list that is usually empty.
 
 **`/live/<id>/host` shows the correct answer.** It is a separate address rather
 than a mode on one page precisely so it can be checked before a projector cable

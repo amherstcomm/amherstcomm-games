@@ -51,6 +51,9 @@ const PAGES = [
   // still a page with its own headings, inputs and labels, and the editor
   // reuses every one of those classes.
   ['sessions', '/sessions'],
+  // Signed out, so the list is empty and the code box is the whole page — which
+  // is the one control every participant touches.
+  ['join', '/join'],
 ] as const;
 
 for (const [name, path] of PAGES) {
