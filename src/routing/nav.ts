@@ -36,7 +36,8 @@ export type Page =
   | { kind: 'game' }
   | { kind: 'ticket'; ticket: string }
   | { kind: 'reportAction'; id: string; token: string; action: string }
-  | { kind: 'reportQueue' };
+  | { kind: 'reportQueue' }
+  | { kind: 'live'; session: string; host: boolean };
 
 export type Overlay =
   | { kind: 'panel'; panel: Panel }
@@ -103,6 +104,11 @@ export function navOf(route: Route, last: Tabs = DEFAULT_TABS): { nav: Nav; game
       };
     case 'reportQueue':
       return { nav: page({ kind: 'reportQueue' }), game: null };
+    case 'live':
+      return {
+        nav: page({ kind: 'live', session: route.session, host: route.host }),
+        game: null,
+      };
     case 'panel':
       return { nav: over({ kind: 'panel', panel: route.panel }, last), game: null };
     case 'stats':
