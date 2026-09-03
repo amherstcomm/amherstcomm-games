@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState, useEffect, useRef } from 'react';
-import { X, BookOpen, Grid3x3, Shuffle, Hexagon, Keyboard, Delete, Github, Info, Square, CalendarDays, Star, Gamepad2, CornerDownLeft, LayoutGrid, Puzzle, BarChart3, UserRound, Scale, Settings, Home, Table2, KeyRound } from 'lucide-react';
+import { X, BookOpen, Grid3x3, Shuffle, Hexagon, Keyboard, Delete, Info, Square, CalendarDays, Star, Gamepad2, CornerDownLeft, LayoutGrid, Puzzle, BarChart3, UserRound, Scale, Settings, Home, Table2, KeyRound } from 'lucide-react';
 import LearnMode, { type LearnModeHandle } from '@/LearnMode';
 import type { Session } from '@supabase/supabase-js';
 import StatsModal from '@/StatsModal';
@@ -40,6 +40,7 @@ import ReportMenu from '@/ReportMenu';
 import { amOwner } from '@/reports';
 import TicketView from '@/TicketView';
 import ReportQueueView from '@/ReportQueueView';
+import LiveSession from '@/LiveSession';
 import ReportActionView from '@/ReportActionView';
 
 import HomeView from '@/HomeView';
@@ -208,36 +209,6 @@ const MODE_ICONS: Record<Mode, typeof Grid3x3> = {
   bridge: Combine,
 };
 
-/** WordLock's mark, drawn the way the footer's other icons are drawn.
- *
- *  Its own logo is a filled blue tile with the key knocked out in white,
- *  which beside a row of monochrome line icons reads as a sticker rather than
- *  a link. The key is traced instead — the bow, the shaft and its two teeth —
- *  as strokes in currentColor, so it follows the theme and the text colour
- *  like everything next to it.
- *
- *  The logo's surrounding tile is dropped on purpose: at fourteen pixels the
- *  frame crowds the key it contains, and none of the icons beside it are
- *  boxed either. The key alone is the recognisable part. */
-function WordLockMark() {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      className="w-3.5 h-3.5"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={2}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <circle cx="7" cy="12" r="4" />
-      <path d="M11 12h10" />
-      <path d="M15 12v4" />
-      <path d="M18.5 12v3" />
-    </svg>
-  );
-}
 
 function normalizeLetters(s: string): string[] {
   return s.toLowerCase().replace(/[^a-z]/g, '').split('');
@@ -541,8 +512,15 @@ function App() {
   }
 
   const atHome = nav.page.kind === 'home';
+  // Full pages: they replace the board rather than sitting over it. One
+  // conditional, per the note where this is rendered — a live session belongs
+  // here for the same reason a report does, and for one more: the presenter's
+  // screen goes on a projector, and a word game behind it is the quiz spoiled.
   const reportPage: Route | null =
-    nav.page.kind === 'ticket' || nav.page.kind === 'reportAction' || nav.page.kind === 'reportQueue'
+    nav.page.kind === 'ticket' ||
+    nav.page.kind === 'reportAction' ||
+    nav.page.kind === 'reportQueue' ||
+    nav.page.kind === 'live'
       ? nav.page
       : null;
 
@@ -1712,6 +1690,9 @@ function App() {
           <>
           {reportPage?.kind === 'ticket' && <TicketView ticket={reportPage.ticket} />}
           {reportPage?.kind === 'reportQueue' && <ReportQueueView />}
+          {reportPage?.kind === 'live' && (
+            <LiveSession session={reportPage.session} host={reportPage.host} />
+          )}
           {reportPage?.kind === 'reportAction' && (
             <ReportActionView
               id={reportPage.id}
@@ -2279,16 +2260,10 @@ function App() {
 
         {/* pb keeps the last row clear of the floating keyboard button */}
         <footer className="mt-14 pb-24 sm:pb-4 text-center text-xs text-slate-500">
-          {/* only where a word list is what is being searched — the ladder
-              and bridge solvers answer from a rule, so naming a dictionary
-              size under them describes work they do not do */}
-          {!playActive && !learnMode && WORD_LIST_SOLVERS.has(mode) && (
-            <p>
-              Searching {words.length.toLocaleString()} English words (the{' '}
-              {DICTIONARIES.find((d) => d.id === dictionaryId)?.label.toLowerCase()} word
-              list).
-            </p>
-          )}
+          {/* The dictionary-size line lived here and described the solver:
+              "searching 67,122 English words". With the solvers gone it was
+              describing work nothing does, on every page including a report
+              and a live session. */}
           {/* wraps into centered rows rather than one overflowing line */}
           <div className="mt-3 flex flex-wrap items-center justify-center gap-x-5 gap-y-2.5">
             <RouteLink
@@ -2321,30 +2296,6 @@ function App() {
                 level,
               }}
             />
-            <a
-              href="https://github.com/rptetzloff/anagrimoire"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-1.5 hover:text-slate-300 transition-colors"
-            >
-              <Github className="w-3.5 h-3.5" />
-              GitHub
-            </a>
-            {/* The other site, by name rather than by domain — it sits among
-                nav links, and "wordlock.net" would read as an address dropped
-                into a row of destinations. Its own mark, served from here
-                rather than hotlinked: the footer of a site that promises
-                nothing leaves your device shouldn't quietly fetch an image
-                from somewhere else. */}
-            <a
-              href="https://wordlock.net"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-1.5 hover:text-slate-300 transition-colors"
-            >
-              <WordLockMark />
-              WordLock
-            </a>
             <RouteLink
               {...overlayLink({ kind: 'stats', tab: nav.last.stats })}
               className="inline-flex items-center gap-1.5 hover:text-slate-300 transition-colors"

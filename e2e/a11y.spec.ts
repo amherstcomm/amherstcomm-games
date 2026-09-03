@@ -40,6 +40,13 @@ const PAGES = [
   ['legal terms', '/legal/terms'],
   // signed out, which is the face most visitors meet
   ['account', '/account'],
+  // A live session with no session behind it: the "not started" face, which is
+  // what everybody sees before the presenter clicks Start and is therefore the
+  // one nobody would think to check. Its presenter half shipped with
+  // text-slate-100 — a tier the palette does not define, so it fell through to
+  // Tailwind's near-white and was invisible on the light theme.
+  ['live', '/live/00000000-0000-0000-0000-000000000000'],
+  ['live host', '/live/00000000-0000-0000-0000-000000000000/host'],
 ] as const;
 
 for (const [name, path] of PAGES) {
