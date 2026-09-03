@@ -2816,3 +2816,437 @@ $fn$;
 
 revoke all on function public.owner_reports() from public, anon;
 grant execute on function public.owner_reports() to authenticated;
+
+-- ---------------------------------------------------------------------------
+-- Live sessions
+--
+-- The Slido replacement: a presenter runs a session, a room answers at once,
+-- and results appear as they arrive. Six kinds of item at first — multiple
+-- choice, matching, a number to guess, a ranking, a survey, and an open
+-- question — with more expected, which is why `kind` is a row in a table
+-- rather than a CHECK constraint. Adding one is an insert and a component,
+-- not a migration.
+--
+-- Three things shape everything below, and each is a promise that has to be
+-- true in the database rather than in the interface.
+--
+-- 1. A participant must never be able to read the correct answer before it is
+--    revealed. Prizes make this worth doing properly, and "the client does not
+--    display it" is not doing it properly — anyone can open a network tab. So
+--    answers are not a column on the item that RLS politely hides; they are a
+--    separate table with no grant to web roles at all. There is nothing to
+--    select.
+--
+-- 2. Fastest wins, so the clock is the server's. submitted_at defaults to
+--    now() and elapsed is measured against the item's opened_at. A client that
+--    sends its own time is a client that decides who won.
+--
+-- 3. "Anonymous" means anonymous to the room, not to the company. The
+--    scoreboard and the presenter's screen show no name; an admin can still
+--    see who asked, because prizes and moderation need it. That is a narrower
+--    promise than the word implies on its own, so the interface says
+--    "anonymous to other participants" rather than "anonymous".
+-- ---------------------------------------------------------------------------
+
+create table if not exists public.item_kinds (
+  kind text primary key,
+  description text not null,
+  -- whether a correct answer exists for this kind at all. A survey and an open
+  -- question have none, and scoring one would be inventing a right answer to a
+  -- question that did not have one.
+  scored boolean not null default true
+);
+alter table public.item_kinds enable row level security;
+revoke all on public.item_kinds from public, anon, authenticated;
+
+insert into public.item_kinds (kind, description, scored) values
+  ('choice',  'One or more of these is correct', true),
+  ('match',   'Pair each left-hand item with a right-hand one', true),
+  ('number',  'Guess a value; closest wins', true),
+  ('rank',    'Put these in order', true),
+  ('survey',  'No right answer, just what the room thinks', false),
+  ('open',    'Ask anything; the presenter reads them out', false)
+on conflict (kind) do nothing;
+
+create table if not exists public.sessions (
+  id uuid primary key default gen_random_uuid(),
+  title text not null check (char_length(title) between 1 and 120),
+  -- draft is being built, live is running, closed is over and read-only
+  state text not null default 'draft' check (state in ('draft', 'live', 'closed')),
+  -- Whether somebody arriving mid-session may catch up on items they were not
+  -- there for. Per event, because a scored round and a survey want different
+  -- answers.
+  --
+  -- **Nothing reads this yet.** Answering is already limited to the item on
+  -- screen while it is open, so a late arrival naturally misses what has gone
+  -- — which is 'strict' by accident rather than by enforcement. 'open' needs a
+  -- record of when each person joined, and joining only becomes a real event
+  -- once there is a session screen to open. The column is here so the choice
+  -- is stored from the first session rather than retrofitted onto one.
+  -- The item the room is looking at. Null before the session starts.
+  current_item uuid,
+  host uuid not null references auth.users (id) on delete cascade,
+  created_at timestamptz not null default now(),
+  started_at timestamptz,
+  closed_at timestamptz
+);
+alter table public.sessions enable row level security;
+revoke all on public.sessions from public, anon, authenticated;
+
+create table if not exists public.items (
+  id uuid primary key default gen_random_uuid(),
+  session_id uuid not null references public.sessions (id) on delete cascade,
+  position int not null,
+  kind text not null references public.item_kinds (kind),
+  prompt text not null check (char_length(prompt) between 1 and 500),
+  -- What the room is shown: the options, the two columns to match, the units a
+  -- guess is in. Never the answer.
+  payload jsonb not null default '{}'::jsonb,
+  state text not null default 'pending'
+    check (state in ('pending', 'open', 'locked', 'revealed')),
+  -- The clock the speed tiebreak measures from, set when the item opens.
+  opened_at timestamptz,
+  locked_at timestamptz,
+  unique (session_id, position)
+);
+alter table public.items enable row level security;
+revoke all on public.items from public, anon, authenticated;
+
+-- Separate, and never granted. See point 1 above: an answer a participant can
+-- select is an answer a participant has.
+create table if not exists public.item_answers (
+  item_id uuid primary key references public.items (id) on delete cascade,
+  answer jsonb not null
+);
+alter table public.item_answers enable row level security;
+revoke all on public.item_answers from public, anon, authenticated;
+
+create table if not exists public.responses (
+  item_id uuid not null references public.items (id) on delete cascade,
+  user_id uuid not null references auth.users (id) on delete cascade,
+  value jsonb not null,
+  -- Hides the name from the room and the presenter, never from an admin.
+  anonymous boolean not null default false,
+  submitted_at timestamptz not null default now(),
+  primary key (item_id, user_id)
+);
+alter table public.responses enable row level security;
+revoke all on public.responses from public, anon, authenticated;
+
+create index if not exists items_session_idx on public.items (session_id, position);
+create index if not exists responses_item_idx on public.responses (item_id);
+
+-- Is the caller running this session? The host, or anyone who may set games up.
+create or replace function public.hosts_session(p_session uuid)
+returns boolean
+language sql
+stable
+security definer
+set search_path = ''
+as $fn$
+  select exists (
+    select 1 from public.sessions s
+    where s.id = p_session
+      and (s.host = (select auth.uid()) or public.can('games.setup'))
+  )
+$fn$;
+
+revoke all on function public.hosts_session(uuid) from public, anon;
+grant execute on function public.hosts_session(uuid) to authenticated;
+
+-- What the room can see right now.
+--
+-- One item, and only if it is the one the session is on and has been opened.
+-- Everything about a future item — including its prompt, which gives away more
+-- than people think when the answer is one of the options — stays unreadable
+-- until the presenter opens it. The answer is not in this table at all.
+create or replace function public.current_item(p_session uuid)
+returns jsonb
+language sql
+stable
+security definer
+set search_path = ''
+as $fn$
+  select case
+    when not exists (select 1 from public.sessions s where s.id = p_session and s.state = 'live')
+      then jsonb_build_object('state', 'not-live')
+    else coalesce(
+      (select jsonb_build_object(
+         'id', i.id,
+         'kind', i.kind,
+         'prompt', i.prompt,
+         'payload', i.payload,
+         'state', i.state,
+         'position', i.position,
+         'opened_at', i.opened_at,
+         -- your own answer comes back with it, so a reload does not look like
+         -- you never answered
+         'mine', (select r.value from public.responses r
+                  where r.item_id = i.id and r.user_id = (select auth.uid())),
+         -- and the correct answer, but only once it has been revealed
+         'answer', case when i.state = 'revealed'
+                        then (select a.answer from public.item_answers a where a.item_id = i.id)
+                   end
+       )
+       from public.sessions s
+       join public.items i on i.id = s.current_item
+       where s.id = p_session and i.state <> 'pending'),
+      jsonb_build_object('state', 'waiting')
+    )
+  end
+$fn$;
+
+revoke all on function public.current_item(uuid) from public, anon;
+grant execute on function public.current_item(uuid) to authenticated;
+
+-- Answering.
+--
+-- Refuses on a closed item rather than accepting and discarding, because a
+-- player who was told "sent" and scored zero has been lied to.
+--
+-- Only the item on screen, and only while it is open. That is what makes a
+-- late arrival miss what has already gone, without needing to know when they
+-- arrived — see the note on sessions.late_join, which is not consulted here
+-- and does not yet do anything.
+create or replace function public.answer_item(
+  p_item uuid,
+  p_value jsonb,
+  p_anonymous boolean default false
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $fn$
+declare
+  it public.items;
+  sess public.sessions;
+begin
+  select * into it from public.items where id = p_item;
+  if it.id is null then
+    return jsonb_build_object('ok', false, 'reason', 'no such item');
+  end if;
+
+  select * into sess from public.sessions where id = it.session_id;
+  if sess.state <> 'live' then
+    return jsonb_build_object('ok', false, 'reason', 'this session is not running');
+  end if;
+  if sess.current_item is distinct from p_item then
+    return jsonb_build_object('ok', false, 'reason', 'that is not the question on screen');
+  end if;
+  if it.state <> 'open' then
+    return jsonb_build_object('ok', false, 'reason', 'answers are closed for this one');
+  end if;
+
+  -- submitted_at is never taken from the caller: the speed tiebreak is the
+  -- server's clock or it is whatever the fastest editor of a JSON body says.
+  insert into public.responses (item_id, user_id, value, anonymous)
+  values (p_item, (select auth.uid()), p_value, coalesce(p_anonymous, false))
+  on conflict (item_id, user_id) do update
+    set value = excluded.value,
+        anonymous = excluded.anonymous,
+        submitted_at = now();
+
+  return jsonb_build_object('ok', true);
+end;
+$fn$;
+
+revoke all on function public.answer_item(uuid, jsonb, boolean) from public, anon;
+grant execute on function public.answer_item(uuid, jsonb, boolean) to authenticated;
+
+-- What the presenter sees, which is deliberately not what the room sees.
+--
+-- A live count while answers are still coming in — the thing that makes a
+-- Slido screen worth looking at — plus the distribution, and for an open
+-- question the text itself so it can be read out. Names are withheld for an
+-- anonymous response even here: the promise is to the room *and* the person
+-- holding the microphone. An admin has a separate route below.
+create or replace function public.presenter_view(p_item uuid)
+returns jsonb
+language sql
+stable
+security definer
+set search_path = ''
+as $fn$
+  select case
+    when not public.hosts_session((select session_id from public.items where id = p_item))
+      then jsonb_build_object('ok', false, 'reason', 'not allowed')
+    else jsonb_build_object(
+      'ok', true,
+      'answered', (select count(*) from public.responses r where r.item_id = p_item),
+      -- the correct answer, which the presenter needs before the reveal in
+      -- order to run the reveal
+      'answer', (select a.answer from public.item_answers a where a.item_id = p_item),
+      'responses', coalesce(
+        (select jsonb_agg(jsonb_build_object(
+           'value', r.value,
+           'at', r.submitted_at,
+           'who', case when r.anonymous then null else p.display_name end
+         ) order by r.submitted_at)
+         from public.responses r
+         left join public.profiles p on p.id = r.user_id
+         where r.item_id = p_item),
+        '[]'::jsonb)
+    )
+  end
+$fn$;
+
+revoke all on function public.presenter_view(uuid) from public, anon;
+grant execute on function public.presenter_view(uuid) to authenticated;
+
+-- What the room sees once an item is revealed: shape only, never names.
+--
+-- Counts per distinct answer, which covers a poll's bar chart, a survey's
+-- result and a choice question's "68% of you said B" without any route to who
+-- said what. Withheld before the reveal, because a live tally of a scored
+-- question tells a late answerer what everyone else picked.
+create or replace function public.item_tally(p_item uuid)
+returns jsonb
+language sql
+stable
+security definer
+set search_path = ''
+as $fn$
+  select case
+    when not exists (select 1 from public.items i where i.id = p_item and i.state = 'revealed')
+      then jsonb_build_object('ok', false, 'reason', 'not revealed yet')
+    else jsonb_build_object(
+      'ok', true,
+      'total', (select count(*) from public.responses r where r.item_id = p_item),
+      'counts', coalesce(
+        (select jsonb_object_agg(v, n)
+         from (select r.value::text as v, count(*) as n
+               from public.responses r where r.item_id = p_item
+               group by r.value::text) t),
+        '{}'::jsonb)
+    )
+  end
+$fn$;
+
+revoke all on function public.item_tally(uuid) from public, anon;
+grant execute on function public.item_tally(uuid) to authenticated;
+
+-- The admin's route behind an anonymous response.
+--
+-- "Anonymous to the room, not to the company" is only honest if this exists
+-- and is named. Prizes need to reach a person and a question read out on stage
+-- may need following up; both require knowing who. Gated on users.manage
+-- rather than on hosting the session, so running a quiz does not come with the
+-- power to unmask its participants.
+create or replace function public.item_responses_identified(p_item uuid)
+returns jsonb
+language sql
+stable
+security definer
+set search_path = ''
+as $fn$
+  select case
+    when not public.can('users.manage') then jsonb_build_object('ok', false, 'reason', 'not allowed')
+    else jsonb_build_object(
+      'ok', true,
+      'responses', coalesce(
+        (select jsonb_agg(jsonb_build_object(
+           'value', r.value,
+           'at', r.submitted_at,
+           'anonymous', r.anonymous,
+           'who', p.display_name,
+           'user', r.user_id
+         ) order by r.submitted_at)
+         from public.responses r
+         left join public.profiles p on p.id = r.user_id
+         where r.item_id = p_item),
+        '[]'::jsonb)
+    )
+  end
+$fn$;
+
+revoke all on function public.item_responses_identified(uuid) from public, anon;
+grant execute on function public.item_responses_identified(uuid) to authenticated;
+
+-- Moving a session along. One function rather than four, because the states
+-- are a sequence and the interesting part is which transitions are refused.
+--
+-- open sets opened_at, which is the only clock the speed tiebreak trusts.
+-- lock stops answers without showing the answer — the pause a presenter wants
+-- before the drum roll. reveal is what makes the answer readable at all.
+create or replace function public.advance_session(p_session uuid, p_action text, p_item uuid default null)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $fn$
+declare
+  sess public.sessions;
+  target uuid;
+begin
+  if not public.hosts_session(p_session) then
+    return jsonb_build_object('ok', false, 'reason', 'not allowed');
+  end if;
+  select * into sess from public.sessions where id = p_session;
+
+  if p_action = 'start' then
+    update public.sessions set state = 'live', started_at = coalesce(started_at, now())
+    where id = p_session;
+    return jsonb_build_object('ok', true, 'state', 'live');
+
+  elsif p_action = 'close' then
+    update public.sessions set state = 'closed', closed_at = now() where id = p_session;
+    -- nothing is left open to answer into after the room has gone
+    update public.items set state = 'locked', locked_at = coalesce(locked_at, now())
+    where session_id = p_session and state = 'open';
+    return jsonb_build_object('ok', true, 'state', 'closed');
+
+  elsif p_action = 'show' then
+    -- Move to an item and open it in one step: a presenter putting a question
+    -- on screen has always meant "and you may answer it".
+    target := coalesce(p_item, (
+      select i.id from public.items i
+      where i.session_id = p_session and i.state = 'pending'
+      order by i.position limit 1
+    ));
+    if target is null then
+      return jsonb_build_object('ok', false, 'reason', 'nothing left to show');
+    end if;
+    -- whatever was on screen stops taking answers
+    update public.items set state = 'locked', locked_at = coalesce(locked_at, now())
+    where session_id = p_session and state = 'open' and id <> target;
+    update public.items set state = 'open', opened_at = coalesce(opened_at, now())
+    where id = target and session_id = p_session;
+    update public.sessions set current_item = target where id = p_session;
+    return jsonb_build_object('ok', true, 'item', target);
+
+  elsif p_action = 'lock' then
+    update public.items set state = 'locked', locked_at = now()
+    where session_id = p_session and state = 'open';
+    return jsonb_build_object('ok', true);
+
+  elsif p_action = 'reveal' then
+    update public.items set state = 'revealed', locked_at = coalesce(locked_at, now())
+    where session_id = p_session and id = coalesce(p_item, sess.current_item)
+      and state in ('open', 'locked');
+    if not found then
+      return jsonb_build_object('ok', false, 'reason', 'nothing to reveal');
+    end if;
+    return jsonb_build_object('ok', true);
+  end if;
+
+  return jsonb_build_object('ok', false, 'reason', 'no such action');
+end;
+$fn$;
+
+revoke all on function public.advance_session(uuid, text, uuid) from public, anon;
+grant execute on function public.advance_session(uuid, text, uuid) to authenticated;
+
+-- The doorbell, in the shape realtimeSync already uses for daily progress: the
+-- event says a session moved, and every client re-reads through current_item()
+-- to find out what it is allowed to see. Nothing about the item travels in the
+-- notification, which is why the answer cannot leak through it.
+do $$
+begin
+  if not exists (
+    select 1 from pg_publication_tables
+    where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'sessions'
+  ) then
+    alter publication supabase_realtime add table public.sessions;
+  end if;
+end $$;
