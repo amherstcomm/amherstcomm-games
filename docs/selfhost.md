@@ -294,7 +294,10 @@ it, and there are no `auth.jwt()` reads anywhere.
 
 `games.view` needs no row. Zitadel grants the application to holders of one of
 the three roles, so reaching the site at all already proves it — enforced
-upstream where a browser cannot reach. Rows exist for the two that raise
+upstream where a browser cannot reach. `has_role()` treats an
+authenticated session as satisfying the floor for that reason; reading it out
+of `role_grants` like the tiers above it would deny `games.play` to every
+ordinary player and allow it only to admins and editors. Rows exist for the two that raise
 privilege:
 
 ```sql
@@ -335,9 +338,11 @@ what it must stay.
 Two properties worth knowing, both enforced in the database rather than in the
 interface:
 
-- **`permissions.manage` cannot be set below `games.admin`.** It is the row
-  that decides who may edit the rows; lowering it lets every signed-in player
-  rewrite the map, including locking admins out of it. A trigger refuses.
+- **`permissions.manage` and `users.manage` cannot be set below
+  `games.admin`.** One decides who may edit the rows; the other decides who
+  may hand out the privileges the rows are keyed on. They are the same power
+  reached from two directions — lower either and every signed-in player can
+  rewrite the map or grant themselves admin. A trigger refuses both.
 - **An unknown capability is denied, never allowed.** `can()` coalesces a
   missing row to false. The tempting reading — "nothing forbids it" — turns
   every unseeded capability and every typo in a gate into an open door, and a

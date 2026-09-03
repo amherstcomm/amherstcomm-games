@@ -2018,10 +2018,22 @@ security definer
 set search_path = ''
 as $fn$
   select public.role_rank(p_role) > 0
-     and exists (
-       select 1 from public.role_grants g
-       where g.user_id = (select auth.uid())
-         and public.role_rank(g.role) >= public.role_rank(p_role)
+     and (
+       -- The floor is being here at all.
+       --
+       -- games.view is deliberately never granted a row: Zitadel grants the
+       -- application to holders of one of the three roles, so a session is
+       -- itself the proof. Reading it out of role_grants like the tiers above
+       -- it made can('games.play') false for every ordinary player and true
+       -- only for admins and editors — the exact inverse of what it describes.
+       -- It failed closed, so it was a lockout waiting for the first gate to
+       -- be written against it rather than a way in.
+       (public.role_rank(p_role) = 1 and (select auth.uid()) is not null)
+       or exists (
+         select 1 from public.role_grants g
+         where g.user_id = (select auth.uid())
+           and public.role_rank(g.role) >= public.role_rank(p_role)
+       )
      )
 $fn$;
 
@@ -2108,8 +2120,22 @@ language plpgsql
 set search_path = ''
 as $fn$
 begin
-  if new.capability = 'permissions.manage' and public.role_rank(new.min_role) < 3 then
-    raise exception 'permissions.manage cannot be set below games.admin';
+  -- Two rows, not one. permissions.manage decides who may edit the rows;
+  -- users.manage decides who may hand out the privileges the rows are keyed
+  -- on. They are the same power reached from two directions, and guarding
+  -- only the first was an omission rather than a judgement — lower
+  -- users.manage to games.view and every signed-in player can grant
+  -- themselves games.admin, which is_owner() now also satisfies.
+  --
+  -- Not exploitable when this was written, because nothing consumed
+  -- users.manage yet. Guarded now rather than when the grant RPC lands,
+  -- because that is a change about granting, and this is a floor.
+  --
+  -- role_rank('games.admin') rather than the literal 3: the rank is correct
+  -- today and silently wrong the day the ladder gains a tier.
+  if new.capability in ('permissions.manage', 'users.manage')
+     and public.role_rank(new.min_role) < public.role_rank('games.admin') then
+    raise exception '% cannot be set below games.admin', new.capability;
   end if;
   return new;
 end;
