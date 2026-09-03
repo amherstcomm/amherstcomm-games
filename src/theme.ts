@@ -3,46 +3,26 @@
 import { createContext, useContext, useEffect } from 'react';
 
 export type ThemeMode = 'system' | 'light' | 'dark';
-// deuter covers deuteranopia/protanopia (red-green, by far the most common),
-// tritan covers tritanopia (blue-yellow), mono covers achromatopsia and any
-// case where hue can't be relied on at all
-// sepia and ocean are there for taste rather than need — they move the page,
-// panels and text tiers and leave the meaning-carrying hues alone. They share
-// this axis with the accommodations, so choosing one gives up the other; the
-// Settings list keeps them in separate groups and says so.
-export type Palette =
-  | 'default'
-  | 'deuter'
-  | 'tritan'
-  | 'mono'
-  | 'sepia'
-  | 'ocean'
-  | 'forest'
-  | 'plum'
-  | 'graphite'
-  | 'ember'
-  | 'garnet'
-  | 'amherst';
+// Four, and every one earns its place on a staff tool. deuter covers
+// deuteranopia/protanopia (red-green, by far the most common), tritan covers
+// tritanopia (blue-yellow), and mono covers achromatopsia and any case where
+// hue cannot be relied on at all — it is also the high-contrast option, since
+// it separates every state by lightness. amherst is the company's own.
+//
+// Seven palettes that existed for taste — sepia, ocean, forest, plum,
+// graphite, ember, garnet — and the original green-and-amber default were
+// dropped when this became one company's site rather than a public product.
+// Nobody here was going to pick Garnet, and each one cost two axe runs in
+// every CI build. The classes and their tests remain, so adding one back is
+// a block of CSS and a list entry.
+export type Palette = 'deuter' | 'tritan' | 'mono' | 'amherst';
 // every size in the app is in rem, so scaling the root scales all of it
 export type TextScale = 'normal' | 'large' | 'larger';
 
 export const THEME_MODES: ThemeMode[] = ['system', 'light', 'dark'];
-export const PALETTES: Palette[] = [
-  'default',
-  'deuter',
-  'tritan',
-  'mono',
-  'sepia',
-  'ocean',
-  'forest',
-  'plum',
-  'graphite',
-  'ember',
-  'garnet',
-  'amherst',
-];
+export const PALETTES: Palette[] = ['deuter', 'tritan', 'mono', 'amherst'];
 /** the ones that exist for colour vision, as opposed to for looks */
-export const ACCESSIBLE_PALETTES: Palette[] = ['default', 'deuter', 'tritan', 'mono'];
+export const ACCESSIBLE_PALETTES: Palette[] = ['deuter', 'tritan', 'mono'];
 
 /** The palette that dresses this deployment as its company, and the one class
  *  allowed to move the hues that carry meaning.
@@ -62,7 +42,7 @@ export const BRAND_PALETTES: Palette[] = ['amherst'];
 /** What to call a colour in copy, per palette — and, for one of them, per
  *  theme as well.
  *
- *  "Must use the amber center letter" is true of one palette in eleven. Under
+ *  "Must use the amber center letter" is true of no palette here at all. Under
  *  Red-green friendly that letter is orange; under Monochrome it is a grey,
  *  and the whole point of that palette is that there is no hue to name. Prose
  *  that hardcodes a colour is wrong for everyone not using the default, and
@@ -86,7 +66,6 @@ export type ColorWords = {
 };
 
 const BASE_WORDS: Record<Palette, ColorWords> = {
-  default: { right: 'green', wrong: 'amber', span: 'gold', theme: 'blue', key: 'amber' },
   deuter: { right: 'blue', wrong: 'orange', span: 'orange', theme: 'light blue', key: 'orange' },
   tritan: {
     right: 'green',
@@ -103,16 +82,7 @@ const BASE_WORDS: Record<Palette, ColorWords> = {
     // no article: this one slots into "the ___ center letter"
     key: 'pale grey',
   },
-  // decorative palettes leave every meaning-carrying hue alone, so the words
-  // for them are the default words
-  sepia: { right: 'green', wrong: 'amber', span: 'gold', theme: 'blue', key: 'amber' },
-  ocean: { right: 'green', wrong: 'amber', span: 'gold', theme: 'blue', key: 'amber' },
-  forest: { right: 'green', wrong: 'amber', span: 'gold', theme: 'blue', key: 'amber' },
-  plum: { right: 'green', wrong: 'amber', span: 'gold', theme: 'blue', key: 'amber' },
-  graphite: { right: 'green', wrong: 'amber', span: 'gold', theme: 'blue', key: 'amber' },
-  ember: { right: 'green', wrong: 'amber', span: 'gold', theme: 'blue', key: 'amber' },
-  garnet: { right: 'green', wrong: 'amber', span: 'gold', theme: 'blue', key: 'amber' },
-  // The one decorative-looking palette that is not: it moves emerald to teal
+  // The brand palette moves emerald to teal
   // and amber to orange, so the words have to move with them. Learn mode says
   // "green is the right letter, amber is a letter placed wrong" in prose, and
   // that sentence reads perfectly well while describing tiles of a different
@@ -142,7 +112,7 @@ export function colorWords(palette: Palette, theme: 'light' | 'dark'): ColorWord
  *  so the picker cannot read the variables of anything but the active one.
  *  Lowering that scope so a subtree could preview a palette would change which
  *  block wins for every colour in light mode: a re-audit of the whole grid for
- *  the sake of six rows.
+ *  the sake of four rows.
  *
  *  A unit test holds these to the stylesheet instead — every value here has to
  *  be one that palette actually declares. It caught the mono row inventing a
@@ -150,20 +120,11 @@ export function colorWords(palette: Palette, theme: 'light' | 'dark'): ColorWord
  *  this duplication invites: a wrong swatch still looks like a colour, so
  *  nothing about it asks to be checked. */
 export const PALETTE_SWATCHES: Record<Palette, string[]> = {
-  default: ['52 211 153', '251 191 36', '251 113 133', '125 211 252'],
   deuter: ['59 130 246', '230 159 0', '236 72 153', '86 180 233'],
   tritan: ['45 190 125', '232 106 58', '236 88 150', '165 228 240'],
   // the real fills: this palette separates states by lightness, so a swatch
   // showing lightnesses it does not use gets the one thing that matters wrong
   mono: ['235 235 235', '210 210 210', '165 165 165', '150 150 150'],
-  sepia: ['245 176 65', '184 167 143', '79 66 50', '38 31 22'],
-  ocean: ['94 214 226', '152 180 195', '33 70 94', '10 30 45'],
-  forest: ['122 205 158', '158 182 168', '46 74 59', '18 34 26'],
-  plum: ['209 160 233', '180 166 190', '78 58 90', '38 26 45'],
-  graphite: ['214 214 220', '173 173 178', '64 64 68', '29 29 31'],
-  ember: ['240 150 118', '188 166 158', '86 55 46', '43 25 21'],
-  garnet: ['255 196 205', '188 162 168', '88 43 51', '44 20 25'],
-  // accent, then the ramp: the brand sky over three depths of the brand navy
   // accent, found, present, and the navy the room is made of
   amherst: ['156 195 223', '45 212 191', '251 146 60', '20 26 62'],
 };
@@ -178,7 +139,7 @@ const LIGHT_QUERY = '(prefers-color-scheme: light)';
 
 // the games read this so shared results use emoji matching the palette on
 // screen, rather than every game taking a prop for it
-export const PaletteContext = createContext<Palette>('default');
+export const PaletteContext = createContext<Palette>('amherst');
 export const usePalette = () => useContext(PaletteContext);
 
 export function resolveTheme(mode: ThemeMode): 'light' | 'dark' {

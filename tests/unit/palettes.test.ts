@@ -53,8 +53,22 @@ describe('decorative palettes', () => {
     (p) => !ACCESSIBLE_PALETTES.includes(p) && !BRAND_PALETTES.includes(p)
   );
 
-  it('are stocked', () => {
-    expect(decorative.length).toBeGreaterThan(0);
+  it('leaves nothing unclassified', () => {
+    // There are no decorative palettes any more — the seven that existed for
+    // taste went when this became one company's site. The rule below stays,
+    // because the classification is what makes adding one back safe rather
+    // than a re-audit; it simply has nothing to iterate today.
+    //
+    // What is worth asserting now is that the split is total: every palette is
+    // either an accommodation or the brand, and a new one that is neither
+    // would slip past both rules in this file.
+    for (const palette of PALETTES) {
+      expect(
+        ACCESSIBLE_PALETTES.includes(palette) || BRAND_PALETTES.includes(palette),
+        `${palette} is neither an accommodation nor a brand palette, so nothing here checks it`
+      ).toBe(true);
+    }
+    expect(decorative).toEqual([]);
   });
 
   it('change the room and nothing that carries meaning', () => {
@@ -312,13 +326,10 @@ describe('palette swatches', () => {
     // the dark blocks, since that is what a swatch depicts: the base theme for
     // default, and the palette's own block for the rest
     for (const palette of PALETTES) {
-      const declared =
-        palette === 'default'
-          ? valuesIn(":root[data-theme='dark']")
-          : new Set([
-              ...valuesIn(`:root[data-palette='${palette}']`),
-              ...valuesIn(":root[data-theme='dark']"),
-            ]);
+      const declared = new Set([
+        ...valuesIn(`:root[data-palette='${palette}']`),
+        ...valuesIn(":root[data-theme='dark']"),
+      ]);
       for (const tone of PALETTE_SWATCHES[palette]) {
         expect(declared.has(tone), `${palette} swatch ${tone} is not a colour that palette uses`).toBe(
           true

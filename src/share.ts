@@ -7,37 +7,23 @@ import { SITE, SLUG_NAME, gameUrl, type Slug } from '@/routes';
 
 export type TileKind = 'correct' | 'present' | 'absent';
 
-// Sepia and ocean change the room, not the tiles — they leave the hues that
-// carry meaning where they are, so they share the default squares. Which is
-// also the honest answer: there is no sepia green square to post.
+// Emoji cannot follow a palette exactly — there is no teal square to post —
+// so amherst shares the squares the app shipped with. Naming that is more
+// honest than pretending the shared result matches the board.
 export const TILE_EMOJI: Record<Palette, Record<TileKind, string>> = {
-  default: { correct: '🟩', present: '🟨', absent: '⬛' },
   deuter: { correct: '🟦', present: '🟧', absent: '⬛' },
   tritan: { correct: '🟩', present: '🟥', absent: '⬛' },
   mono: { correct: '⬜', present: '🔳', absent: '⬛' },
-  sepia: { correct: '🟩', present: '🟨', absent: '⬛' },
-  ocean: { correct: '🟩', present: '🟨', absent: '⬛' },
-  forest: { correct: '🟩', present: '🟨', absent: '⬛' },
-  plum: { correct: '🟩', present: '🟨', absent: '⬛' },
-  graphite: { correct: '🟩', present: '🟨', absent: '⬛' },
-  ember: { correct: '🟩', present: '🟨', absent: '⬛' },
-  garnet: { correct: '🟩', present: '🟨', absent: '⬛' },
-  amherst: { correct: '🟩', present: '🟨', absent: '⬛' },
+  // no teal square exists, so found keeps the green one; present becomes
+  // orange, which the palette actually is
+  amherst: { correct: '🟩', present: '🟧', absent: '⬛' },
 };
 
 export const WEAVE_EMOJI: Record<Palette, { theme: string; span: string; hint: string }> = {
-  default: { theme: '🔵', span: '🟡', hint: '💡' },
   deuter: { theme: '🔵', span: '🟠', hint: '💡' },
   tritan: { theme: '🔵', span: '🔴', hint: '💡' },
   mono: { theme: '⚪', span: '⚫', hint: '💡' },
-  sepia: { theme: '🔵', span: '🟡', hint: '💡' },
-  ocean: { theme: '🔵', span: '🟡', hint: '💡' },
-  forest: { theme: '🔵', span: '🟡', hint: '💡' },
-  plum: { theme: '🔵', span: '🟡', hint: '💡' },
-  graphite: { theme: '🔵', span: '🟡', hint: '💡' },
-  ember: { theme: '🔵', span: '🟡', hint: '💡' },
-  garnet: { theme: '🔵', span: '🟡', hint: '💡' },
-  amherst: { theme: '🔵', span: '🟡', hint: '💡' },
+  amherst: { theme: '🔵', span: '🟠', hint: '💡' },
 };
 
 export type SharePayload = { title: string; text: string; url: string };

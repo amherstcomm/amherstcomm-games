@@ -72,11 +72,11 @@ const THEME_OPTIONS: { id: ThemeMode; label: string; Icon: typeof Sun }[] = [
 
 
 const PALETTE_OPTIONS: { id: Palette; label: string; blurb: string }[] = [
-  { id: 'default', label: 'Default', blurb: 'Green, amber, and rose' },
+  { id: 'amherst', label: 'Amherst', blurb: 'The company colours — navy, sky, and the swish in red' },
   {
     id: 'deuter',
     label: 'Red–green friendly',
-    blurb: 'Deuteranopia and protanopia — blue and orange replace green and amber',
+    blurb: 'Deuteranopia and protanopia — blue and orange replace teal and orange',
   },
   {
     id: 'tritan',
@@ -86,21 +86,8 @@ const PALETTE_OPTIONS: { id: Palette; label: string; blurb: string }[] = [
   {
     id: 'mono',
     label: 'Monochrome',
-    blurb: 'No hue at all — states are separated by lightness',
+    blurb: 'No hue at all — states are separated by lightness, and contrast is highest here',
   },
-];
-
-// Same setting, different reason for existing. These change the page and the
-// panels rather than the colours that carry meaning — green still means found.
-const DECORATIVE_OPTIONS: { id: Palette; label: string; blurb: string }[] = [
-  { id: 'sepia', label: 'Sepia', blurb: 'Warm paper by day, candlelight after dark' },
-  { id: 'ocean', label: 'Ocean', blurb: 'Deep water at night, sea glass by day' },
-  { id: 'forest', label: 'Forest', blurb: 'Pine after dark, light through leaves by day' },
-  { id: 'plum', label: 'Plum', blurb: 'A dark that is not quite black' },
-  { id: 'graphite', label: 'Graphite', blurb: 'No hue in the room at all — the game keeps its own' },
-  { id: 'ember', label: 'Ember', blurb: 'Banked coals after dark, terracotta by day' },
-  { id: 'garnet', label: 'Garnet', blurb: 'Oxblood after dark, blush by day' },
-  { id: 'amherst', label: 'Amherst', blurb: 'Company navy after dark, daylight and sky by day' },
 ];
 
 function PaletteChoice({
@@ -415,22 +402,11 @@ export default function SettingsModal({
                 <PaletteChoice key={opt.id} opt={opt} palette={palette} onPalette={onPalette} />
               ))}
             </div>
-
-            <h4 className="mt-4 text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">
-              Just for looks
-            </h4>
-            {/* One setting, so a decorative choice replaces an accommodation.
-                Saying it here is cheaper than someone discovering it by losing
-                the palette they needed. */}
-            <p className="text-xs text-slate-500 mb-2.5">
-              These change the page rather than the colours that carry meaning. Picking one
-              replaces the colour-vision choice above.
-            </p>
-            <div className="space-y-2">
-              {DECORATIVE_OPTIONS.map((opt) => (
-                <PaletteChoice key={opt.id} opt={opt} palette={palette} onPalette={onPalette} />
-              ))}
-            </div>
+            {/* The "Just for looks" group and its warning are gone with the
+                seven palettes that were in it. The warning existed because one
+                setting meant a decorative choice replaced an accommodation —
+                with nothing decorative left to pick, there is no trade to
+                explain. */}
           </div>
 
           <div>
