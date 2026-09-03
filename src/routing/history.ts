@@ -36,6 +36,8 @@ export const IS_OVERLAY: Record<Route['kind'], boolean> = {
   ticket: false,
   reportAction: false,
   reportQueue: false,
+  // a page you stay on for the length of a session, not something over a board
+  live: false,
 };
 
 export type HistoryOp =

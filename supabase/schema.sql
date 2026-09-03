@@ -3250,3 +3250,81 @@ begin
     alter publication supabase_realtime add table public.sessions;
   end if;
 end $$;
+
+-- Every advance touches the session row, so one channel is enough.
+--
+-- Found by writing the client rather than by reading this: the doorbell
+-- watches `sessions`, and only `show` updated it — `lock` and `reveal` change
+-- `items` alone, so a reveal would have fired nothing and the room would have
+-- sat looking at a locked question until somebody reloaded. Publishing `items`
+-- as well would have worked and been worse: two channels, two orderings, and a
+-- table whose rows carry prompts flowing past every subscriber.
+alter table public.sessions add column if not exists moved_at timestamptz not null default now();
+
+create or replace function public.advance_session(p_session uuid, p_action text, p_item uuid default null)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $fn$
+declare
+  sess public.sessions;
+  target uuid;
+begin
+  if not public.hosts_session(p_session) then
+    return jsonb_build_object('ok', false, 'reason', 'not allowed');
+  end if;
+  select * into sess from public.sessions where id = p_session;
+
+  if p_action = 'start' then
+    update public.sessions
+      set state = 'live', started_at = coalesce(started_at, now()), moved_at = now()
+    where id = p_session;
+    return jsonb_build_object('ok', true, 'state', 'live');
+
+  elsif p_action = 'close' then
+    update public.sessions set state = 'closed', closed_at = now(), moved_at = now()
+    where id = p_session;
+    update public.items set state = 'locked', locked_at = coalesce(locked_at, now())
+    where session_id = p_session and state = 'open';
+    return jsonb_build_object('ok', true, 'state', 'closed');
+
+  elsif p_action = 'show' then
+    target := coalesce(p_item, (
+      select i.id from public.items i
+      where i.session_id = p_session and i.state = 'pending'
+      order by i.position limit 1
+    ));
+    if target is null then
+      return jsonb_build_object('ok', false, 'reason', 'nothing left to show');
+    end if;
+    update public.items set state = 'locked', locked_at = coalesce(locked_at, now())
+    where session_id = p_session and state = 'open' and id <> target;
+    update public.items set state = 'open', opened_at = coalesce(opened_at, now())
+    where id = target and session_id = p_session;
+    update public.sessions set current_item = target, moved_at = now() where id = p_session;
+    return jsonb_build_object('ok', true, 'item', target);
+
+  elsif p_action = 'lock' then
+    update public.items set state = 'locked', locked_at = now()
+    where session_id = p_session and state = 'open';
+    update public.sessions set moved_at = now() where id = p_session;
+    return jsonb_build_object('ok', true);
+
+  elsif p_action = 'reveal' then
+    update public.items set state = 'revealed', locked_at = coalesce(locked_at, now())
+    where session_id = p_session and id = coalesce(p_item, sess.current_item)
+      and state in ('open', 'locked');
+    if not found then
+      return jsonb_build_object('ok', false, 'reason', 'nothing to reveal');
+    end if;
+    update public.sessions set moved_at = now() where id = p_session;
+    return jsonb_build_object('ok', true);
+  end if;
+
+  return jsonb_build_object('ok', false, 'reason', 'no such action');
+end;
+$fn$;
+
+revoke all on function public.advance_session(uuid, text, uuid) from public, anon;
+grant execute on function public.advance_session(uuid, text, uuid) to authenticated;

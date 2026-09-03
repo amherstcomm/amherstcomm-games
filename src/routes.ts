@@ -87,7 +87,13 @@ export type Route =
   | { kind: 'reportAction'; id: string; token: string; action: string }
   // the owner's queue. A real address rather than a panel, because it is a
   // page you leave open and come back to.
-  | { kind: 'reportQueue' };
+  | { kind: 'reportQueue' }
+  // A live session. Two addresses for the same room: the one everybody opens,
+  // and the presenter's, which shows the answer and the controls. Separate
+  // addresses rather than a mode on one page, because the presenter's screen
+  // goes on a projector and the wrong one being there is the whole game
+  // spoiled — an address is something you can check before you plug in.
+  | { kind: 'live'; session: string; host: boolean };
 
 export function pathOf(route: Route): string {
   switch (route.kind) {
@@ -114,6 +120,8 @@ export function pathOf(route: Route): string {
       return `/report/act/${route.id}/${route.token}${route.action ? `/${route.action}` : ''}`;
     case 'reportQueue':
       return '/reports';
+    case 'live':
+      return route.host ? `/live/${route.session}/host` : `/live/${route.session}`;
   }
 }
 
@@ -154,6 +162,10 @@ export function titleOf(route: Route): string {
       return `Handle a report${suffix}`;
     case 'reportQueue':
       return `Open reports${suffix}`;
+    case 'live':
+      // The presenter's title says so, because this address goes on a
+      // projector and the tab is the last thing anyone checks before it does.
+      return route.host ? `Presenting${suffix}` : `Live${suffix}`;
   }
 }
 
@@ -196,6 +208,11 @@ export function parsePath(pathname: string): Route | null {
   // A ticket. Hex from the minting side too, so lowercasing is safe. A bare
   // /report is the lookup form with nothing typed into it yet.
   if (first === 'reports') return { kind: 'reportQueue' };
+
+  if (first === 'live') {
+    if (!second) return null;
+    return { kind: 'live', session: second, host: parts[2] === 'host' };
+  }
 
   if (first === 'report') {
     // /report/act/<id>/<token>[/<action>] is the owner's door; anything else
