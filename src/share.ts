@@ -21,6 +21,7 @@ export const TILE_EMOJI: Record<Palette, Record<TileKind, string>> = {
   graphite: { correct: '🟩', present: '🟨', absent: '⬛' },
   ember: { correct: '🟩', present: '🟨', absent: '⬛' },
   garnet: { correct: '🟩', present: '🟨', absent: '⬛' },
+  amherst: { correct: '🟩', present: '🟨', absent: '⬛' },
 };
 
 export const WEAVE_EMOJI: Record<Palette, { theme: string; span: string; hint: string }> = {
@@ -35,6 +36,7 @@ export const WEAVE_EMOJI: Record<Palette, { theme: string; span: string; hint: s
   graphite: { theme: '🔵', span: '🟡', hint: '💡' },
   ember: { theme: '🔵', span: '🟡', hint: '💡' },
   garnet: { theme: '🔵', span: '🟡', hint: '💡' },
+  amherst: { theme: '🔵', span: '🟡', hint: '💡' },
 };
 
 export type SharePayload = { title: string; text: string; url: string };
