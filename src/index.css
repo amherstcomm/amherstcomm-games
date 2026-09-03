@@ -694,6 +694,60 @@
   --c-accent: 130 32 56;
 }
 
+/* Amherst — the company palette, measured off amherstcomm.net.
+ *
+ * The ground is the brand navies: #000544 lifted just off black for the page,
+ * #191D5C's neighbourhood for the panels. The accent is the brand sky #9CC3DF.
+ *
+ * The brand red #ED1C23 is deliberately absent, and this is the interesting
+ * part. It is not a contrast problem — ΔE 43.8 from rose-400 clears the floor
+ * this file's tests impose with room to spare. It is a meaning problem:
+ * rose-400 is what marks a wrong answer, and it is a red. An accent that is
+ * also red reads as "something is wrong" to a person mid-board, no matter how
+ * far apart a colour-difference formula puts them. The palette tests catch a
+ * decorative palette *editing* a meaning-carrying hue; nothing catches one
+ * standing next to it and borrowing the meaning.
+ *
+ * So the red keeps its job by staying scarce — it belongs to the logo and the
+ * masthead rule, where it is the only red on the page and reads as the
+ * company rather than as an error. Navy and sky are just as much the brand,
+ * and unlike red they are not already spoken for. */
+:root[data-palette='amherst'] {
+  --c-slate-950: 10 14 40;
+  --c-slate-900: 20 26 62;
+  --c-slate-800: 32 40 88;
+  --c-slate-700: 46 58 118;
+  --c-slate-600: 132 142 176;
+  --c-slate-500: 148 158 190;
+  --c-slate-400: 166 176 206;
+  --c-slate-300: 216 224 242;
+  --c-slate-200: 232 238 250;
+
+  --c-ink: 10 14 40;
+  --c-focus: 156 195 223;
+  --c-accent: 156 195 223;
+}
+
+/* By day the ground inverts to a paper that still carries the hue, and the
+ * accent becomes the navy itself — #191D5C at 13.9:1 on this page, where the
+ * sky blue would have been far too pale to read. Same two brand colours,
+ * trading places. */
+:root[data-theme='light'][data-palette='amherst'] {
+  --c-slate-950: 244 247 253;
+  --c-slate-900: 252 253 255;
+  --c-slate-800: 226 232 246;
+  --c-slate-700: 198 208 234;
+  --c-slate-600: 88 100 148;
+  --c-slate-500: 62 74 124;
+  --c-slate-400: 62 74 124;
+  --c-slate-300: 44 54 104;
+  --c-slate-200: 25 29 92;
+
+  --c-white: 25 29 92;
+  --c-focus: 25 29 92;
+  --c-accent: 25 29 92;
+}
+
 /* keep overscroll and the area behind the app in the active theme */
 body {
   background-color: rgb(var(--c-slate-950));

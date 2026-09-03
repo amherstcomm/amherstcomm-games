@@ -21,7 +21,8 @@ export type Palette =
   | 'plum'
   | 'graphite'
   | 'ember'
-  | 'garnet';
+  | 'garnet'
+  | 'amherst';
 // every size in the app is in rem, so scaling the root scales all of it
 export type TextScale = 'normal' | 'large' | 'larger';
 
@@ -38,6 +39,7 @@ export const PALETTES: Palette[] = [
   'graphite',
   'ember',
   'garnet',
+  'amherst',
 ];
 /** the ones that exist for colour vision, as opposed to for looks */
 export const ACCESSIBLE_PALETTES: Palette[] = ['default', 'deuter', 'tritan', 'mono'];
@@ -95,6 +97,7 @@ const BASE_WORDS: Record<Palette, ColorWords> = {
   graphite: { right: 'green', wrong: 'amber', span: 'gold', theme: 'blue', key: 'amber' },
   ember: { right: 'green', wrong: 'amber', span: 'gold', theme: 'blue', key: 'amber' },
   garnet: { right: 'green', wrong: 'amber', span: 'gold', theme: 'blue', key: 'amber' },
+  amherst: { right: 'green', wrong: 'amber', span: 'gold', theme: 'blue', key: 'amber' },
 };
 
 /** Monochrome on a light page, where every lightness above is upside down. */
@@ -140,6 +143,8 @@ export const PALETTE_SWATCHES: Record<Palette, string[]> = {
   graphite: ['214 214 220', '173 173 178', '64 64 68', '29 29 31'],
   ember: ['240 150 118', '188 166 158', '86 55 46', '43 25 21'],
   garnet: ['255 196 205', '188 162 168', '88 43 51', '44 20 25'],
+  // accent, then the ramp: the brand sky over three depths of the brand navy
+  amherst: ['156 195 223', '166 176 206', '46 58 118', '20 26 62'],
 };
 export const TEXT_SCALES: TextScale[] = ['normal', 'large', 'larger'];
 export const TEXT_SCALE_PCT: Record<TextScale, string> = {
