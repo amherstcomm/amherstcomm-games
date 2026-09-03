@@ -39,6 +39,7 @@ export const IS_OVERLAY: Record<Route['kind'], boolean> = {
   // a page you stay on for the length of a session, not something over a board
   live: false,
   sessions: false,
+  join: false,
 };
 
 export type HistoryOp =

@@ -43,6 +43,46 @@ export type PresenterView = {
   responses?: { value: unknown; at: string; who: string | null }[];
 };
 
+/** A session somebody can join: the door, not the room. No questions in it —
+ *  that is `current_item`'s job, and it checks the session is running first. */
+export type LiveSessionSummary = { id: string; title: string; code: string };
+
+/** What is running now, for anybody signed in.
+ *
+ *  This exists because the mechanism worked and nobody could reach it: the only
+ *  links to /live/<id> were on the authoring screen, so the room's way in was
+ *  somebody pasting a URL with a raw UUID in it. */
+export async function readLiveSessions(): Promise<LiveSessionSummary[]> {
+  if (!supabase) return [];
+  const { data, error } = await supabase.rpc('live_sessions');
+  if (error || !Array.isArray(data)) return [];
+  return data as LiveSessionSummary[];
+}
+
+/** A code typed off a slide. Case, spaces and dashes are the server's problem —
+ *  none of them is allowed to be the reason somebody cannot get in. */
+export async function resolveCode(
+  code: string
+): Promise<{ ok: boolean; id?: string; title?: string; reason?: string }> {
+  if (!supabase) return { ok: false, reason: 'not connected' };
+  const { data, error } = await supabase.rpc('session_by_code', { p_code: code });
+  if (error) return { ok: false, reason: error.message };
+  return (data as { ok: boolean; id?: string; reason?: string }) ?? { ok: false, reason: 'no answer' };
+}
+
+/** The presenter's header — the session's name and the code to read out. A
+ *  separate call from the sheet because it is wanted before a session starts
+ *  and on every load, and pulling every question and answer to show four
+ *  characters would put the answers on the wire for nothing. */
+export async function readSessionDoor(
+  session: string
+): Promise<{ ok: boolean; title?: string; code?: string | null; state?: string }> {
+  if (!supabase) return { ok: false };
+  const { data, error } = await supabase.rpc('session_door', { p_session: session });
+  if (error || !data) return { ok: false };
+  return data as { ok: boolean; title?: string; code?: string | null; state?: string };
+}
+
 export async function readCurrentItem(session: string): Promise<LiveItem> {
   if (!supabase) return { state: 'not-live' };
   const { data, error } = await supabase.rpc('current_item', { p_session: session });

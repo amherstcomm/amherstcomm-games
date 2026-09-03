@@ -162,6 +162,8 @@ describe('the overlay table', () => {
       // and so is building one — Back from the editor should leave it, not
       // uncover a game that was never underneath
       'sessions',
+      // and so is joining one
+      'join',
     ];
     for (const k of kinds) expect(IS_OVERLAY[k], k).toBeTypeOf('boolean');
     expect(Object.keys(IS_OVERLAY).sort()).toEqual([...kinds].sort());

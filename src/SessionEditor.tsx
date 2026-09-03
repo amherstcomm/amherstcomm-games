@@ -27,7 +27,7 @@ import {
   type SheetItem,
   type SessionSummary,
 } from '@/authoring';
-import { pathOf } from '@/routes';
+import { JOIN_HOST, pathOf } from '@/routes';
 
 const FIELD =
   'w-full px-3 py-2 rounded-lg bg-white/5 border border-white/15 text-white text-sm placeholder:text-slate-600 focus:outline-none focus:border-accent';
@@ -350,6 +350,28 @@ function SessionEditorFor({ session }: { session: string }) {
             ? 'Running now.'
             : 'Finished.'}
       </p>
+
+      {/* The code, at the size it needs to be read at. This is the thing that
+          goes on the slide, and the whole reason a session is reachable by
+          anyone who was not sent a link. */}
+      {meta.code && meta.state !== 'closed' && (
+        <div className="rounded-xl border border-accent/40 bg-accent/5 p-4 mb-6">
+          <p className="text-xs uppercase tracking-wider text-accent font-semibold">
+            To join
+          </p>
+          <p className="text-3xl font-bold text-white tracking-[0.3em] mt-1">{meta.code}</p>
+          <p className="text-sm text-slate-400 mt-2">
+            Go to <span className="text-slate-300">{JOIN_HOST}/join</span> and type it,
+            or open <span className="text-slate-300">{JOIN_HOST}/join/{meta.code}</span>{' '}
+            directly.
+          </p>
+          {meta.state === 'draft' && (
+            <p className="text-xs text-slate-500 mt-2">
+              It will not work until you start the session from the presenter screen.
+            </p>
+          )}
+        </div>
+      )}
 
       <div className="flex flex-wrap gap-2 mb-8">
         <a

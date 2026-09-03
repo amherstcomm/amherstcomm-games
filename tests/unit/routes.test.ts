@@ -46,6 +46,8 @@ const EVERY_ROUTE: Route[] = [
   { kind: 'live', session: '5f7c2a10-3b4d-4e8f-9a12-6c0d1e2f3a4b', host: true },
   { kind: 'sessions' },
   { kind: 'sessions', session: '5f7c2a10-3b4d-4e8f-9a12-6c0d1e2f3a4b' },
+  { kind: 'join' },
+  { kind: 'join', code: 'K4TP' },
   ...PANELS.map((panel) => ({ kind: 'panel', panel }) as const),
   ...DOCS.map((doc) => ({ kind: 'legal', doc }) as const),
   ...STATS_TABS.map((tab) => ({ kind: 'stats', tab }) as const),
@@ -175,10 +177,22 @@ describe('the parts that are easy to get subtly wrong', () => {
     expect(parsePath('/report/reports')).toEqual({ kind: 'ticket', ticket: 'reports' });
   });
 
+  it('takes a join code straight off a slide', () => {
+    // /join is the form; /join/<code> is the short address that goes on the
+    // projector, and it has to survive being read out and typed back in
+    expect(parsePath('/join')).toEqual({ kind: 'join', code: undefined });
+    expect(parsePath('/join/K4TP')).toEqual({ kind: 'join', code: 'K4TP' });
+    // and typed in lower case, which is what happens when somebody reads it off
+    // a projector into their phone
+    expect(parsePath('/join/k4tp')).toEqual({ kind: 'join', code: 'K4TP' });
+  });
+
   it('treats a bare /sessions as the list, not as a missing session', () => {
     // unlike /live, which is nothing without one — there is no room to open
     expect(parsePath('/sessions')).toEqual({ kind: 'sessions', session: undefined });
-    expect(parsePath('/live')).toBeNull();
+    // /live needs an id to mean a room, so a bare one is a guess at "the thing
+    // that is running" and goes to the door instead of to the front page
+    expect(parsePath('/live')).toEqual({ kind: 'join', code: undefined });
   });
 
   it('tells the presenter address apart from what the room opens', () => {
