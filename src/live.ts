@@ -15,6 +15,7 @@
 import type { RealtimeChannel } from '@supabase/supabase-js';
 import { supabase } from '@/supabase';
 import type { Door } from '@/presenting';
+import type { Chart } from '@/Charts';
 
 /** What the room is looking at. `answer` is null until the presenter reveals
  *  it — the server withholds it, this type just admits that it might not be
@@ -202,6 +203,25 @@ export async function readGameState(
   const { data, error } = await supabase.rpc('game_state', { p_item: item });
   if (error || !data) return { ok: false };
   return data as { ok: boolean; guesses?: GuessRow[]; solved?: boolean; word?: string | null };
+}
+
+/** Question by question, what the room said. The scoreboard answers "who
+ *  won"; this answers "how did that one go", which is the half a room wants to
+ *  look at and the only thing that makes a survey worth asking. */
+export type SessionResults = {
+  ok: boolean;
+  reason?: string;
+  title?: string;
+  state?: 'draft' | 'live' | 'closed';
+  mode?: 'live' | 'open';
+  items?: { id: string; position: number; kind: string; prompt: string; chart: Chart }[];
+};
+
+export async function readSessionResults(session: string): Promise<SessionResults> {
+  if (!supabase) return { ok: false };
+  const { data, error } = await supabase.rpc('session_results', { p_session: session });
+  if (error || !data) return { ok: false, reason: error?.message };
+  return data as SessionResults;
 }
 
 export async function readCurrentItem(session: string): Promise<LiveItem> {

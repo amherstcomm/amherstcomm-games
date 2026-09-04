@@ -9,8 +9,14 @@
 // had three and a half" only settles it if the half can be pointed at. Half a
 // question is now a real score, so this matters more than it did.
 import { useCallback, useEffect, useState } from 'react';
-import { Loader2, Trophy } from 'lucide-react';
-import { readSessionScores, type SessionScores } from '@/live';
+import { BarChart3, Loader2, Trophy } from 'lucide-react';
+import {
+  readSessionResults,
+  readSessionScores,
+  type SessionResults,
+  type SessionScores,
+} from '@/live';
+import ChartFor from '@/Charts';
 import { pathOf } from '@/routes';
 
 /** Marks are numbers a room reads at a distance: 1, 0.5, 0. Not 1.00, and not
@@ -19,10 +25,23 @@ import { pathOf } from '@/routes';
 const mark = (n: number | undefined) =>
   n === undefined ? '·' : Number.isInteger(n) ? String(n) : n.toFixed(2).replace(/0$/, '');
 
+/** Two views of one afternoon, on one address.
+ *
+ *  Standings answer "who won"; results answer "how did that one go". They are
+ *  tabs rather than two pages because they are the same question asked twice —
+ *  and because the thing on the wall should not need a second link found and
+ *  typed while a room waits. */
+type View = 'standings' | 'results';
+
 export default function Scoreboard({ session }: { session: string }) {
   const [board, setBoard] = useState<SessionScores | null>(null);
+  const [results, setResults] = useState<SessionResults | null>(null);
+  const [view, setView] = useState<View>('standings');
 
-  const pull = useCallback(async () => setBoard(await readSessionScores(session)), [session]);
+  const pull = useCallback(async () => {
+    setBoard(await readSessionScores(session));
+    setResults(await readSessionResults(session));
+  }, [session]);
   useEffect(() => {
     void pull();
     // A board left on a screen while the round finishes should finish with it.
@@ -50,16 +69,66 @@ export default function Scoreboard({ session }: { session: string }) {
           {board.title}
         </a>
       </p>
-      <h1 className="text-3xl sm:text-4xl font-bold text-white mt-1 mb-1">Scores</h1>
+      <h1 className="text-3xl sm:text-4xl font-bold text-white mt-1 mb-1">
+        {view === 'standings' ? 'Scores' : 'Results'}
+      </h1>
+      {/* Counted per view. The standings count only the questions that score;
+          the results cover every one that has been shown, because a survey has
+          no score and is the question most worth a chart. One subtitle for
+          both would be wrong on one of them. */}
       <p className="text-sm text-slate-400 mb-8">
-        {questions.length === 0
-          ? 'Nothing has been revealed yet.'
-          : `After ${questions.length} ${questions.length === 1 ? 'question' : 'questions'}${
-              board.state === 'closed' ? ' — finished' : ''
-            }`}
+        {(() => {
+          const n = view === 'results' ? (results?.items?.length ?? 0) : questions.length;
+          const done = board.state === 'closed' ? ' — finished' : '';
+          if (n === 0) {
+            return view === 'results'
+              ? 'Nothing has been answered yet.'
+              : 'Nothing has been revealed yet.';
+          }
+          return `After ${n} ${n === 1 ? 'question' : 'questions'}${done}`;
+        })()}
       </p>
 
-      {standings.length === 0 ? (
+      <div className="flex gap-2 mb-6">
+        {(
+          [
+            ['standings', 'Who won', Trophy],
+            ['results', 'How each question went', BarChart3],
+          ] as const
+        ).map(([v, label, Icon]) => (
+          <button
+            key={v}
+            onClick={() => setView(v)}
+            aria-pressed={view === v}
+            className={`inline-flex items-center justify-center gap-1.5 px-3 h-9 rounded-lg text-sm font-semibold border ${
+              view === v
+                ? 'border-accent bg-accent/15 text-white'
+                : 'border-white/15 text-slate-300 hover:bg-white/5'
+            }`}
+          >
+            <Icon className="w-4 h-4" aria-hidden="true" />
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {view === 'results' ? (
+        <div className="space-y-8">
+          {(results?.items ?? []).length === 0 && (
+            <p className="text-sm text-slate-400">Nothing has been answered yet.</p>
+          )}
+          {(results?.items ?? []).map((q) => (
+            <section key={q.id}>
+              <p className="text-xs uppercase tracking-wider text-slate-500">
+                {q.position} · {q.kind}
+                {q.chart?.total != null && ` · ${q.chart.total} answered`}
+              </p>
+              <h2 className="text-lg sm:text-xl font-semibold text-white mb-3">{q.prompt}</h2>
+              <ChartFor chart={q.chart} />
+            </section>
+          ))}
+        </div>
+      ) : standings.length === 0 ? (
         <p className="text-sm text-slate-400">Nobody has answered anything yet.</p>
       ) : (
         // Its own scroller: a wide round would otherwise push the whole page
@@ -137,7 +206,7 @@ export default function Scoreboard({ session }: { session: string }) {
         </div>
       )}
 
-      {questions.length > 0 && (
+      {view === 'standings' && questions.length > 0 && (
         <ol className="mt-8 space-y-1 text-sm text-slate-400">
           {questions.map((q) => (
             <li key={q.id}>
@@ -150,7 +219,7 @@ export default function Scoreboard({ session }: { session: string }) {
 
       {/* A dot is a question somebody was not there for, which is a different
           thing from getting it wrong and is worth saying once. */}
-      {standings.length > 0 && (
+      {view === 'standings' && standings.length > 0 && (
         <p className="mt-6 text-xs text-slate-500">
           · means they did not answer that one. 0 means they did.
         </p>

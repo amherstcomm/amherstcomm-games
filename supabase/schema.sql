@@ -6407,3 +6407,189 @@ $fn$;
 
 revoke all on function public.current_item(uuid) from public, anon;
 grant execute on function public.current_item(uuid) to authenticated;
+
+-- ---------------------------------------------------------------------------
+-- What the room actually said, question by question
+--
+-- The scoreboard answers "who won". This answers "how did that one go" — the
+-- distribution behind each question, which is the half a room wants to look at
+-- and the half that makes a survey worth asking at all.
+--
+-- One shape does most of it. A choice, a survey, a matching, a ranking and a
+-- word game all reduce to labelled counts out of a total, so they share a
+-- renderer and differ only in what the labels mean. A guessing question does
+-- not — fifty guesses are fifty values on a line, not fifty bars — and an open
+-- question is text. Those two say so and are drawn their own way.
+--
+-- Gated exactly as the standings are: winners.view and hosting. A distribution
+-- is not secret in the way an answer is, but it is somebody's screen for the
+-- room rather than everybody's on their phone, which is the same call made in
+-- session_leaderboard.
+-- ---------------------------------------------------------------------------
+create or replace function public.item_chart(p_item uuid)
+returns jsonb
+language sql
+stable
+set search_path = ''
+as $fn$
+  with it as (
+    select i.id, i.kind, i.payload, a.answer,
+           (select count(*) from public.responses r where r.item_id = i.id) as answered
+    from public.items i
+    left join public.item_answers a on a.item_id = i.id
+    where i.id = p_item
+  )
+  select case (select kind from it)
+
+    -- Every option, including the ones nobody picked: a bar chart missing its
+    -- zeroes is a chart that quietly rewrites the question.
+    when 'choice' then jsonb_build_object(
+      'type', 'bars',
+      'total', (select answered from it),
+      'bars', coalesce((
+        select jsonb_agg(jsonb_build_object(
+                 'label', o,
+                 'count', (select count(*) from public.responses r
+                           where r.item_id = p_item
+                             and (r.value = to_jsonb(o) or r.value @> to_jsonb(o))),
+                 'correct', (select answer -> 'correct' from it) @> to_jsonb(o))
+               order by ord)
+        from jsonb_array_elements_text((select payload -> 'options' from it))
+             with ordinality as t(o, ord)), '[]'::jsonb))
+
+    when 'survey' then jsonb_build_object(
+      'type', 'bars',
+      'total', (select answered from it),
+      'bars', coalesce((
+        select jsonb_agg(jsonb_build_object(
+                 'label', o,
+                 'count', (select count(*) from public.responses r
+                           where r.item_id = p_item
+                             and (r.value = to_jsonb(o) or r.value @> to_jsonb(o))),
+                 'correct', null)
+               order by ord)
+        from jsonb_array_elements_text((select payload -> 'options' from it))
+             with ordinality as t(o, ord)), '[]'::jsonb))
+
+    -- One bar per pair: how many got that one right. Which wrong answer was
+    -- popular is a further question, and a chart that tried to show both would
+    -- show neither.
+    when 'match' then jsonb_build_object(
+      'type', 'bars',
+      'total', (select answered from it),
+      'label', 'Pairs got right',
+      'bars', coalesce((
+        select jsonb_agg(jsonb_build_object(
+                 'label', l || ' → ' || ((select answer -> 'pairs' from it) ->> l),
+                 'count', (select count(*) from public.responses r
+                           where r.item_id = p_item
+                             and r.value ->> l = (select answer -> 'pairs' from it) ->> l),
+                 'correct', true)
+               order by l)
+        from jsonb_object_keys((select answer -> 'pairs' from it)) l), '[]'::jsonb))
+
+    -- Same again, by position rather than by pair.
+    when 'rank' then jsonb_build_object(
+      'type', 'bars',
+      'total', (select answered from it),
+      'label', 'Placed correctly',
+      'bars', coalesce((
+        select jsonb_agg(jsonb_build_object(
+                 'label', (ord::text) || '. ' || o,
+                 'count', (select count(*) from public.responses r
+                           where r.item_id = p_item and r.value ->> (ord - 1)::int = o),
+                 'correct', true)
+               order by ord)
+        from jsonb_array_elements_text((select answer -> 'order' from it))
+             with ordinality as t(o, ord)), '[]'::jsonb))
+
+    -- Solved, and in how many. Six bars and a seventh for the ones who did not.
+    when 'game' then jsonb_build_object(
+      'type', 'bars',
+      'total', (select answered from it),
+      'label', 'Guesses taken',
+      'bars', coalesce((
+        select jsonb_agg(jsonb_build_object(
+                 'label', case when n > 0 then n::text else 'Not solved' end,
+                 'count', (select count(*) from public.responses r
+                           where r.item_id = p_item
+                             and case
+                                   when n > 0 then coalesce((r.value ->> 'solved')::boolean, false)
+                                     and jsonb_array_length(r.value -> 'guesses') = n
+                                   else not coalesce((r.value ->> 'solved')::boolean, false)
+                                 end),
+                 'correct', n > 0)
+               order by case when n = 0 then 99 else n end)
+        from generate_series(0, coalesce(nullif((select payload ->> 'tries' from it), '')::int, 6)) n
+      ), '[]'::jsonb))
+
+    -- Not bars. Fifty guesses are fifty values on a line.
+    when 'number' then jsonb_build_object(
+      'type', 'numbers',
+      'total', (select answered from it),
+      'answer', (select public.as_number(answer -> 'value') from it),
+      'unit', (select payload -> 'unit' from it),
+      'currency', (select payload -> 'currency' from it),
+      'percent', (select payload -> 'percent' from it),
+      'values', coalesce((
+        select jsonb_agg(v order by v)
+        from (select public.as_number(r.value) as v from public.responses r
+              where r.item_id = p_item) g
+        where v is not null), '[]'::jsonb))
+
+    -- Text, with the same promise presenter_view makes: no name on anything
+    -- somebody asked to be unnamed.
+    when 'open' then jsonb_build_object(
+      'type', 'texts',
+      'total', (select answered from it),
+      'texts', coalesce((
+        select jsonb_agg(jsonb_build_object(
+                 'value', r.value,
+                 'who', case when r.anonymous then null else p.display_name end)
+               order by r.submitted_at)
+        from public.responses r
+        left join public.profiles p on p.id = r.user_id
+        where r.item_id = p_item), '[]'::jsonb))
+
+    else jsonb_build_object('type', 'none', 'total', (select answered from it))
+  end
+$fn$;
+
+revoke all on function public.item_chart(uuid) from public, anon, authenticated;
+
+create or replace function public.session_results(p_session uuid)
+returns jsonb
+language sql
+stable
+security definer
+set search_path = ''
+as $fn$
+  select case
+    when not public.can('winners.view')
+      then jsonb_build_object('ok', false, 'reason', 'not allowed')
+    when not public.hosts_session(p_session)
+      then jsonb_build_object('ok', false, 'reason', 'not allowed')
+    else jsonb_build_object(
+      'ok', true,
+      'title', (select s.title from public.sessions s where s.id = p_session),
+      'state', (select s.state from public.sessions s where s.id = p_session),
+      'mode', (select s.mode from public.sessions s where s.id = p_session),
+      -- Everything that has been shown, scored or not: a survey has no score
+      -- and is the question most worth a chart. In a live session that means
+      -- revealed; in an open one, anything that has been opened at all.
+      'items', coalesce((
+        select jsonb_agg(jsonb_build_object(
+                 'id', i.id, 'position', i.position, 'kind', i.kind, 'prompt', i.prompt,
+                 'chart', public.item_chart(i.id))
+               order by i.position)
+        from public.items i
+        join public.sessions s on s.id = i.session_id
+        where i.session_id = p_session
+          and (i.state = 'revealed' or (s.mode = 'open' and i.state <> 'pending'))),
+        '[]'::jsonb)
+    )
+  end
+$fn$;
+
+revoke all on function public.session_results(uuid) from public, anon;
+grant execute on function public.session_results(uuid) to authenticated;

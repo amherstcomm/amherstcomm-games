@@ -596,6 +596,33 @@ had four and you had three and a half" only settles it if the half can be
 pointed at. It is also how a result gets checked afterwards. A `·` means they
 did not answer that one; a `0` means they did.
 
+### The results panel
+
+`/scores/<id>` carries two views on one address: **Who won** (the standings)
+and **How each question went** (the distribution behind each one). Tabs rather
+than two pages, because the thing on the wall should not need a second link
+found and typed while a room waits.
+
+Three chart shapes, because that is what the questions are:
+
+- **Bars** for a choice, a survey, a matching, a ranking and a word game — all
+  of them reduce to labelled counts out of a total, and differ only in what a
+  label means. An option nobody picked still gets a bar: a chart missing its
+  zeroes reads as though the option was never offered.
+- **A number line** for a guessing question, with every guess as a point and the
+  real value marked. Fifty guesses are fifty values, not fifty bars of one, and
+  the range always includes the answer so a room that all guessed low does not
+  see a tidy chart with the truth off the edge of it.
+- **Text** for an open question, keeping the same promise the presenter's screen
+  keeps: no name on anything somebody asked to be unnamed.
+
+No chart library. Bars are a div with a width and the number line is one small
+SVG, both of which are less code than configuring something would be.
+
+Gated exactly as the standings are — `winners.view` and hosting. A distribution
+is not secret the way an answer is, but it is a screen for the room rather than
+everybody's on their phone.
+
 ### Writing a guessing question down
 
 The unit goes where the locale puts it, via `Intl.NumberFormat` — `$41.50`, not
