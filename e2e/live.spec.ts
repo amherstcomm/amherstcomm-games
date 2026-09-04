@@ -277,3 +277,149 @@ test('but a player still gets all of it', async ({ page }) => {
   await expect(page.getByRole('button', { name: '2021' })).toBeEnabled();
   await expect(page.getByText(/you are not scored on it/i)).toHaveCount(0);
 });
+
+// ---------------------------------------------------------------------------
+// Moving on, in an open session
+// ---------------------------------------------------------------------------
+
+/** Answering, per kind, because each one submits differently — and that is
+ *  exactly how one of them came to have no way onwards while the other six
+ *  were fine. */
+const ANSWER: Record<string, (p: import('@playwright/test').Page) => Promise<void>> = {
+  // ITEMS.choice is a multi-select, so picking is not sending — which is the
+  // whole reason each kind needs its own gesture here.
+  choice: async (p) => {
+    await p.getByRole('button', { name: '2019' }).click();
+    await p.getByRole('button', { name: 'Send answer' }).click();
+  },
+  match: async (p) => {
+    await p.getByRole('combobox').selectOption('Analyst');
+    await p.getByRole('button', { name: 'Send answer' }).click();
+  },
+  number: async (p) => {
+    await p.getByRole('textbox').first().fill('41');
+    await p.getByRole('button', { name: /Send guess/ }).click();
+  },
+  rank: async (p) => void (await p.getByRole('button', { name: /Send order/ }).click()),
+  open: async (p) => {
+    await p.getByPlaceholder(/What would you like to ask/).fill('why');
+    await p.getByRole('button', { name: /^Send$/ }).click();
+  },
+  game: async (p) => {
+    await p.keyboard.type('owners');
+    await p.keyboard.press('Enter');
+  },
+};
+
+async function playing(page: import('@playwright/test').Page, which: keyof typeof ITEMS) {
+  await page.route('**/rest/v1/rpc/**', (route) => {
+    const url = route.request().url();
+    if (url.includes('guess_word')) {
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          ok: true,
+          marks: Array(6).fill('correct'),
+          solved: true,
+          left: 5,
+          word: 'OWNERS',
+        }),
+      });
+    }
+    const body = url.includes('answer_item')
+      ? { ok: true, answer: { correct: ['2019'] } }
+      : url.includes('current_item')
+        ? {
+            state: 'open',
+            mode: 'open',
+            id: 'q1',
+            position: 1,
+            opened_at: new Date().toISOString(),
+            seconds: null,
+            now: new Date().toISOString(),
+            mine: null,
+            answer: null,
+            total: 3,
+            done: 0,
+            ...ITEMS[which],
+          }
+        : url.includes('game_state')
+          ? { ok: true, guesses: [], solved: false, word: null }
+          : url.includes('my_standing')
+            ? { ok: true, points: 0, scored: 0 }
+            : {};
+    return route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(body),
+    });
+  });
+  await page.goto(`/live/${SESSION}`);
+  await expect(page.getByRole('heading').last()).toBeVisible();
+}
+
+for (const kind of Object.keys(ANSWER) as (keyof typeof ITEMS)[]) {
+  test(`answering a ${kind} question in an open session offers a way onwards`, async ({
+    page,
+  }) => {
+    // The word game had none: every other kind goes through one send, and it
+    // does not — each guess is its own call — so the screen around it never
+    // learned the round was over and the player sat on a solved board.
+    await playing(page, kind);
+    await ANSWER[kind](page);
+    await expect(page.getByRole('button', { name: /Next question|^Finish$/ })).toBeVisible({
+      timeout: 3000,
+    });
+  });
+}
+
+test('and nothing is served while they are looking at how they did', async ({ page }) => {
+  // current_item does not report in open mode, it serves — so a poll running
+  // here hands out the next question and starts its clock while the player is
+  // still reading the last one's answer. Seconds off a timed question they
+  // have not been shown.
+  let served = 0;
+  await page.route('**/rest/v1/rpc/**', (route) => {
+    const url = route.request().url();
+    if (url.includes('current_item')) served++;
+    const body = url.includes('answer_item')
+      ? { ok: true, answer: { correct: ['2019'] } }
+      : url.includes('current_item')
+        ? {
+            state: 'open',
+            mode: 'open',
+            id: 'q1',
+            position: 1,
+            opened_at: new Date().toISOString(),
+            seconds: 30,
+            now: new Date().toISOString(),
+            mine: null,
+            answer: null,
+            total: 3,
+            done: 0,
+            ...ITEMS.choice,
+          }
+        : url.includes('my_standing')
+          ? { ok: true, points: 0, scored: 0 }
+          : {};
+    return route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(body),
+    });
+  });
+  await page.goto(`/live/${SESSION}`);
+  await expect(page.getByRole('button', { name: '2019' })).toBeVisible();
+  await page.getByRole('button', { name: '2019' }).click();
+  await page.getByRole('button', { name: 'Send answer' }).click();
+  await expect(page.getByRole('button', { name: /Next question|^Finish$/ })).toBeVisible();
+
+  const before = served;
+  // longer than the poll interval, which is five seconds
+  await page.waitForTimeout(6500);
+  expect(served, 'the next question was served while they were still reading').toBe(before);
+
+  await page.getByRole('button', { name: /Next question|^Finish$/ }).click();
+  await expect.poll(() => served).toBeGreaterThan(before);
+});

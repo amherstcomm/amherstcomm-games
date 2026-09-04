@@ -425,6 +425,13 @@ land on the same scoreboard measuring the same thing.
 A per-question clock works the same way — from when the question reached that
 person rather than from when the session opened.
 
+After answering, the player sees how they did and presses on when they are
+ready. **Nothing is served while they are looking at it.** `current_item` does
+not report in open mode, it serves, so the five-second poll running there would
+hand out the next question and start its clock while they were still reading the
+last one's answer — seconds off a timed question they had not been shown. The
+poll pauses until they move on.
+
 ### Running the room
 
 The presenter gets **one button that says what it will do next** — "Start the

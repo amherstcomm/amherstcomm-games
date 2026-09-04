@@ -483,7 +483,18 @@ function Rank({
  *  do. So: letters land in the row, Backspace takes one back, Enter sends, and
  *  MobileKeyInput raises the device keyboard for a thumb, exactly as every
  *  other board here does. */
-function WordGame({ item, readOnly }: { item: LiveItem; readOnly?: boolean }) {
+function WordGame({
+  item,
+  readOnly,
+  onFinished,
+}: {
+  item: LiveItem;
+  readOnly?: boolean;
+  /** A word game never goes through `send` — every guess is its own call — so
+   *  the screen around it has no way to know the round is over. In an open
+   *  session that left the player looking at a solved board with no way on. */
+  onFinished?: () => void;
+}) {
   const length = Number(item.payload?.length) || 5;
   const tries = Number(item.payload?.tries) || 6;
   const [rows, setRows] = useState<GuessRow[]>([]);
@@ -512,11 +523,13 @@ function WordGame({ item, readOnly }: { item: LiveItem; readOnly?: boolean }) {
       setRows(s.guesses ?? []);
       setSolved(s.solved === true);
       setWord(s.word ?? null);
+      // a reload onto a board already finished is still finished
+      if (s.solved === true || (s.guesses?.length ?? 0) >= tries) onFinished?.();
     });
     return () => {
       alive = false;
     };
-  }, [item.id]);
+  }, [item.id, tries, onFinished]);
 
   const locked = readOnly || item.state !== 'open';
   const done = solved || rows.length >= tries;
@@ -547,7 +560,8 @@ function WordGame({ item, readOnly }: { item: LiveItem; readOnly?: boolean }) {
     setCurrent('');
     if (res.solved) setSolved(true);
     if (res.word) setWord(res.word);
-  }, [current, item.id, length, showFlash]);
+    if (res.solved || res.left === 0) onFinished?.();
+  }, [current, item.id, length, showFlash, onFinished]);
 
   const pressKey = useCallback(
     (k: string) => {
@@ -715,6 +729,16 @@ export default function LiveSession({ session, host }: { session: string; host: 
    *  screen until they press on. A live session does not need it — the
    *  presenter's reveal is what puts the answer up, for everybody at once. */
   const [justAnswered, setJustAnswered] = useState<LiveItem | null>(null);
+  /** The word game's equivalent: it marks its own board, so there is nothing
+   *  to hold, only the fact that it is over. */
+  const [gameOver, setGameOver] = useState(false);
+
+  /** Open mode: they have finished with the question on screen and are looking
+   *  at how they did, waiting to move on. Declared here rather than beside the
+   *  other derived values because the poll below reads it. */
+  const holding = !host && (justAnswered !== null || gameOver);
+  // Stable, so WordGame's effects do not re-run on every render of this one.
+  const finishGame = useCallback(() => setGameOver(true), []);
   const [board, setBoard] = useState<Leaderboard | null>(null);
   const [mine, setMine] = useState<{ points?: number; scored?: number } | null>(null);
   const [first, setFirst] = useState<{ name?: string | null; seconds?: number | null } | null>(
@@ -770,6 +794,7 @@ export default function LiveSession({ session, host }: { session: string; host: 
       itemId.current = next.id;
       setTally(null);
       setNote('');
+      setGameOver(false);
     }
     if (next.state === 'revealed' && next.id) {
       const t = await readTally(next.id);
@@ -803,9 +828,15 @@ export default function LiveSession({ session, host }: { session: string; host: 
   // channel reports trouble, because the failure it exists for is a channel
   // that reports SUBSCRIBED and delivers nothing.
   useEffect(() => {
+    // Not while they are looking at how they did. In open mode current_item
+    // does not report, it *serves* — so a poll here hands them the next
+    // question and starts its clock while they are still reading the last
+    // one's answer. On a timed question that is seconds off the clock for
+    // something they have not been shown yet.
+    if (holding) return;
     const id = window.setInterval(() => void pull(), LIVE_POLL_MS);
     return () => window.clearInterval(id);
-  }, [pull]);
+  }, [pull, holding]);
 
 
   // Four times a second while a clock is running, and not at all otherwise. Not
@@ -1101,7 +1132,9 @@ export default function LiveSession({ session, host }: { session: string; host: 
           {kind === 'rank' && <Rank item={shown} onSend={(v) => void send(v)} sending={sending} readOnly={host} />}
           {/* The only kind that does not go through `send`: a word game is a
               sequence of guesses, each marked by the server as it arrives. */}
-          {kind === 'game' && <WordGame item={shown} readOnly={host} />}
+          {kind === 'game' && (
+            <WordGame item={shown} readOnly={host} onFinished={finishGame} />
+          )}
           {kind === 'open' && answering && !host && (
             <Ask onSend={(v, anon) => void send(v, anon)} sending={sending} />
           )}
@@ -1202,10 +1235,11 @@ export default function LiveSession({ session, host }: { session: string; host: 
 
       {/* Open mode: they have seen how they did, and they move on when they
           are ready rather than being moved. */}
-      {justAnswered && (
+      {holding && (
         <button
           onClick={() => {
             setJustAnswered(null);
+            setGameOver(false);
             setNote('');
             void pull();
           }}
