@@ -577,8 +577,16 @@ function WordGame({ item }: { item: LiveItem }) {
 
   return (
     <div className="space-y-3">
-      <div className="space-y-1.5">
-        {Array.from({ length: tries }, (_, r) => {
+      {/* `relative`, and it is load-bearing. MobileKeyInput is `absolute
+          inset-0`, so it fills its nearest *positioned* ancestor — and with
+          none it filled the page, sat invisibly over the presenter's controls
+          and swallowed every click on Close, Reveal and Finish. The board
+          looked perfect and the room could not be moved on.
+          Every other game wraps it round its entry box for exactly this
+          reason; here the grid is the entry box. */}
+      <div className="relative">
+        <div className="space-y-1.5">
+          {Array.from({ length: tries }, (_, r) => {
           const row = rows[r];
           const isCurrent = playing && r === rows.length;
           return (
@@ -599,18 +607,18 @@ function WordGame({ item }: { item: LiveItem }) {
             </div>
           );
         })}
+        </div>
+        {/* No text box. The grid is the input — this raises the device
+            keyboard for a thumb and feeds the same pressKey the physical one
+            does, which is how every other board on the site works. Inside the
+            relative wrapper above, so it covers the grid and nothing else. */}
+        {playing && <MobileKeyInput onKey={pressKey} label="Type your guess" />}
       </div>
 
       {playing && (
-        <>
-          {/* No text box. The grid is the input — this raises the device
-              keyboard for a thumb and feeds the same pressKey the physical one
-              does, which is how every other board on the site works. */}
-          <MobileKeyInput onKey={pressKey} label="Type your guess" />
-          <p className="text-xs text-slate-400 text-center">
-            Type your guess, then press Enter. {tries - rows.length} left.
-          </p>
-        </>
+        <p className="text-xs text-slate-400 text-center">
+          Type your guess, then press Enter. {tries - rows.length} left.
+        </p>
       )}
 
       {note && (
