@@ -421,6 +421,13 @@ The word does not have to be in the dictionary. Guesses are checked against
 `public.words`, but the solution is exempt, so a name or a piece of company
 vocabulary works and is still accepted as a guess.
 
+**It types like the daily board.** Letters land in the row, Backspace takes one
+back, Enter sends, and `MobileKeyInput` raises the device keyboard for a thumb —
+the same handling every other board on the site uses. It had a text box under
+the grid for about a day: that worked, and it was a different game from the one
+on the rest of the site, which is worse than a missing feature. Somebody who
+plays the daily arrives with hands that already know what to do.
+
 **It is `guess` only so far.** `GAME_PLAYABLE` in `src/authoring.ts` is the list
 that moves when another game arrives, and each one needs two things: a play
 function in the schema, because the server marks and so every game's rule has to
