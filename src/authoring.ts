@@ -39,16 +39,27 @@ export type Sheet = {
     current_item: string | null;
     /** the four characters that go on the slide */
     code: string | null;
+    mode: SessionMode;
   };
   kinds?: ItemKind[];
   items?: SheetItem[];
 };
+
+/** Whether there is somebody at the front.
+ *
+ *  `live` is one clock and one screen: the presenter opens a question and the
+ *  room answers it together. `open` has nobody at the front — you join
+ *  whenever, get the questions one at a time, and answer at your own pace, with
+ *  your clock starting when each question reaches *you*. The two land on the
+ *  same scoreboard because the timing means the same thing in both. */
+export type SessionMode = 'live' | 'open';
 
 export type SessionSummary = {
   id: string;
   title: string;
   state: 'draft' | 'live' | 'closed';
   late_join: 'strict' | 'open';
+  mode: SessionMode;
   code: string | null;
   items: number;
   created_at: string;
@@ -123,12 +134,14 @@ export async function readSheet(session: string): Promise<Sheet> {
 
 export async function createSession(
   title: string,
-  lateJoin: 'strict' | 'open'
+  lateJoin: 'strict' | 'open',
+  mode: SessionMode = 'live'
 ): Promise<{ ok: boolean; id?: string; reason?: string }> {
   if (!supabase) return fail('not connected');
   const { data, error } = await supabase.rpc('create_session', {
     p_title: title,
     p_late_join: lateJoin,
+    p_mode: mode,
   });
   if (error) return fail(error.message);
   return (data as { ok: boolean; id?: string; reason?: string }) ?? fail('no answer');

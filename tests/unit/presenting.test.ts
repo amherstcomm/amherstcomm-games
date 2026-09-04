@@ -77,6 +77,56 @@ describe('the next move', () => {
   });
 });
 
+describe('an open session, which has nobody at the front', () => {
+  const open = (over: Partial<Door> = {}): Door => ({
+    ok: true,
+    mode: 'open',
+    state: 'draft',
+    total: 4,
+    pending: 4,
+    position: null,
+    item_state: null,
+    ...over,
+  });
+
+  it('is opened rather than started, in those words', () => {
+    expect(nextMove(open())).toEqual({ action: 'start', label: 'Open it for playing' });
+  });
+
+  it('will not open with nothing in it', () => {
+    expect(nextMove(open({ total: 0, pending: 0 }))).toBeNull();
+    expect(whereWeAre(open({ total: 0, pending: 0 }))).toMatch(/add some/i);
+  });
+
+  it('offers only closing once it is open', () => {
+    // show, lock and reveal are the presenter's, and there is no presenter —
+    // the server refuses all three, so offering them would be offering buttons
+    // that do nothing
+    expect(nextMove(open({ state: 'live' }))).toEqual({ action: 'close', label: 'Close it' });
+    expect(otherMoves(open({ state: 'live' }))).toEqual([]);
+  });
+
+  it('does not offer to close one that is already closed', () => {
+    expect(nextMove(open({ state: 'closed' }))).toBeNull();
+  });
+
+  it('counts people rather than questions, because they are all in different places', () => {
+    // "Question 3 of 6" is meaningless when everybody is somewhere different
+    expect(whereWeAre(open({ state: 'live', players: 7 }))).toBe(
+      'Open for playing · 7 people have played'
+    );
+    expect(whereWeAre(open({ state: 'live', players: 1 }))).toMatch(/1 person has played/);
+    expect(whereWeAre(open({ state: 'live', players: 0 }))).toMatch(/0 people have played/);
+    expect(whereWeAre(open({ state: 'closed', players: 7 }))).toMatch(/^Closed/);
+  });
+
+  it('never mentions a question number', () => {
+    for (const d of [open(), open({ state: 'live', players: 3 }), open({ state: 'closed' })]) {
+      expect(whereWeAre(d)).not.toMatch(/Question \d/);
+    }
+  });
+});
+
 describe('the other moves', () => {
   it('lets a question be skipped while it is up', () => {
     const skip = otherMoves(live({ pending: 2, position: 1, item_state: 'open' }));

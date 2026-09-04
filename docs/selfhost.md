@@ -392,6 +392,30 @@ pixels and decodes it with jsQR, an independent implementation, because a QR
 code that does not scan looks exactly like one that does and the failure happens
 in a room with a projector and no way to fix it.
 
+### Two kinds of session
+
+Chosen when you create it, because it shapes everything else.
+
+**With a presenter** (`live`) is what the rest of this section describes: one
+clock and one screen, you open each question and the room answers it together.
+
+**On their own time** (`open`) has nobody at the front. People join whenever,
+are given the questions one at a time, and answer at their own pace. There is no
+show, lock or reveal — starting it opens every question at once, and each person
+is told their own answer as soon as they have given theirs, because nobody is
+going to announce it. The host screen becomes a way to open it, watch how many
+have played, and close it.
+
+**The timing still means something.** In a live session `items.opened_at` is the
+start for the whole room; an open session has no such moment, so the start is
+per person and recorded in `item_served` the first time a question is put in
+front of somebody. Elapsed is measured from their own start, so playing at nine
+in the morning and at five in the afternoon compare properly and the two modes
+land on the same scoreboard measuring the same thing.
+
+A per-question clock works the same way — from when the question reached that
+person rather than from when the session opened.
+
 ### Running the room
 
 The presenter gets **one button that says what it will do next** — "Start the
