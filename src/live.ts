@@ -160,8 +160,15 @@ export async function readTally(
  *  channel that can only say "the row changed" cannot accidentally grow a
  *  field with the answer in it. The traffic is one row per presenter click,
  *  not one per participant, so the WAL is not carrying the room. */
-export function onSessionMoved(session: string, listener: () => void): () => void {
-  if (!supabase) return () => {};
+export function onSessionMoved(
+  session: string,
+  listener: () => void,
+  onStatus?: (connected: boolean) => void
+): () => void {
+  if (!supabase) {
+    onStatus?.(false);
+    return () => {};
+  }
   const channel: RealtimeChannel = supabase
     .channel(`live:${session}`)
     .on(
@@ -169,7 +176,13 @@ export function onSessionMoved(session: string, listener: () => void): () => voi
       { event: 'UPDATE', schema: 'public', table: 'sessions', filter: `id=eq.${session}` },
       () => listener()
     )
-    .subscribe();
+    // The status was thrown away before, which is most of why the room going
+    // deaf was invisible: a channel that never subscribes and a channel with
+    // nothing to say look identical from here. CHANNEL_ERROR and TIMED_OUT are
+    // both real outcomes — a websocket that a proxy will not upgrade produces
+    // one of them — and the caller needs to know so it can fall back and say
+    // so.
+    .subscribe((status) => onStatus?.(status === 'SUBSCRIBED'));
   return () => {
     void supabase?.removeChannel(channel);
   };
