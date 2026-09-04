@@ -185,9 +185,11 @@ test('and shows no question, because everybody is somewhere different', async ({
   await hostingOpen(page);
   await expect(page.getByText('Which year?')).toHaveCount(0);
   await expect(page.getByRole('button', { name: '2019' })).toHaveCount(0);
-  // what it shows instead: why, and the way to play it as a player
+  // What it shows instead is why. It used to offer "Play it yourself", which
+  // stopped being true when the host stopped being a player in their own
+  // session — a link to a screen that would refuse them.
   await expect(page.getByText(/Nobody is looking at the same question/)).toBeVisible();
-  await expect(page.getByRole('link', { name: 'Play it yourself' })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Play it yourself' })).toHaveCount(0);
 });
 
 test('and keeps the code and the one control it does have', async ({ page }) => {
@@ -199,4 +201,79 @@ test('and keeps the code and the one control it does have', async ({ page }) => 
   for (const gone of ['Close the answers', 'Show the answer', 'Skip to the next question']) {
     await expect(page.getByRole('button', { name: gone })).toHaveCount(0);
   }
+});
+
+// ---------------------------------------------------------------------------
+// The presenter is not playing
+// ---------------------------------------------------------------------------
+
+test('the presenter sees the question but cannot answer it', async ({ page }) => {
+  // The screen is pointed at a room, so the question is on it. What is not on
+  // it is a way in: the host wrote the answers, or has the correct one in front
+  // of them to run the reveal, and a score from that seat means nothing.
+  //
+  // The server refuses either way — runs_session — so this is about not
+  // offering a control that would be refused, which is the screen lying.
+  await presenting(page, 'choice');
+  await expect(page.getByText('Which year?')).toBeVisible();
+
+  const options = page.getByRole('button', { name: /^(2019|2021)$/ });
+  await expect(options).toHaveCount(2);
+  for (const el of await options.all()) {
+    await expect(el, 'an option the presenter could press').toBeDisabled();
+  }
+  await expect(page.getByText(/you are not scored on it/i)).toBeVisible();
+});
+
+test('and is offered no way to submit one either', async ({ page }) => {
+  await presenting(page, 'choice');
+  // the multi-select send, which is the one that is not a bare option
+  await expect(page.getByRole('button', { name: 'Send answer' })).toHaveCount(0);
+});
+
+test('an open question is read out by the presenter, not asked by them', async ({ page }) => {
+  await presenting(page, 'open');
+  await expect(page.getByText('Ask anything')).toBeVisible();
+  await expect(page.getByRole('button', { name: /^Send$/ })).toHaveCount(0);
+  await expect(page.getByPlaceholder(/What would you like to ask/)).toHaveCount(0);
+});
+
+test('a word game on the presenter screen takes no guesses', async ({ page }) => {
+  await presenting(page, 'game');
+  // the grid is there — it is what the room is looking at
+  await expect(page.getByText(/Six letters/)).toBeVisible();
+  // and the way in is not
+  await expect(page.getByText(/Type your guess, then press Enter/)).toHaveCount(0);
+});
+
+test('but a player still gets all of it', async ({ page }) => {
+  // the other half of the rule: this must not have disabled the room
+  const item = {
+    state: 'open',
+    id: 'q1',
+    position: 2,
+    opened_at: new Date().toISOString(),
+    seconds: null,
+    now: new Date().toISOString(),
+    mine: null,
+    answer: null,
+    ...ITEMS.choice,
+  };
+  await page.route('**/rest/v1/rpc/**', (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(
+        route.request().url().includes('current_item')
+          ? item
+          : route.request().url().includes('my_standing')
+            ? { ok: true, points: 0, scored: 0 }
+            : {}
+      ),
+    })
+  );
+  await page.goto(`/live/${SESSION}`);
+  await expect(page.getByText('Which year?')).toBeVisible();
+  await expect(page.getByRole('button', { name: '2021' })).toBeEnabled();
+  await expect(page.getByText(/you are not scored on it/i)).toHaveCount(0);
 });

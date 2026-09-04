@@ -5891,3 +5891,294 @@ $fn$;
 
 revoke all on function public.game_state(uuid) from public, anon;
 grant execute on function public.game_state(uuid) to authenticated;
+
+-- ---------------------------------------------------------------------------
+-- Whoever is running a session is not playing in it
+--
+-- The host has seen the answers. They wrote them, or they have the presenter's
+-- screen open with the correct one on it so they can run the reveal. A score
+-- earned from that seat means nothing, and a prize decided by it is worse than
+-- meaningless.
+--
+-- Enforced here rather than by not drawing the buttons. The presenter's screen
+-- shows the question — it is pointed at a room, that is the whole job — and a
+-- screen that shows a question while quietly declining to send one is a
+-- promise the browser is making on its own.
+--
+-- **The session's own host, not everyone who could host it.** hosts_session()
+-- is true for anybody holding games.setup, and using it here would mean no
+-- editor could ever play any session — which on a site with one admin means
+-- that admin never plays. The rule is about the person running this one.
+-- ---------------------------------------------------------------------------
+create or replace function public.runs_session(p_session uuid)
+returns boolean
+language sql
+stable
+set search_path = ''
+as $fn$
+  select exists (
+    select 1 from public.sessions s
+    where s.id = p_session and s.host = (select auth.uid())
+  )
+$fn$;
+
+create or replace function public.answer_item(
+  p_item uuid,
+  p_value jsonb,
+  p_anonymous boolean default false
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $fn$
+declare
+  it public.items;
+  sess public.sessions;
+  me uuid := (select auth.uid());
+  window_seconds int;
+  began timestamptz;
+begin
+  select * into it from public.items where id = p_item;
+  if it.id is null then
+    return jsonb_build_object('ok', false, 'reason', 'no such item');
+  end if;
+  select * into sess from public.sessions where id = it.session_id;
+  if sess.state <> 'live' then
+    return jsonb_build_object('ok', false, 'reason', 'this session is not running');
+  end if;
+  if public.runs_session(sess.id) then
+    return jsonb_build_object('ok', false, 'reason', 'you are running this one');
+  end if;
+  if it.state <> 'open' then
+    return jsonb_build_object('ok', false, 'reason', 'answers are closed for this one');
+  end if;
+
+  if sess.mode = 'open' then
+    if exists (select 1 from public.responses r where r.item_id = p_item and r.user_id = me) then
+      return jsonb_build_object('ok', false, 'reason', 'you have answered that one');
+    end if;
+    if not exists (select 1 from public.item_served s
+                   where s.item_id = p_item and s.user_id = me) then
+      return jsonb_build_object('ok', false, 'reason', 'that is not the question in front of you');
+    end if;
+  elsif sess.current_item is distinct from p_item then
+    return jsonb_build_object('ok', false, 'reason', 'that is not the question on screen');
+  end if;
+
+  window_seconds := public.item_seconds(it.payload);
+  began := public.started_at(p_item, me);
+  if window_seconds is not null and began is not null
+     and now() > began + (window_seconds * interval '1 second') then
+    return jsonb_build_object('ok', false, 'reason', 'time is up for this one');
+  end if;
+
+  insert into public.responses (item_id, user_id, value, anonymous)
+  values (p_item, me, p_value, coalesce(p_anonymous, false))
+  on conflict (item_id, user_id) do update
+    set value = excluded.value,
+        anonymous = excluded.anonymous,
+        submitted_at = now();
+
+  return jsonb_build_object(
+    'ok', true,
+    'answer', case when sess.mode = 'open'
+                   then (select a.answer from public.item_answers a where a.item_id = p_item)
+              end);
+end;
+$fn$;
+
+revoke all on function public.answer_item(uuid, jsonb, boolean) from public, anon;
+grant execute on function public.answer_item(uuid, jsonb, boolean) to authenticated;
+
+create or replace function public.guess_word(p_item uuid, p_guess text)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $fn$
+declare
+  it public.items;
+  sess public.sessions;
+  me uuid := (select auth.uid());
+  word text;
+  tries int;
+  guesses jsonb;
+  said text;
+  marks text[];
+  max_tries int;
+  window_seconds int;
+  began timestamptz;
+begin
+  select * into it from public.items where id = p_item;
+  if it.id is null or it.kind <> 'game' then
+    return jsonb_build_object('ok', false, 'reason', 'no such question');
+  end if;
+  select * into sess from public.sessions where id = it.session_id;
+  if sess.state <> 'live' then
+    return jsonb_build_object('ok', false, 'reason', 'that is not the question on screen');
+  end if;
+  -- The host set the word. There is no game here for them.
+  if public.runs_session(sess.id) then
+    return jsonb_build_object('ok', false, 'reason', 'you are running this one');
+  end if;
+  if sess.mode = 'open' then
+    if not exists (select 1 from public.item_served s
+                   where s.item_id = p_item and s.user_id = me) then
+      return jsonb_build_object('ok', false, 'reason', 'that is not the question in front of you');
+    end if;
+  elsif sess.current_item is distinct from p_item then
+    return jsonb_build_object('ok', false, 'reason', 'that is not the question on screen');
+  end if;
+  if it.state <> 'open' then
+    return jsonb_build_object('ok', false, 'reason', 'answers are closed for this one');
+  end if;
+
+  window_seconds := public.item_seconds(it.payload);
+  began := public.started_at(p_item, me);
+  if window_seconds is not null and began is not null
+     and now() > began + (window_seconds * interval '1 second') then
+    return jsonb_build_object('ok', false, 'reason', 'time is up for this one');
+  end if;
+
+  select upper(a.answer ->> 'word') into word
+  from public.item_answers a where a.item_id = p_item;
+  if word is null then
+    return jsonb_build_object('ok', false, 'reason', 'this one has no solution set');
+  end if;
+
+  said := upper(regexp_replace(coalesce(p_guess, ''), '[^A-Za-z]', '', 'g'));
+  if length(said) <> length(word) then
+    return jsonb_build_object('ok', false, 'reason',
+      format('Guesses are %s letters.', length(word)));
+  end if;
+  if said <> word and not exists (select 1 from public.words w where w.word = lower(said)) then
+    return jsonb_build_object('ok', false, 'reason', 'That is not a word I know.');
+  end if;
+
+  select coalesce(r.value -> 'guesses', '[]'::jsonb) into guesses
+  from public.responses r where r.item_id = p_item and r.user_id = me;
+  guesses := coalesce(guesses, '[]'::jsonb);
+  tries := jsonb_array_length(guesses);
+
+  max_tries := coalesce(nullif(it.payload ->> 'tries', '')::int, 6);
+  if tries >= max_tries then
+    return jsonb_build_object('ok', false, 'reason', 'No guesses left.');
+  end if;
+  if guesses -> (tries - 1) ->> 'word' = word then
+    return jsonb_build_object('ok', false, 'reason', 'You have already got it.');
+  end if;
+
+  marks := public.mark_guess(word, said);
+  guesses := guesses || jsonb_build_array(
+    jsonb_build_object('word', said, 'marks', to_jsonb(marks)));
+
+  insert into public.responses (item_id, user_id, value)
+  values (p_item, me, jsonb_build_object('guesses', guesses, 'solved', said = word))
+  on conflict (item_id, user_id) do update
+    set value = excluded.value,
+        submitted_at = case when said = word then now() else public.responses.submitted_at end;
+
+  return jsonb_build_object(
+    'ok', true,
+    'marks', to_jsonb(marks),
+    'solved', said = word,
+    'left', max_tries - (tries + 1),
+    'word', case when said = word or tries + 1 >= max_tries then word end);
+end;
+$fn$;
+
+revoke all on function public.guess_word(uuid, text) from public, anon;
+grant execute on function public.guess_word(uuid, text) to authenticated;
+
+-- And nothing is served to them either, so an open session does not quietly
+-- start a clock for somebody who cannot answer.
+create or replace function public.current_item(p_session uuid)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $fn$
+declare
+  sess public.sessions;
+  me uuid := (select auth.uid());
+  it public.items;
+begin
+  select * into sess from public.sessions where id = p_session;
+  if sess.id is null or sess.state <> 'live' then
+    return jsonb_build_object('state', 'not-live', 'now', now());
+  end if;
+
+  if sess.mode = 'open' then
+    if me is null or public.runs_session(p_session) then
+      return jsonb_build_object('state', 'not-live', 'mode', 'open', 'now', now());
+    end if;
+    select i.* into it
+    from public.items i
+    where i.session_id = p_session
+      and i.state <> 'pending'
+      and not exists (
+        select 1 from public.responses r where r.item_id = i.id and r.user_id = me)
+    order by i.position
+    limit 1;
+    if it.id is null then
+      return jsonb_build_object(
+        'state', 'done', 'mode', 'open', 'now', now(),
+        'total', (select count(*) from public.items i where i.session_id = p_session
+                  and i.state <> 'pending'));
+    end if;
+    insert into public.item_served (item_id, user_id) values (it.id, me)
+    on conflict (item_id, user_id) do nothing;
+
+    return jsonb_build_object(
+      'state', 'open',
+      'mode', 'open',
+      'id', it.id,
+      'kind', it.kind,
+      'prompt', it.prompt,
+      'payload', it.payload,
+      'position', it.position,
+      'opened_at', public.started_at(it.id, me),
+      'seconds', public.item_seconds(it.payload),
+      'now', now(),
+      'mine', null,
+      'answer', null,
+      'total', (select count(*) from public.items i where i.session_id = p_session
+                and i.state <> 'pending'),
+      'done', (select count(*) from public.responses r
+               join public.items i on i.id = r.item_id
+               where i.session_id = p_session and r.user_id = me));
+  end if;
+
+  if sess.current_item is null then
+    return jsonb_build_object('state', 'waiting', 'mode', 'live', 'now', now());
+  end if;
+  select * into it from public.items
+  where id = sess.current_item and state <> 'pending';
+  if it.id is null then
+    return jsonb_build_object('state', 'waiting', 'mode', 'live', 'now', now());
+  end if;
+
+  return jsonb_build_object(
+    'state', it.state,
+    'mode', 'live',
+    'id', it.id,
+    'kind', it.kind,
+    'prompt', it.prompt,
+    'payload', it.payload,
+    'position', it.position,
+    'opened_at', it.opened_at,
+    'seconds', public.item_seconds(it.payload),
+    'now', now(),
+    -- The host has no answer of their own and never will, so this is null for
+    -- them rather than an empty-looking board.
+    'mine', (select r.value from public.responses r
+             where r.item_id = it.id and r.user_id = me),
+    'answer', case when it.state = 'revealed'
+                   then (select a.answer from public.item_answers a where a.item_id = it.id)
+              end);
+end;
+$fn$;
+
+revoke all on function public.current_item(uuid) from public, anon;
+grant execute on function public.current_item(uuid) to authenticated;
