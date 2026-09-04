@@ -481,13 +481,31 @@ goes in. The footer link to `/sessions` appears only for accounts holding
 `games.setup`, and it decides a link and nothing else — every RPC behind it
 checks again, in the database.
 
-Three kinds of question work today: **multiple choice** (single or multiple, and
-the speed tiebreak is recorded but not yet scored), **survey** (the same control
-with nothing to be right about) and **open question** (people submit, optionally
-without their name attached to what the room sees). `item_kinds` also holds
-`match`, `number` and `rank`; the authoring screen does not offer them and says
-so, because a question the play view cannot draw fails on the projector at the
-one moment there is nothing to be done about it.
+All six kinds work:
+
+| kind | the room does | scored |
+|---|---|---|
+| **multiple choice** | picks one, or several | one point, part marks on a multi-select |
+| **matching** | pairs each left item with a right one | a fraction per pair got right |
+| **closest guess** | types a number | one point to the closest, and only the closest |
+| **ranking** | orders a list with up/down buttons | a fraction per item in the right place |
+| **survey** | picks one, or several | no |
+| **open question** | submits a question, optionally unnamed | no |
+
+Two notes on the ones that could go wrong quietly:
+
+- **Ranking and matching store their options shuffled.** The author types a
+  ranking in the *correct* order, because that is how the answer gets expressed
+  — so stored as typed, `payload.options` would be the answer, and
+  `current_item()` sends the payload to the room. `save_item` shuffles it (and
+  the right-hand column of a match) before storing, and rotates if the shuffle
+  happens to land on the answer. It is done in the database rather than the
+  browser because "the client remembers to shuffle" is not a property anything
+  enforces, and the failure is silent and total.
+- **Matching and ranking use selects and up/down buttons, not dragging.**
+  Dragging is the obvious gesture and the wrong one: half the room is on a
+  phone, it has no keyboard story for free, and the interaction has to work
+  first time with no practice, in public, against a clock.
 
 **"Anonymous" is anonymous to the room, not to you.** The presenter's screen and
 the scoreboard show no name; an account with `users.manage` can still see who

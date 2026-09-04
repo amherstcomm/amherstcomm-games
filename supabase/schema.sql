@@ -4330,3 +4330,423 @@ $fn$;
 
 revoke all on function public.my_standing(uuid) from public, anon;
 grant execute on function public.my_standing(uuid) to authenticated;
+
+-- ---------------------------------------------------------------------------
+-- The other three kinds: match, number, rank
+--
+-- Two of them mark like the multiple-answer question — a fraction of a
+-- question for the part you got — and one of them does not mark at all in the
+-- ordinary sense: "closest wins" is a comparison between the room's answers
+-- rather than a property of any one of them, so it cannot be decided by looking
+-- at a single response. That is what item_points() exists for.
+--
+-- Shapes, in one place, because the editor and the play view both write to them
+-- and neither can see the other:
+--
+--   match   payload {"left": [...], "right": [...]}
+--           answer  {"pairs": {"<left>": "<right>", ...}}
+--           value   {"<left>": "<right>", ...}
+--
+--   number  payload {"unit": "dollars"}          (unit optional, shown to the room)
+--           answer  {"value": 41.5}
+--           value   41.5
+--
+--   rank    payload {"options": [...]}
+--           answer  {"order": [...]}             (best first)
+--           value   [...]
+-- ---------------------------------------------------------------------------
+
+-- A number out of jsonb, or null. Total, for the same reason item_seconds() is:
+-- these run inside the leaderboard over every response in a session, and one
+-- unparseable value must not take the whole board down with it.
+create or replace function public.as_number(p_value jsonb)
+returns numeric
+language sql
+immutable
+set search_path = ''
+as $fn$
+  select case
+    when p_value is null then null
+    when jsonb_typeof(p_value) = 'number' then (p_value #>> '{}')::numeric
+    -- A string is what an <input> sends if anything upstream forgets to
+    -- convert; accepting it is kinder than scoring somebody zero for it.
+    when jsonb_typeof(p_value) = 'string'
+     and (p_value #>> '{}') ~ '^-?[0-9]+(\.[0-9]+)?$' then (p_value #>> '{}')::numeric
+  end
+$fn$;
+
+-- Pairs got right, over pairs there were.
+--
+-- No subtraction here, unlike the multiple-answer question: each left-hand item
+-- takes exactly one right-hand one, so there is no equivalent of ticking every
+-- box. Answering more is not a way to score more, it is just answering.
+create or replace function public.match_score(p_answer jsonb, p_value jsonb)
+returns numeric
+language sql
+immutable
+set search_path = ''
+as $fn$
+  select case
+    when jsonb_typeof(p_answer -> 'pairs') <> 'object' then 0
+    when p_value is null or jsonb_typeof(p_value) <> 'object' then 0
+    when (select count(*) from jsonb_object_keys(p_answer -> 'pairs')) = 0 then 0
+    else (
+      select (count(*) filter (where p_value ->> k = p_answer -> 'pairs' ->> k))::numeric
+             / count(*)
+      from jsonb_object_keys(p_answer -> 'pairs') k
+    )
+  end
+$fn$;
+
+-- Positions right, over positions there were.
+--
+-- Not a rank correlation. Kendall's tau is the fairer measure and it is the
+-- wrong one here: the rule has to survive being said out loud to somebody who
+-- came second, and "you had three of the five in the right place" is a sentence
+-- a room accepts. "Your tau was 0.6" is not. The cost is that swapping one
+-- adjacent pair loses two fifths rather than one tenth, which is harsh and is
+-- at least harsh in a way people can see.
+create or replace function public.rank_score(p_answer jsonb, p_value jsonb)
+returns numeric
+language sql
+immutable
+set search_path = ''
+as $fn$
+  select case
+    when jsonb_typeof(p_answer -> 'order') <> 'array' then 0
+    when p_value is null or jsonb_typeof(p_value) <> 'array' then 0
+    when jsonb_array_length(p_answer -> 'order') = 0 then 0
+    else (
+      select (count(*) filter (where p_value ->> (i - 1) = p_answer -> 'order' ->> (i - 1)))::numeric
+             / jsonb_array_length(p_answer -> 'order')
+      from generate_series(1, jsonb_array_length(p_answer -> 'order')) i
+    )
+  end
+$fn$;
+
+-- What each person scored on one question, and how long they took.
+--
+-- Per item rather than per response, because "closest wins" is not a property
+-- of one answer. Everything else delegates to a function that can be checked on
+-- its own; number is decided here, where the whole room's guesses are in scope.
+create or replace function public.item_points(p_item uuid)
+returns table (user_id uuid, points numeric, seconds numeric)
+language sql
+stable
+set search_path = ''
+as $fn$
+  with it as (
+    select i.id, i.kind, i.opened_at, a.answer
+    from public.items i
+    left join public.item_answers a on a.item_id = i.id
+    where i.id = p_item
+  ),
+  said as (
+    select r.user_id,
+           r.value,
+           public.answer_seconds((select opened_at from it), r.submitted_at) as seconds
+    from public.responses r
+    where r.item_id = p_item
+  ),
+  -- How far off each guess was, for a number question. Null for a guess that is
+  -- not a number, which then cannot be the closest.
+  gaps as (
+    select s.user_id,
+           abs(public.as_number(s.value)
+               - public.as_number((select answer -> 'value' from it))) as gap
+    from said s
+    where (select kind from it) = 'number'
+  )
+  select
+    s.user_id,
+    case (select kind from it)
+      when 'choice' then public.answer_score((select answer from it), s.value)
+      when 'match'  then public.match_score((select answer from it), s.value)
+      when 'rank'   then public.rank_score((select answer from it), s.value)
+      when 'number' then (
+        select case
+          -- Everyone level at the smallest gap takes the point. The general
+          -- tiebreak — who answered fastest — then separates them, which is the
+          -- same rule the rest of the session runs on.
+          when g.gap is not null and g.gap = (select min(gap) from gaps) then 1
+          else 0
+        end
+        from gaps g where g.user_id = s.user_id
+      )
+      else 0
+    end as points,
+    s.seconds
+  from said s
+$fn$;
+
+revoke all on function public.item_points(uuid) from public, anon, authenticated;
+
+-- The board, over every kind.
+create or replace function public.session_leaderboard(p_session uuid)
+returns jsonb
+language sql
+stable
+security definer
+set search_path = ''
+as $fn$
+  select case
+    when not public.can('winners.view')
+      then jsonb_build_object('ok', false, 'reason', 'not allowed')
+    when not public.hosts_session(p_session)
+      then jsonb_build_object('ok', false, 'reason', 'not allowed')
+    else jsonb_build_object(
+      'ok', true,
+      'scored', (select count(*) from public.items i
+                 join public.item_kinds k on k.kind = i.kind
+                 where i.session_id = p_session and i.state = 'revealed' and k.scored),
+      'standings', coalesce((
+        select jsonb_agg(row_to_json(s)::jsonb order by s.place, s.name)
+        from (
+          select
+            rank() over (order by t.points desc, coalesce(t.seconds, 1e9) asc) as place,
+            coalesce(p.display_name, 'Someone') as name,
+            t.points,
+            t.seconds
+          from (
+            select ip.user_id,
+                   trim_scale(round(sum(ip.points), 2)) as points,
+                   sum(ip.seconds) filter (where ip.points > 0) as seconds
+            from public.items i
+            join public.item_kinds k on k.kind = i.kind
+            cross join lateral public.item_points(i.id) ip
+            where i.session_id = p_session and i.state = 'revealed' and k.scored
+            group by ip.user_id
+          ) t
+          left join public.profiles p on p.id = t.user_id
+        ) s), '[]'::jsonb)
+    )
+  end
+$fn$;
+
+revoke all on function public.session_leaderboard(uuid) from public, anon;
+grant execute on function public.session_leaderboard(uuid) to authenticated;
+
+create or replace function public.my_standing(p_session uuid)
+returns jsonb
+language sql
+stable
+security definer
+set search_path = ''
+as $fn$
+  select case
+    when (select auth.uid()) is null then jsonb_build_object('ok', false)
+    when not exists (select 1 from public.sessions s
+                     where s.id = p_session and s.state <> 'draft')
+      then jsonb_build_object('ok', false)
+    else jsonb_build_object(
+      'ok', true,
+      'points', coalesce((
+        select trim_scale(round(sum(ip.points), 2))
+        from public.items i
+        join public.item_kinds k on k.kind = i.kind
+        cross join lateral public.item_points(i.id) ip
+        where i.session_id = p_session and i.state = 'revealed' and k.scored
+          and ip.user_id = (select auth.uid())), 0),
+      'scored', (select count(*) from public.items i
+                 join public.item_kinds k on k.kind = i.kind
+                 where i.session_id = p_session and i.state = 'revealed' and k.scored))
+  end
+$fn$;
+
+revoke all on function public.my_standing(uuid) from public, anon;
+grant execute on function public.my_standing(uuid) to authenticated;
+
+-- "First correct" over every kind: the fastest person who got the whole
+-- question, which for a number question means the closest guess. A question
+-- nobody got outright has no first correct and says so.
+create or replace function public.item_winner(p_item uuid)
+returns jsonb
+language sql
+stable
+security definer
+set search_path = ''
+as $fn$
+  select case
+    when not public.hosts_session((select session_id from public.items where id = p_item))
+      then jsonb_build_object('ok', false, 'reason', 'not allowed')
+    when not exists (select 1 from public.items where id = p_item and state = 'revealed')
+      then jsonb_build_object('ok', false, 'reason', 'not revealed yet')
+    else coalesce((
+      select jsonb_build_object(
+        'ok', true,
+        'name', coalesce(p.display_name, 'Someone'),
+        'seconds', ip.seconds,
+        'correct', (select count(*) from public.item_points(p_item) w where w.points >= 1))
+      from public.item_points(p_item) ip
+      left join public.profiles p on p.id = ip.user_id
+      where ip.points >= 1
+      order by ip.seconds nulls last
+      limit 1),
+      jsonb_build_object('ok', true, 'name', null, 'correct', 0))
+  end
+$fn$;
+
+revoke all on function public.item_winner(uuid) from public, anon;
+grant execute on function public.item_winner(uuid) to authenticated;
+
+-- The tally already groups by value, which is right for choice and survey and
+-- meaningless for a number: fifty guesses produce fifty bars. The presenter's
+-- read gains the shape a guessing question actually has.
+create or replace function public.number_summary(p_item uuid)
+returns jsonb
+language sql
+stable
+security definer
+set search_path = ''
+as $fn$
+  select case
+    when not public.hosts_session((select session_id from public.items where id = p_item))
+      then jsonb_build_object('ok', false, 'reason', 'not allowed')
+    else (
+      select jsonb_build_object(
+        'ok', true,
+        'guesses', count(g.n),
+        'lowest', min(g.n),
+        'highest', max(g.n),
+        'average', trim_scale(round(avg(g.n), 2)),
+        'answer', case when (select state from public.items where id = p_item) = 'revealed'
+                       then (select public.as_number(a.answer -> 'value')
+                             from public.item_answers a where a.item_id = p_item)
+                  end)
+      from (select public.as_number(r.value) as n
+            from public.responses r where r.item_id = p_item) g
+    )
+  end
+$fn$;
+
+revoke all on function public.number_summary(uuid) from public, anon;
+grant execute on function public.number_summary(uuid) to authenticated;
+
+-- ---------------------------------------------------------------------------
+-- Not putting the answer in the question
+--
+-- `payload` is sent to the room by current_item(). For a ranking question the
+-- payload is the list to be ordered, and if it is stored in the order the
+-- author typed — which is the correct one, because that is how the answer gets
+-- written — then the correct order is on everybody's screen and the question is
+-- "press send". The same for matching: left[i] beside right[i] is the answer
+-- laid out in two columns.
+--
+-- Shuffled here rather than in the browser, because "the client remembers to
+-- shuffle" is not a property anything enforces, and the failure is silent and
+-- total. A client that forgets simply hands out the answers.
+--
+-- The shuffle is checked against the answer afterwards and rotated if it
+-- happens to have landed on it — for two options, random() agrees with the
+-- answer half the time, and a coin flip is not a question.
+-- ---------------------------------------------------------------------------
+create or replace function public.shuffled(p_items jsonb, p_avoid jsonb default null)
+returns jsonb
+language plpgsql
+immutable
+set search_path = ''
+as $fn$
+declare
+  out jsonb;
+  n int;
+begin
+  if jsonb_typeof(p_items) <> 'array' then
+    return p_items;
+  end if;
+  n := jsonb_array_length(p_items);
+  if n < 2 then
+    return p_items;
+  end if;
+  select jsonb_agg(e order by random()) into out
+  from jsonb_array_elements(p_items) e;
+  -- Rotating rather than reshuffling: one more shuffle can land on it again,
+  -- and for two items it lands on it half the time. A rotation of a list of
+  -- two or more is never the list.
+  if out = p_avoid then
+    select jsonb_agg(out -> (((i + 1) % n))) into out from generate_series(0, n - 1) i;
+  end if;
+  return out;
+end;
+$fn$;
+
+create or replace function public.save_item(
+  p_session uuid,
+  p_item uuid,
+  p_kind text,
+  p_prompt text,
+  p_payload jsonb default '{}'::jsonb,
+  p_answer jsonb default null
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $fn$
+declare
+  target uuid;
+  prior_state text;
+  is_scored boolean;
+  body jsonb;
+begin
+  if not public.hosts_session(p_session) then
+    return jsonb_build_object('ok', false, 'reason', 'not allowed');
+  end if;
+  select k.scored into is_scored from public.item_kinds k where k.kind = p_kind;
+  if is_scored is null then
+    return jsonb_build_object('ok', false, 'reason', 'no such kind of question');
+  end if;
+  if coalesce(btrim(p_prompt), '') = '' then
+    return jsonb_build_object('ok', false, 'reason', 'a question needs to say something');
+  end if;
+
+  body := coalesce(p_payload, '{}'::jsonb);
+
+  -- See the note above: the room is shown the payload, so the payload must not
+  -- be the answer in a different arrangement.
+  if p_kind = 'rank' and jsonb_typeof(body -> 'options') = 'array' then
+    body := jsonb_set(body, '{options}',
+                      public.shuffled(body -> 'options', p_answer -> 'order'));
+  elsif p_kind = 'match' and jsonb_typeof(body -> 'right') = 'array' then
+    -- Only the right-hand column moves. The left one is the list of things
+    -- being asked about and reordering it would just reword the question.
+    body := jsonb_set(body, '{right}', public.shuffled(body -> 'right'));
+  end if;
+
+  if p_item is not null then
+    select i.state into prior_state
+    from public.items i where i.id = p_item and i.session_id = p_session;
+    if prior_state is null then
+      return jsonb_build_object('ok', false, 'reason', 'no such question in this session');
+    end if;
+    if prior_state <> 'pending' then
+      return jsonb_build_object('ok', false, 'reason',
+        'this one has already been shown - delete it and add another instead');
+    end if;
+    update public.items
+      set kind = p_kind,
+          prompt = left(btrim(p_prompt), 500),
+          payload = body
+    where id = p_item;
+    target := p_item;
+  else
+    insert into public.items (session_id, position, kind, prompt, payload)
+    values (p_session,
+            coalesce((select max(i.position) + 1 from public.items i
+                      where i.session_id = p_session), 1),
+            p_kind, left(btrim(p_prompt), 500), body)
+    returning id into target;
+  end if;
+
+  if p_answer is null or p_answer = 'null'::jsonb or not is_scored then
+    delete from public.item_answers where item_id = target;
+  else
+    insert into public.item_answers (item_id, answer) values (target, p_answer)
+    on conflict (item_id) do update set answer = excluded.answer;
+  end if;
+
+  return jsonb_build_object('ok', true, 'id', target);
+end;
+$fn$;
+
+revoke all on function public.save_item(uuid, uuid, text, text, jsonb, jsonb) from public, anon;
+grant execute on function public.save_item(uuid, uuid, text, text, jsonb, jsonb) to authenticated;

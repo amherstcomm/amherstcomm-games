@@ -11,7 +11,16 @@
 // unrevealed item comes back with `answer` null, and that is enforced two
 // layers down in a table with no grant.
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { CheckCircle2, Loader2, Radio, Send, Timer, Trophy } from 'lucide-react';
+import {
+  ArrowDown,
+  ArrowUp,
+  CheckCircle2,
+  Loader2,
+  Radio,
+  Send,
+  Timer,
+  Trophy,
+} from 'lucide-react';
 import {
   advance,
   onSessionMoved,
@@ -173,6 +182,243 @@ function Choice({
         >
           {sending ? 'Sending…' : 'Send answer'}
         </button>
+      )}
+    </div>
+  );
+}
+
+/** Pair each thing on the left with one on the right.
+ *
+ *  A select per row rather than dragging. Dragging is the obvious gesture and
+ *  the wrong one here: half the room is on a phone, it needs a keyboard story
+ *  that does not come for free, and the whole interaction has to work first
+ *  time with no practice, in public, against a clock. */
+function Match({
+  item,
+  onSend,
+  sending,
+}: {
+  item: LiveItem;
+  onSend: (value: unknown) => void;
+  sending: boolean;
+}) {
+  const left = Array.isArray(item.payload?.left) ? (item.payload.left as string[]) : [];
+  const right = Array.isArray(item.payload?.right) ? (item.payload.right as string[]) : [];
+  const [pairs, setPairs] = useState<Record<string, string>>(
+    (item.mine as Record<string, string>) ?? {}
+  );
+  useEffect(() => {
+    setPairs((item.mine as Record<string, string>) ?? {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [item.id]);
+
+  const locked = item.state !== 'open';
+  const answer =
+    item.state === 'revealed' ? (item.answer as { pairs?: Record<string, string> } | null) : null;
+
+  return (
+    <div className="space-y-2">
+      {left.map((l) => {
+        const chosen = pairs[l] ?? '';
+        const should = answer?.pairs?.[l];
+        const got = should != null && chosen === should;
+        return (
+          <div key={l} className="flex items-center gap-2">
+            <span className="text-sm text-slate-200 w-1/3 truncate">{l}</span>
+            <select
+              value={chosen}
+              disabled={locked || sending}
+              onChange={(e) => setPairs({ ...pairs, [l]: e.target.value })}
+              aria-label={l}
+              className={`flex-1 px-3 py-2 rounded-lg bg-white/5 border text-white text-sm focus:outline-none focus:border-accent disabled:opacity-70 ${
+                answer ? (got ? 'border-emerald-400' : 'border-rose-400') : 'border-white/15'
+              }`}
+            >
+              <option value="">…</option>
+              {right.map((r) => (
+                <option key={r} value={r}>
+                  {r}
+                </option>
+              ))}
+            </select>
+            {/* After the reveal a wrong row says what it should have been,
+                rather than only that it was wrong. */}
+            {answer && !got && (
+              <span className="text-xs text-slate-400 w-1/4 truncate">{should}</span>
+            )}
+          </div>
+        );
+      })}
+      {!locked && (
+        <>
+          <button
+            onClick={() => onSend(pairs)}
+            disabled={sending || Object.keys(pairs).length === 0}
+            className="w-full h-11 rounded-xl bg-emerald-400 text-ink font-semibold disabled:opacity-50"
+          >
+            {sending ? 'Sending…' : 'Send answer'}
+          </button>
+          <p className="text-xs text-slate-400 pt-1">
+            A fraction of the question for each pair you get right.
+          </p>
+        </>
+      )}
+    </div>
+  );
+}
+
+/** Guess a number. Closest wins — which is not "close enough wins", and the
+ *  screen says so, because those are two different games and only one of them
+ *  is being played. */
+function Guess({
+  item,
+  onSend,
+  sending,
+}: {
+  item: LiveItem;
+  onSend: (value: unknown) => void;
+  sending: boolean;
+}) {
+  const unit = typeof item.payload?.unit === 'string' ? item.payload.unit : '';
+  const [text, setText] = useState(item.mine != null ? String(item.mine) : '');
+  useEffect(() => {
+    setText(item.mine != null ? String(item.mine) : '');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [item.id]);
+
+  const locked = item.state !== 'open';
+  const actual =
+    item.state === 'revealed' ? (item.answer as { value?: number } | null)?.value : undefined;
+  const usable = text.trim() !== '' && Number.isFinite(Number(text));
+
+  return (
+    <div className="space-y-3">
+      <label className="block">
+        <span className="text-xs uppercase tracking-wider text-slate-500">
+          Your guess{unit ? ` (${unit})` : ''}
+        </span>
+        <input
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          disabled={locked || sending}
+          inputMode="decimal"
+          className="w-full px-4 py-3 rounded-xl bg-white/5 border border-white/15 text-white text-lg tabular-nums focus:outline-none focus:border-accent disabled:opacity-70"
+        />
+      </label>
+      {!locked && (
+        <>
+          <button
+            onClick={() => onSend(Number(text))}
+            disabled={sending || !usable}
+            className="w-full h-11 rounded-xl bg-emerald-400 text-ink font-semibold disabled:opacity-50"
+          >
+            {sending ? 'Sending…' : 'Send guess'}
+          </button>
+          <p className="text-xs text-slate-400">
+            The closest guess takes the question — not everyone who was close.
+          </p>
+        </>
+      )}
+      {actual != null && (
+        <p className="text-sm text-slate-300">
+          It was <span className="text-white font-semibold tabular-nums">{actual}</span>
+          {unit ? ` ${unit}` : ''}.
+        </p>
+      )}
+    </div>
+  );
+}
+
+/** Put them in order. Up and down rather than dragging, for the reasons in
+ *  Match — and because a button says what it does, which a drop target does
+ *  not. */
+function Rank({
+  item,
+  onSend,
+  sending,
+}: {
+  item: LiveItem;
+  onSend: (value: unknown) => void;
+  sending: boolean;
+}) {
+  const options = Array.isArray(item.payload?.options) ? (item.payload.options as string[]) : [];
+  const [order, setOrder] = useState<string[]>(
+    Array.isArray(item.mine) ? (item.mine as string[]) : options
+  );
+  useEffect(() => {
+    setOrder(Array.isArray(item.mine) ? (item.mine as string[]) : options);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [item.id]);
+
+  const locked = item.state !== 'open';
+  const right =
+    item.state === 'revealed' ? (item.answer as { order?: string[] } | null)?.order : undefined;
+
+  function move(i: number, delta: -1 | 1) {
+    const next = [...order];
+    const j = i + delta;
+    if (j < 0 || j >= next.length) return;
+    [next[i], next[j]] = [next[j], next[i]];
+    setOrder(next);
+  }
+
+  return (
+    <div className="space-y-2">
+      <ol className="space-y-2">
+        {order.map((option, i) => {
+          const placed = right != null && right[i] === option;
+          return (
+            <li
+              key={option}
+              className={`flex items-center gap-2 px-3 py-2 rounded-xl border text-sm ${
+                right && placed ? 'border-emerald-400' : 'border-white/15'
+              }`}
+            >
+              <span className="text-slate-500 tabular-nums w-5">{i + 1}</span>
+              <span className="flex-1 text-slate-200 truncate">{option}</span>
+              {right ? (
+                placed ? (
+                  <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" aria-hidden="true" />
+                ) : (
+                  <span className="text-xs text-slate-400 truncate">was {right[i]}</span>
+                )
+              ) : (
+                <span className="flex gap-1 shrink-0">
+                  <button
+                    aria-label={`Move ${option} up`}
+                    disabled={locked || sending || i === 0}
+                    onClick={() => move(i, -1)}
+                    className="px-2 h-8 rounded-lg bg-white/10 border border-white/15 text-slate-200 disabled:opacity-40"
+                  >
+                    <ArrowUp className="w-4 h-4" aria-hidden="true" />
+                  </button>
+                  <button
+                    aria-label={`Move ${option} down`}
+                    disabled={locked || sending || i === order.length - 1}
+                    onClick={() => move(i, 1)}
+                    className="px-2 h-8 rounded-lg bg-white/10 border border-white/15 text-slate-200 disabled:opacity-40"
+                  >
+                    <ArrowDown className="w-4 h-4" aria-hidden="true" />
+                  </button>
+                </span>
+              )}
+            </li>
+          );
+        })}
+      </ol>
+      {!locked && (
+        <>
+          <button
+            onClick={() => onSend(order)}
+            disabled={sending}
+            className="w-full h-11 rounded-xl bg-emerald-400 text-ink font-semibold disabled:opacity-50"
+          >
+            {sending ? 'Sending…' : 'Send order'}
+          </button>
+          <p className="text-xs text-slate-400 pt-1">
+            A fraction of the question for each one in the right place.
+          </p>
+        </>
       )}
     </div>
   );
@@ -489,6 +735,13 @@ export default function LiveSession({ session, host }: { session: string; host: 
           {(kind === 'choice' || kind === 'survey') && (
             <Choice item={item} onSend={(v) => void send(v)} sending={sending} />
           )}
+          {kind === 'match' && (
+            <Match item={item} onSend={(v) => void send(v)} sending={sending} />
+          )}
+          {kind === 'number' && (
+            <Guess item={item} onSend={(v) => void send(v)} sending={sending} />
+          )}
+          {kind === 'rank' && <Rank item={item} onSend={(v) => void send(v)} sending={sending} />}
           {kind === 'open' && answering && (
             <Ask onSend={(v, anon) => void send(v, anon)} sending={sending} />
           )}
@@ -501,7 +754,7 @@ export default function LiveSession({ session, host }: { session: string; host: 
           {/* A kind the server knows about and this build does not. Says so
               rather than rendering an empty box: item_kinds is a table so a
               kind can be added ahead of the component that draws it. */}
-          {!['choice', 'survey', 'open'].includes(kind) && (
+          {!['choice', 'survey', 'open', 'match', 'number', 'rank'].includes(kind) && (
             <p className="text-sm text-slate-400">
               This kind of question ({kind}) is not supported by this version of the site
               yet.

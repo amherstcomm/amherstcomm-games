@@ -12,6 +12,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { ArrowDown, ArrowUp, Loader2, Plus, Radio, Trash2 } from 'lucide-react';
 import {
   AUTHORABLE,
+  KIND_LABEL,
   createSession,
   deleteItem,
   deleteSession,
@@ -26,6 +27,10 @@ import {
   saveItem,
   type ChoiceAnswer,
   type ChoicePayload,
+  type MatchAnswer,
+  type MatchPayload,
+  type NumberAnswer,
+  type NumberPayload,
   type Sheet,
   type SheetItem,
   type SessionSummary,
@@ -38,6 +43,62 @@ const BUTTON =
   'px-3 h-9 rounded-lg text-sm font-semibold bg-white/10 border border-white/15 text-slate-200 hover:bg-white/15 disabled:opacity-50';
 const PRIMARY =
   'px-4 h-10 rounded-lg text-sm font-semibold bg-emerald-400 text-ink hover:opacity-90 disabled:opacity-50';
+
+/** What goes in `payload` — what the room is shown — for each kind.
+ *
+ *  Exhaustive over AUTHORABLE, so a kind added to that list without deciding
+ *  what its question looks like fails to compile rather than saving `{}` and
+ *  rendering an empty box in front of a room.
+ *
+ *  Note what is *not* here: nothing correct. `rank` sends its options in the
+ *  right order because that is how the answer is expressed, and save_item
+ *  shuffles them before storing — see the note there. */
+function payloadFor(
+  kind: string,
+  parts: { options: string[]; multi: boolean; left: string[]; right: string[]; unit: string }
+): Record<string, unknown> {
+  switch (kind) {
+    case 'choice':
+      return { options: parts.options, multi: parts.multi };
+    case 'survey':
+      return { options: parts.options };
+    case 'rank':
+      return { options: parts.options };
+    case 'match':
+      return { left: parts.left, right: parts.right };
+    case 'number':
+      return parts.unit.trim() ? { unit: parts.unit.trim() } : {};
+    default:
+      return {};
+  }
+}
+
+/** And what goes in `item_answers`, which no web role can read. Null for the
+ *  kinds that have no right answer — the server drops one sent for them, and
+ *  sending it anyway would be asking it to invent a correct answer to a
+ *  question that did not have one. */
+function answerFor(
+  kind: string,
+  parts: {
+    live: string[];
+    livePairs: Record<string, string>;
+    options: string[];
+    value: string;
+  }
+): Record<string, unknown> | null {
+  switch (kind) {
+    case 'choice':
+      return { correct: parts.live };
+    case 'match':
+      return { pairs: parts.livePairs };
+    case 'rank':
+      return { order: parts.options };
+    case 'number':
+      return { value: Number(parts.value) };
+    default:
+      return null;
+  }
+}
 
 function Note({ text }: { text: string }) {
   if (!text) return null;
@@ -63,8 +124,12 @@ function ItemForm({
   onSave: (args: {
     kind: string;
     prompt: string;
-    payload: ChoicePayload | Record<string, unknown>;
-    answer: ChoiceAnswer | null;
+    // Widened from ChoicePayload/ChoiceAnswer now that six kinds go through
+    // here. The named shapes still live in authoring.ts and are what
+    // payloadFor and answerFor build; this is the union at the boundary, and
+    // narrowing it back would mean this signature naming every kind.
+    payload: Record<string, unknown>;
+    answer: Record<string, unknown> | null;
   }) => void;
   onCancel?: () => void;
   busy: boolean;
@@ -80,12 +145,43 @@ function ItemForm({
   const [correct, setCorrect] = useState<string[]>(
     ((item?.answer as ChoiceAnswer | null)?.correct ?? []) as string[]
   );
+  // Ranking reuses the options box, and the order typed is the correct order —
+  // said on screen, because there is nothing else to indicate it. save_item
+  // shuffles what the room is shown, so typing the answer here is safe.
+  const [leftText, setLeftText] = useState(
+    ((item?.payload as MatchPayload | undefined)?.left ?? []).join('\n')
+  );
+  const [rightText, setRightText] = useState(
+    ((item?.payload as MatchPayload | undefined)?.right ?? []).join('\n')
+  );
+  const [pairs, setPairs] = useState<Record<string, string>>(
+    ((item?.answer as MatchAnswer | null)?.pairs ?? {}) as Record<string, string>
+  );
+  const [unit, setUnit] = useState((item?.payload as NumberPayload | undefined)?.unit ?? '');
+  const [value, setValue] = useState(
+    (item?.answer as NumberAnswer | null)?.value?.toString() ?? ''
+  );
 
   const options = parseOptions(optionText);
   // Only options that still exist can be correct — deleting an option's line
   // should not leave it marked as the right answer nobody can pick.
   const live = correct.filter((c) => options.includes(c));
-  const problem = problemWith({ kind, prompt, options, correct: live });
+  const left = parseOptions(leftText);
+  const right = parseOptions(rightText);
+  // A pairing whose right-hand side has since been deleted is not a pairing.
+  const livePairs = Object.fromEntries(
+    Object.entries(pairs).filter(([l, r]) => left.includes(l) && right.includes(r))
+  );
+  const problem = problemWith({
+    kind,
+    prompt,
+    options,
+    correct: live,
+    left,
+    right,
+    pairs: livePairs,
+    value,
+  });
   const clock = seconds === '' ? null : secondsOf({ seconds: Number(seconds) });
   // Typed something that is not a usable clock — distinct from having left it
   // empty, which is a valid choice and the default.
@@ -105,7 +201,7 @@ function ItemForm({
                 : 'border-white/15 text-slate-300 hover:bg-white/5'
             }`}
           >
-            {k === 'choice' ? 'Multiple choice' : k === 'survey' ? 'Survey' : 'Open question'}
+            {KIND_LABEL[k as keyof typeof KIND_LABEL] ?? k}
           </button>
         ))}
       </div>
@@ -121,11 +217,13 @@ function ItemForm({
         />
       </label>
 
-      {kind !== 'open' && (
+      {(kind === 'choice' || kind === 'survey' || kind === 'rank') && (
         <>
           <label className="block">
             <span className="text-xs uppercase tracking-wider text-slate-500">
-              Options, one per line
+              {kind === 'rank'
+                ? 'Options, one per line, in the correct order'
+                : 'Options, one per line'}
             </span>
             <textarea
               value={optionText}
@@ -180,7 +278,114 @@ function ItemForm({
               </fieldset>
             </>
           )}
+
+          {/* Said here because nothing else indicates it, and because the
+              instinct is to worry about it: the room is shown these shuffled.
+              save_item does the shuffling, so the correct order never reaches
+              anybody's screen even if this page forgets. */}
+          {kind === 'rank' && (
+            <p className="text-xs text-slate-400">
+              Type them in the right order. The room sees them shuffled, and
+              scores a fraction of the question for each one they put in the
+              right place.
+            </p>
+          )}
         </>
+      )}
+
+      {kind === 'match' && (
+        <>
+          <div className="grid grid-cols-2 gap-3">
+            <label className="block">
+              <span className="text-xs uppercase tracking-wider text-slate-500">
+                These, one per line
+              </span>
+              <textarea
+                value={leftText}
+                onChange={(e) => setLeftText(e.target.value)}
+                rows={4}
+                className={FIELD}
+                placeholder="One per line"
+              />
+            </label>
+            <label className="block">
+              <span className="text-xs uppercase tracking-wider text-slate-500">
+                Pair with one of these
+              </span>
+              <textarea
+                value={rightText}
+                onChange={(e) => setRightText(e.target.value)}
+                rows={4}
+                className={FIELD}
+                placeholder="One per line"
+              />
+            </label>
+          </div>
+          <fieldset>
+            <legend className="text-xs uppercase tracking-wider text-slate-500">
+              The right pairings
+            </legend>
+            <div className="space-y-2 mt-1">
+              {left.map((l) => (
+                <label key={l} className="flex items-center gap-2 text-sm">
+                  <span className="text-slate-300 w-1/3 truncate">{l}</span>
+                  <select
+                    value={livePairs[l] ?? ''}
+                    onChange={(e) => setPairs({ ...pairs, [l]: e.target.value })}
+                    className={FIELD + ' flex-1'}
+                  >
+                    <option value="">…</option>
+                    {right.map((r) => (
+                      <option key={r} value={r}>
+                        {r}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              ))}
+              {left.length === 0 && (
+                <p className="text-sm text-slate-500">Fill in both columns first.</p>
+              )}
+            </div>
+          </fieldset>
+          {/* More on the right than on the left is a good question rather than
+              a mistake — spare options are what stop it being answerable by
+              elimination. */}
+          {right.length > left.length && left.length > 0 && (
+            <p className="text-xs text-slate-400">
+              {right.length - left.length} spare on the right, so the last pair
+              cannot be got by elimination.
+            </p>
+          )}
+        </>
+      )}
+
+      {kind === 'number' && (
+        <div className="grid grid-cols-2 gap-3">
+          <label className="block">
+            <span className="text-xs uppercase tracking-wider text-slate-500">
+              The actual value
+            </span>
+            <input
+              value={value}
+              onChange={(e) => setValue(e.target.value)}
+              inputMode="decimal"
+              className={FIELD}
+              placeholder="41.5"
+            />
+          </label>
+          <label className="block">
+            <span className="text-xs uppercase tracking-wider text-slate-500">
+              Units, shown to the room
+            </span>
+            <input
+              value={unit}
+              onChange={(e) => setUnit(e.target.value.slice(0, 24))}
+              className={FIELD}
+              placeholder="dollars"
+            />
+          </label>
+        </div>
       )}
 
       {/* The clock is optional and off by default. A countdown is right for a
@@ -213,7 +418,7 @@ function ItemForm({
               kind,
               prompt: prompt.trim(),
               payload: {
-                ...(kind === 'open' ? {} : { options, multi: kind === 'choice' && multi }),
+                ...payloadFor(kind, { options, multi, left, right, unit }),
                 // Omitted rather than sent as null: item_seconds() reads the key
                 // being absent as "no clock", and a key holding null would be
                 // the same thing said in a way that has to be handled.
@@ -221,7 +426,7 @@ function ItemForm({
               },
               // survey and open are unscored; the server drops an answer sent
               // for them, and sending one anyway would be asking it to.
-              answer: kind === 'choice' ? { correct: live } : null,
+              answer: answerFor(kind, { live, livePairs, options, value }),
             })
           }
         >

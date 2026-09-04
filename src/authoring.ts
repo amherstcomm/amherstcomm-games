@@ -65,7 +65,18 @@ export type SessionSummary = {
  *  LiveSession renders exactly these three. When it grows match, number and
  *  rank, this list is the thing that has to move with it — which is why it sits
  *  next to the type rather than inside a component. */
-export const AUTHORABLE = ['choice', 'survey', 'open'] as const;
+export const AUTHORABLE = ['choice', 'survey', 'open', 'match', 'number', 'rank'] as const;
+
+/** What each one is called on screen. A table rather than a chain of ternaries
+ *  so adding a kind to AUTHORABLE without naming it fails to compile. */
+export const KIND_LABEL: Record<(typeof AUTHORABLE)[number], string> = {
+  choice: 'Multiple choice',
+  survey: 'Survey',
+  open: 'Open question',
+  match: 'Matching',
+  number: 'Closest guess',
+  rank: 'Ranking',
+};
 
 const fail = (reason: string) => ({ ok: false as const, reason });
 
@@ -183,6 +194,21 @@ export function secondsOf(payload: Record<string, unknown> | undefined): number 
  *  question that did not have one. */
 export type ChoiceAnswer = { correct: string[] };
 
+/** match: two columns. `right` is stored shuffled — save_item does it, because
+ *  the payload goes to the room and right[i] beside left[i] is the answer laid
+ *  out in two columns. */
+export type MatchPayload = { left: string[]; right: string[]; seconds?: number };
+export type MatchAnswer = { pairs: Record<string, string> };
+
+/** number: closest wins. `unit` is shown to the room so nobody guesses in the
+ *  wrong denomination. */
+export type NumberPayload = { unit?: string; seconds?: number };
+export type NumberAnswer = { value: number };
+
+/** rank: `options` is the pool, stored shuffled for the same reason as match. */
+export type RankPayload = { options: string[]; seconds?: number };
+export type RankAnswer = { order: string[] };
+
 /** Split a textarea into options: one per line, blanks dropped, duplicates
  *  dropped. Duplicates are not a typo to preserve — the tally counts by value,
  *  so two identical options would be one bar in the results and an unwinnable
@@ -208,11 +234,39 @@ export function problemWith(args: {
   prompt: string;
   options: string[];
   correct: string[];
+  /** match only: the two columns and the pairing so far */
+  left?: string[];
+  right?: string[];
+  pairs?: Record<string, string>;
+  /** number only: the value as typed, so "not a number" is distinguishable
+   *  from "not filled in yet" */
+  value?: string;
 }): string | null {
   if (args.prompt.trim().length === 0) return 'The question needs some words.';
   if (args.kind === 'open') return null;
+
+  if (args.kind === 'number') {
+    if ((args.value ?? '').trim() === '') return 'Give it the value people are guessing at.';
+    if (!Number.isFinite(Number(args.value))) return 'That value is not a number.';
+    return null;
+  }
+
+  if (args.kind === 'match') {
+    const left = args.left ?? [];
+    const right = args.right ?? [];
+    if (left.length === 0) return 'Add the things being matched.';
+    if (right.length < 2) return 'Give it at least two things to match them to.';
+    const pairs = args.pairs ?? {};
+    const unpaired = left.filter((l) => !pairs[l]);
+    if (unpaired.length > 0)
+      return `Say what ${unpaired[0]} pairs with${
+        unpaired.length > 1 ? ` (and ${unpaired.length - 1} more)` : ''
+      }.`;
+    return null;
+  }
+
   if (args.options.length < 2) return 'Give it at least two options.';
-  if (args.kind === 'survey') return null;
+  if (args.kind === 'rank' || args.kind === 'survey') return null;
   if (args.correct.length === 0) return 'Mark which option is correct.';
   if (args.correct.some((c) => !args.options.includes(c)))
     return 'A correct answer is not one of the options.';
