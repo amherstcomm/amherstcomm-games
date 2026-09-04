@@ -572,3 +572,144 @@ test('a timed question that runs out is not a dead end', async ({ page }) => {
   await on.click();
   await expect(page.getByText('The one after it')).toBeVisible();
 });
+
+// ---------------------------------------------------------------------------
+// Questions for the host, alongside
+// ---------------------------------------------------------------------------
+
+const ASKS = [
+  { id: 'a1', body: 'Why is the coffee like that?', votes: 7, voted: false, answered: false, mine: false, who: null, anonymous: true },
+  { id: 'a2', body: 'When is the picnic?', votes: 2, voted: true, answered: false, mine: true, who: 'Ada', anonymous: false },
+  { id: 'a3', body: 'Already dealt with', votes: 9, voted: false, answered: true, mine: false, who: 'Grace', anonymous: false },
+];
+
+async function withAsks(
+  page: import('@playwright/test').Page,
+  opts: { host: boolean; open?: boolean; asks?: typeof ASKS }
+) {
+  const calls: { fn: string; args: Record<string, unknown> }[] = [];
+  await page.route('**/rest/v1/rpc/**', (route) => {
+    const url = route.request().url();
+    const fn = url.split('/rpc/')[1]?.split('?')[0] ?? '';
+    if (['ask_question', 'vote_ask', 'mark_ask'].includes(fn)) {
+      calls.push({ fn, args: JSON.parse(route.request().postData() ?? '{}') });
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ ok: true }),
+      });
+    }
+    const body = url.includes('session_asks')
+      ? { ok: true, open: opts.open ?? true, hosting: opts.host, asks: opts.asks ?? ASKS }
+      : url.includes('session_door')
+        ? { ...DOOR, qa: true }
+        : url.includes('current_item')
+          ? {
+              state: 'open',
+              mode: 'live',
+              yours: false,
+              id: 'q1',
+              position: 2,
+              opened_at: new Date().toISOString(),
+              seconds: null,
+              now: new Date().toISOString(),
+              mine: null,
+              answer: null,
+              ...ITEMS.choice,
+            }
+          : url.includes('my_standing')
+            ? { ok: true, points: 0, scored: 0 }
+            : url.includes('session_leaderboard')
+              ? { ok: true, scored: 0, standings: [] }
+              : url.includes('presenter_view')
+                ? { ok: true, answered: 3, responses: [] }
+                : {};
+    return route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(body),
+    });
+  });
+  await page.goto(`/live/${SESSION}${opts.host ? '/host' : ''}`);
+  await expect(page.getByRole('button', { name: /Questions for the host/ })).toBeVisible();
+  return calls;
+}
+
+test('the room can ask and vote alongside the question on screen', async ({ page }) => {
+  const calls = await withAsks(page, { host: false });
+  // collapsed on a phone: a participant is here to answer, and this is beside
+  // that rather than instead of it
+  await expect(page.getByPlaceholder(/Ask the host/)).toHaveCount(0);
+  await expect(page.getByRole('button', { name: /2 waiting/ })).toBeVisible();
+  await page.getByRole('button', { name: /Questions for the host/ }).click();
+
+  // Most wanted first, and the answered one at the bottom: the list is a queue
+  // of what is still to come, not a record of what was said.
+  const bodies = await page.locator('section li p.text-sm').allTextContents();
+  expect(bodies).toEqual([
+    'Why is the coffee like that?',
+    'When is the picnic?',
+    'Already dealt with',
+  ]);
+
+  await page.getByRole('button', { name: /Vote for "When is the picnic/ }).click();
+  await page.getByPlaceholder(/Ask the host/).fill('Are we hiring?');
+  await page.getByRole('button', { name: /^Ask$/ }).click();
+  await expect.poll(() => calls.map((c) => c.fn)).toEqual(['vote_ask', 'ask_question']);
+});
+
+test('and a question asked without a name shows none', async ({ page }) => {
+  await withAsks(page, { host: false });
+  await page.getByRole('button', { name: /Questions for the host/ }).click();
+  const row = page.locator('li', { hasText: 'Why is the coffee like that?' });
+  await expect(row).toContainText('anonymous');
+  await expect(row, 'a name on something asked without one').not.toContainText('Ada');
+  await expect(row).not.toContainText('Grace');
+});
+
+test('the host gets the two moves and the room does not', async ({ page }) => {
+  await withAsks(page, { host: false });
+  await page.getByRole('button', { name: /Questions for the host/ }).click();
+  await expect(page.getByRole('button', { name: 'Take off the wall' })).toHaveCount(0);
+
+  const calls = await withAsks(page, { host: true });
+  // open by default on the host's screen: they are here to work through it
+  await expect(page.getByPlaceholder(/Ask the host/)).toBeVisible();
+  await page.getByRole('button', { name: 'Take off the wall' }).first().click();
+  await expect.poll(() => calls.at(-1)?.args.p_hidden).toBe(true);
+});
+
+test('a session with questions turned off and none asked draws no panel', async ({ page }) => {
+  // Rather than an empty box on every screen for a session that never wanted
+  // one.
+  await page.route('**/rest/v1/rpc/**', (route) => {
+    const url = route.request().url();
+    const body = url.includes('session_asks')
+      ? { ok: true, open: false, hosting: false, asks: [] }
+      : url.includes('current_item')
+        ? {
+            state: 'open',
+            mode: 'live',
+            yours: false,
+            id: 'q1',
+            position: 2,
+            opened_at: new Date().toISOString(),
+            seconds: null,
+            now: new Date().toISOString(),
+            mine: null,
+            answer: null,
+            ...ITEMS.choice,
+          }
+        : url.includes('my_standing')
+          ? { ok: true, points: 0, scored: 0 }
+          : {};
+    return route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(body),
+    });
+  });
+  await page.goto(`/live/${SESSION}`);
+  await expect(page.getByText('Which year?')).toBeVisible();
+  await expect(page.getByRole('button', { name: /Questions for the host/ })).toHaveCount(0);
+});

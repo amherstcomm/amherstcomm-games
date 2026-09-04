@@ -3367,6 +3367,13 @@ alter table public.sessions add column if not exists late_join text not null
 -- count in supabase/tests/run.sh is there to notice.)
 alter table public.sessions add column if not exists code text;
 
+-- Whether people may ask the host questions while it runs — see "Questions for
+-- the host" below. Up here with the other two for the same reason `code` is:
+-- my_sessions() and session_sheet() select it, and on a fresh database a
+-- function cannot be created against a column that does not exist yet. The
+-- error count in supabase/tests/run.sh caught this one too.
+alter table public.sessions add column if not exists qa boolean not null default true;
+
 -- The sessions this person may run, newest first. Empty rather than an error
 -- for everyone else, which is the shape owner_reports() already uses: a list
 -- that refuses is a list every caller has to special-case.
@@ -5552,7 +5559,7 @@ as $fn$
   select coalesce(
     (select jsonb_agg(jsonb_build_object(
        'id', s.id, 'title', s.title, 'state', s.state, 'late_join', s.late_join,
-       'mode', s.mode, 'code', s.code,
+       'mode', s.mode, 'code', s.code, 'qa', s.qa,
        'items', (select count(*) from public.items i where i.session_id = s.id),
        'created_at', s.created_at
      ) order by s.created_at desc)
@@ -5579,7 +5586,7 @@ as $fn$
       'session', (select jsonb_build_object(
                     'id', s.id, 'title', s.title, 'state', s.state,
                     'late_join', s.late_join, 'current_item', s.current_item,
-                    'code', s.code, 'mode', s.mode)
+                    'code', s.code, 'mode', s.mode, 'qa', s.qa)
                   from public.sessions s where s.id = p_session),
       'kinds', (select jsonb_agg(jsonb_build_object(
                   'kind', k.kind, 'description', k.description, 'scored', k.scored)
@@ -6593,3 +6600,286 @@ $fn$;
 
 revoke all on function public.session_results(uuid) from public, anon;
 grant execute on function public.session_results(uuid) to authenticated;
+
+-- ---------------------------------------------------------------------------
+-- Questions for the host, running alongside everything else
+--
+-- Not an item. The `open` kind is a question the presenter asks and the room
+-- answers, in its turn, when it is on screen. This is the other direction and
+-- has no turn: anybody can ask anything at any point while the session is
+-- running, and the host works through them when there is a gap.
+--
+-- **Votes, because the list is the wrong shape without them.** Forty questions
+-- in the order they arrived is a list nobody can act on, and the host ends up
+-- picking by eye — which is the same as picking their favourites. Ordered by
+-- what the room wanted asked, the list answers "what next" by itself.
+--
+-- Named `asks` rather than `questions` because `items` are already the
+-- questions and one word meaning two things in one schema is how a wrong join
+-- gets written.
+-- ---------------------------------------------------------------------------
+
+
+create table if not exists public.asks (
+  id uuid primary key default gen_random_uuid(),
+  session_id uuid not null references public.sessions (id) on delete cascade,
+  user_id uuid not null references auth.users (id) on delete cascade,
+  body text not null check (char_length(body) between 1 and 500),
+  -- Hides the name from the room, never from an admin. The same promise the
+  -- open kind makes, and it is worded the same way on screen.
+  anonymous boolean not null default false,
+  answered boolean not null default false,
+  -- The host's way of taking something off the wall without deleting what
+  -- somebody said. Nothing on the site permanently erases a person's words on
+  -- somebody else's say-so.
+  hidden boolean not null default false,
+  created_at timestamptz not null default now()
+);
+alter table public.asks enable row level security;
+revoke all on public.asks from public, anon, authenticated;
+
+create index if not exists asks_session_idx on public.asks (session_id, created_at);
+
+create table if not exists public.ask_votes (
+  ask_id uuid not null references public.asks (id) on delete cascade,
+  user_id uuid not null references auth.users (id) on delete cascade,
+  primary key (ask_id, user_id)
+);
+alter table public.ask_votes enable row level security;
+revoke all on public.ask_votes from public, anon, authenticated;
+
+create or replace function public.ask_question(
+  p_session uuid,
+  p_body text,
+  p_anonymous boolean default false
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $fn$
+declare
+  sess public.sessions;
+  said text := btrim(coalesce(p_body, ''));
+begin
+  if (select auth.uid()) is null then
+    return jsonb_build_object('ok', false, 'reason', 'not allowed');
+  end if;
+  select * into sess from public.sessions where id = p_session;
+  if sess.id is null or sess.state <> 'live' or not sess.qa then
+    return jsonb_build_object('ok', false, 'reason', 'questions are not open for this one');
+  end if;
+  if said = '' then
+    return jsonb_build_object('ok', false, 'reason', 'a question needs some words');
+  end if;
+  insert into public.asks (session_id, user_id, body, anonymous)
+  values (p_session, (select auth.uid()), left(said, 500), coalesce(p_anonymous, false));
+  return jsonb_build_object('ok', true);
+end;
+$fn$;
+
+revoke all on function public.ask_question(uuid, text, boolean) from public, anon;
+grant execute on function public.ask_question(uuid, text, boolean) to authenticated;
+
+-- A vote is a toggle, so pressing it twice takes it back. There is nothing to
+-- gain by voting for your own and nothing to police in it either — the host is
+-- reading the list, not auditing it.
+create or replace function public.vote_ask(p_ask uuid)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $fn$
+declare
+  me uuid := (select auth.uid());
+  live boolean;
+begin
+  if me is null then
+    return jsonb_build_object('ok', false, 'reason', 'not allowed');
+  end if;
+  select s.state = 'live' and s.qa into live
+  from public.asks a join public.sessions s on s.id = a.session_id
+  where a.id = p_ask and not a.hidden;
+  if live is not true then
+    return jsonb_build_object('ok', false, 'reason', 'questions are not open for this one');
+  end if;
+  if exists (select 1 from public.ask_votes v where v.ask_id = p_ask and v.user_id = me) then
+    delete from public.ask_votes where ask_id = p_ask and user_id = me;
+    return jsonb_build_object('ok', true, 'voted', false);
+  end if;
+  insert into public.ask_votes (ask_id, user_id) values (p_ask, me);
+  return jsonb_build_object('ok', true, 'voted', true);
+end;
+$fn$;
+
+revoke all on function public.vote_ask(uuid) from public, anon;
+grant execute on function public.vote_ask(uuid) to authenticated;
+
+-- The host's two moves: mark one answered, and take one off the wall.
+create or replace function public.mark_ask(p_ask uuid, p_answered boolean, p_hidden boolean)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $fn$
+declare sess uuid;
+begin
+  select a.session_id into sess from public.asks a where a.id = p_ask;
+  if sess is null or not public.hosts_session(sess) then
+    return jsonb_build_object('ok', false, 'reason', 'not allowed');
+  end if;
+  update public.asks
+     set answered = coalesce(p_answered, answered),
+         hidden = coalesce(p_hidden, hidden)
+   where id = p_ask;
+  return jsonb_build_object('ok', true);
+end;
+$fn$;
+
+revoke all on function public.mark_ask(uuid, boolean, boolean) from public, anon;
+grant execute on function public.mark_ask(uuid, boolean, boolean) to authenticated;
+
+-- The list.
+--
+-- Ordered by what the room wanted asked: most votes first, oldest first within
+-- a tie so a question does not lose its place by being early. Answered ones
+-- sink, because the list is a queue of what is still to come rather than a
+-- record of what was said.
+create or replace function public.session_asks(p_session uuid)
+returns jsonb
+language sql
+stable
+security definer
+set search_path = ''
+as $fn$
+  select case
+    when (select auth.uid()) is null then jsonb_build_object('ok', false)
+    when not exists (select 1 from public.sessions s
+                     where s.id = p_session and s.state <> 'draft')
+      then jsonb_build_object('ok', false)
+    else jsonb_build_object(
+      'ok', true,
+      'open', (select s.qa and s.state = 'live' from public.sessions s where s.id = p_session),
+      'hosting', public.hosts_session(p_session),
+      'asks', coalesce((
+        select jsonb_agg(jsonb_build_object(
+                 'id', a.id,
+                 'body', a.body,
+                 'votes', (select count(*) from public.ask_votes v where v.ask_id = a.id),
+                 'voted', exists (select 1 from public.ask_votes v
+                                  where v.ask_id = a.id and v.user_id = (select auth.uid())),
+                 'answered', a.answered,
+                 'mine', a.user_id = (select auth.uid()),
+                 -- The promise is to the room. An admin has a separate route to
+                 -- it — the same arrangement the open kind uses — because a
+                 -- prize or a follow-up needs a name and the room does not.
+                 'who', case
+                          when not a.anonymous then p.display_name
+                          when public.can('users.manage') then p.display_name
+                        end,
+                 'anonymous', a.anonymous)
+               -- Answered first as a sort key, so answered ones sink: the list
+               -- is a queue of what is still to come rather than a record of
+               -- what was said. Then most wanted, then oldest — a question does
+               -- not lose its place by having been asked early.
+               order by a.answered,
+                        (select count(*) from public.ask_votes v where v.ask_id = a.id) desc,
+                        a.created_at)
+        from public.asks a
+        left join public.profiles p on p.id = a.user_id
+        where a.session_id = p_session
+          -- hidden is the host's way of taking something off the wall; they can
+          -- still see what they took off, so it can be put back
+          and (not a.hidden or public.hosts_session(p_session))),
+        '[]'::jsonb))
+  end
+$fn$;
+
+revoke all on function public.session_asks(uuid) from public, anon;
+grant execute on function public.session_asks(uuid) to authenticated;
+
+-- Turning it on or off for a session that already exists.
+create or replace function public.set_session_qa(p_session uuid, p_on boolean)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $fn$
+begin
+  if not public.hosts_session(p_session) then
+    return jsonb_build_object('ok', false, 'reason', 'not allowed');
+  end if;
+  update public.sessions set qa = coalesce(p_on, true) where id = p_session;
+  return jsonb_build_object('ok', true, 'qa', coalesce(p_on, true));
+end;
+$fn$;
+
+revoke all on function public.set_session_qa(uuid, boolean) from public, anon;
+grant execute on function public.set_session_qa(uuid, boolean) to authenticated;
+
+-- create_session gains the switch. The four-argument form replaces the
+-- three-argument one for the same reason as before: leaving both would mean a
+-- caller of the old one silently gets whatever the default happens to be.
+drop function if exists public.create_session(text, text, text);
+
+create or replace function public.create_session(
+  p_title text,
+  p_late_join text default 'strict',
+  p_mode text default 'live',
+  p_qa boolean default true
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $fn$
+declare new_id uuid;
+begin
+  if not public.can('games.setup') then
+    return jsonb_build_object('ok', false, 'reason', 'not allowed');
+  end if;
+  if coalesce(btrim(p_title), '') = '' then
+    return jsonb_build_object('ok', false, 'reason', 'a session needs a name');
+  end if;
+  insert into public.sessions (title, host, late_join, code, mode, qa)
+  values (left(btrim(p_title), 120), (select auth.uid()),
+          case when p_late_join = 'open' then 'open' else 'strict' end,
+          public.new_session_code(),
+          case when p_mode = 'open' then 'open' else 'live' end,
+          coalesce(p_qa, true))
+  returning id into new_id;
+  return jsonb_build_object('ok', true, 'id', new_id);
+end;
+$fn$;
+
+revoke all on function public.create_session(text, text, text, boolean) from public, anon;
+grant execute on function public.create_session(text, text, text, boolean) to authenticated;
+
+-- and the screens that describe a session say whether it is on
+create or replace function public.session_door(p_session uuid)
+returns jsonb
+language sql
+stable
+security definer
+set search_path = ''
+as $fn$
+  select case
+    when not public.hosts_session(p_session)
+      then jsonb_build_object('ok', false, 'reason', 'not allowed')
+    else (select jsonb_build_object(
+            'ok', true, 'title', s.title, 'code', s.code, 'state', s.state,
+            'mode', s.mode, 'qa', s.qa,
+            'total', (select count(*) from public.items i where i.session_id = s.id),
+            'pending', (select count(*) from public.items i
+                        where i.session_id = s.id and i.state = 'pending'),
+            'position', (select i.position from public.items i where i.id = s.current_item),
+            'item_state', (select i.state from public.items i where i.id = s.current_item),
+            'players', (select count(distinct r.user_id) from public.responses r
+                        join public.items i on i.id = r.item_id
+                        where i.session_id = s.id))
+          from public.sessions s where s.id = p_session)
+  end
+$fn$;
+
+revoke all on function public.session_door(uuid) from public, anon;
+grant execute on function public.session_door(uuid) to authenticated;

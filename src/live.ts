@@ -224,6 +224,78 @@ export async function readSessionResults(session: string): Promise<SessionResult
   return data as SessionResults;
 }
 
+/** A question somebody in the room asked the host, and how many people wanted
+ *  it asked. `who` is null on an anonymous one — except for an admin, who has
+ *  a route to a name because a follow-up needs one and the room does not. */
+export type Ask = {
+  id: string;
+  body: string;
+  votes: number;
+  voted: boolean;
+  answered: boolean;
+  mine: boolean;
+  who: string | null;
+  anonymous: boolean;
+};
+
+export async function readAsks(
+  session: string
+): Promise<{ ok: boolean; open?: boolean; hosting?: boolean; asks?: Ask[] }> {
+  if (!supabase) return { ok: false };
+  const { data, error } = await supabase.rpc('session_asks', { p_session: session });
+  if (error || !data) return { ok: false };
+  return data as { ok: boolean; open?: boolean; hosting?: boolean; asks?: Ask[] };
+}
+
+export async function askQuestion(
+  session: string,
+  body: string,
+  anonymous: boolean
+): Promise<{ ok: boolean; reason?: string }> {
+  if (!supabase) return { ok: false, reason: 'not connected' };
+  const { data, error } = await supabase.rpc('ask_question', {
+    p_session: session,
+    p_body: body,
+    p_anonymous: anonymous,
+  });
+  if (error) return { ok: false, reason: error.message };
+  return (data as { ok: boolean }) ?? { ok: false, reason: 'no answer' };
+}
+
+/** A toggle: pressing it again takes the vote back. */
+export async function voteAsk(ask: string): Promise<{ ok: boolean; reason?: string }> {
+  if (!supabase) return { ok: false, reason: 'not connected' };
+  const { data, error } = await supabase.rpc('vote_ask', { p_ask: ask });
+  if (error) return { ok: false, reason: error.message };
+  return (data as { ok: boolean }) ?? { ok: false, reason: 'no answer' };
+}
+
+/** The host's two moves. Null leaves that half alone. */
+export async function markAsk(
+  ask: string,
+  answered: boolean | null,
+  hidden: boolean | null
+): Promise<{ ok: boolean; reason?: string }> {
+  if (!supabase) return { ok: false, reason: 'not connected' };
+  const { data, error } = await supabase.rpc('mark_ask', {
+    p_ask: ask,
+    p_answered: answered,
+    p_hidden: hidden,
+  });
+  if (error) return { ok: false, reason: error.message };
+  return (data as { ok: boolean }) ?? { ok: false, reason: 'no answer' };
+}
+
+export async function setSessionQa(
+  session: string,
+  on: boolean
+): Promise<{ ok: boolean; reason?: string }> {
+  if (!supabase) return { ok: false, reason: 'not connected' };
+  const { data, error } = await supabase.rpc('set_session_qa', { p_session: session, p_on: on });
+  if (error) return { ok: false, reason: error.message };
+  return (data as { ok: boolean }) ?? { ok: false, reason: 'no answer' };
+}
+
 export async function readCurrentItem(session: string): Promise<LiveItem> {
   if (!supabase) return { state: 'not-live' };
   const { data, error } = await supabase.rpc('current_item', { p_session: session });

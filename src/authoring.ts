@@ -40,6 +40,7 @@ export type Sheet = {
     /** the four characters that go on the slide */
     code: string | null;
     mode: SessionMode;
+    qa: boolean;
   };
   kinds?: ItemKind[];
   items?: SheetItem[];
@@ -60,6 +61,7 @@ export type SessionSummary = {
   state: 'draft' | 'live' | 'closed';
   late_join: 'strict' | 'open';
   mode: SessionMode;
+  qa: boolean;
   code: string | null;
   items: number;
   created_at: string;
@@ -135,13 +137,15 @@ export async function readSheet(session: string): Promise<Sheet> {
 export async function createSession(
   title: string,
   lateJoin: 'strict' | 'open',
-  mode: SessionMode = 'live'
+  mode: SessionMode = 'live',
+  qa = true
 ): Promise<{ ok: boolean; id?: string; reason?: string }> {
   if (!supabase) return fail('not connected');
   const { data, error } = await supabase.rpc('create_session', {
     p_title: title,
     p_late_join: lateJoin,
     p_mode: mode,
+    p_qa: qa,
   });
   if (error) return fail(error.message);
   return (data as { ok: boolean; id?: string; reason?: string }) ?? fail('no answer');

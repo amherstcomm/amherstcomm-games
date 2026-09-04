@@ -596,6 +596,35 @@ had four and you had three and a half" only settles it if the half can be
 pointed at. It is also how a result gets checked afterwards. A `·` means they
 did not answer that one; a `0` means they did.
 
+### Questions for the host
+
+A session can carry a Q&A running **alongside** everything else. Not an item —
+the `open` kind is a question the presenter asks and the room answers in its
+turn; this is the other direction and has no turn. Anybody asks anything while
+the session runs, and the host works through them in the gaps.
+
+**Votes decide the order.** Forty questions in arrival order is a list nobody
+can act on, and a host picking by eye is a host picking their favourites. Most
+wanted first, oldest first within a tie so a question does not lose its place by
+being early, and answered ones sink — the list is a queue of what is still to
+come, not a record of what was said.
+
+The host has two moves: mark one **answered**, and take one **off the wall**.
+The second hides it from the room and not from the host, so it can be put back
+— nothing here erases what somebody said on another person's say-so.
+
+Anonymity works exactly as it does for an open question: no name to the room,
+and an admin (`users.manage`, which is `games.admin`) has a route to one because
+a follow-up needs it. **The host of a session does not, unless they are also an
+admin** — running a session is not the same as being allowed to unmask somebody.
+Where a name does appear on something asked anonymously, the screen says so, so
+nobody is caught out by an admin's view looking like everybody's.
+
+On by default, with a switch when you create a session and a way to turn it off
+mid-session. A session with it off and nothing asked draws no panel at all.
+Collapsed on a phone and open on the host's screen: a participant is here to
+answer, the host is here to work through it.
+
 ### The results panel
 
 `/scores/<id>` carries two views on one address: **Who won** (the standings)
