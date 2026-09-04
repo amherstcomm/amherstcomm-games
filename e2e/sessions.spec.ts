@@ -112,3 +112,97 @@ test('and they are the same height, on one line', async ({ page }) => {
   expect(new Set(boxes.map((b) => b.h)).size, 'the controls are different heights').toBe(1);
   expect(new Set(boxes.map((b) => b.top)).size, 'the controls are on different lines').toBe(1);
 });
+
+// ---------------------------------------------------------------------------
+// The results panel
+// ---------------------------------------------------------------------------
+
+const SCORES = {
+  ok: true,
+  title: 'Week one',
+  state: 'closed',
+  mode: 'live',
+  questions: [{ id: 'a', position: 1, kind: 'choice', prompt: 'Which year?' }],
+  standings: [{ place: 1, name: 'Ada Lovelace', points: 2, seconds: 6, marks: { '1': 1 } }],
+};
+
+const RESULTS = {
+  ok: true,
+  title: 'Week one',
+  state: 'closed',
+  mode: 'live',
+  items: [
+    {
+      id: 'a',
+      position: 1,
+      kind: 'choice',
+      prompt: 'Which year did we become employee-owned?',
+      chart: {
+        type: 'bars',
+        total: 14,
+        bars: [
+          { label: '2019', count: 5, correct: false },
+          { label: '2021', count: 9, correct: true },
+          { label: '2023', count: 0, correct: false },
+        ],
+      },
+    },
+    {
+      id: 'e',
+      position: 2,
+      kind: 'open',
+      prompt: 'Anything for the board?',
+      chart: {
+        type: 'texts',
+        total: 2,
+        texts: [
+          { value: 'When is the picnic?', who: 'Ada Lovelace' },
+          { value: 'Why is the coffee like that?', who: null },
+        ],
+      },
+    },
+  ],
+};
+
+async function board(page: import('@playwright/test').Page) {
+  await page.route('**/rest/v1/rpc/**', (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(
+        route.request().url().includes('session_results') ? RESULTS : SCORES
+      ),
+    })
+  );
+  await page.goto(`/scores/${SESSION}`);
+  await expect(page.getByRole('heading', { name: 'Scores' })).toBeVisible();
+}
+
+test('the board carries both views on one address', async ({ page }) => {
+  // One link to find while a room waits, not two.
+  await board(page);
+  await page.getByRole('button', { name: /How each question went/ }).click();
+  await expect(page.getByRole('heading', { name: 'Results' })).toBeVisible();
+  await page.getByRole('button', { name: /Who won/ }).click();
+  await expect(page.getByRole('heading', { name: 'Scores' })).toBeVisible();
+});
+
+test('an option nobody picked still gets a bar', async ({ page }) => {
+  // A chart missing its zeroes quietly rewrites the question — it reads as
+  // though 2023 was never offered.
+  await board(page);
+  await page.getByRole('button', { name: /How each question went/ }).click();
+  await expect(page.getByText('2023')).toBeVisible();
+});
+
+test('and an anonymous question is still anonymous on the wall', async ({ page }) => {
+  // The promise is to the room. This is the surface where breaking it would be
+  // most public and least recoverable — it is on a projector.
+  await board(page);
+  await page.getByRole('button', { name: /How each question went/ }).click();
+  await expect(page.getByText('Why is the coffee like that?')).toBeVisible();
+  await expect(page.getByText(/— anonymous/)).toBeVisible();
+
+  const named = page.locator('li', { hasText: 'Why is the coffee like that?' });
+  await expect(named).not.toContainText('Ada Lovelace');
+});

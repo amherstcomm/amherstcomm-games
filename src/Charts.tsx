@@ -1,0 +1,159 @@
+// What the room said, drawn.
+//
+// Three shapes, because three is what the questions actually are. Most kinds
+// reduce to labelled counts out of a total — a choice, a survey, a matching, a
+// ranking, a word game — so they share one renderer and differ only in what a
+// label means. A guessing question does not: fifty guesses are fifty values on
+// a line, and forcing them into bars would draw fifty bars of one. An open
+// question is text.
+//
+// No chart library. Bars are a div with a width, and the number line is one
+// small SVG — both of which are less code than configuring something would be,
+// and neither of which brings a runtime dependency to a site that has almost
+// none.
+import { formatGuess } from '@/guessFormat';
+import type { NumberPayload } from '@/authoring';
+
+export type Bar = { label: string; count: number; correct: boolean | null };
+export type Chart =
+  | { type: 'bars'; total: number; label?: string; bars: Bar[] }
+  | {
+      type: 'numbers';
+      total: number;
+      answer: number | null;
+      values: number[];
+      unit?: string | null;
+      currency?: string | null;
+      percent?: boolean | null;
+    }
+  | { type: 'texts'; total: number; texts: { value: unknown; who: string | null }[] }
+  | { type: 'none'; total: number };
+
+/** Strip the quotes jsonb puts round a stored string. The value is whatever was
+ *  sent, so it may be a string, a number or an object. */
+const plain = (v: unknown) => (typeof v === 'string' ? v : JSON.stringify(v));
+
+function Bars({ chart }: { chart: Extract<Chart, { type: 'bars' }> }) {
+  // Against the biggest bar, not against the total: with four options and an
+  // even split, bars at a quarter of the width say nothing you can see across a
+  // room. The count is printed, so the scale is never the only information.
+  const top = Math.max(1, ...chart.bars.map((b) => b.count));
+  return (
+    <div className="space-y-1.5">
+      {chart.label && (
+        <p className="text-xs uppercase tracking-wider text-slate-500">{chart.label}</p>
+      )}
+      {chart.bars.map((b, i) => (
+        <div key={`${b.label}-${i}`} className="flex items-center gap-3">
+          <span
+            className={`w-2/5 shrink-0 truncate text-sm ${
+              b.correct ? 'text-emerald-300 font-semibold' : 'text-slate-300'
+            }`}
+            title={b.label}
+          >
+            {b.label}
+          </span>
+          <span className="flex-1 h-6 rounded bg-white/5 overflow-hidden">
+            <span
+              className={`block h-full rounded ${b.correct ? 'bg-emerald-400' : 'bg-accent'}`}
+              style={{ width: `${(b.count / top) * 100}%` }}
+            />
+          </span>
+          <span className="w-10 shrink-0 text-right tabular-nums text-sm text-slate-400">
+            {b.count}
+          </span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function Numbers({ chart }: { chart: Extract<Chart, { type: 'numbers' }> }) {
+  const values = chart.values ?? [];
+  if (values.length === 0) return <p className="text-sm text-slate-500">Nobody guessed.</p>;
+
+  const payload: NumberPayload = {
+    unit: chart.unit ?? undefined,
+    currency: chart.currency ?? undefined,
+    percent: chart.percent ?? undefined,
+  };
+  // The answer belongs on the line whether or not anybody was near it, so the
+  // range has to include it — otherwise a room that all guessed low sees a
+  // tidy chart with the truth off the edge of it.
+  const points = chart.answer == null ? values : [...values, chart.answer];
+  const lo = Math.min(...points);
+  const hi = Math.max(...points);
+  const span = hi - lo || 1;
+  const at = (n: number) => ((n - lo) / span) * 100;
+
+  return (
+    <div>
+      <svg viewBox="0 0 100 18" className="w-full h-12" role="img" aria-label="Every guess">
+        <line x1="0" y1="12" x2="100" y2="12" stroke="currentColor" strokeWidth="0.3" opacity="0.3" />
+        {values.map((v, i) => (
+          <circle
+            key={i}
+            cx={at(v)}
+            cy="12"
+            r="1.6"
+            className="fill-accent"
+            opacity="0.75"
+          />
+        ))}
+        {chart.answer != null && (
+          <line
+            x1={at(chart.answer)}
+            y1="4"
+            x2={at(chart.answer)}
+            y2="16"
+            className="stroke-emerald-400"
+            strokeWidth="0.8"
+          />
+        )}
+      </svg>
+      <div className="flex justify-between text-xs text-slate-500 tabular-nums">
+        <span>{formatGuess(lo, payload)}</span>
+        {chart.answer != null && (
+          <span className="text-emerald-300">{formatGuess(chart.answer, payload)}</span>
+        )}
+        <span>{formatGuess(hi, payload)}</span>
+      </div>
+    </div>
+  );
+}
+
+function Texts({ chart }: { chart: Extract<Chart, { type: 'texts' }> }) {
+  if (chart.texts.length === 0) return <p className="text-sm text-slate-500">Nothing asked.</p>;
+  return (
+    <ul className="space-y-2">
+      {chart.texts.map((t, i) => (
+        <li key={i} className="text-sm text-slate-200">
+          {plain(t.value)}
+          {/* The promise is to the room, and it is kept here as it is on the
+              presenter's screen: no name on anything somebody asked to be
+              unnamed. */}
+          <span className="text-slate-500"> — {t.who ?? 'anonymous'}</span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+export default function ChartFor({ chart }: { chart: Chart }) {
+  if (!chart || chart.total === 0) {
+    return <p className="text-sm text-slate-500">Nobody answered this one.</p>;
+  }
+  switch (chart.type) {
+    case 'bars':
+      return <Bars chart={chart} />;
+    case 'numbers':
+      return <Numbers chart={chart} />;
+    case 'texts':
+      return <Texts chart={chart} />;
+    default:
+      // A kind the server knows about and this build cannot draw. Says so
+      // rather than rendering an empty box — item_kinds is a table, so that
+      // can happen.
+      return <p className="text-sm text-slate-500">No chart for this kind of question yet.</p>;
+  }
+}
