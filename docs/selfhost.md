@@ -468,6 +468,25 @@ live there; and a board of its own for the room. The daily components cannot be
 embedded as they stand — each one owns a store keyed by the game, so a round in
 a session would write over somebody's daily progress, its streak and its stats.
 
+### Whoever is running a session is not playing in it
+
+The host wrote the answers, or has the presenter's screen open with the correct
+one on it so they can run the reveal. A score from that seat means nothing, and
+a prize decided by it is worse than meaningless. So `answer_item` and
+`guess_word` refuse the session's host, with a reason rather than silently.
+
+**The session's own host, not everyone who could host it.** `hosts_session()` is
+true for anybody holding `games.setup`, and using that here would mean no editor
+could ever play any session — which on a site with one admin means that admin
+never plays. Another editor can play a session they did not create.
+
+A live presenter still **sees** the question and gets the answer at the reveal:
+that screen is pointed at a room, and showing it is the job. What it does not
+have is a way in — the options are drawn but inert, an open question offers no
+box to type into, a word game offers no guess, and a line says why. An open
+session goes further and serves its host nothing at all, because asking is what
+starts a clock and a clock for a question you can never answer is just wrong.
+
 ### Scoring
 
 **One point a question, ties broken by how long the correct answers took.**

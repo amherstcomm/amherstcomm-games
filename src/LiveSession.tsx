@@ -105,10 +105,14 @@ function Choice({
   item,
   onSend,
   sending,
+  readOnly,
 }: {
   item: LiveItem;
   onSend: (value: unknown) => void;
   sending: boolean;
+  /** the presenter's screen: the question is on it because it is pointed at a
+   *  room, and whoever is running the session is not playing in it */
+  readOnly?: boolean;
 }) {
   const options = Array.isArray(item.payload?.options) ? (item.payload.options as string[]) : [];
   const multi = item.payload?.multi === true;
@@ -128,7 +132,7 @@ function Choice({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [item.id]);
 
-  const locked = item.state !== 'open';
+  const locked = readOnly || item.state !== 'open';
 
   function toggle(option: string) {
     if (locked) return;
@@ -203,10 +207,14 @@ function Match({
   item,
   onSend,
   sending,
+  readOnly,
 }: {
   item: LiveItem;
   onSend: (value: unknown) => void;
   sending: boolean;
+  /** the presenter's screen: the question is on it because it is pointed at a
+   *  room, and whoever is running the session is not playing in it */
+  readOnly?: boolean;
 }) {
   const left = Array.isArray(item.payload?.left) ? (item.payload.left as string[]) : [];
   const right = Array.isArray(item.payload?.right) ? (item.payload.right as string[]) : [];
@@ -218,7 +226,7 @@ function Match({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [item.id]);
 
-  const locked = item.state !== 'open';
+  const locked = readOnly || item.state !== 'open';
   const answer =
     item.state === 'revealed' ? (item.answer as { pairs?: Record<string, string> } | null) : null;
 
@@ -280,10 +288,14 @@ function Guess({
   item,
   onSend,
   sending,
+  readOnly,
 }: {
   item: LiveItem;
   onSend: (value: unknown) => void;
   sending: boolean;
+  /** the presenter's screen: the question is on it because it is pointed at a
+   *  room, and whoever is running the session is not playing in it */
+  readOnly?: boolean;
 }) {
   const payload = item.payload as NumberPayload | undefined;
   // Where the symbol goes is Intl's business, not ours — see src/guessFormat.ts
@@ -294,7 +306,7 @@ function Guess({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [item.id]);
 
-  const locked = item.state !== 'open';
+  const locked = readOnly || item.state !== 'open';
   const actual =
     item.state === 'revealed' ? (item.answer as { value?: number } | null)?.value : undefined;
   const usable = text.trim() !== '' && Number.isFinite(Number(text));
@@ -359,10 +371,14 @@ function Rank({
   item,
   onSend,
   sending,
+  readOnly,
 }: {
   item: LiveItem;
   onSend: (value: unknown) => void;
   sending: boolean;
+  /** the presenter's screen: the question is on it because it is pointed at a
+   *  room, and whoever is running the session is not playing in it */
+  readOnly?: boolean;
 }) {
   const options = Array.isArray(item.payload?.options) ? (item.payload.options as string[]) : [];
   const [order, setOrder] = useState<string[]>(
@@ -373,7 +389,7 @@ function Rank({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [item.id]);
 
-  const locked = item.state !== 'open';
+  const locked = readOnly || item.state !== 'open';
   const right =
     item.state === 'revealed' ? (item.answer as { order?: string[] } | null)?.order : undefined;
 
@@ -467,7 +483,7 @@ function Rank({
  *  do. So: letters land in the row, Backspace takes one back, Enter sends, and
  *  MobileKeyInput raises the device keyboard for a thumb, exactly as every
  *  other board here does. */
-function WordGame({ item }: { item: LiveItem }) {
+function WordGame({ item, readOnly }: { item: LiveItem; readOnly?: boolean }) {
   const length = Number(item.payload?.length) || 5;
   const tries = Number(item.payload?.tries) || 6;
   const [rows, setRows] = useState<GuessRow[]>([]);
@@ -502,7 +518,7 @@ function WordGame({ item }: { item: LiveItem }) {
     };
   }, [item.id]);
 
-  const locked = item.state !== 'open';
+  const locked = readOnly || item.state !== 'open';
   const done = solved || rows.length >= tries;
   const playing = !locked && !done;
 
@@ -1012,21 +1028,24 @@ export default function LiveSession({ session, host }: { session: string; host: 
         <div className="py-10 text-center">
           <p className="text-sm text-slate-400">
             Nobody is looking at the same question, so there is nothing to show
-            here. The questions are in the editor, and how everyone is doing is on
-            the scoreboard.
+            here. The questions are in the editor, and how everyone is doing is
+            on the scoreboard.
           </p>
-          <a
-            href={pathOf({ kind: 'live', session, host: false })}
-            className="inline-block mt-3 text-sm text-accent hover:brightness-110"
-          >
-            Play it yourself
-          </a>
         </div>
       ) : (
         <>
           {shown.state === 'not-live' && <Waiting text="This session has not started yet." />}
           {shown.state === 'waiting' && <Waiting text="Waiting for the next question…" />}
         </>
+      )}
+
+      {/* Said once, where somebody might otherwise reach for an option. The
+          server refuses either way — see runs_session — and a screen that
+          offers a button the server will refuse is the screen lying. */}
+      {host && shown.id && shown.state === 'open' && (
+        <p className="mb-3 text-xs text-slate-500">
+          You are running this one, so you are not scored on it.
+        </p>
       )}
 
       {shown.id && !openHost && (
@@ -1071,19 +1090,19 @@ export default function LiveSession({ session, host }: { session: string; host: 
           )}
 
           {(kind === 'choice' || kind === 'survey') && (
-            <Choice item={shown} onSend={(v) => void send(v)} sending={sending} />
+            <Choice item={shown} onSend={(v) => void send(v)} sending={sending} readOnly={host} />
           )}
           {kind === 'match' && (
-            <Match item={shown} onSend={(v) => void send(v)} sending={sending} />
+            <Match item={shown} onSend={(v) => void send(v)} sending={sending} readOnly={host} />
           )}
           {kind === 'number' && (
-            <Guess item={shown} onSend={(v) => void send(v)} sending={sending} />
+            <Guess item={shown} onSend={(v) => void send(v)} sending={sending} readOnly={host} />
           )}
-          {kind === 'rank' && <Rank item={shown} onSend={(v) => void send(v)} sending={sending} />}
+          {kind === 'rank' && <Rank item={shown} onSend={(v) => void send(v)} sending={sending} readOnly={host} />}
           {/* The only kind that does not go through `send`: a word game is a
               sequence of guesses, each marked by the server as it arrives. */}
-          {kind === 'game' && <WordGame item={shown} />}
-          {kind === 'open' && answering && (
+          {kind === 'game' && <WordGame item={shown} readOnly={host} />}
+          {kind === 'open' && answering && !host && (
             <Ask onSend={(v, anon) => void send(v, anon)} sending={sending} />
           )}
           {kind === 'open' && !answering && (
