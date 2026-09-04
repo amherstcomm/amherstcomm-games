@@ -45,7 +45,13 @@ select pg_temp.check('my_sessions carries the code',
 -- A draft is not a thing to join
 -- ---------------------------------------------------------------------------
 set session "test.uid" = '33333333-3333-3333-3333-333333333333';
-select pg_temp.check('a draft is not listed as live', public.live_sessions() = '[]'::jsonb);
+-- Asked about this session rather than about the whole list. These files share
+-- one database and run in alphabetical order, so "the list is empty" is a claim
+-- about every other file as well — and it broke the day one of them left a
+-- session running.
+select pg_temp.check('a draft is not listed as live',
+  not exists (select 1 from jsonb_array_elements(public.live_sessions()) e
+              where e->>'id' = (select v->>'id' from t where k='sess')));
 select pg_temp.check('and its code does not resolve',
   (public.session_by_code((select v #>> '{}' from t where k='code'))->>'ok') = 'false');
 
@@ -87,7 +93,9 @@ set session "test.uid" = '11111111-1111-1111-1111-111111111111';
 select public.advance_session(((select v->>'id' from t where k='sess'))::uuid, 'close');
 
 set session "test.uid" = '33333333-3333-3333-3333-333333333333';
-select pg_temp.check('a closed session leaves the list', public.live_sessions() = '[]'::jsonb);
+select pg_temp.check('a closed session leaves the list',
+  not exists (select 1 from jsonb_array_elements(public.live_sessions()) e
+              where e->>'id' = (select v->>'id' from t where k='sess')));
 select pg_temp.check('and its code stops resolving',
   (public.session_by_code((select v #>> '{}' from t where k='code'))->>'ok') = 'false');
 

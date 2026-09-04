@@ -43,6 +43,7 @@ import { JOIN_HOST, ORIGIN, pathOf } from '@/routes';
 import { formatGuess, guessAffixes } from '@/guessFormat';
 import type { NumberPayload } from '@/authoring';
 import QrCode from '@/QrCode';
+import AskPanel from '@/AskPanel';
 import MobileKeyInput from '@/MobileKeyInput';
 import {
   nextMove,
@@ -1281,6 +1282,12 @@ export default function LiveSession({ session, host }: { session: string; host: 
               : 'Next question'}
         </button>
       )}
+
+      {/* Alongside, not in the sequence. It is here on both screens because a
+          question gets asked while somebody is looking at something else —
+          that is the whole point of it — and the host answers it in the gap
+          between two questions. */}
+      <AskPanel session={session} host={host} />
 
       {note && (
         <p

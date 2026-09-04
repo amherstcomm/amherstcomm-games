@@ -612,6 +612,7 @@ function SessionList() {
   const [title, setTitle] = useState('');
   const [lateJoin, setLateJoin] = useState<'strict' | 'open'>('strict');
   const [mode, setMode] = useState<SessionMode>('live');
+  const [qa, setQa] = useState(true);
   const [note, setNote] = useState('');
   const [busy, setBusy] = useState(false);
 
@@ -620,7 +621,7 @@ function SessionList() {
 
   async function add() {
     setBusy(true);
-    const res = await createSession(title.trim(), lateJoin, mode);
+    const res = await createSession(title.trim(), lateJoin, mode, qa);
     setBusy(false);
     if (!res.ok) {
       setNote(res.reason ?? 'That did not work');
@@ -683,6 +684,11 @@ function SessionList() {
             ))}
           </div>
         </fieldset>
+
+        <label className="flex items-center gap-2 text-xs text-slate-400">
+          <input type="checkbox" checked={qa} onChange={(e) => setQa(e.target.checked)} />
+          Let people ask the host questions while it runs
+        </label>
 
         {mode === 'live' && (
           <label className="flex items-center gap-2 text-xs text-slate-400">
