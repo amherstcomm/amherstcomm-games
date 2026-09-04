@@ -133,6 +133,20 @@ const RESULTS = {
   mode: 'live',
   items: [
     {
+      id: 'w',
+      position: 0,
+      kind: 'survey',
+      prompt: 'How is the coffee?',
+      chart: {
+        type: 'bars',
+        total: 4,
+        bars: [
+          { label: 'Fine', count: 1, correct: null },
+          { label: 'Not fine', count: 3, correct: null },
+        ],
+      },
+    },
+    {
       id: 'a',
       position: 1,
       kind: 'choice',
@@ -205,4 +219,89 @@ test('and an anonymous question is still anonymous on the wall', async ({ page }
 
   const named = page.locator('li', { hasText: 'Why is the coffee like that?' });
   await expect(named).not.toContainText('Ada Lovelace');
+});
+
+test('every field caption sits above its input, not beside it', async ({ page }) => {
+  // Two of these are capped narrow — the clock and the currency code — and
+  // every other one is full width. A full-width input pushes its caption onto
+  // its own line all by itself, so the captions looked stacked without any of
+  // them saying so; the narrow ones then sat beside their words with nothing
+  // between them. Reported from the authoring form.
+  //
+  // Measured over every field in the form rather than the two that broke, so
+  // the next narrow input is covered by a test that already exists.
+  await editor(page);
+  await page.getByRole('button', { name: /Add a question/ }).click();
+
+  // walk the kinds, because which fields exist depends on the kind
+  for (const kind of ['Multiple choice', 'Closest guess', 'Matching', 'Word game']) {
+    await page.getByRole('button', { name: kind, exact: true }).click();
+
+    const rows = await page
+      .locator('label:has(> span):has(input, textarea, select)')
+      .evaluateAll((labels) =>
+        labels.map((el) => {
+          const caption = el.querySelector(':scope > span') as HTMLElement | null;
+          const field = el.querySelector('input, textarea, select') as HTMLElement | null;
+          if (!caption || !field) return null;
+          const c = caption.getBoundingClientRect();
+          const f = field.getBoundingClientRect();
+          return { label: caption.textContent?.trim().slice(0, 40) ?? '', below: f.top >= c.bottom };
+        })
+      );
+
+    for (const row of rows) {
+      if (!row) continue;
+      expect(row.below, `"${row.label}" (${kind}) is beside its caption`).toBe(true);
+    }
+  }
+});
+
+test('the results can be walked through one at a time', async ({ page }) => {
+  // Scrolling a list to find the next question while a room watches is the
+  // part that goes badly.
+  await board(page);
+  await page.getByRole('button', { name: /How each question went/ }).click();
+  await page.getByRole('button', { name: /One at a time/ }).click();
+
+  await expect(page.getByText('1 of 4')).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'How is the coffee?' })).toBeVisible();
+
+  // A presentation remote is a keyboard that sends some subset of these and
+  // nobody knows which, so it answers to all of them.
+  await page.keyboard.press('ArrowRight');
+  await expect(page.getByText('2 of 4')).toBeVisible();
+  await page.keyboard.press('PageDown');
+  await expect(page.getByText('3 of 4')).toBeVisible();
+  await page.keyboard.press('Space');
+
+  // The standings are the last slide, because that is the order it gets told
+  // in — how each question went, and then who won.
+  await expect(page.getByRole('heading', { name: 'Who won' })).toBeVisible();
+  await expect(page.getByText('Ada Lovelace')).toBeVisible();
+
+  await page.keyboard.press('ArrowRight');
+  await expect(page.getByText('4 of 4'), 'walked off the end').toBeVisible();
+
+  await page.keyboard.press('Escape');
+  await expect(page.getByRole('button', { name: /One at a time/ })).toBeVisible();
+});
+
+test('an open question can be shown as a word cloud', async ({ page }) => {
+  await board(page);
+  await page.getByRole('button', { name: /How each question went/ }).click();
+
+  // offered where it means something and nowhere else
+  await expect(page.getByRole('button', { name: /word cloud/ })).toHaveCount(1);
+  await page.getByRole('button', { name: /word cloud/ }).click();
+
+  // The sentences are gone and the words are there. A cloud carries no names
+  // because it carries no sentences, which is also why it is the safer thing
+  // to put on a wall when the answers were personal.
+  await expect(page.getByText('Why is the coffee like that?')).toHaveCount(0);
+  await expect(page.getByText('coffee', { exact: true })).toBeVisible();
+  await expect(page.getByText('the', { exact: true }), 'a filler word on the wall').toHaveCount(0);
+
+  await page.getByRole('button', { name: /Show what was said/ }).click();
+  await expect(page.getByText('Why is the coffee like that?')).toBeVisible();
 });

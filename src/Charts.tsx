@@ -11,7 +11,12 @@
 // small SVG — both of which are less code than configuring something would be,
 // and neither of which brings a runtime dependency to a site that has almost
 // none.
+//
+// `big` is the same chart at projector size rather than a second set of
+// components. One chart drawn twice cannot disagree with itself about what the
+// room said, which a separate "presentation version" eventually would.
 import { formatGuess } from '@/guessFormat';
+import { cloudWords } from '@/wordCloud';
 import type { NumberPayload } from '@/authoring';
 
 export type Bar = { label: string; count: number; correct: boolean | null };
@@ -33,7 +38,7 @@ export type Chart =
  *  sent, so it may be a string, a number or an object. */
 const plain = (v: unknown) => (typeof v === 'string' ? v : JSON.stringify(v));
 
-function Bars({ chart }: { chart: Extract<Chart, { type: 'bars' }> }) {
+function Bars({ chart, big }: { chart: Extract<Chart, { type: 'bars' }>; big?: boolean }) {
   // Against the biggest bar, not against the total: with four options and an
   // even split, bars at a quarter of the width say nothing you can see across a
   // room. The count is printed, so the scale is never the only information.
@@ -41,25 +46,35 @@ function Bars({ chart }: { chart: Extract<Chart, { type: 'bars' }> }) {
   return (
     <div className="space-y-1.5">
       {chart.label && (
-        <p className="text-xs uppercase tracking-wider text-slate-500">{chart.label}</p>
+        <p
+          className={`uppercase tracking-wider text-slate-500 ${big ? 'text-sm' : 'text-xs'}`}
+        >
+          {chart.label}
+        </p>
       )}
       {chart.bars.map((b, i) => (
         <div key={`${b.label}-${i}`} className="flex items-center gap-3">
           <span
-            className={`w-2/5 shrink-0 truncate text-sm ${
+            className={`w-2/5 shrink-0 truncate ${big ? 'text-2xl sm:text-3xl' : 'text-sm'} ${
               b.correct ? 'text-emerald-300 font-semibold' : 'text-slate-300'
             }`}
             title={b.label}
           >
             {b.label}
           </span>
-          <span className="flex-1 h-6 rounded bg-white/5 overflow-hidden">
+          <span
+            className={`flex-1 rounded bg-white/5 overflow-hidden ${big ? 'h-12' : 'h-6'}`}
+          >
             <span
               className={`block h-full rounded ${b.correct ? 'bg-emerald-400' : 'bg-accent'}`}
               style={{ width: `${(b.count / top) * 100}%` }}
             />
           </span>
-          <span className="w-10 shrink-0 text-right tabular-nums text-sm text-slate-400">
+          <span
+            className={`shrink-0 text-right tabular-nums text-slate-400 ${
+              big ? 'w-16 text-2xl sm:text-3xl' : 'w-10 text-sm'
+            }`}
+          >
             {b.count}
           </span>
         </div>
@@ -68,7 +83,7 @@ function Bars({ chart }: { chart: Extract<Chart, { type: 'bars' }> }) {
   );
 }
 
-function Numbers({ chart }: { chart: Extract<Chart, { type: 'numbers' }> }) {
+function Numbers({ chart, big }: { chart: Extract<Chart, { type: 'numbers' }>; big?: boolean }) {
   const values = chart.values ?? [];
   if (values.length === 0) return <p className="text-sm text-slate-500">Nobody guessed.</p>;
 
@@ -88,7 +103,12 @@ function Numbers({ chart }: { chart: Extract<Chart, { type: 'numbers' }> }) {
 
   return (
     <div>
-      <svg viewBox="0 0 100 18" className="w-full h-12" role="img" aria-label="Every guess">
+      <svg
+        viewBox="0 0 100 18"
+        className={`w-full ${big ? 'h-32' : 'h-12'}`}
+        role="img"
+        aria-label="Every guess"
+      >
         <line x1="0" y1="12" x2="100" y2="12" stroke="currentColor" strokeWidth="0.3" opacity="0.3" />
         {values.map((v, i) => (
           <circle
@@ -111,7 +131,11 @@ function Numbers({ chart }: { chart: Extract<Chart, { type: 'numbers' }> }) {
           />
         )}
       </svg>
-      <div className="flex justify-between text-xs text-slate-500 tabular-nums">
+      <div
+        className={`flex justify-between text-slate-500 tabular-nums ${
+          big ? 'text-xl sm:text-2xl' : 'text-xs'
+        }`}
+      >
         <span>{formatGuess(lo, payload)}</span>
         {chart.answer != null && (
           <span className="text-emerald-300">{formatGuess(chart.answer, payload)}</span>
@@ -122,12 +146,53 @@ function Numbers({ chart }: { chart: Extract<Chart, { type: 'numbers' }> }) {
   );
 }
 
-function Texts({ chart }: { chart: Extract<Chart, { type: 'texts' }> }) {
+function Cloud({ texts, big }: { texts: { value: unknown }[]; big?: boolean }) {
+  const words = cloudWords(texts);
+  if (words.length === 0) return <p className="text-sm text-slate-500">Nothing to draw.</p>;
+  const top = words[0].count;
+  const low = words[words.length - 1].count;
+  return (
+    <p className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+      {words.map(({ word, count }) => {
+        // Scaled between the least and most frequent rather than from zero: a
+        // room where everything was said twice and one thing three times is
+        // still a cloud with something in it.
+        const t = top === low ? 1 : (count - low) / (top - low);
+        const min = big ? 1.1 : 0.8;
+        const max = big ? 4 : 2;
+        return (
+          <span
+            key={word}
+            title={`${word} — ${count}`}
+            className={count === top ? 'text-emerald-300 font-semibold' : 'text-slate-300'}
+            style={{ fontSize: `${(min + t * (max - min)).toFixed(2)}rem`, lineHeight: 1.1 }}
+          >
+            {word}
+          </span>
+        );
+      })}
+    </p>
+  );
+}
+
+function Texts({
+  chart,
+  big,
+  cloud,
+}: {
+  chart: Extract<Chart, { type: 'texts' }>;
+  big?: boolean;
+  cloud?: boolean;
+}) {
   if (chart.texts.length === 0) return <p className="text-sm text-slate-500">Nothing asked.</p>;
+  // A cloud is a shape, not a transcript. It carries no names because it
+  // carries no sentences — which is also why it is the safer thing to put on a
+  // wall when the answers were personal.
+  if (cloud) return <Cloud texts={chart.texts} big={big} />;
   return (
     <ul className="space-y-2">
       {chart.texts.map((t, i) => (
-        <li key={i} className="text-sm text-slate-200">
+        <li key={i} className={`text-slate-200 ${big ? 'text-2xl sm:text-3xl' : 'text-sm'}`}>
           {plain(t.value)}
           {/* The promise is to the room, and it is kept here as it is on the
               presenter's screen: no name on anything somebody asked to be
@@ -139,17 +204,26 @@ function Texts({ chart }: { chart: Extract<Chart, { type: 'texts' }> }) {
   );
 }
 
-export default function ChartFor({ chart }: { chart: Chart }) {
+export default function ChartFor({
+  chart,
+  big,
+  cloud,
+}: {
+  chart: Chart;
+  big?: boolean;
+  /** open questions only: the words rather than the sentences */
+  cloud?: boolean;
+}) {
   if (!chart || chart.total === 0) {
     return <p className="text-sm text-slate-500">Nobody answered this one.</p>;
   }
   switch (chart.type) {
     case 'bars':
-      return <Bars chart={chart} />;
+      return <Bars chart={chart} big={big} />;
     case 'numbers':
-      return <Numbers chart={chart} />;
+      return <Numbers chart={chart} big={big} />;
     case 'texts':
-      return <Texts chart={chart} />;
+      return <Texts chart={chart} big={big} cloud={cloud} />;
     default:
       // A kind the server knows about and this build cannot draw. Says so
       // rather than rendering an empty box — item_kinds is a table, so that

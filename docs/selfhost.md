@@ -616,6 +616,19 @@ Three chart shapes, because that is what the questions are:
 - **Text** for an open question, keeping the same promise the presenter's screen
   keeps: no name on anything somebody asked to be unnamed.
 
+An open question can also be shown as a **word cloud** — one toggle per
+question, because the choice depends on the answers: a handful of sentences is a
+list, two hundred one-word answers is a cloud. A cloud carries no names because
+it carries no sentences, which also makes it the safer thing to put on a wall
+when the answers were personal. Filler words are dropped; a cloud whose largest
+word is "the" has told the room nothing.
+
+**One at a time** turns the results into a slideshow: one question per screen at
+projector size, with the standings as the last slide — how each question went,
+and then who won, which is the order it gets told in. Arrow keys, Page Up, Page
+Down, space and backspace all move it, because a presentation remote is a
+keyboard that sends some subset of those and nobody knows which. Escape leaves.
+
 No chart library. Bars are a div with a width and the number line is one small
 SVG, both of which are less code than configuring something would be.
 
