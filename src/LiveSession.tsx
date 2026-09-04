@@ -715,10 +715,35 @@ export default function LiveSession({ session, host }: { session: string; host: 
     // the channel this component had already subscribed, and adding a listener
     // to a subscribed channel throws — which took the whole page down. Found by
     // opening it; nothing else would have.
+    let hosting: Door | null = null;
     if (host) {
       const d = await readSessionDoor(session);
-      if (d.ok) setDoor(d);
+      if (d.ok) {
+        hosting = d;
+        setDoor(d);
+      }
     }
+
+    // The host of an open session is not a player in it.
+    //
+    // Two reasons, and the second is the one that made this a bug rather than
+    // a tidiness question. There is nothing for this screen to show — the room
+    // is not looking at one question, everybody is somewhere different — and
+    // current_item does not merely report in open mode, it *serves*: asking
+    // what you are looking at is what puts a question in front of you and
+    // starts your clock. So the host opening this page was being dealt into
+    // their own session.
+    //
+    // They can still play it. That is the player's address, which this screen
+    // links to.
+    if (hosting?.mode === 'open') {
+      setItem({ state: 'waiting', mode: 'open' });
+      setFirst(null);
+      const b = await readLeaderboard(session);
+      setBoard(b.ok ? b : null);
+      return;
+    }
+
     const next = await readCurrentItem(session);
     // Measured around the read rather than from it: `now` is what the server
     // said, and the closest this browser can get to "at the same moment" is
@@ -835,6 +860,9 @@ export default function LiveSession({ session, host }: { session: string; host: 
   // What is actually on screen: the marked question they just answered, if
   // there is one, otherwise whatever the server last served.
   const shown = justAnswered ?? item;
+  /** Hosting an open session: no question on this screen, and none asked for.
+   *  See the note in pull(). */
+  const openHost = host && door?.mode === 'open';
   const kind = shown.kind ?? '';
   // Not just `state === 'open'`: once the clock has run out the server refuses,
   // so leaving the controls live would be inviting an answer that cannot land.
@@ -976,10 +1004,32 @@ export default function LiveSession({ session, host }: { session: string; host: 
         </div>
       )}
 
-      {shown.state === 'not-live' && <Waiting text="This session has not started yet." />}
-      {shown.state === 'waiting' && <Waiting text="Waiting for the next question…" />}
+      {/* The host of an open session has no question to look at — everybody is
+          somewhere different, which is the point of the mode. What they need is
+          the code, the count and the way to close it, all of which are in the
+          panel above. */}
+      {openHost ? (
+        <div className="py-10 text-center">
+          <p className="text-sm text-slate-400">
+            Nobody is looking at the same question, so there is nothing to show
+            here. The questions are in the editor, and how everyone is doing is on
+            the scoreboard.
+          </p>
+          <a
+            href={pathOf({ kind: 'live', session, host: false })}
+            className="inline-block mt-3 text-sm text-accent hover:brightness-110"
+          >
+            Play it yourself
+          </a>
+        </div>
+      ) : (
+        <>
+          {shown.state === 'not-live' && <Waiting text="This session has not started yet." />}
+          {shown.state === 'waiting' && <Waiting text="Waiting for the next question…" />}
+        </>
+      )}
 
-      {shown.id && (
+      {shown.id && !openHost && (
         <>
           <h1
             className={`font-bold mb-1 text-white ${

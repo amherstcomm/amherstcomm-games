@@ -404,7 +404,16 @@ are given the questions one at a time, and answer at their own pace. There is no
 show, lock or reveal — starting it opens every question at once, and each person
 is told their own answer as soon as they have given theirs, because nobody is
 going to announce it. The host screen becomes a way to open it, watch how many
-have played, and close it.
+have played, and close it — and it shows **no question**, because everybody is
+somewhere different and there is nothing one screen could show.
+
+That is not only tidiness. `current_item` does not merely report in open mode,
+it *serves*: asking what you are looking at is what puts a question in front of
+you and starts your clock. So a host screen that fetched the current question
+was dealing the host into their own session. It does not fetch one, and
+`e2e/live.spec.ts` asserts the call is never made rather than that no question
+is drawn — a screen with nothing on it looks the same either way. The host can
+still play, from the player's address, which that screen links to.
 
 **The timing still means something.** In a live session `items.opened_at` is the
 start for the whole room; an open session has no such moment, so the start is

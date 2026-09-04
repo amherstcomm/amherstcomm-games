@@ -129,3 +129,74 @@ test('nothing invisible is sitting on top of the presenter controls', async ({ p
     });
   expect(covering, 'something is over the button').toBeNull();
 });
+
+// ---------------------------------------------------------------------------
+// Hosting an open session
+// ---------------------------------------------------------------------------
+
+const OPEN_DOOR = {
+  ok: true,
+  title: 'Play it whenever',
+  code: 'K4TP',
+  state: 'live',
+  mode: 'open',
+  total: 6,
+  pending: 0,
+  position: null,
+  item_state: null,
+  players: 7,
+};
+
+async function hostingOpen(page: import('@playwright/test').Page) {
+  const calls: string[] = [];
+  await page.route('**/rest/v1/rpc/**', (route) => {
+    const url = route.request().url();
+    calls.push(url.split('/rpc/')[1]?.split('?')[0] ?? '');
+    const body = url.includes('session_door')
+      ? OPEN_DOOR
+      : url.includes('session_leaderboard')
+        ? { ok: true, scored: 4, standings: [] }
+        : url.includes('current_item')
+          ? { ...ITEMS.choice, state: 'open', mode: 'open', id: 'q1', now: new Date().toISOString() }
+          : {};
+    return route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(body),
+    });
+  });
+  await page.goto(`/live/${SESSION}/host`);
+  await expect(page.getByText(/people have played/)).toBeVisible();
+  return calls;
+}
+
+test('hosting an open session never asks for a question', async ({ page }) => {
+  // The bug, and the reason this is asserted on the *call* rather than on what
+  // is drawn: current_item does not merely report in open mode, it serves —
+  // asking what you are looking at is what puts a question in front of you and
+  // starts your clock. So opening this page dealt the host into their own
+  // session. A screen with no question on it would look identical either way.
+  const calls = await hostingOpen(page);
+  await page.waitForTimeout(300);
+  expect(calls, 'the host was served a question').not.toContain('current_item');
+});
+
+test('and shows no question, because everybody is somewhere different', async ({ page }) => {
+  await hostingOpen(page);
+  await expect(page.getByText('Which year?')).toHaveCount(0);
+  await expect(page.getByRole('button', { name: '2019' })).toHaveCount(0);
+  // what it shows instead: why, and the way to play it as a player
+  await expect(page.getByText(/Nobody is looking at the same question/)).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Play it yourself' })).toBeVisible();
+});
+
+test('and keeps the code and the one control it does have', async ({ page }) => {
+  await hostingOpen(page);
+  await expect(page.getByText('K4TP').first()).toBeVisible();
+  await expect(page.getByRole('img', { name: /Scan to join/ })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Close it' })).toBeVisible();
+  // and not one of the presenter's, which the server would refuse anyway
+  for (const gone of ['Close the answers', 'Show the answer', 'Skip to the next question']) {
+    await expect(page.getByRole('button', { name: gone })).toHaveCount(0);
+  }
+});
