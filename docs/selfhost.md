@@ -425,6 +425,13 @@ land on the same scoreboard measuring the same thing.
 A per-question clock works the same way — from when the question reached that
 person rather than from when the session opened.
 
+After answering, the player sees how they did and presses on when they are
+ready. **Nothing is served while they are looking at it.** `current_item` does
+not report in open mode, it serves, so the five-second poll running there would
+hand out the next question and start its clock while they were still reading the
+last one's answer — seconds off a timed question they had not been shown. The
+poll pauses until they move on.
+
 ### Running the room
 
 The presenter gets **one button that says what it will do next** — "Start the
@@ -479,6 +486,12 @@ a prize decided by it is worse than meaningless. So `answer_item` and
 true for anybody holding `games.setup`, and using that here would mean no editor
 could ever play any session — which on a site with one admin means that admin
 never plays. Another editor can play a session they did not create.
+
+`current_item` returns **`yours`** with every question, so the screen asks the
+same thing the rule asks. It used to decide from the address — `/host` or not —
+and those disagree for exactly one person: the host arriving through `/join`
+like everybody else. They got a fully working question, answered it, and were
+refused, with nothing moving on.
 
 A live presenter still **sees** the question and gets the answer at the reveal:
 that screen is pointed at a room, and showing it is the job. What it does not
