@@ -7,7 +7,7 @@
 // being the correct answer. Both are silent failures that only show up in front
 // of the room.
 import { describe, expect, it } from 'vitest';
-import { AUTHORABLE, parseOptions, problemWith, secondsOf } from '@/authoring';
+import { AUTHORABLE, KIND_LABEL, parseOptions, problemWith, secondsOf } from '@/authoring';
 
 describe('parseOptions', () => {
   it('takes one option per line and drops the blanks', () => {
@@ -69,6 +69,49 @@ describe('problemWith', () => {
   });
 });
 
+describe('the other three kinds', () => {
+  const ok = { kind: 'choice', prompt: 'Which year?', options: [] as string[], correct: [] as string[] };
+
+  it('every authorable kind has a name on screen', () => {
+    // a Record over AUTHORABLE, so adding a kind without naming it is a
+    // compile error rather than a button labelled "rank"
+    for (const k of AUTHORABLE) expect(KIND_LABEL[k], k).toBeTruthy();
+  });
+
+  it('a guess needs a value, and one that is a number', () => {
+    expect(problemWith({ ...ok, kind: 'number', value: '' })).toMatch(/value/);
+    expect(problemWith({ ...ok, kind: 'number', value: 'about forty' })).toMatch(/not a number/);
+    expect(problemWith({ ...ok, kind: 'number', value: '41.5' })).toBeNull();
+    expect(problemWith({ ...ok, kind: 'number', value: '-3' })).toBeNull();
+  });
+
+  it('a match needs both columns and every pair decided', () => {
+    const base = { ...ok, kind: 'match', left: ['Ada'], right: ['Analyst', 'Teacher'] };
+    expect(problemWith({ ...base, left: [] })).toMatch(/things being matched/);
+    expect(problemWith({ ...base, right: ['Analyst'] })).toMatch(/at least two/);
+    // the case that reaches the room: a pair silently left blank
+    expect(problemWith({ ...base, pairs: {} })).toMatch(/Ada/);
+    expect(problemWith({ ...base, pairs: { Ada: 'Analyst' } })).toBeNull();
+  });
+
+  it('names how many pairs are still undecided, not just the first', () => {
+    expect(
+      problemWith({
+        ...ok,
+        kind: 'match',
+        left: ['Ada', 'Grace', 'Alan'],
+        right: ['a', 'b'],
+        pairs: {},
+      })
+    ).toMatch(/and 2 more/);
+  });
+
+  it('a ranking needs options and no separate answer — the order is the answer', () => {
+    expect(problemWith({ ...ok, kind: 'rank', options: ['a'] })).toMatch(/two options/);
+    expect(problemWith({ ...ok, kind: 'rank', options: ['a', 'b'], correct: [] })).toBeNull();
+  });
+});
+
 describe('secondsOf', () => {
   // The editor and item_seconds() in the schema have to agree about whether a
   // question has a clock. If the editor offers a value the server reads as no
@@ -108,6 +151,13 @@ describe('AUTHORABLE', () => {
     // cannot render builds a round that fails on the projector, at the one
     // moment there is no way to fix it. When LiveSession learns match, number
     // and rank, this list moves with it.
-    expect([...AUTHORABLE]).toEqual(['choice', 'survey', 'open']);
+    expect([...AUTHORABLE]).toEqual([
+      'choice',
+      'survey',
+      'open',
+      'match',
+      'number',
+      'rank',
+    ]);
   });
 });
