@@ -202,7 +202,15 @@ export type MatchAnswer = { pairs: Record<string, string> };
 
 /** number: closest wins. `unit` is shown to the room so nobody guesses in the
  *  wrong denomination. */
-export type NumberPayload = { unit?: string; seconds?: number };
+export type NumberPayload = {
+  /** an ISO 4217 code — Intl places the symbol wherever the locale puts it */
+  currency?: string;
+  percent?: boolean;
+  /** an Intl unit identifier, or any words at all, in which case it is a plain
+   *  suffix — see src/guessFormat.ts */
+  unit?: string;
+  seconds?: number;
+};
 export type NumberAnswer = { value: number };
 
 /** rank: `options` is the pool, stored shuffled for the same reason as match. */

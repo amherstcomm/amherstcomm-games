@@ -43,6 +43,7 @@ import ReportQueueView from '@/ReportQueueView';
 import LiveSession from '@/LiveSession';
 import SessionEditor from '@/SessionEditor';
 import JoinSession from '@/JoinSession';
+import Scoreboard from '@/Scoreboard';
 import { allows, myCapabilities } from '@/roles';
 import { readLiveSessions } from '@/live';
 import ReportActionView from '@/ReportActionView';
@@ -526,7 +527,8 @@ function App() {
     nav.page.kind === 'reportQueue' ||
     nav.page.kind === 'live' ||
     nav.page.kind === 'sessions' ||
-    nav.page.kind === 'join'
+    nav.page.kind === 'join' ||
+    nav.page.kind === 'scores'
       ? nav.page
       : null;
 
@@ -1718,6 +1720,7 @@ function App() {
           )}
           {reportPage?.kind === 'sessions' && <SessionEditor session={reportPage.session} />}
           {reportPage?.kind === 'join' && <JoinSession code={reportPage.code} />}
+          {reportPage?.kind === 'scores' && <Scoreboard session={reportPage.session} />}
           {reportPage?.kind === 'reportAction' && (
             <ReportActionView
               id={reportPage.id}

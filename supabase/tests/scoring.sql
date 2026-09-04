@@ -289,4 +289,44 @@ select pg_temp.check('anon may call none of the scoring functions',
    where proname in ('session_leaderboard', 'my_standing', 'item_winner')
      and pronamespace = 'public'::regnamespace) is not true);
 
+-- ---------------------------------------------------------------------------
+-- The whole board, with the marks behind it
+-- ---------------------------------------------------------------------------
+set session "test.uid" = '11111111-1111-1111-1111-111111111111';
+insert into t select 'full', public.session_scores(((select v->>'id' from t where k='sess'))::uuid);
+select pg_temp.check('the scoreboard is allowed to the presenter',
+  (select v->>'ok' from t where k='full') = 'true');
+select pg_temp.check('it names the session',
+  (select v->>'title' from t where k='full') = 'Who won');
+select pg_temp.check('it lists only the questions that have been revealed and score',
+  jsonb_array_length((select v->'questions' from t where k='full')) = 4);
+select pg_temp.check('in running order',
+  (select (v->'questions'->0->>'position')::int from t where k='full')
+    < (select (v->'questions'->1->>'position')::int from t where k='full'));
+select pg_temp.check('and it carries the prompts, so a column can be labelled',
+  (select v->'questions'->0->>'prompt' from t where k='full') = 'One');
+select pg_temp.check('every marker is on it',
+  jsonb_array_length((select v->'standings' from t where k='full')) = 3);
+select pg_temp.check('with a mark per question they answered',
+  (select e->'marks'->>'1' from jsonb_array_elements(
+     (select v->'standings' from t where k='full')) e where e->>'name' = 'Ada')::numeric = 1);
+select pg_temp.check('including the fractional ones',
+  (select e->'marks'->>'5' from jsonb_array_elements(
+     (select v->'standings' from t where k='full')) e where e->>'name' = 'Grace')::numeric = 0.5);
+select pg_temp.check('a question somebody did not answer has no mark rather than a zero',
+  not (select e->'marks' ? '4' from jsonb_array_elements(
+     (select v->'standings' from t where k='full')) e where e->>'name' = 'Ada'));
+select pg_temp.check('and a question answered wrongly has a zero rather than nothing',
+  (select e->'marks'->>'2' from jsonb_array_elements(
+     (select v->'standings' from t where k='full')) e where e->>'name' = 'Ada')::numeric = 0);
+select pg_temp.check('the marks add up to the total shown beside them',
+  (select round((select sum(m::numeric) from jsonb_each_text(e->'marks') as x(kk, m)), 2)
+     = (e->>'points')::numeric
+   from jsonb_array_elements((select v->'standings' from t where k='full')) e
+   where e->>'name' = 'Grace'));
+
+set session "test.uid" = '33333333-3333-3333-3333-333333333333';
+select pg_temp.check('and a player cannot read anyone else''s marks',
+  (public.session_scores(((select v->>'id' from t where k='sess'))::uuid)->>'ok') = 'false');
+
 \echo '--- scoring checks passed ---'

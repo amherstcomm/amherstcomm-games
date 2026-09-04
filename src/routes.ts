@@ -101,7 +101,10 @@ export type Route =
   | { kind: 'sessions'; session?: string }
   // The way in. `/join` is the list and the code box; `/join/<code>` is the
   // short address that fits on a slide and lands straight in the room.
-  | { kind: 'join'; code?: string };
+  | { kind: 'join'; code?: string }
+  // The board, on its own address so it can go on a screen of its own — the
+  // presenter's laptop runs the room while the wall shows the scores.
+  | { kind: 'scores'; session: string };
 
 export function pathOf(route: Route): string {
   switch (route.kind) {
@@ -134,6 +137,8 @@ export function pathOf(route: Route): string {
       return route.session ? `/sessions/${route.session}` : '/sessions';
     case 'join':
       return route.code ? `/join/${route.code}` : '/join';
+    case 'scores':
+      return `/scores/${route.session}`;
   }
 }
 
@@ -182,6 +187,8 @@ export function titleOf(route: Route): string {
       return `Sessions${suffix}`;
     case 'join':
       return `Join a session${suffix}`;
+    case 'scores':
+      return `Scores${suffix}`;
   }
 }
 
@@ -252,6 +259,8 @@ export function parsePath(pathname: string): Route | null {
   // for.) The server normalises too; neither half is allowed to be the reason
   // somebody cannot get in.
   if (first === 'join') return { kind: 'join', code: second ? second.toUpperCase() : undefined };
+
+  if (first === 'scores') return second ? { kind: 'scores', session: second } : null;
 
   if (first === 'report') {
     // /report/act/<id>/<token>[/<action>] is the owner's door; anything else

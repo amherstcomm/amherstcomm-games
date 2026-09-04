@@ -209,6 +209,7 @@ for (const [name, path] of [
   ['the session list', '/sessions'],
   ['the session editor', '/sessions/00000000-0000-0000-0000-000000000000'],
   ['the join page', '/join'],
+  ['the scoreboard', '/scores/00000000-0000-0000-0000-000000000000'],
 ] as const) {
   test(`${name} wears none of the game's chrome`, async ({ page }) => {
     await page.goto(path);

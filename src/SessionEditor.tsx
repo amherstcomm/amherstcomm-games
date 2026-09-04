@@ -36,6 +36,7 @@ import {
   type SessionSummary,
 } from '@/authoring';
 import { JOIN_HOST, pathOf } from '@/routes';
+import { INTL_UNITS, formatGuess } from '@/guessFormat';
 
 const FIELD =
   'w-full px-3 py-2 rounded-lg bg-white/5 border border-white/15 text-white text-sm placeholder:text-slate-600 focus:outline-none focus:border-accent';
@@ -55,7 +56,13 @@ const PRIMARY =
  *  shuffles them before storing — see the note there. */
 function payloadFor(
   kind: string,
-  parts: { options: string[]; multi: boolean; left: string[]; right: string[]; unit: string }
+  parts: {
+    options: string[];
+    multi: boolean;
+    left: string[];
+    right: string[];
+    number: NumberPayload;
+  }
 ): Record<string, unknown> {
   switch (kind) {
     case 'choice':
@@ -67,7 +74,7 @@ function payloadFor(
     case 'match':
       return { left: parts.left, right: parts.right };
     case 'number':
-      return parts.unit.trim() ? { unit: parts.unit.trim() } : {};
+      return parts.number;
     default:
       return {};
   }
@@ -157,7 +164,20 @@ function ItemForm({
   const [pairs, setPairs] = useState<Record<string, string>>(
     ((item?.answer as MatchAnswer | null)?.pairs ?? {}) as Record<string, string>
   );
-  const [unit, setUnit] = useState((item?.payload as NumberPayload | undefined)?.unit ?? '');
+  const existingNumber = item?.payload as NumberPayload | undefined;
+  const [unit, setUnit] = useState(existingNumber?.unit ?? '');
+  const [currency, setCurrency] = useState(existingNumber?.currency ?? '');
+  // One control rather than three fields that can disagree — a question cannot
+  // be in dollars and a percentage at once.
+  const [style, setStyle] = useState<'plain' | 'currency' | 'percent' | 'unit'>(
+    existingNumber?.currency
+      ? 'currency'
+      : existingNumber?.percent
+        ? 'percent'
+        : existingNumber?.unit
+          ? 'unit'
+          : 'plain'
+  );
   const [value, setValue] = useState(
     (item?.answer as NumberAnswer | null)?.value?.toString() ?? ''
   );
@@ -186,6 +206,21 @@ function ItemForm({
   // Typed something that is not a usable clock — distinct from having left it
   // empty, which is a valid choice and the default.
   const badClock = seconds !== '' && clock === null;
+
+  /** The three format fields collapsed back into the one shape the payload
+   *  holds, so the preview and the save cannot disagree about it. */
+  function numberPayload(): NumberPayload {
+    switch (style) {
+      case 'currency':
+        return currency.trim() ? { currency: currency.trim() } : {};
+      case 'percent':
+        return { percent: true };
+      case 'unit':
+        return unit.trim() ? { unit: unit.trim() } : {};
+      default:
+        return {};
+    }
+  }
 
   return (
     <div className="rounded-xl border border-white/15 p-4 space-y-3">
@@ -361,31 +396,86 @@ function ItemForm({
       )}
 
       {kind === 'number' && (
-        <div className="grid grid-cols-2 gap-3">
-          <label className="block">
-            <span className="text-xs uppercase tracking-wider text-slate-500">
-              The actual value
-            </span>
-            <input
-              value={value}
-              onChange={(e) => setValue(e.target.value)}
-              inputMode="decimal"
-              className={FIELD}
-              placeholder="41.5"
-            />
-          </label>
-          <label className="block">
-            <span className="text-xs uppercase tracking-wider text-slate-500">
-              Units, shown to the room
-            </span>
-            <input
-              value={unit}
-              onChange={(e) => setUnit(e.target.value.slice(0, 24))}
-              className={FIELD}
-              placeholder="dollars"
-            />
-          </label>
-        </div>
+        <>
+          <div className="grid grid-cols-2 gap-3">
+            <label className="block">
+              <span className="text-xs uppercase tracking-wider text-slate-500">
+                The actual value
+              </span>
+              <input
+                value={value}
+                onChange={(e) => setValue(e.target.value)}
+                inputMode="decimal"
+                className={FIELD}
+                placeholder="41.5"
+              />
+            </label>
+            <label className="block">
+              <span className="text-xs uppercase tracking-wider text-slate-500">
+                Written as
+              </span>
+              <select
+                value={style}
+                onChange={(e) => setStyle(e.target.value as typeof style)}
+                className={FIELD}
+              >
+                <option value="plain">A plain number</option>
+                <option value="currency">Money</option>
+                <option value="percent">A percentage</option>
+                <option value="unit">Something else</option>
+              </select>
+            </label>
+          </div>
+
+          {style === 'currency' && (
+            <label className="block">
+              <span className="text-xs uppercase tracking-wider text-slate-500">
+                Currency code
+              </span>
+              <input
+                value={currency}
+                onChange={(e) => setCurrency(e.target.value.toUpperCase().slice(0, 3))}
+                className={FIELD + ' max-w-24'}
+                placeholder="USD"
+              />
+            </label>
+          )}
+
+          {style === 'unit' && (
+            <label className="block">
+              <span className="text-xs uppercase tracking-wider text-slate-500">
+                Units
+              </span>
+              <input
+                value={unit}
+                onChange={(e) => setUnit(e.target.value.slice(0, 24))}
+                className={FIELD}
+                list="intl-units"
+                placeholder="employees"
+              />
+              {/* The listed ones get proper formatting from Intl; anything else
+                  is printed after the number as typed. Both work, so this is a
+                  suggestion rather than a constraint. */}
+              <datalist id="intl-units">
+                {INTL_UNITS.map((u) => (
+                  <option key={u} value={u} />
+                ))}
+              </datalist>
+            </label>
+          )}
+
+          {/* What the room will see, from the same function that will draw it.
+              Guessing at the placement is exactly the mistake this replaced. */}
+          {value.trim() !== '' && Number.isFinite(Number(value)) && (
+            <p className="text-sm text-slate-400">
+              The room sees{' '}
+              <span className="text-slate-200 tabular-nums">
+                {formatGuess(Number(value), numberPayload())}
+              </span>
+              .
+            </p>
+          )}
+        </>
       )}
 
       {/* The clock is optional and off by default. A countdown is right for a
@@ -418,7 +508,7 @@ function ItemForm({
               kind,
               prompt: prompt.trim(),
               payload: {
-                ...payloadFor(kind, { options, multi, left, right, unit }),
+                ...payloadFor(kind, { options, multi, left, right, number: numberPayload() }),
                 // Omitted rather than sent as null: item_seconds() reads the key
                 // being absent as "no clock", and a key holding null would be
                 // the same thing said in a way that has to be handled.
@@ -624,6 +714,9 @@ function SessionEditorFor({ session }: { session: string }) {
         </a>
         <a className={BUTTON} href={pathOf({ kind: 'live', session, host: false })}>
           What the room sees
+        </a>
+        <a className={BUTTON} href={pathOf({ kind: 'scores', session })}>
+          Scores
         </a>
         {meta.state === 'draft' && (
           <button
