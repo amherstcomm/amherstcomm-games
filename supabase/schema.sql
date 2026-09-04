@@ -3800,3 +3800,172 @@ $fn$;
 
 revoke all on function public.session_door(uuid) from public, anon;
 grant execute on function public.session_door(uuid) to authenticated;
+
+-- ---------------------------------------------------------------------------
+-- The clock, and what the presenter needs to run the room
+--
+-- A per-question countdown lives in `payload.seconds`, not in a column of its
+-- own. The rule for payload is "what the room is shown, never the answer", and
+-- a countdown is literally on their screen — so it travels with the options
+-- through current_item() without a single new field, and a kind that wants a
+-- different clock later needs no migration to have one.
+--
+-- **The clock is enforced here, not in the browser.** A timer that only stops
+-- the button from being drawn is a timer that a second tab ignores, and the
+-- tiebreak is speed — so the one thing it must not be is advisory. answer_item
+-- refuses a late answer whatever the client believes, and the presenter's
+-- screen firing `lock` when it runs out is a convenience on top of that rather
+-- than the mechanism.
+-- ---------------------------------------------------------------------------
+
+-- How long this question is open for, in seconds, or null for no clock at all.
+-- Read out of payload rather than declared, so nothing here needs to know which
+-- kinds have one.
+create or replace function public.item_seconds(p_payload jsonb)
+returns int
+language sql
+immutable
+set search_path = ''
+as $fn$
+  -- The regex is not paranoia about the authoring screen, which sends a number.
+  -- It is that payload is jsonb by design, so this has to be total: a cast that
+  -- throws inside answer_item would turn one bad question into a session where
+  -- nobody can answer anything.
+  select case
+    when p_payload ->> 'seconds' ~ '^[0-9]{1,5}$'
+     and (p_payload ->> 'seconds')::int between 5 and 3600
+    then (p_payload ->> 'seconds')::int
+  end
+$fn$;
+
+create or replace function public.answer_item(
+  p_item uuid,
+  p_value jsonb,
+  p_anonymous boolean default false
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $fn$
+declare
+  it public.items;
+  sess public.sessions;
+  window_seconds int;
+begin
+  select * into it from public.items where id = p_item;
+  if it.id is null then
+    return jsonb_build_object('ok', false, 'reason', 'no such item');
+  end if;
+
+  select * into sess from public.sessions where id = it.session_id;
+  if sess.state <> 'live' then
+    return jsonb_build_object('ok', false, 'reason', 'this session is not running');
+  end if;
+  if sess.current_item is distinct from p_item then
+    return jsonb_build_object('ok', false, 'reason', 'that is not the question on screen');
+  end if;
+  if it.state <> 'open' then
+    return jsonb_build_object('ok', false, 'reason', 'answers are closed for this one');
+  end if;
+
+  -- The clock, on the server's own time. A browser whose clock is slow does not
+  -- get longer to answer than the room it is in.
+  window_seconds := public.item_seconds(it.payload);
+  if window_seconds is not null
+     and it.opened_at is not null
+     and now() > it.opened_at + (window_seconds * interval '1 second') then
+    return jsonb_build_object('ok', false, 'reason', 'time is up for this one');
+  end if;
+
+  -- submitted_at is never taken from the caller: the speed tiebreak is the
+  -- server's clock or it is whatever the fastest editor of a JSON body says.
+  insert into public.responses (item_id, user_id, value, anonymous)
+  values (p_item, (select auth.uid()), p_value, coalesce(p_anonymous, false))
+  on conflict (item_id, user_id) do update
+    set value = excluded.value,
+        anonymous = excluded.anonymous,
+        submitted_at = now();
+
+  return jsonb_build_object('ok', true);
+end;
+$fn$;
+
+revoke all on function public.answer_item(uuid, jsonb, boolean) from public, anon;
+grant execute on function public.answer_item(uuid, jsonb, boolean) to authenticated;
+
+-- current_item gains the server's clock.
+--
+-- Without it a countdown is drawn against the viewer's own clock, and a laptop
+-- twenty seconds out shows a room-wide question ending at a time nobody else
+-- agrees with — including the server, which is the only opinion that decides
+-- whether an answer counts. The client takes the difference once and draws
+-- against that.
+create or replace function public.current_item(p_session uuid)
+returns jsonb
+language sql
+stable
+security definer
+set search_path = ''
+as $fn$
+  select case
+    when not exists (select 1 from public.sessions s where s.id = p_session and s.state = 'live')
+      then jsonb_build_object('state', 'not-live', 'now', now())
+    else coalesce(
+      (select jsonb_build_object(
+         'id', i.id,
+         'kind', i.kind,
+         'prompt', i.prompt,
+         'payload', i.payload,
+         'state', i.state,
+         'position', i.position,
+         'opened_at', i.opened_at,
+         'seconds', public.item_seconds(i.payload),
+         'now', now(),
+         'mine', (select r.value from public.responses r
+                  where r.item_id = i.id and r.user_id = (select auth.uid())),
+         'answer', case when i.state = 'revealed'
+                        then (select a.answer from public.item_answers a where a.item_id = i.id)
+                   end
+       )
+       from public.sessions s
+       join public.items i on i.id = s.current_item
+       where s.id = p_session and i.state <> 'pending'),
+      jsonb_build_object('state', 'waiting', 'now', now())
+    )
+  end
+$fn$;
+
+revoke all on function public.current_item(uuid) from public, anon;
+grant execute on function public.current_item(uuid) to authenticated;
+
+-- The presenter's header, now carrying enough to say what the next move is.
+--
+-- One primary action beats five raw verbs: the previous controls were Start /
+-- Next question / Lock / Reveal / Close all at once, with nothing on screen
+-- saying which question you were on, how many were left, or which of the five
+-- was the sensible one to press next. Working that out is the presenter's job
+-- in front of a room, which is exactly when it should not be.
+create or replace function public.session_door(p_session uuid)
+returns jsonb
+language sql
+stable
+security definer
+set search_path = ''
+as $fn$
+  select case
+    when not public.hosts_session(p_session)
+      then jsonb_build_object('ok', false, 'reason', 'not allowed')
+    else (select jsonb_build_object(
+            'ok', true, 'title', s.title, 'code', s.code, 'state', s.state,
+            'total', (select count(*) from public.items i where i.session_id = s.id),
+            'pending', (select count(*) from public.items i
+                        where i.session_id = s.id and i.state = 'pending'),
+            'position', (select i.position from public.items i where i.id = s.current_item),
+            'item_state', (select i.state from public.items i where i.id = s.current_item))
+          from public.sessions s where s.id = p_session)
+  end
+$fn$;
+
+revoke all on function public.session_door(uuid) from public, anon;
+grant execute on function public.session_door(uuid) to authenticated;

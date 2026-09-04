@@ -156,7 +156,28 @@ export async function deleteSession(session: string): Promise<{ ok: boolean; rea
 
 /** choice and survey: the options the room sees, and whether more than one may
  *  be picked. */
-export type ChoicePayload = { options: string[]; multi?: boolean };
+export type ChoicePayload = { options: string[]; multi?: boolean; seconds?: number };
+
+/** How long a question stays open, or absent for no clock. In `payload` rather
+ *  than a column of its own because the rule for payload is "what the room is
+ *  shown", and a countdown is literally on their screen — so it reaches them
+ *  through current_item() with no new field anywhere.
+ *
+ *  The bounds match item_seconds() in the schema, which is where the rule
+ *  actually lives: outside this range the server reads it as no clock at all,
+ *  so offering a value it would ignore would be offering a timer that silently
+ *  is not one. */
+export const SECONDS_MIN = 5;
+export const SECONDS_MAX = 3600;
+
+/** Read a timer out of a payload the way the server does, so the editor and the
+ *  database cannot disagree about whether a question has one. */
+export function secondsOf(payload: Record<string, unknown> | undefined): number | null {
+  const raw = payload?.seconds;
+  const n = typeof raw === 'string' ? Number(raw) : raw;
+  if (typeof n !== 'number' || !Number.isInteger(n)) return null;
+  return n >= SECONDS_MIN && n <= SECONDS_MAX ? n : null;
+}
 /** choice: which of those options are correct. Survey has no answer at all —
  *  the server drops one if it is sent, rather than storing a right answer to a
  *  question that did not have one. */

@@ -383,6 +383,46 @@ releases its code for reuse — a month of weekly trivia would otherwise burn
 through four-character codes for no reason. Two joinable sessions cannot share
 one; a partial unique index enforces that.
 
+The presenter screen and the editor both show the code **and a QR of the direct
+link**, drawn on the page as inline SVG rather than fetched. A QR service would
+be a request off the VM for something the site can compute, on a page whose
+whole point is that it works on an internal network — and a third party learning
+which sessions run and when. `tests/unit/qrCode.test.ts` renders the matrix to
+pixels and decodes it with jsQR, an independent implementation, because a QR
+code that does not scan looks exactly like one that does and the failure happens
+in a room with a projector and no way to fix it.
+
+### Running the room
+
+The presenter gets **one button that says what it will do next** — "Start the
+session", "Show question 2 of 6", "Close the answers", "Show the answer",
+"Finish" — with the position and state on the line above it. Skip, reveal early
+and finish sit underneath as secondary moves. The sequence lives in
+`src/presenting.ts` and is pinned by `tests/unit/presenting.test.ts`; it decides
+what to *offer*, while `advance_session` decides what is allowed, so a
+disagreement produces a button that does nothing rather than a way round the
+rules.
+
+### The optional clock
+
+A question can carry a countdown — set "Seconds to answer" when authoring, or
+leave it empty for none. It lives in `payload.seconds` rather than a column of
+its own, because the rule for payload is "what the room is shown", and a
+countdown is literally on their screen.
+
+**The window is enforced in the database.** `answer_item` refuses an answer that
+arrives after `opened_at + seconds`, on the server's own clock, so a browser
+whose clock is slow does not get longer than the room it is in and a second tab
+is no help. The presenter's screen firing `lock` when it runs out is the visible
+half of that rule, not the rule — if nobody has the presenter screen open, late
+answers are still refused. `current_item` returns the server's `now` alongside
+the item, so the countdown is drawn against the clock that decides whether an
+answer counts rather than against the viewer's laptop.
+
+What the clock does **not** do is reveal the answer or move to the next
+question. Those stay presenter actions, because the gap after a question closes
+is where somebody talks about it.
+
 A **Join** link appears in the footer of every page while something is running,
 for anyone signed in. It is fetched when the page loads and again when the tab
 regains focus — which is when somebody has just been told it is starting —
