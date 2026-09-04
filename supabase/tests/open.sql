@@ -213,4 +213,71 @@ select pg_temp.check('and is NOT told the answer — the room is told together',
 select pg_temp.check('a live session is not scored before the reveal',
   (public.my_standing(((select v->>'id' from t where k='live'))::uuid)->>'scored')::int = 0);
 
+-- ---------------------------------------------------------------------------
+-- A question whose time ran out is behind them
+--
+-- The dead end this closes: open mode serves the first question you have not
+-- answered, the server will not take an answer after the clock, and there is no
+-- presenter to move the room on. So a timed question that ran out was served
+-- back for ever and the round stopped.
+-- ---------------------------------------------------------------------------
+set session "test.uid" = '11111111-1111-1111-1111-111111111111';
+insert into t select 'tsess', public.create_session('Against the clock', 'strict', 'open');
+insert into t select 'tq1', public.save_item(
+  ((select v->>'id' from t where k='tsess'))::uuid, null, 'choice', 'Quick one',
+  '{"options":["a","b"],"seconds":30}'::jsonb, '{"correct":["a"]}'::jsonb);
+insert into t select 'tq2', public.save_item(
+  ((select v->>'id' from t where k='tsess'))::uuid, null, 'choice', 'The one after',
+  '{"options":["a","b"]}'::jsonb, '{"correct":["a"]}'::jsonb);
+select public.advance_session(((select v->>'id' from t where k='tsess'))::uuid, 'start');
+
+set session "test.uid" = '33333333-3333-3333-3333-333333333333';
+select pg_temp.check('the timed one is served first',
+  (public.current_item(((select v->>'id' from t where k='tsess'))::uuid)->>'id')
+    = (select v->>'id' from t where k='tq1'));
+select pg_temp.check('and is not expired yet',
+  not public.expired_for(((select v->>'id' from t where k='tq1'))::uuid,
+                         '33333333-3333-3333-3333-333333333333'));
+
+-- Move their clock rather than waiting thirty seconds: served_at is the only
+-- thing the check reads.
+update public.item_served set served_at = now() - interval '31 seconds'
+where item_id = ((select v->>'id' from t where k='tq1'))::uuid
+  and user_id = '33333333-3333-3333-3333-333333333333';
+
+select pg_temp.check('once the window has passed it counts as expired for them',
+  public.expired_for(((select v->>'id' from t where k='tq1'))::uuid,
+                     '33333333-3333-3333-3333-333333333333'));
+select pg_temp.check('the server still refuses an answer to it',
+  (public.answer_item(((select v->>'id' from t where k='tq1'))::uuid, '"a"'::jsonb)->>'reason')
+    like '%time is up%');
+
+insert into t select 'after', public.current_item(((select v->>'id' from t where k='tsess'))::uuid);
+select pg_temp.check('so the next one is served instead of the same one for ever',
+  (select v->>'id' from t where k='after') = (select v->>'id' from t where k='tq2'));
+select pg_temp.check('and it counts as behind them, so the numbering keeps up',
+  (select (v->>'done')::int from t where k='after') = 1);
+select pg_temp.check('nothing was written for the one they missed',
+  not exists (select 1 from public.responses
+              where item_id = ((select v->>'id' from t where k='tq1'))::uuid
+                and user_id = '33333333-3333-3333-3333-333333333333'));
+
+select public.answer_item(((select v->>'id' from t where k='tq2'))::uuid, '"a"'::jsonb);
+select pg_temp.check('and answering the rest finishes it rather than looping',
+  (public.current_item(((select v->>'id' from t where k='tsess'))::uuid)->>'state') = 'done');
+
+-- Only a question actually put in front of somebody can expire.
+select pg_temp.check('a question never served to them cannot have run out',
+  not public.expired_for(((select v->>'id' from t where k='tq1'))::uuid,
+                         '44444444-4444-4444-4444-444444444444'));
+select pg_temp.check('and one with no clock never expires at all',
+  not public.expired_for(((select v->>'id' from t where k='tq2'))::uuid,
+                         '33333333-3333-3333-3333-333333333333'));
+
+set session "test.uid" = '11111111-1111-1111-1111-111111111111';
+select pg_temp.check('a missed question is a dot on the board, not a zero',
+  not (select bool_or(e->'marks' ? '1')
+       from jsonb_array_elements(
+         (public.session_scores(((select v->>'id' from t where k='tsess'))::uuid))->'standings') e));
+
 \echo '--- open session checks passed ---'

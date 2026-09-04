@@ -425,6 +425,15 @@ land on the same scoreboard measuring the same thing.
 A per-question clock works the same way — from when the question reached that
 person rather than from when the session opened.
 
+**A question whose clock runs out is behind them.** Open mode serves the first
+question you have not answered, the server refuses an answer after the window,
+and there is no presenter to move the room on — so without this a timed question
+that ran out was served back for ever and the round stopped. An expired one is
+skipped like an answered one, nothing is written for it, and it shows as a `·`
+on the scoreboard rather than a `0`: not answering and answering wrongly are
+different things. Only a question actually served can expire, so nothing anybody
+was never shown gets skipped.
+
 After answering, the player sees how they did and presses on when they are
 ready. **Nothing is served while they are looking at it.** `current_item` does
 not report in open mode, it serves, so the five-second poll running there would

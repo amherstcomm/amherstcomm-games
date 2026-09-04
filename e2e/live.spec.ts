@@ -498,3 +498,77 @@ test('and everybody else at that address still gets a working question', async (
   await expect(page.getByRole('button', { name: 'Send answer' })).toBeEnabled();
   await expect(page.getByText(/you are not scored on it/i)).toHaveCount(0);
 });
+
+test('a timed question that runs out is not a dead end', async ({ page }) => {
+  // Reported from a live deployment, over a matching question: the clock hit
+  // zero, the screen still offered "Send answer", the server refused it, and
+  // there was no way forward. Open mode has no presenter to move the room on,
+  // so the round simply stopped.
+  //
+  // Served three seconds ago with a five-second window, so it runs out while
+  // the test watches rather than being expired on arrival — the transition is
+  // the thing that was broken.
+  let done = 0;
+  await page.route('**/rest/v1/rpc/**', (route) => {
+    const url = route.request().url();
+    const body = url.includes('answer_item')
+      ? { ok: false, reason: 'time is up for this one' }
+      : url.includes('current_item')
+        ? done === 0
+          ? {
+              state: 'open',
+              mode: 'open',
+              yours: false,
+              id: 'q1',
+              position: 1,
+              opened_at: new Date(Date.now() - 3000).toISOString(),
+              seconds: 5,
+              now: new Date().toISOString(),
+              mine: null,
+              answer: null,
+              total: 6,
+              done: 0,
+              ...ITEMS.match,
+            }
+          : {
+              state: 'open',
+              mode: 'open',
+              yours: false,
+              id: 'q2',
+              position: 2,
+              opened_at: new Date().toISOString(),
+              seconds: null,
+              now: new Date().toISOString(),
+              mine: null,
+              answer: null,
+              total: 6,
+              done: 1,
+              ...ITEMS.choice,
+              prompt: 'The one after it',
+            }
+        : url.includes('my_standing')
+          ? { ok: true, points: 0, scored: 0 }
+          : {};
+    return route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(body),
+    });
+  });
+  await page.goto(`/live/${SESSION}`);
+  await expect(page.getByRole('combobox').first()).toBeEnabled();
+
+  // the clock runs out
+  await expect(page.getByText(/Time is up/i)).toBeVisible({ timeout: 6000 });
+
+  // nothing is offered that the server would refuse
+  await expect(page.getByRole('button', { name: 'Send answer' })).toHaveCount(0);
+  await expect(page.getByRole('combobox').first()).toBeDisabled();
+
+  // and there is a way past it
+  const on = page.getByRole('button', { name: 'Move on' });
+  await expect(on).toBeVisible();
+  done = 1;
+  await on.click();
+  await expect(page.getByText('The one after it')).toBeVisible();
+});
