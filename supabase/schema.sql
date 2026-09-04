@@ -4463,6 +4463,11 @@ as $fn$
       when 'choice' then public.answer_score((select answer from it), s.value)
       when 'match'  then public.match_score((select answer from it), s.value)
       when 'rank'   then public.rank_score((select answer from it), s.value)
+      -- A word game is solved or it is not. No part marks: getting four of six
+      -- letters in a wordle is not four sixths of having got it, and the
+      -- speed tiebreak already separates the people who did.
+      when 'game' then
+        case when coalesce((s.value ->> 'solved')::boolean, false) then 1 else 0 end
       when 'number' then (
         select case
           -- Everyone level at the smallest gap takes the point. The general
@@ -4824,3 +4829,217 @@ $fn$;
 
 revoke all on function public.session_scores(uuid) from public, anon;
 grant execute on function public.session_scores(uuid) to authenticated;
+
+-- ---------------------------------------------------------------------------
+-- A word game as a question
+--
+-- The seventh kind. The presenter shows it, the room plays it there and then,
+-- and solving it scores like any other question.
+--
+-- **The server does the marking.** For every other kind the answer sits in
+-- item_answers until the reveal and the client never needs it; here the client
+-- would need it on every guess in order to colour the tiles, which would put
+-- the word on the room's screens at the first keystroke. So the guess goes to
+-- the server and the colours come back — one round trip a guess, which is
+-- nothing next to how long somebody spends deciding what to type.
+--
+-- That also settles a question this could not otherwise answer honestly: the
+-- payload carries the length and nothing else, so there is no arrangement of
+-- what the room is sent that contains the answer.
+--
+-- This is `guess` only for now. The other nine games each need their own play
+-- function and their own board, and GAME_PLAYABLE in the client is the list
+-- that moves when one of them arrives — offering a game the room cannot play
+-- would fail on the projector, which is the rule item_kinds already follows.
+-- ---------------------------------------------------------------------------
+
+insert into public.item_kinds (kind, description, scored) values
+  ('game', 'Play a word game with a solution you choose', true)
+on conflict (kind) do nothing;
+
+-- Wordle marking, in SQL because that is where the answer lives.
+--
+-- The doubled-letter rule is the whole reason this is not three lines: a guess
+-- of SPEED against SPEND marks the second E absent, not present, because the
+-- answer has only one E left once the first is matched. Getting that wrong is
+-- invisible until somebody in the room notices the board lied to them.
+create or replace function public.mark_guess(p_answer text, p_guess text)
+returns text[]
+language plpgsql
+immutable
+set search_path = ''
+as $fn$
+declare
+  n int := length(p_answer);
+  out text[] := array_fill('absent'::text, array[n]);
+  left_over text[] := '{}';
+  i int;
+  j int;
+begin
+  if p_guess is null or length(p_guess) <> n then
+    return null;
+  end if;
+  -- exact positions first, and what the answer has left after them
+  for i in 1..n loop
+    if substr(p_guess, i, 1) = substr(p_answer, i, 1) then
+      out[i] := 'correct';
+    else
+      left_over := array_append(left_over, substr(p_answer, i, 1));
+    end if;
+  end loop;
+  for i in 1..n loop
+    if out[i] = 'absent' then
+      j := array_position(left_over, substr(p_guess, i, 1));
+      if j is not null then
+        out[i] := 'present';
+        -- spent: a second E cannot claim the same letter twice
+        left_over := left_over[1:j - 1] || left_over[j + 1:array_length(left_over, 1)];
+      end if;
+    end if;
+  end loop;
+  return out;
+end;
+$fn$;
+
+/*
+ * One guess.
+ *
+ * Appends to the player's own row rather than replacing it — a word game is a
+ * sequence of attempts and the sequence is the answer. The count of attempts is
+ * capped here rather than in the browser, because the cap is part of the game
+ * and a second tab is not a sixth guess.
+ */
+create or replace function public.guess_word(p_item uuid, p_guess text)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $fn$
+declare
+  it public.items;
+  sess public.sessions;
+  word text;
+  tries int;
+  guesses jsonb;
+  said text;
+  marks text[];
+  max_tries int;
+  window_seconds int;
+begin
+  select * into it from public.items where id = p_item;
+  if it.id is null or it.kind <> 'game' then
+    return jsonb_build_object('ok', false, 'reason', 'no such question');
+  end if;
+  select * into sess from public.sessions where id = it.session_id;
+  if sess.state <> 'live' or sess.current_item is distinct from p_item then
+    return jsonb_build_object('ok', false, 'reason', 'that is not the question on screen');
+  end if;
+  if it.state <> 'open' then
+    return jsonb_build_object('ok', false, 'reason', 'answers are closed for this one');
+  end if;
+
+  -- the same clock every other kind runs on
+  window_seconds := public.item_seconds(it.payload);
+  if window_seconds is not null and it.opened_at is not null
+     and now() > it.opened_at + (window_seconds * interval '1 second') then
+    return jsonb_build_object('ok', false, 'reason', 'time is up for this one');
+  end if;
+
+  select upper(a.answer ->> 'word') into word
+  from public.item_answers a where a.item_id = p_item;
+  if word is null then
+    return jsonb_build_object('ok', false, 'reason', 'this one has no solution set');
+  end if;
+
+  said := upper(regexp_replace(coalesce(p_guess, ''), '[^A-Za-z]', '', 'g'));
+  if length(said) <> length(word) then
+    return jsonb_build_object('ok', false, 'reason',
+      format('Guesses are %s letters.', length(word)));
+  end if;
+  -- A real word, judged by the same table the rest of the site judges words
+  -- with. The solution is exempt: an author may set a name or a piece of
+  -- company vocabulary that no dictionary has, and refusing to accept the
+  -- answer as a guess would make the question unwinnable.
+  if said <> word and not exists (
+    select 1 from public.words w where w.word = lower(said)
+  ) then
+    return jsonb_build_object('ok', false, 'reason', 'That is not a word I know.');
+  end if;
+
+  select coalesce(r.value -> 'guesses', '[]'::jsonb) into guesses
+  from public.responses r where r.item_id = p_item and r.user_id = (select auth.uid());
+  guesses := coalesce(guesses, '[]'::jsonb);
+  tries := jsonb_array_length(guesses);
+
+  max_tries := coalesce(nullif(it.payload ->> 'tries', '')::int, 6);
+  if tries >= max_tries then
+    return jsonb_build_object('ok', false, 'reason', 'No guesses left.');
+  end if;
+  -- already solved: nothing to add, and nothing to take away
+  if guesses -> (tries - 1) ->> 'word' = word then
+    return jsonb_build_object('ok', false, 'reason', 'You have already got it.');
+  end if;
+
+  marks := public.mark_guess(word, said);
+  guesses := guesses || jsonb_build_array(
+    jsonb_build_object('word', said, 'marks', to_jsonb(marks)));
+
+  insert into public.responses (item_id, user_id, value)
+  values (p_item, (select auth.uid()),
+          jsonb_build_object('guesses', guesses, 'solved', said = word))
+  on conflict (item_id, user_id) do update
+    set value = excluded.value,
+        -- The clock stops when they solve it, not on every keystroke: the
+        -- tiebreak is how long it took to get there.
+        submitted_at = case when said = word then now() else public.responses.submitted_at end;
+
+  return jsonb_build_object(
+    'ok', true,
+    'marks', to_jsonb(marks),
+    'solved', said = word,
+    'left', max_tries - (tries + 1),
+    'word', case when said = word or tries + 1 >= max_tries then word end);
+end;
+$fn$;
+
+revoke all on function public.guess_word(uuid, text) from public, anon;
+grant execute on function public.guess_word(uuid, text) to authenticated;
+
+-- What the room is playing, and how far they have got. The answer is in here
+-- only once it is out of reach — solved, out of guesses, or revealed.
+create or replace function public.game_state(p_item uuid)
+returns jsonb
+language sql
+stable
+security definer
+set search_path = ''
+as $fn$
+  select case
+    when not exists (
+      select 1 from public.items i
+      join public.sessions s on s.id = i.session_id
+      where i.id = p_item and s.state = 'live' and s.current_item = i.id
+        and i.state <> 'pending')
+      then jsonb_build_object('ok', false)
+    else (
+      select jsonb_build_object(
+        'ok', true,
+        'guesses', coalesce(r.value -> 'guesses', '[]'::jsonb),
+        'solved', coalesce(r.value -> 'solved', 'false'::jsonb),
+        'word', case
+          when i.state = 'revealed'
+            or coalesce((r.value ->> 'solved')::boolean, false)
+            or jsonb_array_length(coalesce(r.value -> 'guesses', '[]'::jsonb))
+                 >= coalesce(nullif(i.payload ->> 'tries', '')::int, 6)
+          then (select upper(a.answer ->> 'word') from public.item_answers a
+                where a.item_id = p_item)
+        end)
+      from public.items i
+      left join public.responses r
+        on r.item_id = i.id and r.user_id = (select auth.uid())
+      where i.id = p_item)
+  end
+$fn$;
+
+revoke all on function public.game_state(uuid) from public, anon;
+grant execute on function public.game_state(uuid) to authenticated;

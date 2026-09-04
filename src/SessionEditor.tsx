@@ -12,6 +12,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { ArrowDown, ArrowUp, Loader2, Plus, Radio, Trash2 } from 'lucide-react';
 import {
   AUTHORABLE,
+  GAME_PLAYABLE,
   KIND_LABEL,
   createSession,
   deleteItem,
@@ -29,6 +30,7 @@ import {
   type ChoicePayload,
   type MatchAnswer,
   type MatchPayload,
+  type GameAnswer,
   type NumberAnswer,
   type NumberPayload,
   type Sheet,
@@ -62,6 +64,7 @@ function payloadFor(
     left: string[];
     right: string[];
     number: NumberPayload;
+    word: string;
   }
 ): Record<string, unknown> {
   switch (kind) {
@@ -75,6 +78,10 @@ function payloadFor(
       return { left: parts.left, right: parts.right };
     case 'number':
       return parts.number;
+    case 'game':
+      // length so the room can draw the board before it knows anything else,
+      // and never the word
+      return { slug: 'guess', length: parts.word.length, tries: 6 };
     default:
       return {};
   }
@@ -91,6 +98,7 @@ function answerFor(
     livePairs: Record<string, string>;
     options: string[];
     value: string;
+    word: string;
   }
 ): Record<string, unknown> | null {
   switch (kind) {
@@ -102,6 +110,8 @@ function answerFor(
       return { order: parts.options };
     case 'number':
       return { value: Number(parts.value) };
+    case 'game':
+      return { word: parts.word };
     default:
       return null;
   }
@@ -166,6 +176,9 @@ function ItemForm({
   );
   const existingNumber = item?.payload as NumberPayload | undefined;
   const [unit, setUnit] = useState(existingNumber?.unit ?? '');
+  const [gameWord, setGameWord] = useState(
+    ((item?.answer as GameAnswer | null)?.word ?? '').toUpperCase()
+  );
   const [currency, setCurrency] = useState(existingNumber?.currency ?? '');
   // One control rather than three fields that can disagree — a question cannot
   // be in dollars and a percentage at once.
@@ -201,6 +214,7 @@ function ItemForm({
     right,
     pairs: livePairs,
     value,
+    word: gameWord,
   });
   const clock = seconds === '' ? null : secondsOf({ seconds: Number(seconds) });
   // Typed something that is not a usable clock — distinct from having left it
@@ -395,6 +409,44 @@ function ItemForm({
         </>
       )}
 
+      {kind === 'game' && (
+        <>
+          <label className="block">
+            <span className="text-xs uppercase tracking-wider text-slate-500">
+              The word to find
+            </span>
+            <input
+              value={gameWord}
+              onChange={(e) =>
+                setGameWord(e.target.value.replace(/[^A-Za-z]/g, '').toUpperCase().slice(0, 8))
+              }
+              className={FIELD + ' tracking-[0.3em] uppercase'}
+              placeholder="OWNERS"
+            />
+          </label>
+          {/* Said plainly because it is the surprising part: the word never
+              reaches anybody's browser. The server marks each guess and sends
+              back the colours, so there is no arrangement of what the room is
+              sent that contains it. */}
+          <p className="text-xs text-slate-400">
+            The room gets six guesses at a {gameWord.length || '—'}-letter word. The
+            word itself stays on the server — each guess is marked there, so it is
+            never sent to anybody's browser.
+          </p>
+          {gameWord.length > 0 && (
+            <p className="text-xs text-slate-500">
+              It does not have to be in the dictionary — a name or something only
+              this company says is fine, and it will still be accepted as a guess.
+            </p>
+          )}
+          {GAME_PLAYABLE.length === 1 && (
+            <p className="text-xs text-slate-500">
+              Guess is the only game a session can run so far.
+            </p>
+          )}
+        </>
+      )}
+
       {kind === 'number' && (
         <>
           <div className="grid grid-cols-2 gap-3">
@@ -508,7 +560,14 @@ function ItemForm({
               kind,
               prompt: prompt.trim(),
               payload: {
-                ...payloadFor(kind, { options, multi, left, right, number: numberPayload() }),
+                ...payloadFor(kind, {
+                  options,
+                  multi,
+                  left,
+                  right,
+                  number: numberPayload(),
+                  word: gameWord,
+                }),
                 // Omitted rather than sent as null: item_seconds() reads the key
                 // being absent as "no clock", and a key holding null would be
                 // the same thing said in a way that has to be handled.
@@ -516,7 +575,7 @@ function ItemForm({
               },
               // survey and open are unscored; the server drops an answer sent
               // for them, and sending one anyway would be asking it to.
-              answer: answerFor(kind, { live, livePairs, options, value }),
+              answer: answerFor(kind, { live, livePairs, options, value, word: gameWord }),
             })
           }
         >
