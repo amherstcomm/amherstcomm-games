@@ -156,6 +156,15 @@ function Choice({
           </button>
         );
       })}
+      {/* Said before they answer, because it changes how they answer. Somebody
+          who thinks it is all-or-nothing does not tick the two they are sure
+          of, and somebody who thinks there is no downside ticks everything. */}
+      {multi && !locked && (
+        <p className="text-xs text-slate-400 pt-1">
+          Part marks for each right one — but a wrong pick cancels a right one
+          out, so ticking everything is not a way to win.
+        </p>
+      )}
       {multi && !locked && (
         <button
           onClick={() => onSend(picked)}

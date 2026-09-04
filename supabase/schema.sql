@@ -4183,3 +4183,150 @@ $fn$;
 
 revoke all on function public.item_winner(uuid) from public, anon;
 grant execute on function public.item_winner(uuid) to authenticated;
+
+-- ---------------------------------------------------------------------------
+-- Partial credit on a multiple-answer question
+--
+-- Four correct options, so each one found is a quarter of a point. That is the
+-- rule as asked for, and it holds exactly whenever somebody picks only correct
+-- options.
+--
+-- **A wrong pick subtracts.** Not asked for, and stated here rather than
+-- buried, because without it the winning move is to tick every box: four
+-- quarters is a whole point, and the person who worked out which two were right
+-- and stopped would score less than the person who did not read the question.
+-- A rule that pays best for not playing is not a scoring rule. So:
+--
+--     score = max(0, (right ones picked - wrong ones picked) / right ones)
+--
+-- Six options of which four are right: all four and nothing else is 1; one
+-- right one alone is 0.25; three right and one wrong is 0.5; ticking all six is
+-- 0.5; two wrong and nothing else is 0 rather than -0.5, because a question
+-- cannot cost you points you earned elsewhere.
+--
+-- Single choice is unchanged and cannot be partial — there is one pick, and it
+-- is right or it is not.
+--
+-- Kept separate from answer_is_correct(), which still means *fully* right and
+-- is what "first correct" on the presenter's screen reports. The two questions
+-- are different now and a function that answered both would be answering
+-- neither.
+-- ---------------------------------------------------------------------------
+create or replace function public.answer_score(p_answer jsonb, p_value jsonb)
+returns numeric
+language sql
+immutable
+set search_path = ''
+as $fn$
+  select case
+    when p_answer is null or jsonb_typeof(p_answer -> 'correct') <> 'array' then 0
+    when p_value is null then 0
+    when jsonb_typeof(p_value) <> 'array' then
+      case when p_answer -> 'correct' @> jsonb_build_array(p_value) then 1 else 0 end
+    else (
+      select case
+        when total = 0 then 0
+        -- Deliberately not rounded here. A third of a point rounded to two
+        -- places three times sums to 0.99, and somebody who got all three
+        -- would be told they got less than a whole question. The rounding
+        -- happens once, on the total.
+        else greatest(0, (hits - misses)::numeric / total)
+      end
+      from (
+        select
+          (select count(distinct e) from jsonb_array_elements_text(p_value) e
+           where p_answer -> 'correct' @> jsonb_build_array(e)) as hits,
+          (select count(distinct e) from jsonb_array_elements_text(p_value) e
+           where not (p_answer -> 'correct' @> jsonb_build_array(e))) as misses,
+          (select count(distinct e) from jsonb_array_elements_text(p_answer -> 'correct') e)
+            as total
+      ) counted
+    )
+  end
+$fn$;
+
+-- The standings, now counting fractions of a question.
+create or replace function public.session_leaderboard(p_session uuid)
+returns jsonb
+language sql
+stable
+security definer
+set search_path = ''
+as $fn$
+  select case
+    when not public.can('winners.view')
+      then jsonb_build_object('ok', false, 'reason', 'not allowed')
+    when not public.hosts_session(p_session)
+      then jsonb_build_object('ok', false, 'reason', 'not allowed')
+    else jsonb_build_object(
+      'ok', true,
+      'scored', (select count(*) from public.items i
+                 join public.item_kinds k on k.kind = i.kind
+                 where i.session_id = p_session and i.state = 'revealed' and k.scored),
+      'standings', coalesce((
+        select jsonb_agg(row_to_json(s)::jsonb order by s.place, s.name)
+        from (
+          select
+            rank() over (order by t.points desc, coalesce(t.seconds, 1e9) asc) as place,
+            coalesce(p.display_name, 'Someone') as name,
+            t.points,
+            t.seconds
+          from (
+            select r.user_id,
+                   -- trim_scale so a whole question comes back as 1 rather
+                   -- than 1.00. The scale is an artefact of rounding thirds,
+                   -- and a scoreboard reading "1.00" in front of a room looks
+                   -- like a spreadsheet rather than a score.
+                   trim_scale(round(sum(public.answer_score(a.answer, r.value)), 2)) as points,
+                   -- Time on the questions you scored something on. Not on the
+                   -- ones you got nothing for: a fast wrong answer is not a
+                   -- thing the tiebreak should reward, and a slow one is not a
+                   -- thing it should punish twice.
+                   sum(public.answer_seconds(i.opened_at, r.submitted_at))
+                     filter (where public.answer_score(a.answer, r.value) > 0) as seconds
+            from public.responses r
+            join public.items i on i.id = r.item_id
+            join public.item_kinds k on k.kind = i.kind
+            left join public.item_answers a on a.item_id = i.id
+            where i.session_id = p_session and i.state = 'revealed' and k.scored
+            group by r.user_id
+          ) t
+          left join public.profiles p on p.id = t.user_id
+        ) s), '[]'::jsonb)
+    )
+  end
+$fn$;
+
+revoke all on function public.session_leaderboard(uuid) from public, anon;
+grant execute on function public.session_leaderboard(uuid) to authenticated;
+
+create or replace function public.my_standing(p_session uuid)
+returns jsonb
+language sql
+stable
+security definer
+set search_path = ''
+as $fn$
+  select case
+    when (select auth.uid()) is null then jsonb_build_object('ok', false)
+    when not exists (select 1 from public.sessions s
+                     where s.id = p_session and s.state <> 'draft')
+      then jsonb_build_object('ok', false)
+    else (
+      select jsonb_build_object(
+        'ok', true,
+        'points', coalesce(trim_scale(round(sum(public.answer_score(a.answer, r.value)), 2)), 0),
+        'scored', (select count(*) from public.items i2
+                   join public.item_kinds k2 on k2.kind = i2.kind
+                   where i2.session_id = p_session and i2.state = 'revealed' and k2.scored))
+      from public.items i
+      join public.item_kinds k on k.kind = i.kind
+      left join public.item_answers a on a.item_id = i.id
+      left join public.responses r on r.item_id = i.id and r.user_id = (select auth.uid())
+      where i.session_id = p_session and i.state = 'revealed' and k.scored
+    )
+  end
+$fn$;
+
+revoke all on function public.my_standing(uuid) from public, anon;
+grant execute on function public.my_standing(uuid) to authenticated;

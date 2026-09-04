@@ -53,6 +53,46 @@ select pg_temp.check('a malformed answer marks nothing right rather than errorin
 select pg_temp.check('and no response is not a right one',
   not public.answer_is_correct('{"correct":["a"]}'::jsonb, null));
 
+-- ---------------------------------------------------------------------------
+-- Partial credit
+--
+-- Four right options means a quarter of a point each — which holds exactly
+-- while somebody picks only right ones. A wrong pick subtracts, because
+-- otherwise ticking every box scores full marks and the person who worked out
+-- which two were right and stopped does worse than the person who did not read
+-- the question.
+-- ---------------------------------------------------------------------------
+select pg_temp.check('a quarter of a point for one of four',
+  public.answer_score('{"correct":["a","b","c","d"]}'::jsonb, '["a"]'::jsonb) = 0.25);
+select pg_temp.check('half for two of four',
+  public.answer_score('{"correct":["a","b","c","d"]}'::jsonb, '["a","b"]'::jsonb) = 0.5);
+select pg_temp.check('the whole point for all four',
+  public.answer_score('{"correct":["a","b","c","d"]}'::jsonb, '["d","c","b","a"]'::jsonb) = 1);
+select pg_temp.check('a wrong pick costs one of the right ones',
+  public.answer_score('{"correct":["a","b","c","d"]}'::jsonb, '["a","b","c","z"]'::jsonb) = 0.5);
+select pg_temp.check('ticking everything is not a way to win',
+  public.answer_score('{"correct":["a","b","c","d"]}'::jsonb,
+                      '["a","b","c","d","y","z"]'::jsonb) = 0.5);
+select pg_temp.check('and cannot beat answering it properly',
+  public.answer_score('{"correct":["a","b","c","d"]}'::jsonb, '["a","b","c","d","y","z"]'::jsonb)
+    < public.answer_score('{"correct":["a","b","c","d"]}'::jsonb, '["a","b","c","d"]'::jsonb));
+select pg_temp.check('a bad answer is worth nothing, never less than nothing',
+  public.answer_score('{"correct":["a","b"]}'::jsonb, '["y","z"]'::jsonb) = 0);
+select pg_temp.check('thirds add up to a whole question rather than to 0.99',
+  round(3 * public.answer_score('{"correct":["a","b","c"]}'::jsonb, '["a"]'::jsonb), 2) = 1.00);
+select pg_temp.check('a duplicate pick is not two picks',
+  public.answer_score('{"correct":["a","b"]}'::jsonb, '["a","a"]'::jsonb) = 0.5);
+select pg_temp.check('a single choice is still all or nothing',
+  public.answer_score('{"correct":["a","b"]}'::jsonb, '"a"'::jsonb) = 1
+  and public.answer_score('{"correct":["a","b"]}'::jsonb, '"z"'::jsonb) = 0);
+select pg_temp.check('and a malformed answer scores nothing rather than erroring',
+  public.answer_score('{"correct":"a"}'::jsonb, '["a"]'::jsonb) = 0
+  and public.answer_score(null, '["a"]'::jsonb) = 0
+  and public.answer_score('{"correct":["a"]}'::jsonb, null) = 0);
+select pg_temp.check('"fully right" still means fully right, for the first-correct line',
+  not public.answer_is_correct('{"correct":["a","b"]}'::jsonb, '["a"]'::jsonb)
+  and public.answer_score('{"correct":["a","b"]}'::jsonb, '["a"]'::jsonb) > 0);
+
 select pg_temp.check('seconds are measured from opening to submitting',
   public.answer_seconds('2026-10-01 12:00:00+00', '2026-10-01 12:00:03.5+00') = 3.5);
 select pg_temp.check('a submission before the opening is no time at all, not a negative one',
@@ -128,16 +168,18 @@ select pg_temp.check('Ada is first — level on points, quicker on the one she g
 select pg_temp.check('Grace second',
   (select v->'standings'->1->>'name' from t where k='board') = 'Grace');
 select pg_temp.check('both on one point',
-  (select v->'standings'->0->>'points' from t where k='board') = '1'
-  and (select v->'standings'->1->>'points' from t where k='board') = '1');
+  (select (v->'standings'->0->>'points')::numeric from t where k='board') = 1
+  and (select (v->'standings'->1->>'points')::numeric from t where k='board') = 1);
+select pg_temp.check('and a whole question reads as 1, not 1.00',
+  (select v->'standings'->0->>'points' from t where k='board') = '1');
 select pg_temp.check('and the tiebreak is the time on question one, 2s against 5s',
   (select (v->'standings'->0->>'seconds')::numeric from t where k='board') = 2
   and (select (v->'standings'->1->>'seconds')::numeric from t where k='board') = 5);
 select pg_temp.check('a question nobody got right leaves the scores where they were',
-  (select v->'standings'->0->>'points' from t where k='board') = '1');
+  (select (v->'standings'->0->>'points')::numeric from t where k='board') = 1);
 select pg_temp.check('Alan is last on nought',
   (select v->'standings'->2->>'name' from t where k='board') = 'Alan'
-  and (select v->'standings'->2->>'points' from t where k='board') = '0');
+  and (select (v->'standings'->2->>'points')::numeric from t where k='board') = 0);
 select pg_temp.check('somebody with nothing right has no time to compare',
   (select v->'standings'->2->'seconds' from t where k='board') = 'null'::jsonb);
 
@@ -160,10 +202,48 @@ select public.advance_session(((select v->>'id' from t where k='sess'))::uuid, '
 insert into t select 'board3', public.session_leaderboard(((select v->>'id' from t where k='sess'))::uuid);
 select pg_temp.check('more right answers beats a faster one',
   (select v->'standings'->0->>'name' from t where k='board3') = 'Grace'
-  and (select v->'standings'->0->>'points' from t where k='board3') = '2');
+  and (select (v->'standings'->0->>'points')::numeric from t where k='board3') = 2);
 select pg_temp.check('even though she took longer over every one of them',
   (select (v->'standings'->0->>'seconds')::numeric from t where k='board3')
     > (select (v->'standings'->1->>'seconds')::numeric from t where k='board3'));
+
+-- Question five: pick-all-that-apply, four right out of six. Ada finds two,
+-- Grace finds three but tags a wrong one on, Alan ticks the lot. This is the
+-- rule end to end rather than in the helper.
+set session "test.uid" = '11111111-1111-1111-1111-111111111111';
+insert into t select 'q5', public.save_item(
+  ((select v->>'id' from t where k='sess'))::uuid, null, 'choice', 'Five',
+  '{"options":["a","b","c","d","y","z"],"multi":true}'::jsonb,
+  '{"correct":["a","b","c","d"]}'::jsonb);
+select public.advance_session(((select v->>'id' from t where k='sess'))::uuid, 'show',
+  ((select v->>'id' from t where k='q5'))::uuid);
+update public.items set opened_at = '2026-10-01 12:04:00+00'
+where id = ((select v->>'id' from t where k='q5'))::uuid;
+insert into public.responses (item_id, user_id, value, submitted_at) values
+  (((select v->>'id' from t where k='q5'))::uuid, '33333333-3333-3333-3333-333333333333', '["a","b"]', '2026-10-01 12:04:04+00'),
+  (((select v->>'id' from t where k='q5'))::uuid, '44444444-4444-4444-4444-444444444444', '["a","b","c","z"]', '2026-10-01 12:04:06+00'),
+  (((select v->>'id' from t where k='q5'))::uuid, '55555555-5555-5555-5555-555555555555', '["a","b","c","d","y","z"]', '2026-10-01 12:04:02+00');
+select public.advance_session(((select v->>'id' from t where k='sess'))::uuid, 'reveal',
+  ((select v->>'id' from t where k='q5'))::uuid);
+
+insert into t select 'board4', public.session_leaderboard(((select v->>'id' from t where k='sess'))::uuid);
+select pg_temp.check('two of four is half a question on the board',
+  (select (e->>'points')::numeric from jsonb_array_elements(
+     (select v->'standings' from t where k='board4')) e where e->>'name' = 'Ada') = 1.5);
+select pg_temp.check('three right and one wrong is half a question too',
+  (select (e->>'points')::numeric from jsonb_array_elements(
+     (select v->'standings' from t where k='board4')) e where e->>'name' = 'Grace') = 2.5);
+select pg_temp.check('and ticking every box is worth the same as answering half of it',
+  (select (e->>'points')::numeric from jsonb_array_elements(
+     (select v->'standings' from t where k='board4')) e where e->>'name' = 'Alan') = 0.5);
+select pg_temp.check('a fraction reads as 0.5 rather than 0.50',
+  (select e->>'points' from jsonb_array_elements(
+     (select v->'standings' from t where k='board4')) e where e->>'name' = 'Alan') = '0.5');
+select pg_temp.check('nobody was fully right, so there is no first correct',
+  (public.item_winner(((select v->>'id' from t where k='q5'))::uuid)->>'name') is null);
+select pg_temp.check('but partial answers still count towards the tiebreak time',
+  (select (e->>'seconds')::numeric from jsonb_array_elements(
+     (select v->'standings' from t where k='board4')) e where e->>'name' = 'Alan') = 2);
 
 -- The survey has no answer, so it must not count for anyone.
 select public.advance_session(((select v->>'id' from t where k='sess'))::uuid, 'show');
@@ -172,11 +252,11 @@ insert into public.responses (item_id, user_id, value) values
 select public.advance_session(((select v->>'id' from t where k='sess'))::uuid, 'reveal');
 insert into t select 'board2', public.session_leaderboard(((select v->>'id' from t where k='sess'))::uuid);
 select pg_temp.check('an unscored question is not a question anybody won',
-  (select (v->>'scored')::int from t where k='board2') = 3);
-select pg_temp.check('and answering it earns nothing',
-  (select (e->>'points')::int from jsonb_array_elements(
+  (select (v->>'scored')::int from t where k='board2') = 4);
+select pg_temp.check('and answering it earns nothing beyond what was already there',
+  (select (e->>'points')::numeric from jsonb_array_elements(
      (select v->'standings' from t where k='board2')) e
-   where e->>'name' = 'Alan') = 0);
+   where e->>'name' = 'Alan') = 0.5);
 
 -- ---------------------------------------------------------------------------
 -- Who may see what
@@ -188,17 +268,17 @@ select pg_temp.check('nor who won a question',
   (public.item_winner(((select v->>'id' from t where k='q1'))::uuid)->>'ok') = 'false');
 
 insert into t select 'mine', public.my_standing(((select v->>'id' from t where k='sess'))::uuid);
-select pg_temp.check('but does get her own score',
+select pg_temp.check('but does get her own score, fractions included',
   (select v->>'ok' from t where k='mine') = 'true'
-  and (select (v->>'points')::int from t where k='mine') = 1);
+  and (select (v->>'points')::numeric from t where k='mine') = 1.5);
 select pg_temp.check('out of the questions that have been revealed',
-  (select (v->>'scored')::int from t where k='mine') = 3);
+  (select (v->>'scored')::int from t where k='mine') = 4);
 select pg_temp.check('and it carries nobody else',
   not (select v ? 'standings' from t where k='mine'));
 
 set session "test.uid" = '55555555-5555-5555-5555-555555555555';
-select pg_temp.check('somebody who got none says so rather than failing',
-  (public.my_standing(((select v->>'id' from t where k='sess'))::uuid)->>'points')::int = 0);
+select pg_temp.check('somebody scraping half a question is told so',
+  (public.my_standing(((select v->>'id' from t where k='sess'))::uuid)->>'points')::numeric = 0.5);
 
 set session "test.uid" = '';
 select pg_temp.check('signed out has no standing',
