@@ -43,6 +43,28 @@ import {
  *  replication stream, to animate a number on one screen. */
 const COUNT_MS = 2000;
 
+/** How often the room re-reads regardless of the doorbell.
+ *
+ *  **This reverses part of the note above.** The doorbell was written to
+ *  replace polling, and the argument still holds for the presenter's answer
+ *  count. It does not hold for "is there a new question on screen", because
+ *  that is the one read the whole feature rests on and it had a single point of
+ *  failure nobody could see.
+ *
+ *  It failed twice over. `sessions` had row-level security enabled and not one
+ *  policy, and Realtime applies RLS to delivery — so there was no row the room
+ *  was allowed to be sent and postgres_changes said nothing about it. That is
+ *  fixed in the schema. The second reason is the one that cannot be fixed from
+ *  here: a websocket has to survive whatever sits in front of the site, and a
+ *  proxy that does not upgrade the connection breaks the doorbell without
+ *  breaking anything else on the page.
+ *
+ *  Five seconds is chosen against the room rather than the server: it is the
+ *  longest somebody stares at a stale screen before deciding it is broken. Even
+ *  at fifty people that is ten reads a second on a VM that is already serving
+ *  them, which is the cheap half of this trade. */
+const LIVE_POLL_MS = 5000;
+
 /** The address the QR points at — absolute, because a phone scanning it has no
  *  page to be relative to. */
 const joinUrl = (code: string) => ORIGIN + pathOf({ kind: 'join', code });
@@ -192,6 +214,10 @@ export default function LiveSession({ session, host }: { session: string; host: 
   // an answer counts, not against this laptop's.
   const [skewMs, setSkewMs] = useState(0);
   const [tick, setTick] = useState(0);
+  // Whether the live connection actually came up. Null until it answers, so a
+  // page that has not finished connecting does not accuse itself of being
+  // broken.
+  const [connected, setConnected] = useState<boolean | null>(null);
   const itemId = useRef<string | undefined>(undefined);
 
   const pull = useCallback(async () => {
@@ -226,8 +252,16 @@ export default function LiveSession({ session, host }: { session: string; host: 
 
   useEffect(() => {
     void pull();
-    return onSessionMoved(session, () => void pull());
+    return onSessionMoved(session, () => void pull(), setConnected);
   }, [session, pull]);
+
+  // The safety net — see LIVE_POLL_MS. Unconditional rather than only when the
+  // channel reports trouble, because the failure it exists for is a channel
+  // that reports SUBSCRIBED and delivers nothing.
+  useEffect(() => {
+    const id = window.setInterval(() => void pull(), LIVE_POLL_MS);
+    return () => window.clearInterval(id);
+  }, [pull]);
 
 
   // Four times a second while a clock is running, and not at all otherwise. Not
@@ -366,6 +400,17 @@ export default function LiveSession({ session, host }: { session: string; host: 
             </p>
           )}
         </div>
+      )}
+
+      {/* Said out loud rather than left to be discovered. The screen still
+          keeps up — it re-reads every few seconds — but "updates arrive a
+          moment late" is a different thing to be told than nothing at all, and
+          on the day it is the sentence that identifies the problem. */}
+      {connected === false && (
+        <p className="mb-4 text-xs text-slate-500" role="status">
+          Live updates are not connected — this screen is refreshing every few
+          seconds instead.
+        </p>
       )}
 
       {item.state === 'not-live' && <Waiting text="This session has not started yet." />}

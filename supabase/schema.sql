@@ -3969,3 +3969,34 @@ $fn$;
 
 revoke all on function public.session_door(uuid) from public, anon;
 grant execute on function public.session_door(uuid) to authenticated;
+
+-- ---------------------------------------------------------------------------
+-- Why the room never saw the presenter's clicks
+--
+-- The doorbell was published, the client subscribed, and nothing arrived.
+-- Realtime applies row-level security to delivery — the comment on the
+-- daily_progress publication above says exactly that — and `sessions` had
+-- `revoke all ... from authenticated` and not one policy. There was no row the
+-- subscriber was allowed to be sent, so postgres_changes had nothing to
+-- deliver and said nothing about it. The presenter's own screen looked fine
+-- because their click re-reads; only the room depended on the event.
+--
+-- Measured rather than reasoned: on a throwaway database,
+-- has_table_privilege('authenticated', 'public.daily_progress', 'select') is
+-- true with one SELECT policy, and the same question about `sessions` was
+-- false with none.
+--
+-- What this exposes is the session row: id, title, state, code, timestamps,
+-- and which item is up. Not the questions and not the answers — `items` and
+-- `item_answers` keep their revoke, and a current_item id is a uuid rather
+-- than a prompt. Drafts stay hidden, so an unstarted session's title and code
+-- are not readable by the room; every transition the room needs still
+-- delivers, because Realtime authorises an UPDATE against the new row and
+-- start, show, lock, reveal and close all leave it non-draft.
+-- ---------------------------------------------------------------------------
+grant select on public.sessions to authenticated;
+
+drop policy if exists "read a session that has started" on public.sessions;
+create policy "read a session that has started"
+  on public.sessions for select
+  using ((select auth.uid()) is not null and state <> 'draft');

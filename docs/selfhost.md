@@ -455,6 +455,34 @@ instead — deleting takes its answers with it, which is honest, whereas editing
 would silently change what those answers were answers to. A session that has
 already run cannot be deleted at all; close it.
 
+### If the room does not follow the presenter
+
+This was broken and is the reason the section exists. The presenter clicked
+"show", their own screen moved, and nobody else's did.
+
+**Realtime applies row-level security to delivery.** `sessions` had RLS enabled,
+`revoke all … from authenticated`, and not one policy — so there was no row the
+room was allowed to be sent, and `postgres_changes` delivered nothing and
+reported nothing. The publication was right, the subscription succeeded, the
+client was right, and the feature was dead. `supabase/tests/doorbell.sql` pins
+the two halves Realtime needs, and that `items`, `item_answers` and `responses`
+did not quietly gain them along the way.
+
+Two things follow for anyone debugging this again:
+
+- **The room re-reads every five seconds regardless of the doorbell.** That
+  partly reverses the "a doorbell, not a poll" design — deliberately. It is the
+  read the whole feature rests on, and it had a single point of failure nobody
+  could see. With Realtime working the update is immediate; without it the room
+  is at most five seconds behind instead of stuck.
+- **The screen says when the live connection is down**: *"Live updates are not
+  connected — this screen is refreshing every few seconds instead."* That line
+  is the diagnostic. If the room keeps up and the line is absent, Realtime is
+  working. If the line appears, the websocket is not getting through to the
+  Supabase gateway — check whatever terminates TLS for `VITE_SUPABASE_URL`
+  forwards `Upgrade` and `Connection` headers. The app's own nginx
+  (`docker/nginx.conf`) serves static files only and is not in that path.
+
 ### Applying the schema
 
 `supabase/schema.sql` is idempotent on a database that already has it, so
