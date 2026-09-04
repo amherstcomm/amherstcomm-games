@@ -480,6 +480,34 @@ the one being run.
 Names appear on the board. The anonymity promise is about what an open question
 shows the room, never about who won the quiz — a prize needs a name.
 
+### The presenter's screen is a room's screen
+
+`/live/<id>/host` runs wide — the page's `<main>` is `max-w-3xl` for reading and
+`max-w-6xl` for the two views pointed at a room, this one and the scoreboard.
+The join code is set at a size that reads from the back, the QR at 192px so it
+can be scanned rather than walked up to, and the game switcher is not drawn:
+a row of ten word games above a trivia question is chrome, and on a projector it
+is also a way out of the session in front of everybody. The footer still has
+Home.
+
+The participant's half stays narrow. It is a phone in a hand.
+
+### Deleting a session
+
+**Any session can be deleted, including one that has run.** An earlier version
+refused — "it is a record of what the room said, close it instead" — which is a
+good argument for not doing it by accident and a bad one for not being able to.
+
+What is left of that is the confirmation. A draft goes on the first click.
+Anything that has run comes back asking, and the refusal carries what would be
+lost, so the question is *"Delete "Week one" for good? It has 6 questions, 42
+answers, from 12 people."* rather than "are you sure?" about an unknown
+quantity.
+
+The responses go with it. That is the point rather than a side effect: half a
+deleted session leaves answers to questions that no longer exist, on a
+scoreboard that can no longer explain them. There is no undo.
+
 ### The scoreboard
 
 `/scores/<id>` is the board on its own address, so the presenter's laptop can

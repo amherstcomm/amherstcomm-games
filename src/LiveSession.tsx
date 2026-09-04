@@ -829,83 +829,90 @@ export default function LiveSession({ session, host }: { session: string; host: 
   const others = host ? otherMoves(door ?? { ok: false }) : [];
 
   return (
-    <div className="max-w-xl mx-auto px-4 py-8">
+    <div className={`mx-auto px-4 py-8 ${host ? 'max-w-5xl' : 'max-w-xl'}`}>
       {host && (
-        <div className="mb-6 rounded-xl border border-accent/40 bg-accent/5 p-3">
-          <p className="text-xs uppercase tracking-wider text-accent font-semibold mb-2">
+        /* The presenter's screen is a room's screen, not a page in a column.
+           It was a small card at the top of the same narrow measure everybody
+           else reads on, which is right for a phone and wrong for the thing
+           pointed at forty people: the code was too small to read from the
+           back and the QR was a stamp. Wider, and the join block gets the
+           weight it needs. */
+        <div className="mb-8 rounded-2xl border border-accent/40 bg-accent/5 p-4 sm:p-6">
+          <p className="text-xs uppercase tracking-wider text-accent font-semibold mb-4">
             Presenting{door?.title ? ` — ${door.title}` : ''}
           </p>
-          {/* The code, on the screen that is already pointed at the room. It is
-              here as well as on the editor because this is the one somebody is
-              looking at when they say "go to the site and type this". */}
-          {/* The way in, on the screen already pointed at the room: the code to
-              read out, and the same link as a QR so nobody has to type
-              anything. Both, because a phone camera and a laptop keyboard are
-              different people in the same room. */}
-          {door?.code && door.state !== 'closed' && (
-            <div className="flex items-center gap-4 mb-3">
-              <QrCode
-                text={joinUrl(door.code)}
-                className="w-24 h-24 rounded-md shrink-0 p-1"
-                label={`Scan to join with code ${door.code}`}
-              />
-              <div className="min-w-0">
-                <p className="text-xs uppercase tracking-wider text-slate-500">To join</p>
-                <p className="text-2xl font-bold text-white tracking-[0.25em] leading-tight">
-                  {door.code}
-                </p>
-                <p className="text-sm text-slate-400 break-words">{JOIN_HOST}/join</p>
+
+          <div className="grid gap-6 sm:grid-cols-[auto_1fr] sm:items-center">
+            {/* The way in, on the screen already pointed at the room: the code
+                to read out, and the same link as a QR so nobody has to type
+                anything. Both, because a phone camera and a laptop keyboard
+                are different people in the same room.
+                Sized to be scanned across a room rather than from a desk —
+                a QR the size of a stamp is a QR everybody walks up to. */}
+            {door?.code && door.state !== 'closed' && (
+              <div className="flex items-center gap-5">
+                <QrCode
+                  text={joinUrl(door.code)}
+                  className="w-36 h-36 sm:w-48 sm:h-48 rounded-lg shrink-0 p-2"
+                  label={`Scan to join with code ${door.code}`}
+                />
+                <div className="min-w-0">
+                  <p className="text-xs uppercase tracking-wider text-slate-500">To join</p>
+                  <p className="text-4xl sm:text-6xl font-bold text-white tracking-[0.15em] leading-none my-1">
+                    {door.code}
+                  </p>
+                  <p className="text-sm sm:text-base text-slate-400 break-words">
+                    {JOIN_HOST}/join
+                  </p>
+                </div>
               </div>
-            </div>
-          )}
+            )}
 
-          <p className="text-sm text-slate-300 mb-2">{whereWeAre(door ?? { ok: false })}</p>
+            <div className="min-w-0">
+              <p className="text-base sm:text-lg text-slate-300 mb-3">
+                {whereWeAre(door ?? { ok: false })}
+              </p>
 
-          {/* One move, and it says what it will do. The five verbs this
-              replaced — Start, Next question, Lock, Reveal, Close, all at once
-              — left the presenter working out which was next in front of a
-              room. See src/presenting.ts. */}
-          {move && (
-            <button
-              onClick={() => void control(move.action)}
-              className="w-full h-11 rounded-lg bg-emerald-400 text-ink font-semibold hover:opacity-90"
-            >
-              {move.label}
-            </button>
-          )}
-
-          {others.length > 0 && (
-            <div className="flex flex-wrap gap-2 mt-2">
-              {others.map((m) => (
+              {/* One move, and it says what it will do. The five verbs this
+                  replaced — Start, Next question, Lock, Reveal, Close, all at
+                  once — left the presenter working out which was next in front
+                  of a room. See src/presenting.ts. */}
+              {move && (
                 <button
-                  key={`${m.action}-${m.label}`}
-                  onClick={() => void control(m.action)}
-                  // slate-200, not slate-100: the palette defines 950 down to 200,
-                  // and a tier it does not define falls through to Tailwind's own —
-                  // near-white, invisible on the light theme's page. Caught by
-                  // looking at it; now covered by the a11y sweep.
-                  className="px-3 h-9 rounded-lg text-sm font-semibold bg-white/10 border border-white/15 text-slate-200 hover:bg-white/15"
+                  onClick={() => void control(move.action)}
+                  className="w-full h-14 rounded-xl bg-emerald-400 text-ink font-semibold text-lg hover:opacity-90"
                 >
-                  {m.label}
+                  {move.label}
                 </button>
-              ))}
+              )}
+
+              {others.length > 0 && (
+                <div className="flex flex-wrap gap-2 mt-3">
+                  {others.map((m) => (
+                    <button
+                      key={`${m.action}-${m.label}`}
+                      onClick={() => void control(m.action)}
+                      // slate-200, not slate-100: the palette defines 950 down
+                      // to 200, and a tier it does not define falls through to
+                      // Tailwind's own — near-white, invisible on the light
+                      // theme's page. Caught by looking at it; now covered by
+                      // the a11y sweep.
+                      className="px-3 h-10 rounded-lg text-sm font-semibold bg-white/10 border border-white/15 text-slate-200 hover:bg-white/15"
+                    >
+                      {m.label}
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {view?.ok && item.id && (
+                <p className="mt-3 text-base text-slate-300 tabular-nums">
+                  {view.answered ?? 0} answered
+                  {item.state === 'open' ? ' so far' : ''}
+                </p>
+              )}
             </div>
-          )}
-
-          {/* The board on its own address, for the other screen. */}
-          <a
-            href={pathOf({ kind: 'scores', session })}
-            className="inline-block mt-2 text-sm text-accent hover:brightness-110"
-          >
-            Open the scoreboard
-          </a>
-
-          {view?.ok && item.id && (
-            <p className="mt-3 text-sm text-slate-300">
-              {view.answered ?? 0} answered
-              {item.state === 'open' ? ' so far' : ''}
-            </p>
-          )}
+          </div>
         </div>
       )}
 
@@ -920,12 +927,30 @@ export default function LiveSession({ session, host }: { session: string; host: 
         </p>
       )}
 
+      {/* The board on its own address, for the other screen. Under the panel
+          rather than in it: it opens a different page, which is not the same
+          kind of thing as the buttons that move the room. */}
+      {host && (
+        <a
+          href={pathOf({ kind: 'scores', session })}
+          className="inline-block mb-6 text-sm text-accent hover:brightness-110"
+        >
+          Open the scoreboard
+        </a>
+      )}
+
       {item.state === 'not-live' && <Waiting text="This session has not started yet." />}
       {item.state === 'waiting' && <Waiting text="Waiting for the next question…" />}
 
       {item.id && (
         <>
-          <h1 className="text-xl sm:text-2xl font-bold mb-1 text-white">{item.prompt}</h1>
+          <h1
+            className={`font-bold mb-1 text-white ${
+              host ? 'text-2xl sm:text-4xl' : 'text-xl sm:text-2xl'
+            }`}
+          >
+            {item.prompt}
+          </h1>
           <p className="text-xs uppercase tracking-wider text-slate-500 mb-3">
             {item.state === 'open'
               ? expired

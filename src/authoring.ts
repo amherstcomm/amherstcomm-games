@@ -175,11 +175,43 @@ export async function moveItem(
   return (data as { ok: boolean; reason?: string }) ?? fail('no answer');
 }
 
-export async function deleteSession(session: string): Promise<{ ok: boolean; reason?: string }> {
+/** What a deletion would cost, when the server asks for confirmation. */
+export type DeleteCost = { items?: number; answers?: number; people?: number };
+
+/** Delete a session, for good.
+ *
+ *  A draft goes on the first call. Anything that has run comes back with
+ *  `reason: 'confirm'` and the counts, so the interface can ask about a known
+ *  quantity rather than saying "are you sure?" about an unknown one; calling
+ *  again with `confirm` does it.
+ *
+ *  The responses go with it. That is the point rather than a side effect —
+ *  half-deleting would leave answers to questions that no longer exist. */
+export async function deleteSession(
+  session: string,
+  confirm = false
+): Promise<{ ok: boolean; reason?: string } & DeleteCost> {
   if (!supabase) return fail('not connected');
-  const { data, error } = await supabase.rpc('delete_session', { p_session: session });
+  const { data, error } = await supabase.rpc('delete_session', {
+    p_session: session,
+    p_confirm: confirm,
+  });
   if (error) return fail(error.message);
   return (data as { ok: boolean; reason?: string }) ?? fail('no answer');
+}
+
+/** The sentence to put in front of somebody before it goes. Numbers, because
+ *  "are you sure?" about an unknown quantity is not a question anybody can
+ *  answer well. */
+export function deletionWarning(title: string, cost: DeleteCost): string {
+  const parts = [
+    `${cost.items ?? 0} ${cost.items === 1 ? 'question' : 'questions'}`,
+    `${cost.answers ?? 0} ${cost.answers === 1 ? 'answer' : 'answers'}`,
+  ];
+  if ((cost.people ?? 0) > 0) {
+    parts.push(`from ${cost.people} ${cost.people === 1 ? 'person' : 'people'}`);
+  }
+  return `Delete "${title}" for good? It has ${parts.join(', ')}. This cannot be undone.`;
 }
 
 // ---------------------------------------------------------------------------

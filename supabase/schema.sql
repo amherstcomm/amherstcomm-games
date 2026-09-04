@@ -5043,3 +5043,75 @@ $fn$;
 
 revoke all on function public.game_state(uuid) from public, anon;
 grant execute on function public.game_state(uuid) to authenticated;
+
+-- ---------------------------------------------------------------------------
+-- Deleting a session for good
+--
+-- **This overturns the earlier rule.** delete_session refused anything that had
+-- run — "it is a record of what the room said; close it instead" — which is a
+-- fine argument for not deleting one by accident and a bad one for not being
+-- able to. Old sessions accumulate, they are the operator's to keep or not, and
+-- a tool that will not let you tidy up teaches people to work around it.
+--
+-- What survives of the old rule is that it cannot happen by accident. A draft
+-- deletes as it always did. Anything that has run needs `p_confirm`, and the
+-- refusal without it comes back carrying what would be lost — questions,
+-- answers and people — so the interface can say so in numbers rather than
+-- asking "are you sure?" about an unknown quantity.
+--
+-- The responses go with it, by the foreign key. That is the point rather than a
+-- side effect: half-deleting a session would leave answers to questions that no
+-- longer exist, on a scoreboard that can no longer explain them.
+-- ---------------------------------------------------------------------------
+
+-- The old one-argument form has to go rather than be replaced: adding a
+-- defaulted parameter makes a new signature, and leaving both would mean a
+-- client calling the old one bypasses the confirmation entirely.
+drop function if exists public.delete_session(uuid);
+
+create or replace function public.delete_session(p_session uuid, p_confirm boolean default false)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $fn$
+declare
+  state text;
+  n_items int;
+  n_answers int;
+  n_people int;
+begin
+  if not public.hosts_session(p_session) then
+    return jsonb_build_object('ok', false, 'reason', 'not allowed');
+  end if;
+  select s.state into state from public.sessions s where s.id = p_session;
+  if state is null then
+    return jsonb_build_object('ok', false, 'reason', 'no such session');
+  end if;
+
+  select count(*) into n_items from public.items i where i.session_id = p_session;
+  select count(*), count(distinct r.user_id) into n_answers, n_people
+  from public.responses r
+  join public.items i on i.id = r.item_id
+  where i.session_id = p_session;
+
+  -- A draft is somebody's half-built questions and nobody has answered it;
+  -- asking twice about that is asking for the sake of asking.
+  if state <> 'draft' and not coalesce(p_confirm, false) then
+    return jsonb_build_object(
+      'ok', false,
+      'reason', 'confirm',
+      'state', state,
+      'items', n_items,
+      'answers', n_answers,
+      'people', n_people);
+  end if;
+
+  delete from public.sessions where id = p_session;
+  return jsonb_build_object(
+    'ok', true, 'items', n_items, 'answers', n_answers, 'people', n_people);
+end;
+$fn$;
+
+revoke all on function public.delete_session(uuid, boolean) from public, anon;
+grant execute on function public.delete_session(uuid, boolean) to authenticated;

@@ -164,10 +164,13 @@ select pg_temp.check('current_item was cleared rather than dangling',
   (select current_item from public.sessions
    where id = ((select v->>'id' from t where k='sess'))::uuid) is null);
 
--- a session that has run is not deletable
+-- A session that has run does not delete unconfirmed. It used to refuse
+-- outright; see supabase/tests/deleting.sql for why that changed and what is
+-- left of it.
 insert into t select 'delsess', public.delete_session(((select v->>'id' from t where k='sess'))::uuid);
-select pg_temp.check('a live session refuses deletion',
-  (select v->>'ok' from t where k='delsess') = 'false');
+select pg_temp.check('a session that has run does not delete on the first ask',
+  (select v->>'ok' from t where k='delsess') = 'false'
+  and (select v->>'reason' from t where k='delsess') = 'confirm');
 update public.sessions set state = 'draft' where id = ((select v->>'id' from t where k='sess'))::uuid;
 
 -- ---------------------------------------------------------------------------
