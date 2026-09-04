@@ -265,7 +265,7 @@ function ItemForm({
       </div>
 
       <label className="block">
-        <span className="text-xs uppercase tracking-wider text-slate-500">Question</span>
+        <span className="block text-xs uppercase tracking-wider text-slate-500">Question</span>
         <textarea
           value={prompt}
           onChange={(e) => setPrompt(e.target.value.slice(0, 500))}
@@ -278,7 +278,7 @@ function ItemForm({
       {(kind === 'choice' || kind === 'survey' || kind === 'rank') && (
         <>
           <label className="block">
-            <span className="text-xs uppercase tracking-wider text-slate-500">
+            <span className="block text-xs uppercase tracking-wider text-slate-500">
               {kind === 'rank'
                 ? 'Options, one per line, in the correct order'
                 : 'Options, one per line'}
@@ -355,7 +355,7 @@ function ItemForm({
         <>
           <div className="grid grid-cols-2 gap-3">
             <label className="block">
-              <span className="text-xs uppercase tracking-wider text-slate-500">
+              <span className="block text-xs uppercase tracking-wider text-slate-500">
                 These, one per line
               </span>
               <textarea
@@ -367,7 +367,7 @@ function ItemForm({
               />
             </label>
             <label className="block">
-              <span className="text-xs uppercase tracking-wider text-slate-500">
+              <span className="block text-xs uppercase tracking-wider text-slate-500">
                 Pair with one of these
               </span>
               <textarea
@@ -421,7 +421,7 @@ function ItemForm({
       {kind === 'game' && (
         <>
           <label className="block">
-            <span className="text-xs uppercase tracking-wider text-slate-500">
+            <span className="block text-xs uppercase tracking-wider text-slate-500">
               The word to find
             </span>
             <input
@@ -460,7 +460,7 @@ function ItemForm({
         <>
           <div className="grid grid-cols-2 gap-3">
             <label className="block">
-              <span className="text-xs uppercase tracking-wider text-slate-500">
+              <span className="block text-xs uppercase tracking-wider text-slate-500">
                 The actual value
               </span>
               <input
@@ -472,7 +472,7 @@ function ItemForm({
               />
             </label>
             <label className="block">
-              <span className="text-xs uppercase tracking-wider text-slate-500">
+              <span className="block text-xs uppercase tracking-wider text-slate-500">
                 Written as
               </span>
               <select
@@ -490,7 +490,7 @@ function ItemForm({
 
           {style === 'currency' && (
             <label className="block">
-              <span className="text-xs uppercase tracking-wider text-slate-500">
+              <span className="block text-xs uppercase tracking-wider text-slate-500">
                 Currency code
               </span>
               <input
@@ -504,7 +504,7 @@ function ItemForm({
 
           {style === 'unit' && (
             <label className="block">
-              <span className="text-xs uppercase tracking-wider text-slate-500">
+              <span className="block text-xs uppercase tracking-wider text-slate-500">
                 Units
               </span>
               <input
@@ -541,9 +541,15 @@ function ItemForm({
 
       {/* The clock is optional and off by default. A countdown is right for a
           scored round and wrong for "any questions for the board?", and the
-          same controls have to run both. */}
+          same controls have to run both.
+
+          `block` on the caption is load-bearing on this field and on the
+          currency one. Every other input here is `w-full`, so its caption is
+          pushed onto its own line by the input rather than by anything about
+          the caption; these two are capped narrow, so an inline caption let the
+          box sit beside the words with nothing between them. */}
       <label className="block">
-        <span className="text-xs uppercase tracking-wider text-slate-500">
+        <span className="block text-xs uppercase tracking-wider text-slate-500">
           Seconds to answer — leave empty for no clock
         </span>
         <input
@@ -636,7 +642,7 @@ function SessionList() {
 
       <div className="rounded-xl border border-white/15 p-4 space-y-3 mb-8">
         <label className="block">
-          <span className="text-xs uppercase tracking-wider text-slate-500">New session</span>
+          <span className="block text-xs uppercase tracking-wider text-slate-500">New session</span>
           <input
             value={title}
             onChange={(e) => setTitle(e.target.value.slice(0, 120))}
@@ -717,7 +723,7 @@ function SessionList() {
             >
               <span className="flex items-center justify-between gap-3">
                 <span className="text-white font-medium">{s.title}</span>
-                <span className="text-xs uppercase tracking-wider text-slate-500">
+                <span className="block text-xs uppercase tracking-wider text-slate-500">
                   {s.mode === 'open' ? 'on their own time' : 'presented'} · {s.state}
                 </span>
               </span>
