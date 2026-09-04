@@ -17,6 +17,7 @@ import {
   createSession,
   deleteItem,
   deleteSession,
+  deletionWarning,
   moveItem,
   parseOptions,
   problemWith,
@@ -706,6 +707,24 @@ function SessionEditorFor({ session }: { session: string }) {
     }
   }
 
+  /** Two calls when it has run: the first comes back asking, with the counts.
+   *  A draft goes on the first. */
+  async function removeSession() {
+    const first = await deleteSession(session);
+    if (first.ok) {
+      window.location.assign(pathOf({ kind: 'sessions' }));
+      return;
+    }
+    if (first.reason !== 'confirm') {
+      setNote(first.reason ?? 'That did not work');
+      return;
+    }
+    if (!window.confirm(deletionWarning(sheet?.session?.title ?? 'this session', first))) return;
+    const second = await deleteSession(session, true);
+    if (second.ok) window.location.assign(pathOf({ kind: 'sessions' }));
+    else setNote(second.reason ?? 'That did not work');
+  }
+
   if (sheet === null) return <Loader2 className="w-4 h-4 animate-spin text-slate-500 m-8" />;
   if (!sheet.ok || !sheet.session) {
     return (
@@ -777,23 +796,17 @@ function SessionEditorFor({ session }: { session: string }) {
         <a className={BUTTON} href={pathOf({ kind: 'scores', session })}>
           Scores
         </a>
-        {meta.state === 'draft' && (
-          <button
-            className={BUTTON}
-            disabled={busy}
-            onClick={() => {
-              // No confirm dialog: this refuses on anything that has run, and
-              // a draft nobody has seen is not a thing worth guarding.
-              void run(async () => {
-                const res = await deleteSession(session);
-                if (res.ok) window.location.assign(pathOf({ kind: 'sessions' }));
-                return res;
-              });
-            }}
-          >
-            Delete session
-          </button>
-        )}
+        {/* Any session, not only a draft. Old ones pile up and they are the
+            operator's to keep or not — see the note on delete_session. What is
+            left of the old refusal is that a session which has run says what
+            would be lost before it goes. */}
+        <button
+          className={BUTTON}
+          disabled={busy}
+          onClick={() => void removeSession()}
+        >
+          Delete session
+        </button>
       </div>
 
       <ol className="space-y-3">

@@ -9,6 +9,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   AUTHORABLE,
+  deletionWarning,
   GAME_PLAYABLE,
   KIND_LABEL,
   parseOptions,
@@ -162,6 +163,38 @@ describe('secondsOf', () => {
     expect(secondsOf({ seconds: 'soon' })).toBeNull();
     expect(secondsOf({ seconds: 12.5 })).toBeNull();
     expect(secondsOf({ seconds: null })).toBeNull();
+  });
+});
+
+describe('the deletion warning', () => {
+  // "Are you sure?" about an unknown quantity is not a question anybody can
+  // answer well. This is the sentence that replaces it, and the counts are the
+  // whole reason the refusal carries them.
+  it('says what is in it, in numbers', () => {
+    expect(deletionWarning('Week one', { items: 6, answers: 42, people: 12 })).toBe(
+      'Delete "Week one" for good? It has 6 questions, 42 answers, from 12 people. This cannot be undone.'
+    );
+  });
+
+  it('counts one of a thing as one', () => {
+    expect(deletionWarning('x', { items: 1, answers: 1, people: 1 })).toContain(
+      '1 question, 1 answer, from 1 person'
+    );
+  });
+
+  it('leaves people out when nobody answered', () => {
+    // a session that ran and nobody joined: "from 0 people" reads as a fault
+    const w = deletionWarning('x', { items: 3, answers: 0, people: 0 });
+    expect(w).toContain('3 questions, 0 answers');
+    expect(w).not.toMatch(/people/);
+  });
+
+  it('survives a refusal that carried no counts', () => {
+    expect(deletionWarning('x', {})).toContain('0 questions, 0 answers');
+  });
+
+  it('says it cannot be undone, because it cannot', () => {
+    expect(deletionWarning('x', { items: 1 })).toMatch(/cannot be undone/);
   });
 });
 

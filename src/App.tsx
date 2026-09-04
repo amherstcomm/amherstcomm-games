@@ -532,6 +532,12 @@ function App() {
       ? nav.page
       : null;
 
+  /** Pages meant to be looked at from across a room rather than read. The
+   *  presenter's half of a live session and the scoreboard; the participant's
+   *  half is a phone in a hand and stays narrow. */
+  const forTheRoom =
+    (nav.page.kind === 'live' && nav.page.host) || nav.page.kind === 'scores';
+
   // `some`, not `top` — the consent banner opens Legal over an open Settings,
   // and both modals stay mounted. The address is the top; what renders is
   // whatever is anywhere on the stack.
@@ -1576,7 +1582,13 @@ function App() {
           tab is a switch with one position, and dropping to just the wordmark
           would only print the site's name directly above the h1 that already
           says it. The page header below carries the identity instead. */}
-      {shownModes.length > 1 && (
+      {/* Not on the screen pointed at a room. A row of ten word games above a
+          trivia question is chrome, and on a projector it is also a way out of
+          the session sitting in front of forty people. It was a compact menu
+          here before the page was widened; widening it made the full row
+          appear, which is my doing rather than something to leave. The footer
+          still has Home, so the way back out has not gone. */}
+      {shownModes.length > 1 && !forTheRoom && (
       <nav
         aria-label="Game modes"
         className="sticky top-0 z-40 bg-slate-950/80 backdrop-blur border-b border-white/10"
@@ -1650,10 +1662,17 @@ function App() {
       </nav>
       )}
 
+      {/* Two widths. A board and a page of prose are read at arm's length and
+          want a measure; the presenter's screen and the scoreboard are pointed
+          at a room and want the wall. Without this the panel's own max-width
+          was moot — main clamped it to 728px and the QR could not be made
+          bigger than the column it sat in. */}
       <main
         id="main"
         tabIndex={-1}
-        className={`relative max-w-3xl mx-auto px-5 py-10 sm:py-16 outline-none ${kbOpen ? 'pb-64 sm:pb-64' : ''}`}
+        className={`relative mx-auto px-5 py-10 sm:py-16 outline-none ${
+          forTheRoom ? 'max-w-6xl' : 'max-w-3xl'
+        } ${kbOpen ? 'pb-64 sm:pb-64' : ''}`}
       >
         {/* header */}
         <header className="text-center mb-8">
