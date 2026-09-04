@@ -135,6 +135,28 @@ export async function readItemWinner(
   return data as { ok: boolean; name?: string | null; seconds?: number | null; correct?: number };
 }
 
+/** The board for the wall: every revealed question, everybody, and what each
+ *  of them scored on each of them. Same gate as the standings. */
+export type SessionScores = {
+  ok: boolean;
+  reason?: string;
+  title?: string;
+  state?: 'draft' | 'live' | 'closed';
+  questions?: { id: string; position: number; kind: string; prompt: string }[];
+  standings?: (Standing & {
+    /** keyed by question position; absent means they did not answer it, which
+     *  is a different thing from answering it wrongly */
+    marks?: Record<string, number>;
+  })[];
+};
+
+export async function readSessionScores(session: string): Promise<SessionScores> {
+  if (!supabase) return { ok: false };
+  const { data, error } = await supabase.rpc('session_scores', { p_session: session });
+  if (error || !data) return { ok: false, reason: error?.message };
+  return data as SessionScores;
+}
+
 export async function readCurrentItem(session: string): Promise<LiveItem> {
   if (!supabase) return { state: 'not-live' };
   const { data, error } = await supabase.rpc('current_item', { p_session: session });

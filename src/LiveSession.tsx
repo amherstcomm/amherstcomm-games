@@ -37,6 +37,8 @@ import {
   type PresenterView,
 } from '@/live';
 import { JOIN_HOST, ORIGIN, pathOf } from '@/routes';
+import { formatGuess, guessAffixes } from '@/guessFormat';
+import type { NumberPayload } from '@/authoring';
 import QrCode from '@/QrCode';
 import {
   nextMove,
@@ -279,7 +281,9 @@ function Guess({
   onSend: (value: unknown) => void;
   sending: boolean;
 }) {
-  const unit = typeof item.payload?.unit === 'string' ? item.payload.unit : '';
+  const payload = item.payload as NumberPayload | undefined;
+  // Where the symbol goes is Intl's business, not ours — see src/guessFormat.ts
+  const { prefix, suffix } = guessAffixes(payload);
   const [text, setText] = useState(item.mine != null ? String(item.mine) : '');
   useEffect(() => {
     setText(item.mine != null ? String(item.mine) : '');
@@ -294,16 +298,28 @@ function Guess({
   return (
     <div className="space-y-3">
       <label className="block">
-        <span className="text-xs uppercase tracking-wider text-slate-500">
-          Your guess{unit ? ` (${unit})` : ''}
+        <span className="text-xs uppercase tracking-wider text-slate-500">Your guess</span>
+        {/* The affixes sit on the box rather than in the label, so what is
+            being typed looks like what the answer will look like. */}
+        <span className="flex items-stretch gap-2 rounded-xl bg-white/5 border border-white/15 focus-within:border-accent px-4">
+          {prefix && (
+            <span className="self-center text-lg text-slate-400" aria-hidden="true">
+              {prefix}
+            </span>
+          )}
+          <input
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            disabled={locked || sending}
+            inputMode="decimal"
+            className="flex-1 min-w-0 py-3 bg-transparent text-white text-lg tabular-nums focus:outline-none disabled:opacity-70"
+          />
+          {suffix && (
+            <span className="self-center text-lg text-slate-400" aria-hidden="true">
+              {suffix}
+            </span>
+          )}
         </span>
-        <input
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-          disabled={locked || sending}
-          inputMode="decimal"
-          className="w-full px-4 py-3 rounded-xl bg-white/5 border border-white/15 text-white text-lg tabular-nums focus:outline-none focus:border-accent disabled:opacity-70"
-        />
       </label>
       {!locked && (
         <>
@@ -321,8 +337,11 @@ function Guess({
       )}
       {actual != null && (
         <p className="text-sm text-slate-300">
-          It was <span className="text-white font-semibold tabular-nums">{actual}</span>
-          {unit ? ` ${unit}` : ''}.
+          It was{' '}
+          <span className="text-white font-semibold tabular-nums">
+            {formatGuess(actual, payload)}
+          </span>
+          .
         </p>
       )}
     </div>
@@ -673,6 +692,14 @@ export default function LiveSession({ session, host }: { session: string; host: 
               ))}
             </div>
           )}
+
+          {/* The board on its own address, for the other screen. */}
+          <a
+            href={pathOf({ kind: 'scores', session })}
+            className="inline-block mt-2 text-sm text-accent hover:brightness-110"
+          >
+            Open the scoreboard
+          </a>
 
           {view?.ok && item.id && (
             <p className="mt-3 text-sm text-slate-300">

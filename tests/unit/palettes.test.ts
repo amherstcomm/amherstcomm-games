@@ -338,3 +338,38 @@ describe('palette swatches', () => {
     }
   });
 });
+
+describe('the dropdown items', () => {
+  // An open dropdown is drawn by the browser's own control layer. Where that
+  // layer honours `color-scheme` — Chromium does — the items come out right
+  // with no help, which is why this is asserted against the stylesheet rather
+  // than against a rendered page: an end-to-end check in Chromium passes
+  // whether or not the rule exists, and a test that cannot fail is worse than
+  // no test.
+  //
+  // Where it is not honoured, the items inherit the select's colour and not its
+  // background, so a select whose text is `--c-white` draws white on the
+  // platform's white popup the moment somebody opens it. Reported from a live
+  // session, where the matching question was unanswerable.
+  //
+  // **The limit of this claim:** it pins that both halves are painted from
+  // theme variables, so no palette can be left out. It does not prove the
+  // rendering, which needs a browser that reproduces the bug.
+  const block = blockFor('option');
+
+  it('paints its own background rather than leaving it to the platform', () => {
+    expect(block).toMatch(/background-color:\s*rgb\(var\(--c-[a-z0-9-]+\)\)/);
+  });
+
+  it('and its own text colour, so it cannot inherit white onto that', () => {
+    expect(block).toMatch(/[^-]color:\s*rgb\(var\(--c-[a-z0-9-]+\)\)/);
+  });
+
+  it('uses theme variables, so every palette gets it', () => {
+    // a literal here would be right on one theme and wrong on the other, which
+    // is the failure mode this whole file exists to catch
+    expect(block, 'no hex or literal rgb in the option rule').not.toMatch(
+      /#[0-9a-f]{3,8}|rgb\(\s*\d/i
+    );
+  });
+});

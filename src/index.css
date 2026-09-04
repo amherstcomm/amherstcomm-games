@@ -548,6 +548,24 @@ body {
   background-color: rgb(var(--c-slate-950));
 }
 
+/* An open dropdown is drawn by the platform, not by the page.
+ *
+ * The items inherit the select's `color` — which is `--c-white`, and on the
+ * dark theme that is white — but not its background, which comes from the OS
+ * and is white. So a select that looks right closed is white on white the
+ * moment somebody opens it, and nothing on the page shows it: a screenshot of
+ * the form is fine, and the a11y sweep cannot see inside a native popup.
+ *
+ * Reported from a live session, where the matching question was unanswerable.
+ * Painted here rather than per component because there are four selects and
+ * counting, and one of them not carrying the class is the whole bug back
+ * again. Both tiers are theme variables, so this follows the palette rather
+ * than pinning a colour that is only right on one of them. */
+option {
+  background-color: rgb(var(--c-slate-950));
+  color: rgb(var(--c-slate-200));
+}
+
 @layer utilities {
   /* A visible keyboard focus ring on everything focusable. Element+pseudo
      specificity beats Tailwind's `outline-none` utility, which several

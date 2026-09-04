@@ -48,6 +48,7 @@ const EVERY_ROUTE: Route[] = [
   { kind: 'sessions', session: '5f7c2a10-3b4d-4e8f-9a12-6c0d1e2f3a4b' },
   { kind: 'join' },
   { kind: 'join', code: 'K4TP' },
+  { kind: 'scores', session: '5f7c2a10-3b4d-4e8f-9a12-6c0d1e2f3a4b' },
   ...PANELS.map((panel) => ({ kind: 'panel', panel }) as const),
   ...DOCS.map((doc) => ({ kind: 'legal', doc }) as const),
   ...STATS_TABS.map((tab) => ({ kind: 'stats', tab }) as const),

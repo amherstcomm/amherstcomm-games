@@ -54,6 +54,8 @@ const PAGES = [
   // Signed out, so the list is empty and the code box is the whole page — which
   // is the one control every participant touches.
   ['join', '/join'],
+  // Signed out this is the refusal, which is still a page with type on it.
+  ['scores', '/scores/00000000-0000-0000-0000-000000000000'],
 ] as const;
 
 for (const [name, path] of PAGES) {

@@ -448,6 +448,33 @@ the one being run.
 Names appear on the board. The anonymity promise is about what an open question
 shows the room, never about who won the quiz — a prize needs a name.
 
+### The scoreboard
+
+`/scores/<id>` is the board on its own address, so the presenter's laptop can
+run the room while a second screen shows the standings. Linked from the editor
+and from the presenter screen, gated on `winners.view` like the standings are,
+and it refreshes itself every ten seconds so a board left up finishes with the
+round.
+
+It carries **the marks behind the total**, one column per revealed question. A
+prize gets handed to somebody in a room and the first question is "how" — "she
+had four and you had three and a half" only settles it if the half can be
+pointed at. It is also how a result gets checked afterwards. A `·` means they
+did not answer that one; a `0` means they did.
+
+### Writing a guessing question down
+
+The unit goes where the locale puts it, via `Intl.NumberFormat` — `$41.50`, not
+`41.5 dollars`, and `41,50 €` for somebody whose browser says so. Choose **money**
+(with an ISO code), **a percentage**, or **something else** when authoring; the
+last takes any words, and the ones `Intl` recognises (`kilogram`, `mile`,
+`year`, …) get proper formatting rather than being tacked on the end. The
+authoring screen previews the result with the same function that will draw it,
+because guessing at the placement is the mistake this replaced.
+
+No library: `Intl` is in the browser. `src/guessFormat.ts` is the glue, and it
+degrades to a plain number rather than throwing on a code it does not know.
+
 ### The optional clock
 
 A question can carry a countdown — set "Seconds to answer" when authoring, or

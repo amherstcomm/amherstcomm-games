@@ -40,6 +40,7 @@ export const IS_OVERLAY: Record<Route['kind'], boolean> = {
   live: false,
   sessions: false,
   join: false,
+  scores: false,
 };
 
 export type HistoryOp =

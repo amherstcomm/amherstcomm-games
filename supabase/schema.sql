@@ -4750,3 +4750,77 @@ $fn$;
 
 revoke all on function public.save_item(uuid, uuid, text, text, jsonb, jsonb) from public, anon;
 grant execute on function public.save_item(uuid, uuid, text, text, jsonb, jsonb) to authenticated;
+
+-- ---------------------------------------------------------------------------
+-- The whole scoreboard
+--
+-- The standings on the presenter's screen are a summary beside a question; this
+-- is the board itself — every question, every person, and what each of them
+-- scored on each of them.
+--
+-- The breakdown is the point rather than a decoration. A prize gets handed to
+-- somebody in a room and the first question is "how", and "she had four and you
+-- had three and a half" only settles it if the half can be pointed at. It is
+-- also the answer to verifying a result after the fact, which was asked for
+-- before any of this was built.
+--
+-- Same gate as the standings: winners.view, and hosting the session. Nobody
+-- else sees anyone's marks but their own.
+-- ---------------------------------------------------------------------------
+create or replace function public.session_scores(p_session uuid)
+returns jsonb
+language sql
+stable
+security definer
+set search_path = ''
+as $fn$
+  select case
+    when not public.can('winners.view')
+      then jsonb_build_object('ok', false, 'reason', 'not allowed')
+    when not public.hosts_session(p_session)
+      then jsonb_build_object('ok', false, 'reason', 'not allowed')
+    else jsonb_build_object(
+      'ok', true,
+      'title', (select s.title from public.sessions s where s.id = p_session),
+      'state', (select s.state from public.sessions s where s.id = p_session),
+      -- Revealed only, and in running order. An unrevealed question has no
+      -- marks yet, and a column of blanks on a projector reads as a fault.
+      'questions', coalesce((
+        select jsonb_agg(jsonb_build_object(
+                 'id', i.id, 'position', i.position, 'kind', i.kind, 'prompt', i.prompt)
+               order by i.position)
+        from public.items i
+        join public.item_kinds k on k.kind = i.kind
+        where i.session_id = p_session and i.state = 'revealed' and k.scored), '[]'::jsonb),
+      'standings', coalesce((
+        select jsonb_agg(row_to_json(s)::jsonb order by s.place, s.name)
+        from (
+          select
+            rank() over (order by t.points desc, coalesce(t.seconds, 1e9) asc) as place,
+            coalesce(p.display_name, 'Someone') as name,
+            t.points,
+            t.seconds,
+            t.marks
+          from (
+            select ip.user_id,
+                   trim_scale(round(sum(ip.points), 2)) as points,
+                   sum(ip.seconds) filter (where ip.points > 0) as seconds,
+                   -- One entry per revealed question, in the same order as
+                   -- `questions`, so the two can be read as a grid. Absent
+                   -- rather than zero where somebody did not answer at all:
+                   -- "nothing" and "wrong" are different things to be told.
+                   jsonb_object_agg(i.position::text, trim_scale(round(ip.points, 2))) as marks
+            from public.items i
+            join public.item_kinds k on k.kind = i.kind
+            cross join lateral public.item_points(i.id) ip
+            where i.session_id = p_session and i.state = 'revealed' and k.scored
+            group by ip.user_id
+          ) t
+          left join public.profiles p on p.id = t.user_id
+        ) s), '[]'::jsonb)
+    )
+  end
+$fn$;
+
+revoke all on function public.session_scores(uuid) from public, anon;
+grant execute on function public.session_scores(uuid) to authenticated;
