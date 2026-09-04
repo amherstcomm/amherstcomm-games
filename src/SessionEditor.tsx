@@ -43,10 +43,17 @@ import { INTL_UNITS, formatGuess } from '@/guessFormat';
 
 const FIELD =
   'w-full px-3 py-2 rounded-lg bg-white/5 border border-white/15 text-white text-sm placeholder:text-slate-600 focus:outline-none focus:border-accent';
+// `inline-flex items-center justify-center` is not decoration. A <button>
+// centres its own content, an <a> does not — so the same class on a link gave
+// a fixed-height box with the text sitting at the top of it, and a row mixing
+// the two came out ragged. Centring here rather than at each link is the point
+// of having the class at all: "Presenter screen" happened to carry its own
+// inline-flex for an icon and looked right, which is exactly how the other two
+// went unnoticed.
 const BUTTON =
-  'px-3 h-9 rounded-lg text-sm font-semibold bg-white/10 border border-white/15 text-slate-200 hover:bg-white/15 disabled:opacity-50';
+  'inline-flex items-center justify-center px-3 h-9 rounded-lg text-sm font-semibold bg-white/10 border border-white/15 text-slate-200 hover:bg-white/15 disabled:opacity-50';
 const PRIMARY =
-  'px-4 h-10 rounded-lg text-sm font-semibold bg-emerald-400 text-ink hover:opacity-90 disabled:opacity-50';
+  'inline-flex items-center justify-center px-4 h-10 rounded-lg text-sm font-semibold bg-emerald-400 text-ink hover:opacity-90 disabled:opacity-50';
 
 /** What goes in `payload` — what the room is shown — for each kind.
  *
@@ -785,7 +792,7 @@ function SessionEditorFor({ session }: { session: string }) {
 
       <div className="flex flex-wrap gap-2 mb-8">
         <a
-          className={BUTTON + ' inline-flex items-center gap-1.5'}
+          className={BUTTON + ' gap-1.5'}
           href={pathOf({ kind: 'live', session, host: true })}
         >
           <Radio className="w-4 h-4" aria-hidden="true" /> Presenter screen
