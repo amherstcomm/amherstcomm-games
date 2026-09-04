@@ -11,15 +11,19 @@
 // unrevealed item comes back with `answer` null, and that is enforced two
 // layers down in a table with no grant.
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { CheckCircle2, Loader2, Radio, Send, Timer } from 'lucide-react';
+import { CheckCircle2, Loader2, Radio, Send, Timer, Trophy } from 'lucide-react';
 import {
   advance,
   onSessionMoved,
   readCurrentItem,
+  readItemWinner,
+  readLeaderboard,
+  readMyStanding,
   readPresenterView,
   readSessionDoor,
   readTally,
   sendAnswer,
+  type Leaderboard,
   type LiveItem,
   type PresenterView,
 } from '@/live';
@@ -152,6 +156,15 @@ function Choice({
           </button>
         );
       })}
+      {/* Said before they answer, because it changes how they answer. Somebody
+          who thinks it is all-or-nothing does not tick the two they are sure
+          of, and somebody who thinks there is no downside ticks everything. */}
+      {multi && !locked && (
+        <p className="text-xs text-slate-400 pt-1">
+          Part marks for each right one — but a wrong pick cancels a right one
+          out, so ticking everything is not a way to win.
+        </p>
+      )}
       {multi && !locked && (
         <button
           onClick={() => onSend(picked)}
@@ -218,6 +231,11 @@ export default function LiveSession({ session, host }: { session: string; host: 
   // page that has not finished connecting does not accuse itself of being
   // broken.
   const [connected, setConnected] = useState<boolean | null>(null);
+  const [board, setBoard] = useState<Leaderboard | null>(null);
+  const [mine, setMine] = useState<{ points?: number; scored?: number } | null>(null);
+  const [first, setFirst] = useState<{ name?: string | null; seconds?: number | null } | null>(
+    null
+  );
   const itemId = useRef<string | undefined>(undefined);
 
   const pull = useCallback(async () => {
@@ -247,6 +265,23 @@ export default function LiveSession({ session, host }: { session: string; host: 
     if (next.state === 'revealed' && next.id) {
       const t = await readTally(next.id);
       if (t.ok) setTally(t.counts ?? {});
+      // Who got there first — only the presenter may ask, and only after the
+      // reveal, which the server enforces either way.
+      if (host) {
+        const w = await readItemWinner(next.id);
+        setFirst(w.ok ? w : null);
+      }
+    } else {
+      setFirst(null);
+    }
+    // Scores follow every move rather than only the reveal: a question skipped
+    // or a session closed both change what the board says.
+    if (host) {
+      const b = await readLeaderboard(session);
+      setBoard(b.ok ? b : null);
+    } else {
+      const m = await readMyStanding(session);
+      setMine(m.ok ? m : null);
     }
   }, [session, host]);
 
@@ -473,6 +508,19 @@ export default function LiveSession({ session, host }: { session: string; host: 
             </p>
           )}
 
+          {/* The tiebreak made visible, at the moment the room can still check it
+              against what they just watched happen. */}
+          {host && item.state === 'revealed' && first && (
+            <p className="mt-5 text-sm text-slate-300 inline-flex items-center gap-1.5">
+              <Trophy className="w-4 h-4 text-accent" aria-hidden="true" />
+              {first.name
+                ? `First correct: ${first.name}${
+                    first.seconds != null ? ` — ${first.seconds}s` : ''
+                  }`
+                : 'Nobody got that one.'}
+            </p>
+          )}
+
           {tally && Object.keys(tally).length > 0 && (
             <div className="mt-6 space-y-1.5">
               <p className="text-xs uppercase tracking-wider text-slate-500">What the room said</p>
@@ -497,6 +545,46 @@ export default function LiveSession({ session, host }: { session: string; host: 
             </div>
           )}
         </>
+      )}
+
+      {/* The board, on the screen that is already pointed at the room. Only
+          revealed questions count — the server refuses to score the one on
+          screen, so putting this on a projector mid-round cannot give away the
+          answer people are still working on. */}
+      {host && board?.ok && (board.standings?.length ?? 0) > 0 && (
+        <div className="mt-8">
+          <p className="text-xs uppercase tracking-wider text-slate-500 mb-2">
+            Scores after {board.scored} {board.scored === 1 ? 'question' : 'questions'}
+          </p>
+          <ol className="space-y-1">
+            {(board.standings ?? []).map((s, i) => (
+              <li
+                key={`${s.name}-${i}`}
+                className="flex items-baseline justify-between gap-3 text-sm"
+              >
+                <span className="min-w-0 truncate">
+                  <span className="text-slate-500 tabular-nums mr-2">{s.place}</span>
+                  <span className="text-slate-200">{s.name}</span>
+                </span>
+                <span className="shrink-0 tabular-nums text-slate-400">
+                  {s.points}
+                  {/* The tiebreak, shown because it is the thing somebody will
+                      ask about when they came second on the same score. */}
+                  {s.seconds != null && (
+                    <span className="text-slate-500"> · {s.seconds}s</span>
+                  )}
+                </span>
+              </li>
+            ))}
+          </ol>
+        </div>
+      )}
+
+      {/* Your own, and nobody else's. */}
+      {!host && mine && (mine.scored ?? 0) > 0 && (
+        <p className="mt-8 text-sm text-slate-300">
+          You have {mine.points} of {mine.scored} so far.
+        </p>
       )}
 
       {note && (

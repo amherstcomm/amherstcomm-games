@@ -89,6 +89,52 @@ export async function readSessionDoor(session: string): Promise<Door> {
   return data as Door;
 }
 
+/** One line of the standings. Names, not ids — the anonymity promise is about
+ *  what an open question shows the room, never about who won the quiz. */
+export type Standing = { place: number; name: string; points: number; seconds: number | null };
+
+export type Leaderboard = {
+  ok: boolean;
+  reason?: string;
+  /** how many scored questions have been revealed, so "3 of 5" can be said */
+  scored?: number;
+  standings?: Standing[];
+};
+
+/** The board. Gated on winners.view in the database, so this is the presenter's
+ *  read — it is what goes on the projector. */
+export async function readLeaderboard(session: string): Promise<Leaderboard> {
+  if (!supabase) return { ok: false };
+  const { data, error } = await supabase.rpc('session_leaderboard', { p_session: session });
+  if (error || !data) return { ok: false, reason: error?.message };
+  return data as Leaderboard;
+}
+
+/** Your own score, for anybody playing. Deliberately not the whole board: a
+ *  scoreboard is a thing a room looks at together on one screen, and putting
+ *  everyone's position on everyone's phone is a different event from the one
+ *  being run. */
+export async function readMyStanding(
+  session: string
+): Promise<{ ok: boolean; points?: number; scored?: number }> {
+  if (!supabase) return { ok: false };
+  const { data, error } = await supabase.rpc('my_standing', { p_session: session });
+  if (error || !data) return { ok: false };
+  return data as { ok: boolean; points?: number; scored?: number };
+}
+
+/** Who got there first, for the moment after the reveal — the tiebreak made
+ *  visible, and the one part of the scoring the room can check against its own
+ *  memory of what just happened. */
+export async function readItemWinner(
+  item: string
+): Promise<{ ok: boolean; name?: string | null; seconds?: number | null; correct?: number }> {
+  if (!supabase) return { ok: false };
+  const { data, error } = await supabase.rpc('item_winner', { p_item: item });
+  if (error || !data) return { ok: false };
+  return data as { ok: boolean; name?: string | null; seconds?: number | null; correct?: number };
+}
+
 export async function readCurrentItem(session: string): Promise<LiveItem> {
   if (!supabase) return { state: 'not-live' };
   const { data, error } = await supabase.rpc('current_item', { p_session: session });
