@@ -28,6 +28,13 @@ export type LiveItem = {
   /** open mode: where they are in it, which nobody else's progress affects */
   total?: number;
   done?: number;
+  /** whether *this viewer* is the one running the session.
+   *
+   *  Not the same question as "is this the presenter's address", which is what
+   *  the screen used to ask. They disagree for exactly one person — the host
+   *  arriving through /join like everybody else — and that person got a working
+   *  question the server was never going to accept an answer to. */
+  yours?: boolean;
   id?: string;
   kind?: string;
   prompt?: string;

@@ -910,6 +910,10 @@ export default function LiveSession({ session, host }: { session: string; host: 
   /** Hosting an open session: no question on this screen, and none asked for.
    *  See the note in pull(). */
   const openHost = host && door?.mode === 'open';
+  /** Read-only because the server will refuse, not because of the address.
+   *  `host` is which screen this is; `yours` is whether the person looking at
+   *  it runs the session, and the second is the one the rule is about. */
+  const readOnly = host || item.yours === true;
   const kind = shown.kind ?? '';
   // Not just `state === 'open'`: once the clock has run out the server refuses,
   // so leaving the controls live would be inviting an answer that cannot land.
@@ -1065,7 +1069,15 @@ export default function LiveSession({ session, host }: { session: string; host: 
         </div>
       ) : (
         <>
-          {shown.state === 'not-live' && <Waiting text="This session has not started yet." />}
+          {shown.state === 'not-live' && (
+            <Waiting
+              text={
+                item.yours
+                  ? 'You are running this one, so there is nothing here for you to play.'
+                  : 'This session has not started yet.'
+              }
+            />
+          )}
           {shown.state === 'waiting' && <Waiting text="Waiting for the next question…" />}
         </>
       )}
@@ -1073,7 +1085,7 @@ export default function LiveSession({ session, host }: { session: string; host: 
       {/* Said once, where somebody might otherwise reach for an option. The
           server refuses either way — see runs_session — and a screen that
           offers a button the server will refuse is the screen lying. */}
-      {host && shown.id && shown.state === 'open' && (
+      {readOnly && shown.id && shown.state === 'open' && (
         <p className="mb-3 text-xs text-slate-500">
           You are running this one, so you are not scored on it.
         </p>
@@ -1121,21 +1133,21 @@ export default function LiveSession({ session, host }: { session: string; host: 
           )}
 
           {(kind === 'choice' || kind === 'survey') && (
-            <Choice item={shown} onSend={(v) => void send(v)} sending={sending} readOnly={host} />
+            <Choice item={shown} onSend={(v) => void send(v)} sending={sending} readOnly={readOnly} />
           )}
           {kind === 'match' && (
-            <Match item={shown} onSend={(v) => void send(v)} sending={sending} readOnly={host} />
+            <Match item={shown} onSend={(v) => void send(v)} sending={sending} readOnly={readOnly} />
           )}
           {kind === 'number' && (
-            <Guess item={shown} onSend={(v) => void send(v)} sending={sending} readOnly={host} />
+            <Guess item={shown} onSend={(v) => void send(v)} sending={sending} readOnly={readOnly} />
           )}
-          {kind === 'rank' && <Rank item={shown} onSend={(v) => void send(v)} sending={sending} readOnly={host} />}
+          {kind === 'rank' && <Rank item={shown} onSend={(v) => void send(v)} sending={sending} readOnly={readOnly} />}
           {/* The only kind that does not go through `send`: a word game is a
               sequence of guesses, each marked by the server as it arrives. */}
           {kind === 'game' && (
-            <WordGame item={shown} readOnly={host} onFinished={finishGame} />
+            <WordGame item={shown} readOnly={readOnly} onFinished={finishGame} />
           )}
-          {kind === 'open' && answering && !host && (
+          {kind === 'open' && answering && !readOnly && (
             <Ask onSend={(v, anon) => void send(v, anon)} sending={sending} />
           )}
           {kind === 'open' && !answering && (

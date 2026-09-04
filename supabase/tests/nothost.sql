@@ -46,6 +46,12 @@ select pg_temp.check('the host still sees the question — the screen is for the
   (select v->>'id' from t where k='sees') = (select v->>'id' from t where k='q1'));
 select pg_temp.check('and its options, because that is what goes on the projector',
   (select v->'payload'->'options'->>0 from t where k='sees') = 'a');
+-- The question travels with the answer to "is this yours", so the screen stops
+-- guessing it from the address. It guessed wrong for exactly one person: the
+-- host arriving at the ordinary player address, who got a working question and
+-- was refused on sending it.
+select pg_temp.check('and it says the session is theirs',
+  (select v->>'yours' from t where k='sees') = 'true');
 
 insert into t select 'try', public.answer_item(
   ((select v->>'id' from t where k='q1'))::uuid, '"a"'::jsonb);
@@ -65,6 +71,8 @@ select pg_temp.check('an editor who is not running it may play',
 set session "test.uid" = '33333333-3333-3333-3333-333333333333';
 select pg_temp.check('and so may anybody else',
   (public.answer_item(((select v->>'id' from t where k='q1'))::uuid, '"a"'::jsonb)->>'ok') = 'true');
+select pg_temp.check('and they are told it is not theirs, so the screen stays usable',
+  (public.current_item(((select v->>'id' from t where k='sess'))::uuid)->>'yours') = 'false');
 
 -- The reveal still reaches the host, because they are the one running it.
 set session "test.uid" = '11111111-1111-1111-1111-111111111111';
@@ -93,6 +101,8 @@ select public.advance_session(((select v->>'id' from t where k='open'))::uuid, '
 insert into t select 'ohost', public.current_item(((select v->>'id' from t where k='open'))::uuid);
 select pg_temp.check('the host of an open session is given no question at all',
   (select v->>'state' from t where k='ohost') = 'not-live');
+select pg_temp.check('and is told why, rather than being left to read it as "not started"',
+  (select v->>'yours' from t where k='ohost') = 'true');
 -- The reason this matters more here than on a live session: asking is what
 -- starts a clock, so a host who was served would have one running for a
 -- question they can never answer.

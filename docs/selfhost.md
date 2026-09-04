@@ -487,6 +487,12 @@ true for anybody holding `games.setup`, and using that here would mean no editor
 could ever play any session — which on a site with one admin means that admin
 never plays. Another editor can play a session they did not create.
 
+`current_item` returns **`yours`** with every question, so the screen asks the
+same thing the rule asks. It used to decide from the address — `/host` or not —
+and those disagree for exactly one person: the host arriving through `/join`
+like everybody else. They got a fully working question, answered it, and were
+refused, with nothing moving on.
+
 A live presenter still **sees** the question and gets the answer at the reveal:
 that screen is pointed at a room, and showing it is the job. What it does not
 have is a way in — the options are drawn but inert, an open question offers no

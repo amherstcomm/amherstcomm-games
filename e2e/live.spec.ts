@@ -423,3 +423,78 @@ test('and nothing is served while they are looking at how they did', async ({ pa
   await page.getByRole('button', { name: /Next question|^Finish$/ }).click();
   await expect.poll(() => served).toBeGreaterThan(before);
 });
+
+test('the host arriving at the player address is not offered a way in', async ({ page }) => {
+  // The bug this closes. `readOnly` used to come from the address — /host or
+  // not — while the server's rule is whether *this person* runs the session.
+  // They disagree for exactly one person: the host arriving through /join like
+  // everybody else. They got a fully working question, answered it, and were
+  // refused, with nothing moving on. Reported as "it sent, but nothing moved
+  // on" over a matching question, which is a kind that needs a Send button and
+  // so makes the disagreement visible rather than instant.
+  const item = {
+    state: 'open',
+    id: 'q1',
+    position: 2,
+    opened_at: new Date().toISOString(),
+    seconds: null,
+    now: new Date().toISOString(),
+    mine: null,
+    answer: null,
+    yours: true,
+    ...ITEMS.match,
+  };
+  await page.route('**/rest/v1/rpc/**', (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(
+        route.request().url().includes('current_item')
+          ? item
+          : route.request().url().includes('my_standing')
+            ? { ok: true, points: 0, scored: 0 }
+            : {}
+      ),
+    })
+  );
+  // the player address, not /host
+  await page.goto(`/live/${SESSION}`);
+  await expect(page.getByText('Match them up')).toBeVisible();
+
+  await expect(page.getByRole('combobox').first()).toBeDisabled();
+  await expect(page.getByRole('button', { name: 'Send answer' })).toHaveCount(0);
+  await expect(page.getByText(/you are not scored on it/i)).toBeVisible();
+});
+
+test('and everybody else at that address still gets a working question', async ({ page }) => {
+  const item = {
+    state: 'open',
+    id: 'q1',
+    position: 2,
+    opened_at: new Date().toISOString(),
+    seconds: null,
+    now: new Date().toISOString(),
+    mine: null,
+    answer: null,
+    yours: false,
+    ...ITEMS.match,
+  };
+  await page.route('**/rest/v1/rpc/**', (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(
+        route.request().url().includes('current_item')
+          ? item
+          : route.request().url().includes('my_standing')
+            ? { ok: true, points: 0, scored: 0 }
+            : {}
+      ),
+    })
+  );
+  await page.goto(`/live/${SESSION}`);
+  await expect(page.getByRole('combobox').first()).toBeEnabled();
+  await page.getByRole('combobox').first().selectOption('Analyst');
+  await expect(page.getByRole('button', { name: 'Send answer' })).toBeEnabled();
+  await expect(page.getByText(/you are not scored on it/i)).toHaveCount(0);
+});

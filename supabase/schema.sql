@@ -6182,3 +6182,102 @@ $fn$;
 
 revoke all on function public.current_item(uuid) from public, anon;
 grant execute on function public.current_item(uuid) to authenticated;
+
+-- ---------------------------------------------------------------------------
+-- Telling the room whether *they* are the one running it
+--
+-- runs_session() decides whether an answer counts, and the interface was asking
+-- a different question: whether the address ended in /host. Those disagree for
+-- exactly one person — the session's own host opening the ordinary player
+-- address, or arriving through /join like everybody else. They got a fully
+-- working question, answered it, and were refused, which is the screen having
+-- promised something the server was never going to honour.
+--
+-- So the answer travels with the question. The client stops guessing from the
+-- URL and asks the same source the rule comes from.
+-- ---------------------------------------------------------------------------
+create or replace function public.current_item(p_session uuid)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $fn$
+declare
+  sess public.sessions;
+  me uuid := (select auth.uid());
+  it public.items;
+  yours boolean;
+begin
+  select * into sess from public.sessions where id = p_session;
+  if sess.id is null then
+    return jsonb_build_object('state', 'not-live', 'now', now(), 'yours', false);
+  end if;
+  yours := public.runs_session(p_session);
+  if sess.state <> 'live' then
+    return jsonb_build_object('state', 'not-live', 'now', now(), 'yours', yours);
+  end if;
+
+  if sess.mode = 'open' then
+    if me is null or yours then
+      return jsonb_build_object('state', 'not-live', 'mode', 'open', 'now', now(),
+                                'yours', yours);
+    end if;
+    select i.* into it
+    from public.items i
+    where i.session_id = p_session
+      and i.state <> 'pending'
+      and not exists (
+        select 1 from public.responses r where r.item_id = i.id and r.user_id = me)
+    order by i.position
+    limit 1;
+    if it.id is null then
+      return jsonb_build_object(
+        'state', 'done', 'mode', 'open', 'now', now(), 'yours', false,
+        'total', (select count(*) from public.items i where i.session_id = p_session
+                  and i.state <> 'pending'));
+    end if;
+    insert into public.item_served (item_id, user_id) values (it.id, me)
+    on conflict (item_id, user_id) do nothing;
+
+    return jsonb_build_object(
+      'state', 'open', 'mode', 'open', 'yours', false,
+      'id', it.id, 'kind', it.kind, 'prompt', it.prompt, 'payload', it.payload,
+      'position', it.position,
+      'opened_at', public.started_at(it.id, me),
+      'seconds', public.item_seconds(it.payload),
+      'now', now(),
+      'mine', null,
+      'answer', null,
+      'total', (select count(*) from public.items i where i.session_id = p_session
+                and i.state <> 'pending'),
+      'done', (select count(*) from public.responses r
+               join public.items i on i.id = r.item_id
+               where i.session_id = p_session and r.user_id = me));
+  end if;
+
+  if sess.current_item is null then
+    return jsonb_build_object('state', 'waiting', 'mode', 'live', 'now', now(), 'yours', yours);
+  end if;
+  select * into it from public.items
+  where id = sess.current_item and state <> 'pending';
+  if it.id is null then
+    return jsonb_build_object('state', 'waiting', 'mode', 'live', 'now', now(), 'yours', yours);
+  end if;
+
+  return jsonb_build_object(
+    'state', it.state, 'mode', 'live', 'yours', yours,
+    'id', it.id, 'kind', it.kind, 'prompt', it.prompt, 'payload', it.payload,
+    'position', it.position,
+    'opened_at', it.opened_at,
+    'seconds', public.item_seconds(it.payload),
+    'now', now(),
+    'mine', (select r.value from public.responses r
+             where r.item_id = it.id and r.user_id = me),
+    'answer', case when it.state = 'revealed'
+                   then (select a.answer from public.item_answers a where a.item_id = it.id)
+              end);
+end;
+$fn$;
+
+revoke all on function public.current_item(uuid) from public, anon;
+grant execute on function public.current_item(uuid) to authenticated;
