@@ -403,6 +403,37 @@ what to *offer*, while `advance_session` decides what is allowed, so a
 disagreement produces a button that does nothing rather than a way round the
 rules.
 
+### Scoring
+
+**One point a question, ties broken by how long the correct answers took.**
+That is the rule the room was promised, and it is deliberately not a
+speed-weighted score of the Kahoot kind: a prize has to be explainable to the
+person who did not win it. "You both got five, she was quicker" is a sentence
+you can say out loud; "you got 4,180 and she got 4,240" is a curve nobody in the
+room agreed to.
+
+- A single-choice answer counts if it is one of the correct options. A
+  multiple-choice one counts only if it is **exactly** the set — three of four
+  right ones is not most of a point, and neither is picking all of them.
+- Only **revealed** questions score. The board is gated on `winners.view` so the
+  presenter can put it on the projector mid-round, and if it counted the
+  question currently open, doing that would show the room who is right before
+  the reveal.
+- Surveys and open questions score nothing. They have no correct answer, and
+  inventing one is not scoring.
+- Elapsed time is `submitted_at − opened_at`, both set by the server — see the
+  note on `answer_item` about why neither comes from the caller.
+
+The presenter's screen shows **who got there first** after each reveal (the
+tiebreak made visible, while the room can still check it against what they just
+watched) and the standings underneath. Everyone else sees **their own score
+only**: a scoreboard is a thing a room looks at together on one screen, and
+putting everyone's position on everyone's phone is a different social event from
+the one being run.
+
+Names appear on the board. The anonymity promise is about what an open question
+shows the room, never about who won the quiz — a prize needs a name.
+
 ### The optional clock
 
 A question can carry a countdown — set "Seconds to answer" when authoring, or
