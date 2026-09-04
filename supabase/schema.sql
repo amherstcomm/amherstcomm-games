@@ -6281,3 +6281,129 @@ $fn$;
 
 revoke all on function public.current_item(uuid) from public, anon;
 grant execute on function public.current_item(uuid) to authenticated;
+
+-- ---------------------------------------------------------------------------
+-- A question whose time ran out is behind you
+--
+-- Open mode serves the first question you have not answered. If one of them has
+-- a clock and the clock runs out before you answer, that stays true forever:
+-- the server will not take an answer, and the same question is served back on
+-- every read. There is no presenter to move the room on, so the round simply
+-- stops.
+--
+-- So an expired one is no longer "not answered yet" — it is over, like an
+-- answered one, and the next question is served instead. Nothing is written for
+-- it: no response, no score, and a dot rather than a zero on the scoreboard,
+-- because "did not answer" and "answered wrongly" are different things and this
+-- is the first.
+--
+-- Only a question actually served can expire, so this cannot skip anything
+-- somebody was never shown.
+-- ---------------------------------------------------------------------------
+create or replace function public.expired_for(p_item uuid, p_user uuid)
+returns boolean
+language sql
+stable
+set search_path = ''
+as $fn$
+  select exists (
+    select 1
+    from public.items i
+    join public.item_served s on s.item_id = i.id and s.user_id = p_user
+    where i.id = p_item
+      and public.item_seconds(i.payload) is not null
+      and now() > s.served_at + (public.item_seconds(i.payload) * interval '1 second')
+  )
+$fn$;
+
+create or replace function public.current_item(p_session uuid)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $fn$
+declare
+  sess public.sessions;
+  me uuid := (select auth.uid());
+  it public.items;
+  yours boolean;
+begin
+  select * into sess from public.sessions where id = p_session;
+  if sess.id is null then
+    return jsonb_build_object('state', 'not-live', 'now', now(), 'yours', false);
+  end if;
+  yours := public.runs_session(p_session);
+  if sess.state <> 'live' then
+    return jsonb_build_object('state', 'not-live', 'now', now(), 'yours', yours);
+  end if;
+
+  if sess.mode = 'open' then
+    if me is null or yours then
+      return jsonb_build_object('state', 'not-live', 'mode', 'open', 'now', now(),
+                                'yours', yours);
+    end if;
+    select i.* into it
+    from public.items i
+    where i.session_id = p_session
+      and i.state <> 'pending'
+      and not exists (
+        select 1 from public.responses r where r.item_id = i.id and r.user_id = me)
+      -- see the note above: a question whose window has closed is behind them
+      and not public.expired_for(i.id, me)
+    order by i.position
+    limit 1;
+    if it.id is null then
+      return jsonb_build_object(
+        'state', 'done', 'mode', 'open', 'now', now(), 'yours', false,
+        'total', (select count(*) from public.items i where i.session_id = p_session
+                  and i.state <> 'pending'));
+    end if;
+    insert into public.item_served (item_id, user_id) values (it.id, me)
+    on conflict (item_id, user_id) do nothing;
+
+    return jsonb_build_object(
+      'state', 'open', 'mode', 'open', 'yours', false,
+      'id', it.id, 'kind', it.kind, 'prompt', it.prompt, 'payload', it.payload,
+      'position', it.position,
+      'opened_at', public.started_at(it.id, me),
+      'seconds', public.item_seconds(it.payload),
+      'now', now(),
+      'mine', null,
+      'answer', null,
+      'total', (select count(*) from public.items i where i.session_id = p_session
+                and i.state <> 'pending'),
+      -- how many are behind them, answered or timed out, so "Question 3 of 6"
+      -- keeps counting while a skipped one still counts as gone
+      'done', (select count(*) from public.items i
+               where i.session_id = p_session and i.state <> 'pending'
+                 and (exists (select 1 from public.responses r
+                              where r.item_id = i.id and r.user_id = me)
+                      or public.expired_for(i.id, me))));
+  end if;
+
+  if sess.current_item is null then
+    return jsonb_build_object('state', 'waiting', 'mode', 'live', 'now', now(), 'yours', yours);
+  end if;
+  select * into it from public.items
+  where id = sess.current_item and state <> 'pending';
+  if it.id is null then
+    return jsonb_build_object('state', 'waiting', 'mode', 'live', 'now', now(), 'yours', yours);
+  end if;
+
+  return jsonb_build_object(
+    'state', it.state, 'mode', 'live', 'yours', yours,
+    'id', it.id, 'kind', it.kind, 'prompt', it.prompt, 'payload', it.payload,
+    'position', it.position,
+    'opened_at', it.opened_at,
+    'seconds', public.item_seconds(it.payload),
+    'now', now(),
+    'mine', (select r.value from public.responses r
+             where r.item_id = it.id and r.user_id = me),
+    'answer', case when it.state = 'revealed'
+                   then (select a.answer from public.item_answers a where a.item_id = it.id)
+              end);
+end;
+$fn$;
+
+revoke all on function public.current_item(uuid) from public, anon;
+grant execute on function public.current_item(uuid) to authenticated;

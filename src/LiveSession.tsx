@@ -732,11 +732,15 @@ export default function LiveSession({ session, host }: { session: string; host: 
   /** The word game's equivalent: it marks its own board, so there is nothing
    *  to hold, only the fact that it is over. */
   const [gameOver, setGameOver] = useState(false);
+  /** Open mode, timed question, clock run out before they answered. The server
+   *  will not take an answer and there is no presenter to move them on, so
+   *  without this the round simply stopped. */
+  const [outOfTime, setOutOfTime] = useState(false);
 
   /** Open mode: they have finished with the question on screen and are looking
    *  at how they did, waiting to move on. Declared here rather than beside the
    *  other derived values because the poll below reads it. */
-  const holding = !host && (justAnswered !== null || gameOver);
+  const holding = !host && (justAnswered !== null || gameOver || outOfTime);
   // Stable, so WordGame's effects do not re-run on every render of this one.
   const finishGame = useCallback(() => setGameOver(true), []);
   const [board, setBoard] = useState<Leaderboard | null>(null);
@@ -795,6 +799,7 @@ export default function LiveSession({ session, host }: { session: string; host: 
       setTally(null);
       setNote('');
       setGameOver(false);
+      setOutOfTime(false);
     }
     if (next.state === 'revealed' && next.id) {
       const t = await readTally(next.id);
@@ -863,6 +868,12 @@ export default function LiveSession({ session, host }: { session: string; host: 
     void advance(session, 'lock');
   }, [host, expired, session]);
 
+  // Open mode has nobody to close the answers, so running out is the end of
+  // that question for that person and they are shown the way on.
+  useEffect(() => {
+    if (expired && item.mode === 'open' && !host) setOutOfTime(true);
+  }, [expired, item.mode, host]);
+
   // The presenter's count, which the doorbell cannot provide — see COUNT_MS.
   useEffect(() => {
     if (!host || !item.id) return;
@@ -914,6 +925,11 @@ export default function LiveSession({ session, host }: { session: string; host: 
    *  `host` is which screen this is; `yours` is whether the person looking at
    *  it runs the session, and the second is the one the rule is about. */
   const readOnly = host || item.yours === true;
+  /** Inert, for any reason. `expired` was computed and then only consulted by
+   *  the open-question box — so a choice, a match, a guess or a ranking went on
+   *  offering a Send after the clock had run out, and the server refused it.
+   *  Offering a control that will be refused is the screen lying. */
+  const inert = readOnly || expired;
   const kind = shown.kind ?? '';
   // Not just `state === 'open'`: once the clock has run out the server refuses,
   // so leaving the controls live would be inviting an answer that cannot land.
@@ -1133,19 +1149,19 @@ export default function LiveSession({ session, host }: { session: string; host: 
           )}
 
           {(kind === 'choice' || kind === 'survey') && (
-            <Choice item={shown} onSend={(v) => void send(v)} sending={sending} readOnly={readOnly} />
+            <Choice item={shown} onSend={(v) => void send(v)} sending={sending} readOnly={inert} />
           )}
           {kind === 'match' && (
-            <Match item={shown} onSend={(v) => void send(v)} sending={sending} readOnly={readOnly} />
+            <Match item={shown} onSend={(v) => void send(v)} sending={sending} readOnly={inert} />
           )}
           {kind === 'number' && (
-            <Guess item={shown} onSend={(v) => void send(v)} sending={sending} readOnly={readOnly} />
+            <Guess item={shown} onSend={(v) => void send(v)} sending={sending} readOnly={inert} />
           )}
-          {kind === 'rank' && <Rank item={shown} onSend={(v) => void send(v)} sending={sending} readOnly={readOnly} />}
+          {kind === 'rank' && <Rank item={shown} onSend={(v) => void send(v)} sending={sending} readOnly={inert} />}
           {/* The only kind that does not go through `send`: a word game is a
               sequence of guesses, each marked by the server as it arrives. */}
           {kind === 'game' && (
-            <WordGame item={shown} readOnly={readOnly} onFinished={finishGame} />
+            <WordGame item={shown} readOnly={inert} onFinished={finishGame} />
           )}
           {kind === 'open' && answering && !readOnly && (
             <Ask onSend={(v, anon) => void send(v, anon)} sending={sending} />
@@ -1252,12 +1268,17 @@ export default function LiveSession({ session, host }: { session: string; host: 
           onClick={() => {
             setJustAnswered(null);
             setGameOver(false);
+            setOutOfTime(false);
             setNote('');
             void pull();
           }}
           className="w-full h-11 mt-5 rounded-xl bg-emerald-400 text-ink font-semibold"
         >
-          {(item.done ?? 0) + 1 >= (item.total ?? 0) ? 'Finish' : 'Next question'}
+          {outOfTime && !justAnswered
+            ? 'Move on'
+            : (item.done ?? 0) + 1 >= (item.total ?? 0)
+              ? 'Finish'
+              : 'Next question'}
         </button>
       )}
 
