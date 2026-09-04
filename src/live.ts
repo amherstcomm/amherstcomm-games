@@ -157,6 +157,39 @@ export async function readSessionScores(session: string): Promise<SessionScores>
   return data as SessionScores;
 }
 
+/** One row of a word game board: what was typed, and how the server marked it.
+ *  The marking is the server's because a client that could colour the tiles
+ *  would be a client that had been sent the word. */
+export type GuessRow = { word: string; marks: string[] };
+
+export async function playGuess(
+  item: string,
+  word: string
+): Promise<{
+  ok: boolean;
+  reason?: string;
+  marks?: string[];
+  solved?: boolean;
+  left?: number;
+  /** only once it is out of reach — solved, or out of guesses */
+  word?: string | null;
+}> {
+  if (!supabase) return { ok: false, reason: 'not connected' };
+  const { data, error } = await supabase.rpc('guess_word', { p_item: item, p_guess: word });
+  if (error) return { ok: false, reason: error.message };
+  return (data as { ok: boolean }) ?? { ok: false, reason: 'no answer' };
+}
+
+/** The board as it stands, so a reload mid-round is not a fresh start. */
+export async function readGameState(
+  item: string
+): Promise<{ ok: boolean; guesses?: GuessRow[]; solved?: boolean; word?: string | null }> {
+  if (!supabase) return { ok: false };
+  const { data, error } = await supabase.rpc('game_state', { p_item: item });
+  if (error || !data) return { ok: false };
+  return data as { ok: boolean; guesses?: GuessRow[]; solved?: boolean; word?: string | null };
+}
+
 export async function readCurrentItem(session: string): Promise<LiveItem> {
   if (!supabase) return { state: 'not-live' };
   const { data, error } = await supabase.rpc('current_item', { p_session: session });

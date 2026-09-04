@@ -65,7 +65,15 @@ export type SessionSummary = {
  *  LiveSession renders exactly these three. When it grows match, number and
  *  rank, this list is the thing that has to move with it — which is why it sits
  *  next to the type rather than inside a component. */
-export const AUTHORABLE = ['choice', 'survey', 'open', 'match', 'number', 'rank'] as const;
+export const AUTHORABLE = [
+  'choice',
+  'survey',
+  'open',
+  'match',
+  'number',
+  'rank',
+  'game',
+] as const;
 
 /** What each one is called on screen. A table rather than a chain of ternaries
  *  so adding a kind to AUTHORABLE without naming it fails to compile. */
@@ -76,7 +84,26 @@ export const KIND_LABEL: Record<(typeof AUTHORABLE)[number], string> = {
   match: 'Matching',
   number: 'Closest guess',
   rank: 'Ranking',
+  game: 'Word game',
 };
+
+/** The word games a session can actually run.
+ *
+ *  One so far. The other nine each need a play function in the schema — the
+ *  server marks, so every game's rule has to exist there — and a board of
+ *  their own for the room, because embedding the daily component would mean a
+ *  round in a session writing over somebody's daily progress and its streak.
+ *
+ *  This is the list that moves when one arrives, and it is next to the type
+ *  rather than inside a component for the same reason AUTHORABLE is: offering
+ *  a game the room cannot play fails on the projector. */
+export const GAME_PLAYABLE = ['guess'] as const;
+
+/** What the room is shown to start a word game. Deliberately not the answer:
+ *  `payload` goes to the room, and the word lives in item_answers where no web
+ *  role can read it — see the note above guess_word in the schema. */
+export type GamePayload = { slug: string; length: number; tries: number; seconds?: number };
+export type GameAnswer = { word: string };
 
 const fail = (reason: string) => ({ ok: false as const, reason });
 
@@ -249,9 +276,21 @@ export function problemWith(args: {
   /** number only: the value as typed, so "not a number" is distinguishable
    *  from "not filled in yet" */
   value?: string;
+  /** game only: the solution word, as typed */
+  word?: string;
 }): string | null {
   if (args.prompt.trim().length === 0) return 'The question needs some words.';
   if (args.kind === 'open') return null;
+
+  if (args.kind === 'game') {
+    const word = (args.word ?? '').trim();
+    if (word.length === 0) return 'Give it a word to find.';
+    if (!/^[A-Za-z]+$/.test(word)) return 'Letters only.';
+    // Three is the shortest that leaves anything to work out; eight is where a
+    // six-guess board stops being winnable in a room against a clock.
+    if (word.length < 3 || word.length > 8) return 'Between 3 and 8 letters.';
+    return null;
+  }
 
   if (args.kind === 'number') {
     if ((args.value ?? '').trim() === '') return 'Give it the value people are guessing at.';

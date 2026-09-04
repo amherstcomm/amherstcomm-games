@@ -28,10 +28,13 @@ import {
   readItemWinner,
   readLeaderboard,
   readMyStanding,
+  playGuess,
+  readGameState,
   readPresenterView,
   readSessionDoor,
   readTally,
   sendAnswer,
+  type GuessRow,
   type Leaderboard,
   type LiveItem,
   type PresenterView,
@@ -443,6 +446,140 @@ function Rank({
   );
 }
 
+/** A word game, played in the room.
+ *
+ *  Only `guess` so far — see GAME_PLAYABLE in authoring.ts, which is the list
+ *  that moves when another game learns to be a question.
+ *
+ *  The board is its own, not the daily one. Embedding GuessGame would have
+ *  meant a round in a session writing over somebody's daily progress, its
+ *  streak and its stats, all of which live in one store keyed by the game. A
+ *  round against a clock in front of a room wants none of that: no persistence,
+ *  no difficulty, no practice mode. What it does share is the rule, and the
+ *  rule is not here either — the server marks, because a client that could
+ *  colour the tiles would be a client that had been sent the word. */
+function WordGame({ item, sending }: { item: LiveItem; sending: boolean }) {
+  const length = Number(item.payload?.length) || 5;
+  const tries = Number(item.payload?.tries) || 6;
+  const [rows, setRows] = useState<GuessRow[]>([]);
+  const [solved, setSolved] = useState(false);
+  const [word, setWord] = useState<string | null>(null);
+  const [typed, setTyped] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState('');
+
+  // What they had already, so a reload mid-round is not a fresh start.
+  useEffect(() => {
+    let alive = true;
+    if (!item.id) return;
+    void readGameState(item.id).then((s) => {
+      if (!alive || !s.ok) return;
+      setRows(s.guesses ?? []);
+      setSolved(s.solved === true);
+      setWord(s.word ?? null);
+    });
+    return () => {
+      alive = false;
+    };
+  }, [item.id]);
+
+  const locked = item.state !== 'open';
+  const done = solved || rows.length >= tries;
+
+  async function send() {
+    if (!item.id) return;
+    setBusy(true);
+    const res = await playGuess(item.id, typed);
+    setBusy(false);
+    if (!res.ok) {
+      setNote(res.reason ?? 'That did not work');
+      return;
+    }
+    setNote('');
+    setTyped('');
+    setRows((prev) => [...prev, { word: typed.toUpperCase(), marks: res.marks ?? [] }]);
+    if (res.solved) setSolved(true);
+    if (res.word) setWord(res.word);
+  }
+
+  const tile = (state: string | undefined) =>
+    state === 'correct'
+      ? 'border-emerald-400 bg-emerald-400/20 text-emerald-100'
+      : state === 'present'
+        ? 'border-amber-400 bg-amber-400/20 text-amber-100'
+        : state === 'absent'
+          ? 'border-white/10 bg-white/5 text-slate-400'
+          : 'border-white/15 text-slate-200';
+
+  return (
+    <div className="space-y-3">
+      <div className="space-y-1.5">
+        {Array.from({ length: tries }, (_, r) => {
+          const row = rows[r];
+          return (
+            <div key={r} className="flex gap-1.5 justify-center">
+              {Array.from({ length }, (_, c) => (
+                <span
+                  key={c}
+                  className={`w-10 h-10 sm:w-12 sm:h-12 rounded-lg border flex items-center justify-center text-lg font-bold uppercase ${tile(
+                    row?.marks?.[c]
+                  )}`}
+                >
+                  {row?.word?.[c] ?? ''}
+                </span>
+              ))}
+            </div>
+          );
+        })}
+      </div>
+
+      {!locked && !done && (
+        <>
+          <input
+            value={typed}
+            onChange={(e) => {
+              setTyped(e.target.value.replace(/[^A-Za-z]/g, '').slice(0, length).toUpperCase());
+              setNote('');
+            }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && typed.length === length) void send();
+            }}
+            aria-label="Your guess"
+            autoComplete="off"
+            spellCheck={false}
+            className="w-full px-4 py-3 rounded-xl bg-white/5 border border-white/15 text-white text-lg tracking-[0.3em] text-center uppercase focus:outline-none focus:border-accent"
+          />
+          <button
+            onClick={() => void send()}
+            disabled={busy || sending || typed.length !== length}
+            className="w-full h-11 rounded-xl bg-emerald-400 text-ink font-semibold disabled:opacity-50"
+          >
+            {busy ? 'Checking…' : `Guess (${tries - rows.length} left)`}
+          </button>
+        </>
+      )}
+
+      {note && (
+        <p className="text-sm text-danger" role="status">
+          {note}
+        </p>
+      )}
+
+      {solved && (
+        <p className="text-sm text-emerald-300">
+          Got it in {rows.length} {rows.length === 1 ? 'guess' : 'guesses'}.
+        </p>
+      )}
+      {/* Told once it is out of reach, and not before: the server decides that,
+          and only sends the word when it does. */}
+      {!solved && word && <p className="text-sm text-slate-300">It was {word}.</p>}
+      {locked && !solved && !word && (
+        <p className="text-sm text-slate-400">Answers are closed for this one.</p>
+      )}
+    </div>
+  );
+}
+
 /** Ask anything. Anonymous is offered here and nowhere else, and the label
  *  says what it actually means — the room and the presenter see no name, an
  *  admin can still see who asked. Saying "anonymous" unqualified would be a
@@ -769,6 +906,9 @@ export default function LiveSession({ session, host }: { session: string; host: 
             <Guess item={item} onSend={(v) => void send(v)} sending={sending} />
           )}
           {kind === 'rank' && <Rank item={item} onSend={(v) => void send(v)} sending={sending} />}
+          {/* The only kind that does not go through `send`: a word game is a
+              sequence of guesses, each marked by the server as it arrives. */}
+          {kind === 'game' && <WordGame item={item} sending={sending} />}
           {kind === 'open' && answering && (
             <Ask onSend={(v, anon) => void send(v, anon)} sending={sending} />
           )}
@@ -781,7 +921,7 @@ export default function LiveSession({ session, host }: { session: string; host: 
           {/* A kind the server knows about and this build does not. Says so
               rather than rendering an empty box: item_kinds is a table so a
               kind can be added ahead of the component that draws it. */}
-          {!['choice', 'survey', 'open', 'match', 'number', 'rank'].includes(kind) && (
+          {!['choice', 'survey', 'open', 'match', 'number', 'rank', 'game'].includes(kind) && (
             <p className="text-sm text-slate-400">
               This kind of question ({kind}) is not supported by this version of the site
               yet.

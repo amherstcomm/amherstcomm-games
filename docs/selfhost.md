@@ -403,6 +403,31 @@ what to *offer*, while `advance_session` decides what is allowed, so a
 disagreement produces a button that does nothing rather than a way round the
 rules.
 
+### A word game as a question
+
+A session can carry a one-off wordle whose answer you choose — six guesses at a
+3-to-8-letter word. Solving it is one point, tied on the usual speed rule. No
+part marks: four of six letters is not four sixths of having got it.
+
+**The server marks.** For every other kind the answer waits in `item_answers`
+until the reveal and the client never needs it. Here the client would need it on
+every guess in order to colour the tiles — so the guess goes to the server and
+the colours come back. One round trip per guess, which is nothing next to how
+long somebody spends deciding what to type, and it means the payload carries the
+word's *length* and nothing else: there is no arrangement of what the room is
+sent that contains the answer.
+
+The word does not have to be in the dictionary. Guesses are checked against
+`public.words`, but the solution is exempt, so a name or a piece of company
+vocabulary works and is still accepted as a guess.
+
+**It is `guess` only so far.** `GAME_PLAYABLE` in `src/authoring.ts` is the list
+that moves when another game arrives, and each one needs two things: a play
+function in the schema, because the server marks and so every game's rule has to
+live there; and a board of its own for the room. The daily components cannot be
+embedded as they stand — each one owns a store keyed by the game, so a round in
+a session would write over somebody's daily progress, its streak and its stats.
+
 ### Scoring
 
 **One point a question, ties broken by how long the correct answers took.**
@@ -516,6 +541,7 @@ All six kinds work:
 | **matching** | pairs each left item with a right one | a fraction per pair got right |
 | **closest guess** | types a number | one point to the closest, and only the closest |
 | **ranking** | orders a list with up/down buttons | a fraction per item in the right place |
+| **word game** | plays a wordle with a solution you chose | one point for solving it |
 | **survey** | picks one, or several | no |
 | **open question** | submits a question, optionally unnamed | no |
 

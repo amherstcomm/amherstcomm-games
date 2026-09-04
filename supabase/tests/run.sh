@@ -34,6 +34,10 @@ done
 psql_() { docker exec -i "$name" psql -q -U postgres -h 127.0.0.1 "$@"; }
 
 psql_ -v ON_ERROR_STOP=1 < "$here/bootstrap.sql" >/dev/null
+# words.sql is DDL for public.words and is applied alongside schema.sql on a
+# real deployment — see docs/selfhost.md. It carries no rows; the tests that
+# need words insert their own.
+psql_ -v ON_ERROR_STOP=1 < "$here/../words.sql" >/dev/null
 # Realtime owns this publication; schema.sql adds tables to it.
 psql_ -c 'create publication supabase_realtime;' >/dev/null 2>&1 || true
 

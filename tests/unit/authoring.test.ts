@@ -7,7 +7,14 @@
 // being the correct answer. Both are silent failures that only show up in front
 // of the room.
 import { describe, expect, it } from 'vitest';
-import { AUTHORABLE, KIND_LABEL, parseOptions, problemWith, secondsOf } from '@/authoring';
+import {
+  AUTHORABLE,
+  GAME_PLAYABLE,
+  KIND_LABEL,
+  parseOptions,
+  problemWith,
+  secondsOf,
+} from '@/authoring';
 
 describe('parseOptions', () => {
   it('takes one option per line and drops the blanks', () => {
@@ -106,6 +113,20 @@ describe('the other three kinds', () => {
     ).toMatch(/and 2 more/);
   });
 
+  it('a word game needs a word, and one that fits a board', () => {
+    expect(problemWith({ ...ok, kind: 'game', word: '' })).toMatch(/word to find/);
+    expect(problemWith({ ...ok, kind: 'game', word: 'own3rs' })).toMatch(/Letters only/);
+    expect(problemWith({ ...ok, kind: 'game', word: 'ox' })).toMatch(/3 and 8/);
+    expect(problemWith({ ...ok, kind: 'game', word: 'ownership' })).toMatch(/3 and 8/);
+    expect(problemWith({ ...ok, kind: 'game', word: 'OWNERS' })).toBeNull();
+  });
+
+  it('only offers word games the room can actually play', () => {
+    // the server marks, so every game's rule has to exist in the schema before
+    // the editor may offer it — one so far
+    expect([...GAME_PLAYABLE]).toEqual(['guess']);
+  });
+
   it('a ranking needs options and no separate answer — the order is the answer', () => {
     expect(problemWith({ ...ok, kind: 'rank', options: ['a'] })).toMatch(/two options/);
     expect(problemWith({ ...ok, kind: 'rank', options: ['a', 'b'], correct: [] })).toBeNull();
@@ -158,6 +179,7 @@ describe('AUTHORABLE', () => {
       'match',
       'number',
       'rank',
+      'game',
     ]);
   });
 });
