@@ -24,6 +24,9 @@ export type Door = {
   pending?: number;
   /** which one is up, 1-based, or null before anything is shown */
   position?: number | null;
+  mode?: 'live' | 'open';
+  /** open mode: how many people have answered anything */
+  players?: number;
   item_state?: 'pending' | 'open' | 'locked' | 'revealed' | null;
 };
 
@@ -42,6 +45,17 @@ export function nextMove(door: Door): Move | null {
   if (door.state === 'closed') return null;
 
   const total = door.total ?? 0;
+
+  // An open session has nobody at the front, so there is no show, lock or
+  // reveal — only starting it and finishing it. Offering the rest would be
+  // offering buttons the server refuses.
+  if (door.mode === 'open') {
+    if (door.state === 'draft') {
+      return total === 0 ? null : { action: 'start', label: 'Open it for playing' };
+    }
+    return { action: 'close', label: 'Close it' };
+  }
+
   if (door.state === 'draft') {
     // Refusing to start an empty session here rather than letting the server
     // do it: "nothing left to show" arriving after Start looks like a fault,
@@ -73,6 +87,9 @@ export function nextMove(door: Door): Move | null {
  *  is the thing this replaced. */
 export function otherMoves(door: Door): Move[] {
   if (!door.ok || door.state !== 'live') return [];
+  // Finishing is the only other thing an open session can be told to do, and
+  // nextMove already offers it.
+  if (door.mode === 'open') return [];
   const out: Move[] = [];
   // Skipping the reveal is a real thing to want — a survey has no answer to
   // show, and sometimes a question is simply moved past.
@@ -89,6 +106,19 @@ export function otherMoves(door: Door): Move[] {
 /** Where the room is, in words, for the line above the controls. */
 export function whereWeAre(door: Door): string {
   if (!door.ok || !door.state) return '';
+
+  if (door.mode === 'open') {
+    const total = door.total ?? 0;
+    if (door.state === 'draft') {
+      return total === 0
+        ? 'No questions yet — add some before opening it.'
+        : `Not open yet · ${total} ${total === 1 ? 'question' : 'questions'}`;
+    }
+    const players = door.players ?? 0;
+    const who = `${players} ${players === 1 ? 'person has' : 'people have'} played`;
+    return door.state === 'closed' ? `Closed · ${who}` : `Open for playing · ${who}`;
+  }
+
   if (door.state === 'draft') {
     const total = door.total ?? 0;
     return total === 0

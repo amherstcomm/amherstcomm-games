@@ -32,8 +32,12 @@ on conflict do nothing;
 create or replace function pg_temp.check(label text, got boolean) returns void
 language plpgsql as $$
 begin
-  raise notice '%  %', case when got then 'PASS' else 'FAIL' end, label;
-  if not got then raise exception 'failed: %', label; end if;
+  -- `is not true`, not `not got`: a check whose expression comes back NULL
+  -- printed FAIL and then carried on, because NOT NULL is NULL and the IF was
+  -- never taken. A check that can report a failure without stopping is a check
+  -- that can be ignored, which is worse than not having it.
+  raise notice '%  %', case when got is true then 'PASS' else 'FAIL' end, label;
+  if got is not true then raise exception 'failed: %', label; end if;
 end $$;
 
 -- ---------------------------------------------------------------------------

@@ -695,6 +695,10 @@ export default function LiveSession({ session, host }: { session: string; host: 
   // page that has not finished connecting does not accuse itself of being
   // broken.
   const [connected, setConnected] = useState<boolean | null>(null);
+  /** Open mode only: the question they have just answered, marked, kept on
+   *  screen until they press on. A live session does not need it — the
+   *  presenter's reveal is what puts the answer up, for everybody at once. */
+  const [justAnswered, setJustAnswered] = useState<LiveItem | null>(null);
   const [board, setBoard] = useState<Leaderboard | null>(null);
   const [mine, setMine] = useState<{ points?: number; scored?: number } | null>(null);
   const [first, setFirst] = useState<{ name?: string | null; seconds?: number | null } | null>(
@@ -812,6 +816,13 @@ export default function LiveSession({ session, host }: { session: string; host: 
     // this whole flow exists to avoid — somebody who was told "sent" and
     // scored nothing has been lied to.
     setNote(res.ok ? 'Sent' : (res.reason ?? 'That did not send'));
+    // Open mode hands the answer back with the acknowledgement, because nobody
+    // is going to reveal it. Held here rather than re-read, so the marked
+    // question stays on screen until they choose to move on.
+    if (res.ok && item.mode === 'open') {
+      setJustAnswered({ ...item, state: 'revealed', mine: value, answer: res.answer });
+      return;
+    }
     if (res.ok) void pull();
   }
 
@@ -821,10 +832,15 @@ export default function LiveSession({ session, host }: { session: string; host: 
     void pull();
   }
 
-  const kind = item.kind ?? '';
+  // What is actually on screen: the marked question they just answered, if
+  // there is one, otherwise whatever the server last served.
+  const shown = justAnswered ?? item;
+  const kind = shown.kind ?? '';
   // Not just `state === 'open'`: once the clock has run out the server refuses,
   // so leaving the controls live would be inviting an answer that cannot land.
-  const answering = item.state === 'open' && !expired;
+  // What is on screen, which in open mode is the held marked question after
+  // they answer rather than the next one the server would serve.
+  const answering = shown.state === 'open' && !expired;
   const move = host ? nextMove(door ?? { ok: false }) : null;
   const others = host ? otherMoves(door ?? { ok: false }) : [];
 
@@ -939,20 +955,41 @@ export default function LiveSession({ session, host }: { session: string; host: 
         </a>
       )}
 
-      {item.state === 'not-live' && <Waiting text="This session has not started yet." />}
-      {item.state === 'waiting' && <Waiting text="Waiting for the next question…" />}
+      {/* Where they are in it. Their own progress, which nobody else's affects
+          — the whole difference between this and a room moving together. */}
+      {item.mode === 'open' && (item.total ?? 0) > 0 && shown.state !== 'not-live' && (
+        <p className="text-xs uppercase tracking-wider text-slate-500 mb-2">
+          {shown.state === 'done'
+            ? `All ${item.total} answered`
+            : `Question ${(item.done ?? 0) + 1} of ${item.total}`}
+        </p>
+      )}
 
-      {item.id && (
+      {shown.state === 'done' && (
+        <div className="py-10 text-center">
+          <p className="text-lg text-white font-semibold">That is all of them.</p>
+          <p className="text-sm text-slate-400 mt-1">
+            {mine && (mine.scored ?? 0) > 0
+              ? `You got ${mine.points} of ${mine.scored}.`
+              : 'Thanks for playing.'}
+          </p>
+        </div>
+      )}
+
+      {shown.state === 'not-live' && <Waiting text="This session has not started yet." />}
+      {shown.state === 'waiting' && <Waiting text="Waiting for the next question…" />}
+
+      {shown.id && (
         <>
           <h1
             className={`font-bold mb-1 text-white ${
               host ? 'text-2xl sm:text-4xl' : 'text-xl sm:text-2xl'
             }`}
           >
-            {item.prompt}
+            {shown.prompt}
           </h1>
           <p className="text-xs uppercase tracking-wider text-slate-500 mb-3">
-            {item.state === 'open'
+            {shown.state === 'open'
               ? expired
                 ? 'Time is up'
                 : 'Answers open'
@@ -984,18 +1021,18 @@ export default function LiveSession({ session, host }: { session: string; host: 
           )}
 
           {(kind === 'choice' || kind === 'survey') && (
-            <Choice item={item} onSend={(v) => void send(v)} sending={sending} />
+            <Choice item={shown} onSend={(v) => void send(v)} sending={sending} />
           )}
           {kind === 'match' && (
-            <Match item={item} onSend={(v) => void send(v)} sending={sending} />
+            <Match item={shown} onSend={(v) => void send(v)} sending={sending} />
           )}
           {kind === 'number' && (
-            <Guess item={item} onSend={(v) => void send(v)} sending={sending} />
+            <Guess item={shown} onSend={(v) => void send(v)} sending={sending} />
           )}
-          {kind === 'rank' && <Rank item={item} onSend={(v) => void send(v)} sending={sending} />}
+          {kind === 'rank' && <Rank item={shown} onSend={(v) => void send(v)} sending={sending} />}
           {/* The only kind that does not go through `send`: a word game is a
               sequence of guesses, each marked by the server as it arrives. */}
-          {kind === 'game' && <WordGame item={item} />}
+          {kind === 'game' && <WordGame item={shown} />}
           {kind === 'open' && answering && (
             <Ask onSend={(v, anon) => void send(v, anon)} sending={sending} />
           )}
@@ -1092,6 +1129,21 @@ export default function LiveSession({ session, host }: { session: string; host: 
         <p className="mt-8 text-sm text-slate-300">
           You have {mine.points} of {mine.scored} so far.
         </p>
+      )}
+
+      {/* Open mode: they have seen how they did, and they move on when they
+          are ready rather than being moved. */}
+      {justAnswered && (
+        <button
+          onClick={() => {
+            setJustAnswered(null);
+            setNote('');
+            void pull();
+          }}
+          className="w-full h-11 mt-5 rounded-xl bg-emerald-400 text-ink font-semibold"
+        >
+          {(item.done ?? 0) + 1 >= (item.total ?? 0) ? 'Finish' : 'Next question'}
+        </button>
       )}
 
       {note && (

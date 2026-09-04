@@ -36,6 +36,7 @@ import {
   type NumberPayload,
   type Sheet,
   type SheetItem,
+  type SessionMode,
   type SessionSummary,
 } from '@/authoring';
 import { JOIN_HOST, pathOf } from '@/routes';
@@ -604,6 +605,7 @@ function SessionList() {
   const [sessions, setSessions] = useState<SessionSummary[] | null>(null);
   const [title, setTitle] = useState('');
   const [lateJoin, setLateJoin] = useState<'strict' | 'open'>('strict');
+  const [mode, setMode] = useState<SessionMode>('live');
   const [note, setNote] = useState('');
   const [busy, setBusy] = useState(false);
 
@@ -612,7 +614,7 @@ function SessionList() {
 
   async function add() {
     setBusy(true);
-    const res = await createSession(title.trim(), lateJoin);
+    const res = await createSession(title.trim(), lateJoin, mode);
     setBusy(false);
     if (!res.ok) {
       setNote(res.reason ?? 'That did not work');
@@ -642,17 +644,53 @@ function SessionList() {
             placeholder="Employee Ownership Month, week one"
           />
         </label>
-        <label className="flex items-center gap-2 text-xs text-slate-400">
-          <input
-            type="checkbox"
-            checked={lateJoin === 'open'}
-            onChange={(e) => setLateJoin(e.target.checked ? 'open' : 'strict')}
-          />
-          Let people who arrive late catch up on questions they missed
-        </label>
+        {/* The choice that shapes everything else about it, so it is made
+            here rather than found later. */}
+        <fieldset>
+          <legend className="text-xs uppercase tracking-wider text-slate-500 mb-1">
+            How it runs
+          </legend>
+          <div className="space-y-2">
+            {(
+              [
+                ['live', 'With a presenter', 'You run it in the room. Everyone sees the same question at the same time, and you decide when to close the answers and show them.'],
+                ['open', 'On their own time', 'No presenter. People join whenever, get the questions one at a time and answer at their own pace. Their clock starts when each question reaches them, so the scores still compare.'],
+              ] as const
+            ).map(([value, label, what]) => (
+              <label
+                key={value}
+                className={`block rounded-xl border p-3 cursor-pointer ${
+                  mode === value ? 'border-accent bg-accent/10' : 'border-white/15 hover:bg-white/5'
+                }`}
+              >
+                <span className="flex items-center gap-2">
+                  <input
+                    type="radio"
+                    name="session-mode"
+                    checked={mode === value}
+                    onChange={() => setMode(value)}
+                  />
+                  <span className="text-sm font-semibold text-slate-200">{label}</span>
+                </span>
+                <span className="block text-xs text-slate-400 mt-1 ml-6">{what}</span>
+              </label>
+            ))}
+          </div>
+        </fieldset>
+
+        {mode === 'live' && (
+          <label className="flex items-center gap-2 text-xs text-slate-400">
+            <input
+              type="checkbox"
+              checked={lateJoin === 'open'}
+              onChange={(e) => setLateJoin(e.target.checked ? 'open' : 'strict')}
+            />
+            Let people who arrive late catch up on questions they missed
+          </label>
+        )}
         {/* Said here rather than discovered on the night. The column is stored
             and nothing reads it yet — see the note on sessions.late_join. */}
-        {lateJoin === 'open' && (
+        {mode === 'live' && lateJoin === 'open' && (
           <p className="text-xs text-slate-500">
             Not in effect yet: answering is limited to the question on screen, so
             late arrivals miss what has gone either way.
@@ -679,7 +717,9 @@ function SessionList() {
             >
               <span className="flex items-center justify-between gap-3">
                 <span className="text-white font-medium">{s.title}</span>
-                <span className="text-xs uppercase tracking-wider text-slate-500">{s.state}</span>
+                <span className="text-xs uppercase tracking-wider text-slate-500">
+                  {s.mode === 'open' ? 'on their own time' : 'presented'} · {s.state}
+                </span>
               </span>
               <span className="text-sm text-slate-400">
                 {s.items} {s.items === 1 ? 'question' : 'questions'}
@@ -761,10 +801,13 @@ function SessionEditorFor({ session }: { session: string }) {
       </p>
       <h1 className="text-2xl font-bold text-white mt-1">{meta.title}</h1>
       <p className="text-sm text-slate-400 mb-4">
+        {meta.mode === 'open' ? 'Played on their own time. ' : 'Run by a presenter. '}
         {meta.state === 'draft'
-          ? 'Not started. Nobody can see it yet.'
+          ? 'Not open yet — nobody can see it.'
           : meta.state === 'live'
-            ? 'Running now.'
+            ? meta.mode === 'open'
+              ? 'Open for playing.'
+              : 'Running now.'
             : 'Finished.'}
       </p>
 
@@ -795,10 +838,11 @@ function SessionEditorFor({ session }: { session: string }) {
           className={BUTTON + ' gap-1.5'}
           href={pathOf({ kind: 'live', session, host: true })}
         >
-          <Radio className="w-4 h-4" aria-hidden="true" /> Presenter screen
+          <Radio className="w-4 h-4" aria-hidden="true" />
+          {meta.mode === 'open' ? 'Open and close it' : 'Presenter screen'}
         </a>
         <a className={BUTTON} href={pathOf({ kind: 'live', session, host: false })}>
-          What the room sees
+          {meta.mode === 'open' ? 'What a player sees' : 'What the room sees'}
         </a>
         <a className={BUTTON} href={pathOf({ kind: 'scores', session })}>
           Scores

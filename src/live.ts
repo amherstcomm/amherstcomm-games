@@ -20,7 +20,14 @@ import type { Door } from '@/presenting';
  *  it — the server withholds it, this type just admits that it might not be
  *  there. */
 export type LiveItem = {
-  state: 'not-live' | 'waiting' | 'open' | 'locked' | 'revealed';
+  /** `done` is open-mode only: they have answered everything there is. */
+  state: 'not-live' | 'waiting' | 'open' | 'locked' | 'revealed' | 'done';
+  /** which kind of session this came from — the screen differs, so it has to
+   *  be told rather than inferred from what happens to be on it */
+  mode?: 'live' | 'open';
+  /** open mode: where they are in it, which nobody else's progress affects */
+  total?: number;
+  done?: number;
   id?: string;
   kind?: string;
   prompt?: string;
@@ -212,7 +219,7 @@ export async function sendAnswer(
   item: string,
   value: unknown,
   anonymous = false
-): Promise<{ ok: boolean; reason?: string }> {
+): Promise<{ ok: boolean; reason?: string; answer?: unknown }> {
   if (!supabase) return { ok: false, reason: 'not connected' };
   const { data, error } = await supabase.rpc('answer_item', {
     p_item: item,
