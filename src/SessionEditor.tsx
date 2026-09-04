@@ -18,6 +18,9 @@ import {
   moveItem,
   parseOptions,
   problemWith,
+  secondsOf,
+  SECONDS_MAX,
+  SECONDS_MIN,
   readSessions,
   readSheet,
   saveItem,
@@ -71,6 +74,9 @@ function ItemForm({
   const [prompt, setPrompt] = useState(item?.prompt ?? '');
   const [optionText, setOptionText] = useState((existing?.options ?? []).join('\n'));
   const [multi, setMulti] = useState(existing?.multi === true);
+  const [seconds, setSeconds] = useState<string>(
+    secondsOf(item?.payload)?.toString() ?? ''
+  );
   const [correct, setCorrect] = useState<string[]>(
     ((item?.answer as ChoiceAnswer | null)?.correct ?? []) as string[]
   );
@@ -80,6 +86,10 @@ function ItemForm({
   // should not leave it marked as the right answer nobody can pick.
   const live = correct.filter((c) => options.includes(c));
   const problem = problemWith({ kind, prompt, options, correct: live });
+  const clock = seconds === '' ? null : secondsOf({ seconds: Number(seconds) });
+  // Typed something that is not a usable clock — distinct from having left it
+  // empty, which is a valid choice and the default.
+  const badClock = seconds !== '' && clock === null;
 
   return (
     <div className="rounded-xl border border-white/15 p-4 space-y-3">
@@ -173,15 +183,42 @@ function ItemForm({
         </>
       )}
 
+      {/* The clock is optional and off by default. A countdown is right for a
+          scored round and wrong for "any questions for the board?", and the
+          same controls have to run both. */}
+      <label className="block">
+        <span className="text-xs uppercase tracking-wider text-slate-500">
+          Seconds to answer — leave empty for no clock
+        </span>
+        <input
+          value={seconds}
+          onChange={(e) => setSeconds(e.target.value.replace(/[^0-9]/g, '').slice(0, 4))}
+          inputMode="numeric"
+          placeholder="none"
+          className={FIELD + ' max-w-32'}
+        />
+      </label>
+      {seconds !== '' && secondsOf({ seconds: Number(seconds) }) === null && (
+        <p className="text-sm text-slate-400">
+          Between {SECONDS_MIN} and {SECONDS_MAX} seconds, or empty for no clock.
+        </p>
+      )}
+
       <div className="flex items-center gap-2">
         <button
           className={PRIMARY}
-          disabled={busy || problem !== null}
+          disabled={busy || problem !== null || badClock}
           onClick={() =>
             onSave({
               kind,
               prompt: prompt.trim(),
-              payload: kind === 'open' ? {} : { options, multi: kind === 'choice' && multi },
+              payload: {
+                ...(kind === 'open' ? {} : { options, multi: kind === 'choice' && multi }),
+                // Omitted rather than sent as null: item_seconds() reads the key
+                // being absent as "no clock", and a key holding null would be
+                // the same thing said in a way that has to be handled.
+                ...(clock === null ? {} : { seconds: clock }),
+              },
               // survey and open are unscored; the server drops an answer sent
               // for them, and sending one anyway would be asking it to.
               answer: kind === 'choice' ? { correct: live } : null,
@@ -411,6 +448,7 @@ function SessionEditorFor({ session }: { session: string }) {
                 <div className="min-w-0">
                   <p className="text-xs uppercase tracking-wider text-slate-500">
                     {item.position}. {item.kind}
+                    {secondsOf(item.payload) !== null && ` · ${secondsOf(item.payload)}s`}
                     {shown && ` — ${item.state}, ${item.responses} answered`}
                   </p>
                   <p className="text-white">{item.prompt}</p>

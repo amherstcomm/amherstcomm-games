@@ -14,6 +14,7 @@
 // leak.
 import type { RealtimeChannel } from '@supabase/supabase-js';
 import { supabase } from '@/supabase';
+import type { Door } from '@/presenting';
 
 /** What the room is looking at. `answer` is null until the presenter reveals
  *  it — the server withholds it, this type just admits that it might not be
@@ -29,6 +30,11 @@ export type LiveItem = {
   /** this browser's own answer, so a reload does not look like you never sent one */
   mine?: unknown;
   answer?: unknown;
+  /** how long the question is open for, or absent for no clock */
+  seconds?: number | null;
+  /** the server's own clock, so a countdown is drawn against the clock that
+   *  decides whether an answer counts rather than against this laptop's */
+  now?: string;
 };
 
 /** The presenter's read: a live count while answers arrive, the answer so they
@@ -73,14 +79,14 @@ export async function resolveCode(
 /** The presenter's header — the session's name and the code to read out. A
  *  separate call from the sheet because it is wanted before a session starts
  *  and on every load, and pulling every question and answer to show four
- *  characters would put the answers on the wire for nothing. */
-export async function readSessionDoor(
-  session: string
-): Promise<{ ok: boolean; title?: string; code?: string | null; state?: string }> {
+ *  characters would put the answers on the wire for nothing. It also carries
+ *  where the run is up to — which question, how many are left, what state it is
+ *  in — which is what lets the controls offer one move instead of five. */
+export async function readSessionDoor(session: string): Promise<Door> {
   if (!supabase) return { ok: false };
   const { data, error } = await supabase.rpc('session_door', { p_session: session });
   if (error || !data) return { ok: false };
-  return data as { ok: boolean; title?: string; code?: string | null; state?: string };
+  return data as Door;
 }
 
 export async function readCurrentItem(session: string): Promise<LiveItem> {

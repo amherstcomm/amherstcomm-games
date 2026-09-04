@@ -7,7 +7,7 @@
 // being the correct answer. Both are silent failures that only show up in front
 // of the room.
 import { describe, expect, it } from 'vitest';
-import { AUTHORABLE, parseOptions, problemWith } from '@/authoring';
+import { AUTHORABLE, parseOptions, problemWith, secondsOf } from '@/authoring';
 
 describe('parseOptions', () => {
   it('takes one option per line and drops the blanks', () => {
@@ -66,6 +66,38 @@ describe('problemWith', () => {
 
   it('asks an open question for nothing but words', () => {
     expect(problemWith({ kind: 'open', prompt: 'Ask away', options: [], correct: [] })).toBeNull();
+  });
+});
+
+describe('secondsOf', () => {
+  // The editor and item_seconds() in the schema have to agree about whether a
+  // question has a clock. If the editor offers a value the server reads as no
+  // clock, it has offered a timer that silently is not one.
+  it('reads a usable window', () => {
+    expect(secondsOf({ seconds: 30 })).toBe(30);
+  });
+
+  it('reads one that arrived as a string, because JSON', () => {
+    expect(secondsOf({ seconds: '30' })).toBe(30);
+  });
+
+  it('is null for no clock at all', () => {
+    expect(secondsOf({ options: ['a'] })).toBeNull();
+    expect(secondsOf(undefined)).toBeNull();
+  });
+
+  it('is null outside the range the server accepts', () => {
+    // 5 to 3600, matching item_seconds()
+    expect(secondsOf({ seconds: 4 })).toBeNull();
+    expect(secondsOf({ seconds: 5 })).toBe(5);
+    expect(secondsOf({ seconds: 3600 })).toBe(3600);
+    expect(secondsOf({ seconds: 3601 })).toBeNull();
+  });
+
+  it('is null for anything that is not a whole number of seconds', () => {
+    expect(secondsOf({ seconds: 'soon' })).toBeNull();
+    expect(secondsOf({ seconds: 12.5 })).toBeNull();
+    expect(secondsOf({ seconds: null })).toBeNull();
   });
 });
 

@@ -11,7 +11,7 @@
 // unrevealed item comes back with `answer` null, and that is enforced two
 // layers down in a table with no grant.
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { CheckCircle2, Loader2, Radio, Send } from 'lucide-react';
+import { CheckCircle2, Loader2, Radio, Send, Timer } from 'lucide-react';
 import {
   advance,
   onSessionMoved,
@@ -23,7 +23,16 @@ import {
   type LiveItem,
   type PresenterView,
 } from '@/live';
-import { JOIN_HOST } from '@/routes';
+import { JOIN_HOST, ORIGIN, pathOf } from '@/routes';
+import QrCode from '@/QrCode';
+import {
+  nextMove,
+  otherMoves,
+  secondsLeft,
+  whereWeAre,
+  type Action,
+  type Door,
+} from '@/presenting';
 
 /** How often the presenter's count refreshes while answers are arriving.
  *
@@ -33,6 +42,10 @@ import { JOIN_HOST } from '@/routes';
  *  through the WAL per participant per question — the room's traffic in the
  *  replication stream, to animate a number on one screen. */
 const COUNT_MS = 2000;
+
+/** The address the QR points at — absolute, because a phone scanning it has no
+ *  page to be relative to. */
+const joinUrl = (code: string) => ORIGIN + pathOf({ kind: 'join', code });
 
 function Waiting({ text }: { text: string }) {
   return (
@@ -173,11 +186,32 @@ export default function LiveSession({ session, host }: { session: string; host: 
   const [note, setNote] = useState('');
   // The presenter's header — the code to read out. Only fetched on the host
   // screen, because only the host is allowed it and only the host needs it.
-  const [door, setDoor] = useState<{ code?: string | null; title?: string } | null>(null);
+  const [door, setDoor] = useState<Door | null>(null);
+  // What the server's clock read minus what this browser's did, measured on
+  // every read. The countdown is drawn against the clock that decides whether
+  // an answer counts, not against this laptop's.
+  const [skewMs, setSkewMs] = useState(0);
+  const [tick, setTick] = useState(0);
   const itemId = useRef<string | undefined>(undefined);
 
   const pull = useCallback(async () => {
+    // The presenter's header comes back on the same beat as the item, inside
+    // the one read the doorbell already drives.
+    //
+    // It had its own onSessionMoved subscription for about ten minutes.
+    // supabase-js keys channels by name, so a second `live:<id>` resolved to
+    // the channel this component had already subscribed, and adding a listener
+    // to a subscribed channel throws — which took the whole page down. Found by
+    // opening it; nothing else would have.
+    if (host) {
+      const d = await readSessionDoor(session);
+      if (d.ok) setDoor(d);
+    }
     const next = await readCurrentItem(session);
+    // Measured around the read rather than from it: `now` is what the server
+    // said, and the closest this browser can get to "at the same moment" is
+    // when the answer arrived.
+    if (next.now) setSkewMs(Date.parse(next.now) - Date.now());
     setItem(next);
     if (next.id !== itemId.current) {
       itemId.current = next.id;
@@ -188,21 +222,37 @@ export default function LiveSession({ session, host }: { session: string; host: 
       const t = await readTally(next.id);
       if (t.ok) setTally(t.counts ?? {});
     }
-  }, [session]);
+  }, [session, host]);
 
   useEffect(() => {
     void pull();
     return onSessionMoved(session, () => void pull());
   }, [session, pull]);
 
+
+  // Four times a second while a clock is running, and not at all otherwise. Not
+  // once a second: at that rate the displayed number skips whenever the tick
+  // and the second boundary drift apart, and a countdown that jumps from 8 to 6
+  // in front of a room reads as broken. A question with no clock re-renders
+  // nothing.
+  const clock = secondsLeft(item.opened_at, item.seconds, skewMs, Date.now());
+  const running = item.state === 'open' && clock !== null;
   useEffect(() => {
-    if (!host) return;
-    let alive = true;
-    readSessionDoor(session).then((d) => alive && d.ok && setDoor(d));
-    return () => {
-      alive = false;
-    };
-  }, [host, session]);
+    if (!running) return;
+    const id = window.setInterval(() => setTick((n) => n + 1), 250);
+    return () => window.clearInterval(id);
+  }, [running, item.id]);
+  void tick;
+
+  // When the clock runs out the presenter's screen closes the answers, so the
+  // room sees it happen rather than sitting on a question the server has
+  // already stopped accepting. The server refuses late answers on its own — see
+  // answer_item — so this is the visible half of a rule, not the rule.
+  const expired = running && clock === 0;
+  useEffect(() => {
+    if (!host || !expired) return;
+    void advance(session, 'lock');
+  }, [host, expired, session]);
 
   // The presenter's count, which the doorbell cannot provide — see COUNT_MS.
   useEffect(() => {
@@ -232,14 +282,18 @@ export default function LiveSession({ session, host }: { session: string; host: 
     if (res.ok) void pull();
   }
 
-  async function control(action: 'start' | 'show' | 'lock' | 'reveal' | 'close') {
+  async function control(action: Action) {
     const res = await advance(session, action);
     if (!res.ok) setNote(res.reason ?? 'That did not work');
     void pull();
   }
 
   const kind = item.kind ?? '';
-  const answering = item.state === 'open';
+  // Not just `state === 'open'`: once the clock has run out the server refuses,
+  // so leaving the controls live would be inviting an answer that cannot land.
+  const answering = item.state === 'open' && !expired;
+  const move = host ? nextMove(door ?? { ok: false }) : null;
+  const others = host ? otherMoves(door ?? { ok: false }) : [];
 
   return (
     <div className="max-w-xl mx-auto px-4 py-8">
@@ -251,29 +305,61 @@ export default function LiveSession({ session, host }: { session: string; host: 
           {/* The code, on the screen that is already pointed at the room. It is
               here as well as on the editor because this is the one somebody is
               looking at when they say "go to the site and type this". */}
-          {door?.code && (
-            <p className="text-sm text-slate-300 mb-2">
-              To join:{' '}
-              <span className="text-white font-bold tracking-[0.25em]">{door.code}</span>
-              <span className="text-slate-500"> at {JOIN_HOST}/join</span>
-            </p>
+          {/* The way in, on the screen already pointed at the room: the code to
+              read out, and the same link as a QR so nobody has to type
+              anything. Both, because a phone camera and a laptop keyboard are
+              different people in the same room. */}
+          {door?.code && door.state !== 'closed' && (
+            <div className="flex items-center gap-4 mb-3">
+              <QrCode
+                text={joinUrl(door.code)}
+                className="w-24 h-24 rounded-md shrink-0 p-1"
+                label={`Scan to join with code ${door.code}`}
+              />
+              <div className="min-w-0">
+                <p className="text-xs uppercase tracking-wider text-slate-500">To join</p>
+                <p className="text-2xl font-bold text-white tracking-[0.25em] leading-tight">
+                  {door.code}
+                </p>
+                <p className="text-sm text-slate-400 break-words">{JOIN_HOST}/join</p>
+              </div>
+            </div>
           )}
-          <div className="flex flex-wrap gap-2">
-            {(['start', 'show', 'lock', 'reveal', 'close'] as const).map((a) => (
-              <button
-                key={a}
-                onClick={() => void control(a)}
-                // slate-200, not slate-100: the palette defines 950 down to 200, and a
-                // tier it does not define falls through to Tailwind's own — which is
-                // near-white, and invisible on the light theme's page. Caught by
-                // looking at it; now also covered by the a11y sweep below.
-                className="px-3 h-9 rounded-lg text-sm font-semibold bg-white/10 border border-white/15 text-slate-200 hover:bg-white/15"
-              >
-                {a === 'show' ? 'Next question' : a[0].toUpperCase() + a.slice(1)}
-              </button>
-            ))}
-          </div>
-          {view?.ok && (
+
+          <p className="text-sm text-slate-300 mb-2">{whereWeAre(door ?? { ok: false })}</p>
+
+          {/* One move, and it says what it will do. The five verbs this
+              replaced — Start, Next question, Lock, Reveal, Close, all at once
+              — left the presenter working out which was next in front of a
+              room. See src/presenting.ts. */}
+          {move && (
+            <button
+              onClick={() => void control(move.action)}
+              className="w-full h-11 rounded-lg bg-emerald-400 text-ink font-semibold hover:opacity-90"
+            >
+              {move.label}
+            </button>
+          )}
+
+          {others.length > 0 && (
+            <div className="flex flex-wrap gap-2 mt-2">
+              {others.map((m) => (
+                <button
+                  key={`${m.action}-${m.label}`}
+                  onClick={() => void control(m.action)}
+                  // slate-200, not slate-100: the palette defines 950 down to 200,
+                  // and a tier it does not define falls through to Tailwind's own —
+                  // near-white, invisible on the light theme's page. Caught by
+                  // looking at it; now covered by the a11y sweep.
+                  className="px-3 h-9 rounded-lg text-sm font-semibold bg-white/10 border border-white/15 text-slate-200 hover:bg-white/15"
+                >
+                  {m.label}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {view?.ok && item.id && (
             <p className="mt-3 text-sm text-slate-300">
               {view.answered ?? 0} answered
               {item.state === 'open' ? ' so far' : ''}
@@ -288,13 +374,37 @@ export default function LiveSession({ session, host }: { session: string; host: 
       {item.id && (
         <>
           <h1 className="text-xl sm:text-2xl font-bold mb-1 text-white">{item.prompt}</h1>
-          <p className="text-xs uppercase tracking-wider text-slate-500 mb-5">
+          <p className="text-xs uppercase tracking-wider text-slate-500 mb-3">
             {item.state === 'open'
-              ? 'Answers open'
+              ? expired
+                ? 'Time is up'
+                : 'Answers open'
               : item.state === 'locked'
                 ? 'Answers closed'
                 : 'Revealed'}
           </p>
+
+          {/* The clock. Only while it is running: a bar that sits at zero after
+              the question closes is a bar that says "too late" for the rest of
+              the round, and the state line above already says so once. */}
+          {running && (
+            <div className="mb-5" aria-hidden={expired}>
+              <div className="flex items-center gap-2 text-sm text-slate-400 mb-1">
+                <Timer className="w-4 h-4" aria-hidden="true" />
+                <span className="tabular-nums" role="timer" aria-live="off">
+                  {clock}s
+                </span>
+              </div>
+              <div className="h-1.5 rounded-full bg-white/10 overflow-hidden">
+                <div
+                  className={`h-full rounded-full transition-[width] duration-300 ease-linear ${
+                    (clock ?? 0) <= 5 ? 'bg-danger' : 'bg-accent'
+                  }`}
+                  style={{ width: `${((clock ?? 0) / (item.seconds || 1)) * 100}%` }}
+                />
+              </div>
+            </div>
+          )}
 
           {(kind === 'choice' || kind === 'survey') && (
             <Choice item={item} onSend={(v) => void send(v)} sending={sending} />
@@ -303,7 +413,9 @@ export default function LiveSession({ session, host }: { session: string; host: 
             <Ask onSend={(v, anon) => void send(v, anon)} sending={sending} />
           )}
           {kind === 'open' && !answering && (
-            <p className="text-sm text-slate-400">Questions are closed for this one.</p>
+            <p className="text-sm text-slate-400">
+              {expired ? 'Time is up for this one.' : 'Questions are closed for this one.'}
+            </p>
           )}
 
           {/* A kind the server knows about and this build does not. Says so
