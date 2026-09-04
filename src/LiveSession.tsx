@@ -43,6 +43,7 @@ import { JOIN_HOST, ORIGIN, pathOf } from '@/routes';
 import { formatGuess, guessAffixes } from '@/guessFormat';
 import type { NumberPayload } from '@/authoring';
 import QrCode from '@/QrCode';
+import MobileKeyInput from '@/MobileKeyInput';
 import {
   nextMove,
   otherMoves,
@@ -457,16 +458,34 @@ function Rank({
  *  round against a clock in front of a room wants none of that: no persistence,
  *  no difficulty, no practice mode. What it does share is the rule, and the
  *  rule is not here either — the server marks, because a client that could
- *  colour the tiles would be a client that had been sent the word. */
-function WordGame({ item, sending }: { item: LiveItem; sending: boolean }) {
+ *  colour the tiles would be a client that had been sent the word.
+ *
+ *  What it also shares, and must, is how you type into it. This had a text box
+ *  under the grid for about a day: it worked, and it was a different game from
+ *  the one on the rest of the site, which is worse than a missing feature —
+ *  somebody who plays the daily arrives with hands that already know what to
+ *  do. So: letters land in the row, Backspace takes one back, Enter sends, and
+ *  MobileKeyInput raises the device keyboard for a thumb, exactly as every
+ *  other board here does. */
+function WordGame({ item }: { item: LiveItem }) {
   const length = Number(item.payload?.length) || 5;
   const tries = Number(item.payload?.tries) || 6;
   const [rows, setRows] = useState<GuessRow[]>([]);
   const [solved, setSolved] = useState(false);
   const [word, setWord] = useState<string | null>(null);
-  const [typed, setTyped] = useState('');
+  const [current, setCurrent] = useState('');
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState('');
+  const flashTimer = useRef(0);
+
+  /** Transient, and clears itself after a beat — the same shape GuessGame and
+   *  BoxGame use for "Not enough letters". A message that stays put reads as
+   *  the state of the board rather than as a reaction to the last keystroke. */
+  const showFlash = useCallback((msg: string) => {
+    setNote(msg);
+    window.clearTimeout(flashTimer.current);
+    flashTimer.current = window.setTimeout(() => setNote(''), 1600);
+  }, []);
 
   // What they had already, so a reload mid-round is not a fresh start.
   useEffect(() => {
@@ -485,22 +504,67 @@ function WordGame({ item, sending }: { item: LiveItem; sending: boolean }) {
 
   const locked = item.state !== 'open';
   const done = solved || rows.length >= tries;
+  const playing = !locked && !done;
 
-  async function send() {
-    if (!item.id) return;
+  // A ref, because the physical-keyboard listener is attached once per render
+  // and `submit` closes over state — the same shape GuessGame uses.
+  const sending = useRef(false);
+
+  const submit = useCallback(async () => {
+    if (!item.id || sending.current) return;
+    if (current.length !== length) {
+      // the daily board's words, because it is the same complaint
+      showFlash('Not enough letters');
+      return;
+    }
+    sending.current = true;
     setBusy(true);
-    const res = await playGuess(item.id, typed);
+    const res = await playGuess(item.id, current);
     setBusy(false);
+    sending.current = false;
     if (!res.ok) {
-      setNote(res.reason ?? 'That did not work');
+      showFlash(res.reason ?? 'That did not work');
       return;
     }
     setNote('');
-    setTyped('');
-    setRows((prev) => [...prev, { word: typed.toUpperCase(), marks: res.marks ?? [] }]);
+    setRows((prev) => [...prev, { word: current.toUpperCase(), marks: res.marks ?? [] }]);
+    setCurrent('');
     if (res.solved) setSolved(true);
     if (res.word) setWord(res.word);
-  }
+  }, [current, item.id, length, showFlash]);
+
+  const pressKey = useCallback(
+    (k: string) => {
+      if (!playing || busy) return;
+      setNote('');
+      if (k === 'enter') {
+        void submit();
+        return;
+      }
+      if (k === 'backspace') {
+        setCurrent((c) => c.slice(0, -1));
+        return;
+      }
+      if (/^[a-z]$/.test(k)) setCurrent((c) => (c.length < length ? c + k : c));
+    },
+    [playing, busy, submit, length]
+  );
+
+  // Physical keyboard, guarded the same way GuessGame guards it: modifier
+  // combinations are the browser's, and a keystroke aimed at a text field is
+  // that field's. The presenter's screen has both a board and controls, so the
+  // second guard is doing real work here.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+      if (e.key === 'Enter') pressKey('enter');
+      else if (e.key === 'Backspace') pressKey('backspace');
+      else if (/^[a-zA-Z]$/.test(e.key)) pressKey(e.key.toLowerCase());
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [pressKey]);
 
   const tile = (state: string | undefined) =>
     state === 'correct'
@@ -516,65 +580,55 @@ function WordGame({ item, sending }: { item: LiveItem; sending: boolean }) {
       <div className="space-y-1.5">
         {Array.from({ length: tries }, (_, r) => {
           const row = rows[r];
+          const isCurrent = playing && r === rows.length;
           return (
             <div key={r} className="flex gap-1.5 justify-center">
-              {Array.from({ length }, (_, c) => (
-                <span
-                  key={c}
-                  className={`w-10 h-10 sm:w-12 sm:h-12 rounded-lg border flex items-center justify-center text-lg font-bold uppercase ${tile(
-                    row?.marks?.[c]
-                  )}`}
-                >
-                  {row?.word?.[c] ?? ''}
-                </span>
-              ))}
+              {Array.from({ length }, (_, c) => {
+                const typed = isCurrent ? current[c] : undefined;
+                return (
+                  <span
+                    key={c}
+                    className={`w-10 h-10 sm:w-12 sm:h-12 rounded-lg border flex items-center justify-center text-lg font-bold uppercase transition-colors ${tile(
+                      row?.marks?.[c]
+                    )} ${typed ? 'border-accent text-white' : ''}`}
+                  >
+                    {row?.word?.[c] ?? typed ?? ''}
+                  </span>
+                );
+              })}
             </div>
           );
         })}
       </div>
 
-      {!locked && !done && (
+      {playing && (
         <>
-          <input
-            value={typed}
-            onChange={(e) => {
-              setTyped(e.target.value.replace(/[^A-Za-z]/g, '').slice(0, length).toUpperCase());
-              setNote('');
-            }}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && typed.length === length) void send();
-            }}
-            aria-label="Your guess"
-            autoComplete="off"
-            spellCheck={false}
-            className="w-full px-4 py-3 rounded-xl bg-white/5 border border-white/15 text-white text-lg tracking-[0.3em] text-center uppercase focus:outline-none focus:border-accent"
-          />
-          <button
-            onClick={() => void send()}
-            disabled={busy || sending || typed.length !== length}
-            className="w-full h-11 rounded-xl bg-emerald-400 text-ink font-semibold disabled:opacity-50"
-          >
-            {busy ? 'Checking…' : `Guess (${tries - rows.length} left)`}
-          </button>
+          {/* No text box. The grid is the input — this raises the device
+              keyboard for a thumb and feeds the same pressKey the physical one
+              does, which is how every other board on the site works. */}
+          <MobileKeyInput onKey={pressKey} label="Type your guess" />
+          <p className="text-xs text-slate-400 text-center">
+            Type your guess, then press Enter. {tries - rows.length} left.
+          </p>
         </>
       )}
 
       {note && (
-        <p className="text-sm text-danger" role="status">
+        <p className="text-sm text-danger text-center" role="status">
           {note}
         </p>
       )}
 
       {solved && (
-        <p className="text-sm text-emerald-300">
+        <p className="text-sm text-emerald-300 text-center">
           Got it in {rows.length} {rows.length === 1 ? 'guess' : 'guesses'}.
         </p>
       )}
       {/* Told once it is out of reach, and not before: the server decides that,
           and only sends the word when it does. */}
-      {!solved && word && <p className="text-sm text-slate-300">It was {word}.</p>}
+      {!solved && word && <p className="text-sm text-slate-300 text-center">It was {word}.</p>}
       {locked && !solved && !word && (
-        <p className="text-sm text-slate-400">Answers are closed for this one.</p>
+        <p className="text-sm text-slate-400 text-center">Answers are closed for this one.</p>
       )}
     </div>
   );
@@ -908,7 +962,7 @@ export default function LiveSession({ session, host }: { session: string; host: 
           {kind === 'rank' && <Rank item={item} onSend={(v) => void send(v)} sending={sending} />}
           {/* The only kind that does not go through `send`: a word game is a
               sequence of guesses, each marked by the server as it arrives. */}
-          {kind === 'game' && <WordGame item={item} sending={sending} />}
+          {kind === 'game' && <WordGame item={item} />}
           {kind === 'open' && answering && (
             <Ask onSend={(v, anon) => void send(v, anon)} sending={sending} />
           )}
