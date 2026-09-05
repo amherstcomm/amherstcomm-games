@@ -57,13 +57,22 @@ export function normaliseTheme(raw) {
         .filter((w) => /^[a-z]+$/.test(w))
     : [];
   if (words.length === 0) return null;
-  const spangram = typeof raw.spangram === 'string' ? raw.spangram.trim().toLowerCase() : '';
+  // An array, and tolerant of the single `spangram` the first version sent —
+  // this reads a database that may be older than the generator.
+  const offered = Array.isArray(raw.spangrams)
+    ? raw.spangrams
+    : typeof raw.spangram === 'string'
+      ? [raw.spangram]
+      : [];
   return {
     name: typeof raw.name === 'string' ? raw.name : '',
     clue: (typeof raw.clue === 'string' && raw.clue.trim()) || raw.name || '',
-    // Weave needs one and the shape is the board's business, so a spangram that
-    // will not thread is treated as absent rather than passed on to fail later.
-    spangram: /^[a-z]{6,16}$/.test(spangram) ? spangram : '',
+    // The shape is the board's business, so one that will not thread is treated
+    // as absent rather than passed on to fail later.
+    spangrams: offered
+      .filter((w) => typeof w === 'string')
+      .map((w) => w.trim().toLowerCase())
+      .filter((w) => /^[a-z]{6,16}$/.test(w)),
     words,
   };
 }
@@ -95,20 +104,35 @@ export function themedPool(themeWords, length, blocked) {
     .sort();
 }
 
-/** The theme as Weave wants it: a clue, a spangram, and members of 4 to 10
- *  letters that are not the spangram itself.
+/** The theme as Weave wants it — one candidate per spangram.
  *
- *  Null when it cannot make a board — no spangram, or too few letters to tile
- *  one. Weave's own generator would simply fail to place it, and failing here
- *  with a reason is more use than an exception forty lines down. */
-export function weaveTheme(theme, cells = 48) {
-  if (!theme || !theme.spangram) return null;
-  const words = [...new Set(theme.words)].filter(
-    (w) => w.length >= 4 && w.length <= 10 && w !== theme.spangram
-  );
-  const letters = words.reduce((n, w) => n + w.length, 0);
-  // The board is the spangram plus whatever tiles the rest. Without enough
-  // letters to reach that there is nothing to attempt.
-  if (letters < cells - theme.spangram.length) return null;
-  return { clue: theme.clue, spangram: theme.spangram, words };
+ *  A list of them rather than one, and it is the answer to a real problem: a
+ *  list that runs for a month builds a board every day of it, and a single
+ *  spangram threads the same word through all thirty-one. The board rearranges,
+ *  the long answer does not, and by the third day nobody is looking for it.
+ *
+ *  Handed to Weave's own generator as its themes, which shuffles them against
+ *  the day's seed and takes the first that tiles. So the day picks, the pick is
+ *  deterministic, and a spangram that will not fit this shape is passed over
+ *  rather than costing the board.
+ *
+ *  Empty when none of them can work — no spangrams at all, or too few letters
+ *  to tile around any of them — and the caller falls back to the curated
+ *  themes, because a day without a Weave board is worse than a day without a
+ *  themed one.
+ */
+export function weaveThemes(theme, cells = 48) {
+  if (!theme || !theme.spangrams || theme.spangrams.length === 0) return [];
+  const out = [];
+  for (const spangram of theme.spangrams) {
+    const words = [...new Set(theme.words)].filter(
+      (w) => w.length >= 4 && w.length <= 10 && w !== spangram
+    );
+    const letters = words.reduce((n, w) => n + w.length, 0);
+    // The board is the spangram plus whatever tiles the rest. Without enough
+    // letters to reach that there is nothing to attempt.
+    if (letters < cells - spangram.length) continue;
+    out.push({ clue: theme.clue, spangram, words });
+  }
+  return out;
 }

@@ -23,7 +23,7 @@ const DATE = '2026-10-08';
 const THEME = {
   name: 'Employee ownership',
   clue: 'What we all are',
-  spangram: 'employeeowned',
+  spangrams: ['employeeowned', 'sharedreward', 'ownership', 'stakeholders'],
   words: [
     'esop',
     'shares', 'dividend', 'owner', 'equity', 'buyout', 'vesting', 'stake', 'payout',
@@ -34,13 +34,23 @@ const THEME = {
 
 let plain: string;
 let themed: string;
+/** More themed days. One spangram would thread the same long answer through
+ *  every board of a month-long theme — the board rearranges and the word does
+ *  not.
+ *
+ *  Three days rather than two, and the assertion is "more than one spangram
+ *  across them" rather than "each differs from the last". Two consecutive days
+ *  landing on the same one is ordinary with four to choose from; a month stuck
+ *  on one is the failure. */
+const MORE = ['2026-10-09', '2026-10-10'];
+let themedMore: string[] = [];
 
-async function generate(dir: string, theme?: object) {
+async function generate(dir: string, theme?: object, date = DATE) {
   await run('node', ['scripts/fetch-puzzles.mjs'], {
     env: {
       ...process.env,
       SKIP_SOLVER_DATA: '1',
-      PUZZLES_DATE: DATE,
+      PUZZLES_DATE: date,
       PUZZLES_DATA_DIR: dir,
       PUZZLES_SEED_SALT: 'themed-test-salt',
       ...(theme ? { PUZZLES_THEME: JSON.stringify(theme) } : {}),
@@ -63,12 +73,20 @@ const words = (payload: { byDifficulty: Record<string, { words: Record<string, s
 beforeAll(async () => {
   plain = await mkdtemp(join(tmpdir(), 'anagrimoire-plain-'));
   themed = await mkdtemp(join(tmpdir(), 'anagrimoire-themed-'));
-  await Promise.all([generate(plain), generate(themed, THEME)]);
+  themedMore = await Promise.all(
+    MORE.map(() => mkdtemp(join(tmpdir(), 'anagrimoire-themed-more-')))
+  );
+  await Promise.all([
+    generate(plain),
+    generate(themed, THEME),
+    ...themedMore.map((dir, i) => generate(dir, THEME, MORE[i])),
+  ]);
 });
 
 afterAll(async () => {
   await rm(plain, { recursive: true, force: true });
   await rm(themed, { recursive: true, force: true });
+  await Promise.all(themedMore.map((dir) => rm(dir, { recursive: true, force: true })));
 });
 
 describe('the daily word', () => {
@@ -139,10 +157,25 @@ describe('the Weave board', () => {
     const solved: { spangram: { w: string }; words: { w: string }[] } = JSON.parse(
       Buffer.from(board.byDifficulty.easy.answers, 'base64').toString()
     );
-    expect(solved.spangram.w).toBe(THEME.spangram);
+    expect(THEME.spangrams).toContain(solved.spangram.w);
     for (const { w } of solved.words) {
       expect(THEME.words).toContain(w.toLowerCase());
     }
+  });
+
+  // The whole reason a list carries several. A month of boards threading the
+  // same long answer is a month of one puzzle: by the third day nobody is
+  // looking for it.
+  it('and a run of days does not thread the same one every time', async () => {
+    const spangramOf = async (dir: string) =>
+      JSON.parse(
+        Buffer.from(
+          (await read(dir, 'daily-weave.json')).byDifficulty.easy.answers,
+          'base64'
+        ).toString()
+      ).spangram.w as string;
+    const used = new Set(await Promise.all([themed, ...themedMore].map(spangramOf)));
+    expect(used.size, `every day threaded ${[...used][0]}`).toBeGreaterThan(1);
   });
 
   it('while the unthemed day gets a curated one', async () => {

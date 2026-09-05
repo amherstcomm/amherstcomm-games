@@ -1179,9 +1179,20 @@ ten games can take a plain word list, and they are the two this touches:
   to relax because the words came from inside the building.
 - **Weave**, whose whole premise is a themed word set — the list becomes the
   theme, so the board spells out the event's own words. It needs a **clue** (the
-  list's name by default) and a **spangram**: one word of 6 to 16 letters,
-  threaded corner to corner. Without a spangram the list still picks the daily
-  word and simply cannot build a board.
+  list's name by default) and **spangrams**: the long answers threaded corner to
+  corner, one word each of 6 to 16 letters.
+
+  **Plural, and give several.** A theme that runs for a month builds a board
+  every day of it, and one spangram threads the same long answer through all
+  thirty-one — the board rearranges, the word does not, and by the third day
+  nobody is looking for it. Each spangram becomes a candidate handed to Weave's
+  own generator, which shuffles them against the day's seed and takes the first
+  that tiles: so the day picks, the pick is deterministic, and one that will not
+  fit a given shape is passed over rather than costing the board. Four across a
+  month reads as four different puzzles.
+
+  Without any, the list still picks the daily word and simply cannot build a
+  board.
 
 The other eight need pangrams, letter grids or curated pairs, and a bag of words
 cannot supply those.

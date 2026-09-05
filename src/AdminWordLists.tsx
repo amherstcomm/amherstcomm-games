@@ -32,7 +32,7 @@ export default function AdminWordLists() {
   const [name, setName] = useState('');
   const [words, setWords] = useState('');
   const [clue, setClue] = useState('');
-  const [spangram, setSpangram] = useState('');
+  const [spangrams, setSpangrams] = useState('');
   const [from, setFrom] = useState('');
   const [until, setUntil] = useState('');
   const [note, setNote] = useState('');
@@ -46,7 +46,7 @@ export default function AdminWordLists() {
     setName('');
     setWords('');
     setClue('');
-    setSpangram('');
+    setSpangrams('');
     setFrom('');
     setUntil('');
     setNote('');
@@ -59,7 +59,7 @@ export default function AdminWordLists() {
     // initial value would quietly clear whatever the row had, so opening a
     // themed list to fix a typo would take its dates off.
     setClue(list.clue ?? '');
-    setSpangram(list.spangram ?? '');
+    setSpangrams((list.spangrams ?? []).join('\n'));
     setFrom(list.daily_from ?? '');
     setUntil(list.daily_until ?? '');
     setNote('');
@@ -70,7 +70,7 @@ export default function AdminWordLists() {
     setBusy(true);
     const res = await saveWordList(editing === 'new' ? null : editing, name, words, {
       clue,
-      spangram,
+      spangrams,
       from,
       until,
     });
@@ -215,17 +215,23 @@ export default function AdminWordLists() {
               />
             </label>
             <label className="block">
-              <span className="text-xs text-slate-400">Spangram</span>
+              <span className="text-xs text-slate-400">Spangrams</span>
+              {/* Several, and said plainly because the reason is not obvious
+                  until the second week: a theme that runs for a month builds a
+                  board every day of it, and one spangram threads the same long
+                  answer through all thirty-one. */}
               <span className="block text-xs text-slate-500 mt-0.5 mb-1">
-                The long answer threaded corner to corner — one word, 6 to 16
-                letters. Without one the list still picks the daily word, but
+                The long answer threaded corner to corner — one word each, 6 to
+                16 letters, one per line. Give several: a different one is
+                picked each day, so a month of boards is not a month of the same
+                board. Without any, the list still picks the daily word but
                 cannot build a Weave board.
               </span>
-              <input
-                className={FIELD}
-                value={spangram}
-                placeholder="employeeowned"
-                onChange={(e) => setSpangram(e.target.value)}
+              <textarea
+                className={FIELD + ' h-24 font-mono'}
+                value={spangrams}
+                placeholder={'employeeowned\nsharedreward\nownership'}
+                onChange={(e) => setSpangrams(e.target.value)}
               />
             </label>
           </div>
