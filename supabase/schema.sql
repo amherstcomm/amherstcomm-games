@@ -2103,7 +2103,8 @@ insert into public.capabilities (capability, min_role, description) values
   ('reports.read',       'games.admin', 'Read the abuse report queue'),
   ('reports.act',        'games.admin', 'Act on a report — dismiss, blocklist, ban'),
   ('users.manage',       'games.admin', 'Grant and revoke privileges'),
-  ('permissions.manage', 'games.admin', 'Change what each privilege unlocks')
+  ('permissions.manage', 'games.admin', 'Change what each privilege unlocks'),
+  ('site.settings',      'games.admin', 'Change the site settings')
 on conflict (capability) do nothing;
 
 -- permissions.manage cannot be handed below admin.
@@ -7364,3 +7365,185 @@ $fn$;
 
 revoke all on function public.duplicate_session(uuid, text) from public, anon;
 grant execute on function public.duplicate_session(uuid, text) to authenticated;
+
+-- ---------------------------------------------------------------------------
+-- Things a deployment changes without rebuilding itself
+--
+-- Everything here was a `VITE_` value first, and most of it can stay one: a
+-- name, an origin, an SSO provider are all facts about the deployment, and a
+-- deployment is rebuilt when it changes. What does not fit that shape is
+-- anything naming an *event* — "Employee Ownership Month" is true for October
+-- and false in November, and a container rebuild is an absurd way to say so.
+-- brand.ts has said this was coming since the subtitle was added.
+--
+-- The env var does not go away; it becomes the floor. A row overrides it, an
+-- empty row does not, and a deployment that sets neither gets the fallback.
+-- That ordering is what lets the page paint before the database answers.
+--
+-- Everything in this table is *public display text*. It is read by anon,
+-- deliberately: the masthead and the legal pages render before anybody signs
+-- in. Nothing secret goes here — there is no "private settings" flag and there
+-- should not be one, because a table where some rows are public and some are
+-- not is a table somebody will eventually get wrong.
+-- ---------------------------------------------------------------------------
+
+
+-- No policy, and no grant to any web role: reads go through
+-- read_site_settings() and writes through set_site_setting(). Enabling RLS on
+-- a table nothing is granted on is belt and braces rather than the guarantee,
+-- but the guarantee is one `grant` away from being wrong and this is not.
+
+/*
+ * The keys that exist.
+ *
+ * A closed set rather than free-form text. A settings table anybody can invent
+ * a key in is a settings table where `subtitle` and `subtitles` both look
+ * plausible in the database and only one of them renders — and the one that
+ * does not is silent. Adding a key is one row here.
+ */
+create table if not exists public.site_setting_keys (
+  key text primary key,
+  description text not null
+);
+
+insert into public.site_setting_keys (key, description) values
+  ('subtitle',      'The line under the site name — the event this run is for'),
+  ('announcement',  'A short notice on the home page, or empty for none'),
+  ('contact_email', 'The address the legal pages and account deletion offer'),
+  ('office_zone',   'The company clock an open session''s opening hours are read in')
+on conflict (key) do update set description = excluded.description;
+
+-- Declared after site_setting_keys and referencing it inline. An
+-- `alter table ... add constraint` here instead would apply once and fail on
+-- every re-run, which run.sh notices as a second pass that is not clean.
+create table if not exists public.site_settings (
+  key text primary key references public.site_setting_keys (key),
+  value text not null default '',
+  updated_at timestamptz not null default now(),
+  updated_by uuid references auth.users (id) on delete set null
+);
+alter table public.site_settings enable row level security;
+
+
+/*
+ * Reading them.
+ *
+ * One object rather than a row set, because the client wants all of it at once
+ * and exactly once — this is called before the first paint. Granted to anon as
+ * well as authenticated: the masthead and the privacy page render for somebody
+ * who has not signed in, and the alternative is a site whose own name arrives
+ * late.
+ *
+ * Keys with no row, and keys whose row is empty, are simply absent. The client
+ * then falls through to its build value, which is what makes an unset row and
+ * an unset variable mean the same thing.
+ */
+create or replace function public.read_site_settings()
+returns jsonb
+language sql
+stable
+security definer
+set search_path = ''
+as $fn$
+  select coalesce(jsonb_object_agg(s.key, s.value), '{}'::jsonb)
+  from public.site_settings s
+  where btrim(s.value) <> ''
+$fn$;
+
+revoke all on function public.read_site_settings() from public;
+grant execute on function public.read_site_settings() to anon, authenticated;
+
+/*
+ * Changing one.
+ *
+ * Validated here rather than only in the form, because the form is not the
+ * only way in and because two of these can break a page rather than merely
+ * look wrong. A zone name the platform does not know throws a RangeError out
+ * of Intl, at module load, on every visitor — see src/schedule.ts. Postgres
+ * happens to carry the same list the browser does, which is a better check
+ * than any regular expression.
+ *
+ * An empty value is how a setting is cleared: the row is kept so it can carry
+ * who cleared it and when, and read_site_settings() leaves empty rows out.
+ */
+create or replace function public.set_site_setting(p_key text, p_value text)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $fn$
+declare
+  v text := btrim(coalesce(p_value, ''));
+begin
+  if not public.can('site.settings') then
+    return jsonb_build_object('ok', false, 'reason', 'not allowed');
+  end if;
+  if not exists (select 1 from public.site_setting_keys k where k.key = p_key) then
+    return jsonb_build_object('ok', false, 'reason', 'no such setting');
+  end if;
+
+  if length(v) > 200 then
+    return jsonb_build_object('ok', false, 'reason', 'that is longer than the space it goes in');
+  end if;
+
+  -- A zone the browser cannot resolve takes every page down, so it is refused
+  -- here where the refusal is visible rather than there where it is a blank
+  -- screen. Postgres carries the same tz database Intl does.
+  if p_key = 'office_zone' and v <> ''
+     and not exists (select 1 from pg_timezone_names t where t.name = v) then
+    return jsonb_build_object('ok', false, 'reason',
+      'that is not a timezone name — try something like America/Chicago');
+  end if;
+
+  -- Deliberately loose. The address is printed for a person to write to, not
+  -- authenticated, and a validator strict enough to be worth having rejects
+  -- addresses that work.
+  if p_key = 'contact_email' and v <> '' and v !~ '^[^@[:space:]]+@[^@[:space:]]+\.[^@[:space:]]+$' then
+    return jsonb_build_object('ok', false, 'reason', 'that does not look like an email address');
+  end if;
+
+  insert into public.site_settings (key, value, updated_at, updated_by)
+  values (p_key, v, now(), (select auth.uid()))
+  on conflict (key) do update
+    set value = excluded.value, updated_at = now(), updated_by = excluded.updated_by;
+
+  return jsonb_build_object('ok', true, 'key', p_key, 'value', v);
+end;
+$fn$;
+
+revoke all on function public.set_site_setting(text, text) from public, anon;
+grant execute on function public.set_site_setting(text, text) to authenticated;
+
+/*
+ * What the settings page draws itself from: every key that exists, its
+ * description, and what it is currently set to. Admin only — not because the
+ * values are secret, they are on the page for anybody, but because a list of
+ * every knob is a thing to show the person who may turn them.
+ */
+create or replace function public.site_settings_sheet()
+returns jsonb
+language sql
+stable
+security definer
+set search_path = ''
+as $fn$
+  select case
+    when not public.can('site.settings')
+      then jsonb_build_object('ok', false, 'reason', 'not allowed')
+    else jsonb_build_object('ok', true, 'settings', coalesce(
+      (select jsonb_agg(jsonb_build_object(
+                'key', k.key,
+                'description', k.description,
+                'value', coalesce(s.value, ''),
+                'updated_at', s.updated_at,
+                'updated_by', p.display_name)
+              order by k.key)
+       from public.site_setting_keys k
+       left join public.site_settings s on s.key = k.key
+       left join public.profiles p on p.id = s.updated_by),
+      '[]'::jsonb))
+  end
+$fn$;
+
+revoke all on function public.site_settings_sheet() from public, anon;
+grant execute on function public.site_settings_sheet() to authenticated;

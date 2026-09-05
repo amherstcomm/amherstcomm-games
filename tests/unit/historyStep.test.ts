@@ -165,6 +165,9 @@ describe('the overlay table', () => {
       // and so is joining one, and looking at the board
       'join',
       'scores',
+      // and so is the settings page: it has its own address, and Back from it
+      // should leave rather than uncover whatever was behind
+      'admin',
     ];
     for (const k of kinds) expect(IS_OVERLAY[k], k).toBeTypeOf('boolean');
     expect(Object.keys(IS_OVERLAY).sort()).toEqual([...kinds].sort());

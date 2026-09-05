@@ -5,7 +5,7 @@
 
 import type { ReactNode } from 'react';
 import ReportMenu from '@/ReportMenu';
-import { CONTACT_EMAIL } from '@/brand';
+import { useSetting } from '@/settings';
 
 export const LEGAL_UPDATED = '16 August 2026';
 
@@ -32,7 +32,12 @@ function List({ children }: { children: ReactNode }) {
   return <ul className="text-slate-400 mb-2.5 space-y-1.5 list-disc list-outside pl-5">{children}</ul>;
 }
 
-function Mail({ to = CONTACT_EMAIL }: { to?: string }) {
+function Mail({ to }: { to?: string }) {
+  // The default is a hook rather than a default parameter, which is why this
+  // reads oddly: a default parameter is evaluated at the call, and the value
+  // now lives in a store that only a component may read.
+  const settingAddress = useSetting('contact_email');
+  to = to ?? settingAddress;
   // An unset address rendered <a href="mailto:"></a> — a link with no target
   // and no text, which axe caught as a link-name violation on the privacy page.
   // Guarding each call site would have been the fragile fix, and was: I wrote
@@ -83,6 +88,7 @@ function Updated() {
 }
 
 export function PrivacyPolicy() {
+  const contact = useSetting('contact_email');
   return (
     <div className="text-sm">
       <Updated />
@@ -346,7 +352,7 @@ export function PrivacyPolicy() {
       <P>
         Both are immediate and neither can be undone. If you would rather we did it, or
         you want a copy of what we hold or something corrected,{' '}
-        {CONTACT_EMAIL ? (
+        {contact ? (
           <>
             email <Mail /> from your Amherst address — that one has to be email, because
             the request only means anything if it comes from the account it is about,
@@ -419,7 +425,7 @@ export function PrivacyPolicy() {
         through rather than an inbox that might not be — which is the honest
         difference between the two. Leave an address if you want a reply.
       </P>
-      {CONTACT_EMAIL && (
+      {contact && (
         <P>
           You can also email <Mail /> if you would rather, and you should if what you
           need to send us does not fit in a form.
@@ -430,6 +436,7 @@ export function PrivacyPolicy() {
 }
 
 export function Terms() {
+  const contact = useSetting('contact_email');
   return (
     <div className="text-sm">
       <Updated />
@@ -493,7 +500,7 @@ export function Terms() {
         If you find a security problem, please report it rather than exploiting it, and
         please not anywhere public — that publishes the hole to everyone before it is
         fixed. Use the security option under <em>Report a problem</em> at the bottom of
-        any page{CONTACT_EMAIL ? <>, or <Mail /></> : null}. It goes
+        any page{contact ? <>, or <Mail /></> : null}. It goes
         to the same internal queue, and you get a reference you can check.
       </P>
 
@@ -550,7 +557,7 @@ export function Terms() {
       <H>Contact</H>
       <P>
         <Report>The report form</Report> at the bottom of any page
-        {CONTACT_EMAIL ? <>, or <Mail /></> : null}. Security problems
+        {contact ? <>, or <Mail /></> : null}. Security problems
         have their own route, above.
       </P>
     </div>

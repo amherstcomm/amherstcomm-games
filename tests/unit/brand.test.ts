@@ -55,18 +55,22 @@ describe('the name', () => {
   });
 });
 
-describe('the subtitle', () => {
+// The build value is the *fallback* now: a site_settings row overrides it, and
+// components read useSetting('subtitle'). What is asserted here is the floor —
+// what paints before the database answers, and what applies if it never does.
+// tests/unit/settings.test.ts owns the layering on top.
+describe('the subtitle fallback', () => {
   it('is empty unless set, so no campaign outlives its month', async () => {
     for (const value of ['', '   ']) {
-      const { SITE_SUBTITLE } = await loadWith({ VITE_SITE_SUBTITLE: value });
-      expect(SITE_SUBTITLE).toBe('');
+      const { SITE_SUBTITLE_FALLBACK } = await loadWith({ VITE_SITE_SUBTITLE: value });
+      expect(SITE_SUBTITLE_FALLBACK).toBe('');
     }
   });
 
   it('carries the event when there is one', async () => {
-    const { SITE_SUBTITLE } = await loadWith({
+    const { SITE_SUBTITLE_FALLBACK } = await loadWith({
       VITE_SITE_SUBTITLE: 'Employee Ownership Month',
     });
-    expect(SITE_SUBTITLE).toBe('Employee Ownership Month');
+    expect(SITE_SUBTITLE_FALLBACK).toBe('Employee Ownership Month');
   });
 });

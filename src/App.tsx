@@ -12,13 +12,14 @@ import { colorWords, PALETTES, PaletteContext, resolveTheme, TEXT_SCALES, THEME_
 import { PrefsContext } from '@/prefs';
 import OnboardingCard from '@/OnboardingCard';
 import { useModalA11y } from '@/useModalA11y';
-import { Combine, Flag as FlagIcon, Radio } from 'lucide-react';
+import { Combine, Flag as FlagIcon, Radio, SlidersHorizontal } from 'lucide-react';
 import BridgeGame, { type BridgeGameHandle } from '@/BridgeGame';
 import GameMenu from '@/GameMenu';
 import LadderIcon from '@/LadderIcon';
 import { supabase } from '@/supabase';
 import { autoSignIn } from '@/signIn';
-import { SITE_NAME, SITE_SUBTITLE } from '@/brand';
+import { SITE_NAME } from '@/brand';
+import { useSetting } from '@/settings';
 import { importBaselineOnce } from '@/stats';
 import GuessGame, { type GuessGameHandle, type LetterState } from '@/GuessGame';
 import HiveGame, { type HiveGameHandle } from '@/HiveGame';
@@ -42,6 +43,7 @@ import TicketView from '@/TicketView';
 import ReportQueueView from '@/ReportQueueView';
 import LiveSession from '@/LiveSession';
 import SessionEditor from '@/SessionEditor';
+import AdminSettings from '@/AdminSettings';
 import JoinSession from '@/JoinSession';
 import Scoreboard from '@/Scoreboard';
 import { allows, myCapabilities } from '@/roles';
@@ -320,6 +322,10 @@ function initialPlay(mode: Mode, stored: boolean): boolean {
 if (entryRoute().kind === 'friend') stashInvite((entryRoute() as { code: string }).code);
 
 function App() {
+  // The event this run is for. A setting, so it changes without a rebuild;
+  // the build value is what paints before the database answers.
+  const subtitle = useSetting('subtitle');
+  const announcement = useSetting('announcement');
   const [mode, setMode] = useState<Mode>(linkMode ?? initial.mode);
   const [dictionaries, setDictionaries] = useState(initial.dictionaries);
   const [length, setLength] = useState(initial.pattern.length);
@@ -527,6 +533,7 @@ function App() {
     nav.page.kind === 'reportQueue' ||
     nav.page.kind === 'live' ||
     nav.page.kind === 'sessions' ||
+    nav.page.kind === 'admin' ||
     nav.page.kind === 'join' ||
     nav.page.kind === 'scores'
       ? nav.page
@@ -565,6 +572,7 @@ function App() {
   // which role may set games up is one row in `capabilities` and not a
   // redeploy.
   const [canSetUp, setCanSetUp] = useState(false);
+  const [canAdmin, setCanAdmin] = useState(false);
   // Whether anything is running, so the way in is on every page rather than
   // only for people who were sent a link. Not a poll — see the note in
   // JoinSession; this refetches when the tab is focused, which is when somebody
@@ -600,12 +608,17 @@ function App() {
     if (!session) {
       setOwner(false);
       setCanSetUp(false);
+      setCanAdmin(false);
       setLiveNow(0);
       return;
     }
     let alive = true;
     amOwner().then((yes) => alive && setOwner(yes));
-    myCapabilities().then((held) => alive && setCanSetUp(allows(held, 'games.setup')));
+    myCapabilities().then((held) => {
+      if (!alive) return;
+      setCanSetUp(allows(held, 'games.setup'));
+      setCanAdmin(allows(held, 'site.settings'));
+    });
     const count = () => readLiveSessions().then((live) => alive && setLiveNow(live.length));
     void count();
     window.addEventListener('focus', count);
@@ -1707,9 +1720,18 @@ function App() {
               ordinary state and renders nothing rather than an empty line —
               which is why this is a guard and not a string that defaults to
               something cheerful. */}
-          {SITE_SUBTITLE && (
+          {subtitle && (
             <p className="-mt-2 mb-4 text-sm sm:text-base font-semibold uppercase tracking-[0.18em] text-accent">
-              {SITE_SUBTITLE}
+              {subtitle}
+            </p>
+          )}
+          {/* A notice the site can put up and take down. Under the subtitle
+              because it is the more perishable of the two — the subtitle names
+              the month, this names the afternoon — and it renders nothing at
+              all when there is none rather than reserving the space. */}
+          {announcement && (
+            <p className="mb-4 rounded-lg border border-accent/40 bg-accent/5 px-3 py-2 text-sm text-slate-200">
+              {announcement}
             </p>
           )}
           {/* The strapline describes whichever game is loaded behind all this,
@@ -1738,6 +1760,7 @@ function App() {
             <LiveSession session={reportPage.session} host={reportPage.host} />
           )}
           {reportPage?.kind === 'sessions' && <SessionEditor session={reportPage.session} />}
+          {reportPage?.kind === 'admin' && <AdminSettings />}
           {reportPage?.kind === 'join' && <JoinSession code={reportPage.code} />}
           {reportPage?.kind === 'scores' && <Scoreboard session={reportPage.session} />}
           {reportPage?.kind === 'reportAction' && (
@@ -2355,6 +2378,15 @@ function App() {
               >
                 <Radio className="w-3.5 h-3.5" aria-hidden="true" />
                 Sessions
+              </RouteLink>
+            )}
+            {canAdmin && (
+              <RouteLink
+                {...pageLink({ kind: 'admin' })}
+                className="inline-flex items-center gap-1.5 text-accent hover:brightness-110 transition"
+              >
+                <SlidersHorizontal className="w-3.5 h-3.5" aria-hidden="true" />
+                Site settings
               </RouteLink>
             )}
             <ReportMenu

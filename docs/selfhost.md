@@ -966,6 +966,71 @@ per statement, unless it is declared deferrable.
 
 ---
 
+## Settings, without a rebuild
+
+`/admin` — gated on `site.settings`, which only `games.admin` holds — carries
+the handful of values that describe an *event* rather than a deployment.
+A name, an origin, an SSO provider are facts about the deployment and stay
+`VITE_` values, rebuilt when they change. "Employee Ownership Month" is true in
+October and false in November, and a container rebuild is an absurd way to say
+so.
+
+| Setting | What it is |
+| --- | --- |
+| `subtitle` | The line under the site name |
+| `announcement` | A notice on the home page, or empty for none |
+| `contact_email` | The address the legal pages and account deletion offer |
+| `office_zone` | The company clock an open session's opening hours are read in |
+
+### Three sources, in order
+
+1. the `site_settings` row, once it arrives
+2. what this browser saw last time
+3. the build value, compiled in
+
+(2) exists because of (1)'s latency. The subtitle renders in the masthead, among
+the first things painted; a value that arrives after the paint does not render
+late, it renders **twice**, and the second one moves the page. A remembered
+value is almost always the right one, so almost nobody sees a change at all.
+
+It is remembered through `store`, so it obeys the privacy level like everything
+else. At `essential` there is no cache and the build value carries the first
+paint — the honest outcome rather than a special case: somebody who asked us not
+to keep things does not have things kept.
+
+**An empty row and no row mean the same thing.** That is what lets a cleared
+setting fall through to the build value instead of rendering a blank masthead,
+and it is enforced at both ends — the server leaves empty rows out of
+`read_site_settings()`, the client drops empty strings — which is exactly the
+arrangement that drifts, so `tests/unit/settings.test.ts` pins both.
+
+### What is validated, and where
+
+In the database, in `set_site_setting`, because the form is not the only way in
+and two of these can break a page rather than merely look wrong. A zone name the
+platform cannot resolve throws a `RangeError` out of `Intl` at module load, for
+every visitor — so it is refused against `pg_timezone_names`, which is the same
+tz database the browser carries. The address is checked loosely on purpose: it
+is printed for a person to write to, and a validator strict enough to be worth
+having rejects addresses that work.
+
+The refusals are printed in the admin page **exactly as the server worded
+them**, rather than pre-empted client-side. A form that validates one way and a
+server that validates another disagree eventually, and the one people see is the
+wrong one.
+
+The keys are a closed set — a row in `site_setting_keys`, with the settings
+table carrying a foreign key to it. A settings table anybody can invent a key in
+is one where `subtitle` and `subtitles` both look plausible in the database and
+only one of them renders, silently.
+
+### What is deliberately not here
+
+Anything secret. Everything in this table is public display text, read by `anon`
+because the masthead and the privacy page render before anybody signs in. There
+is no "private setting" flag and there should not be one: a table where some
+rows are public and some are not is a table somebody eventually gets wrong.
+
 ## Keeping the puzzle window fresh
 
 `daily_puzzles` holds a rolling fortnight, so it goes stale rather than

@@ -99,6 +99,7 @@ export type Route =
   // the editor and a separate /sessions/list would be a second name for the
   // same page.
   | { kind: 'sessions'; session?: string }
+  | { kind: 'admin' }
   // The way in. `/join` is the list and the code box; `/join/<code>` is the
   // short address that fits on a slide and lands straight in the room.
   | { kind: 'join'; code?: string }
@@ -135,6 +136,8 @@ export function pathOf(route: Route): string {
       return route.host ? `/live/${route.session}/host` : `/live/${route.session}`;
     case 'sessions':
       return route.session ? `/sessions/${route.session}` : '/sessions';
+    case 'admin':
+      return '/admin';
     case 'join':
       return route.code ? `/join/${route.code}` : '/join';
     case 'scores':
@@ -185,6 +188,8 @@ export function titleOf(route: Route): string {
       return route.host ? `Presenting${suffix}` : `Live${suffix}`;
     case 'sessions':
       return `Sessions${suffix}`;
+    case 'admin':
+      return `Site settings${suffix}`;
     case 'join':
       return `Join a session${suffix}`;
     case 'scores':
@@ -281,6 +286,7 @@ export function parsePath(pathname: string): Route | null {
 
   // /sign-in and /account are the same panel wearing whichever face fits
   if (first === 'sign-in' || first === 'signin') return { kind: 'account', tab: DEFAULT_ACCOUNT };
+  if (first === 'admin' && parts.length === 1) return { kind: 'admin' };
   if (PANELS.includes(first as Panel)) return { kind: 'panel', panel: first as Panel };
 
   // 'solve' is not a view any more, but the address is out there in shared

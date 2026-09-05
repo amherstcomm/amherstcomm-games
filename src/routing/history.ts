@@ -39,6 +39,8 @@ export const IS_OVERLAY: Record<Route['kind'], boolean> = {
   // a page you stay on for the length of a session, not something over a board
   live: false,
   sessions: false,
+  // A page, like sessions: it has its own address and Back leaves it.
+  admin: false,
   join: false,
   scores: false,
 };

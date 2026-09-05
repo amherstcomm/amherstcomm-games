@@ -39,6 +39,7 @@ export type Page =
   | { kind: 'reportQueue' }
   | { kind: 'live'; session: string; host: boolean }
   | { kind: 'sessions'; session?: string }
+  | { kind: 'admin' }
   | { kind: 'join'; code?: string }
   | { kind: 'scores'; session: string };
 
@@ -130,6 +131,8 @@ export function navOf(route: Route, last: Tabs = DEFAULT_TABS): { nav: Nav; game
       return { nav: over({ kind: 'legal', doc: route.doc }, { ...last, legal: route.doc }), game: null };
     case 'sessions':
       return { nav: page({ kind: 'sessions', session: route.session }), game: null };
+    case 'admin':
+      return { nav: page({ kind: 'admin' }), game: null };
     case 'join':
       return { nav: page({ kind: 'join', code: route.code }), game: null };
     case 'scores':
