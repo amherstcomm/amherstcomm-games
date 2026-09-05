@@ -7559,3 +7559,180 @@ $fn$;
 
 revoke all on function public.site_settings_sheet() from public, anon;
 grant execute on function public.site_settings_sheet() to authenticated;
+
+-- ---------------------------------------------------------------------------
+-- Handing somebody a privilege
+--
+-- Until now this was a row inserted by hand, which meant one person could grant
+-- anything and everybody else had to ask him. That is fine for a deployment
+-- with one administrator and bad for an event month, where the thing most
+-- likely to be needed at short notice is a second person who can build a round.
+--
+-- Three things shape the design, all of them from has_role above:
+--
+--   * `games.view` is never a row. Being signed in is the proof, because
+--     Zitadel only grants the application to people who hold one of the three
+--     roles. So "no row" is a real state meaning ordinary player, and removing
+--     somebody's privilege is a delete rather than a downgrade.
+--   * The roles are a ladder, and a row out-ranks anything below it. Nobody
+--     needs two rows, so setting a level replaces rather than adds.
+--   * Somebody has to exist before they can be given anything, and they exist
+--     from their first sign-in. There is no inviting people here; the identity
+--     provider does that.
+-- ---------------------------------------------------------------------------
+
+/*
+ * Everybody who holds something, and what.
+ *
+ * Gated on users.manage rather than on being an admin, because that is the
+ * capability the whole surface is about and capabilities are the thing this
+ * deployment can re-map. Email as well as display name: a room contains two
+ * people called Dave and the address is what tells them apart.
+ */
+create or replace function public.people_with_roles()
+returns jsonb
+language sql
+stable
+security definer
+set search_path = ''
+as $fn$
+  select case
+    when not public.can('users.manage')
+      then jsonb_build_object('ok', false, 'reason', 'not allowed')
+    else jsonb_build_object('ok', true, 'people', coalesce(
+      (select jsonb_agg(jsonb_build_object(
+                'user', g.user_id,
+                'email', u.email,
+                'name', p.display_name,
+                'role', g.role,
+                'granted_at', g.granted_at,
+                'self', g.user_id = (select auth.uid()))
+              order by public.role_rank(g.role) desc, u.email)
+       from public.role_grants g
+       join auth.users u on u.id = g.user_id
+       left join public.profiles p on p.id = g.user_id),
+      '[]'::jsonb))
+  end
+$fn$;
+
+revoke all on function public.people_with_roles() from public, anon;
+grant execute on function public.people_with_roles() to authenticated;
+
+/*
+ * Finding somebody who does not hold anything yet.
+ *
+ * A search rather than a list, and a short one. The whole staff directory
+ * rendered on a page is a different thing from "who can do what", and the
+ * question being asked here is always about one person somebody has in mind.
+ *
+ * Matches on address or display name, because whoever is granting knows one or
+ * the other and not necessarily which one the site stored.
+ */
+create or replace function public.find_people(p_query text)
+returns jsonb
+language sql
+stable
+security definer
+set search_path = ''
+as $fn$
+  select case
+    when not public.can('users.manage')
+      then jsonb_build_object('ok', false, 'reason', 'not allowed')
+    when length(btrim(coalesce(p_query, ''))) < 2
+      then jsonb_build_object('ok', true, 'people', '[]'::jsonb)
+    else jsonb_build_object('ok', true, 'people', coalesce(
+      (select jsonb_agg(x order by x->>'email')
+       from (
+         select jsonb_build_object(
+                  'user', u.id,
+                  'email', u.email,
+                  'name', p.display_name,
+                  'role', g.role) as x
+         from auth.users u
+         left join public.profiles p on p.id = u.id
+         left join public.role_grants g on g.user_id = u.id
+         where u.email ilike '%' || btrim(p_query) || '%'
+            or p.display_name ilike '%' || btrim(p_query) || '%'
+         limit 10
+       ) found),
+      '[]'::jsonb))
+  end
+$fn$;
+
+revoke all on function public.find_people(text) from public, anon;
+grant execute on function public.find_people(text) to authenticated;
+
+/*
+ * Setting what somebody may do.
+ *
+ * `games.view` means "nothing special", so it deletes rather than inserts —
+ * see the note above about why it is never a row.
+ *
+ * Two refusals, and both are about the same failure. A deployment with no
+ * administrator cannot appoint one: role_grants is reachable only through this
+ * function, this function requires users.manage, and users.manage requires an
+ * administrator. Getting back would mean SQL against the database by hand,
+ * which is exactly the thing this page exists to stop being necessary. So the
+ * last administrator cannot be removed or demoted, whether by somebody else or
+ * by themselves.
+ *
+ * And nobody may hand out more than they hold. Not paternalism: an editor who
+ * could grant games.admin would be an administrator with extra steps, which
+ * makes the ladder decorative.
+ */
+create or replace function public.set_person_role(p_user uuid, p_role text)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $fn$
+declare
+  mine int;
+  wanted int;
+  theirs text;
+  admins int;
+begin
+  if not public.can('users.manage') then
+    return jsonb_build_object('ok', false, 'reason', 'not allowed');
+  end if;
+  if p_user is null or not exists (select 1 from auth.users u where u.id = p_user) then
+    return jsonb_build_object('ok', false, 'reason', 'no such person');
+  end if;
+
+  wanted := public.role_rank(p_role);
+  if wanted = 0 then
+    return jsonb_build_object('ok', false, 'reason', 'no such privilege');
+  end if;
+
+  select coalesce(max(public.role_rank(g.role)), 1) into mine
+  from public.role_grants g where g.user_id = (select auth.uid());
+  if wanted > mine then
+    return jsonb_build_object('ok', false, 'reason', 'you cannot hand out more than you hold');
+  end if;
+
+  select g.role into theirs from public.role_grants g where g.user_id = p_user
+  order by public.role_rank(g.role) desc limit 1;
+
+  -- The lockout guard. Counted rather than assumed, and counted *before* the
+  -- delete, because "there is another admin" has to be true of the state this
+  -- leaves behind.
+  if theirs = 'games.admin' and p_role <> 'games.admin' then
+    select count(*) into admins from public.role_grants g where g.role = 'games.admin';
+    if admins <= 1 then
+      return jsonb_build_object('ok', false, 'reason',
+        'that is the last administrator — appoint another one first');
+    end if;
+  end if;
+
+  delete from public.role_grants g where g.user_id = p_user;
+  -- games.view is the floor and never a row: being signed in is the proof.
+  if p_role <> 'games.view' then
+    insert into public.role_grants (user_id, role) values (p_user, p_role);
+  end if;
+
+  return jsonb_build_object('ok', true, 'user', p_user, 'role', p_role);
+end;
+$fn$;
+
+revoke all on function public.set_person_role(uuid, text) from public, anon;
+grant execute on function public.set_person_role(uuid, text) to authenticated;

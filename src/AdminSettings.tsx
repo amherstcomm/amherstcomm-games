@@ -12,6 +12,7 @@ import { Loader2 } from 'lucide-react';
 import { readSiteSettings, setSiteSetting, type SettingRow } from '@/settingsAdmin';
 import { refreshSettings } from '@/settings';
 import { pathOf } from '@/routes';
+import AdminPeople from '@/AdminPeople';
 
 const FIELD =
   'w-full rounded-lg bg-white/5 border border-white/15 px-3 py-2 text-sm text-slate-100 ' +
@@ -180,6 +181,15 @@ export default function AdminSettings() {
           ))}
         </div>
       )}
+
+      {/* Its own section rather than its own page: both halves are "things one
+          person changes about the deployment", and a second address to remember
+          buys nothing. It draws itself, including its own refusal — the two
+          halves are gated on different capabilities (site.settings and
+          users.manage) and a deployment is free to hand them out separately. */}
+      <div className="mt-10">
+        <AdminPeople />
+      </div>
     </div>
   );
 }

@@ -1031,6 +1031,49 @@ because the masthead and the privacy page render before anybody signs in. There
 is no "private setting" flag and there should not be one: a table where some
 rows are public and some are not is a table somebody eventually gets wrong.
 
+### Who may do what
+
+The second half of `/admin`, gated on `users.manage`. Until now a privilege was
+a row inserted by hand, which is fine for a deployment with one administrator
+and bad for an event month — the thing most likely to be needed at short notice
+is a second person who can build a round.
+
+Three facts from `has_role` shape it:
+
+- **`games.view` is never a row.** Zitadel only grants the application to
+  holders of one of the three roles, so being signed in is the proof. "No row"
+  is therefore a real state meaning ordinary player, and taking a privilege away
+  is a delete rather than a downgrade.
+- **The roles are a ladder** and a row out-ranks everything below it, so nobody
+  needs two rows: setting a level replaces rather than adds.
+- **Somebody exists from their first sign-in.** There is no inviting people
+  here; the identity provider does that. The page says so, because otherwise a
+  search that finds nobody looks broken.
+
+Finding people is a search, not a list — under two characters the server answers
+with nobody. The whole staff directory rendered on a page is a different thing
+from "who can do what", and the question being asked is always about one person
+somebody already has in mind.
+
+#### Two refusals, both from the server
+
+**Nobody hands out more than they hold.** An editor who could grant
+`games.admin` would be an administrator with extra steps, which makes the ladder
+decorative.
+
+**The last administrator cannot be removed or demoted**, including by
+themselves. This one is worth stating plainly because it is not recoverable from
+inside the application: `role_grants` is reachable only through
+`set_person_role`, that needs `users.manage`, and `users.manage` needs an
+administrator. A deployment with no administrator cannot appoint one, and the
+way back is SQL by hand — the exact thing this page exists to stop being
+necessary. Appoint the second one first.
+
+The page states it as well as the server enforcing it, because it is the refusal
+that would otherwise look like a bug: the control is there, it is the obvious
+thing to press, and the reason it refuses is about the whole database rather
+than about the row being pressed.
+
 ## Keeping the puzzle window fresh
 
 `daily_puzzles` holds a rolling fortnight, so it goes stale rather than
