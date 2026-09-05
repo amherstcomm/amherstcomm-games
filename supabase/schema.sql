@@ -8342,3 +8342,193 @@ revoke all on function public.set_feature_window(text, boolean, timestamptz, tim
   from public, anon;
 grant execute on function public.set_feature_window(text, boolean, timestamptz, timestamptz)
   to authenticated;
+
+-- ---------------------------------------------------------------------------
+-- Weave themes of somebody's own
+--
+-- A word list is a bag of words: right for a themed round in a session, and
+-- right for picking the daily word, where any word of the right length will do.
+-- A Weave theme is a different thing and pretending otherwise made a worse
+-- version of both. It is a *set that tiles a board* — a clue, a spangram
+-- threaded corner to corner, and words whose lengths fill exactly what the
+-- spangram leaves. Forty-eight letters in sixes cannot make thirty-five.
+--
+--   { clue: 'Profit sharing', spangram: 'profitsharing',
+--     words: [metrics, payout, reward, target, bonus, split] }
+--
+-- Dates work as a pool rather than as ownership: every theme covering a day is
+-- a candidate, and the generator picks among them with that day's seed. So one
+-- theme on one date is a theme for that date, and six themes across October is
+-- a month that does not repeat itself.
+-- ---------------------------------------------------------------------------
+
+create table if not exists public.weave_themes (
+  id uuid primary key default gen_random_uuid(),
+  clue text not null,
+  spangram text not null check (spangram ~ '^[a-z]{6,16}$'),
+  words text[] not null,
+  -- Both null is a theme nobody has scheduled yet: kept, editable, unused.
+  starts_on date,
+  ends_on date,
+  created_by uuid references auth.users (id) on delete set null,
+  created_at timestamptz not null default now()
+);
+alter table public.weave_themes enable row level security;
+
+/*
+ * The themes covering one day, for the generator.
+ *
+ * Read with the service-role key and by nothing else: these are answers, and a
+ * browser that could ask for tomorrow's board has been handed tomorrow's board.
+ *
+ * All of them, not one. Weave's own generator shuffles the themes it is given
+ * against the day's seed and takes the first that tiles, so handing it the pool
+ * is what makes a month of boards a month of different boards — and a theme
+ * that will not fit a particular shape is passed over rather than costing the
+ * day.
+ */
+create or replace function public.daily_weave_themes(p_date date)
+returns jsonb
+language sql
+stable
+security definer
+set search_path = ''
+as $fn$
+  select coalesce(
+    (select jsonb_agg(jsonb_build_object(
+              'clue', t.clue,
+              'spangram', t.spangram,
+              'words', to_jsonb(t.words))
+            order by t.clue)
+     from public.weave_themes t
+     where t.starts_on is not null and t.ends_on is not null
+       and p_date between t.starts_on and t.ends_on),
+    '[]'::jsonb)
+$fn$;
+
+revoke all on function public.daily_weave_themes(date) from public, anon, authenticated;
+grant execute on function public.daily_weave_themes(date) to service_role;
+
+create or replace function public.weave_themes_sheet()
+returns jsonb
+language sql
+stable
+security definer
+set search_path = ''
+as $fn$
+  select case
+    when not public.can('games.setup')
+      then jsonb_build_object('ok', false, 'reason', 'not allowed')
+    else jsonb_build_object('ok', true, 'themes', coalesce(
+      (select jsonb_agg(jsonb_build_object(
+                'id', t.id,
+                'clue', t.clue,
+                'spangram', t.spangram,
+                'words', to_jsonb(t.words),
+                'starts_on', t.starts_on,
+                'ends_on', t.ends_on)
+              order by t.starts_on nulls last, t.clue)
+       from public.weave_themes t),
+      '[]'::jsonb))
+  end
+$fn$;
+
+revoke all on function public.weave_themes_sheet() from public, anon;
+grant execute on function public.weave_themes_sheet() to authenticated;
+
+/*
+ * Writing one.
+ *
+ * Whether it tiles is *not* checked here, deliberately. The page works that out
+ * while somebody is typing — see src/weaveFit.ts — and a theme that fits no
+ * board today may fit one tomorrow when a word is added. Refusing to save it
+ * would mean losing the half-written thing, which is the worst moment to be
+ * strict. What is refused is what cannot ever be right: a spangram of the wrong
+ * shape, and a window that ends before it starts.
+ */
+create or replace function public.save_weave_theme(
+  p_id uuid,
+  p_clue text,
+  p_spangram text,
+  p_words text,
+  p_from date default null,
+  p_until date default null
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $fn$
+declare
+  id uuid;
+  clue text := btrim(coalesce(p_clue, ''));
+  span text := lower(btrim(coalesce(p_spangram, '')));
+  list text[];
+begin
+  if not public.can('games.setup') then
+    return jsonb_build_object('ok', false, 'reason', 'not allowed');
+  end if;
+  if clue = '' then
+    return jsonb_build_object('ok', false, 'reason', 'it needs a clue');
+  end if;
+  if span !~ '^[a-z]{6,16}$' then
+    return jsonb_build_object('ok', false, 'reason',
+      'a spangram is one word of 6 to 16 letters, no spaces');
+  end if;
+  if p_from is not null and p_until is not null and p_until < p_from then
+    return jsonb_build_object('ok', false, 'reason', 'it cannot finish before it starts');
+  end if;
+
+  -- Same splitting as a word list: anything that is not a letter separates, so
+  -- a paste needs no formatting first. Weave takes 4 to 10 letters, so the rest
+  -- are dropped rather than refused — a paste has junk in it.
+  list := array(
+    select distinct lower(w)
+    from regexp_split_to_table(coalesce(p_words, ''), '[^A-Za-z]+') as w
+    where length(w) between 4 and 10 and lower(w) <> span
+    order by 1);
+  if coalesce(array_length(list, 1), 0) = 0 then
+    return jsonb_build_object('ok', false, 'reason', 'it needs some words');
+  end if;
+
+  if p_id is null then
+    insert into public.weave_themes (clue, spangram, words, starts_on, ends_on, created_by)
+    values (clue, span, list, p_from, p_until, (select auth.uid()))
+    returning weave_themes.id into id;
+  else
+    update public.weave_themes
+       set clue = clue, spangram = span, words = list,
+           starts_on = p_from, ends_on = p_until
+     where weave_themes.id = p_id
+    returning weave_themes.id into id;
+    if id is null then
+      return jsonb_build_object('ok', false, 'reason', 'no such theme');
+    end if;
+  end if;
+
+  return jsonb_build_object('ok', true, 'id', id, 'words', array_length(list, 1));
+end;
+$fn$;
+
+revoke all on function public.save_weave_theme(uuid, text, text, text, date, date)
+  from public, anon;
+grant execute on function public.save_weave_theme(uuid, text, text, text, date, date)
+  to authenticated;
+
+create or replace function public.delete_weave_theme(p_theme uuid)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $fn$
+begin
+  if not public.can('games.setup') then
+    return jsonb_build_object('ok', false, 'reason', 'not allowed');
+  end if;
+  delete from public.weave_themes where id = p_theme;
+  return jsonb_build_object('ok', true);
+end;
+$fn$;
+
+revoke all on function public.delete_weave_theme(uuid) from public, anon;
+grant execute on function public.delete_weave_theme(uuid) to authenticated;

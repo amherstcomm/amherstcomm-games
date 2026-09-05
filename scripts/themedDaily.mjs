@@ -47,6 +47,70 @@ export async function themeFor(date, env = process.env, fetchImpl = fetch) {
   }
 }
 
+/** The Weave themes covering a date: a pool, not one.
+ *
+ *  Separate from themeFor because they are separate things. A word list is a
+ *  bag of words — right for the daily word, where any word of the right length
+ *  will do. A Weave theme is a set that tiles a board, and pretending one shape
+ *  served both made a worse version of each.
+ *
+ *  Every theme covering the day is a candidate; Weave's own generator shuffles
+ *  them against that day's seed and takes the first that tiles. One theme on one
+ *  date is a theme for that date; six across October is a month that does not
+ *  repeat itself.
+ *
+ *  `PUZZLES_WEAVE_THEMES` short-circuits it with inline JSON, for the contract
+ *  test and for trying a theme before committing to dates. */
+export async function weaveThemesFor(date, env = process.env, fetchImpl = fetch) {
+  const inline = (env.PUZZLES_WEAVE_THEMES || '').trim();
+  if (inline) {
+    try {
+      return cleanWeaveThemes(JSON.parse(inline));
+    } catch {
+      throw new Error('PUZZLES_WEAVE_THEMES is set but is not valid JSON');
+    }
+  }
+  const url = env.SUPABASE_URL;
+  const key = env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !key) return [];
+  try {
+    const res = await fetchImpl(`${url}/rest/v1/rpc/daily_weave_themes`, {
+      method: 'POST',
+      headers: {
+        apikey: key,
+        authorization: `Bearer ${key}`,
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({ p_date: date }),
+    });
+    if (!res.ok) return [];
+    return cleanWeaveThemes(await res.json());
+  } catch {
+    // Unreachable is a reason to publish a curated board, not no board.
+    return [];
+  }
+}
+
+/** What the generator can rely on: a clue, a spangram it can thread, and words
+ *  it can place. Anything else is dropped rather than passed on to fail
+ *  somewhere less legible. */
+export function cleanWeaveThemes(raw) {
+  if (!Array.isArray(raw)) return [];
+  const out = [];
+  for (const t of raw) {
+    if (!t || typeof t !== 'object') continue;
+    const spangram = typeof t.spangram === 'string' ? t.spangram.trim().toLowerCase() : '';
+    if (!/^[a-z]{6,16}$/.test(spangram)) continue;
+    const words = (Array.isArray(t.words) ? t.words : [])
+      .filter((w) => typeof w === 'string')
+      .map((w) => w.trim().toLowerCase())
+      .filter((w) => /^[a-z]{4,10}$/.test(w) && w !== spangram);
+    if (words.length === 0) continue;
+    out.push({ clue: typeof t.clue === 'string' && t.clue.trim() ? t.clue.trim() : spangram, spangram, words });
+  }
+  return out;
+}
+
 /** What the generator can rely on, whatever came back. */
 export function normaliseTheme(raw) {
   if (!raw || typeof raw !== 'object') return null;

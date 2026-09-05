@@ -1233,6 +1233,48 @@ the theme, they write it in the question, where saying it is a choice.
 The draw happens once, at save. Deleting the list afterwards does not take the
 question apart: the word was copied when it was drawn.
 
+### Weave themes
+
+A word list is a bag of words — right for a themed round in a session, and right
+for picking the daily word, where any word of the right length will do. **A
+Weave theme is a different thing**, and one shape serving both made a worse
+version of each. It is a set that *tiles a board*:
+
+```
+clue      Profit sharing
+spangram  profitsharing          threaded corner to corner, 6–16 letters
+words     metrics payout reward target bonus split
+```
+
+Thirteen letters of spangram and thirty-five of words is forty-eight, which is
+the easy board exactly. The bigger boards are sixty-three and eighty.
+
+**The dates are a pool, not ownership.** Every theme covering a day is a
+candidate, and Weave's own generator shuffles them against that day's seed and
+takes the first that tiles. One theme on one date is a theme for that date; six
+across October is a month that does not repeat itself. Put the same date in both
+fields for a single day, and leave both empty for a theme kept but not scheduled.
+
+#### The calculator, and why there is one
+
+Weave fills the whole grid. The words have to sum **exactly** to the cells the
+spangram leaves, so a theme can look generous and still fail: forty-eight
+letters in words of six cannot make thirty-five, however many of them there are.
+That failure is silent — the generator passes the theme over and uses a curated
+one, which looks like nothing happening.
+
+So `/admin` works it out while somebody types, per board, and says which ones
+the theme fills and why not for the rest (`15 letters short`, `no combination of
+these words fills exactly 35 squares`). It is a subset-sum over word lengths,
+in `src/weaveFit.ts`, and the board sizes are read out of the generator by
+`tests/unit/weaveFit.test.ts` rather than copied and hoped for.
+
+Whether a theme tiles is **not** enforced when saving. A theme that fills no
+board today may fill one tomorrow when a word is added, and refusing to save it
+would lose the half-written thing at the worst moment. What is refused is what
+can never be right: a spangram of the wrong shape, and a window that ends before
+it starts.
+
 #### Taking over the dailies
 
 A list with **dates** on it themes the daily puzzles for those days. Two of the
