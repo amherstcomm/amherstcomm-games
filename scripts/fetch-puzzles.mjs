@@ -8,6 +8,7 @@ import { createRequire } from 'node:module';
 import { generateWeave } from './weave.mjs';
 import { generateSquare, GIVEN_TARGET } from './squares.mjs';
 import { THEMES } from './themes.mjs';
+import { themeFor, themedPool, weaveTheme } from './themedDaily.mjs';
 import {
   generateCryptogram,
   generatePlayable,
@@ -426,6 +427,15 @@ const dailyWeaveClues = new Set();
 const dailyCryptogramTexts = new Set();
 const dailyLadderPairs = new Set();
 const dailyBridgePrompts = new Set();
+// Which theme, if any, covers the day being generated. Asked once for the run
+// rather than per game, and asked about the *puzzle* date rather than today's:
+// the window is generated a fortnight ahead, so this run is writing days that
+// have not happened. Null for eleven months of the year, and null whenever the
+// database cannot be reached, which produces exactly the day the site would
+// have had anyway.
+const theme = await themeFor(etDate);
+if (theme) console.log(`Theming ${etDate} from "${theme.name}" (${theme.words.length} words)`);
+
 for (const variant of ['', 'dev']) {
   const salt = variant ? `-${variant}` : '';
   const prefix = variant ? 'dev-' : '';
@@ -458,6 +468,13 @@ for (const variant of ['', 'dev']) {
       let pool = at(answers);
       if (pool.length < YEAR) pool = at(cumulative);
       if (pool.length === 0) throw new Error(`No ${difficulty} words of length ${len}`);
+      // A themed month narrows the pool to the theme's own words *of this
+      // length that the pool already allowed* — see themedPool for why the
+      // intersection rather than the theme alone. Per length, so a list with no
+      // seven-letter words still themes the other boards, and empty falls
+      // straight back to the day the site would have had anyway.
+      const themed = themedPool(pool, theme?.words, len);
+      if (themed.length > 0) pool = themed;
       words[len] = Buffer.from(pool[Math.floor(rng() * pool.length)]).toString('base64');
     }
     // wrapped in { words } so every byDifficulty entry has the same field
@@ -630,7 +647,15 @@ for (const variant of ['', 'dev']) {
   for (const difficulty of DIFFICULTIES) {
     const [cols, rows] = WEAVE_SHAPE[difficulty];
     const weaveRng = mulberry32(xmur3(`${SEED_SALT}anagrimoire-weave-${etDate}${salt}${diffSalt(difficulty)}`)());
-    const weave = generateWeave(weaveRng, cols, rows, THEMES);
+    // The themed list first and on its own, so it is the board rather than one
+    // candidate among sixty. If it will not tile — too few letters for this
+    // shape, or no arrangement found in the attempts allowed — the curated
+    // themes take over, because a day without a Weave board is worse than a day
+    // without a themed one.
+    const themedBoard = weaveTheme(theme, cols * rows);
+    const weave =
+      (themedBoard && generateWeave(weaveRng, cols, rows, [themedBoard])) ||
+      generateWeave(weaveRng, cols, rows, THEMES);
     if (!weave) throw new Error(`Could not generate a ${difficulty} daily weave`);
     dailyWeaveClues.add(weave.clue);
     weaveByDifficulty[difficulty] = {

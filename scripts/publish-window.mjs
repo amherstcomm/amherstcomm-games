@@ -36,7 +36,19 @@ try {
       PUZZLES_DATA_DIR: dir,
       SKIP_SOLVER_DATA: '1',
     };
-    execFileSync('node', ['scripts/fetch-puzzles.mjs'], { env, stdio: 'ignore' });
+    // Output discarded except for the theming line. The generator is chatty —
+    // a dozen "Wrote …" lines per day, fourteen days — but which days a themed
+    // list took over is the one thing worth seeing in the nightly log, and
+    // "trust me, October is themed" is not a thing to find out is wrong on the
+    // first.
+    const said = execFileSync('node', ['scripts/fetch-puzzles.mjs'], {
+      env,
+      encoding: 'utf8',
+      maxBuffer: 16 * 1024 * 1024,
+    });
+    for (const line of said.split(/\r?\n/)) {
+      if (line.startsWith('Theming ')) console.log(line);
+    }
     execFileSync('node', ['scripts/publish-puzzles.mjs'], { env, stdio: 'inherit' });
   }
   console.log(`Window published: ${baseDate} through ${plus(baseDate, WINDOW_DAYS - 1)}`);

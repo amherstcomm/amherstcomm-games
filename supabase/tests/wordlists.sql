@@ -170,7 +170,7 @@ select pg_temp.check('nor draw from one',
   not has_function_privilege('authenticated', 'public.draw_word(uuid, int)', 'execute'));
 select pg_temp.check('and anon may call none of it',
   not has_function_privilege('anon', 'public.word_lists_sheet()', 'execute')
-  and not has_function_privilege('anon', 'public.save_word_list(uuid, text, text)', 'execute'));
+  and not has_function_privilege('anon', 'public.save_word_list(uuid, text, text, text, text, date, date)', 'execute'));
 
 -- ---------------------------------------------------------------------------
 -- Tidying up
@@ -188,5 +188,101 @@ select pg_temp.check('but a round already drawn from it keeps its answer',
   (select a.answer ->> 'word' from public.item_answers a
    where a.item_id = ((select v->>'id' from t where k='item'))::uuid)
     = (select v#>>'{}' from t where k='word'));
+
+-- ---------------------------------------------------------------------------
+-- Taking over the dailies
+--
+-- Dates rather than a switch, and the reason is the fortnight: the window is
+-- generated ahead, so the run on 25 September already writes 1 October. The
+-- theme has to be decided per puzzle date or the first two weeks of an event
+-- go out unthemed and already published.
+-- ---------------------------------------------------------------------------
+set session "test.uid" = 'e1111111-1111-1111-1111-111111111111';
+insert into t select 'oct', public.save_word_list(
+  null, 'October', E'shares
+dividend
+owner
+equity
+buyout
+vesting',
+  'What we all are', 'employeeowned', date '2026-10-01', date '2026-10-31');
+select pg_temp.check('a list can be given a run of days',
+  (select v->>'ok' from t where k='oct') = 'true');
+
+select pg_temp.check('and the generator finds it by date',
+  public.daily_theme(date '2026-10-08')->>'clue' = 'What we all are');
+select pg_temp.check('with the words and the spangram it needs',
+  jsonb_array_length(public.daily_theme(date '2026-10-08')->'words') = 6
+  and public.daily_theme(date '2026-10-08')->>'spangram' = 'employeeowned');
+-- Eleven months of the year there is no theme, and that is the ordinary state
+-- rather than a failure: the generator makes the day it would have made.
+select pg_temp.check('a day nothing covers has no theme',
+  public.daily_theme(date '2026-09-30') is null
+  and public.daily_theme(date '2026-11-01') is null);
+select pg_temp.check('the ends are included',
+  public.daily_theme(date '2026-10-01') is not null
+  and public.daily_theme(date '2026-10-31') is not null);
+
+-- The name is the obvious clue and usually the right one.
+insert into t select 'noclue', public.save_word_list(
+  null, 'Anniversary week', E'silver
+golden
+decade
+planet',
+  null, null, date '2026-12-01', date '2026-12-07');
+select pg_temp.check('a list with no clue of its own is called by its name',
+  public.daily_theme(date '2026-12-03')->>'clue' = 'Anniversary week');
+-- Without a spangram it can still pick the daily word; it just cannot build a
+-- Weave board, which the generator decides rather than this.
+select pg_temp.check('and may have no spangram at all',
+  public.daily_theme(date '2026-12-03')->'spangram' = 'null'::jsonb);
+
+-- ---------------------------------------------------------------------------
+-- What is refused
+-- ---------------------------------------------------------------------------
+select pg_temp.check('a spangram that will not thread is refused while somebody is looking',
+  (public.save_word_list(null, 'Too short', 'shares', null, 'short',
+     date '2027-01-01', date '2027-01-07')->>'reason') like 'a spangram is one word%');
+select pg_temp.check('and one with a space in it',
+  (public.save_word_list(null, 'Spaced', 'shares', null, 'employee owned',
+     date '2027-01-01', date '2027-01-07')->>'ok') = 'false');
+select pg_temp.check('a window cannot finish before it starts',
+  (public.save_word_list(null, 'Backwards', 'shares', null, null,
+     date '2027-02-10', date '2027-02-01')->>'reason') = 'it cannot finish before it starts');
+-- Two themes covering one day would make the daily depend on which row was read
+-- first: a puzzle that changes when nobody changed anything.
+select pg_temp.check('and two lists cannot cover the same day',
+  (public.save_word_list(null, 'Also October', 'shares', null, null,
+     date '2026-10-15', date '2026-10-20')->>'reason') like 'another list already covers%');
+select pg_temp.check('though a list may be edited without colliding with itself',
+  (public.save_word_list(((select v->>'id' from t where k='oct'))::uuid, 'October',
+     'shares dividend owner', 'What we all are', 'employeeowned',
+     date '2026-10-01', date '2026-10-31')->>'ok') = 'true');
+
+-- ---------------------------------------------------------------------------
+-- Who may read a theme
+--
+-- The generator, with the service-role key, and nobody else: the words are
+-- answers and nothing a browser holds should be able to ask for tomorrow's.
+-- ---------------------------------------------------------------------------
+select pg_temp.check('the generator may read a theme',
+  has_function_privilege('service_role', 'public.daily_theme(date)', 'execute'));
+select pg_temp.check('and no web role may',
+  not has_function_privilege('authenticated', 'public.daily_theme(date)', 'execute')
+  and not has_function_privilege('anon', 'public.daily_theme(date)', 'execute'));
+
+-- How many of them could actually be a daily, which is fewer and is worth
+-- saying: a daily is validated against the dictionary that ships with the
+-- client, so a themed word it has never heard of makes an unanswerable day.
+insert into public.words (word, len, sorted) values ('dividend', 8, 'dddeiinv')
+on conflict do nothing;
+select pg_temp.check('the sheet says how many the dictionary knows',
+  (select (e->>'dictionary')::int from jsonb_array_elements(
+     public.word_lists_sheet()->'lists') e
+   where e->>'name' = 'Anniversary week') = 1);
+select pg_temp.check('which is fewer than the list holds',
+  (select (e->>'dictionary')::int < (e->>'words')::int from jsonb_array_elements(
+     public.word_lists_sheet()->'lists') e
+   where e->>'name' = 'Anniversary week'));
 
 \echo '--- word list checks passed ---'
