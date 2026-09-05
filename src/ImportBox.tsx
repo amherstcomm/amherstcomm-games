@@ -84,11 +84,36 @@ export default function ImportBox<T>({
 
   return (
     <div className="rounded-xl border border-white/15 p-4 space-y-3">
+      {/* A file or a paste, and the file simply fills the box: everything after
+          this point — the preview, the refusals, the count — is the same path
+          either way, and a second path would be a second thing to get wrong. */}
+      <label className="flex flex-wrap items-center gap-2 text-xs text-slate-400">
+        Open a file
+        <input
+          type="file"
+          accept="application/json,.json,text/plain"
+          aria-label={`${label} from a file`}
+          className="text-xs text-slate-400 file:mr-2 file:rounded-lg file:border file:border-white/15 file:bg-white/10 file:px-3 file:py-1.5 file:text-sm file:font-semibold file:text-slate-200"
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            if (!file) return;
+            void file.text().then((t) => {
+              setText(t);
+              setDone([]);
+            });
+            // Cleared, so choosing the same file twice after an edit still
+            // fires: a file input does not change when the name does not.
+            e.target.value = '';
+          }}
+        />
+      </label>
+
       <label className="block">
         <span className="text-sm font-semibold text-slate-200">{label}</span>
         <span className="block text-xs text-slate-400 mt-0.5 mb-1">
-          One object or an array of them. Anything worked out rather than given —
-          counts, totals — is ignored and recalculated.
+          Open a file above, or paste here. One object or an array of them;
+          anything worked out rather than given — counts, totals — is ignored
+          and recalculated.
         </span>
         <textarea
           className={FIELD + ' h-48 font-mono text-xs'}

@@ -8,7 +8,7 @@ import { createRequire } from 'node:module';
 import { generateWeave } from './weave.mjs';
 import { generateSquare, GIVEN_TARGET } from './squares.mjs';
 import { THEMES } from './themes.mjs';
-import { themeFor, themedPool, weaveThemes, weaveThemesFor } from './themedDaily.mjs';
+import { themeFor, themedPool, weaveThemesFor } from './themedDaily.mjs';
 import {
   generateCryptogram,
   generatePlayable,
@@ -676,11 +676,12 @@ for (const variant of ['', 'dev']) {
     // Weave's own generator shuffles them against the day's seed and takes the
     // first that tiles. That is what stops a month-long theme threading the
     // same long answer through all thirty-one boards.
-    // The purpose-built themes first, then whatever a word list can be turned
-    // into. A list was the only way to theme Weave before themes existed, and
-    // it still works, but a theme written as a theme is the better answer when
-    // there is one.
-    const themedBoards = [...weaveThemesToday, ...weaveThemes(theme, cols * rows)];
+    // Weave's own themes, and only those. A word list used to be turned into
+    // one, which was the only way before weave_themes existed — it went when
+    // lists were allowed to overlap, because merging two lists would have had
+    // to invent a rule for whose clue and whose spangram won. A list themes the
+    // daily word; a theme themes the board.
+    const themedBoards = weaveThemesToday;
     const weave =
       (themedBoards.length > 0 && generateWeave(weaveRng, cols, rows, themedBoards)) ||
       generateWeave(weaveRng, cols, rows, THEMES);

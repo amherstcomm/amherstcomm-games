@@ -1268,7 +1268,9 @@ It accepts `theme` or `clue`, words as an array or as a line of text, and
 those go stale. A date it cannot read plainly is left off rather than guessed at:
 a date read wrong is a theme that appears in the wrong week.
 
-**Download template** gives a blank of the right shape with two worked
+**Open a file** takes a `.json` straight off disk; it fills the same box a
+paste does, so the preview, the refusals and the count are one path rather than
+two. **Download template** gives a blank of the right shape with two worked
 examples, for handing to whoever — or whatever — is writing the month. The
 instructions travel inside it under `_readme`, a key the parsers skip, because
 that is the only way to put a sentence in JSON. `tests/unit/templates.test.ts`
@@ -1349,8 +1351,19 @@ cannot supply those.
 generated a fortnight ahead, so the run on 25 September already writes 1
 October: the theme is decided per *puzzle date*, not per run. Set the dates at
 least two weeks before the first day, which the admin page says on the form.
-Two lists may not cover the same day — the daily would then depend on which row
-was read first, which is a puzzle that changes when nobody changed anything.
+
+**Lists may overlap**, and a day takes the **union** of every list covering it.
+This used to be refused, on the grounds that two lists covering a day would make
+the daily depend on which row was read first — true of the answer given then,
+and the wrong fix. Pooling the words means there is nothing to decide and no
+order to depend on: a standing list for the month and a narrower one for a week
+are both simply available that week.
+
+**A word list themes the daily *word* and nothing else.** Weave used to be
+themed from a list's clue and spangrams, which went when overlap was allowed:
+merging two lists would have had to invent a rule for whose clue won, and
+`weave_themes` already says it properly. A list themes the word; a theme themes
+the board.
 
 **Everything degrades rather than fails.** A day nothing covers, a database the
 generator cannot reach, a length the list cannot fill, a theme that will not

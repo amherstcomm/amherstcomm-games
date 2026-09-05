@@ -34,8 +34,6 @@ export default function AdminWordLists() {
   const [editing, setEditing] = useState<string | null>(null);
   const [name, setName] = useState('');
   const [words, setWords] = useState('');
-  const [clue, setClue] = useState('');
-  const [spangrams, setSpangrams] = useState('');
   const [from, setFrom] = useState('');
   const [until, setUntil] = useState('');
   const [note, setNote] = useState('');
@@ -48,8 +46,6 @@ export default function AdminWordLists() {
     setEditing('new');
     setName('');
     setWords('');
-    setClue('');
-    setSpangrams('');
     setFrom('');
     setUntil('');
     setNote('');
@@ -61,8 +57,6 @@ export default function AdminWordLists() {
     // All of them, because saving sends all of them: a field left at its
     // initial value would quietly clear whatever the row had, so opening a
     // themed list to fix a typo would take its dates off.
-    setClue(list.clue ?? '');
-    setSpangrams((list.spangrams ?? []).join('\n'));
     setFrom(list.daily_from ?? '');
     setUntil(list.daily_until ?? '');
     setNote('');
@@ -72,8 +66,6 @@ export default function AdminWordLists() {
   async function save() {
     setBusy(true);
     const res = await saveWordList(editing === 'new' ? null : editing, name, words, {
-      clue,
-      spangrams,
       from,
       until,
     });
@@ -201,7 +193,7 @@ export default function AdminWordLists() {
               fields with no explanation. */}
           <div className="rounded-lg border border-white/15 p-3 space-y-3">
             <p className="text-xs uppercase tracking-wider text-slate-500">
-              Take over the dailies (optional)
+              Take over the daily word (optional)
             </p>
             <div className="flex flex-wrap gap-3">
               <label className="flex flex-col gap-1 text-xs text-slate-400">
@@ -228,37 +220,9 @@ export default function AdminWordLists() {
                 catch it, and dates set the day before do not. */}
             <p className="text-xs text-slate-500">
               Puzzles are generated a fortnight ahead, so set these at least two
-              weeks before the first day.
+              weeks before the first day. Lists may overlap — a day takes the
+              words of every list covering it.
             </p>
-            <label className="block">
-              <span className="text-xs text-slate-400">Clue for the Weave board</span>
-              <input
-                className={FIELD + ' mt-1'}
-                value={clue}
-                placeholder={name || 'What we all are'}
-                onChange={(e) => setClue(e.target.value)}
-              />
-            </label>
-            <label className="block">
-              <span className="text-xs text-slate-400">Spangrams</span>
-              {/* Several, and said plainly because the reason is not obvious
-                  until the second week: a theme that runs for a month builds a
-                  board every day of it, and one spangram threads the same long
-                  answer through all thirty-one. */}
-              <span className="block text-xs text-slate-500 mt-0.5 mb-1">
-                The long answer threaded corner to corner — one word each, 6 to
-                16 letters, one per line. Give several: a different one is
-                picked each day, so a month of boards is not a month of the same
-                board. Without any, the list still picks the daily word but
-                cannot build a Weave board.
-              </span>
-              <textarea
-                className={FIELD + ' h-24 font-mono'}
-                value={spangrams}
-                placeholder={'employeeowned\nsharedreward\nownership'}
-                onChange={(e) => setSpangrams(e.target.value)}
-              />
-            </label>
           </div>
 
           <div className="flex flex-wrap items-center gap-2">

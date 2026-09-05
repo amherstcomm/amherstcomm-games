@@ -357,7 +357,9 @@ test('a month of Weave themes can be pasted in one go', async ({ page }) => {
   ]);
 
   await page.getByRole('button', { name: 'Paste themes' }).click();
-  await page.getByLabel('Paste themes').fill(blob);
+  // Exact: the file input beside it answers to 'Paste themes from a file',
+  // which a substring match now finds as well.
+  await page.getByLabel('Paste themes', { exact: true }).fill(blob);
 
   // Shown before it happens, with the fit — a theme that fills no board imports
   // perfectly and then never appears.
@@ -418,7 +420,7 @@ test('and several word lists at once, with a template to start from', async ({ p
 
   // Three lists in one paste, each with several words — which is the shape a
   // month arrives in.
-  await page.getByLabel('Paste lists').fill(
+  await page.getByLabel('Paste lists', { exact: true }).fill(
     JSON.stringify([
       { name: 'Employee ownership', words: ['shares', 'dividend', 'esop'] },
       { name: 'Around the office', words: ['fibre', 'splice', 'conduit', 'router'] },
@@ -438,4 +440,71 @@ test('and several word lists at once, with a template to start from', async ({ p
     'The building',
   ]);
   expect(saved[1].p_words).toBe('fibre splice conduit router');
+});
+
+// A file, not just a paste. The file fills the same box, so everything after
+// that point is the path the other tests already cover — what this checks is
+// that opening one actually gets there.
+test('a month can be opened from a file rather than pasted', async ({ page }) => {
+  const saved: Record<string, unknown>[] = [];
+  await page.route('**/rest/v1/rpc/**', (route) => {
+    const url = route.request().url();
+    if (url.includes('save_weave_theme')) {
+      saved.push(JSON.parse(route.request().postData() ?? '{}'));
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ ok: true, words: 6 }),
+      });
+    }
+    const body = url.includes('weave_themes_sheet')
+      ? { ok: true, themes: [] }
+      : url.includes('site_settings_sheet')
+        ? { ok: true, settings: [] }
+        : url.includes('word_lists_sheet')
+          ? { ok: true, lists: [] }
+          : url.includes('feature_windows_sheet')
+            ? { ok: true, features: [] }
+            : url.includes('people_with_roles')
+              ? { ok: true, people: [] }
+              : [];
+    return route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(body),
+    });
+  });
+  await page.goto('/admin');
+  await page.getByRole('button', { name: 'Paste themes' }).click();
+
+  await page.getByLabel('Paste themes from a file').setInputFiles({
+    name: 'october.json',
+    mimeType: 'application/json',
+    buffer: Buffer.from(
+      JSON.stringify({
+        _readme: 'ignored, because it is a sentence rather than an entry',
+        themes: [
+          {
+            theme: 'Profit sharing',
+            spangram: 'profitsharing',
+            words: ['metrics', 'payout', 'reward', 'target', 'bonus', 'split'],
+          },
+          {
+            theme: 'On the board',
+            spangram: 'stakeholders',
+            words: ['voting', 'shares', 'trustee'],
+          },
+        ],
+      })
+    ),
+  });
+
+  // It landed in the box, so the preview and the refusals work as they do for a
+  // paste — including the `_readme` being a sentence rather than a broken entry.
+  await expect(page.getByText(/Profit sharing \(profitsharing, 6 words\)/)).toBeVisible();
+  await expect(page.getByText(/Entry \d/)).toHaveCount(0);
+
+  await page.getByRole('button', { name: /^Import 2$/ }).click();
+  await expect(page.getByText('Imported 2 of 2.')).toBeVisible();
+  expect(saved.map((s) => s.p_clue)).toEqual(['Profit sharing', 'On the board']);
 });
