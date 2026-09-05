@@ -53,3 +53,70 @@ test('while an address that is still offered opens as usual', async ({ page }) =
   await page.goto('/daily/guess');
   await expect(page).toHaveURL(/\/daily\/guess$/);
 });
+
+// The gap that let the last one through.
+//
+// Everything above stubs the availability feed with a key written by hand, and
+// the unit tests filter with keys written by hand. Nothing checked that the key
+// the *admin page* writes is the key the site *reads* — and it was not: the
+// page keyed its switches by mode and the site filtered by slug, so the three
+// games whose names differ (guess is `pattern`, scramble is `descramble`, hive
+// is `bee`) could be switched off and stayed on screen.
+//
+// So this presses the switch and then looks at the menu, which is the only way
+// to catch the two halves disagreeing.
+test('switching a game off from the admin page actually removes it', async ({ page }) => {
+  const written: string[] = [];
+  let off: string[] = [];
+  // The sheet has to reflect the write, as the real one does — a stub that
+  // forgets makes the control spring back and says nothing about the bug.
+  let rows: { feature: string; enabled: boolean; starts_at: null; ends_at: null }[] = [];
+  await page.route('**/rest/v1/rpc/**', (route) => {
+    const url = route.request().url();
+    if (url.includes('set_feature_window')) {
+      const body = JSON.parse(route.request().postData() ?? '{}');
+      written.push(body.p_feature);
+      // The server's rule: enabled with no window means no row at all.
+      off = body.p_enabled ? off.filter((f) => f !== body.p_feature) : [...off, body.p_feature];
+      rows = [
+        ...rows.filter((r) => r.feature !== body.p_feature),
+        ...(body.p_enabled
+          ? []
+          : [{ feature: body.p_feature, enabled: false, starts_at: null, ends_at: null }]),
+      ];
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ ok: true }),
+      });
+    }
+    const body = url.includes('read_availability')
+      ? off
+      : url.includes('feature_windows_sheet')
+        ? { ok: true, features: [] }
+        : url.includes('site_settings_sheet')
+          ? { ok: true, settings: [] }
+          : url.includes('word_lists_sheet')
+            ? { ok: true, lists: [] }
+            : url.includes('people_with_roles')
+              ? { ok: true, people: [] }
+              : [];
+    return route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(body),
+    });
+  });
+
+  await page.goto('/admin');
+  // Hive, deliberately: its mode is `bee`, so it is one of the three the bug
+  // was invisible on.
+  // click rather than uncheck: the control is driven by a round trip, and
+  // uncheck() insists the state has flipped before it returns. What is being
+  // tested is the key that went out and what the menu did about it.
+  await page.getByRole('checkbox', { name: 'Offer Hive' }).click();
+  await expect.poll(() => written).toEqual(['game:hive']);
+
+  await page.goto('/');
+  await expect(page.getByRole('link', { name: /Hive/ })).toHaveCount(0);
+});

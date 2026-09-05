@@ -121,6 +121,19 @@ export const SLUG_NAME: Record<Slug, string> = Object.fromEntries(
   SLUGS.map((slug) => [slug, GAME_NAME[SLUG_MODE[slug]].full])
 ) as Record<Slug, string>;
 
+/** The key a game is switched off by, on /admin and in availability.ts.
+ *
+ *  A function rather than a convention, because the convention was got wrong
+ *  the first time and looked right: the admin page keyed its switches by *mode*
+ *  and the site filtered by *slug*, so seven of the ten games agreed by
+ *  coincidence and the three whose names differ — guess is `pattern`, scramble
+ *  is `descramble`, hive is `bee` — could be switched off and stayed on screen.
+ *
+ *  The slug wins because it is the word the address bar and the admin page both
+ *  use. tests/unit/games.test.ts asserts the two sides derive the same set.
+ */
+export const gameFeature = (slug: Slug): string => `game:${slug}`;
+
 /** What the puzzle feed and the database call each game.
  *
  *  A third name, after the storage key and the address slug, and not a spare:

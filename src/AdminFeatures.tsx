@@ -11,7 +11,7 @@
 // thing an event actually wants: a game a week, appearing on its own.
 import { useCallback, useEffect, useState } from 'react';
 import { Loader2 } from 'lucide-react';
-import { ALL_MODES, ALL_VIEWS, GAME_NAME } from '@/games';
+import { ALL_SLUGS, ALL_VIEWS, SLUG_NAME, gameFeature } from '@/games';
 import { DIFFICULTIES } from '@/difficulty';
 import { refreshAvailability } from '@/availability';
 import { readFeatureWindows, setFeatureWindow, type FeatureWindow } from '@/features';
@@ -40,7 +40,11 @@ function everything(): { heading: string; rows: Row[] }[] {
   return [
     {
       heading: 'Games',
-      rows: ALL_MODES.map((m) => ({ feature: `game:${m}`, label: GAME_NAME[m].full })),
+      // By slug, which is what the site filters on and what the address bar
+      // uses. Keyed by mode first, and the three games whose mode has a
+      // different name — guess/pattern, scramble/descramble, hive/bee — could
+      // be switched off and stayed on screen.
+      rows: ALL_SLUGS.map((slug) => ({ feature: gameFeature(slug), label: SLUG_NAME[slug] })),
     },
     {
       heading: 'Ways to play',

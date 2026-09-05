@@ -22,6 +22,7 @@ import {
   PROGRESS_NAME,
   SLUG_MODE,
   SLUG_NAME,
+  gameFeature,
   modeOf,
 } from '@/games';
 
@@ -127,5 +128,37 @@ describe('the game tables', () => {
     const before = [...ALL_MODES];
     expect(() => [...ALL_MODES].sort()).not.toThrow();
     expect(ALL_MODES).toEqual(before);
+  });
+});
+
+// The two halves of a switch have to name the same thing.
+//
+// They did not. The admin page keyed its switches by *mode* and the site
+// filtered by *slug*, so seven of the ten games agreed by coincidence and the
+// three whose names differ — guess is `pattern`, scramble is `descramble`, hive
+// is `bee` — could be switched off and stayed on screen. Reported as "guess,
+// scramble and hive don't disappear", which is the list of games whose two
+// names differ, read back.
+//
+// Both sides go through gameFeature now. This asserts they land on the same
+// set, which is the property that was quietly false.
+describe('the switch a game is turned off by', () => {
+  it('is the same key from either side', () => {
+    const written = ALL_SLUGS.map((slug) => gameFeature(slug)).sort();
+    const read = ALL_MODES.map((mode) => gameFeature(MODE_SLUG[mode])).sort();
+    expect(read).toEqual(written);
+  });
+
+  it('and is the slug, which is what the address bar uses', () => {
+    expect(gameFeature('hive')).toBe('game:hive');
+    expect(gameFeature(MODE_SLUG['bee'])).toBe('game:hive');
+  });
+
+  // The three that made the bug possible, named so a future rename of one of
+  // them is a red test rather than three games that will not switch off.
+  it('covers the games whose mode is called something else', () => {
+    expect(MODE_SLUG['pattern']).toBe('guess');
+    expect(MODE_SLUG['descramble']).toBe('scramble');
+    expect(MODE_SLUG['bee']).toBe('hive');
   });
 });
