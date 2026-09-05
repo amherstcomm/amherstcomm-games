@@ -5,6 +5,12 @@
 # takes its other branch here — the one that skips. cron.sh proves the branch
 # that schedules a job, on a server that has the extension.
 #
+# It applies to an *empty* database, which proves the file is idempotent against
+# itself and nothing about the path a real deployment takes: from the version
+# already running to this one. upgrade.sh asks that question, and it is not the
+# same question — `create or replace function` cannot rename a parameter, so a
+# rename applies perfectly here and aborts on a live database.
+#
 # Not in CI. It needs Docker and pulls a Postgres image, and the suite it would
 # join runs in about six minutes without one — so this is a thing you run when
 # you change schema.sql, which is the only time it can tell you anything.
