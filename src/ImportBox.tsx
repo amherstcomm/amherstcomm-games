@@ -10,6 +10,7 @@
 // the ones that worked — "imported twenty-nine" out of thirty-one is a sentence
 // that has lost two.
 import { useState } from 'react';
+import { downloadJson } from '@/templates';
 
 const FIELD =
   'w-full rounded-lg bg-white/5 border border-white/15 px-3 py-2 text-sm text-slate-100 ' +
@@ -23,6 +24,8 @@ export type ImportResult = { ok: boolean; reason?: string };
 export default function ImportBox<T>({
   label,
   placeholder,
+  template,
+  templateName,
   parse,
   describe,
   save,
@@ -30,6 +33,9 @@ export default function ImportBox<T>({
 }: {
   label: string;
   placeholder: string;
+  /** the blank, handed to whoever is filling a month in elsewhere */
+  template: unknown;
+  templateName: string;
   parse: (text: string) => { items: T[]; problems: string[] };
   /** one line per item, for the preview — what it is, and anything worth
    *  knowing before it lands */
@@ -117,6 +123,13 @@ export default function ImportBox<T>({
       )}
 
       <div className="flex flex-wrap items-center gap-2">
+        {/* The blank, for filling in elsewhere. It carries its own instructions
+            in a key the parser ignores, which is the only way to put a sentence
+            inside JSON — and it is pushed back through that parser by a test,
+            because a template that does not import is worse than none. */}
+        <button className={BUTTON} onClick={() => downloadJson(templateName, template)}>
+          Download template
+        </button>
         <button
           className={BUTTON}
           disabled={busy || parsed.items.length === 0}

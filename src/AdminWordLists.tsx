@@ -19,6 +19,7 @@ import {
   type WordList,
 } from '@/wordLists';
 import ImportBox from '@/ImportBox';
+import { LIST_TEMPLATE } from '@/templates';
 import { parseWordLists, type ParsedList } from '@/importing';
 
 const FIELD =
@@ -155,6 +156,8 @@ export default function AdminWordLists() {
               '[{ "name": "Employee ownership",\n' +
               '   "words": ["shares","dividend","esop"] }]'
             }
+            template={LIST_TEMPLATE}
+            templateName="word-lists-template.json"
             parse={parseWordLists}
             describe={(l) => `${l.name} (${l.words.length} words)`}
             save={(l) =>

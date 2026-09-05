@@ -19,6 +19,7 @@ import {
 } from '@/weaveThemes';
 import { BOARD_CELLS, fitsBoards } from '@/weaveFit';
 import ImportBox from '@/ImportBox';
+import { THEME_TEMPLATE } from '@/templates';
 import { parseWeaveThemes, type ParsedTheme } from '@/importing';
 
 const FIELD =
@@ -210,6 +211,8 @@ export default function AdminWeaveThemes() {
                   '   "words": ["metrics","payout","reward","target","bonus","split"],\n' +
                   '   "starts_on": "2026-10-01", "ends_on": "2026-10-01" }]'
                 }
+                template={THEME_TEMPLATE}
+                templateName="weave-themes-template.json"
                 parse={parseWeaveThemes}
                 describe={(t) => {
                   // The fit, in the preview, because a theme that fills no board
