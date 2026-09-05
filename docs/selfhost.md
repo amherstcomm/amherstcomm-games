@@ -944,9 +944,12 @@ Two things follow for anyone debugging this again:
 ### Applying the schema
 
 `supabase/schema.sql` is idempotent on a database that already has it, so
-re-running is the update path. This change adds a `late_join` column to
-`sessions` and seven functions, all through `alter … add column if not exists`
-and `create or replace`.
+re-running is the update path — every change arrives as
+`alter … add column if not exists` and `create or replace`, so applying the
+whole file is how a deployment catches up rather than a migration per change.
+
+(This used to name the one change it was written for, a `late_join` column and
+seven functions, which stopped being true within a week.)
 
 On a **fresh** database, run it twice. Six statements fail the first time —
 `daily_progress` and `game_results` are altered above the point where they are

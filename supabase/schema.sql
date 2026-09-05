@@ -3353,6 +3353,18 @@ grant execute on function public.advance_session(uuid, text, uuid) to authentica
 -- table already standing on the VM, so it has to arrive as an alter either way.
 -- Still nothing reads it — answering is limited to the open item, which is
 -- 'strict' by accident — but authoring can now set it, so the value is real.
+-- Whether somebody may join a live session that has already begun.
+--
+-- Stored, carried in every payload, copied by duplication, and read by nothing
+-- that decides anything. That is deliberate as of 2026-09-05 rather than
+-- unfinished: a latecomer simply ends up with a partial score, so there is
+-- nothing for the strict half to protect, and the editor's checkbox for it has
+-- been removed. Implementing it would need an arrival record, because nothing
+-- notes that a person turned up — a "player" is inferred from having answered
+-- something, which by definition happens after they were let in.
+--
+-- The column stays because it is harmless and every create and copy already
+-- carries it. Dropping one to tidy a form is not a trade worth making.
 alter table public.sessions add column if not exists late_join text not null
   default 'strict' check (late_join in ('strict', 'open'));
 
