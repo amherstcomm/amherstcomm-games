@@ -119,11 +119,21 @@ select pg_temp.check('and anon is granted exactly that and nothing else',
   has_function_privilege('anon', 'public.read_site_settings()', 'execute')
   and not has_function_privilege('anon', 'public.set_site_setting(text, text)', 'execute')
   and not has_function_privilege('anon', 'public.site_settings_sheet()', 'execute'));
--- The table itself is reachable only through the two functions.
-select pg_temp.check('and the table is granted to nobody',
-  not has_table_privilege('anon', 'public.site_settings', 'select')
-  and not has_table_privilege('authenticated', 'public.site_settings', 'select')
-  and not has_table_privilege('authenticated', 'public.site_settings', 'update'));
+-- Reversal, and the reason it matters more than the wording suggests. This
+-- used to assert that the table was *granted* to nobody, which passed on a bare
+-- Postgres and proved nothing: a Supabase database grants anon and authenticated
+-- default privileges on every new table in `public`, so the grant is there and
+-- protection comes from RLS instead. The old assertion could not fail on the
+-- machine it ran on, and would have gone on passing for a table that was wide
+-- open in production — which is exactly what nearly shipped here.
+select pg_temp.check('the settings tables are protected by RLS, not by hope',
+  (select bool_and(c.relrowsecurity) from pg_class c
+   join pg_namespace n on n.oid = c.relnamespace
+   where n.nspname = 'public' and c.relname in ('site_settings', 'site_setting_keys')));
+select pg_temp.check('and carry no policy, so nothing is readable directly',
+  not exists (select 1 from pg_policies
+              where schemaname = 'public'
+                and tablename in ('site_settings', 'site_setting_keys')));
 
 -- ---------------------------------------------------------------------------
 -- The page that draws the form

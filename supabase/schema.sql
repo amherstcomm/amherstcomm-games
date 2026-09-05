@@ -7405,6 +7405,18 @@ create table if not exists public.site_setting_keys (
   key text primary key,
   description text not null
 );
+-- RLS, like every other table here, and for a reason that is easy to miss on
+-- this one: it holds no secrets, only the list of which settings exist. But a
+-- Supabase database grants anon and authenticated default privileges on new
+-- tables in `public`, so "nothing was granted" is not the same sentence here as
+-- it is on a bare Postgres — a table without this is readable by anyone holding
+-- the anon key. Studio said so out loud when this file was pasted in, which is
+-- the only reason it was caught.
+--
+-- No policy, deliberately: reads go through the security-definer functions
+-- below, so RLS with no policy is the whole of the protection rather than a
+-- layer on top of it.
+alter table public.site_setting_keys enable row level security;
 
 insert into public.site_setting_keys (key, description) values
   ('subtitle',      'The line under the site name — the event this run is for'),
