@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 # Apply schema.sql to a throwaway Postgres and run the SQL tests against it.
 #
+# This Postgres has no pg_cron, so the guarded block at the end of schema.sql
+# takes its other branch here — the one that skips. cron.sh proves the branch
+# that schedules a job, on a server that has the extension.
+#
 # Not in CI. It needs Docker and pulls a Postgres image, and the suite it would
 # join runs in about six minutes without one — so this is a thing you run when
 # you change schema.sql, which is the only time it can tell you anything.

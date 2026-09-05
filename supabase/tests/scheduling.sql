@@ -213,7 +213,30 @@ select pg_temp.check('anon may not call it',
 -- The clock is nobody's to run by hand.
 select pg_temp.check('nor may anybody call the sweep itself',
   not has_function_privilege('authenticated', 'public.apply_schedule(uuid)', 'execute')
-  and not has_function_privilege('authenticated', 'public.open_session(uuid)', 'execute')
-  and not has_function_privilege('authenticated', 'public.close_session(uuid)', 'execute'));
+  and not has_function_privilege('authenticated',
+        'public.open_session(uuid, timestamptz)', 'execute')
+  and not has_function_privilege('authenticated',
+        'public.close_session(uuid, timestamptz)', 'execute'));
+
+-- ---------------------------------------------------------------------------
+-- When it says it happened
+--
+-- A schedule is honoured at the next visit, which is not the same instant as
+-- the one it named. The record has to say the named one: a survey due at eight
+-- that nobody reaches until ten past was taking answers from eight, and an
+-- answer at one minute past five was already refused.
+-- ---------------------------------------------------------------------------
+set session "test.uid" = '11111111-1111-1111-1111-111111111111';
+insert into t select 'stamp', to_jsonb(pg_temp.make('Stamped at the hour'));
+update public.sessions
+   set opens_at = now() - interval '2 hours', closes_at = now() - interval '1 hour'
+ where id = ((select v#>>'{}' from t where k='stamp'))::uuid;
+select public.apply_schedule(((select v#>>'{}' from t where k='stamp'))::uuid);
+select pg_temp.check('it closed when it said it would, not when somebody noticed',
+  (select closed_at = closes_at from public.sessions
+   where id = ((select v#>>'{}' from t where k='stamp'))::uuid));
+select pg_temp.check('and a host closing it by hand is still stamped now',
+  (select abs(extract(epoch from (closed_at - now()))) < 5 from public.sessions s
+   where s.id = ((select v#>>'{}' from t where k='early'))::uuid));
 
 \echo '--- scheduling checks passed ---'

@@ -3415,15 +3415,28 @@ alter table public.sessions add column if not exists closes_at timestamptz;
  * already checked: advance_session that this is the host, apply_schedule that
  * the clock says so.
  */
-create or replace function public.open_session(p_session uuid)
+-- The one-argument pair, from before the schedule could say when it happened.
+-- Dropped rather than left: they still resolve ahead of the new ones for a
+-- single-argument call, so a database that has both would quietly keep using
+-- the old ones and go on stamping the discovery instead of the moment.
+drop function if exists public.open_session(uuid);
+drop function if exists public.close_session(uuid);
+
+create or replace function public.open_session(p_session uuid, p_at timestamptz default null)
 returns void
 language plpgsql
 security definer
 set search_path = ''
 as $fn$
 begin
+  -- `p_at` is when it opened, which is not always when this ran. A schedule is
+  -- honoured at the next visit, so a survey due at eight that nobody reaches
+  -- until ten past opened at eight: that is the time answers were being taken
+  -- from, and stamping the discovery instead would put a lie in the record.
   update public.sessions
-     set state = 'live', started_at = coalesce(started_at, now()), moved_at = now()
+     set state = 'live',
+         started_at = coalesce(started_at, p_at, now()),
+         moved_at = now()
    where id = p_session;
   -- An open session has no presenter to open each question, so starting it
   -- opens all of them at once. Nobody is shown more than one at a time — that
@@ -3436,22 +3449,27 @@ begin
 end;
 $fn$;
 
-create or replace function public.close_session(p_session uuid)
+create or replace function public.close_session(p_session uuid, p_at timestamptz default null)
 returns void
 language plpgsql
 security definer
 set search_path = ''
 as $fn$
 begin
-  update public.sessions set state = 'closed', closed_at = now(), moved_at = now()
+  -- Same as open_session: five o'clock is when it shut, whoever noticed at ten
+  -- past. It is also the honest thing to record, because an answer sent at one
+  -- minute past five was already refused.
+  update public.sessions
+     set state = 'closed', closed_at = coalesce(p_at, now()), moved_at = now()
    where id = p_session;
-  update public.items set state = 'locked', locked_at = coalesce(locked_at, now())
+  update public.items
+     set state = 'locked', locked_at = coalesce(locked_at, p_at, now())
    where session_id = p_session and state = 'open';
 end;
 $fn$;
 
-revoke all on function public.open_session(uuid) from public, anon, authenticated;
-revoke all on function public.close_session(uuid) from public, anon, authenticated;
+revoke all on function public.open_session(uuid, timestamptz) from public, anon, authenticated;
+revoke all on function public.close_session(uuid, timestamptz) from public, anon, authenticated;
 
 /*
  * What the clock says this session is, whether or not anybody has acted on it.
@@ -3529,8 +3547,8 @@ begin
   -- and does the part of it that is a write.
   case public.scheduled_state(s)
     when s.state then return;
-    when 'live' then perform public.open_session(p_session);
-    when 'closed' then perform public.close_session(p_session);
+    when 'live' then perform public.open_session(p_session, s.opens_at);
+    when 'closed' then perform public.close_session(p_session, s.closes_at);
     else return;
   end case;
 end;
@@ -3567,6 +3585,41 @@ end;
 $fn$;
 
 revoke all on function public.apply_schedules() from public, anon, authenticated;
+
+/*
+ * And a minute hand, where the server has one.
+ *
+ * The sweep above is what makes the schedule correct: every path a person can
+ * reach applies it, so a survey is shut to everybody the moment its time
+ * passes whether or not this job exists. What the job adds is that the *row*
+ * is true as well — between five o'clock and the next visitor, a table nobody
+ * has swept still reads `live` to anything looking at Postgres directly, and
+ * "the state is right unless you look at it" is a bad sentence to have to say.
+ *
+ * Which is also the order of trust: the job is the nicety, the sweep is the
+ * guarantee. If the job stops, nothing breaks — which is the whole reason it
+ * was safe to add one.
+ *
+ * Every minute, because the window is set to the minute and there is nothing
+ * finer to be accurate about. Guarded and dynamic so a database without
+ * pg_cron applies this file unchanged: `cron.schedule` would not parse at all
+ * there, and the error count in supabase/tests/run.sh is calibrated to six.
+ * Re-scheduling the same name replaces the job rather than adding a second, so
+ * re-applying this file stays idempotent like everything else in it.
+ */
+do $do$
+begin
+  if exists (select 1 from pg_extension where extname = 'pg_cron') then
+    execute $cron$
+      select cron.schedule('sessions-opening-hours', '* * * * *',
+                           $job$select public.apply_schedules()$job$)
+    $cron$;
+    raise notice 'opening hours: pg_cron job scheduled every minute';
+  else
+    raise notice 'opening hours: no pg_cron here, the sweep at each visit is doing it';
+  end if;
+end;
+$do$;
 
 /*
  * Who may look at the board and the results.

@@ -189,38 +189,47 @@ async function openEditor(page: import('@playwright/test').Page, sent: unknown[]
   await expect(page.getByRole('heading', { name: 'Test 3' })).toBeVisible();
 }
 
-test('an open session can be given opening hours', async ({ page }) => {
-  const sent: Record<string, string | null>[] = [];
-  await openEditor(page, sent);
-  await expect(page.getByText('It opens and closes when you say so.')).toBeVisible();
+// Run from two zones over, deliberately. The developer machine and CI are both
+// somewhere; a test that agrees with the browser it is running in cannot tell
+// the office clock from the browser's, which is exactly the bug this replaced.
+// Denver is the host in a hotel: 5pm there is 6pm at home.
+test.describe('from a laptop that is not in Central', () => {
+  test.use({ timezoneId: 'America/Denver' });
 
-  await page.getByLabel('Closes').fill('2026-10-16T17:00');
-  await expect.poll(() => sent.length).toBe(1);
+  test('an open session can be given opening hours', async ({ page }) => {
+    const sent: Record<string, string | null>[] = [];
+    await openEditor(page, sent);
+    await expect(page.getByText('It opens and closes when you say so.')).toBeVisible();
 
-  // An instant, not the wall clock — five in the afternoon here, whatever that
-  // is in UTC. Compared against the same conversion the browser did rather than
-  // a hardcoded Z time, which would only pass in one timezone.
-  const expected = new Date(2026, 9, 16, 17, 0).toISOString();
-  expect(sent[0].p_closes_at).toBe(expected);
-  // Both ends travel together: the server cannot tell an end that was unset
-  // from one that was untouched, and the two mean opposite things.
-  expect(sent[0].p_opens_at).toBeNull();
-  expect(sent[0].p_clear).toBe(true);
-});
+    await page.getByLabel('Closes').fill('2026-10-16T17:00');
+    await expect.poll(() => sent.length).toBe(1);
 
-test('and a session with a presenter is not offered them', async ({ page }) => {
-  await page.route('**/rest/v1/rpc/**', (route) =>
-    route.fulfill({
-      status: 200,
-      contentType: 'application/json',
-      body: JSON.stringify(route.request().url().includes('session_sheet') ? SHEET : []),
-    })
-  );
-  await page.goto(`/sessions/${SESSION}`);
-  await expect(page.getByRole('heading', { name: 'Test 3' })).toBeVisible();
-  // The presenter is the schedule; a clock underneath them would take the one
-  // thing they are there for.
-  await expect(page.getByText('Opening hours')).toHaveCount(0);
+    // An instant, and specifically five o'clock *in Central* — not five where
+    // this browser happens to be. Hardcoded on purpose: an expectation computed
+    // from the machine's own zone would pass in Denver while the feature was an
+    // hour wrong there, which is the bug this replaced. 16 October is inside
+    // daylight time, so Central is UTC-5.
+    expect(sent[0].p_closes_at).toBe('2026-10-16T22:00:00.000Z');
+    // Both ends travel together: the server cannot tell an end that was unset
+    // from one that was untouched, and the two mean opposite things.
+    expect(sent[0].p_opens_at).toBeNull();
+    expect(sent[0].p_clear).toBe(true);
+  });
+
+  test('and a session with a presenter is not offered them', async ({ page }) => {
+    await page.route('**/rest/v1/rpc/**', (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify(route.request().url().includes('session_sheet') ? SHEET : []),
+      })
+    );
+    await page.goto(`/sessions/${SESSION}`);
+    await expect(page.getByRole('heading', { name: 'Test 3' })).toBeVisible();
+    // The presenter is the schedule; a clock underneath them would take the one
+    // thing they are there for.
+    await expect(page.getByText('Opening hours')).toHaveCount(0);
+  });
 });
 
 // ---------------------------------------------------------------------------

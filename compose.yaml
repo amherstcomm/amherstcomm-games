@@ -30,6 +30,7 @@ services:
         VITE_SSO_LABEL: ${VITE_SSO_LABEL:-}
         VITE_SITE_NAME: ${VITE_SITE_NAME:-}
         VITE_SITE_SUBTITLE: ${VITE_SITE_SUBTITLE:-}
+        VITE_OFFICE_ZONE: ${VITE_OFFICE_ZONE:-}
         VITE_CONTACT_EMAIL: ${VITE_CONTACT_EMAIL:-}
         # No default here on purpose. Compose errors on an unset variable with
         # this syntax, which is the right outcome: the Dockerfile's fallback

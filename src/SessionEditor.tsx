@@ -44,7 +44,7 @@ import {
 import { JOIN_HOST, pathOf } from '@/routes';
 import { setSessionOptions } from '@/live';
 import { INTL_UNITS, formatGuess } from '@/guessFormat';
-import { describeWindow, fromLocalInput, toLocalInput } from '@/schedule';
+import { describeWindow, fromOfficeInput, toOfficeInput } from '@/schedule';
 
 const FIELD =
   'w-full px-3 py-2 rounded-lg bg-white/5 border border-white/15 text-white text-sm placeholder:text-slate-600 focus:outline-none focus:border-accent';
@@ -964,9 +964,9 @@ function SessionEditorFor({ session }: { session: string }) {
                 <input
                   type="datetime-local"
                   className={FIELD + ' w-auto'}
-                  value={toLocalInput(meta[field])}
+                  value={toOfficeInput(meta[field])}
                   onChange={(e) => {
-                    const at = fromLocalInput(e.target.value);
+                    const at = fromOfficeInput(e.target.value);
                     const other = field === 'opens_at' ? meta.closes_at : meta.opens_at;
                     const kept = other ? new Date(other) : null;
                     void run(() =>
@@ -993,7 +993,8 @@ function SessionEditorFor({ session }: { session: string }) {
             </button>
           )}
           <p className="text-xs text-slate-500 mt-3">
-            Times are whatever your own computer says the time is. Opening it
+            Times are the company's, not your laptop's — five o'clock means five
+            in Central wherever you happen to be reading this. Opening it
             yourself before the hour still works; closing it yourself ends it for
             good, because a survey that shut and came back is worse than one that
             never opened.

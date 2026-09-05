@@ -597,13 +597,37 @@ Both ends are independent and either may be left off: an opening alone is a
 session that starts on its own and is closed by hand; a closing alone is one
 opened by hand that will not be left running over the weekend.
 
-#### There is no scheduler, and that is deliberate
+#### Two clocks, and only one of them is the guarantee
 
-This deployment has no cron. Rather than add one, the clock is applied **the
-next time anybody looks** — `apply_schedule` runs at the top of every path a
-person can reach, and the read surfaces that cannot write (they are `stable`)
+Reversal, twice over, and both are worth keeping visible — along with how the
+first one was possible, which is the useful part. This page said "this
+deployment has no cron" as though it had been established. It had not been
+checked, and it was contradicted **by this document**: "Keeping the puzzle
+window fresh", below, installs a systemd timer that has been running nightly on
+this VM the whole time. The claim did not need a query to refute, only a read of
+the file it was written into. It then shaped a design before anything could
+argue with it, which is what makes an unchecked assumption expensive — a wrong
+sentence gets corrected, a wrong premise gets built on.
+
+Checked since, and twice over: the VM runs systemd timers, and **this Postgres
+has `pg_cron`, available, preloaded and already installed.** pg_cron is what is
+used here, because a job that lives in the database needs no unit file, no
+environment file and no second copy of the credentials. So there is a job — `schema.sql`
+schedules `sessions-opening-hours` to run `apply_schedules()` every minute, on
+any database that has the extension, and quietly does not on one that does not.
+
+The job is the nicety. **The sweep is the guarantee.** The clock is applied
+**the next time anybody looks** — `apply_schedule` runs at the top of every path
+a person can reach, and the read surfaces that cannot write (they are `stable`)
 ask `scheduled_state` instead, so a list of what is running already leaves out a
-survey whose closing time has passed.
+survey whose closing time has passed. If the job stops, or the extension goes,
+nothing about what people can do changes. That order is deliberate: it is what
+made adding a scheduled job safe rather than load-bearing.
+
+What the job adds is that the **row** is true as well. Between five o'clock and
+the next visitor, an unswept table still reads `live` to anything looking at
+Postgres directly, and "the state is right unless you look at it" is a bad
+sentence to have to say.
 
 It has to *write*, which is the part worth explaining. Opening an open session
 is not only a fact about the session: it is what moves every question from
@@ -614,6 +638,18 @@ the host would have done rather than the readers deriving it, and one function �
 The window that matters is a closing time, and it is honoured on the way in:
 `answer_item` and `guess_word` sweep before they check, so a screen that has
 been open since before five cannot post an answer at ten past.
+
+#### It records the hour, not the discovery
+
+A session swept at ten past eight still says it opened at eight, and one swept
+on Monday still says it closed on Friday at five: `open_session` and
+`close_session` take the moment the schedule named. That is the honest record —
+an answer sent at one minute past five was already refused — and it is the
+difference a real scheduler would otherwise have made, since nothing else about
+the behaviour depends on when the sweep happened to run.
+
+A host pressing the button is stamped with the actual time, because that is the
+moment they meant.
 
 #### Who wins
 
@@ -629,9 +665,40 @@ been open since before five cannot post an answer at ten past.
 
 It does not tell somebody who types the code early when the session opens: they
 are told no session is running with that code, the same as any code that is not
-live. And the times are **whatever the browser setting them says the time is** —
-one office, one timezone, and an instant on the wire, so a phone in another
-zone shows the same moment in its own terms.
+live.
+
+#### Whose five o'clock
+
+Reversal, and the third assumption on this page to need one. The times used to
+be **whatever the browser setting them said the time was**, justified as "one
+office, one timezone". Everyone here is *based* in Central; not everyone is *in*
+Central at the moment they use this. A host setting "Friday at five" from a
+hotel two zones over would have set it for six o'clock at home — silently, and
+correctly by that rule.
+
+So the anchor is the company's clock — `VITE_OFFICE_ZONE`, defaulting to
+`America/Chicago` — and not the reader's:
+five means five where the company is, whoever is typing it and wherever they are
+standing. A name rather than an offset, so the two annual changeovers are the
+platform's problem — a stored −6 would be an hour wrong for eight months of the
+year. Every time shown carries its zone, `5:00 PM CDT`, because that is what
+tells a traveller which five o'clock is meant.
+
+Enforcement never depended on any of this: `closes_at` is a `timestamptz`, one
+instant compared against `now()`, the same moment everywhere. What was wrong was
+only which wall clock the words referred to — which is the harder kind of wrong,
+because everything looks right from the desk it was set at.
+
+An unknown zone name falls back to the default rather than taking the page down
+with it: `Intl.DateTimeFormat` throws a `RangeError` on one, and these
+formatters are built at module load, so a typo in the environment would not
+produce a wrong time — it would produce a white page. Survivable but silent, so
+check it renders after changing it.
+
+The tests are pinned to absolute instants rather than round trips for the same
+reason, and the browser test runs in `America/Denver` deliberately: this
+developer machine is in Central, so a test that agreed with its own clock proved
+nothing at all. Run against the old rule it comes back exactly one hour out.
 
 ### Running the same questions again
 
