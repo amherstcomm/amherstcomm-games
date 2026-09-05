@@ -161,4 +161,48 @@ select pg_temp.check('nor call item_chart at all',
 select pg_temp.check('and anon may not read them either',
   not has_function_privilege('anon', 'public.session_results(uuid)', 'execute'));
 
+-- ---------------------------------------------------------------------------
+-- Letting the room look afterwards
+--
+-- Off by default, and even switched on it opens nothing while the session is
+-- running: a distribution halfway through is a hint.
+-- ---------------------------------------------------------------------------
+set session "test.uid" = '11111111-1111-1111-1111-111111111111';
+select pg_temp.check('sharing is off to begin with',
+  not (select share_results from public.sessions
+       where id = ((select v->>'id' from t where k='sess'))::uuid));
+
+select pg_temp.check('turning it on is the host''s to do',
+  (public.set_session_options(((select v->>'id' from t where k='sess'))::uuid, null, true)->>'ok')
+    = 'true');
+
+set session "test.uid" = '33333333-3333-3333-3333-333333333333';
+select pg_temp.check('but a running session still shows the room nothing',
+  (public.session_results(((select v->>'id' from t where k='sess'))::uuid)->>'ok') = 'false'
+  and (public.session_scores(((select v->>'id' from t where k='sess'))::uuid)->>'ok') = 'false');
+
+set session "test.uid" = '11111111-1111-1111-1111-111111111111';
+select public.advance_session(((select v->>'id' from t where k='sess'))::uuid, 'close');
+
+set session "test.uid" = '33333333-3333-3333-3333-333333333333';
+select pg_temp.check('once it is over, the room can see how it went',
+  (public.session_results(((select v->>'id' from t where k='sess'))::uuid)->>'ok') = 'true');
+select pg_temp.check('and where everybody came',
+  (public.session_scores(((select v->>'id' from t where k='sess'))::uuid)->>'ok') = 'true');
+-- The promise does not weaken because the audience widened.
+select pg_temp.check('and an anonymous question is still anonymous to them',
+  (select e->'chart'->'texts'->1->'who' from jsonb_array_elements(
+     (public.session_results(((select v->>'id' from t where k='sess'))::uuid))->'items') e
+   where (e->>'position')::int = 5) = 'null'::jsonb);
+
+set session "test.uid" = '11111111-1111-1111-1111-111111111111';
+select public.set_session_options(((select v->>'id' from t where k='sess'))::uuid, null, false);
+set session "test.uid" = '33333333-3333-3333-3333-333333333333';
+select pg_temp.check('turning it off closes it again',
+  (public.session_results(((select v->>'id' from t where k='sess'))::uuid)->>'ok') = 'false');
+
+set session "test.uid" = '';
+select pg_temp.check('signed out is never let in',
+  (public.session_results(((select v->>'id' from t where k='sess'))::uuid)->>'ok') = 'false');
+
 \echo '--- results checks passed ---'

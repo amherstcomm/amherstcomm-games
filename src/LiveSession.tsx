@@ -1086,6 +1086,16 @@ export default function LiveSession({ session, host }: { session: string; host: 
         </div>
       ) : (
         <>
+          {shown.state === 'not-live' && item.shared && !host && (
+            <p className="text-center pt-6">
+              <a
+                href={pathOf({ kind: 'scores', session })}
+                className="text-sm text-accent hover:brightness-110"
+              >
+                See how it went
+              </a>
+            </p>
+          )}
           {shown.state === 'not-live' && (
             <Waiting
               text={

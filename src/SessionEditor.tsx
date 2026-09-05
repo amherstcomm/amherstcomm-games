@@ -40,6 +40,7 @@ import {
   type SessionSummary,
 } from '@/authoring';
 import { JOIN_HOST, pathOf } from '@/routes';
+import { setSessionOptions } from '@/live';
 import { INTL_UNITS, formatGuess } from '@/guessFormat';
 
 const FIELD =
@@ -74,6 +75,7 @@ function payloadFor(
     right: string[];
     number: NumberPayload;
     word: string;
+    cloud: boolean;
   }
 ): Record<string, unknown> {
   switch (kind) {
@@ -87,6 +89,8 @@ function payloadFor(
       return { left: parts.left, right: parts.right };
     case 'number':
       return parts.number;
+    case 'open':
+      return parts.cloud ? { cloud: true } : {};
     case 'game':
       // length so the room can draw the board before it knows anything else,
       // and never the word
@@ -185,6 +189,9 @@ function ItemForm({
   );
   const existingNumber = item?.payload as NumberPayload | undefined;
   const [unit, setUnit] = useState(existingNumber?.unit ?? '');
+  const [asCloud, setAsCloud] = useState(
+    (item?.payload as { cloud?: boolean } | undefined)?.cloud === true
+  );
   const [gameWord, setGameWord] = useState(
     ((item?.answer as GameAnswer | null)?.word ?? '').toUpperCase()
   );
@@ -418,6 +425,20 @@ function ItemForm({
         </>
       )}
 
+      {/* Decided with the question rather than found on the results screen
+          afterwards. "One word for this month" is a cloud before anybody
+          answers it. */}
+      {kind === 'open' && (
+        <label className="flex items-center gap-2 text-xs text-slate-400">
+          <input
+            type="checkbox"
+            checked={asCloud}
+            onChange={(e) => setAsCloud(e.target.checked)}
+          />
+          Show the answers as a word cloud
+        </label>
+      )}
+
       {kind === 'game' && (
         <>
           <label className="block">
@@ -582,6 +603,7 @@ function ItemForm({
                   right,
                   number: numberPayload(),
                   word: gameWord,
+                  cloud: asCloud,
                 }),
                 // Omitted rather than sent as null: item_seconds() reads the key
                 // being absent as "no clock", and a key holding null would be
@@ -859,6 +881,7 @@ function SessionEditorFor({ session }: { session: string }) {
         <a className={BUTTON} href={pathOf({ kind: 'scores', session })}>
           Scores
         </a>
+
         {/* Any session, not only a draft. Old ones pile up and they are the
             operator's to keep or not — see the note on delete_session. What is
             left of the old refusal is that a session which has run says what
@@ -871,6 +894,24 @@ function SessionEditorFor({ session }: { session: string }) {
           Delete session
         </button>
       </div>
+
+      {/* Off by default, and it opens nothing until the session is closed —
+            a distribution halfway through is a hint. */}
+      <label className="flex items-center gap-2 text-xs text-slate-400 mb-6 -mt-4">
+        <input
+          type="checkbox"
+          checked={meta.shared}
+          onChange={(e) => {
+            // Read now, not after the await. This is a controlled input, so by
+            // the time an async callback runs React has already set the DOM
+            // node back to the prop — and the value sent was whatever it had
+            // been reset to rather than what was clicked.
+            const on = e.target.checked;
+            void run(() => setSessionOptions(session, { shareResults: on }));
+          }}
+        />
+        Let everyone see the results afterwards
+      </label>
 
       <ol className="space-y-3">
         {items.map((item, i) => {

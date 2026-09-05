@@ -713,3 +713,28 @@ test('a session with questions turned off and none asked draws no panel', async 
   await expect(page.getByText('Which year?')).toBeVisible();
   await expect(page.getByRole('button', { name: /Questions for the host/ })).toHaveCount(0);
 });
+
+test('once it is over, the room is offered the way to see how it went', async ({ page }) => {
+  // Only when the host has opened it. The screen that says "this is not
+  // running" is the same screen that should carry the way to look, and it has
+  // nothing else to say.
+  for (const shared of [true, false]) {
+    await page.route('**/rest/v1/rpc/**', (route) => {
+      const url = route.request().url();
+      const body = url.includes('current_item')
+        ? { state: 'not-live', yours: false, shared, now: new Date().toISOString() }
+        : url.includes('my_standing')
+          ? { ok: true, points: 0, scored: 0 }
+          : { ok: false };
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify(body),
+      });
+    });
+    await page.goto(`/live/${SESSION}`);
+    const link = page.getByRole('link', { name: 'See how it went' });
+    if (shared) await expect(link).toBeVisible();
+    else await expect(link).toHaveCount(0);
+  }
+});

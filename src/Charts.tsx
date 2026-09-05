@@ -31,7 +31,13 @@ export type Chart =
       currency?: string | null;
       percent?: boolean | null;
     }
-  | { type: 'texts'; total: number; texts: { value: unknown; who: string | null }[] }
+  | {
+      type: 'texts';
+      total: number;
+      /** the author's choice, made when the question was written */
+      cloud?: boolean;
+      texts: { value: unknown; who: string | null }[];
+    }
   | { type: 'none'; total: number };
 
 /** Strip the quotes jsonb puts round a stored string. The value is whatever was
@@ -188,7 +194,10 @@ function Texts({
   // A cloud is a shape, not a transcript. It carries no names because it
   // carries no sentences — which is also why it is the safer thing to put on a
   // wall when the answers were personal.
-  if (cloud) return <Cloud texts={chart.texts} big={big} />;
+  // The author's choice unless the screen overrides it: "one word for this
+  // month" is a cloud before anybody answers it, and finding that switch on
+  // the results page afterwards is finding it too late.
+  if (cloud ?? chart.cloud) return <Cloud texts={chart.texts} big={big} />;
   return (
     <ul className="space-y-2">
       {chart.texts.map((t, i) => (
@@ -211,7 +220,7 @@ export default function ChartFor({
 }: {
   chart: Chart;
   big?: boolean;
-  /** open questions only: the words rather than the sentences */
+  /** open questions only. Undefined defers to what the author chose. */
   cloud?: boolean;
 }) {
   if (!chart || chart.total === 0) {

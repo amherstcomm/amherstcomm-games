@@ -179,7 +179,7 @@ select pg_temp.check('and a player cannot mark anything',
 -- ---------------------------------------------------------------------------
 set session "test.uid" = '11111111-1111-1111-1111-111111111111';
 select pg_temp.check('the host can turn questions off mid-session',
-  (public.set_session_qa(((select v->>'id' from t where k='sess'))::uuid, false)->>'ok') = 'true');
+  (public.set_session_options(((select v->>'id' from t where k='sess'))::uuid, false)->>'ok') = 'true');
 set session "test.uid" = '33333333-3333-3333-3333-333333333333';
 select pg_temp.check('after which no more can be asked',
   (public.ask_question(((select v->>'id' from t where k='sess'))::uuid, 'one more?')->>'ok') = 'false');
