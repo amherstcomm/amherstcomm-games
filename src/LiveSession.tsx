@@ -40,6 +40,7 @@ import {
   type PresenterView,
 } from '@/live';
 import { JOIN_HOST, ORIGIN, pathOf } from '@/routes';
+import { describeWindow } from '@/schedule';
 import { formatGuess, guessAffixes } from '@/guessFormat';
 import type { NumberPayload } from '@/authoring';
 import QrCode from '@/QrCode';
@@ -922,6 +923,10 @@ export default function LiveSession({ session, host }: { session: string; host: 
   /** Hosting an open session: no question on this screen, and none asked for.
    *  See the note in pull(). */
   const openHost = host && door?.mode === 'open';
+  // Only the host's, and only when there is one — a player is told the session
+  // is not running, which is the whole of what they need.
+  const scheduleLine =
+    openHost && door?.ok ? describeWindow(door.opens_at, door.closes_at) : null;
   /** Read-only because the server will refuse, not because of the address.
    *  `host` is which screen this is; `yours` is whether the person looking at
    *  it runs the session, and the second is the one the rule is about. */
@@ -984,6 +989,15 @@ export default function LiveSession({ session, host }: { session: string; host: 
               <p className="text-base sm:text-lg text-slate-300 mb-3">
                 {whereWeAre(door ?? { ok: false })}
               </p>
+
+              {/* What the clock is going to do, for the host who did not set it
+                  and is looking at a session that says "not open yet". Under
+                  the standing rather than inside it: the sentence above is
+                  where things are, this is what happens next without anybody
+                  pressing anything. */}
+              {scheduleLine && (
+                <p className="text-sm text-slate-400 -mt-2 mb-3">{scheduleLine}</p>
+              )}
 
               {/* One move, and it says what it will do. The five verbs this
                   replaced — Start, Next question, Lock, Reveal, Close, all at

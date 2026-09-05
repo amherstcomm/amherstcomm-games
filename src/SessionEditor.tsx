@@ -18,6 +18,7 @@ import {
   deleteItem,
   deleteSession,
   duplicateSession,
+  setSessionSchedule,
   deletionWarning,
   moveItem,
   parseOptions,
@@ -43,6 +44,7 @@ import {
 import { JOIN_HOST, pathOf } from '@/routes';
 import { setSessionOptions } from '@/live';
 import { INTL_UNITS, formatGuess } from '@/guessFormat';
+import { describeWindow, fromLocalInput, toLocalInput } from '@/schedule';
 
 const FIELD =
   'w-full px-3 py-2 rounded-lg bg-white/5 border border-white/15 text-white text-sm placeholder:text-slate-600 focus:outline-none focus:border-accent';
@@ -935,6 +937,69 @@ function SessionEditorFor({ session }: { session: string }) {
         />
         Let everyone see the results afterwards
       </label>
+
+      {/* Only for a session that runs without anybody at the front. A live one
+          has a presenter, and the presenter is the schedule — a clock that
+          opened or shut it underneath them would take the one thing they are
+          there for. */}
+      {meta.mode === 'open' && (
+        <div className="rounded-xl border border-white/15 p-4 mb-8">
+          <p className="text-xs uppercase tracking-wider text-slate-500">Opening hours</p>
+          <p className="text-sm text-slate-400 mt-1">
+            {describeWindow(meta.opens_at, meta.closes_at) ??
+              'It opens and closes when you say so.'}
+          </p>
+          {/* Both ends are sent on every change, because the server cannot tell
+              an unset end from an untouched one and the two mean opposite
+              things — see set_session_schedule's p_clear. */}
+          <div className="flex flex-wrap gap-4 mt-3">
+            {(
+              [
+                ['Opens', 'opens_at'],
+                ['Closes', 'closes_at'],
+              ] as const
+            ).map(([label, field]) => (
+              <label key={field} className="flex flex-col gap-1 text-xs text-slate-400">
+                {label}
+                <input
+                  type="datetime-local"
+                  className={FIELD + ' w-auto'}
+                  value={toLocalInput(meta[field])}
+                  onChange={(e) => {
+                    const at = fromLocalInput(e.target.value);
+                    const other = field === 'opens_at' ? meta.closes_at : meta.opens_at;
+                    const kept = other ? new Date(other) : null;
+                    void run(() =>
+                      setSessionSchedule(
+                        session,
+                        field === 'opens_at'
+                          ? { opensAt: at, closesAt: kept }
+                          : { opensAt: kept, closesAt: at },
+                        true
+                      )
+                    );
+                  }}
+                />
+              </label>
+            ))}
+          </div>
+          {(meta.opens_at || meta.closes_at) && (
+            <button
+              className={BUTTON + ' mt-3'}
+              disabled={busy}
+              onClick={() => void run(() => setSessionSchedule(session, {}, true))}
+            >
+              No schedule
+            </button>
+          )}
+          <p className="text-xs text-slate-500 mt-3">
+            Times are whatever your own computer says the time is. Opening it
+            yourself before the hour still works; closing it yourself ends it for
+            good, because a survey that shut and came back is worse than one that
+            never opened.
+          </p>
+        </div>
+      )}
 
       <ol className="space-y-3">
         {items.map((item, i) => {

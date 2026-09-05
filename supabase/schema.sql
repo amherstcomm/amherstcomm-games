@@ -3379,6 +3379,195 @@ alter table public.sessions add column if not exists qa boolean not null default
 -- same reason: my_sessions() and session_sheet() select it.
 alter table public.sessions add column if not exists share_results boolean not null default false;
 
+-- Whether there is somebody at the front. Moved up here from "Playing it on
+-- their own time", where it used to sit: opening a session is now something
+-- the clock can do as well as the host, and the function that does it has to
+-- know whether there is a presenter — so the column has to exist before it.
+alter table public.sessions add column if not exists mode text not null
+  default 'live' check (mode in ('live', 'open'));
+
+-- When it lets itself in, and when it locks up.
+--
+-- Only meaningful for an open session, which is the one that runs without
+-- anybody at the front — see set_session_schedule. Both are nullable and both
+-- are independent: a window with only an opening is a session that starts on
+-- its own and is closed by hand, and one with only a closing is a session
+-- opened by hand that will not be left running over the weekend.
+--
+-- Up here with late_join, code, qa and share_results, for the reason that
+-- comment gives: my_sessions() and session_sheet() select them, and on a fresh
+-- database a function cannot be created against a column that does not exist
+-- yet.
+alter table public.sessions add column if not exists opens_at timestamptz;
+alter table public.sessions add column if not exists closes_at timestamptz;
+
+/*
+ * Opening and closing, as one thing rather than two.
+ *
+ * These are the bodies of advance_session's `start` and `close`, lifted out
+ * because they are no longer only the host's to run: a schedule does exactly
+ * the same thing at a time nobody is watching. Two copies of "what opening
+ * means" would drift the first time one of them learned something — so there
+ * is one, read twice, the same way the blocklist is the only place the slur
+ * flag is kept.
+ *
+ * Neither is granted to anybody. They check nothing, because both callers have
+ * already checked: advance_session that this is the host, apply_schedule that
+ * the clock says so.
+ */
+create or replace function public.open_session(p_session uuid)
+returns void
+language plpgsql
+security definer
+set search_path = ''
+as $fn$
+begin
+  update public.sessions
+     set state = 'live', started_at = coalesce(started_at, now()), moved_at = now()
+   where id = p_session;
+  -- An open session has no presenter to open each question, so starting it
+  -- opens all of them at once. Nobody is shown more than one at a time — that
+  -- is current_item's job — but every one of them is now answerable by whoever
+  -- reaches it.
+  update public.items set state = 'open'
+   where session_id = p_session and state = 'pending'
+     and exists (select 1 from public.sessions s
+                 where s.id = p_session and s.mode = 'open');
+end;
+$fn$;
+
+create or replace function public.close_session(p_session uuid)
+returns void
+language plpgsql
+security definer
+set search_path = ''
+as $fn$
+begin
+  update public.sessions set state = 'closed', closed_at = now(), moved_at = now()
+   where id = p_session;
+  update public.items set state = 'locked', locked_at = coalesce(locked_at, now())
+   where session_id = p_session and state = 'open';
+end;
+$fn$;
+
+revoke all on function public.open_session(uuid) from public, anon, authenticated;
+revoke all on function public.close_session(uuid) from public, anon, authenticated;
+
+/*
+ * What the clock says this session is, whether or not anybody has acted on it.
+ *
+ * The single rule, because there are two things that need it and they must not
+ * disagree: apply_schedule below, which makes it true, and the half-dozen read
+ * surfaces that are `stable` and so cannot write anything — a list of what is
+ * running has to leave out a survey whose closing time has passed even though
+ * nothing has swept it yet.
+ *
+ * Two rules about who wins. A host who closed it early has closed it: the
+ * schedule never reopens a closed session, because "it shut and then came back"
+ * is the worst thing a survey can do to somebody who has already answered. A
+ * host who opened it early has opened it, and the closing time still applies,
+ * because that is the half they were relying on.
+ *
+ * A live session is returned untouched. It has a presenter, and the presenter
+ * is the schedule.
+ */
+create or replace function public.scheduled_state(s public.sessions)
+returns text
+language sql
+stable
+set search_path = ''
+as $fn$
+  select case
+    when s.mode is distinct from 'open' then s.state
+    when s.state = 'closed' then 'closed'
+    when s.closes_at is not null and now() >= s.closes_at then 'closed'
+    when s.state = 'live' then 'live'
+    when s.opens_at is not null and now() >= s.opens_at then 'live'
+    else s.state
+  end
+$fn$;
+
+/*
+ * Letting the clock do it.
+ *
+ * A survey that runs all week wants to be answerable on Monday morning without
+ * somebody remembering to press a button at eight, and shut on Friday at five
+ * without somebody remembering at all. So a session can carry an opening time
+ * and a closing time, and this is what honours them.
+ *
+ * It writes rather than computes, which is the decision worth explaining.
+ * Deriving the state from the clock at every read would need no sweep and have
+ * no window — but opening an open session is not only a fact about the session,
+ * it moves every one of its questions from pending to open. That is a write. So
+ * the clock has to *do* what the host would have done, and the only question
+ * left is when: the answer is "the next time anybody looks", which is why this
+ * is called at the top of everything a person can reach rather than from a
+ * scheduler this deployment does not have.
+ *
+ * Two rules about who wins. A host who closes early has closed it — the
+ * schedule never reopens a closed session, because "it shut and then came back"
+ * is the worst thing a survey can do to somebody who has already answered. And
+ * a host who opens early has opened it; the closing time still applies, because
+ * that is the half they were relying on.
+ *
+ * Only for open sessions. A live one has a presenter, and a presenter is the
+ * schedule.
+ */
+create or replace function public.apply_schedule(p_session uuid)
+returns void
+language plpgsql
+security definer
+set search_path = ''
+as $fn$
+declare
+  s public.sessions;
+begin
+  select * into s from public.sessions where id = p_session;
+  if s.id is null then return; end if;
+
+  -- Nothing decided here. scheduled_state() is the rule; this makes it true,
+  -- and does the part of it that is a write.
+  case public.scheduled_state(s)
+    when s.state then return;
+    when 'live' then perform public.open_session(p_session);
+    when 'closed' then perform public.close_session(p_session);
+    else return;
+  end case;
+end;
+$fn$;
+
+revoke all on function public.apply_schedule(uuid) from public, anon, authenticated;
+
+/*
+ * The same sweep, for the surfaces that ask about sessions in general rather
+ * than about one of them: the list of what is running, and a code typed off a
+ * slide with no session named yet.
+ *
+ * Bounded to the sessions a schedule could actually have moved, so the cost is
+ * a couple of rows rather than the table.
+ */
+create or replace function public.apply_schedules()
+returns void
+language plpgsql
+security definer
+set search_path = ''
+as $fn$
+declare
+  s uuid;
+begin
+  for s in
+    select id from public.sessions
+    where mode = 'open' and state <> 'closed'
+      and (opens_at is not null or closes_at is not null)
+      and public.scheduled_state(sessions) is distinct from state
+  loop
+    perform public.apply_schedule(s);
+  end loop;
+end;
+$fn$;
+
+revoke all on function public.apply_schedules() from public, anon, authenticated;
+
 /*
  * Who may look at the board and the results.
  *
@@ -3397,7 +3586,8 @@ as $fn$
     when public.can('winners.view') and public.hosts_session(p_session) then true
     else exists (
       select 1 from public.sessions s
-      where s.id = p_session and s.share_results and s.state = 'closed')
+      where s.id = p_session and s.share_results
+        and public.scheduled_state(s) = 'closed')
   end
 $fn$;
 
@@ -3782,7 +3972,7 @@ as $fn$
     (select jsonb_agg(jsonb_build_object('id', s.id, 'title', s.title, 'code', s.code)
                       order by s.started_at desc)
      from public.sessions s
-     where s.state = 'live' and (select auth.uid()) is not null),
+     where public.scheduled_state(s) = 'live' and (select auth.uid()) is not null),
     '[]'::jsonb)
 $fn$;
 
@@ -3801,7 +3991,7 @@ as $fn$
   select coalesce(
     (select jsonb_build_object('ok', true, 'id', s.id, 'title', s.title)
      from public.sessions s
-     where s.state = 'live'
+     where public.scheduled_state(s) = 'live'
        and s.code = upper(regexp_replace(coalesce(p_code, ''), '[^A-Za-z0-9]', '', 'g'))
        and (select auth.uid()) is not null),
     jsonb_build_object('ok', false, 'reason', 'no session is running with that code'))
@@ -5171,8 +5361,9 @@ grant execute on function public.delete_session(uuid, boolean) to authenticated;
 -- moment it is answered rather than waiting for a reveal that never comes.
 -- ---------------------------------------------------------------------------
 
-alter table public.sessions add column if not exists mode text not null
-  default 'live' check (mode in ('live', 'open'));
+-- The  column used to be added here. It moved up beside late_join and
+-- code when the clock learned to open a session: open_session() has to know
+-- whether there is a presenter, and it is defined long before this line.
 
 -- When a question was first put in front of one person.
 --
@@ -5239,25 +5430,15 @@ begin
   end if;
   select * into sess from public.sessions where id = p_session;
 
+  -- Both of these are the schedule's too, which is why neither is written out
+  -- here any more — see open_session and close_session, and apply_schedule for
+  -- the clock that calls them.
   if p_action = 'start' then
-    update public.sessions
-      set state = 'live', started_at = coalesce(started_at, now()), moved_at = now()
-    where id = p_session;
-    -- An open session has no presenter to open each question, so starting it
-    -- opens all of them at once. Nobody is shown more than one at a time — that
-    -- is current_item's job — but every one of them is now answerable by
-    -- whoever reaches it.
-    if sess.mode = 'open' then
-      update public.items set state = 'open'
-      where session_id = p_session and state = 'pending';
-    end if;
+    perform public.open_session(p_session);
     return jsonb_build_object('ok', true, 'state', 'live');
 
   elsif p_action = 'close' then
-    update public.sessions set state = 'closed', closed_at = now(), moved_at = now()
-    where id = p_session;
-    update public.items set state = 'locked', locked_at = coalesce(locked_at, now())
-    where session_id = p_session and state = 'open';
+    perform public.close_session(p_session);
     return jsonb_build_object('ok', true, 'state', 'closed');
 
   -- show, lock and reveal are the presenter's, and an open session has none.
@@ -5584,7 +5765,8 @@ set search_path = ''
 as $fn$
   select coalesce(
     (select jsonb_agg(jsonb_build_object(
-       'id', s.id, 'title', s.title, 'state', s.state, 'late_join', s.late_join,
+       'id', s.id, 'title', s.title, 'state', public.scheduled_state(s),
+                    'opens_at', s.opens_at, 'closes_at', s.closes_at, 'late_join', s.late_join,
        'mode', s.mode, 'code', s.code, 'qa', s.qa, 'shared', s.share_results,
        'items', (select count(*) from public.items i where i.session_id = s.id),
        'created_at', s.created_at
@@ -5610,7 +5792,8 @@ as $fn$
     else jsonb_build_object(
       'ok', true,
       'session', (select jsonb_build_object(
-                    'id', s.id, 'title', s.title, 'state', s.state,
+                    'id', s.id, 'title', s.title, 'state', public.scheduled_state(s),
+                    'opens_at', s.opens_at, 'closes_at', s.closes_at,
                     'late_join', s.late_join, 'current_item', s.current_item,
                     'code', s.code, 'mode', s.mode, 'qa', s.qa,
                     'shared', s.share_results)
@@ -5972,6 +6155,10 @@ declare
   window_seconds int;
   began timestamptz;
 begin
+  -- The clock before the question: a survey whose closing time has passed is
+  -- shut, whether or not anybody has been by since.
+  perform public.apply_schedule(
+    (select i.session_id from public.items i where i.id = p_item));
   select * into it from public.items where id = p_item;
   if it.id is null then
     return jsonb_build_object('ok', false, 'reason', 'no such item');
@@ -6043,6 +6230,10 @@ declare
   window_seconds int;
   began timestamptz;
 begin
+  -- The clock before the question: a survey whose closing time has passed is
+  -- shut, whether or not anybody has been by since.
+  perform public.apply_schedule(
+    (select i.session_id from public.items i where i.id = p_item));
   select * into it from public.items where id = p_item;
   if it.id is null or it.kind <> 'game' then
     return jsonb_build_object('ok', false, 'reason', 'no such question');
@@ -6365,6 +6556,9 @@ declare
   it public.items;
   yours boolean;
 begin
+  -- The clock before the question: a survey whose closing time has passed is
+  -- shut, whether or not anybody has been by since.
+  perform public.apply_schedule(p_session);
   select * into sess from public.sessions where id = p_session;
   if sess.id is null then
     return jsonb_build_object('state', 'not-live', 'now', now(), 'yours', false);
@@ -6699,6 +6893,9 @@ declare
   sess public.sessions;
   said text := btrim(coalesce(p_body, ''));
 begin
+  -- The clock before the question: a survey whose closing time has passed is
+  -- shut, whether or not anybody has been by since.
+  perform public.apply_schedule(p_session);
   if (select auth.uid()) is null then
     return jsonb_build_object('ok', false, 'reason', 'not allowed');
   end if;
@@ -6904,7 +7101,8 @@ as $fn$
     when not public.hosts_session(p_session)
       then jsonb_build_object('ok', false, 'reason', 'not allowed')
     else (select jsonb_build_object(
-            'ok', true, 'title', s.title, 'code', s.code, 'state', s.state,
+            'ok', true, 'title', s.title, 'code', s.code, 'state', public.scheduled_state(s),
+              'opens_at', s.opens_at, 'closes_at', s.closes_at,
             'mode', s.mode, 'qa', s.qa,
             'total', (select count(*) from public.items i where i.session_id = s.id),
             'pending', (select count(*) from public.items i
@@ -6961,6 +7159,72 @@ $fn$;
 
 revoke all on function public.set_session_options(uuid, boolean, boolean) from public, anon;
 grant execute on function public.set_session_options(uuid, boolean, boolean) to authenticated;
+
+
+/*
+ * Setting the window.
+ *
+ * Open sessions only. A live one is run by a person standing in front of the
+ * room, and a clock that opened or shut it underneath them would be taking the
+ * one thing a presenter is there for.
+ *
+ * Both ends are independent and both are clearable, which is why the arguments
+ * cannot be `coalesce`d onto what is already there the way set_session_options
+ * does it: "leave it alone" and "take it off" are different instructions, and a
+ * schedule nobody can remove is worse than none. p_clear says which.
+ *
+ * A closing time already in the past is allowed. It reads as odd and it is
+ * exactly what somebody shutting a survey from their phone means by it — the
+ * next person through the door closes it, which is the same thing the button
+ * would have done.
+ */
+create or replace function public.set_session_schedule(
+  p_session uuid,
+  p_opens_at timestamptz default null,
+  p_closes_at timestamptz default null,
+  p_clear boolean default false
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $fn$
+declare
+  s public.sessions;
+begin
+  if not public.hosts_session(p_session) then
+    return jsonb_build_object('ok', false, 'reason', 'not allowed');
+  end if;
+  select * into s from public.sessions where id = p_session;
+  if s.id is null then
+    return jsonb_build_object('ok', false, 'reason', 'no such session');
+  end if;
+  if s.mode <> 'open' then
+    return jsonb_build_object('ok', false, 'reason', 'a session with a presenter is not scheduled');
+  end if;
+  if p_opens_at is not null and p_closes_at is not null and p_closes_at <= p_opens_at then
+    return jsonb_build_object('ok', false, 'reason', 'it cannot close before it opens');
+  end if;
+
+  update public.sessions
+     set opens_at  = case when p_clear then p_opens_at else coalesce(p_opens_at, opens_at) end,
+         closes_at = case when p_clear then p_closes_at else coalesce(p_closes_at, closes_at) end
+   where id = p_session;
+
+  -- Honoured now rather than at the next visit, so a window that has already
+  -- opened is open by the time this returns and the editor is not left
+  -- showing a draft that the clock says is running.
+  perform public.apply_schedule(p_session);
+  return (select jsonb_build_object('ok', true, 'state', public.scheduled_state(s2),
+                                    'opens_at', s2.opens_at, 'closes_at', s2.closes_at)
+          from public.sessions s2 where s2.id = p_session);
+end;
+$fn$;
+
+revoke all on function public.set_session_schedule(uuid, timestamptz, timestamptz, boolean)
+  from public, anon;
+grant execute on function public.set_session_schedule(uuid, timestamptz, timestamptz, boolean)
+  to authenticated;
 
 -- ---------------------------------------------------------------------------
 -- Running the same set of questions again

@@ -582,6 +582,57 @@ The responses go with it. That is the point rather than a side effect: half a
 deleted session leaves answers to questions that no longer exist, on a
 scoreboard that can no longer explain them. There is no undo.
 
+### Opening hours
+
+An open session can carry an **opening time and a closing time**. A survey that
+runs all week wants to be answerable on Monday morning without somebody
+remembering to press a button at eight, and shut on Friday at five without
+somebody remembering at all.
+
+**Open sessions only.** A live one has a presenter, and the presenter is the
+schedule — a clock that opened or shut it underneath them would take the one
+thing they are standing there for. `set_session_schedule` refuses.
+
+Both ends are independent and either may be left off: an opening alone is a
+session that starts on its own and is closed by hand; a closing alone is one
+opened by hand that will not be left running over the weekend.
+
+#### There is no scheduler, and that is deliberate
+
+This deployment has no cron. Rather than add one, the clock is applied **the
+next time anybody looks** — `apply_schedule` runs at the top of every path a
+person can reach, and the read surfaces that cannot write (they are `stable`)
+ask `scheduled_state` instead, so a list of what is running already leaves out a
+survey whose closing time has passed.
+
+It has to *write*, which is the part worth explaining. Opening an open session
+is not only a fact about the session: it is what moves every question from
+pending to open, and that is what makes them answerable. So the clock does what
+the host would have done rather than the readers deriving it, and one function —
+`scheduled_state` — is the rule both halves read, so they cannot drift.
+
+The window that matters is a closing time, and it is honoured on the way in:
+`answer_item` and `guess_word` sweep before they check, so a screen that has
+been open since before five cannot post an answer at ten past.
+
+#### Who wins
+
+- **A host who closed it early has closed it.** The schedule never reopens a
+  closed session. "It shut and then came back" is the worst thing a survey can
+  do to somebody who has already answered it.
+- **A host who opened it early has opened it**, and the closing time still
+  applies, because that is the half they were relying on.
+- A **duplicate does not inherit the window** — a copy carrying last week's
+  times would open and shut itself in the past.
+
+#### What it does not do
+
+It does not tell somebody who types the code early when the session opens: they
+are told no session is running with that code, the same as any code that is not
+live. And the times are **whatever the browser setting them says the time is** —
+one office, one timezone, and an instant on the wire, so a phone in another
+zone shows the same moment in its own terms.
+
 ### Running the same questions again
 
 **Duplicate** on the editor makes a new session out of an old one's questions:
