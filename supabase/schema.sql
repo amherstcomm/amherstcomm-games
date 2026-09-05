@@ -5133,6 +5133,13 @@ grant execute on function public.word_list_words(uuid) to authenticated;
  * so.
  */
 drop function if exists public.save_word_list(uuid, text, text);
+-- And the seven-argument one, whose fifth parameter was `p_spangram` before it
+-- became `p_spangrams`. `create or replace` cannot rename a parameter — it
+-- raises 42P13 and takes the rest of the file down with it, which is how a
+-- deployment that had already applied the previous version ended up with no
+-- word lists, no availability table, and an admin page missing half its
+-- panels. A new name needs a drop, every time.
+drop function if exists public.save_word_list(uuid, text, text, text, text, date, date);
 
 create or replace function public.save_word_list(
   p_id uuid,

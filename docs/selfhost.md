@@ -948,6 +948,22 @@ re-running is the update path — every change arrives as
 `alter … add column if not exists` and `create or replace`, so applying the
 whole file is how a deployment catches up rather than a migration per change.
 
+**A renamed parameter needs a `drop function` first.** `create or replace`
+cannot rename one: it raises `42P13` and, because the file is applied as one
+script, takes every statement after it down too. That is not a hypothetical —
+renaming `p_spangram` to `p_spangrams` applied perfectly to a fresh database and
+aborted on the live one, which ended up with no word lists, no availability
+table, and an admin page missing half its panels while reporting nothing beyond
+one line of red in the SQL editor.
+
+`supabase/tests/upgrade.sh` is the guard. `run.sh` applies the file to an empty
+database twice, which proves it is idempotent against itself and says nothing
+about the path a deployment actually takes; `upgrade.sh` applies the schema from
+each of the last five releases and then this one, which is that path. It caught
+the rename above when pointed at the release two back — testing only the most
+recent one misses a rename made in the release before it, which is exactly how
+this got out.
+
 (This used to name the one change it was written for, a `late_join` column and
 seven functions, which stopped being true within a week.)
 

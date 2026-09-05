@@ -23,6 +23,18 @@ const FIELD =
 
 type Row = { feature: string; label: string };
 
+/** The one refusal worth translating.
+ *
+ *  PostgREST answers a call to a function that does not exist with a schema-cache
+ *  message about `public.feature_windows_sheet`, which is true and tells nobody
+ *  what to do. It means the database has not caught up with the build, which is
+ *  a two-word instruction rather than a mystery. */
+function explain(reason: string): string {
+  return /schema cache|does not exist|not find the function/i.test(reason)
+    ? 'This needs supabase/schema.sql re-running — the database has not caught up with this build yet.'
+    : reason;
+}
+
 /** Everything that can be switched, in the order somebody thinks about it. */
 function everything(): { heading: string; rows: Row[] }[] {
   return [
@@ -146,9 +158,11 @@ export default function AdminFeatures() {
     await refreshAvailability();
   }
 
-  if (set === null) return <Loader2 className="w-4 h-4 animate-spin text-slate-500 m-8" />;
-  if (refused) return <p className="text-sm text-slate-400">{refused}</p>;
-
+  // The heading first, always. This used to return the refusal on its own, so a
+  // section that could not load rendered as a stray line of grey text with no
+  // title — which reads as the panel not being there at all rather than as the
+  // panel being unavailable. Reported exactly that way: "did you forget to wire
+  // it in? it's legit not there."
   return (
     <section>
       <h2 className="text-lg font-bold text-white mb-1">What is on offer</h2>
@@ -158,26 +172,31 @@ export default function AdminFeatures() {
         address.
       </p>
 
+      {set === null && <Loader2 className="w-4 h-4 animate-spin text-slate-500" />}
+      {refused && <p className="text-sm text-rose-300">{explain(refused)}</p>}
+      {set !== null && !refused && (
+
       <div className="space-y-5">
-        {everything().map((group) => (
-          <div key={group.heading}>
-            <p className="text-xs uppercase tracking-wider text-slate-500 mb-2">
-              {group.heading}
-            </p>
-            <ul className="space-y-2">
-              {group.rows.map((row) => (
-                <Switch
-                  key={row.feature}
-                  row={row}
-                  set={set[row.feature]}
-                  note={notes[row.feature] ?? ''}
-                  onChanged={change}
-                />
-              ))}
-            </ul>
-          </div>
-        ))}
-      </div>
+          {everything().map((group) => (
+            <div key={group.heading}>
+              <p className="text-xs uppercase tracking-wider text-slate-500 mb-2">
+                {group.heading}
+              </p>
+              <ul className="space-y-2">
+                {group.rows.map((row) => (
+                  <Switch
+                    key={row.feature}
+                    row={row}
+                    set={set[row.feature]}
+                    note={notes[row.feature] ?? ''}
+                    onChanged={change}
+                  />
+                ))}
+              </ul>
+            </div>
+          ))}
+        </div>
+      )}
     </section>
   );
 }
