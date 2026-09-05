@@ -6,6 +6,7 @@ import StatsModal from '@/StatsModal';
 import AccountModal from '@/AccountModal';
 import { stashInvite } from '@/friends';
 import { OskContext } from '@/MobileKeyInput';
+import { KeySinkContext, type KeySink } from '@/keySink';
 import SettingsModal from '@/SettingsModal';
 import KeyboardHelp from '@/KeyboardHelp';
 import { colorWords, PALETTES, PaletteContext, resolveTheme, TEXT_SCALES, THEME_MODES, useTheme, type Palette, type TextScale, type ThemeMode } from '@/theme';
@@ -782,6 +783,11 @@ function App() {
   const [boxedPlay, setBoxedPlay] = useState(initialPlay('boxed', initial.boxedPlay));
   const [descramblePlay, setDescramblePlay] = useState(initialPlay('descramble', initial.descramblePlay));
   const [letterStates, setLetterStates] = useState<Record<string, LetterState>>({});
+  // A board outside the daily set — a word game inside a session — claiming the
+  // on-screen keyboard while it is on screen. Null the rest of the time, which
+  // is every other page, and then the keyboard behaves exactly as it did.
+  const [keySink, setKeySink] = useState<KeySink | null>(null);
+  const registerKeySink = useCallback((sink: KeySink | null) => setKeySink(sink), []);
   const [commonWordsArr, setCommonWordsArr] = useState<string[] | null>(null);
   const [fullWordsArr, setFullWordsArr] = useState<string[] | null>(null);
   const [standardWordsArr, setStandardWordsArr] = useState<string[] | null>(null);
@@ -1578,6 +1584,7 @@ function App() {
     <PaletteContext.Provider value={palette}>
     <PrefsContext.Provider value={prefs}>
     <OskContext.Provider value={kbOpen}>
+    <KeySinkContext.Provider value={registerKeySink}>
     <div className="min-h-screen bg-slate-950 text-white relative overflow-x-clip">
       {/* ambient glow */}
       <div className="pointer-events-none absolute -top-40 -left-40 w-[500px] h-[500px] bg-amber-500/10 rounded-full blur-[120px]" />
@@ -2976,7 +2983,7 @@ function App() {
               'qwertyuiop'.split(''),
               'asdfghjkl'.split(''),
               [
-                ...(playActive || learnMode ? ['enter'] : []),
+                ...(playActive || learnMode || keySink ? ['enter'] : []),
                 ...(mode === 'descramble' ? ['?'] : []),
                 ...'zxcvbnm'.split(''),
                 'backspace',
@@ -2984,7 +2991,13 @@ function App() {
             ].map((row, r) => (
               <div key={r} className={`flex w-full gap-1 sm:gap-1.5 ${r === 1 ? 'px-[4.5%]' : ''}`}>
                 {row.map((k) => {
-                  const state = playActive && /^[a-z]$/.test(k) ? letterStates[k] : undefined;
+                  const state = !/^[a-z]$/.test(k)
+                    ? undefined
+                    : keySink
+                      ? keySink.letters[k]
+                      : playActive
+                        ? letterStates[k]
+                        : undefined;
                   const tone =
                     state === 'correct'
                       ? 'bg-emerald-500/80 hover:bg-emerald-500 text-white'
@@ -2997,8 +3010,21 @@ function App() {
                     <button
                       key={k}
                       onMouseDown={(e) => e.preventDefault()}
-                      onClick={() => pressKey(k)}
+                      onClick={() => (keySink ? keySink.press(k) : pressKey(k))}
                       aria-label={k === 'backspace' ? 'Backspace' : k === 'enter' ? 'Enter' : `Key ${k}`}
+                      /* The colour says whether a letter is used up, spent or
+                         still open, and a colour is not available to a screen
+                         reader or to a test. */
+                      data-state={state ?? 'open'}
+                      aria-description={
+                        state === 'correct'
+                          ? 'in the word, in the right place'
+                          : state === 'present'
+                            ? 'in the word'
+                            : state === 'absent'
+                              ? 'not in the word'
+                              : undefined
+                      }
                       className={`h-11 min-w-0 rounded-md text-sm font-semibold uppercase transition-colors flex items-center justify-center ${tone}
                         ${k === 'backspace' || k === 'enter' ? 'flex-[1.5]' : 'flex-1'}`}
                     >
@@ -3027,6 +3053,7 @@ function App() {
         </button>
       )}
     </div>
+    </KeySinkContext.Provider>
     </OskContext.Provider>
     </PrefsContext.Provider>
     </PaletteContext.Provider>
