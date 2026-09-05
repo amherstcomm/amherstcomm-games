@@ -3,7 +3,7 @@ import type { Session } from '@supabase/supabase-js';
 import { AlertTriangle, KeyRound, LogOut, Users, X } from 'lucide-react';
 import { supabase } from '@/supabase';
 import { SSO_LABEL, SSO_ONLY } from '@/sso';
-import { CONTACT_EMAIL } from '@/brand';
+import { useSetting } from '@/settings';
 import { beginSso, releaseAutoAttempt } from '@/signIn';
 import { clearMyStats, deleteAccount } from '@/account';
 import {
@@ -65,6 +65,7 @@ export default function AccountModal({
   onTab: (t: AccountTab) => void;
   onClose: () => void;
 }) {
+  const contact = useSetting('contact_email');
   const [status, setStatus] = useState<'idle' | 'sending' | 'sent' | 'error'>('idle');
   const [error, setError] = useState('');
 
@@ -257,8 +258,8 @@ export default function AccountModal({
     if (!ok) {
       setBusy(false);
       setDangerError(
-        CONTACT_EMAIL
-          ? `Couldn’t delete the account just now. Try again, or email ${CONTACT_EMAIL} and it will be done by hand.`
+        contact
+          ? `Couldn’t delete the account just now. Try again, or email ${contact} and it will be done by hand.`
           : 'Couldn’t delete the account just now. Try again, or ask whoever administers this site and it will be done by hand.'
       );
       return;

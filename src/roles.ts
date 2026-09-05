@@ -74,6 +74,7 @@ export const CAPABILITIES = [
   'reports.act',
   'users.manage',
   'permissions.manage',
+  'site.settings',
 ] as const;
 export type Capability = (typeof CAPABILITIES)[number];
 

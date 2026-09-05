@@ -9,10 +9,12 @@
 // fixed -6 offset — the version this replaced would have needed — goes wrong
 // for eight months of the year. In 2026 US daylight time runs 8 March to
 // 1 November: Central is UTC-6 (CST) outside that and UTC-5 (CDT) inside it.
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 import {
-  OFFICE_ZONE,
+  OFFICE_ZONE_BUILD,
   OFFICE_ZONE_FALLBACK,
+  officeZone,
+  wireOfficeZone,
   describeWindow,
   fromOfficeInput,
   toOfficeInput,
@@ -23,19 +25,37 @@ import {
 const at = (iso: string) => new Date(iso).toISOString();
 
 describe('the anchor', () => {
+  afterEach(() => wireOfficeZone(() => OFFICE_ZONE_BUILD));
+
   it('is a company clock, not the browser', () => {
     // Set by the deployment; this build does not set it, so it is the fallback.
-    expect(OFFICE_ZONE).toBe(OFFICE_ZONE_FALLBACK);
+    expect(OFFICE_ZONE_BUILD).toBe(OFFICE_ZONE_FALLBACK);
     expect(OFFICE_ZONE_FALLBACK).toBe('America/Chicago');
   });
 
-  // The zone is used to build formatters at module load, and an unknown name
-  // does not degrade — Intl throws a RangeError on it. A typo in the
-  // environment has to cost a wrong default, not a white page.
-  it('and a name the platform does not know is not fatal', () => {
-    const bad = () => new Intl.DateTimeFormat('en-US', { timeZone: 'Amherst/Office' });
-    expect(bad).toThrow();
-    expect(() => new Intl.DateTimeFormat('en-US', { timeZone: OFFICE_ZONE })).not.toThrow();
+  // The zone is a setting now, so it can change while the page is open — and
+  // every formatter here is built from it.
+  it('follows the setting once one is wired in', () => {
+    wireOfficeZone(() => 'America/Denver');
+    expect(officeZone()).toBe('America/Denver');
+    // Denver is UTC-6 in October, so five in the afternoon there is 23:00Z
+    expect(fromOfficeInput('2026-10-16T17:00')?.toISOString()).toBe('2026-10-16T23:00:00.000Z');
+  });
+
+  // An unknown name does not degrade — Intl throws a RangeError on it — and
+  // these formatters are built from whatever the setting says. A bad value has
+  // to cost the fallback, not the page. The server refuses one too; this is the
+  // second of the two guards, because a white screen deserves more than one.
+  it('and a name the platform does not know falls back rather than throwing', () => {
+    expect(() => new Intl.DateTimeFormat('en-US', { timeZone: 'Amherst/Office' })).toThrow();
+    wireOfficeZone(() => 'Amherst/Office');
+    expect(officeZone()).toBe(OFFICE_ZONE_BUILD);
+    expect(() => when(new Date('2026-10-16T22:00:00Z'), new Date())).not.toThrow();
+  });
+
+  it('and so does an empty one', () => {
+    wireOfficeZone(() => '');
+    expect(officeZone()).toBe(OFFICE_ZONE_BUILD);
   });
 });
 

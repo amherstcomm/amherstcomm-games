@@ -30,8 +30,13 @@ export const SITE_NAME: string = trimmed(import.meta.env.VITE_SITE_NAME) || SITE
 
 /** The event this run of the site is for — "Employee Ownership Month" — or
  *  empty, which is the ordinary state and renders nothing at all rather than
- *  an empty line. */
-export const SITE_SUBTITLE: string = trimmed(import.meta.env.VITE_SITE_SUBTITLE);
+ *  an empty line.
+ *
+ *  The *fallback* now, not the value: a `site_settings` row overrides it, and
+ *  components read `useSetting('subtitle')`. This is what paints before the
+ *  database answers, and what applies if it never does. The move was written
+ *  down here before it happened, and this is it. */
+export const SITE_SUBTITLE_FALLBACK: string = trimmed(import.meta.env.VITE_SITE_SUBTITLE);
 
 /** Where a person writes when a form will not do.
  *
@@ -46,4 +51,4 @@ export const SITE_SUBTITLE: string = trimmed(import.meta.env.VITE_SITE_SUBTITLE)
  *  question about a specific account — only the address on the account can show
  *  whose account it is — so that route says plainly that it needs an address
  *  configured. */
-export const CONTACT_EMAIL: string = trimmed(import.meta.env.VITE_CONTACT_EMAIL);
+export const CONTACT_EMAIL_FALLBACK: string = trimmed(import.meta.env.VITE_CONTACT_EMAIL);

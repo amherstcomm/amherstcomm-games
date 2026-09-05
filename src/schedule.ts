@@ -48,15 +48,54 @@ function usable(zone: string): boolean {
  *  this one's to know — see brand.ts. Build-time, so changing it means a
  *  rebuild; that is the same cost as editing this line, and the point of the
  *  variable is that a fork does not have to edit this line at all. */
-export const OFFICE_ZONE: string = (() => {
+export const OFFICE_ZONE_BUILD: string = (() => {
   const named = typeof import.meta.env.VITE_OFFICE_ZONE === 'string'
     ? import.meta.env.VITE_OFFICE_ZONE.trim()
     : '';
   return usable(named) ? named : OFFICE_ZONE_FALLBACK;
 })();
 
-const PARTS = new Intl.DateTimeFormat('en-US', {
-  timeZone: OFFICE_ZONE,
+/** Where the zone is actually read from, per call.
+ *
+ *  Set by `wireOfficeZone` rather than imported, and that is not ceremony:
+ *  settings.ts imports this module for the fallback, so this module importing
+ *  settings.ts back would be a cycle. The app hands the lookup in at boot; a
+ *  test or a bare import gets the build value, which is a working site. */
+let lookup: () => string = () => OFFICE_ZONE_BUILD;
+
+/** Tell this module where the live setting lives. Called once, from the app. */
+export function wireOfficeZone(fn: () => string): void {
+  lookup = fn;
+}
+
+/** The company's clock right now: the settings row if there is one, else the
+ *  build value, else Chicago — and never one the platform cannot resolve,
+ *  because every formatter below is built from it and Intl throws rather than
+ *  degrading. The server refuses an unknown zone too; this is the second of
+ *  the two, held because a white page is not a thing to have one guard for. */
+export function officeZone(): string {
+  const named = lookup();
+  return usable(named) ? named : OFFICE_ZONE_BUILD;
+}
+
+/** Formatters are not free and the zone changes about never, so they are built
+ *  once per zone rather than once per call — but they can no longer be built
+ *  once per module, because the zone is now a setting. */
+function memo<T>(build: (zone: string) => T): () => T {
+  let forZone: string | null = null;
+  let made: T;
+  return () => {
+    const zone = officeZone();
+    if (zone !== forZone) {
+      forZone = zone;
+      made = build(zone);
+    }
+    return made;
+  };
+}
+
+const PARTS = memo((zone) => new Intl.DateTimeFormat('en-US', {
+  timeZone: zone,
   hour12: false,
   year: 'numeric',
   month: '2-digit',
@@ -64,12 +103,12 @@ const PARTS = new Intl.DateTimeFormat('en-US', {
   hour: '2-digit',
   minute: '2-digit',
   second: '2-digit',
-});
+}));
 
 /** The office wall clock at a given instant, as numbers. */
 function officeParts(at: Date): Record<string, number> {
   const out: Record<string, number> = {};
-  for (const p of PARTS.formatToParts(at)) {
+  for (const p of PARTS().formatToParts(at)) {
     if (p.type !== 'literal') out[p.type] = Number(p.value);
   }
   // 24:00 rather than 00:00 is legal output for hourCycle h24 and would push
@@ -126,18 +165,18 @@ export function fromOfficeInput(value: string): Date | null {
   return new Date(naive - offsetAt(new Date(first)));
 }
 
-const TIME = new Intl.DateTimeFormat(undefined, {
-  timeZone: OFFICE_ZONE,
+const TIME = memo((zone) => new Intl.DateTimeFormat(undefined, {
+  timeZone: zone,
   hour: 'numeric',
   minute: '2-digit',
   timeZoneName: 'short',
-});
-const DAY = new Intl.DateTimeFormat(undefined, { timeZone: OFFICE_ZONE, weekday: 'long' });
-const DATE = new Intl.DateTimeFormat(undefined, {
-  timeZone: OFFICE_ZONE,
+}));
+const DAY = memo((zone) => new Intl.DateTimeFormat(undefined, { timeZone: zone, weekday: 'long' }));
+const DATE = memo((zone) => new Intl.DateTimeFormat(undefined, {
+  timeZone: zone,
   day: 'numeric',
   month: 'long',
-});
+}));
 
 /** Which day of the office's calendar an instant falls on. */
 function officeDay(at: Date): number {
@@ -161,9 +200,9 @@ export function when(at: Date, now: Date): string {
         : days === -1
           ? 'yesterday'
           : days > 1 && days < 7
-            ? DAY.format(at)
-            : DATE.format(at);
-  return `${day} at ${TIME.format(at)}`;
+            ? DAY().format(at)
+            : DATE().format(at);
+  return `${day} at ${TIME().format(at)}`;
 }
 
 /** The line under the session's name. Null when there is no window, because a
