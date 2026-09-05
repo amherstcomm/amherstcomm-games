@@ -42,6 +42,9 @@ export type Sheet = {
     mode: SessionMode;
     qa: boolean;
     shared: boolean;
+    /** an open session's window, either end of which may be unset */
+    opens_at: string | null;
+    closes_at: string | null;
   };
   kinds?: ItemKind[];
   items?: SheetItem[];
@@ -64,6 +67,8 @@ export type SessionSummary = {
   mode: SessionMode;
   qa: boolean;
   shared: boolean;
+  opens_at: string | null;
+  closes_at: string | null;
   code: string | null;
   items: number;
   created_at: string;
@@ -214,6 +219,33 @@ export async function deleteSession(
   const { data, error } = await supabase.rpc('delete_session', {
     p_session: session,
     p_confirm: confirm,
+  });
+  if (error) return fail(error.message);
+  return (data as { ok: boolean; reason?: string }) ?? fail('no answer');
+}
+
+/** When an open session lets itself in, and when it locks up.
+ *
+ *  Open sessions only — a live one has a presenter, and the presenter is the
+ *  schedule. Both ends are independent: pass one to change one. `clear` is how
+ *  a schedule comes off, because "leave it alone" and "take it off" cannot both
+ *  be spelled `null`.
+ *
+ *  Times go over the wire as ISO strings, so what the browser sends is an
+ *  instant rather than a wall clock — nine on Monday means nine where the
+ *  person setting it is, which is the only reading that survives somebody
+ *  looking at it from a phone in another timezone. */
+export async function setSessionSchedule(
+  session: string,
+  window: { opensAt?: Date | null; closesAt?: Date | null },
+  clear = false
+): Promise<{ ok: boolean; reason?: string; state?: string }> {
+  if (!supabase) return fail('not connected');
+  const { data, error } = await supabase.rpc('set_session_schedule', {
+    p_session: session,
+    p_opens_at: window.opensAt ? window.opensAt.toISOString() : null,
+    p_closes_at: window.closesAt ? window.closesAt.toISOString() : null,
+    p_clear: clear,
   });
   if (error) return fail(error.message);
   return (data as { ok: boolean; reason?: string }) ?? fail('no answer');

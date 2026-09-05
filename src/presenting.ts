@@ -28,6 +28,9 @@ export type Door = {
   /** open mode: how many people have answered anything */
   players?: number;
   item_state?: 'pending' | 'open' | 'locked' | 'revealed' | null;
+  /** open mode: the window it keeps, either end of which may be unset */
+  opens_at?: string | null;
+  closes_at?: string | null;
 };
 
 export type Action = 'start' | 'show' | 'lock' | 'reveal' | 'close';

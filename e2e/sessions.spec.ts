@@ -152,6 +152,78 @@ test('and they are the same height, lining up with whatever shares their line', 
 });
 
 // ---------------------------------------------------------------------------
+// Opening hours
+//
+// The panel is only offered to a session that runs without anybody at the
+// front, and what it sends has to be an instant rather than the wall clock the
+// input shows — the conversion between the two is the part with an off-by-a-
+// timezone in it, and tests/unit/schedule.test.ts owns the arithmetic. What is
+// worth checking from a browser is that a real `datetime-local` hands over a
+// real instant, and that both ends travel together.
+// ---------------------------------------------------------------------------
+
+const OPEN_SHEET = {
+  ...SHEET,
+  session: { ...SHEET.session, state: 'draft', mode: 'open', qa: true, shared: false,
+             opens_at: null, closes_at: null },
+};
+
+async function openEditor(page: import('@playwright/test').Page, sent: unknown[]) {
+  await page.route('**/rest/v1/rpc/**', (route) => {
+    const url = route.request().url();
+    if (url.includes('set_session_schedule')) {
+      sent.push(JSON.parse(route.request().postData() ?? '{}'));
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ ok: true }),
+      });
+    }
+    return route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(url.includes('session_sheet') ? OPEN_SHEET : []),
+    });
+  });
+  await page.goto(`/sessions/${SESSION}`);
+  await expect(page.getByRole('heading', { name: 'Test 3' })).toBeVisible();
+}
+
+test('an open session can be given opening hours', async ({ page }) => {
+  const sent: Record<string, string | null>[] = [];
+  await openEditor(page, sent);
+  await expect(page.getByText('It opens and closes when you say so.')).toBeVisible();
+
+  await page.getByLabel('Closes').fill('2026-10-16T17:00');
+  await expect.poll(() => sent.length).toBe(1);
+
+  // An instant, not the wall clock — five in the afternoon here, whatever that
+  // is in UTC. Compared against the same conversion the browser did rather than
+  // a hardcoded Z time, which would only pass in one timezone.
+  const expected = new Date(2026, 9, 16, 17, 0).toISOString();
+  expect(sent[0].p_closes_at).toBe(expected);
+  // Both ends travel together: the server cannot tell an end that was unset
+  // from one that was untouched, and the two mean opposite things.
+  expect(sent[0].p_opens_at).toBeNull();
+  expect(sent[0].p_clear).toBe(true);
+});
+
+test('and a session with a presenter is not offered them', async ({ page }) => {
+  await page.route('**/rest/v1/rpc/**', (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(route.request().url().includes('session_sheet') ? SHEET : []),
+    })
+  );
+  await page.goto(`/sessions/${SESSION}`);
+  await expect(page.getByRole('heading', { name: 'Test 3' })).toBeVisible();
+  // The presenter is the schedule; a clock underneath them would take the one
+  // thing they are there for.
+  await expect(page.getByText('Opening hours')).toHaveCount(0);
+});
+
+// ---------------------------------------------------------------------------
 // Duplicating
 //
 // The copy is a whole new session, so the one thing worth asserting from the
