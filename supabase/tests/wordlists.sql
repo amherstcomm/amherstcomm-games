@@ -205,15 +205,22 @@ owner
 equity
 buyout
 vesting',
-  'What we all are', 'employeeowned', date '2026-10-01', date '2026-10-31');
+  'What we all are', E'employeeowned
+sharedreward
+ownership',
+  date '2026-10-01', date '2026-10-31');
 select pg_temp.check('a list can be given a run of days',
   (select v->>'ok' from t where k='oct') = 'true');
 
 select pg_temp.check('and the generator finds it by date',
   public.daily_theme(date '2026-10-08')->>'clue' = 'What we all are');
-select pg_temp.check('with the words and the spangram it needs',
-  jsonb_array_length(public.daily_theme(date '2026-10-08')->'words') = 6
-  and public.daily_theme(date '2026-10-08')->>'spangram' = 'employeeowned');
+select pg_temp.check('with the words it needs',
+  jsonb_array_length(public.daily_theme(date '2026-10-08')->'words') = 6);
+-- Several, because a list that runs for a month builds a board every day of it
+-- and one spangram would thread the same word through all thirty-one.
+select pg_temp.check('and every spangram it was given',
+  public.daily_theme(date '2026-10-08')->'spangrams'
+    @> '["employeeowned","sharedreward","ownership"]'::jsonb);
 -- Eleven months of the year there is no theme, and that is the ordinary state
 -- rather than a failure: the generator makes the day it would have made.
 select pg_temp.check('a day nothing covers has no theme',
@@ -234,18 +241,29 @@ select pg_temp.check('a list with no clue of its own is called by its name',
   public.daily_theme(date '2026-12-03')->>'clue' = 'Anniversary week');
 -- Without a spangram it can still pick the daily word; it just cannot build a
 -- Weave board, which the generator decides rather than this.
-select pg_temp.check('and may have no spangram at all',
-  public.daily_theme(date '2026-12-03')->'spangram' = 'null'::jsonb);
+select pg_temp.check('and may have none at all',
+  public.daily_theme(date '2026-12-03')->'spangrams' = '[]'::jsonb);
 
 -- ---------------------------------------------------------------------------
 -- What is refused
 -- ---------------------------------------------------------------------------
 select pg_temp.check('a spangram that will not thread is refused while somebody is looking',
   (public.save_word_list(null, 'Too short', 'shares', null, 'short',
-     date '2027-01-01', date '2027-01-07')->>'reason') like 'a spangram is one word%');
-select pg_temp.check('and one with a space in it',
-  (public.save_word_list(null, 'Spaced', 'shares', null, 'employee owned',
-     date '2027-01-01', date '2027-01-07')->>'ok') = 'false');
+     date '2027-01-01', date '2027-01-07')->>'reason') like '%cannot be a spangram%');
+-- Named, because a list of eight is no use if the refusal will not say which.
+select pg_temp.check('and the refusal says which one',
+  (public.save_word_list(null, 'One bad', 'shares', null,
+     E'employeeowned
+no
+ownership', date '2027-01-01', date '2027-01-07')->>'reason')
+    like '"no" cannot be%');
+-- A space separates, like it does in the word list: two spangrams, not one
+-- broken one.
+select pg_temp.check('a space separates rather than spoils',
+  (public.save_word_list(null, 'Spaced', 'shares', null, 'employeeowned ownership',
+     date '2027-01-01', date '2027-01-07')->>'ok') = 'true');
+select pg_temp.check('and both were kept',
+  (select array_length(spangrams, 1) from public.word_lists where name = 'Spaced') = 2);
 select pg_temp.check('a window cannot finish before it starts',
   (public.save_word_list(null, 'Backwards', 'shares', null, null,
      date '2027-02-10', date '2027-02-01')->>'reason') = 'it cannot finish before it starts');

@@ -5009,7 +5009,18 @@ create table if not exists public.word_lists (
 -- flipping a switch on the first would leave the first two weeks unthemed and
 -- already published.
 alter table public.word_lists add column if not exists clue text;
+-- Spangrams, plural. A list that runs for a month builds a Weave board every
+-- day of it, and one spangram means the same long answer every time — the board
+-- rearranges, the word threaded through it does not. So a list carries several
+-- and the generator picks per day.
+--
+-- `spangram` singular came first and is kept only to carry its value into the
+-- array below. Nothing reads it.
 alter table public.word_lists add column if not exists spangram text;
+alter table public.word_lists add column if not exists spangrams text[];
+update public.word_lists
+   set spangrams = array[spangram]
+ where spangram is not null and spangrams is null;
 alter table public.word_lists add column if not exists daily_from date;
 alter table public.word_lists add column if not exists daily_until date;
 alter table public.word_lists enable row level security;
@@ -5061,7 +5072,7 @@ as $fn$
                 -- left, because a number nothing depends on is a number
                 -- somebody will make a decision on.
                 'clue', l.clue,
-                'spangram', l.spangram,
+                'spangrams', to_jsonb(coalesce(l.spangrams, '{}')),
                 'daily_from', l.daily_from,
                 'daily_until', l.daily_until,
                 'lengths', (select coalesce(jsonb_agg(distinct length(e.word) order by length(e.word)), '[]'::jsonb)
@@ -5128,7 +5139,7 @@ create or replace function public.save_word_list(
   p_name text,
   p_words text,
   p_clue text default null,
-  p_spangram text default null,
+  p_spangrams text default null,
   p_from date default null,
   p_until date default null
 )
@@ -5141,6 +5152,8 @@ declare
   id uuid;
   nm text := btrim(coalesce(p_name, ''));
   kept int;
+  spans text[];
+  i int;
 begin
   if not public.can('games.setup') then
     return jsonb_build_object('ok', false, 'reason', 'not allowed');
@@ -5152,15 +5165,21 @@ begin
     return jsonb_build_object('ok', false, 'reason', 'that name is longer than the space it goes in');
   end if;
 
-  -- Weave threads the spangram corner to corner, so its shape is the board's
-  -- problem rather than a matter of taste. Refused here because a list that
-  -- cannot build a board should say so while somebody is looking at it, not at
-  -- three in the morning when the window is generated.
-  if btrim(coalesce(p_spangram, '')) <> ''
-     and btrim(lower(p_spangram)) !~ '^[a-z]{6,16}$' then
-    return jsonb_build_object('ok', false, 'reason',
-      'a spangram is one word of 6 to 16 letters, no spaces');
-  end if;
+  -- Weave threads a spangram corner to corner, so its shape is the board's
+  -- problem rather than a matter of taste. Refused here, naming the one at
+  -- fault, because a list that cannot build a board should say so while
+  -- somebody is looking at it rather than at three in the morning when the
+  -- window is generated.
+  spans := array(
+    select w from regexp_split_to_table(coalesce(p_spangrams, ''), '[^A-Za-z]+') as w
+    where w <> '');
+  for i in 1 .. coalesce(array_length(spans, 1), 0) loop
+    if lower(spans[i]) !~ '^[a-z]{6,16}$' then
+      return jsonb_build_object('ok', false, 'reason',
+        format('"%s" cannot be a spangram — it is one word of 6 to 16 letters', spans[i]));
+    end if;
+    spans[i] := lower(spans[i]);
+  end loop;
   if p_from is not null and p_until is not null and p_until < p_from then
     return jsonb_build_object('ok', false, 'reason', 'it cannot finish before it starts');
   end if;
@@ -5178,15 +5197,15 @@ begin
   end if;
 
   if p_id is null then
-    insert into public.word_lists (name, created_by, clue, spangram, daily_from, daily_until)
+    insert into public.word_lists (name, created_by, clue, spangrams, daily_from, daily_until)
     values (nm, (select auth.uid()), nullif(btrim(coalesce(p_clue, '')), ''),
-            nullif(btrim(lower(coalesce(p_spangram, ''))), ''), p_from, p_until)
+            nullif(spans, '{}'), p_from, p_until)
     returning word_lists.id into id;
   else
     update public.word_lists
        set name = nm,
            clue = nullif(btrim(coalesce(p_clue, '')), ''),
-           spangram = nullif(btrim(lower(coalesce(p_spangram, ''))), ''),
+           spangrams = nullif(spans, '{}'),
            daily_from = p_from,
            daily_until = p_until
      where word_lists.id = p_id returning word_lists.id into id;
@@ -5242,7 +5261,7 @@ as $fn$
     -- The name is the obvious clue and usually the right one, so it stands in
     -- rather than making somebody type it twice.
     'clue', coalesce(nullif(btrim(l.clue), ''), l.name),
-    'spangram', l.spangram,
+    'spangrams', to_jsonb(coalesce(l.spangrams, '{}')),
     'words', coalesce(
       (select jsonb_agg(e.word order by e.word)
        from public.word_list_entries e where e.list_id = l.id),

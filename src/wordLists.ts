@@ -14,9 +14,11 @@ export type WordList = {
   id: string;
   name: string;
   words: number;
-  /** the Weave clue, and its long corner-to-corner answer */
+  /** the Weave clue, and the long corner-to-corner answers to choose between —
+   *  several, because a month-long theme builds a board a day and one would
+   *  thread the same word through all of them */
   clue: string | null;
-  spangram: string | null;
+  spangrams: string[];
   /** the days this list themes, or null for none */
   daily_from: string | null;
   daily_until: string | null;
@@ -49,7 +51,7 @@ export async function saveWordList(
   id: string | null,
   name: string,
   words: string,
-  daily: { clue?: string; spangram?: string; from?: string; until?: string } = {}
+  daily: { clue?: string; spangrams?: string; from?: string; until?: string } = {}
 ): Promise<{ ok: boolean; reason?: string; id?: string; words?: number }> {
   if (!supabase) return fail('not connected');
   const { data, error } = await supabase.rpc('save_word_list', {
@@ -57,7 +59,7 @@ export async function saveWordList(
     p_name: name,
     p_words: words,
     p_clue: daily.clue || null,
-    p_spangram: daily.spangram || null,
+    p_spangrams: daily.spangrams || null,
     // Empty is no date rather than an invalid one, and the two have to stay
     // distinguishable: a list with no dates themes nothing.
     p_from: daily.from || null,

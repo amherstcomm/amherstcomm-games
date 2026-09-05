@@ -8,7 +8,7 @@ import { createRequire } from 'node:module';
 import { generateWeave } from './weave.mjs';
 import { generateSquare, GIVEN_TARGET } from './squares.mjs';
 import { THEMES } from './themes.mjs';
-import { themeFor, themedPool, weaveTheme } from './themedDaily.mjs';
+import { themeFor, themedPool, weaveThemes } from './themedDaily.mjs';
 import {
   generateCryptogram,
   generatePlayable,
@@ -662,9 +662,13 @@ for (const variant of ['', 'dev']) {
     // shape, or no arrangement found in the attempts allowed — the curated
     // themes take over, because a day without a Weave board is worse than a day
     // without a themed one.
-    const themedBoard = weaveTheme(theme, cols * rows);
+    // One candidate per spangram, handed over as the themes to choose from:
+    // Weave's own generator shuffles them against the day's seed and takes the
+    // first that tiles. That is what stops a month-long theme threading the
+    // same long answer through all thirty-one boards.
+    const themedBoards = weaveThemes(theme, cols * rows);
     const weave =
-      (themedBoard && generateWeave(weaveRng, cols, rows, [themedBoard])) ||
+      (themedBoards.length > 0 && generateWeave(weaveRng, cols, rows, themedBoards)) ||
       generateWeave(weaveRng, cols, rows, THEMES);
     if (!weave) throw new Error(`Could not generate a ${difficulty} daily weave`);
     dailyWeaveClues.add(weave.clue);
