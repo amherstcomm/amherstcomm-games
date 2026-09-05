@@ -22,8 +22,17 @@ test('a word that joins neither side is refused', async ({ page }) => {
 
   // something that is certainly not a word on either side
   await input.fill('zzz');
-  await page.getByRole('button', { name: 'Add', exact: true }).click();
-  await expect(page.getByText(/is not a word/)).toBeVisible();
+
+  // Pressed until the board can answer, rather than once. The word list is
+  // fetched, and a board that has not got it yet says "Still loading the word
+  // list." — which is the right behaviour and was not what this asserted, so
+  // the test failed whenever the fetch lost a race with the click. Measured at
+  // five failures in twelve under parallel load; it had been passing on a quiet
+  // machine and failing in full runs.
+  await expect(async () => {
+    await page.getByRole('button', { name: 'Add', exact: true }).click();
+    await expect(page.getByText(/is not a word/)).toBeVisible({ timeout: 500 });
+  }).toPass({ timeout: 10_000 });
   await expect(rows(page).filter({ hasText: 'found' })).toHaveCount(0);
 });
 

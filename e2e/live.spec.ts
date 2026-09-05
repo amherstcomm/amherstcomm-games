@@ -760,3 +760,61 @@ test('once it is over, the room is offered the way to see how it went', async ({
     else await expect(link).toHaveCount(0);
   }
 });
+
+// Reported from a session: the total under a marked answer was the total from
+// *before* that answer, while the "of" beside it already counted the question —
+// so it read as though the answer they could see marked in front of them had
+// not been counted. It had; the poll simply stops while somebody is looking at
+// how they did, so nothing re-read the standing.
+//
+// There is nothing to protect by waiting. They have just been shown whether
+// they got it right.
+test('the total under a marked answer counts that answer', async ({ page }) => {
+  let served = 0;
+  let standings = 0;
+  await page.route('**/rest/v1/rpc/**', (route) => {
+    const url = route.request().url();
+    if (url.includes('current_item')) served++;
+    if (url.includes('my_standing')) standings++;
+    const body = url.includes('answer_item')
+      ? { ok: true, answer: { correct: ['2019'] } }
+      : url.includes('current_item')
+        ? {
+            state: 'open',
+            mode: 'open',
+            id: 'q1',
+            position: 1,
+            opened_at: new Date().toISOString(),
+            seconds: null,
+            now: new Date().toISOString(),
+            mine: null,
+            answer: null,
+            total: 3,
+            done: 0,
+            ...ITEMS.choice,
+          }
+        : url.includes('my_standing')
+          ? // Before the answer, one of three counted and none of them right.
+            // After it, the same question is right — which is the whole point.
+            standings <= 1
+            ? { ok: true, points: 0, scored: 1 }
+            : { ok: true, points: 1, scored: 1 }
+          : {};
+    return route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(body),
+    });
+  });
+  await page.goto(`/live/${SESSION}`);
+  await expect(page.getByText('You have 0 of 1 so far.')).toBeVisible();
+
+  await page.getByRole('button', { name: '2019' }).click();
+  const before = served;
+  await page.getByRole('button', { name: 'Send answer' }).click();
+
+  await expect(page.getByText('You have 1 of 1 so far.')).toBeVisible();
+  // And without serving anything: reading the current item in open mode is what
+  // hands out the next question and starts its clock.
+  expect(served, 'the next question was served while they were still reading').toBe(before);
+});

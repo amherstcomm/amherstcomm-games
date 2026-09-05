@@ -6863,6 +6863,42 @@ as $fn$
   )
 $fn$;
 
+
+-- Whether somebody is done with a question, which is not the same as having
+-- written something against it.
+--
+-- Every other kind answers once: a row in `responses` is the answer and the
+-- question is behind them. A word game writes a row per *guess* — that is how a
+-- half-played board survives a reload — so "has a response" is true from the
+-- first wrong guess onwards.
+--
+-- Which meant open mode took the board away after one guess. current_item
+-- serves the first question with no response, the poll runs every five seconds,
+-- and the next one came back instead. Reported as the clock expiring early; the
+-- clock had nothing to do with it.
+--
+-- So a game is finished when it is solved or out of guesses, and anything else
+-- is finished when it has been answered at all.
+create or replace function public.finished_item(p_item uuid, p_user uuid)
+returns boolean
+language sql
+stable
+set search_path = ''
+as $fn$
+  select exists (
+    select 1
+    from public.responses r
+    join public.items i on i.id = r.item_id
+    where r.item_id = p_item and r.user_id = p_user
+      and (
+        i.kind <> 'game'
+        or coalesce((r.value ->> 'solved')::boolean, false)
+        or jsonb_array_length(coalesce(r.value -> 'guesses', '[]'::jsonb))
+           >= coalesce(nullif(i.payload ->> 'tries', '')::int, 6)
+      )
+  )
+$fn$;
+
 create or replace function public.current_item(p_session uuid)
 returns jsonb
 language plpgsql
@@ -6900,8 +6936,9 @@ begin
     from public.items i
     where i.session_id = p_session
       and i.state <> 'pending'
-      and not exists (
-        select 1 from public.responses r where r.item_id = i.id and r.user_id = me)
+      -- Finished rather than merely written against — a word game writes a row
+      -- per guess, and the old test took the board away after the first one.
+      and not public.finished_item(i.id, me)
       -- see the note above: a question whose window has closed is behind them
       and not public.expired_for(i.id, me)
     order by i.position
@@ -6930,8 +6967,7 @@ begin
       -- keeps counting while a skipped one still counts as gone
       'done', (select count(*) from public.items i
                where i.session_id = p_session and i.state <> 'pending'
-                 and (exists (select 1 from public.responses r
-                              where r.item_id = i.id and r.user_id = me)
+                 and (public.finished_item(i.id, me)
                       or public.expired_for(i.id, me))));
   end if;
 
