@@ -128,3 +128,29 @@ select pg_temp.check('the sheet lists what has been set, and only that',
     = (select count(*) from public.feature_windows));
 
 \echo '--- availability checks passed ---'
+
+-- ---------------------------------------------------------------------------
+-- The things that are not games
+--
+-- A deployment may want the quiz and nothing else — every game off and sessions
+-- alone is a real thing to run during an event — or the games and no quiz. So
+-- there is a fourth kind, and the constraint that allows it is its own rather
+-- than inline on the column: `create table if not exists` does nothing on a
+-- database that already has the table, so an inline check could never have been
+-- widened.
+-- ---------------------------------------------------------------------------
+set session "test.uid" = 'f1111111-1111-1111-1111-111111111111';
+select pg_temp.check('sessions can be switched off like anything else',
+  (public.set_feature_window('site:sessions', false)->>'ok') = 'true');
+select pg_temp.check('and are then unavailable', pg_temp.off('site:sessions'));
+select public.set_feature_window('site:sessions', true);
+
+-- Switching everything off is allowed. It is not the interface's business to
+-- decide that a deployment must offer at least one game.
+select pg_temp.check('every game at once is allowed',
+  (select bool_and((public.set_feature_window('game:' || g, false)->>'ok') = 'true')
+   from unnest(array['guess','scramble','hive','grid','boxed',
+                     'weave','squares','cryptogram','ladder','bridge']) as g));
+select pg_temp.check('and then every one of them is off',
+  (select count(*) from jsonb_array_elements_text(public.read_availability()) f
+   where f like 'game:%') = 10);

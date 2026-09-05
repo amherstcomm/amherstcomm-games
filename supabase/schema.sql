@@ -8205,7 +8205,7 @@ grant execute on function public.set_person_role(uuid, text) to authenticated;
 -- ---------------------------------------------------------------------------
 
 create table if not exists public.feature_windows (
-  feature text primary key check (feature ~ '^(game|view|difficulty):[a-z0-9-]{1,32}$'),
+  feature text primary key,
   -- Off outright, regardless of the window. A switch somebody can flip without
   -- working out dates, which is what most of these will ever need.
   enabled boolean not null default true,
@@ -8217,6 +8217,19 @@ create table if not exists public.feature_windows (
   updated_at timestamptz not null default now(),
   updated_by uuid references auth.users (id) on delete set null
 );
+-- The kinds, as their own constraint rather than inline on the column.
+--
+-- `create table if not exists` does nothing on a database that already has the
+-- table, so a kind added later would never reach it — the first version put
+-- this inline and `site:` could not have been added without a migration.
+-- Dropped and re-added instead, which is idempotent as a pair.
+--
+-- `site:` is for the things that are not games: sessions, and whatever else
+-- turns out to be switchable that nobody plays.
+alter table public.feature_windows drop constraint if exists feature_windows_kind;
+alter table public.feature_windows add constraint feature_windows_kind
+  check (feature ~ '^(game|view|difficulty|site):[a-z0-9-]{1,32}$');
+
 alter table public.feature_windows enable row level security;
 
 /*
@@ -8300,7 +8313,7 @@ begin
   if not public.can('site.settings') then
     return jsonb_build_object('ok', false, 'reason', 'not allowed');
   end if;
-  if p_feature !~ '^(game|view|difficulty):[a-z0-9-]{1,32}$' then
+  if p_feature !~ '^(game|view|difficulty|site):[a-z0-9-]{1,32}$' then
     return jsonb_build_object('ok', false, 'reason', 'that is not something that can be switched');
   end if;
   if p_starts_at is not null and p_ends_at is not null and p_ends_at <= p_starts_at then

@@ -120,3 +120,46 @@ test('switching a game off from the admin page actually removes it', async ({ pa
   await page.goto('/');
   await expect(page.getByRole('link', { name: /Hive/ })).toHaveCount(0);
 });
+
+// Switching every game off is allowed, and is a real thing to want: a
+// deployment can run the quiz alone for an event. What it must not do is take
+// the site with it, which is what it did — `setMode(undefined)` on an empty
+// list, and a blank page.
+test('with every game switched off the site is still there', async ({ page }) => {
+  const errors: string[] = [];
+  page.on('pageerror', (e) => errors.push(e.message));
+  await site(page, [
+    'game:guess',
+    'game:scramble',
+    'game:hive',
+    'game:grid',
+    'game:boxed',
+    'game:weave',
+    'game:squares',
+    'game:cryptogram',
+    'game:ladder',
+    'game:bridge',
+  ]);
+  await page.goto('/');
+
+  await expect(page.getByText(/word games are switched off/i)).toBeVisible();
+  // Not "zero word games, a fresh puzzle in each one".
+  await expect(page.getByText(/^zero word games/i)).toHaveCount(0);
+  expect(errors, 'the page threw with nothing to play').toEqual([]);
+});
+
+// Sessions are not a game, so they switch separately — and switching them off
+// has to close the address as well as the link, or a session stays playable to
+// whoever kept the QR code from last week.
+test('sessions can be switched off on their own', async ({ page }) => {
+  await site(page, ['site:sessions']);
+  await page.goto('/join');
+  await expect(page.getByText(/Sessions are switched off/i)).toBeVisible();
+  await expect(page.getByRole('textbox')).toHaveCount(0);
+});
+
+test('and are there when they are on', async ({ page }) => {
+  await site(page, []);
+  await page.goto('/join');
+  await expect(page.getByText(/Sessions are switched off/i)).toHaveCount(0);
+});

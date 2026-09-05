@@ -5,6 +5,8 @@
 // opposite of the per-user hiding in storage.ts, which falls back to showing
 // everything if somebody hid the lot. A preference can be overruled by the
 // interface; a deployment's decision cannot.
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { __setAvailabilityForTest, isOffered, offered } from '@/availability';
 
@@ -49,5 +51,34 @@ describe('the store', () => {
     __setAvailabilityForTest(['sandwich:ham', 'game:hive', '', 'game:UPPER'] as string[]);
     expect(isOffered('game:hive')).toBe(false);
     expect(offered(['sandwich:ham'], 'game', ['hive'])).toEqual(['hive']);
+  });
+});
+
+// The kinds the server allows and the kinds this file keeps have to be the same
+// list. They were not: `site:` was added to the constraint in schema.sql and not
+// to the filter here, so the switch saved, the feed carried it, and the client
+// dropped it on the way in — a control that worked and did nothing.
+//
+// Asserted against the schema rather than restated, because a copy is what went
+// wrong.
+describe('the kinds of thing that can be switched', () => {
+  it('are the ones the database allows', () => {
+    const schema = readFileSync(join(process.cwd(), 'supabase/schema.sql'), 'utf8');
+    const constraint = schema.match(
+      /check \(feature ~ '\^\(([a-z|]+)\):/
+    );
+    expect(constraint, 'the feature constraint moved or changed shape').not.toBeNull();
+    const allowed = constraint![1].split('|').sort();
+
+    // Each one, through the real filter: a kind the server allows must survive
+    // the trip in.
+    for (const kind of allowed) {
+      __setAvailabilityForTest([`${kind}:thing`]);
+      expect(isOffered(`${kind}:thing` as never), `${kind}: was dropped`).toBe(false);
+    }
+    // And one it does not allow must not.
+    __setAvailabilityForTest(['sandwich:ham']);
+    expect(isOffered('sandwich:ham' as never)).toBe(true);
+    expect(allowed).toEqual(['difficulty', 'game', 'site', 'view']);
   });
 });

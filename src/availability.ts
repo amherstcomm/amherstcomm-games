@@ -25,14 +25,25 @@ import { supabase } from '@/supabase';
  *  and in src/games.ts rather than in the database, which stores whatever it is
  *  handed against a shape — a copy of the game list in SQL would be a copy to
  *  keep in step. */
-export type Feature = `game:${string}` | `view:${string}` | `difficulty:${string}`;
+export type Feature =
+  | `game:${string}`
+  | `view:${string}`
+  | `difficulty:${string}`
+  // Not a game and not a way of playing one — sessions, and whatever else turns
+  // out to be switchable that nobody plays.
+  | `site:${string}`;
 
 const CACHE_KEY = 'anagrimoire:availability:v1';
 
 function clean(raw: unknown): string[] {
   if (!Array.isArray(raw)) return [];
   return raw.filter(
-    (f): f is string => typeof f === 'string' && /^(game|view|difficulty):[a-z0-9-]{1,32}$/.test(f)
+    // Kept in step with the constraint in schema.sql by
+    // tests/unit/availability.test.ts — a kind the server allows and this drops
+    // is a switch that saves and does nothing, which is how `site:sessions`
+    // first behaved.
+    (f): f is string =>
+      typeof f === 'string' && /^(game|view|difficulty|site):[a-z0-9-]{1,32}$/.test(f)
   );
 }
 

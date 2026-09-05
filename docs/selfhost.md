@@ -1136,6 +1136,17 @@ Two reasons it exists. A game that is not ready is better hidden than explained,
 and a game a week is a reason to come back — the window is for the second, the
 switch for the first, and most of these will only ever be switched.
 
+**Sessions are switched separately**, under `site:sessions`, because they are
+not a game and not a way of playing one. A deployment may want the quiz and
+nothing else, or the games and no quiz.
+
+**Switching every game off is allowed.** It is a real thing to run during an
+event — sessions alone — and it is not the interface's business to insist a
+deployment offer at least one game. The home page says the games are off rather
+than offering "zero word games, a fresh puzzle in each one", and the tab that
+was standing on a switched-off game stays where it is rather than being sent to
+`undefined`, which is what used to take the page down.
+
 **Switched off means gone from the menu *and* refused at its own address.** That
 is the difference between this and the per-user hiding in `storage.ts`: hiding a
 game is a preference, so `visibleModes` falls back to showing everything if
@@ -1162,7 +1173,13 @@ page still *wrote* modes, so seven games agreed by coincidence and exactly those
 three could be switched off and stay on screen. Reported as "guess, scramble and
 hive don't disappear", which is that list read back.
 
-Both failures were invisible to tests that wrote the key by hand on each side.
+There was a third of the same kind, one layer down: `site:` was added to the
+constraint in `schema.sql` and not to the filter in `availability.ts`, so the
+switch saved, the feed carried it, and the client dropped it on the way in — a
+control that worked and did nothing. `tests/unit/availability.test.ts` now reads
+the kinds out of the schema and puts each one through the real filter.
+
+All three were invisible to tests that wrote the key by hand on each side.
 What catches them is `tests/unit/games.test.ts` asserting the two sides derive
 the same set, and a browser test that presses the switch on `/admin` and then
 looks at the menu. The list of
