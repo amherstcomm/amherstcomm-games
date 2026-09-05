@@ -306,8 +306,30 @@ const ANSWER: Record<string, (p: import('@playwright/test').Page) => Promise<voi
     await p.getByRole('button', { name: /^Send$/ }).click();
   },
   game: async (p) => {
-    await p.keyboard.type('owners');
-    await p.keyboard.press('Enter');
+    // Typed into the overlay that covers the grid, not at the document.
+    //
+    // Every other kind clicks a control, and Playwright waits for a control to
+    // exist before clicking it. `page.keyboard` waits for nothing: bare
+    // keystrokes are heard by a document listener the board attaches in an
+    // effect, which runs *after* the paint that made the heading this test
+    // waited for visible. On a quick machine the gap is invisible; under CPU
+    // throttling the whole word and its Enter fell into it and the board came
+    // back empty — red on CI and green on the same commit's PR run.
+    //
+    // Waiting after the fact cannot fix that: a keystroke sent into the gap is
+    // gone, not pending. So type at the element instead. MobileKeyInput's
+    // handlers are React's, wired when it enters the DOM rather than an effect
+    // later, and a locator waits for it — no gap to fall into at any speed. It
+    // is also the path a real player is on the moment they touch the board.
+    //
+    // To see the old failure again: `Emulation.setCPUThrottlingRate` at 20 via
+    // a CDP session before `playing()`. That fails every time on `page.keyboard`
+    // and passes every time on this. It is not left switched on because a
+    // twenty-times-slower page under parallel workers goes on to miss its own
+    // deadlines — trading a flake for a flake.
+    const board = p.locator('[data-key-overlay]');
+    await board.pressSequentially('owners');
+    await board.press('Enter');
   },
 };
 

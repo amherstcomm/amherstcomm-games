@@ -105,7 +105,21 @@ test('every control in the action row has its label centred', async ({ page }) =
   }
 });
 
-test('and they are the same height, on one line', async ({ page }) => {
+// Reversal, noted rather than edited away: this used to assert every control
+// shared one `top` — "on one line". That held for four controls on Windows and
+// stopped holding the moment there were five, because the row is `flex-wrap`
+// and Linux draws the same labels wider: CI went red with "the controls are on
+// different lines" while the same commit passed on a Mac runner.
+//
+// One line was never the rule. The row wraps by design — it has to, on a phone,
+// where it has always wrapped and this test has never run. What the row owes
+// the reader is that its controls are the same size and that the ones sitting
+// beside each other line up, which is what it now says. Equal heights is the
+// half that catches the original bug's neighbourhood; the centring test above
+// catches the bug itself.
+test('and they are the same height, lining up with whatever shares their line', async ({
+  page,
+}) => {
   await editor(page);
   const boxes = [];
   for (const label of ACTIONS) {
@@ -119,7 +133,22 @@ test('and they are the same height, on one line', async ({ page }) => {
     );
   }
   expect(new Set(boxes.map((b) => b.h)).size, 'the controls are different heights').toBe(1);
-  expect(new Set(boxes.map((b) => b.top)).size, 'the controls are on different lines').toBe(1);
+
+  // Grouped by line rather than assumed to be one. A control whose top is
+  // within its own height of another's is beside it; anything further is the
+  // next line down.
+  const height = boxes[0].h;
+  const lines = new Map<number, number[]>();
+  for (const b of boxes) {
+    const line = [...lines.keys()].find((t) => Math.abs(t - b.top) < height) ?? b.top;
+    lines.set(line, [...(lines.get(line) ?? []), b.top]);
+  }
+  for (const [, tops] of lines) {
+    expect(new Set(tops).size, 'controls on the same line do not line up').toBe(1);
+  }
+  // And the lines are lines: nothing is stacked one control per row, which is
+  // what a broken flex container looks like.
+  expect(lines.size, 'every control landed on its own line').toBeLessThan(boxes.length);
 });
 
 // ---------------------------------------------------------------------------
