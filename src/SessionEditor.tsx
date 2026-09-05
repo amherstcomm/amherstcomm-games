@@ -17,6 +17,7 @@ import {
   createSession,
   deleteItem,
   deleteSession,
+  duplicateSession,
   deletionWarning,
   moveItem,
   parseOptions,
@@ -806,6 +807,21 @@ function SessionEditorFor({ session }: { session: string }) {
     else setNote(second.reason ?? 'That did not work');
   }
 
+  /** Named on the way out, because nothing renames a session afterwards. The
+   *  default is what most copies want, so it is one Enter away. */
+  async function copySession() {
+    const title = window.prompt(
+      'Name for the copy',
+      `${sheet?.session?.title ?? 'Session'} (copy)`
+    );
+    if (title === null) return;
+    setBusy(true);
+    const res = await duplicateSession(session, title.trim() || undefined);
+    setBusy(false);
+    if (res.ok && res.id) window.location.assign(pathOf({ kind: 'sessions', session: res.id }));
+    else setNote(res.reason ?? 'That did not work');
+  }
+
   if (sheet === null) return <Loader2 className="w-4 h-4 animate-spin text-slate-500 m-8" />;
   if (!sheet.ok || !sheet.session) {
     return (
@@ -881,6 +897,13 @@ function SessionEditorFor({ session }: { session: string }) {
         <a className={BUTTON} href={pathOf({ kind: 'scores', session })}>
           Scores
         </a>
+
+        {/* The questions again without the answers. Same round for a second
+            group, or the same shape next week — see duplicate_session for what
+            deliberately does not come across. */}
+        <button className={BUTTON} disabled={busy} onClick={() => void copySession()}>
+          Duplicate
+        </button>
 
         {/* Any session, not only a draft. Old ones pile up and they are the
             operator's to keep or not — see the note on delete_session. What is

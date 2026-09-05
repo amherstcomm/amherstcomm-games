@@ -367,7 +367,7 @@ Four addresses, and the difference between two of them matters:
 | `/join` | anyone signed in | the way in: what is running, and a box for the code |
 | `/join/<code>` | the same | the short address for a slide — resolves and goes straight in |
 | `/sessions` | anyone with `games.setup` | the list, and where a new one is made |
-| `/sessions/<id>` | the same | its questions — add, edit, reorder, delete |
+| `/sessions/<id>` | the same | its questions — add, edit, reorder, delete; and duplicating the whole session |
 | `/live/<id>` | everybody | what the room answers on |
 | `/live/<id>/host` | the presenter | the same screen plus the controls, the count, and the answer |
 
@@ -581,6 +581,30 @@ quantity.
 The responses go with it. That is the point rather than a side effect: half a
 deleted session leaves answers to questions that no longer exist, on a
 scoreboard that can no longer explain them. There is no undo.
+
+### Running the same questions again
+
+**Duplicate** on the editor makes a new session out of an old one's questions:
+same prompts, same options, same answers, same clocks. A weekly quiz is the
+same shape every week, and rebuilding it by hand is the part that stops it
+happening.
+
+What does not come across is the point. No answers, no scoreboard, no questions
+anybody asked, no start or close time, and a **new join code** — a copy sharing
+the old code would collide with the session it came from, and one carrying the
+old answers would put last week's winner on this week's board. The copy is a
+draft, so it is not reachable until it is started, whatever the original was
+doing when it was copied.
+
+Three smaller decisions. A ranking is **shuffled again** rather than copied as
+it stands: the arrangement is not part of the question — `save_item` scrambles
+it precisely so the payload is not the answer — and a second group seeing the
+identical order is a second group one screenshot away from the first group's
+working out. The copy **belongs to whoever made it**, not to whoever wrote the
+original, because the person duplicating it is the person about to run it and
+the host column is what decides that. And it is **named on the way out**,
+offered as *"Week one (copy)"* and editable there, because nothing renames a
+session afterwards.
 
 ### The scoreboard
 

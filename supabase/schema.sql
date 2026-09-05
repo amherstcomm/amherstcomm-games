@@ -6961,3 +6961,89 @@ $fn$;
 
 revoke all on function public.set_session_options(uuid, boolean, boolean) from public, anon;
 grant execute on function public.set_session_options(uuid, boolean, boolean) to authenticated;
+
+-- ---------------------------------------------------------------------------
+-- Running the same set of questions again
+--
+-- A weekly quiz is the same shape every week, and the same questions get run
+-- for a second group often enough that rebuilding them by hand is the part
+-- that stops it happening. So: copy the questions and their answers, and leave
+-- everything that happened behind.
+--
+-- What does not come across is the point. No responses, no votes, no questions
+-- anybody asked, no start or close times, and a new join code — a copy that
+-- carried last week's answers would put last week's winner on this week's
+-- board, and a copy that carried the code would collide with the session it
+-- came from.
+--
+-- The copy belongs to whoever made it rather than to whoever wrote the
+-- original, because the person duplicating it is the person about to run it —
+-- and running it is what the host column decides.
+-- ---------------------------------------------------------------------------
+create or replace function public.duplicate_session(p_session uuid, p_title text default null)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $fn$
+declare
+  src public.sessions;
+  new_id uuid;
+  it record;
+  body jsonb;
+  copied int := 0;
+begin
+  if not public.can('games.setup') or not public.hosts_session(p_session) then
+    return jsonb_build_object('ok', false, 'reason', 'not allowed');
+  end if;
+  select * into src from public.sessions where id = p_session;
+  if src.id is null then
+    return jsonb_build_object('ok', false, 'reason', 'no such session');
+  end if;
+
+  insert into public.sessions (title, host, late_join, code, mode, qa, share_results)
+  values (
+    left(coalesce(nullif(btrim(coalesce(p_title, '')), ''), src.title || ' (copy)'), 120),
+    (select auth.uid()),
+    src.late_join,
+    public.new_session_code(),
+    src.mode,
+    src.qa,
+    src.share_results)
+  returning id into new_id;
+
+  for it in
+    select i.id, i.position, i.kind, i.prompt, i.payload, a.answer
+    from public.items i
+    left join public.item_answers a on a.item_id = i.id
+    where i.session_id = p_session
+    order by i.position
+  loop
+    body := it.payload;
+    -- Shuffled again rather than copied as they stand. The arrangement is not
+    -- part of the question — save_item scrambles it precisely so the payload
+    -- is not the answer — and a second group seeing the identical order is a
+    -- second group one screenshot away from the first group's working out.
+    if it.kind = 'rank' and jsonb_typeof(body -> 'options') = 'array' then
+      body := jsonb_set(body, '{options}', public.shuffled(body -> 'options', it.answer -> 'order'));
+    elsif it.kind = 'match' and jsonb_typeof(body -> 'right') = 'array' then
+      body := jsonb_set(body, '{right}', public.shuffled(body -> 'right'));
+    end if;
+
+    insert into public.items (session_id, position, kind, prompt, payload)
+    values (new_id, it.position, it.kind, it.prompt, body);
+
+    if it.answer is not null then
+      insert into public.item_answers (item_id, answer)
+      values ((select i.id from public.items i
+               where i.session_id = new_id and i.position = it.position), it.answer);
+    end if;
+    copied := copied + 1;
+  end loop;
+
+  return jsonb_build_object('ok', true, 'id', new_id, 'items', copied);
+end;
+$fn$;
+
+revoke all on function public.duplicate_session(uuid, text) from public, anon;
+grant execute on function public.duplicate_session(uuid, text) to authenticated;
