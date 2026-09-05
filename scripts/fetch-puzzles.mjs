@@ -8,7 +8,7 @@ import { createRequire } from 'node:module';
 import { generateWeave } from './weave.mjs';
 import { generateSquare, GIVEN_TARGET } from './squares.mjs';
 import { THEMES } from './themes.mjs';
-import { themeFor, themedPool, weaveThemes } from './themedDaily.mjs';
+import { themeFor, themedPool, weaveThemes, weaveThemesFor } from './themedDaily.mjs';
 import {
   generateCryptogram,
   generatePlayable,
@@ -434,6 +434,16 @@ const dailyBridgePrompts = new Set();
 // database cannot be reached, which produces exactly the day the site would
 // have had anyway.
 const theme = await themeFor(etDate);
+// Weave's own, which are a different shape from a word list: a set that tiles a
+// board rather than a bag of words. Every theme covering the day is a
+// candidate.
+const weaveThemesToday = await weaveThemesFor(etDate);
+if (weaveThemesToday.length > 0) {
+  console.log(
+    `Theming ${etDate} Weave from ${weaveThemesToday.length} ` +
+      `theme${weaveThemesToday.length === 1 ? '' : 's'}`
+  );
+}
 if (theme) console.log(`Theming ${etDate} from "${theme.name}" (${theme.words.length} words)`);
 
 for (const variant of ['', 'dev']) {
@@ -666,7 +676,11 @@ for (const variant of ['', 'dev']) {
     // Weave's own generator shuffles them against the day's seed and takes the
     // first that tiles. That is what stops a month-long theme threading the
     // same long answer through all thirty-one boards.
-    const themedBoards = weaveThemes(theme, cols * rows);
+    // The purpose-built themes first, then whatever a word list can be turned
+    // into. A list was the only way to theme Weave before themes existed, and
+    // it still works, but a theme written as a theme is the better answer when
+    // there is one.
+    const themedBoards = [...weaveThemesToday, ...weaveThemes(theme, cols * rows)];
     const weave =
       (themedBoards.length > 0 && generateWeave(weaveRng, cols, rows, themedBoards)) ||
       generateWeave(weaveRng, cols, rows, THEMES);

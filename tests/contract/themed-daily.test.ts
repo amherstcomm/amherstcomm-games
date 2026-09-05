@@ -45,7 +45,7 @@ let themed: string;
 const MORE = ['2026-10-09', '2026-10-10'];
 let themedMore: string[] = [];
 
-async function generate(dir: string, theme?: object, date = DATE) {
+async function generate(dir: string, theme?: object, date = DATE, weave?: object[]) {
   await run('node', ['scripts/fetch-puzzles.mjs'], {
     env: {
       ...process.env,
@@ -54,6 +54,7 @@ async function generate(dir: string, theme?: object, date = DATE) {
       PUZZLES_DATA_DIR: dir,
       PUZZLES_SEED_SALT: 'themed-test-salt',
       ...(theme ? { PUZZLES_THEME: JSON.stringify(theme) } : {}),
+      ...(weave ? { PUZZLES_WEAVE_THEMES: JSON.stringify(weave) } : {}),
     },
     maxBuffer: 10 * 1024 * 1024,
   });
@@ -181,5 +182,56 @@ describe('the Weave board', () => {
   it('while the unthemed day gets a curated one', async () => {
     const board = await read(plain, 'daily-weave.json');
     expect(board.byDifficulty.easy.clue).not.toBe(THEME.clue);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Weave themes written as themes
+//
+// A word list is a bag of words and a Weave theme is a set that tiles a board.
+// The board tiles exactly — the words have to sum to the cells the spangram
+// leaves — so a theme written properly is the better answer, and one written as
+// a theme should beat one derived from a list.
+// ---------------------------------------------------------------------------
+
+/** Ray's own shape: 13-letter spangram, 35 letters of words, 48 cells. */
+const WEAVE = [
+  {
+    clue: 'Profit sharing',
+    spangram: 'profitsharing',
+    words: ['metrics', 'payout', 'reward', 'target', 'bonus', 'split'],
+  },
+];
+
+describe('a Weave theme of its own', () => {
+  let dir: string;
+
+  beforeAll(async () => {
+    dir = await mkdtemp(join(tmpdir(), 'anagrimoire-weave-'));
+    await generate(dir, undefined, DATE, WEAVE);
+  });
+  afterAll(async () => rm(dir, { recursive: true, force: true }));
+
+  it('builds the board it tiles', async () => {
+    const board = await read(dir, 'daily-weave.json');
+    expect(board.byDifficulty.easy.clue).toBe('Profit sharing');
+  });
+
+  it('out of its own words', async () => {
+    const board = await read(dir, 'daily-weave.json');
+    const solved: { spangram: { w: string }; words: { w: string }[] } = JSON.parse(
+      Buffer.from(board.byDifficulty.easy.answers, 'base64').toString()
+    );
+    expect(solved.spangram.w).toBe('profitsharing');
+    for (const { w } of solved.words) expect(WEAVE[0].words).toContain(w.toLowerCase());
+  });
+
+  // 48 letters cannot fill 63 or 80 cells, and the honest outcome is a curated
+  // board rather than no board. The admin page says so before anybody waits for
+  // a night to find out.
+  it('and leaves the bigger boards to the curated themes', async () => {
+    const board = await read(dir, 'daily-weave.json');
+    expect(board.byDifficulty.hard.clue).not.toBe('Profit sharing');
+    expect(board.byDifficulty.extreme.clue).not.toBe('Profit sharing');
   });
 });

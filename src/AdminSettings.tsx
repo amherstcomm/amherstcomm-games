@@ -15,6 +15,7 @@ import { pathOf } from '@/routes';
 import AdminPeople from '@/AdminPeople';
 import AdminWordLists from '@/AdminWordLists';
 import AdminFeatures from '@/AdminFeatures';
+import AdminWeaveThemes from '@/AdminWeaveThemes';
 
 const FIELD =
   'w-full rounded-lg bg-white/5 border border-white/15 px-3 py-2 text-sm text-slate-100 ' +
@@ -199,6 +200,13 @@ export default function AdminSettings() {
 
       <div className="mt-10">
         <AdminWordLists />
+      </div>
+
+      {/* Beside the word lists rather than inside them: a Weave theme is a set
+          that tiles a board, a word list is a bag of words, and making one shape
+          serve both made a worse version of each. */}
+      <div className="mt-10">
+        <AdminWeaveThemes />
       </div>
 
       <div className="mt-10">
