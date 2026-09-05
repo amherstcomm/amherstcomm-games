@@ -3587,6 +3587,41 @@ $fn$;
 revoke all on function public.apply_schedules() from public, anon, authenticated;
 
 /*
+ * And a minute hand, where the server has one.
+ *
+ * The sweep above is what makes the schedule correct: every path a person can
+ * reach applies it, so a survey is shut to everybody the moment its time
+ * passes whether or not this job exists. What the job adds is that the *row*
+ * is true as well — between five o'clock and the next visitor, a table nobody
+ * has swept still reads `live` to anything looking at Postgres directly, and
+ * "the state is right unless you look at it" is a bad sentence to have to say.
+ *
+ * Which is also the order of trust: the job is the nicety, the sweep is the
+ * guarantee. If the job stops, nothing breaks — which is the whole reason it
+ * was safe to add one.
+ *
+ * Every minute, because the window is set to the minute and there is nothing
+ * finer to be accurate about. Guarded and dynamic so a database without
+ * pg_cron applies this file unchanged: `cron.schedule` would not parse at all
+ * there, and the error count in supabase/tests/run.sh is calibrated to six.
+ * Re-scheduling the same name replaces the job rather than adding a second, so
+ * re-applying this file stays idempotent like everything else in it.
+ */
+do $do$
+begin
+  if exists (select 1 from pg_extension where extname = 'pg_cron') then
+    execute $cron$
+      select cron.schedule('sessions-opening-hours', '* * * * *',
+                           $job$select public.apply_schedules()$job$)
+    $cron$;
+    raise notice 'opening hours: pg_cron job scheduled every minute';
+  else
+    raise notice 'opening hours: no pg_cron here, the sweep at each visit is doing it';
+  end if;
+end;
+$do$;
+
+/*
  * Who may look at the board and the results.
  *
  * The host always. Everybody else only when the session is finished and its

@@ -597,18 +597,27 @@ Both ends are independent and either may be left off: an opening alone is a
 session that starts on its own and is closed by hand; a closing alone is one
 opened by hand that will not be left running over the weekend.
 
-#### The clock is applied at the next visit, not by a job
+#### Two clocks, and only one of them is the guarantee
 
-Correction to the first version of this page, which said "this deployment has no
-cron" as though that had been established. It had not been checked — Postgres
-can run jobs (`pg_cron`), and so can the VM. Whether this one does is an open
-question, not a settled fact.
+Reversal, twice over, and both are worth keeping visible. The first version of
+this page said "this deployment has no cron" as though it had been established;
+it had not been checked. It was then checked: **this Postgres has `pg_cron`,
+available, preloaded and already installed.** So there is a job — `schema.sql`
+schedules `sessions-opening-hours` to run `apply_schedules()` every minute, on
+any database that has the extension, and quietly does not on one that does not.
 
-What is true either way is that the sweep does not need one. The clock is
-applied **the next time anybody looks** — `apply_schedule` runs at the top of
-every path a person can reach, and the read surfaces that cannot write (they are
-`stable`) ask `scheduled_state` instead, so a list of what is running already
-leaves out a survey whose closing time has passed.
+The job is the nicety. **The sweep is the guarantee.** The clock is applied
+**the next time anybody looks** — `apply_schedule` runs at the top of every path
+a person can reach, and the read surfaces that cannot write (they are `stable`)
+ask `scheduled_state` instead, so a list of what is running already leaves out a
+survey whose closing time has passed. If the job stops, or the extension goes,
+nothing about what people can do changes. That order is deliberate: it is what
+made adding a scheduled job safe rather than load-bearing.
+
+What the job adds is that the **row** is true as well. Between five o'clock and
+the next visitor, an unswept table still reads `live` to anything looking at
+Postgres directly, and "the state is right unless you look at it" is a bad
+sentence to have to say.
 
 It has to *write*, which is the part worth explaining. Opening an open session
 is not only a fact about the session: it is what moves every question from
