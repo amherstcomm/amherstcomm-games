@@ -531,3 +531,63 @@ test('an open question is marked as a cloud when it is written', async ({ page }
 
   await expect.poll(() => sent.at(-1)?.p_payload).toEqual({ cloud: true });
 });
+
+// Reported from the editor: choosing a word list left "Add question" disabled,
+// with nothing on screen to say why. Every rule the button consults was about
+// the typed word, and choosing a list is exactly the case where there is not
+// one — so it complained, silently, about a field it had itself made empty.
+//
+// The unit tests own the rule. What this owns is the button, which is the level
+// the report came from and the level nothing was checking.
+test('a word game drawn from a list can actually be added', async ({ page }) => {
+  const sent: Record<string, unknown>[] = [];
+  await page.route('**/rest/v1/rpc/**', (route) => {
+    const url = route.request().url();
+    if (url.includes('save_item')) {
+      sent.push(JSON.parse(route.request().postData() ?? '{}'));
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ ok: true, id: 'x' }),
+      });
+    }
+    const body = url.includes('session_sheet')
+      ? SHEET
+      : url.includes('word_lists_sheet')
+        ? {
+            ok: true,
+            lists: [
+              // No six-letter words on purpose: the length control defaults to
+              // six, and a list that cannot fill that board is the other half
+              // of the same bug — a control reading fine and a save refused.
+              { id: 'l1', name: 'Employee ownership', words: 5, lengths: [4, 5, 7] },
+            ],
+          }
+        : [];
+    return route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(body),
+    });
+  });
+  await page.goto(`/sessions/${SESSION}`);
+  await page.getByRole('button', { name: /Add a question/ }).click();
+  await page.getByRole('button', { name: 'Word game', exact: true }).click();
+  await page.getByRole('textbox').first().fill('Guess the word');
+
+  // Before choosing a list: no word typed, so it is correctly refused.
+  await expect(page.getByRole('button', { name: 'Add question' })).toBeDisabled();
+
+  await page.getByLabel('Draw from a list').selectOption('l1');
+  // The typed field has no job now, and says so rather than sitting there
+  // looking like the thing that is missing.
+  await expect(page.getByRole('textbox').nth(1)).toBeDisabled();
+  // And the length followed the list rather than staying on a default it
+  // cannot fill.
+  await expect(page.getByLabel('How many letters')).toHaveValue('4');
+
+  await expect(page.getByRole('button', { name: 'Add question' })).toBeEnabled();
+  await page.getByRole('button', { name: 'Add question' }).click();
+
+  await expect.poll(() => sent.at(-1)?.p_answer).toEqual({ list: 'l1', length: 4 });
+});

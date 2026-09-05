@@ -382,11 +382,25 @@ export function problemWith(args: {
   value?: string;
   /** game only: the solution word, as typed */
   word?: string;
+  /** game only: a word list to draw from instead of typing one */
+  list?: string;
+  /** game only: how many letters to draw, when drawing */
+  drawLength?: number;
 }): string | null {
   if (args.prompt.trim().length === 0) return 'The question needs some words.';
   if (args.kind === 'open') return null;
 
   if (args.kind === 'game') {
+    // Drawing from a list instead of typing one. There is no word to check —
+    // the server picks it when the question is saved — so the rules below,
+    // which are all about the typed word, do not apply. Forgetting this is what
+    // left the button disabled with nothing on screen to say why: the field it
+    // was complaining about had been deliberately left empty.
+    if (args.list) {
+      return args.drawLength && args.drawLength > 0
+        ? null
+        : 'That list has no words that will fit a board.';
+    }
     const word = (args.word ?? '').trim();
     if (word.length === 0) return 'Give it a word to find.';
     if (!/^[A-Za-z]+$/.test(word)) return 'Letters only.';
