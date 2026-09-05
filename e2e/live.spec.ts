@@ -1027,3 +1027,69 @@ test('and colours the letters it has used up', async ({ page }) => {
     'open'
   );
 });
+
+// Reported: "it starts to pick up when not moused down, and drags weird
+// directions, but not always."
+//
+// Both halves were the same cause. The drag used setPointerCapture, the rows
+// reorder mid-drag, React moves the very node holding the capture — and the
+// capture does not reliably survive that. Lose it and the release lands
+// somewhere else, so the drag never ended and the next move over a grip picked
+// the row up again with no button held. The "not always" was whether the node
+// happened to move.
+test('a pointer with no button held does not move anything', async ({ page }) => {
+  await ranking(page, []);
+  expect(await shown(page)).toEqual(['a', 'b', 'c']);
+
+  const grips = page.locator('[data-grip]');
+  const first = await grips.first().boundingBox();
+  const last = await grips.last().boundingBox();
+
+  // Straight across every row, button up the whole way.
+  for (let y = first!.y; y <= last!.y + last!.height; y += 6) {
+    await page.mouse.move(first!.x + first!.width / 2, y);
+  }
+  expect(await shown(page)).toEqual(['a', 'b', 'c']);
+});
+
+test('and a finished drag does not carry on afterwards', async ({ page }) => {
+  await ranking(page, []);
+  const grips = page.locator('[data-grip]');
+  const first = await grips.first().boundingBox();
+  const last = await grips.last().boundingBox();
+
+  await page.mouse.move(first!.x + first!.width / 2, first!.y + first!.height / 2);
+  await page.mouse.down();
+  for (let y = first!.y; y <= last!.y + last!.height; y += 6) {
+    await page.mouse.move(first!.x + first!.width / 2, y);
+  }
+  await page.mouse.up();
+  const after = await shown(page);
+  expect(after).toEqual(['b', 'c', 'a']);
+
+  // Back up the list with the button released. Nothing should follow.
+  for (let y = last!.y + last!.height; y >= first!.y; y -= 6) {
+    await page.mouse.move(first!.x + first!.width / 2, y);
+  }
+  expect(await shown(page)).toEqual(after);
+});
+
+// The other half of the report: a row landing somewhere nobody dragged it. Two
+// moves can arrive before React re-renders, and an index read from state would
+// still be the one from the last render — so the second move took the wrong row
+// out of an already reordered list.
+test('a fast drag lands where it was dragged', async ({ page }) => {
+  await ranking(page, []);
+  const grips = page.locator('[data-grip]');
+  const first = await grips.first().boundingBox();
+  const last = await grips.last().boundingBox();
+
+  await page.mouse.move(first!.x + first!.width / 2, first!.y + first!.height / 2);
+  await page.mouse.down();
+  // One jump the whole way, rather than a step per row: the events arrive
+  // faster than the rows can be redrawn, which is what a real hand does.
+  await page.mouse.move(first!.x + first!.width / 2, last!.y + last!.height);
+  await page.mouse.up();
+
+  expect(await shown(page)).toEqual(['b', 'c', 'a']);
+});
