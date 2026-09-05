@@ -719,7 +719,6 @@ function ItemForm({
 function SessionList() {
   const [sessions, setSessions] = useState<SessionSummary[] | null>(null);
   const [title, setTitle] = useState('');
-  const [lateJoin, setLateJoin] = useState<'strict' | 'open'>('strict');
   const [mode, setMode] = useState<SessionMode>('live');
   const [qa, setQa] = useState(true);
   const [note, setNote] = useState('');
@@ -730,7 +729,7 @@ function SessionList() {
 
   async function add() {
     setBusy(true);
-    const res = await createSession(title.trim(), lateJoin, mode, qa);
+    const res = await createSession(title.trim(), 'strict', mode, qa);
     setBusy(false);
     if (!res.ok) {
       setNote(res.reason ?? 'That did not work');
@@ -799,24 +798,16 @@ function SessionList() {
           Let people ask the host questions while it runs
         </label>
 
-        {mode === 'live' && (
-          <label className="flex items-center gap-2 text-xs text-slate-400">
-            <input
-              type="checkbox"
-              checked={lateJoin === 'open'}
-              onChange={(e) => setLateJoin(e.target.checked ? 'open' : 'strict')}
-            />
-            Let people who arrive late catch up on questions they missed
-          </label>
-        )}
-        {/* Said here rather than discovered on the night. The column is stored
-            and nothing reads it yet — see the note on sessions.late_join. */}
-        {mode === 'live' && lateJoin === 'open' && (
-          <p className="text-xs text-slate-500">
-            Not in effect yet: answering is limited to the question on screen, so
-            late arrivals miss what has gone either way.
-          </p>
-        )}
+        {/* There used to be a "let people who arrive late catch up" checkbox
+            here, with a note under it saying it was not in effect yet. Removed
+            rather than implemented: it decides whether somebody may *join* a
+            live session that has already begun, and since a latecomer simply
+            ends up with a partial score there is nothing for the strict half to
+            protect. A control that does nothing costs a moment's thought every
+            time a session is built, and a disclaimer under it is an admission
+            that it should not be there. sessions.late_join stays — it is
+            harmless, and dropping a column to tidy a form is not a trade worth
+            making. */}
         <button className={PRIMARY} onClick={() => void add()} disabled={busy || !title.trim()}>
           <span className="inline-flex items-center gap-1.5">
             <Plus className="w-4 h-4" aria-hidden="true" /> Create
