@@ -18,6 +18,8 @@ import {
   saveWordList,
   type WordList,
 } from '@/wordLists';
+import ImportBox from '@/ImportBox';
+import { parseWordLists, type ParsedList } from '@/importing';
 
 const FIELD =
   'w-full rounded-lg bg-white/5 border border-white/15 px-3 py-2 text-sm text-slate-100 ' +
@@ -143,9 +145,29 @@ export default function AdminWordLists() {
       )}
 
       {editing === null ? (
-        <button className={BUTTON} onClick={startNew}>
-          New list
-        </button>
+        <div className="flex flex-wrap gap-2">
+          <button className={BUTTON} onClick={startNew}>
+            New list
+          </button>
+          <ImportBox<ParsedList>
+            label="Paste lists"
+            placeholder={
+              '[{ "name": "Employee ownership",\n' +
+              '   "words": ["shares","dividend","esop"] }]'
+            }
+            parse={parseWordLists}
+            describe={(l) => `${l.name} (${l.words.length} words)`}
+            save={(l) =>
+              saveWordList(null, l.name, l.words.join(' '), {
+                clue: l.clue,
+                spangrams: l.spangrams?.join(' '),
+                from: l.from,
+                until: l.until,
+              })
+            }
+            onDone={() => void pull()}
+          />
+        </div>
       ) : (
         <div className="rounded-xl border border-white/15 p-4 space-y-3">
           <label className="block">

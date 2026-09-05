@@ -298,3 +298,79 @@ test('a word list can be written by pasting whatever comes to hand', async ({ pa
   // What landed, not what was typed.
   await expect(page.getByText('Saved — 5 words.')).toBeVisible();
 });
+
+// ---------------------------------------------------------------------------
+// Pasting a month at once
+//
+// The case: thirty-one themes written somewhere else. Typing them into a form
+// one at a time is what stops it happening, so the page takes the blob — and
+// what it must never do is report a count of the ones that worked without
+// naming the ones that did not.
+// ---------------------------------------------------------------------------
+
+test('a month of Weave themes can be pasted in one go', async ({ page }) => {
+  const saved: Record<string, unknown>[] = [];
+  await page.route('**/rest/v1/rpc/**', (route) => {
+    const url = route.request().url();
+    if (url.includes('save_weave_theme')) {
+      const body = JSON.parse(route.request().postData() ?? '{}');
+      saved.push(body);
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ ok: true, words: 6 }),
+      });
+    }
+    const body = url.includes('weave_themes_sheet')
+      ? { ok: true, themes: [] }
+      : url.includes('site_settings_sheet')
+        ? { ok: true, settings: [] }
+        : url.includes('word_lists_sheet')
+          ? { ok: true, lists: [] }
+          : url.includes('feature_windows_sheet')
+            ? { ok: true, features: [] }
+            : url.includes('people_with_roles')
+              ? { ok: true, people: [] }
+              : [];
+    return route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(body),
+    });
+  });
+  await page.goto('/admin');
+
+  // Ray's own shape, three of them, one dated — plus one that cannot be used.
+  const blob = JSON.stringify([
+    {
+      theme: 'Profit sharing',
+      spangram: 'PROFITSHARING',
+      spangram_length: 13,
+      words: ['METRICS', 'PAYOUT', 'REWARD', 'TARGET', 'BONUS', 'SPLIT'],
+      word_count: 6,
+      total_letters: 48,
+      starts_on: '2026-10-01',
+      ends_on: '2026-10-01',
+    },
+    { theme: 'On the board', spangram: 'stakeholders', words: ['voting', 'shares', 'trustee'] },
+    { theme: 'Broken', spangram: 'no', words: ['voting'] },
+  ]);
+
+  await page.getByRole('button', { name: 'Paste themes' }).click();
+  await page.getByLabel('Paste themes').fill(blob);
+
+  // Shown before it happens, with the fit — a theme that fills no board imports
+  // perfectly and then never appears.
+  await expect(page.getByText(/Profit sharing \(profitsharing, 6 words\).*fills easy/)).toBeVisible();
+  // And the one that cannot be used is named, rather than silently dropped from
+  // a count.
+  await expect(page.getByText(/Entry 3 \(Broken\).*cannot be a spangram/)).toBeVisible();
+
+  await page.getByRole('button', { name: /^Import 2$/ }).click();
+  await expect(page.getByText('Imported 2 of 2.')).toBeVisible();
+
+  expect(saved.map((s) => s.p_clue)).toEqual(['Profit sharing', 'On the board']);
+  // The derived numbers are ignored and the words recomputed.
+  expect(saved[0].p_words).toBe('metrics payout reward target bonus split');
+  expect(saved[0].p_from).toBe('2026-10-01');
+});
