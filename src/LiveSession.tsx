@@ -15,6 +15,7 @@ import {
   ArrowDown,
   ArrowUp,
   CheckCircle2,
+  GripVertical,
   Loader2,
   Radio,
   Send,
@@ -41,6 +42,7 @@ import {
 } from '@/live';
 import { JOIN_HOST, ORIGIN, pathOf } from '@/routes';
 import { describeWindow } from '@/schedule';
+import { reorder, rowAt } from '@/ranking';
 import { formatGuess, guessAffixes } from '@/guessFormat';
 import type { NumberPayload } from '@/authoring';
 import QrCode from '@/QrCode';
@@ -396,11 +398,38 @@ function Rank({
     item.state === 'revealed' ? (item.answer as { order?: string[] } | null)?.order : undefined;
 
   function move(i: number, delta: -1 | 1) {
-    const next = [...order];
-    const j = i + delta;
-    if (j < 0 || j >= next.length) return;
-    [next[i], next[j]] = [next[j], next[i]];
-    setOrder(next);
+    setOrder((prev) => reorder(prev, i, i + delta));
+  }
+
+  // Dragging, on pointer events rather than the HTML5 drag-and-drop API:
+  // `dragstart` does not fire on most mobile browsers, and this is a question
+  // people answer on a phone. The buttons stay — they are the keyboard path,
+  // and the fallback when a drag does not take.
+  const rows = useRef<(HTMLLIElement | null)[]>([]);
+  const [dragging, setDragging] = useState<number | null>(null);
+
+  function grab(i: number, e: React.PointerEvent) {
+    if (locked || sending) return;
+    // The pointer is followed even when it leaves the grip, which it does
+    // immediately: the row moves out from under the finger.
+    e.currentTarget.setPointerCapture(e.pointerId);
+    setDragging(i);
+  }
+
+  function drag(e: React.PointerEvent) {
+    if (dragging === null) return;
+    // Measured every move rather than at the start, because the rows are
+    // reordering underneath as it goes and their midpoints move with them.
+    const mids = rows.current
+      .filter((el): el is HTMLLIElement => el !== null)
+      .map((el) => {
+        const r = el.getBoundingClientRect();
+        return r.top + r.height / 2;
+      });
+    const to = rowAt(mids, e.clientY);
+    if (to < 0 || to === dragging) return;
+    setOrder((prev) => reorder(prev, dragging, to));
+    setDragging(to);
   }
 
   return (
@@ -411,10 +440,33 @@ function Rank({
           return (
             <li
               key={option}
+              ref={(el) => {
+                rows.current[i] = el;
+              }}
               className={`flex items-center gap-2 px-3 py-2 rounded-xl border text-sm ${
                 right && placed ? 'border-emerald-400' : 'border-white/15'
-              }`}
+              } ${dragging === i ? 'border-accent bg-white/5' : ''}`}
             >
+              {!right && (
+                /* `touch-action: none` is load-bearing: without it the browser
+                   takes the gesture for scrolling and the row never moves.
+                   Not a button — it does nothing on a click, and announcing it
+                   to a screen reader as something to press would be a lie. The
+                   arrows beside it are the keyboard path. */
+                <span
+                  aria-hidden="true"
+                  onPointerDown={(e) => grab(i, e)}
+                  onPointerMove={drag}
+                  onPointerUp={() => setDragging(null)}
+                  onPointerCancel={() => setDragging(null)}
+                  className={`touch-none select-none text-slate-500 shrink-0 ${
+                    locked || sending ? 'opacity-40' : 'cursor-grab active:cursor-grabbing'
+                  }`}
+                  data-grip=""
+                >
+                  <GripVertical className="w-4 h-4" />
+                </span>
+              )}
               <span className="text-slate-500 tabular-nums w-5">{i + 1}</span>
               <span className="flex-1 text-slate-200 truncate">{option}</span>
               {right ? (

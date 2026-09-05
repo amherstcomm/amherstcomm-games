@@ -1031,6 +1031,31 @@ because the masthead and the privacy page render before anybody signs in. There
 is no "private setting" flag and there should not be one: a table where some
 rows are public and some are not is a table somebody eventually gets wrong.
 
+### Ranking, by dragging or by arrows
+
+A ranking question can be reordered by dragging a row, and by the arrows beside
+it. Both are kept, and neither is the fallback for the other: the arrows are how
+the question is answered from a keyboard, and the drag is how it is answered by
+somebody holding a phone.
+
+**Pointer events, not the HTML5 drag-and-drop API.** `dragstart` does not fire
+on most mobile browsers, which rules out the API for the case this is mostly
+for. That makes the arithmetic ours, so it lives in `src/ranking.ts` with tests:
+where the list ends up after a move, and which row a given pointer position is
+over.
+
+Two decisions in there worth knowing. A drag **moves** rather than swaps — the
+arrows swap with a neighbour, which is the same thing for neighbours and a
+different thing entirely across a list, and dragging the top item to the bottom
+should push the rest up one rather than exchanging the ends. And a row is
+displaced when the pointer passes its **midpoint**, not its edge, because edges
+make the list flicker between two arrangements while a finger rests on a
+boundary.
+
+`touch-action: none` on the grip is load-bearing: without it the browser takes
+the gesture for scrolling and the row never moves on a phone, while the page
+looks perfect on a laptop. It is asserted in the browser test for that reason.
+
 ### Word lists of your own
 
 The dictionary in `public.words` is the English language — the right source for
