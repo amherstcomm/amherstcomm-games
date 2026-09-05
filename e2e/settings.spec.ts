@@ -374,3 +374,68 @@ test('a month of Weave themes can be pasted in one go', async ({ page }) => {
   expect(saved[0].p_words).toBe('metrics payout reward target bonus split');
   expect(saved[0].p_from).toBe('2026-10-01');
 });
+
+test('and several word lists at once, with a template to start from', async ({ page }) => {
+  const saved: Record<string, unknown>[] = [];
+  await page.route('**/rest/v1/rpc/**', (route) => {
+    const url = route.request().url();
+    if (url.includes('save_word_list')) {
+      saved.push(JSON.parse(route.request().postData() ?? '{}'));
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ ok: true, words: 5 }),
+      });
+    }
+    const body = url.includes('word_lists_sheet')
+      ? { ok: true, lists: [] }
+      : url.includes('site_settings_sheet')
+        ? { ok: true, settings: [] }
+        : url.includes('weave_themes_sheet')
+          ? { ok: true, themes: [] }
+          : url.includes('feature_windows_sheet')
+            ? { ok: true, features: [] }
+            : url.includes('people_with_roles')
+              ? { ok: true, people: [] }
+              : [];
+    return route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(body),
+    });
+  });
+  await page.goto('/admin');
+
+  await page.getByRole('button', { name: 'Paste lists' }).click();
+
+  // The blank, first: it is handed to whoever fills a month in elsewhere, so it
+  // has to actually arrive.
+  const [download] = await Promise.all([
+    page.waitForEvent('download'),
+    page.getByRole('button', { name: 'Download template' }).first().click(),
+  ]);
+  expect(download.suggestedFilename()).toBe('word-lists-template.json');
+
+  // Three lists in one paste, each with several words — which is the shape a
+  // month arrives in.
+  await page.getByLabel('Paste lists').fill(
+    JSON.stringify([
+      { name: 'Employee ownership', words: ['shares', 'dividend', 'esop'] },
+      { name: 'Around the office', words: ['fibre', 'splice', 'conduit', 'router'] },
+      { name: 'The building', words: ['lobby', 'atrium'] },
+    ])
+  );
+
+  await expect(page.getByText('Employee ownership (3 words)')).toBeVisible();
+  await expect(page.getByText('Around the office (4 words)')).toBeVisible();
+
+  await page.getByRole('button', { name: /^Import 3$/ }).click();
+  await expect(page.getByText('Imported 3 of 3.')).toBeVisible();
+
+  expect(saved.map((s) => s.p_name)).toEqual([
+    'Employee ownership',
+    'Around the office',
+    'The building',
+  ]);
+  expect(saved[1].p_words).toBe('fibre splice conduit router');
+});

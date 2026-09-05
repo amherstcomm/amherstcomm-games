@@ -1268,6 +1268,15 @@ It accepts `theme` or `clue`, words as an array or as a line of text, and
 those go stale. A date it cannot read plainly is left off rather than guessed at:
 a date read wrong is a theme that appears in the wrong week.
 
+**Download template** gives a blank of the right shape with two worked
+examples, for handing to whoever — or whatever — is writing the month. The
+instructions travel inside it under `_readme`, a key the parsers skip, because
+that is the only way to put a sentence in JSON. `tests/unit/templates.test.ts`
+pushes each template back through its own parser and requires it to come out
+clean, and requires the example themes to actually fill a board: a template that
+does not import is worse than none, and one whose examples teach the wrong shape
+is worse still.
+
 What it will not do is lose one quietly. Every entry it cannot use comes back
 with its position and a reason before anything is saved, and the preview shows
 each theme with **which boards it fills** — a theme that fills none imports
