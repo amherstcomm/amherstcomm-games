@@ -3374,6 +3374,34 @@ alter table public.sessions add column if not exists code text;
 -- error count in supabase/tests/run.sh caught this one too.
 alter table public.sessions add column if not exists qa boolean not null default true;
 
+-- Whether the room may look at the board and the results once it is over — see
+-- "Letting the room look afterwards" below. Up here with the others for the
+-- same reason: my_sessions() and session_sheet() select it.
+alter table public.sessions add column if not exists share_results boolean not null default false;
+
+/*
+ * Who may look at the board and the results.
+ *
+ * The host always. Everybody else only when the session is finished and its
+ * host has said so — one function, so the two surfaces cannot drift into
+ * disagreeing about who is allowed to see what.
+ */
+create or replace function public.may_see_results(p_session uuid)
+returns boolean
+language sql
+stable
+set search_path = ''
+as $fn$
+  select case
+    when (select auth.uid()) is null then false
+    when public.can('winners.view') and public.hosts_session(p_session) then true
+    else exists (
+      select 1 from public.sessions s
+      where s.id = p_session and s.share_results and s.state = 'closed')
+  end
+$fn$;
+
+
 -- The sessions this person may run, newest first. Empty rather than an error
 -- for everyone else, which is the shape owner_reports() already uses: a list
 -- that refuses is a list every caller has to special-case.
@@ -4787,9 +4815,7 @@ security definer
 set search_path = ''
 as $fn$
   select case
-    when not public.can('winners.view')
-      then jsonb_build_object('ok', false, 'reason', 'not allowed')
-    when not public.hosts_session(p_session)
+    when not public.may_see_results(p_session)
       then jsonb_build_object('ok', false, 'reason', 'not allowed')
     else jsonb_build_object(
       'ok', true,
@@ -5559,7 +5585,7 @@ as $fn$
   select coalesce(
     (select jsonb_agg(jsonb_build_object(
        'id', s.id, 'title', s.title, 'state', s.state, 'late_join', s.late_join,
-       'mode', s.mode, 'code', s.code, 'qa', s.qa,
+       'mode', s.mode, 'code', s.code, 'qa', s.qa, 'shared', s.share_results,
        'items', (select count(*) from public.items i where i.session_id = s.id),
        'created_at', s.created_at
      ) order by s.created_at desc)
@@ -5586,7 +5612,8 @@ as $fn$
       'session', (select jsonb_build_object(
                     'id', s.id, 'title', s.title, 'state', s.state,
                     'late_join', s.late_join, 'current_item', s.current_item,
-                    'code', s.code, 'mode', s.mode, 'qa', s.qa)
+                    'code', s.code, 'mode', s.mode, 'qa', s.qa,
+                    'shared', s.share_results)
                   from public.sessions s where s.id = p_session),
       'kinds', (select jsonb_agg(jsonb_build_object(
                   'kind', k.kind, 'description', k.description, 'scored', k.scored)
@@ -5718,15 +5745,14 @@ security definer
 set search_path = ''
 as $fn$
   select case
-    when not public.can('winners.view')
-      then jsonb_build_object('ok', false, 'reason', 'not allowed')
-    when not public.hosts_session(p_session)
+    when not public.may_see_results(p_session)
       then jsonb_build_object('ok', false, 'reason', 'not allowed')
     else jsonb_build_object(
       'ok', true,
       'title', (select s.title from public.sessions s where s.id = p_session),
       'state', (select s.state from public.sessions s where s.id = p_session),
       'mode', (select s.mode from public.sessions s where s.id = p_session),
+      'shared', (select s.share_results from public.sessions s where s.id = p_session),
       'questions', coalesce((
         select jsonb_agg(jsonb_build_object(
                  'id', i.id, 'position', i.position, 'kind', i.kind, 'prompt', i.prompt)
@@ -6221,7 +6247,11 @@ begin
   end if;
   yours := public.runs_session(p_session);
   if sess.state <> 'live' then
-    return jsonb_build_object('state', 'not-live', 'now', now(), 'yours', yours);
+    -- `shared` travels with the refusal, because the screen that says "this is
+    -- not running" is the same screen that should offer the way to see how it
+    -- went — and it has nothing else to ask.
+    return jsonb_build_object('state', 'not-live', 'now', now(), 'yours', yours,
+                              'shared', sess.share_results and sess.state = 'closed');
   end if;
 
   if sess.mode = 'open' then
@@ -6341,7 +6371,11 @@ begin
   end if;
   yours := public.runs_session(p_session);
   if sess.state <> 'live' then
-    return jsonb_build_object('state', 'not-live', 'now', now(), 'yours', yours);
+    -- `shared` travels with the refusal, because the screen that says "this is
+    -- not running" is the same screen that should offer the way to see how it
+    -- went — and it has nothing else to ask.
+    return jsonb_build_object('state', 'not-live', 'now', now(), 'yours', yours,
+                              'shared', sess.share_results and sess.state = 'closed');
   end if;
 
   if sess.mode = 'open' then
@@ -6549,6 +6583,10 @@ as $fn$
     when 'open' then jsonb_build_object(
       'type', 'texts',
       'total', (select answered from it),
+      -- The author's choice, made when the question was written rather than
+      -- found on the results screen afterwards: "one word for this month" is a
+      -- cloud before anybody answers it.
+      'cloud', coalesce((select (payload ->> 'cloud')::boolean from it), false),
       'texts', coalesce((
         select jsonb_agg(jsonb_build_object(
                  'value', r.value,
@@ -6572,15 +6610,14 @@ security definer
 set search_path = ''
 as $fn$
   select case
-    when not public.can('winners.view')
-      then jsonb_build_object('ok', false, 'reason', 'not allowed')
-    when not public.hosts_session(p_session)
+    when not public.may_see_results(p_session)
       then jsonb_build_object('ok', false, 'reason', 'not allowed')
     else jsonb_build_object(
       'ok', true,
       'title', (select s.title from public.sessions s where s.id = p_session),
       'state', (select s.state from public.sessions s where s.id = p_session),
       'mode', (select s.mode from public.sessions s where s.id = p_session),
+      'shared', (select s.share_results from public.sessions s where s.id = p_session),
       -- Everything that has been shown, scored or not: a survey has no score
       -- and is the question most worth a chart. In a live session that means
       -- revealed; in an open one, anything that has been opened at all.
@@ -6883,3 +6920,44 @@ $fn$;
 
 revoke all on function public.session_door(uuid) from public, anon;
 grant execute on function public.session_door(uuid) to authenticated;
+
+-- ---------------------------------------------------------------------------
+-- Letting the room look afterwards
+--
+-- The board and the results have been the host's since they were written, on
+-- the grounds that they are a screen for the room rather than everybody's on
+-- their phone. That is right while a session is running — a distribution
+-- halfway through is a hint — and wrong once it is over, when the commonest
+-- thing anybody wants is to see how it went and where they came.
+--
+-- So: a switch per session, off by default, and it only opens anything once
+-- the session is closed. Nothing about a running session becomes visible.
+-- ---------------------------------------------------------------------------
+
+-- One function for both switches, rather than one function per switch.
+drop function if exists public.set_session_qa(uuid, boolean);
+
+create or replace function public.set_session_options(
+  p_session uuid,
+  p_qa boolean default null,
+  p_share_results boolean default null
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $fn$
+begin
+  if not public.hosts_session(p_session) then
+    return jsonb_build_object('ok', false, 'reason', 'not allowed');
+  end if;
+  update public.sessions
+     set qa = coalesce(p_qa, qa),
+         share_results = coalesce(p_share_results, share_results)
+   where id = p_session;
+  return jsonb_build_object('ok', true);
+end;
+$fn$;
+
+revoke all on function public.set_session_options(uuid, boolean, boolean) from public, anon;
+grant execute on function public.set_session_options(uuid, boolean, boolean) to authenticated;

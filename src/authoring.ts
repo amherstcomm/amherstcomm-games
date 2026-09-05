@@ -41,6 +41,7 @@ export type Sheet = {
     code: string | null;
     mode: SessionMode;
     qa: boolean;
+    shared: boolean;
   };
   kinds?: ItemKind[];
   items?: SheetItem[];
@@ -62,6 +63,7 @@ export type SessionSummary = {
   late_join: 'strict' | 'open';
   mode: SessionMode;
   qa: boolean;
+  shared: boolean;
   code: string | null;
   items: number;
   created_at: string;

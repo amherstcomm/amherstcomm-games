@@ -158,10 +158,13 @@ function Slides({
 export default function Scoreboard({ session }: { session: string }) {
   const [board, setBoard] = useState<SessionScores | null>(null);
   const [results, setResults] = useState<SessionResults | null>(null);
-  const [view, setView] = useState<View>('standings');
-  /** Walking a room through it one at a time, rather than scrolling a list
-   *  while everybody watches. */
-  const [slides, setSlides] = useState(false);
+  // Results, because that is what the slideshow was showing: leaving it should
+  // put you where you were rather than somewhere else.
+  const [view, setView] = useState<View>('results');
+  /** One at a time by default. It is the way this gets looked at — in front of
+   *  a room, or afterwards by somebody catching up — and the scrolling list is
+   *  the special case, for reading the whole thing at once. */
+  const [slides, setSlides] = useState(true);
   /** Which open questions are showing as a cloud rather than as a list. Per
    *  question, because the choice depends on the answers: a handful of
    *  sentences is a list, two hundred one-word answers is a cloud. */

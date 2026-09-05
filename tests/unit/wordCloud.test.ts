@@ -1,66 +1,81 @@
-// Counting words for a cloud.
+// Counting answers for a cloud.
 //
-// The decisions worth arguing with are all here: what counts as a word, what
-// counts as noise, and what order the result comes out in. A cloud is a picture
-// people read conclusions off, so being wrong is quiet — it just looks like the
-// room said something it did not.
+// The decisions worth arguing with are all here: what counts as the same
+// answer, what the label says, and what order the result comes out in. A cloud
+// is a picture people read conclusions off, so being wrong is quiet — it just
+// looks like the room said something it did not.
 import { describe, expect, it } from 'vitest';
 import { cloudWords } from '@/wordCloud';
 
 const said = (...values: string[]) => values.map((value) => ({ value }));
 
 describe('cloudWords', () => {
-  it('counts the same word said twice as one word said twice', () => {
-    expect(cloudWords(said('coffee', 'coffee'))).toEqual([{ word: 'coffee', count: 2 }]);
-  });
-
-  it('does not care about case, because "Coffee" is the same answer', () => {
-    expect(cloudWords(said('Coffee', 'coffee', 'COFFEE'))).toEqual([
-      { word: 'coffee', count: 3 },
+  // The reason this is not a word cloud in the literal sense. Splitting on
+  // whitespace took "employee ownership" apart and showed the room two ideas
+  // where it had given one.
+  it('keeps a phrase together', () => {
+    expect(cloudWords(said('employee ownership', 'employee ownership'))).toEqual([
+      { word: 'employee ownership', count: 2 },
     ]);
   });
 
-  it('drops the words that would otherwise be the biggest thing on the wall', () => {
-    // A cloud whose largest word is "the" has told the room nothing.
-    const out = cloudWords(said('the coffee is the best', 'the coffee'));
-    expect(out.map((w) => w.word)).not.toContain('the');
-    expect(out.map((w) => w.word)).not.toContain('is');
-    expect(out[0]).toEqual({ word: 'coffee', count: 2 });
+  it('and does not fold a phrase into the words inside it', () => {
+    const out = cloudWords(said('ownership', 'employee ownership'));
+    expect(out.map((w) => w.word).sort()).toEqual(['employee ownership', 'ownership']);
   });
 
-  it('keeps an apostrophe inside a word and drops it round the outside', () => {
-    // "don't" is one word; a quoted 'word' is not a different one
-    expect(cloudWords(said("don't"))).toEqual([{ word: "don't", count: 1 }]);
-    expect(cloudWords(said("'coffee'"))).toEqual([{ word: 'coffee', count: 1 }]);
+  it('counts the same answer said twice as one answer said twice', () => {
+    expect(cloudWords(said('coffee', 'coffee'))).toEqual([{ word: 'coffee', count: 2 }]);
+  });
+
+  it('does not care about capitals, because "Coffee" is the same answer', () => {
+    expect(cloudWords(said('Coffee', 'coffee', 'COFFEE'))).toEqual([
+      { word: 'Coffee', count: 3 },
+    ]);
+  });
+
+  it('shows the first spelling rather than the key it counted by', () => {
+    // the cloud should read like something a person typed
+    expect(cloudWords(said('Employee Ownership', 'employee ownership'))[0].word).toBe(
+      'Employee Ownership'
+    );
+  });
+
+  it('treats spacing as typing rather than as meaning', () => {
+    expect(cloudWords(said('employee  ownership', ' employee ownership '))).toEqual([
+      { word: 'employee ownership', count: 2 },
+    ]);
+  });
+
+  it('and a full stop on the end the same way', () => {
+    expect(cloudWords(said('coffee.', 'coffee', 'coffee!'))).toEqual([
+      { word: 'coffee.', count: 3 },
+    ]);
   });
 
   it('treats a curly apostrophe the same as a straight one', () => {
     // phones type the curly one, so a room's answers contain both
-    expect(cloudWords(said('don’t', "don't")).map((w) => w.count)).toEqual([2]);
-  });
-
-  it('ignores single letters, which are noise at any size', () => {
-    expect(cloudWords(said('a b coffee')).map((w) => w.word)).toEqual(['coffee']);
+    expect(cloudWords(said('don’t know', "don't know")).map((w) => w.count)).toEqual([2]);
   });
 
   it('puts the commonest first', () => {
-    expect(cloudWords(said('tea', 'coffee tea', 'coffee', 'coffee'))).toEqual([
-      { word: 'coffee', count: 3 },
-      { word: 'tea', count: 2 },
+    expect(cloudWords(said('tea', 'coffee', 'coffee'))).toEqual([
+      { word: 'coffee', count: 2 },
+      { word: 'tea', count: 1 },
     ]);
   });
 
   it('and is stable within a count, so the same answers draw the same cloud', () => {
     // a picture that reshuffles on every refresh reads as though the data
     // changed
-    const once = cloudWords(said('pear apple mango'));
-    const again = cloudWords(said('mango pear apple'));
+    const once = cloudWords(said('pear', 'apple', 'mango'));
+    const again = cloudWords(said('mango', 'pear', 'apple'));
     expect(once).toEqual(again);
     expect(once.map((w) => w.word)).toEqual(['apple', 'mango', 'pear']);
   });
 
   it('takes only as many as will fit', () => {
-    const many = said([...Array(60)].map((_, i) => `word${i}`).join(' '));
+    const many = [...Array(60)].map((_, i) => ({ value: `answer ${i}` }));
     expect(cloudWords(many)).toHaveLength(40);
     expect(cloudWords(many, 5)).toHaveLength(5);
   });
@@ -72,6 +87,6 @@ describe('cloudWords', () => {
 
   it('has nothing to draw when nothing was said', () => {
     expect(cloudWords([])).toEqual([]);
-    expect(cloudWords(said('the and of'))).toEqual([]);
+    expect(cloudWords(said('', '   ', '...'))).toEqual([]);
   });
 });

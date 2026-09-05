@@ -178,7 +178,7 @@ const RESULTS = {
   ],
 };
 
-async function board(page: import('@playwright/test').Page) {
+async function board(page: import('@playwright/test').Page, { leave = true } = {}) {
   await page.route('**/rest/v1/rpc/**', (route) =>
     route.fulfill({
       status: 200,
@@ -189,23 +189,31 @@ async function board(page: import('@playwright/test').Page) {
     })
   );
   await page.goto(`/scores/${SESSION}`);
-  await expect(page.getByRole('heading', { name: 'Scores' })).toBeVisible();
+  // It opens one at a time, because that is how it gets looked at — in front of
+  // a room, or afterwards by somebody catching up. The list is the special
+  // case.
+  await expect(page.getByText(/^1 of \d+$/)).toBeVisible();
+  if (leave) {
+    // Leaving lands on the results, because that is what the slideshow was
+    // showing.
+    await page.getByRole('button', { name: 'Leave' }).click();
+    await expect(page.getByRole('heading', { name: 'Results' })).toBeVisible();
+  }
 }
 
 test('the board carries both views on one address', async ({ page }) => {
   // One link to find while a room waits, not two.
   await board(page);
-  await page.getByRole('button', { name: /How each question went/ }).click();
-  await expect(page.getByRole('heading', { name: 'Results' })).toBeVisible();
   await page.getByRole('button', { name: /Who won/ }).click();
   await expect(page.getByRole('heading', { name: 'Scores' })).toBeVisible();
+  await page.getByRole('button', { name: /How each question went/ }).click();
+  await expect(page.getByRole('heading', { name: 'Results' })).toBeVisible();
 });
 
 test('an option nobody picked still gets a bar', async ({ page }) => {
   // A chart missing its zeroes quietly rewrites the question — it reads as
   // though 2023 was never offered.
   await board(page);
-  await page.getByRole('button', { name: /How each question went/ }).click();
   await expect(page.getByText('2023')).toBeVisible();
 });
 
@@ -213,7 +221,6 @@ test('and an anonymous question is still anonymous on the wall', async ({ page }
   // The promise is to the room. This is the surface where breaking it would be
   // most public and least recoverable — it is on a projector.
   await board(page);
-  await page.getByRole('button', { name: /How each question went/ }).click();
   await expect(page.getByText('Why is the coffee like that?')).toBeVisible();
   await expect(page.getByText(/— anonymous/)).toBeVisible();
 
@@ -257,12 +264,10 @@ test('every field caption sits above its input, not beside it', async ({ page })
   }
 });
 
-test('the results can be walked through one at a time', async ({ page }) => {
+test('the results open one at a time, and can be walked through', async ({ page }) => {
   // Scrolling a list to find the next question while a room watches is the
-  // part that goes badly.
-  await board(page);
-  await page.getByRole('button', { name: /How each question went/ }).click();
-  await page.getByRole('button', { name: /One at a time/ }).click();
+  // part that goes badly, so this is the default rather than a mode to find.
+  await board(page, { leave: false });
 
   await expect(page.getByText('1 of 4')).toBeVisible();
   await expect(page.getByRole('heading', { name: 'How is the coffee?' })).toBeVisible();
@@ -289,19 +294,59 @@ test('the results can be walked through one at a time', async ({ page }) => {
 
 test('an open question can be shown as a word cloud', async ({ page }) => {
   await board(page);
-  await page.getByRole('button', { name: /How each question went/ }).click();
 
   // offered where it means something and nowhere else
   await expect(page.getByRole('button', { name: /word cloud/ })).toHaveCount(1);
   await page.getByRole('button', { name: /word cloud/ }).click();
 
-  // The sentences are gone and the words are there. A cloud carries no names
-  // because it carries no sentences, which is also why it is the safer thing
-  // to put on a wall when the answers were personal.
-  await expect(page.getByText('Why is the coffee like that?')).toHaveCount(0);
-  await expect(page.getByText('coffee', { exact: true })).toBeVisible();
-  await expect(page.getByText('the', { exact: true }), 'a filler word on the wall').toHaveCount(0);
+  // A whole answer is one entry: splitting on whitespace took "employee
+  // ownership" apart and showed the room two ideas where it had given one.
+  await expect(page.getByText('Why is the coffee like that?')).toBeVisible();
+
+  // What the cloud drops is the attribution. It carries no names because it
+  // carries no rows, which is also why it is the safer thing to put on a wall
+  // when the answers were personal.
+  await expect(page.getByText(/— anonymous/)).toHaveCount(0);
+  await expect(page.getByText('Ada Lovelace')).toHaveCount(0);
 
   await page.getByRole('button', { name: /Show what was said/ }).click();
-  await expect(page.getByText('Why is the coffee like that?')).toBeVisible();
+  await expect(page.getByText(/— anonymous/)).toBeVisible();
+});
+
+test('an open question is marked as a cloud when it is written', async ({ page }) => {
+  // Not found on the results screen afterwards: "one phrase for this month" is
+  // a cloud before anybody answers it, and discovering the switch after the
+  // event is discovering it too late.
+  const sent: Record<string, unknown>[] = [];
+  await page.route('**/rest/v1/rpc/**', (route) => {
+    const url = route.request().url();
+    if (url.includes('save_item')) {
+      sent.push(JSON.parse(route.request().postData() ?? '{}'));
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ ok: true, id: 'x' }),
+      });
+    }
+    return route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(url.includes('session_sheet') ? SHEET : []),
+    });
+  });
+  await page.goto(`/sessions/${SESSION}`);
+  await page.getByRole('button', { name: /Add a question/ }).click();
+  await page.getByRole('button', { name: 'Open question', exact: true }).click();
+
+  // and offered nowhere else, because nothing else has words to count
+  await expect(page.getByText(/Show the answers as a word cloud/)).toBeVisible();
+  await page.getByRole('button', { name: 'Multiple choice', exact: true }).click();
+  await expect(page.getByText(/Show the answers as a word cloud/)).toHaveCount(0);
+
+  await page.getByRole('button', { name: 'Open question', exact: true }).click();
+  await page.getByRole('checkbox', { name: /word cloud/ }).check();
+  await page.getByRole('textbox').first().fill('One phrase for this month?');
+  await page.getByRole('button', { name: 'Add question' }).click();
+
+  await expect.poll(() => sent.at(-1)?.p_payload).toEqual({ cloud: true });
 });

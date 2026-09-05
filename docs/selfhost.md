@@ -596,6 +596,20 @@ had four and you had three and a half" only settles it if the half can be
 pointed at. It is also how a result gets checked afterwards. A `·` means they
 did not answer that one; a `0` means they did.
 
+### Letting the room look afterwards
+
+The board and the results are the host's by default. **A switch per session
+opens them to everybody — but only once the session is closed.** Nothing about a
+running session becomes visible: a distribution halfway through is a hint.
+
+Both surfaces go through one rule (`may_see_results`), so they cannot drift into
+disagreeing about who may see what. Anonymity does not weaken because the
+audience widened — an anonymous answer still carries no name, and `users.manage`
+is still the only route to one.
+
+When it is on and the session is over, the player's screen carries **See how it
+went** where it would otherwise only say the session is not running.
+
 ### Questions for the host
 
 A session can carry a Q&A running **alongside** everything else. Not an item —
@@ -645,15 +659,23 @@ Three chart shapes, because that is what the questions are:
 - **Text** for an open question, keeping the same promise the presenter's screen
   keeps: no name on anything somebody asked to be unnamed.
 
-An open question can also be shown as a **word cloud** — one toggle per
-question, because the choice depends on the answers: a handful of sentences is a
-list, two hundred one-word answers is a cloud. A cloud carries no names because
-it carries no sentences, which also makes it the safer thing to put on a wall
-when the answers were personal. Filler words are dropped; a cloud whose largest
-word is "the" has told the room nothing.
+An open question can also be shown as a **word cloud**, chosen with a checkbox
+**when the question is written** — "one phrase for this month" is a cloud before
+anybody answers it, and finding that switch on the results page afterwards is
+finding it too late. The results screen can still flip either way per question.
 
-**One at a time** turns the results into a slideshow: one question per screen at
-projector size, with the standings as the last slide — how each question went,
+**A whole answer is one entry.** It split on whitespace at first, which is what
+"word cloud" says and is wrong for what people type: "employee ownership" came
+apart into two and the cloud showed the room two ideas where it had given one.
+Two answers are the same answer when they differ only in the ways typing differs
+— spacing, capitals, a full stop, which apostrophe the keyboard produced. A
+cloud carries no names because it carries no rows, which also makes it the safer
+thing to put on a wall when the answers were personal.
+
+**The results open one at a time.** That is how they get looked at — in front of
+a room, or afterwards by somebody catching up — so the slideshow is the default
+and the scrolling list is the special case, one click away. One question per
+screen at projector size, with the standings as the last slide — how each question went,
 and then who won, which is the order it gets told in. Arrow keys, Page Up, Page
 Down, space and backspace all move it, because a presentation remote is a
 keyboard that sends some subset of those and nobody knows which. Escape leaves.

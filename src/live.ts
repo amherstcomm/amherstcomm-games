@@ -36,6 +36,8 @@ export type LiveItem = {
    *  arriving through /join like everybody else — and that person got a working
    *  question the server was never going to accept an answer to. */
   yours?: boolean;
+  /** the session is over and its host has opened the results to everybody */
+  shared?: boolean;
   id?: string;
   kind?: string;
   prompt?: string;
@@ -286,12 +288,18 @@ export async function markAsk(
   return (data as { ok: boolean }) ?? { ok: false, reason: 'no answer' };
 }
 
-export async function setSessionQa(
+/** The session's two switches. Null leaves one alone, so a screen that only
+ *  knows about one of them cannot turn the other off by omission. */
+export async function setSessionOptions(
   session: string,
-  on: boolean
+  opts: { qa?: boolean | null; shareResults?: boolean | null }
 ): Promise<{ ok: boolean; reason?: string }> {
   if (!supabase) return { ok: false, reason: 'not connected' };
-  const { data, error } = await supabase.rpc('set_session_qa', { p_session: session, p_on: on });
+  const { data, error } = await supabase.rpc('set_session_options', {
+    p_session: session,
+    p_qa: opts.qa ?? null,
+    p_share_results: opts.shareResults ?? null,
+  });
   if (error) return { ok: false, reason: error.message };
   return (data as { ok: boolean }) ?? { ok: false, reason: 'no answer' };
 }
