@@ -599,10 +599,20 @@ opened by hand that will not be left running over the weekend.
 
 #### Two clocks, and only one of them is the guarantee
 
-Reversal, twice over, and both are worth keeping visible. The first version of
-this page said "this deployment has no cron" as though it had been established;
-it had not been checked. It was then checked: **this Postgres has `pg_cron`,
-available, preloaded and already installed.** So there is a job — `schema.sql`
+Reversal, twice over, and both are worth keeping visible — along with how the
+first one was possible, which is the useful part. This page said "this
+deployment has no cron" as though it had been established. It had not been
+checked, and it was contradicted **by this document**: "Keeping the puzzle
+window fresh", below, installs a systemd timer that has been running nightly on
+this VM the whole time. The claim did not need a query to refute, only a read of
+the file it was written into. It then shaped a design before anything could
+argue with it, which is what makes an unchecked assumption expensive — a wrong
+sentence gets corrected, a wrong premise gets built on.
+
+Checked since, and twice over: the VM runs systemd timers, and **this Postgres
+has `pg_cron`, available, preloaded and already installed.** pg_cron is what is
+used here, because a job that lives in the database needs no unit file, no
+environment file and no second copy of the credentials. So there is a job — `schema.sql`
 schedules `sessions-opening-hours` to run `apply_schedules()` every minute, on
 any database that has the extension, and quietly does not on one that does not.
 
