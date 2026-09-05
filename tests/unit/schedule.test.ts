@@ -10,14 +10,32 @@
 // for eight months of the year. In 2026 US daylight time runs 8 March to
 // 1 November: Central is UTC-6 (CST) outside that and UTC-5 (CDT) inside it.
 import { describe, expect, it } from 'vitest';
-import { OFFICE_ZONE, describeWindow, fromOfficeInput, toOfficeInput, when } from '@/schedule';
+import {
+  OFFICE_ZONE,
+  OFFICE_ZONE_FALLBACK,
+  describeWindow,
+  fromOfficeInput,
+  toOfficeInput,
+  when,
+} from '@/schedule';
 
 /** An instant, written the way the wire writes it. */
 const at = (iso: string) => new Date(iso).toISOString();
 
 describe('the anchor', () => {
-  it('is the company clock, not the browser', () => {
-    expect(OFFICE_ZONE).toBe('America/Chicago');
+  it('is a company clock, not the browser', () => {
+    // Set by the deployment; this build does not set it, so it is the fallback.
+    expect(OFFICE_ZONE).toBe(OFFICE_ZONE_FALLBACK);
+    expect(OFFICE_ZONE_FALLBACK).toBe('America/Chicago');
+  });
+
+  // The zone is used to build formatters at module load, and an unknown name
+  // does not degrade — Intl throws a RangeError on it. A typo in the
+  // environment has to cost a wrong default, not a white page.
+  it('and a name the platform does not know is not fatal', () => {
+    const bad = () => new Intl.DateTimeFormat('en-US', { timeZone: 'Amherst/Office' });
+    expect(bad).toThrow();
+    expect(() => new Intl.DateTimeFormat('en-US', { timeZone: OFFICE_ZONE })).not.toThrow();
   });
 });
 

@@ -66,9 +66,14 @@ ARG VITE_SSO_LABEL=""
 ARG VITE_SITE_NAME=""
 ARG VITE_SITE_SUBTITLE=""
 ARG VITE_CONTACT_EMAIL=""
+# The company's clock, for an open session's opening hours. Empty falls back to
+# America/Chicago in src/schedule.ts rather than to the build machine's zone,
+# which is a thing a container has no business having an opinion about.
+ARG VITE_OFFICE_ZONE=""
 ENV VITE_SITE_NAME=$VITE_SITE_NAME \
     VITE_CONTACT_EMAIL=$VITE_CONTACT_EMAIL \
     VITE_SITE_SUBTITLE=$VITE_SITE_SUBTITLE \
+    VITE_OFFICE_ZONE=$VITE_OFFICE_ZONE \
     VITE_SUPABASE_URL=$VITE_SUPABASE_URL \
     VITE_SUPABASE_ANON_KEY=$VITE_SUPABASE_ANON_KEY \
     VITE_SITE_ORIGIN=$VITE_SITE_ORIGIN \

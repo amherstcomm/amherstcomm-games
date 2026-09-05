@@ -18,13 +18,42 @@
 // whoever is typing it and wherever they are standing, and every time shown
 // carries its zone so a traveller reading it knows which five it is.
 
+/** The zone a deployment falls back to when it does not name one. */
+export const OFFICE_ZONE_FALLBACK = 'America/Chicago';
+
+/** Whether the platform actually knows a zone.
+ *
+ *  Worth asking rather than assuming, because an unknown name does not degrade
+ *  — `Intl.DateTimeFormat` throws a RangeError on it. These formatters are
+ *  built at module load, so a typo in the environment would not produce a wrong
+ *  time, it would produce a white page. */
+function usable(zone: string): boolean {
+  if (!zone) return false;
+  try {
+    new Intl.DateTimeFormat('en-US', { timeZone: zone }).format(0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 /** The company's clock. Not the browser's, deliberately — see above.
  *
- *  A name rather than an offset, so the two annual changeovers are the
+ *  A zone *name* rather than an offset, so the two annual changeovers are the
  *  platform's problem: `America/Chicago` is CST or CDT depending on the date
  *  being formatted, and a stored -6 would be an hour wrong for eight months of
- *  the year. */
-export const OFFICE_ZONE = 'America/Chicago';
+ *  the year.
+ *
+ *  From the environment, like every other thing about a deployment that is not
+ *  this one's to know — see brand.ts. Build-time, so changing it means a
+ *  rebuild; that is the same cost as editing this line, and the point of the
+ *  variable is that a fork does not have to edit this line at all. */
+export const OFFICE_ZONE: string = (() => {
+  const named = typeof import.meta.env.VITE_OFFICE_ZONE === 'string'
+    ? import.meta.env.VITE_OFFICE_ZONE.trim()
+    : '';
+  return usable(named) ? named : OFFICE_ZONE_FALLBACK;
+})();
 
 const PARTS = new Intl.DateTimeFormat('en-US', {
   timeZone: OFFICE_ZONE,

@@ -676,7 +676,8 @@ Central at the moment they use this. A host setting "Friday at five" from a
 hotel two zones over would have set it for six o'clock at home — silently, and
 correctly by that rule.
 
-So the anchor is the company's clock, `America/Chicago`, and not the reader's:
+So the anchor is the company's clock — `VITE_OFFICE_ZONE`, defaulting to
+`America/Chicago` — and not the reader's:
 five means five where the company is, whoever is typing it and wherever they are
 standing. A name rather than an offset, so the two annual changeovers are the
 platform's problem — a stored −6 would be an hour wrong for eight months of the
@@ -687,6 +688,12 @@ Enforcement never depended on any of this: `closes_at` is a `timestamptz`, one
 instant compared against `now()`, the same moment everywhere. What was wrong was
 only which wall clock the words referred to — which is the harder kind of wrong,
 because everything looks right from the desk it was set at.
+
+An unknown zone name falls back to the default rather than taking the page down
+with it: `Intl.DateTimeFormat` throws a `RangeError` on one, and these
+formatters are built at module load, so a typo in the environment would not
+produce a wrong time — it would produce a white page. Survivable but silent, so
+check it renders after changing it.
 
 The tests are pinned to absolute instants rather than round trips for the same
 reason, and the browser test runs in `America/Denver` deliberately: this
