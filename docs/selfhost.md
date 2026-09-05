@@ -1083,6 +1083,28 @@ boundary.
 the gesture for scrolling and the row never moves on a phone, while the page
 looks perfect on a laptop. It is asserted in the browser test for that reason.
 
+**Reversal: not `setPointerCapture`.** The first version captured the pointer on
+the grip, which is the textbook way and was wrong here. The rows reorder during
+a drag, React moves the very node holding the capture, and the capture does not
+reliably survive that — lose it and the release lands somewhere else, so the
+drag never ends and the next pointer move over a grip picks the row up again
+with no button held. Reported from use as "it starts to pick up when not moused
+down, and drags weird directions, but not always"; the "not always" was whether
+the node happened to move.
+
+The listeners now go on the window, and go on **during the pointerdown handler**
+rather than from an effect. That second part was a separate race, found by a
+test rather than by use: an effect runs after the render that starting the drag
+causes, so a drag fast enough to be a single move — a flick on a phone — was
+over before anything was listening.
+
+Honest limit: the browser tests pin the *symptoms* — a pointer with no button
+held moves nothing, a finished drag does not carry on, a single-move drag lands
+where it was dragged — but they do **not** reproduce the original capture loss.
+A headless synthetic pointer does not drop a capture the way a hand on a real
+browser does, and the capture version passes all three. They are guards against
+the behaviour returning, not proof of the diagnosis.
+
 ### Word lists of your own
 
 The dictionary in `public.words` is the English language — the right source for

@@ -407,31 +407,87 @@ function Rank({
   // people answer on a phone. The buttons stay — they are the keyboard path,
   // and the fallback when a drag does not take.
   const rows = useRef<(HTMLLIElement | null)[]>([]);
+  // Two of them, and the reason is the reordering. `at` is read and written
+  // inside the move handler, which can fire more than once before React has
+  // re-rendered; a state value would still be the index from the last render,
+  // so the second move of a frame would take the wrong row out of an already
+  // reordered list — a row jumping somewhere nobody dragged it. `dragging` is
+  // for the styling, where being a render behind costs nothing.
+  const at = useRef<number | null>(null);
   const [dragging, setDragging] = useState<number | null>(null);
+
+
+  // Followed on the window, and attached the moment the grip goes down.
+  //
+  // Not through setPointerCapture, which was the obvious way and was the bug:
+  // the rows reorder during a drag, React moves the very node holding the
+  // capture, and the capture does not reliably survive that. Lose it and the
+  // release lands somewhere else — so the drag never ended, and the next
+  // pointer move over a grip picked the row up again with no button held.
+  // Reported as "it starts to pick up when not moused down, but not always";
+  // the "not always" was whether the node happened to move.
+  //
+  // Attached here rather than from an effect, which was the second bug and only
+  // showed up in a test: an effect runs after the render that `setDragging`
+  // causes, so a drag fast enough to be one move — a flick on a phone — was
+  // over before anything was listening.
+  const release = useRef<(() => void) | null>(null);
 
   function grab(i: number, e: React.PointerEvent) {
     if (locked || sending) return;
-    // The pointer is followed even when it leaves the grip, which it does
-    // immediately: the row moves out from under the finger.
-    e.currentTarget.setPointerCapture(e.pointerId);
+    // Left button only. Without this a right-click on the grip started a drag
+    // that no button-up would ever end.
+    if (e.pointerType === 'mouse' && e.button !== 0) return;
+    // Stops the browser selecting the row text, which turns the gesture into a
+    // text selection halfway through.
+    e.preventDefault();
+    at.current = i;
     setDragging(i);
+
+    const stop = () => {
+      at.current = null;
+      setDragging(null);
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', stop);
+      window.removeEventListener('pointercancel', stop);
+      window.removeEventListener('blur', stop);
+      release.current = null;
+    };
+    const move = (ev: PointerEvent) => {
+      // A mouse with no button held is not dragging. Belt to the listeners'
+      // braces: if a release is ever missed, the next move ends it rather than
+      // carrying the row around.
+      if (ev.pointerType === 'mouse' && ev.buttons === 0) {
+        stop();
+        return;
+      }
+      const from = at.current;
+      if (from === null) return;
+      // Measured every move rather than at the start, because the rows are
+      // reordering underneath as it goes and their midpoints move with them.
+      const mids = rows.current
+        .filter((el): el is HTMLLIElement => el !== null)
+        .map((el) => {
+          const r = el.getBoundingClientRect();
+          return r.top + r.height / 2;
+        });
+      const to = rowAt(mids, ev.clientY);
+      if (to < 0 || to === from) return;
+      at.current = to;
+      setOrder((prev) => reorder(prev, from, to));
+      setDragging(to);
+    };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', stop);
+    window.addEventListener('pointercancel', stop);
+    // Alt-tabbing away mid-drag is a release that never arrives.
+    window.addEventListener('blur', stop);
+    release.current = stop;
   }
 
-  function drag(e: React.PointerEvent) {
-    if (dragging === null) return;
-    // Measured every move rather than at the start, because the rows are
-    // reordering underneath as it goes and their midpoints move with them.
-    const mids = rows.current
-      .filter((el): el is HTMLLIElement => el !== null)
-      .map((el) => {
-        const r = el.getBoundingClientRect();
-        return r.top + r.height / 2;
-      });
-    const to = rowAt(mids, e.clientY);
-    if (to < 0 || to === dragging) return;
-    setOrder((prev) => reorder(prev, dragging, to));
-    setDragging(to);
-  }
+  // A question that goes away mid-drag — the presenter moving the room on —
+  // would otherwise leave the listeners on the window.
+  useEffect(() => () => release.current?.(), []);
 
   return (
     <div className="space-y-2">
@@ -457,9 +513,6 @@ function Rank({
                 <span
                   aria-hidden="true"
                   onPointerDown={(e) => grab(i, e)}
-                  onPointerMove={drag}
-                  onPointerUp={() => setDragging(null)}
-                  onPointerCancel={() => setDragging(null)}
                   className={`touch-none select-none text-slate-500 shrink-0 ${
                     locked || sending ? 'opacity-40' : 'cursor-grab active:cursor-grabbing'
                   }`}
