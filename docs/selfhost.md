@@ -1151,10 +1151,21 @@ is a presentation question. Treating it as protection would be the wrong kind of
 confidence.
 
 The vocabulary — `game:hive`, `view:solve`, `difficulty:extreme` — is keyed by
-**slug**, not by mode. They are different words for eight of the ten games (hive
-is `bee` internally, guess is `pattern`, scramble is `descramble`), and the slug
-is what the address bar and the admin page both use. Getting that wrong is how
-the first version of this filtered nothing while looking correct. The list of
+**slug**, not by mode, and goes through `gameFeature()` so it is written once
+rather than agreed twice.
+
+That is not tidiness. Three of the ten games have a mode called something else —
+guess is `pattern`, scramble is `descramble`, hive is `bee` — and the first two
+versions of this both got it wrong in different directions. The site filtered by
+mode and matched nothing at all; then the site filtered by slug while the admin
+page still *wrote* modes, so seven games agreed by coincidence and exactly those
+three could be switched off and stay on screen. Reported as "guess, scramble and
+hive don't disappear", which is that list read back.
+
+Both failures were invisible to tests that wrote the key by hand on each side.
+What catches them is `tests/unit/games.test.ts` asserting the two sides derive
+the same set, and a browser test that presses the switch on `/admin` and then
+looks at the menu. The list of
 what exists stays in `src/games.ts`; the database validates a shape and stores
 whatever it is handed, because a copy of the game list in SQL would be a copy to
 keep in step.

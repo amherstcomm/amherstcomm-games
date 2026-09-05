@@ -36,7 +36,8 @@ import ConsentBanner from '@/ConsentBanner';
 import { PrivacyPolicy, Terms } from '@/LegalDocs';
 import { onDailyReport, requestDaily } from '@/dailyBus';
 import { entryGame, entryRoute } from '@/routing/entry';
-import { FEED_NAME, GAME_NAME } from '@/games';
+import {
+  gameFeature, FEED_NAME, GAME_NAME } from '@/games';
 import { useAddressBar, useNav } from '@/routing/useRouting';
 import { routeOf, type Overlay } from '@/routing/nav';
 import ReportMenu from '@/ReportMenu';
@@ -907,7 +908,7 @@ function App() {
   const unavailable = useUnavailable();
   /** The games still on offer, by mode — the switches are named by slug. */
   const offeredModes = (off: string[]) =>
-    ALL_MODES.filter((m) => offered(off, 'game', [MODE_SLUG[m]]).length > 0);
+    ALL_MODES.filter((m) => !off.includes(gameFeature(MODE_SLUG[m])));
 
   // A game switched off is gone from the menu *and* refused at its own address.
   // Hiding it from the menu alone would leave it playable to anybody who had
@@ -921,7 +922,7 @@ function App() {
     // ten games — hive is `bee` internally, guess is `pattern`, scramble is
     // `descramble` — and the slug is the one the address bar and the admin page
     // both use, so it is the one the switch is named after.
-    if (isOffered(`game:${MODE_SLUG[mode]}`)) return;
+    if (isOffered(gameFeature(MODE_SLUG[mode]) as `game:${string}`)) return;
     const first = offeredModes(unavailable)[0];
     if (first) setMode(first);
   }, [mode, unavailable]);
