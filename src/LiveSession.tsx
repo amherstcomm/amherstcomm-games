@@ -10,7 +10,7 @@
 // no "hide it in the UI" branch here because there is nothing to hide: an
 // unrevealed item comes back with `answer` null, and that is enforced two
 // layers down in a table with no grant.
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ArrowDown,
   ArrowUp,
@@ -43,6 +43,7 @@ import {
 import { JOIN_HOST, ORIGIN, pathOf } from '@/routes';
 import { describeWindow } from '@/schedule';
 import { reorder, rowAt } from '@/ranking';
+import { tallyLetters, useKeySink } from '@/keySink';
 import { formatGuess, guessAffixes } from '@/guessFormat';
 import type { NumberPayload } from '@/authoring';
 import QrCode from '@/QrCode';
@@ -633,6 +634,26 @@ function WordGame({
     },
     [playing, busy, submit, length]
   );
+
+  // The site's on-screen keyboard, while this board is the thing being played.
+  //
+  // It is the only place the site shows which letters have been used up, which
+  // is most of what a guessing game is — and before this it typed into the
+  // daily games and nothing else, so a player on a phone could see the board
+  // and not the letters.
+  //
+  // Both of these are memoised because registering puts them in App's state:
+  // a fresh object per render would re-render App, which re-renders this. See
+  // the note on useKeySink.
+  const letterStates = useMemo(() => tallyLetters(rows), [rows]);
+  // pressKey is rebuilt on every keystroke — it closes over the letters typed
+  // so far — and registering that directly would put a new object into App's
+  // state per letter, re-rendering the whole application to type a word. A ref
+  // holds the current one behind a callback that never changes.
+  const pressRef = useRef(pressKey);
+  pressRef.current = pressKey;
+  const pressLatest = useCallback((k: string) => pressRef.current(k), []);
+  useKeySink(playing && !busy, pressLatest, letterStates);
 
   // Physical keyboard, guarded the same way GuessGame guards it: modifier
   // combinations are the browser's, and a keystroke aimed at a text field is

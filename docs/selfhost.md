@@ -1031,6 +1031,33 @@ because the masthead and the privacy page render before anybody signs in. There
 is no "private setting" flag and there should not be one: a table where some
 rows are public and some are not is a table somebody eventually gets wrong.
 
+### The on-screen keyboard, over a session board
+
+The site's on-screen keyboard is drawn by `App`, and it knew about one family of
+boards: the daily games, reached through `pressKey` and coloured from
+`letterStates`. A word game inside a session is drawn by `LiveSession`, which
+was not among them — so the keyboard rendered and pressing it did nothing.
+
+That mattered more than a missing input, because the keyboard is **the only
+place the site shows which letters have been used up**, which is most of what a
+guessing game is. A player on a phone could see the board and not the letters.
+
+A board now claims the keyboard while it is on screen (`src/keySink.ts`), and
+gives it back on the way out. Nothing claims it on any other page, and the daily
+games behave exactly as they did.
+
+Two things to know if another board ever claims it. What is registered goes into
+`App`'s state, so **both the press handler and the letter map must be stable** —
+a fresh object per render re-renders `App`, which re-renders the board, which
+builds another object. `LiveSession` holds its handler behind a ref for that
+reason, since it is rebuilt on every keystroke. And the strongest mark wins when
+a letter appears in more than one guess: a letter marked correct once and absent
+later is in the word, and greying it out would be telling the player something
+untrue.
+
+Each key carries `data-state` and a description of what its colour means, so the
+fact is available to a screen reader and to a test rather than only to an eye.
+
 ### Ranking, by dragging or by arrows
 
 A ranking question can be reordered by dragging a row, and by the arrows beside

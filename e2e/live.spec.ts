@@ -916,3 +916,114 @@ test('and the arrows still move it, to the same place', async ({ page }) => {
   await page.getByRole('button', { name: 'Move a down' }).click();
   expect(await shown(page)).toEqual(['b', 'c', 'a']);
 });
+
+// ---------------------------------------------------------------------------
+// The on-screen keyboard, over a session word game
+//
+// Reported: it did not type into the board. The keyboard is drawn by App and
+// knew about one family of boards — the daily games — and a word game inside a
+// session is drawn by LiveSession, which was not among them. So it rendered,
+// and pressing it did nothing.
+//
+// Worse than it sounds, because the keyboard is the only place the site shows
+// which letters are used up, which is most of what a guessing game is.
+// ---------------------------------------------------------------------------
+
+async function sessionBoard(page: import('@playwright/test').Page, marks: string[]) {
+  const sent: string[] = [];
+  await page.route('**/rest/v1/rpc/**', (route) => {
+    const url = route.request().url();
+    if (url.includes('guess_word')) {
+      sent.push(JSON.parse(route.request().postData() ?? '{}').p_guess);
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ ok: true, marks, solved: false, left: 5, word: null }),
+      });
+    }
+    const body = url.includes('current_item')
+      ? {
+          state: 'open',
+          mode: 'open',
+          id: 'q1',
+          position: 1,
+          opened_at: new Date().toISOString(),
+          seconds: null,
+          now: new Date().toISOString(),
+          mine: null,
+          answer: null,
+          total: 1,
+          done: 0,
+          ...ITEMS.game,
+        }
+      : url.includes('game_state')
+        ? { ok: true, guesses: [], solved: false, word: null }
+        : url.includes('my_standing')
+          ? { ok: true, points: 0, scored: 0 }
+          : {};
+    return route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(body),
+    });
+  });
+  await page.goto(`/live/${SESSION}`);
+  await page.getByRole('button', { name: 'Show keyboard' }).click();
+  return sent;
+}
+
+test('the on-screen keyboard types into a session word game', async ({ page }) => {
+  const sent = await sessionBoard(page, [
+    'absent',
+    'absent',
+    'present',
+    'absent',
+    'absent',
+    'correct',
+  ]);
+  for (const letter of 'planet'.split('')) {
+    await page.getByRole('button', { name: `Key ${letter}` }).click();
+  }
+  await page.getByRole('button', { name: 'Enter', exact: true }).click();
+  await expect.poll(() => sent).toEqual(['planet']);
+});
+
+test('and colours the letters it has used up', async ({ page }) => {
+  await sessionBoard(page, [
+    'absent',
+    'absent',
+    'present',
+    'absent',
+    'absent',
+    'correct',
+  ]);
+  // Untouched to begin with — a keyboard that started grey would be telling
+  // the player every letter was spent.
+  await expect(page.getByRole('button', { name: 'Key p' })).toHaveAttribute(
+    'data-state',
+    'open'
+  );
+
+  for (const letter of 'planet'.split('')) {
+    await page.getByRole('button', { name: `Key ${letter}` }).click();
+  }
+  await page.getByRole('button', { name: 'Enter', exact: true }).click();
+
+  await expect(page.getByRole('button', { name: 'Key p' })).toHaveAttribute(
+    'data-state',
+    'absent'
+  );
+  await expect(page.getByRole('button', { name: 'Key a' })).toHaveAttribute(
+    'data-state',
+    'present'
+  );
+  await expect(page.getByRole('button', { name: 'Key t' })).toHaveAttribute(
+    'data-state',
+    'correct'
+  );
+  // And a letter nobody has tried is still open.
+  await expect(page.getByRole('button', { name: 'Key z' })).toHaveAttribute(
+    'data-state',
+    'open'
+  );
+});
