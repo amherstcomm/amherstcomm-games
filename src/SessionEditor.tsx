@@ -211,6 +211,15 @@ function ItemForm({
   useEffect(() => {
     void readWordLists().then(setLists);
   }, []);
+
+  // Follow the list that was picked. The default of six is a guess about a list
+  // nobody had chosen yet, and leaving it there for a list with no six-letter
+  // words gives a control that reads fine and a save the server refuses.
+  useEffect(() => {
+    if (!drawFrom) return;
+    const lengths = lists.find((l) => l.id === drawFrom)?.lengths ?? [];
+    if (lengths.length > 0 && !lengths.includes(drawLength)) setDrawLength(lengths[0]);
+  }, [drawFrom, lists, drawLength]);
   const [gameWord, setGameWord] = useState(
     ((item?.answer as GameAnswer | null)?.word ?? '').toUpperCase()
   );
@@ -250,6 +259,8 @@ function ItemForm({
     pairs: livePairs,
     value,
     word: gameWord,
+    list: drawFrom,
+    drawLength,
   });
   const clock = seconds === '' ? null : secondsOf({ seconds: Number(seconds) });
   // Typed something that is not a usable clock — distinct from having left it
@@ -465,12 +476,13 @@ function ItemForm({
               The word to find
             </span>
             <input
-              value={gameWord}
+              value={drawFrom ? '' : gameWord}
+              disabled={drawFrom !== ''}
               onChange={(e) =>
                 setGameWord(e.target.value.replace(/[^A-Za-z]/g, '').toUpperCase().slice(0, 8))
               }
-              className={FIELD + ' tracking-[0.3em] uppercase'}
-              placeholder="OWNERS"
+              className={FIELD + ' tracking-[0.3em] uppercase disabled:opacity-40'}
+              placeholder={drawFrom ? 'Drawn from the list' : 'OWNERS'}
             />
           </label>
           {/* Said plainly because it is the surprising part: the word never

@@ -122,6 +122,31 @@ describe('the other three kinds', () => {
     expect(problemWith({ ...ok, kind: 'game', word: 'OWNERS' })).toBeNull();
   });
 
+  // Reported from the editor: choosing a list left the button disabled with
+  // nothing on screen to say why. Every rule above is about the typed word, and
+  // choosing a list is precisely the case where there is not one — the server
+  // draws it when the question is saved.
+  it('does not want a typed word when one is being drawn from a list', () => {
+    expect(problemWith({ ...ok, kind: 'game', word: '', list: 'l1', drawLength: 6 })).toBeNull();
+  });
+
+  it('and does not apply the typed-word rules to it either', () => {
+    // a list id is not a word, and none of "letters only" or "3 to 8" is being
+    // asked about it
+    expect(problemWith({ ...ok, kind: 'game', word: '', list: 'a-b-c', drawLength: 8 })).toBeNull();
+  });
+
+  // The other half of the same bug: a length the list cannot fill is a control
+  // that reads fine and a save the server refuses.
+  it('but does want a length the list can actually fill', () => {
+    expect(problemWith({ ...ok, kind: 'game', word: '', list: 'l1', drawLength: 0 })).toMatch(
+      /no words that will fit/
+    );
+    expect(problemWith({ ...ok, kind: 'game', word: '', list: 'l1' })).toMatch(
+      /no words that will fit/
+    );
+  });
+
   it('only offers word games the room can actually play', () => {
     // the server marks, so every game's rule has to exist in the schema before
     // the editor may offer it — one so far
