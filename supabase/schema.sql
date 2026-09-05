@@ -8178,3 +8178,147 @@ $fn$;
 
 revoke all on function public.set_person_role(uuid, text) from public, anon;
 grant execute on function public.set_person_role(uuid, text) to authenticated;
+
+-- ---------------------------------------------------------------------------
+-- What is switched on, and when
+--
+-- Ten games, four ways to play each, three difficulties. Most deployments want
+-- all of it; an event month wants a curated subset, and wants some of it to
+-- appear partway through — a game a week is a reason to come back, and a game
+-- that is not ready yet is better hidden than explained.
+--
+-- The vocabulary lives in the client, not here. `game:hive`, `view:solve`,
+-- `difficulty:extreme` — this table stores whatever it is handed against a
+-- shape, and src/games.ts remains the one list of what exists. A copy of that
+-- list in SQL would be a copy to keep in step, and the copies this project has
+-- kept by hand were all short.
+--
+-- Rows are the exception rather than the rule: no row means available, which is
+-- what makes an empty table the ordinary state and a fresh deployment complete.
+-- ---------------------------------------------------------------------------
+
+create table if not exists public.feature_windows (
+  feature text primary key check (feature ~ '^(game|view|difficulty):[a-z0-9-]{1,32}$'),
+  -- Off outright, regardless of the window. A switch somebody can flip without
+  -- working out dates, which is what most of these will ever need.
+  enabled boolean not null default true,
+  -- Timestamps rather than dates, and read in the company's clock like an open
+  -- session's opening hours: "the quiz unlocks at noon on the 14th" is a thing
+  -- an event wants to say.
+  starts_at timestamptz,
+  ends_at timestamptz,
+  updated_at timestamptz not null default now(),
+  updated_by uuid references auth.users (id) on delete set null
+);
+alter table public.feature_windows enable row level security;
+
+/*
+ * What is not available right now.
+ *
+ * The absences rather than the presences, because absences are rare: a payload
+ * that lists everything switched on would be a hundred lines on every page load
+ * to say "as usual". Empty is the ordinary answer.
+ *
+ * Read by anon as well as authenticated — the menu renders before anybody signs
+ * in, and a game that vanishes on sign-in would be worse than one that was
+ * never offered.
+ */
+create or replace function public.read_availability()
+returns jsonb
+language sql
+stable
+security definer
+set search_path = ''
+as $fn$
+  select coalesce(jsonb_agg(f.feature order by f.feature), '[]'::jsonb)
+  from public.feature_windows f
+  where not f.enabled
+     or (f.starts_at is not null and now() < f.starts_at)
+     or (f.ends_at is not null and now() >= f.ends_at)
+$fn$;
+
+revoke all on function public.read_availability() from public;
+grant execute on function public.read_availability() to anon, authenticated;
+
+/*
+ * Everything anybody has ever set, for the page that sets it.
+ *
+ * Only the rows. The page unions them with its own list of what exists, so a
+ * game nobody has touched shows as on without needing a row to say so.
+ */
+create or replace function public.feature_windows_sheet()
+returns jsonb
+language sql
+stable
+security definer
+set search_path = ''
+as $fn$
+  select case
+    when not public.can('site.settings')
+      then jsonb_build_object('ok', false, 'reason', 'not allowed')
+    else jsonb_build_object('ok', true, 'features', coalesce(
+      (select jsonb_agg(jsonb_build_object(
+                'feature', f.feature,
+                'enabled', f.enabled,
+                'starts_at', f.starts_at,
+                'ends_at', f.ends_at)
+              order by f.feature)
+       from public.feature_windows f),
+      '[]'::jsonb))
+  end
+$fn$;
+
+revoke all on function public.feature_windows_sheet() from public, anon;
+grant execute on function public.feature_windows_sheet() to authenticated;
+
+/*
+ * Setting one.
+ *
+ * A row that says "on, with no window" is the same as no row at all, so it is
+ * deleted rather than stored: the table stays a list of exceptions, and
+ * "switched everything back on" leaves nothing behind to wonder about later.
+ */
+create or replace function public.set_feature_window(
+  p_feature text,
+  p_enabled boolean default true,
+  p_starts_at timestamptz default null,
+  p_ends_at timestamptz default null
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $fn$
+begin
+  if not public.can('site.settings') then
+    return jsonb_build_object('ok', false, 'reason', 'not allowed');
+  end if;
+  if p_feature !~ '^(game|view|difficulty):[a-z0-9-]{1,32}$' then
+    return jsonb_build_object('ok', false, 'reason', 'that is not something that can be switched');
+  end if;
+  if p_starts_at is not null and p_ends_at is not null and p_ends_at <= p_starts_at then
+    return jsonb_build_object('ok', false, 'reason', 'it cannot finish before it starts');
+  end if;
+
+  if coalesce(p_enabled, true) and p_starts_at is null and p_ends_at is null then
+    delete from public.feature_windows where feature = p_feature;
+    return jsonb_build_object('ok', true, 'feature', p_feature, 'cleared', true);
+  end if;
+
+  insert into public.feature_windows (feature, enabled, starts_at, ends_at, updated_at, updated_by)
+  values (p_feature, coalesce(p_enabled, true), p_starts_at, p_ends_at, now(), (select auth.uid()))
+  on conflict (feature) do update
+    set enabled = excluded.enabled,
+        starts_at = excluded.starts_at,
+        ends_at = excluded.ends_at,
+        updated_at = now(),
+        updated_by = excluded.updated_by;
+
+  return jsonb_build_object('ok', true, 'feature', p_feature);
+end;
+$fn$;
+
+revoke all on function public.set_feature_window(text, boolean, timestamptz, timestamptz)
+  from public, anon;
+grant execute on function public.set_feature_window(text, boolean, timestamptz, timestamptz)
+  to authenticated;
