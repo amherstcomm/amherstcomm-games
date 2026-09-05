@@ -906,6 +906,9 @@ function App() {
   // link-mode exception below, which drags a hidden game back for the length of
   // one visit, does not apply to it.
   const unavailable = useUnavailable();
+  // Sessions are not a game, so they are switched by their own key. A
+  // deployment may want the quiz and nothing else, or the games and no quiz.
+  const sessionsOn = !unavailable.includes('site:sessions');
   /** The games still on offer, by mode — the switches are named by slug. */
   const offeredModes = (off: string[]) =>
     ALL_MODES.filter((m) => !off.includes(gameFeature(MODE_SLUG[m])));
@@ -1056,7 +1059,13 @@ function App() {
   const shownLengths = useMemo(() => lengthChoices(lengthRange), [lengthRange]);
 
   // hiding the game or tab you're standing on shouldn't leave you nowhere
+  //
+  // Unless there is nowhere: a deployment may switch every game off and run
+  // sessions alone, which is a real thing to want during an event. Then `mode`
+  // stays whatever it was and simply never renders — setMode(undefined) is what
+  // used to happen, and it took the whole page down.
   useEffect(() => {
+    if (shownModes.length === 0) return;
     if (!shownModes.includes(mode)) setMode(shownModes[0]);
   }, [shownModes, mode]);
 
@@ -1794,13 +1803,27 @@ function App() {
           <>
           {reportPage?.kind === 'ticket' && <TicketView ticket={reportPage.ticket} />}
           {reportPage?.kind === 'reportQueue' && <ReportQueueView />}
-          {reportPage?.kind === 'live' && (
+          {/* Switched off means refused at the address too, the same as a
+              game. Hiding the link alone would leave a session playable to
+              whoever had the QR code from last week, which is the opposite of
+              what switching sessions off means. */}
+          {!sessionsOn &&
+            (reportPage?.kind === 'live' ||
+              reportPage?.kind === 'sessions' ||
+              reportPage?.kind === 'join' ||
+              reportPage?.kind === 'scores') && (
+              <p className="max-w-2xl mx-auto px-4 py-10 text-sm text-slate-400">
+                Sessions are switched off at the moment.
+              </p>
+            )}
+
+          {sessionsOn && reportPage?.kind === 'live' && (
             <LiveSession session={reportPage.session} host={reportPage.host} />
           )}
-          {reportPage?.kind === 'sessions' && <SessionEditor session={reportPage.session} />}
+          {sessionsOn && reportPage?.kind === 'sessions' && <SessionEditor session={reportPage.session} />}
           {reportPage?.kind === 'admin' && <AdminSettings />}
-          {reportPage?.kind === 'join' && <JoinSession code={reportPage.code} />}
-          {reportPage?.kind === 'scores' && <Scoreboard session={reportPage.session} />}
+          {sessionsOn && reportPage?.kind === 'join' && <JoinSession code={reportPage.code} />}
+          {sessionsOn && reportPage?.kind === 'scores' && <Scoreboard session={reportPage.session} />}
           {reportPage?.kind === 'reportAction' && (
             <ReportActionView
               id={reportPage.id}
@@ -2400,7 +2423,7 @@ function App() {
                 running: a link that is usually a dead end teaches people to
                 ignore it, and this one has to be believed on the one afternoon
                 a month it matters. */}
-            {liveNow > 0 && (
+            {liveNow > 0 && sessionsOn && (
               <RouteLink
                 {...pageLink({ kind: 'join' })}
                 className="inline-flex items-center gap-1.5 text-accent hover:brightness-110 transition"
@@ -2409,7 +2432,7 @@ function App() {
                 {liveNow === 1 ? 'Join the session' : `Join a session (${liveNow})`}
               </RouteLink>
             )}
-            {canSetUp && (
+            {canSetUp && sessionsOn && (
               <RouteLink
                 {...pageLink({ kind: 'sessions' })}
                 className="inline-flex items-center gap-1.5 text-accent hover:brightness-110 transition"

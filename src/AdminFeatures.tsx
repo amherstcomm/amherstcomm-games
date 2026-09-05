@@ -56,6 +56,13 @@ function everything(): { heading: string; rows: Row[] }[] {
       heading: 'Difficulties',
       rows: DIFFICULTIES.map((d) => ({ feature: `difficulty:${d}`, label: d })),
     },
+    {
+      // Not a game and not a way of playing one. A deployment may want the quiz
+      // and nothing else — every game off and sessions alone is a real thing to
+      // run during an event — or the games and no quiz.
+      heading: 'The rest of the site',
+      rows: [{ feature: 'site:sessions', label: 'Sessions and joining' }],
+    },
   ];
 }
 
@@ -173,7 +180,8 @@ export default function AdminFeatures() {
       <p className="text-sm text-slate-400 mb-4">
         Everything is on unless you say otherwise. Times are the company&rsquo;s,
         and something switched off is gone from the menu and from its own
-        address.
+        address. Switching every game off is allowed — the site then offers
+        sessions and nothing else.
       </p>
 
       {set === null && <Loader2 className="w-4 h-4 animate-spin text-slate-500" />}

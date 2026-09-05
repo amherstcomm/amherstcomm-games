@@ -119,10 +119,23 @@ export default function HomeView({
           {/* Counted, not written down: it said six for as long as there were
               seven, because a number in prose doesn't change when the code
               does. It also follows what you've chosen to show. */}
-          {NUMBER_WORD[modes.length] ?? modes.length} word games, a fresh puzzle in
-          each one every morning, and a solver behind every game for when
-          you&apos;re properly stuck. Everything works without an account and
-          nothing you type into a solver leaves your device.
+          {modes.length === 0 ? (
+            // Every game switched off, which is a real thing to want: a
+            // deployment can run sessions alone for an event. The page still
+            // has to say something, and "zero word games, a fresh puzzle in
+            // each one" is not it.
+            <>
+              The word games are switched off at the moment. Anything you have
+              been invited to join is still here.
+            </>
+          ) : (
+            <>
+              {NUMBER_WORD[modes.length] ?? modes.length} word games, a fresh
+              puzzle in each one every morning, and a solver behind every game
+              for when you&apos;re properly stuck. Everything works without an
+              account and nothing you type into a solver leaves your device.
+            </>
+          )}
         </p>
       </section>
 
