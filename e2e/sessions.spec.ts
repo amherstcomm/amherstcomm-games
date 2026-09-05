@@ -13,9 +13,18 @@ import { expect, test } from './fixtures';
 
 const SESSION = '5f7c2a10-3b4d-4e8f-9a12-6c0d1e2f3a4b';
 
-/** The row under the session title. Three links and a button, which is the
- *  whole reason this test exists. */
-const ACTIONS = ['Presenter screen', 'What the room sees', 'Scores', 'Delete session'] as const;
+/** The row under the session title. Three links and two buttons, which is the
+ *  whole reason this test exists — the mix is what made it possible for half
+ *  the row to be aligned differently from the other half. */
+const ACTIONS = [
+  'Presenter screen',
+  'What the room sees',
+  'Scores',
+  'Duplicate',
+  'Delete session',
+] as const;
+
+const IS_LINK = (label: string) => !['Duplicate', 'Delete session'].includes(label);
 
 const SHEET = {
   ok: true,
@@ -78,7 +87,7 @@ test('every control in the action row has its label centred', async ({ page }) =
   const offsets: { label: string; at: number }[] = [];
   for (const label of ACTIONS) {
     const at = await page
-      .getByRole(label === 'Delete session' ? 'button' : 'link', { name: label })
+      .getByRole(IS_LINK(label) ? 'link' : 'button', { name: label })
       .evaluate(
         (el, fn) =>
           // eslint-disable-next-line no-new-func
@@ -96,13 +105,27 @@ test('every control in the action row has its label centred', async ({ page }) =
   }
 });
 
-test('and they are the same height, on one line', async ({ page }) => {
+// Reversal, noted rather than edited away: this used to assert every control
+// shared one `top` — "on one line". That held for four controls on Windows and
+// stopped holding the moment there were five, because the row is `flex-wrap`
+// and Linux draws the same labels wider: CI went red with "the controls are on
+// different lines" while the same commit passed on a Mac runner.
+//
+// One line was never the rule. The row wraps by design — it has to, on a phone,
+// where it has always wrapped and this test has never run. What the row owes
+// the reader is that its controls are the same size and that the ones sitting
+// beside each other line up, which is what it now says. Equal heights is the
+// half that catches the original bug's neighbourhood; the centring test above
+// catches the bug itself.
+test('and they are the same height, lining up with whatever shares their line', async ({
+  page,
+}) => {
   await editor(page);
   const boxes = [];
   for (const label of ACTIONS) {
     boxes.push(
       await page
-        .getByRole(label === 'Delete session' ? 'button' : 'link', { name: label })
+        .getByRole(IS_LINK(label) ? 'link' : 'button', { name: label })
         .evaluate((el) => {
           const r = el.getBoundingClientRect();
           return { h: Math.round(r.height), top: Math.round(r.top) };
@@ -110,7 +133,84 @@ test('and they are the same height, on one line', async ({ page }) => {
     );
   }
   expect(new Set(boxes.map((b) => b.h)).size, 'the controls are different heights').toBe(1);
-  expect(new Set(boxes.map((b) => b.top)).size, 'the controls are on different lines').toBe(1);
+
+  // Grouped by line rather than assumed to be one. A control whose top is
+  // within its own height of another's is beside it; anything further is the
+  // next line down.
+  const height = boxes[0].h;
+  const lines = new Map<number, number[]>();
+  for (const b of boxes) {
+    const line = [...lines.keys()].find((t) => Math.abs(t - b.top) < height) ?? b.top;
+    lines.set(line, [...(lines.get(line) ?? []), b.top]);
+  }
+  for (const [, tops] of lines) {
+    expect(new Set(tops).size, 'controls on the same line do not line up').toBe(1);
+  }
+  // And the lines are lines: nothing is stacked one control per row, which is
+  // what a broken flex container looks like.
+  expect(lines.size, 'every control landed on its own line').toBeLessThan(boxes.length);
+});
+
+// ---------------------------------------------------------------------------
+// Duplicating
+//
+// The copy is a whole new session, so the one thing worth asserting from the
+// browser is that it lands on it. A duplicate that quietly succeeded and left
+// you on the original looks exactly like a duplicate that did nothing.
+// ---------------------------------------------------------------------------
+
+const COPY = '9a1b2c3d-4e5f-4a6b-8c7d-1e2f3a4b5c6d';
+
+test('duplicating opens the copy, under the name you gave it', async ({ page }) => {
+  let asked: string | null = null;
+  await page.route('**/rest/v1/rpc/**', (route) => {
+    const url = route.request().url();
+    if (url.includes('duplicate_session')) {
+      asked = JSON.parse(route.request().postData() ?? '{}').p_title;
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ ok: true, id: COPY, items: 3 }),
+      });
+    }
+    return route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(url.includes('session_sheet') ? SHEET : []),
+    });
+  });
+  await page.goto(`/sessions/${SESSION}`);
+  await expect(page.getByRole('heading', { name: 'Test 3' })).toBeVisible();
+
+  page.once('dialog', (d) => {
+    // Offered rather than demanded: the default is what most copies want.
+    expect(d.defaultValue()).toBe('Test 3 (copy)');
+    void d.accept('October, week two');
+  });
+  await page.getByRole('button', { name: 'Duplicate' }).click();
+
+  await expect(page).toHaveURL(new RegExp(`/sessions/${COPY}$`));
+  expect(asked).toBe('October, week two');
+});
+
+test('and changing your mind about it does nothing at all', async ({ page }) => {
+  let called = false;
+  await page.route('**/rest/v1/rpc/**', (route) => {
+    const url = route.request().url();
+    if (url.includes('duplicate_session')) called = true;
+    return route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(url.includes('session_sheet') ? SHEET : []),
+    });
+  });
+  await page.goto(`/sessions/${SESSION}`);
+  await expect(page.getByRole('heading', { name: 'Test 3' })).toBeVisible();
+
+  page.once('dialog', (d) => void d.dismiss());
+  await page.getByRole('button', { name: 'Duplicate' }).click();
+  await expect(page).toHaveURL(new RegExp(`/sessions/${SESSION}$`));
+  expect(called, 'cancelling the name still made a copy').toBe(false);
 });
 
 // ---------------------------------------------------------------------------

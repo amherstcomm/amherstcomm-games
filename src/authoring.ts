@@ -219,6 +219,27 @@ export async function deleteSession(
   return (data as { ok: boolean; reason?: string }) ?? fail('no answer');
 }
 
+/** Run the same questions again with nobody's answers in the way.
+ *
+ *  A weekly quiz is the same shape every week, and rebuilding it by hand is the
+ *  part that stops it happening. The copy is a draft with its own join code,
+ *  and none of what happened: no answers, no board, no questions anybody asked.
+ *
+ *  Pass a title or take `"<name> (copy)"` — there is no rename anywhere else,
+ *  so the name it is created with is the name it keeps. */
+export async function duplicateSession(
+  session: string,
+  title?: string
+): Promise<{ ok: boolean; reason?: string; id?: string; items?: number }> {
+  if (!supabase) return fail('not connected');
+  const { data, error } = await supabase.rpc('duplicate_session', {
+    p_session: session,
+    p_title: title ?? null,
+  });
+  if (error) return fail(error.message);
+  return (data as { ok: boolean; reason?: string }) ?? fail('no answer');
+}
+
 /** The sentence to put in front of somebody before it goes. Numbers, because
  *  "are you sure?" about an unknown quantity is not a question anybody can
  *  answer well. */
