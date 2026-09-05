@@ -597,13 +597,18 @@ Both ends are independent and either may be left off: an opening alone is a
 session that starts on its own and is closed by hand; a closing alone is one
 opened by hand that will not be left running over the weekend.
 
-#### There is no scheduler, and that is deliberate
+#### The clock is applied at the next visit, not by a job
 
-This deployment has no cron. Rather than add one, the clock is applied **the
-next time anybody looks** — `apply_schedule` runs at the top of every path a
-person can reach, and the read surfaces that cannot write (they are `stable`)
-ask `scheduled_state` instead, so a list of what is running already leaves out a
-survey whose closing time has passed.
+Correction to the first version of this page, which said "this deployment has no
+cron" as though that had been established. It had not been checked — Postgres
+can run jobs (`pg_cron`), and so can the VM. Whether this one does is an open
+question, not a settled fact.
+
+What is true either way is that the sweep does not need one. The clock is
+applied **the next time anybody looks** — `apply_schedule` runs at the top of
+every path a person can reach, and the read surfaces that cannot write (they are
+`stable`) ask `scheduled_state` instead, so a list of what is running already
+leaves out a survey whose closing time has passed.
 
 It has to *write*, which is the part worth explaining. Opening an open session
 is not only a fact about the session: it is what moves every question from
@@ -614,6 +619,18 @@ the host would have done rather than the readers deriving it, and one function �
 The window that matters is a closing time, and it is honoured on the way in:
 `answer_item` and `guess_word` sweep before they check, so a screen that has
 been open since before five cannot post an answer at ten past.
+
+#### It records the hour, not the discovery
+
+A session swept at ten past eight still says it opened at eight, and one swept
+on Monday still says it closed on Friday at five: `open_session` and
+`close_session` take the moment the schedule named. That is the honest record —
+an answer sent at one minute past five was already refused — and it is the
+difference a real scheduler would otherwise have made, since nothing else about
+the behaviour depends on when the sweep happened to run.
+
+A host pressing the button is stamped with the actual time, because that is the
+moment they meant.
 
 #### Who wins
 
