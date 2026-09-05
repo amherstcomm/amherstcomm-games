@@ -4953,6 +4953,234 @@ begin
 end;
 $fn$;
 
+-- ---------------------------------------------------------------------------
+-- Word lists of somebody's own
+--
+-- The dictionary in `public.words` is the English language, which is the right
+-- source for a daily puzzle and the wrong one for a round about this company.
+-- A themed list is a small set of words somebody typed — ESOP, dividend, the
+-- name of the building — and what it is *for* is deciding what the puzzle is,
+-- not deciding what counts as English.
+--
+-- That distinction is the whole design. A themed list supplies answers; the
+-- dictionary still says what may be typed, with the list's own words allowed on
+-- top so a themed word that SCOWL has never heard of is still a legal guess. A
+-- board that rejects HOUSE because the theme is about shares does not read as
+-- themed, it reads as broken.
+--
+-- Which list a question was drawn from lives with the *answer*, in
+-- item_answers, and never in the payload. The payload goes to the room, and a
+-- six-letter word drawn from a list of forty is nearly given away by naming the
+-- list. If the author wants the room to know the theme, they write it in the
+-- question, where saying it is a choice.
+-- ---------------------------------------------------------------------------
+
+create table if not exists public.word_lists (
+  id uuid primary key default gen_random_uuid(),
+  name text not null unique,
+  created_by uuid references auth.users (id) on delete set null,
+  created_at timestamptz not null default now()
+);
+alter table public.word_lists enable row level security;
+
+create table if not exists public.word_list_entries (
+  list_id uuid not null references public.word_lists (id) on delete cascade,
+  word text not null,
+  primary key (list_id, word)
+);
+alter table public.word_list_entries enable row level security;
+
+-- RLS with no policy on both, like everything else here: they are reached
+-- through the functions below and nowhere else. It matters more on these two
+-- than on most — `word_list_entries` is the answer key for every themed round
+-- drawn from it, and a Supabase grants anon and authenticated default
+-- privileges on new tables in `public`, so without this line the entries are
+-- readable with the anon key. See supabase/tests/rls.sql.
+
+create index if not exists word_list_entries_len_idx
+  on public.word_list_entries (list_id, length(word));
+
+/*
+ * The lists that exist, and how big they are.
+ *
+ * Names and counts only — never the words. An editor picking a list for a round
+ * needs to know it exists and has enough in it; the contents are the answer key
+ * and are not on this or any other client-facing surface.
+ */
+create or replace function public.word_lists_sheet()
+returns jsonb
+language sql
+stable
+security definer
+set search_path = ''
+as $fn$
+  select case
+    when not public.can('games.setup')
+      then jsonb_build_object('ok', false, 'reason', 'not allowed')
+    else jsonb_build_object('ok', true, 'lists', coalesce(
+      (select jsonb_agg(jsonb_build_object(
+                'id', l.id,
+                'name', l.name,
+                'words', (select count(*) from public.word_list_entries e where e.list_id = l.id),
+                'lengths', (select coalesce(jsonb_agg(distinct length(e.word) order by length(e.word)), '[]'::jsonb)
+                            from public.word_list_entries e where e.list_id = l.id),
+                'created_at', l.created_at)
+              order by l.name)
+       from public.word_lists l),
+      '[]'::jsonb))
+  end
+$fn$;
+
+revoke all on function public.word_lists_sheet() from public, anon;
+grant execute on function public.word_lists_sheet() to authenticated;
+
+/*
+ * The words in one, for the person editing it.
+ *
+ * Separate from the sheet above and gated the same way, because reading a list
+ * is what editing it starts with and there is no sense in which an editor may
+ * choose a list but not see it. It is still never sent to a player: nothing a
+ * participant calls returns this.
+ */
+create or replace function public.word_list_words(p_list uuid)
+returns jsonb
+language sql
+stable
+security definer
+set search_path = ''
+as $fn$
+  select case
+    when not public.can('games.setup')
+      then jsonb_build_object('ok', false, 'reason', 'not allowed')
+    else jsonb_build_object('ok', true, 'words', coalesce(
+      (select jsonb_agg(e.word order by e.word)
+       from public.word_list_entries e where e.list_id = p_list),
+      '[]'::jsonb))
+  end
+$fn$;
+
+revoke all on function public.word_list_words(uuid) from public, anon;
+grant execute on function public.word_list_words(uuid) to authenticated;
+
+/*
+ * Writing one.
+ *
+ * The words arrive as text — one per line, or commas, or whatever a person
+ * pasted — because the alternative is asking somebody to format a list before
+ * they are allowed to have one. Everything that is not a letter separates.
+ *
+ * It replaces rather than merges. "Save this list" is what the page offers and
+ * a save that quietly kept words the author had deleted would be the wrong
+ * behaviour for the one action that looks most like a text file.
+ *
+ * Words are held lower case and deduplicated. Anything under three letters or
+ * over fifteen is dropped rather than refused: a paste of a document has junk
+ * in it, and rejecting the whole list for one stray "a" helps nobody. The count
+ * that comes back is how many actually landed, which is the honest way to say
+ * so.
+ */
+create or replace function public.save_word_list(
+  p_id uuid,
+  p_name text,
+  p_words text
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $fn$
+declare
+  id uuid;
+  nm text := btrim(coalesce(p_name, ''));
+  kept int;
+begin
+  if not public.can('games.setup') then
+    return jsonb_build_object('ok', false, 'reason', 'not allowed');
+  end if;
+  if nm = '' then
+    return jsonb_build_object('ok', false, 'reason', 'it needs a name');
+  end if;
+  if length(nm) > 60 then
+    return jsonb_build_object('ok', false, 'reason', 'that name is longer than the space it goes in');
+  end if;
+
+  if p_id is null then
+    insert into public.word_lists (name, created_by) values (nm, (select auth.uid()))
+    returning word_lists.id into id;
+  else
+    update public.word_lists set name = nm where word_lists.id = p_id returning word_lists.id into id;
+    if id is null then
+      return jsonb_build_object('ok', false, 'reason', 'no such list');
+    end if;
+    delete from public.word_list_entries where list_id = id;
+  end if;
+
+  insert into public.word_list_entries (list_id, word)
+  select id, w
+  from (
+    select distinct lower(t) as w
+    from regexp_split_to_table(coalesce(p_words, ''), '[^A-Za-z]+') as t
+    where length(t) between 3 and 15
+  ) cleaned
+  on conflict do nothing;
+
+  select count(*) into kept from public.word_list_entries where list_id = id;
+  return jsonb_build_object('ok', true, 'id', id, 'name', nm, 'words', kept);
+exception
+  when unique_violation then
+    return jsonb_build_object('ok', false, 'reason', 'there is already a list with that name');
+end;
+$fn$;
+
+revoke all on function public.save_word_list(uuid, text, text) from public, anon;
+grant execute on function public.save_word_list(uuid, text, text) to authenticated;
+
+create or replace function public.delete_word_list(p_list uuid)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $fn$
+begin
+  if not public.can('games.setup') then
+    return jsonb_build_object('ok', false, 'reason', 'not allowed');
+  end if;
+  -- The entries go with it, by the foreign key. Questions already drawn from it
+  -- keep their word: the answer was copied into item_answers when it was drawn,
+  -- so a round that has been built does not come apart because somebody tidied
+  -- up the list it came from.
+  delete from public.word_lists where id = p_list;
+  return jsonb_build_object('ok', true);
+end;
+$fn$;
+
+revoke all on function public.delete_word_list(uuid) from public, anon;
+grant execute on function public.delete_word_list(uuid) to authenticated;
+
+/*
+ * Drawing one word from a list.
+ *
+ * Internal, and granted to nobody: it returns an answer. `p_length` narrows to
+ * a board size when the author wants one, and null takes whatever the list has.
+ */
+create or replace function public.draw_word(p_list uuid, p_length int default null)
+returns text
+language sql
+volatile
+security definer
+set search_path = ''
+as $fn$
+  select e.word
+  from public.word_list_entries e
+  where e.list_id = p_list
+    and (p_length is null or length(e.word) = p_length)
+  order by random()
+  limit 1
+$fn$;
+
+revoke all on function public.draw_word(uuid, int) from public, anon, authenticated;
+
+
 create or replace function public.save_item(
   p_session uuid,
   p_item uuid,
@@ -4984,6 +5212,31 @@ begin
   end if;
 
   body := coalesce(p_payload, '{}'::jsonb);
+
+  -- A word game drawn from a themed list rather than typed.
+  --
+  -- The draw happens here, once, and what it drew is stored with the answer —
+  -- so the round is fixed the moment it is saved, and deleting the list later
+  -- does not take the question apart. The list travels in `answer` and never in
+  -- the payload: the payload goes to the room, and naming the list a six-letter
+  -- word came out of nearly gives it away.
+  if p_kind = 'game' and (p_answer ->> 'list') is not null then
+    declare
+      drawn text;
+      want int := nullif(p_answer ->> 'length', '')::int;
+    begin
+      drawn := public.draw_word((p_answer ->> 'list')::uuid, want);
+      if drawn is null then
+        return jsonb_build_object('ok', false, 'reason',
+          case when want is null then 'that list has no words in it'
+               else format('that list has no %s-letter words in it', want) end);
+      end if;
+      p_answer := jsonb_build_object('word', drawn, 'list', p_answer ->> 'list');
+      -- The board is drawn from the payload before the room knows anything
+      -- else, so the length has to follow the word that was actually drawn.
+      body := jsonb_set(body, '{length}', to_jsonb(length(drawn)));
+    end;
+  end if;
 
   -- See the note above: the room is shown the payload, so the payload must not
   -- be the answer in a different arrangement.
@@ -6330,7 +6583,19 @@ begin
     return jsonb_build_object('ok', false, 'reason',
       format('Guesses are %s letters.', length(word)));
   end if;
-  if said <> word and not exists (select 1 from public.words w where w.word = lower(said)) then
+  -- The dictionary decides what may be typed, and the round's own list is
+  -- allowed on top of it. A themed list supplies the answer, not the language:
+  -- a board that rejects HOUSE because the theme is about shares does not read
+  -- as themed, it reads as broken. And the other direction matters too — ESOP
+  -- is not in SCOWL and has to be typeable in a round built out of it.
+  if said <> word
+     and not exists (select 1 from public.words w where w.word = lower(said))
+     and not exists (
+       select 1 from public.item_answers a
+       join public.word_list_entries e
+         on e.list_id = (a.answer ->> 'list')::uuid and e.word = lower(said)
+       where a.item_id = p_item and (a.answer ->> 'list') is not null)
+  then
     return jsonb_build_object('ok', false, 'reason', 'That is not a word I know.');
   end if;
 

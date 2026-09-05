@@ -1031,6 +1031,61 @@ because the masthead and the privacy page render before anybody signs in. There
 is no "private setting" flag and there should not be one: a table where some
 rows are public and some are not is a table somebody eventually gets wrong.
 
+### Word lists of your own
+
+The dictionary in `public.words` is the English language — the right source for
+a daily puzzle and the wrong one for a round about this company. A themed list
+is a small set of words somebody typed: ESOP, dividend, the name of the
+building.
+
+**A list supplies the answer, not the language.** That is the whole design. The
+ordinary dictionary still decides what may be typed, with the list's own words
+allowed on top:
+
+- an ordinary word stays a legal guess in a themed round — a board that rejects
+  HOUSE because the theme is about shares does not read as themed, it reads as
+  broken;
+- and a themed word no dictionary has heard of becomes a legal guess in the
+  round built out of it.
+
+Both directions are asserted in `supabase/tests/wordlists.sql`, because getting
+either backwards looks like a bug rather than a theme.
+
+#### Writing one
+
+A textarea on `/admin`, gated on `games.setup` — an editor who can build a
+session can write the words it draws from. Paste a column out of a spreadsheet,
+type one per line, or drop a paragraph in: the server splits on anything that is
+not a letter, lowercases, deduplicates, and drops anything under three letters
+or over fifteen. A paste of a document has junk in it, and rejecting a whole
+list for one stray "a" helps nobody — so the count that comes back is how many
+actually landed, and the page shows that rather than the number of lines typed.
+
+Saving **replaces**. It is the action that looks most like editing a text file,
+and a save that quietly kept words the author had deleted would be the wrong
+behaviour for it.
+
+#### Drawing a round from one
+
+In the session editor, a word game can take its word from a list instead of
+having one typed. The server draws when the question is saved, and **stores
+which list it came from beside the answer, in `item_answers`** — never in the
+payload. The payload goes to the room, and naming the list a six-letter word
+came out of narrows it to one of a handful. If the author wants the room to know
+the theme, they write it in the question, where saying it is a choice.
+
+The draw happens once, at save. Deleting the list afterwards does not take the
+question apart: the word was copied when it was drawn.
+
+#### Not yet: themed dailies
+
+The other half of what a themed list could do — October's daily Guess word
+coming from an event list instead of the general dictionary — is **not built**.
+It means teaching the nightly publish job to draw from a list while one is
+active, and that touches deterministic generation, the published rolling
+fortnight and what happens when a list runs out mid-window. Worth doing
+separately rather than folded in here.
+
 ### Who may do what
 
 The second half of `/admin`, gated on `users.manage`. Until now a privilege was

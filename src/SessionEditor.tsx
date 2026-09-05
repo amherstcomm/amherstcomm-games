@@ -45,6 +45,7 @@ import { JOIN_HOST, pathOf } from '@/routes';
 import { setSessionOptions } from '@/live';
 import { INTL_UNITS, formatGuess } from '@/guessFormat';
 import { describeWindow, fromOfficeInput, toOfficeInput } from '@/schedule';
+import { readWordLists, type WordList } from '@/wordLists';
 
 const FIELD =
   'w-full px-3 py-2 rounded-lg bg-white/5 border border-white/15 text-white text-sm placeholder:text-slate-600 focus:outline-none focus:border-accent';
@@ -79,6 +80,8 @@ function payloadFor(
     number: NumberPayload;
     word: string;
     cloud: boolean;
+    list: string;
+    drawLength: number;
   }
 ): Record<string, unknown> {
   switch (kind) {
@@ -115,6 +118,9 @@ function answerFor(
     options: string[];
     value: string;
     word: string;
+    /** empty when the author typed the word instead of choosing a list */
+    list: string;
+    drawLength: number;
   }
 ): Record<string, unknown> | null {
   switch (kind) {
@@ -127,7 +133,11 @@ function answerFor(
     case 'number':
       return { value: Number(parts.value) };
     case 'game':
-      return { word: parts.word };
+      // A list rather than a word: the server draws, and refuses if the list
+      // has nothing of that length. It comes back as the answer either way.
+      return parts.list
+        ? { list: parts.list, length: parts.drawLength }
+        : { word: parts.word };
     default:
       return null;
   }
@@ -195,6 +205,12 @@ function ItemForm({
   const [asCloud, setAsCloud] = useState(
     (item?.payload as { cloud?: boolean } | undefined)?.cloud === true
   );
+  const [drawFrom, setDrawFrom] = useState('');
+  const [drawLength, setDrawLength] = useState(6);
+  const [lists, setLists] = useState<WordList[]>([]);
+  useEffect(() => {
+    void readWordLists().then(setLists);
+  }, []);
   const [gameWord, setGameWord] = useState(
     ((item?.answer as GameAnswer | null)?.word ?? '').toUpperCase()
   );
@@ -472,6 +488,52 @@ function ItemForm({
               this company says is fine, and it will still be accepted as a guess.
             </p>
           )}
+          {/* Or don't pick the word at all. The server draws one when the
+              question is saved and keeps which list it came from beside the
+              answer, where the room cannot see it — naming the list would
+              narrow a six-letter word to one of a handful. */}
+          {lists.length > 0 && (
+            <div className="rounded-lg border border-white/15 p-3 space-y-2">
+              <span className="block text-xs uppercase tracking-wider text-slate-500">
+                Or draw one from a list
+              </span>
+              <div className="flex flex-wrap gap-2">
+                <select
+                  className={FIELD + ' w-auto'}
+                  value={drawFrom}
+                  aria-label="Draw from a list"
+                  onChange={(e) => setDrawFrom(e.target.value)}
+                >
+                  <option value="">Type the word myself</option>
+                  {lists.map((list) => (
+                    <option key={list.id} value={list.id}>
+                      {list.name} ({list.words})
+                    </option>
+                  ))}
+                </select>
+                {drawFrom && (
+                  <select
+                    className={FIELD + ' w-auto'}
+                    value={drawLength}
+                    aria-label="How many letters"
+                    onChange={(e) => setDrawLength(Number(e.target.value))}
+                  >
+                    {(lists.find((l) => l.id === drawFrom)?.lengths ?? []).map((n) => (
+                      <option key={n} value={n}>
+                        {n} letters
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </div>
+              {drawFrom && (
+                <p className="text-xs text-slate-400">
+                  A word is picked when you save, and stays picked. Saving again
+                  draws another one.
+                </p>
+              )}
+            </div>
+          )}
           {GAME_PLAYABLE.length === 1 && (
             <p className="text-xs text-slate-500">
               Guess is the only game a session can run so far.
@@ -607,6 +669,8 @@ function ItemForm({
                   number: numberPayload(),
                   word: gameWord,
                   cloud: asCloud,
+                  list: drawFrom,
+                  drawLength,
                 }),
                 // Omitted rather than sent as null: item_seconds() reads the key
                 // being absent as "no clock", and a key holding null would be
@@ -615,7 +679,15 @@ function ItemForm({
               },
               // survey and open are unscored; the server drops an answer sent
               // for them, and sending one anyway would be asking it to.
-              answer: answerFor(kind, { live, livePairs, options, value, word: gameWord }),
+              answer: answerFor(kind, {
+                live,
+                livePairs,
+                options,
+                value,
+                word: gameWord,
+                list: drawFrom,
+                drawLength,
+              }),
             })
           }
         >
