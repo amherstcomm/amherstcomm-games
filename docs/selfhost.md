@@ -665,9 +665,33 @@ moment they meant.
 
 It does not tell somebody who types the code early when the session opens: they
 are told no session is running with that code, the same as any code that is not
-live. And the times are **whatever the browser setting them says the time is** —
-one office, one timezone, and an instant on the wire, so a phone in another
-zone shows the same moment in its own terms.
+live.
+
+#### Whose five o'clock
+
+Reversal, and the third assumption on this page to need one. The times used to
+be **whatever the browser setting them said the time was**, justified as "one
+office, one timezone". Everyone here is *based* in Central; not everyone is *in*
+Central at the moment they use this. A host setting "Friday at five" from a
+hotel two zones over would have set it for six o'clock at home — silently, and
+correctly by that rule.
+
+So the anchor is the company's clock, `America/Chicago`, and not the reader's:
+five means five where the company is, whoever is typing it and wherever they are
+standing. A name rather than an offset, so the two annual changeovers are the
+platform's problem — a stored −6 would be an hour wrong for eight months of the
+year. Every time shown carries its zone, `5:00 PM CDT`, because that is what
+tells a traveller which five o'clock is meant.
+
+Enforcement never depended on any of this: `closes_at` is a `timestamptz`, one
+instant compared against `now()`, the same moment everywhere. What was wrong was
+only which wall clock the words referred to — which is the harder kind of wrong,
+because everything looks right from the desk it was set at.
+
+The tests are pinned to absolute instants rather than round trips for the same
+reason, and the browser test runs in `America/Denver` deliberately: this
+developer machine is in Central, so a test that agreed with its own clock proved
+nothing at all. Run against the old rule it comes back exactly one hour out.
 
 ### Running the same questions again
 

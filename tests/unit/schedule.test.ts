@@ -1,123 +1,175 @@
 // The window, between the browser and the wire.
 //
-// The conversion worth testing is the one with an off-by-a-timezone in it: an
-// instant shown in a datetime-local input, and read back out of it. Run these
-// under a fixed TZ (vitest.config sets one) or the round trip is the only thing
-// that can be asserted.
+// Every assertion here is against an absolute instant rather than a round trip,
+// which is the point: these conversions must not depend on the zone the machine
+// running them happens to be in. A round-trip test passes in Denver while the
+// feature is an hour wrong there.
+//
+// The dates are chosen around the two changeovers, because that is where a
+// fixed -6 offset — the version this replaced would have needed — goes wrong
+// for eight months of the year. In 2026 US daylight time runs 8 March to
+// 1 November: Central is UTC-6 (CST) outside that and UTC-5 (CDT) inside it.
 import { describe, expect, it } from 'vitest';
-import { describeWindow, fromLocalInput, toLocalInput, when } from '@/schedule';
+import { OFFICE_ZONE, describeWindow, fromOfficeInput, toOfficeInput, when } from '@/schedule';
 
-describe('toLocalInput', () => {
-  it('gives the input a wall clock, not UTC', () => {
-    // The obvious version — toISOString().slice(0, 16) — is wrong by the
-    // offset, and shows a five o'clock closing as one in the afternoon.
-    const at = new Date(2026, 9, 12, 17, 0);
-    expect(toLocalInput(at.toISOString())).toBe('2026-10-12T17:00');
-  });
+/** An instant, written the way the wire writes it. */
+const at = (iso: string) => new Date(iso).toISOString();
 
-  it('pads, because the input will not accept 2026-9-2T9:05', () => {
-    expect(toLocalInput(new Date(2026, 8, 2, 9, 5).toISOString())).toBe('2026-09-02T09:05');
-  });
-
-  it('has nothing to show for no time', () => {
-    expect(toLocalInput(null)).toBe('');
-    expect(toLocalInput(undefined)).toBe('');
-    expect(toLocalInput('not a date')).toBe('');
+describe('the anchor', () => {
+  it('is the company clock, not the browser', () => {
+    expect(OFFICE_ZONE).toBe('America/Chicago');
   });
 });
 
-describe('fromLocalInput', () => {
-  it('reads the input back as the instant it was showing', () => {
-    const at = new Date(2026, 9, 12, 17, 0);
-    expect(fromLocalInput(toLocalInput(at.toISOString()))?.getTime()).toBe(at.getTime());
+describe('fromOfficeInput', () => {
+  // The bug this exists for: a host setting "Friday at five" from a hotel two
+  // zones over set it for six o'clock at home, silently and correctly by the
+  // old rule. These are absolute, so they fail on that version wherever they
+  // are run.
+  it('reads five in the afternoon as five in the office, in summer', () => {
+    expect(fromOfficeInput('2026-10-16T17:00')?.toISOString()).toBe('2026-10-16T22:00:00.000Z');
+  });
+
+  it('and in winter, which is a different offset', () => {
+    expect(fromOfficeInput('2026-12-11T17:00')?.toISOString()).toBe('2026-12-11T23:00:00.000Z');
+  });
+
+  it('the morning after the clocks go forward', () => {
+    expect(fromOfficeInput('2026-03-08T09:00')?.toISOString()).toBe('2026-03-08T14:00:00.000Z');
+  });
+
+  it('and the morning after they go back', () => {
+    expect(fromOfficeInput('2026-11-01T09:00')?.toISOString()).toBe('2026-11-01T15:00:00.000Z');
+  });
+
+  // A schedule is not the place to argue with somebody about 2:30 am.
+  it('settles on a real instant for a wall clock that never happened', () => {
+    // 2:30 am on 8 March 2026 does not exist in Central: the hour is skipped
+    const got = fromOfficeInput('2026-03-08T02:30');
+    expect(got).not.toBeNull();
+    expect(Number.isNaN(got!.getTime())).toBe(false);
+  });
+
+  it('and picks one for a wall clock that happened twice', () => {
+    // 1:30 am on 1 November 2026 happens once in CDT and again in CST
+    const got = fromOfficeInput('2026-11-01T01:30');
+    expect(got).not.toBeNull();
+    expect(['2026-11-01T06:30:00.000Z', '2026-11-01T07:30:00.000Z']).toContain(
+      got!.toISOString()
+    );
   });
 
   // One means "take it off" and the other means a time; they have to stay
   // distinguishable all the way to the server.
   it('keeps empty distinct from a date', () => {
-    expect(fromLocalInput('')).toBeNull();
-    expect(fromLocalInput('nonsense')).toBeNull();
+    expect(fromOfficeInput('')).toBeNull();
+    expect(fromOfficeInput('nonsense')).toBeNull();
+  });
+});
+
+describe('toOfficeInput', () => {
+  it('shows the instant on the office clock', () => {
+    expect(toOfficeInput(at('2026-10-16T22:00:00Z'))).toBe('2026-10-16T17:00');
+  });
+
+  it('across the changeover, where a fixed offset would be an hour out', () => {
+    expect(toOfficeInput(at('2026-12-11T23:00:00Z'))).toBe('2026-12-11T17:00');
+  });
+
+  it('pads, because the input will not accept 2026-9-2T9:05', () => {
+    expect(toOfficeInput(at('2026-09-02T14:05:00Z'))).toBe('2026-09-02T09:05');
+  });
+
+  it('and midnight is not the day before', () => {
+    // hourCycle h24 can report 24:00, which would push the date out by a day
+    expect(toOfficeInput(at('2026-10-16T05:00:00Z'))).toBe('2026-10-16T00:00');
+  });
+
+  it('has nothing to show for no time', () => {
+    expect(toOfficeInput(null)).toBe('');
+    expect(toOfficeInput(undefined)).toBe('');
+    expect(toOfficeInput('not a date')).toBe('');
+  });
+
+  it('round-trips whatever it shows', () => {
+    for (const iso of ['2026-10-16T22:00:00Z', '2026-12-11T23:00:00Z', '2026-03-08T14:00:00Z']) {
+      expect(fromOfficeInput(toOfficeInput(iso))?.toISOString()).toBe(at(iso));
+    }
   });
 });
 
 describe('when', () => {
-  const now = new Date(2026, 9, 12, 9, 0); // Monday 12 October 2026
+  // Monday 12 October 2026, 9am Central
+  const now = new Date('2026-10-12T14:00:00Z');
+
+  it('names the zone, so a traveller knows which five o clock is meant', () => {
+    expect(when(new Date('2026-10-12T22:00:00Z'), now)).toMatch(/C[DS]T/);
+  });
 
   it('says today rather than naming the day', () => {
-    expect(when(new Date(2026, 9, 12, 17, 0), now)).toMatch(/^today at /);
+    expect(when(new Date('2026-10-12T22:00:00Z'), now)).toMatch(/^today at /);
   });
 
   it('and tomorrow', () => {
-    expect(when(new Date(2026, 9, 13, 17, 0), now)).toMatch(/^tomorrow at /);
+    expect(when(new Date('2026-10-13T22:00:00Z'), now)).toMatch(/^tomorrow at /);
   });
 
   it('names the weekday inside the week', () => {
-    expect(when(new Date(2026, 9, 16, 17, 0), now)).toMatch(/^Friday at /);
+    expect(when(new Date('2026-10-16T22:00:00Z'), now)).toMatch(/^Friday at /);
   });
 
   // A weekday alone is the easiest thing to misread a week late.
   it('and the date once a weekday could mean either week', () => {
-    expect(when(new Date(2026, 9, 19, 17, 0), now)).not.toMatch(/^Monday/);
-    expect(when(new Date(2026, 9, 19, 17, 0), now)).toMatch(/19/);
+    const line = when(new Date('2026-10-19T22:00:00Z'), now);
+    expect(line).not.toMatch(/^Monday/);
+    expect(line).toMatch(/19/);
   });
 
-  it('counts calendar days, not twenty-four-hour blocks', () => {
-    // 11pm to 1am is two hours and one day; "in 2 hours" would read as today
-    expect(when(new Date(2026, 9, 13, 1, 0), new Date(2026, 9, 12, 23, 0))).toMatch(
-      /^tomorrow at /
-    );
+  // "Today" is the office's today. Eleven at night in Central is the small
+  // hours in London, and the answer is still today.
+  it('counts days on the office calendar, not the reader s', () => {
+    // 2026-10-13T03:00Z is 10pm Monday in Central
+    expect(when(new Date('2026-10-13T03:00:00Z'), now)).toMatch(/^today at /);
   });
 });
 
 describe('describeWindow', () => {
-  const now = new Date(2026, 9, 12, 9, 0);
+  const now = new Date('2026-10-12T14:00:00Z');
 
   it('has nothing to say when there is no window', () => {
     expect(describeWindow(null, null, now)).toBeNull();
   });
 
   it('says when it opens, before it does', () => {
-    const line = describeWindow(new Date(2026, 9, 13, 9, 0).toISOString(), null, now);
-    expect(line).toMatch(/^Opens tomorrow at /);
+    expect(describeWindow(at('2026-10-13T14:00:00Z'), null, now)).toMatch(/^Opens tomorrow at /);
   });
 
   it('and both ends when both are still ahead', () => {
-    const line = describeWindow(
-      new Date(2026, 9, 13, 9, 0).toISOString(),
-      new Date(2026, 9, 16, 17, 0).toISOString(),
-      now
-    );
-    expect(line).toMatch(/^Opens tomorrow at .* and closes Friday at /);
+    expect(
+      describeWindow(at('2026-10-13T14:00:00Z'), at('2026-10-16T22:00:00Z'), now)
+    ).toMatch(/^Opens tomorrow at .* and closes Friday at /);
   });
 
   // The useful fact about a survey that is running is when it shuts.
   it('says when it shuts, once it is running', () => {
-    const line = describeWindow(
-      new Date(2026, 9, 12, 8, 0).toISOString(),
-      new Date(2026, 9, 16, 17, 0).toISOString(),
-      now
-    );
-    expect(line).toMatch(/^Closes Friday at /);
+    expect(
+      describeWindow(at('2026-10-12T13:00:00Z'), at('2026-10-16T22:00:00Z'), now)
+    ).toMatch(/^Closes Friday at /);
   });
 
   it('and says it is shut once it is', () => {
-    const line = describeWindow(null, new Date(2026, 9, 9, 17, 0).toISOString(), now);
-    expect(line).toMatch(/^Closed /);
+    expect(describeWindow(null, at('2026-10-09T22:00:00Z'), now)).toMatch(/^Closed /);
   });
 
-  // A closing time in the past wins over an opening time in the past, which is
-  // the same order apply_schedule applies them in.
+  // A passed closing beats a passed opening, which is the order apply_schedule
+  // applies them in.
   it('a passed closing beats a passed opening', () => {
-    const line = describeWindow(
-      new Date(2026, 9, 5, 9, 0).toISOString(),
-      new Date(2026, 9, 9, 17, 0).toISOString(),
-      now
-    );
-    expect(line).toMatch(/^Closed /);
+    expect(
+      describeWindow(at('2026-10-05T14:00:00Z'), at('2026-10-09T22:00:00Z'), now)
+    ).toMatch(/^Closed /);
   });
 
   it('and an opening with no closing has nothing left to promise', () => {
-    const line = describeWindow(new Date(2026, 9, 12, 8, 0).toISOString(), null, now);
-    expect(line).toMatch(/^Opened today at /);
+    expect(describeWindow(at('2026-10-12T13:00:00Z'), null, now)).toMatch(/^Opened today at /);
   });
 });
