@@ -4993,6 +4993,25 @@ create table if not exists public.word_lists (
   created_by uuid references auth.users (id) on delete set null,
   created_at timestamptz not null default now()
 );
+
+-- What a list needs to become a *daily* theme, on top of being a bag of words.
+--
+--   clue      what the Weave board says it is about. The list's name is the
+--             obvious default and usually the right one.
+--   spangram  Weave's long answer, threaded corner to corner. Six to sixteen
+--             letters and at least as long as the board is wide; without one a
+--             list can still drive the daily word but cannot build a board.
+--   from/until  which dates it covers.
+--
+-- Dates rather than a switch, and that is not a preference. The window is
+-- generated a fortnight ahead, so the run on 25 September already writes 1
+-- October: the theme has to be decided per *puzzle date*, not per run, or
+-- flipping a switch on the first would leave the first two weeks unthemed and
+-- already published.
+alter table public.word_lists add column if not exists clue text;
+alter table public.word_lists add column if not exists spangram text;
+alter table public.word_lists add column if not exists daily_from date;
+alter table public.word_lists add column if not exists daily_until date;
 alter table public.word_lists enable row level security;
 
 create table if not exists public.word_list_entries (
@@ -5034,6 +5053,17 @@ as $fn$
                 'id', l.id,
                 'name', l.name,
                 'words', (select count(*) from public.word_list_entries e where e.list_id = l.id),
+                -- There was a 'dictionary' count here, for how many of a
+                -- list's words the bundled dictionary knew. It existed because
+                -- a daily answer had to be in it, and that stopped being true:
+                -- a themed day ships its own words and the board accepts them,
+                -- so ESOP is as good an answer as SHARES. Removed rather than
+                -- left, because a number nothing depends on is a number
+                -- somebody will make a decision on.
+                'clue', l.clue,
+                'spangram', l.spangram,
+                'daily_from', l.daily_from,
+                'daily_until', l.daily_until,
                 'lengths', (select coalesce(jsonb_agg(distinct length(e.word) order by length(e.word)), '[]'::jsonb)
                             from public.word_list_entries e where e.list_id = l.id),
                 'created_at', l.created_at)
@@ -5091,10 +5121,16 @@ grant execute on function public.word_list_words(uuid) to authenticated;
  * that comes back is how many actually landed, which is the honest way to say
  * so.
  */
+drop function if exists public.save_word_list(uuid, text, text);
+
 create or replace function public.save_word_list(
   p_id uuid,
   p_name text,
-  p_words text
+  p_words text,
+  p_clue text default null,
+  p_spangram text default null,
+  p_from date default null,
+  p_until date default null
 )
 returns jsonb
 language plpgsql
@@ -5116,11 +5152,44 @@ begin
     return jsonb_build_object('ok', false, 'reason', 'that name is longer than the space it goes in');
   end if;
 
+  -- Weave threads the spangram corner to corner, so its shape is the board's
+  -- problem rather than a matter of taste. Refused here because a list that
+  -- cannot build a board should say so while somebody is looking at it, not at
+  -- three in the morning when the window is generated.
+  if btrim(coalesce(p_spangram, '')) <> ''
+     and btrim(lower(p_spangram)) !~ '^[a-z]{6,16}$' then
+    return jsonb_build_object('ok', false, 'reason',
+      'a spangram is one word of 6 to 16 letters, no spaces');
+  end if;
+  if p_from is not null and p_until is not null and p_until < p_from then
+    return jsonb_build_object('ok', false, 'reason', 'it cannot finish before it starts');
+  end if;
+  -- One theme per day. Two lists covering the same date would make the daily
+  -- depend on which row was read first, which is a puzzle that changes when
+  -- nobody changed anything.
+  if p_from is not null and p_until is not null and exists (
+    select 1 from public.word_lists l
+    where l.id is distinct from p_id
+      and l.daily_from is not null and l.daily_until is not null
+      and daterange(l.daily_from, l.daily_until, '[]') && daterange(p_from, p_until, '[]')
+  ) then
+    return jsonb_build_object('ok', false, 'reason',
+      'another list already covers some of those days');
+  end if;
+
   if p_id is null then
-    insert into public.word_lists (name, created_by) values (nm, (select auth.uid()))
+    insert into public.word_lists (name, created_by, clue, spangram, daily_from, daily_until)
+    values (nm, (select auth.uid()), nullif(btrim(coalesce(p_clue, '')), ''),
+            nullif(btrim(lower(coalesce(p_spangram, ''))), ''), p_from, p_until)
     returning word_lists.id into id;
   else
-    update public.word_lists set name = nm where word_lists.id = p_id returning word_lists.id into id;
+    update public.word_lists
+       set name = nm,
+           clue = nullif(btrim(coalesce(p_clue, '')), ''),
+           spangram = nullif(btrim(lower(coalesce(p_spangram, ''))), ''),
+           daily_from = p_from,
+           daily_until = p_until
+     where word_lists.id = p_id returning word_lists.id into id;
     if id is null then
       return jsonb_build_object('ok', false, 'reason', 'no such list');
     end if;
@@ -5144,8 +5213,49 @@ exception
 end;
 $fn$;
 
-revoke all on function public.save_word_list(uuid, text, text) from public, anon;
-grant execute on function public.save_word_list(uuid, text, text) to authenticated;
+revoke all on function public.save_word_list(uuid, text, text, text, text, date, date)
+  from public, anon;
+grant execute on function public.save_word_list(uuid, text, text, text, text, date, date)
+  to authenticated;
+
+/*
+ * The theme covering one day, for the generator.
+ *
+ * Read by scripts/fetch-puzzles.mjs with the service-role key, which is the
+ * only thing that ever calls it — the words are answers, and nothing a browser
+ * holds should be able to ask for tomorrow's.
+ *
+ * A date rather than "the current theme", because the window is generated a
+ * fortnight ahead and each day in it has to be asked about separately. Null
+ * when nothing covers that day, which is the ordinary state for eleven months
+ * of the year and means "generate as usual".
+ */
+create or replace function public.daily_theme(p_date date)
+returns jsonb
+language sql
+stable
+security definer
+set search_path = ''
+as $fn$
+  select jsonb_build_object(
+    'name', l.name,
+    -- The name is the obvious clue and usually the right one, so it stands in
+    -- rather than making somebody type it twice.
+    'clue', coalesce(nullif(btrim(l.clue), ''), l.name),
+    'spangram', l.spangram,
+    'words', coalesce(
+      (select jsonb_agg(e.word order by e.word)
+       from public.word_list_entries e where e.list_id = l.id),
+      '[]'::jsonb))
+  from public.word_lists l
+  where l.daily_from is not null and l.daily_until is not null
+    and p_date between l.daily_from and l.daily_until
+  order by l.daily_from
+  limit 1
+$fn$;
+
+revoke all on function public.daily_theme(date) from public, anon, authenticated;
+grant execute on function public.daily_theme(date) to service_role;
 
 create or replace function public.delete_word_list(p_list uuid)
 returns jsonb

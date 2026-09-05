@@ -1154,14 +1154,59 @@ the theme, they write it in the question, where saying it is a choice.
 The draw happens once, at save. Deleting the list afterwards does not take the
 question apart: the word was copied when it was drawn.
 
-#### Not yet: themed dailies
+#### Taking over the dailies
 
-The other half of what a themed list could do — October's daily Guess word
-coming from an event list instead of the general dictionary — is **not built**.
-It means teaching the nightly publish job to draw from a list while one is
-active, and that touches deterministic generation, the published rolling
-fortnight and what happens when a list runs out mid-window. Worth doing
-separately rather than folded in here.
+A list with **dates** on it themes the daily puzzles for those days. Two of the
+ten games can take a plain word list, and they are the two this touches:
+
+- **The daily word.** Per length, the pool narrows to the theme's own words —
+  **including ones no dictionary carries**. That is the point rather than an
+  edge case: ESOP, the name of the building, the thing only this company says.
+  Being absent from a dictionary is what makes a word the company's.
+
+  For that to work the day ships its own words beside the answer and the board
+  accepts them alongside the dictionary. Nothing is revealed by carrying them —
+  the answers themselves already ship in the same payload, base64'd against a
+  casual glance rather than as a secret, because it is a client-side game and
+  the board on your machine has always known what it wants you to type.
+
+  **Reversal, and it was wrong for about an hour.** The first version
+  intersected the theme with the day's ordinary pool, so a themed word the
+  dictionary had never heard of was silently dropped and ESOP could be an answer
+  inside a session but not a daily. Backwards, and the fix was the board rather
+  than the list. The one thing still applied is the blocklist: a curated list is
+  somebody's paste, and never handing anybody a slur as an answer is not a rule
+  to relax because the words came from inside the building.
+- **Weave**, whose whole premise is a themed word set — the list becomes the
+  theme, so the board spells out the event's own words. It needs a **clue** (the
+  list's name by default) and a **spangram**: one word of 6 to 16 letters,
+  threaded corner to corner. Without a spangram the list still picks the daily
+  word and simply cannot build a board.
+
+The other eight need pangrams, letter grids or curated pairs, and a bag of words
+cannot supply those.
+
+**Dates rather than a switch**, and that is not a preference. The window is
+generated a fortnight ahead, so the run on 25 September already writes 1
+October: the theme is decided per *puzzle date*, not per run. Set the dates at
+least two weeks before the first day, which the admin page says on the form.
+Two lists may not cover the same day — the daily would then depend on which row
+was read first, which is a puzzle that changes when nobody changed anything.
+
+**Everything degrades rather than fails.** A day nothing covers, a database the
+generator cannot reach, a length the list cannot fill, a theme that will not
+tile a board: each falls back to exactly the puzzle the site would have had
+anyway. A themed month is a nice thing to have and a daily puzzle is not
+optional.
+
+`PUZZLES_THEME` short-circuits the lookup with inline JSON. It is there for the
+contract test, which runs the real generator with no database — and it is also
+how to try a theme before committing to the dates.
+
+The nightly window prints one `Theming <date> from "<name>"` line per themed
+day. The rest of the generator's chatter is discarded, but which days a list
+took over is worth seeing in the log: the first of the month is a bad morning to
+discover that "trust me, it is themed" was wrong.
 
 ### Who may do what
 

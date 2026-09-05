@@ -31,6 +31,10 @@ export default function AdminWordLists() {
   const [editing, setEditing] = useState<string | null>(null);
   const [name, setName] = useState('');
   const [words, setWords] = useState('');
+  const [clue, setClue] = useState('');
+  const [spangram, setSpangram] = useState('');
+  const [from, setFrom] = useState('');
+  const [until, setUntil] = useState('');
   const [note, setNote] = useState('');
   const [busy, setBusy] = useState(false);
 
@@ -41,19 +45,35 @@ export default function AdminWordLists() {
     setEditing('new');
     setName('');
     setWords('');
+    setClue('');
+    setSpangram('');
+    setFrom('');
+    setUntil('');
     setNote('');
   }
 
   async function open(list: WordList) {
     setEditing(list.id);
     setName(list.name);
+    // All of them, because saving sends all of them: a field left at its
+    // initial value would quietly clear whatever the row had, so opening a
+    // themed list to fix a typo would take its dates off.
+    setClue(list.clue ?? '');
+    setSpangram(list.spangram ?? '');
+    setFrom(list.daily_from ?? '');
+    setUntil(list.daily_until ?? '');
     setNote('');
     setWords((await readWordListWords(list.id)).join('\n'));
   }
 
   async function save() {
     setBusy(true);
-    const res = await saveWordList(editing === 'new' ? null : editing, name, words);
+    const res = await saveWordList(editing === 'new' ? null : editing, name, words, {
+      clue,
+      spangram,
+      from,
+      until,
+    });
     setBusy(false);
     if (!res.ok) {
       setNote(res.reason ?? 'That did not work');
@@ -103,6 +123,11 @@ export default function AdminWordLists() {
                   {list.words} {list.words === 1 ? 'word' : 'words'}
                   {list.lengths.length > 0 && ` · ${list.lengths.join(', ')} letters`}
                 </p>
+                {list.daily_from && list.daily_until && (
+                  <p className="text-xs text-accent">
+                    Themes the dailies {list.daily_from} to {list.daily_until}
+                  </p>
+                )}
               </div>
               <div className="flex gap-2">
                 <button className={BUTTON} onClick={() => void open(list)}>
@@ -145,6 +170,66 @@ export default function AdminWordLists() {
               onChange={(e) => setWords(e.target.value)}
             />
           </label>
+          {/* Everything above is enough for a themed round inside a session.
+              Everything below is only for taking over the daily puzzles, which
+              most lists never do — hence the heading rather than four more
+              fields with no explanation. */}
+          <div className="rounded-lg border border-white/15 p-3 space-y-3">
+            <p className="text-xs uppercase tracking-wider text-slate-500">
+              Take over the dailies (optional)
+            </p>
+            <div className="flex flex-wrap gap-3">
+              <label className="flex flex-col gap-1 text-xs text-slate-400">
+                From
+                <input
+                  type="date"
+                  className={FIELD + ' w-auto'}
+                  value={from}
+                  onChange={(e) => setFrom(e.target.value)}
+                />
+              </label>
+              <label className="flex flex-col gap-1 text-xs text-slate-400">
+                Until
+                <input
+                  type="date"
+                  className={FIELD + ' w-auto'}
+                  value={until}
+                  onChange={(e) => setUntil(e.target.value)}
+                />
+              </label>
+            </div>
+            {/* Said here because it is the surprising part: the window is built
+                a fortnight ahead, so dates set the week before an event still
+                catch it, and dates set the day before do not. */}
+            <p className="text-xs text-slate-500">
+              Puzzles are generated a fortnight ahead, so set these at least two
+              weeks before the first day.
+            </p>
+            <label className="block">
+              <span className="text-xs text-slate-400">Clue for the Weave board</span>
+              <input
+                className={FIELD + ' mt-1'}
+                value={clue}
+                placeholder={name || 'What we all are'}
+                onChange={(e) => setClue(e.target.value)}
+              />
+            </label>
+            <label className="block">
+              <span className="text-xs text-slate-400">Spangram</span>
+              <span className="block text-xs text-slate-500 mt-0.5 mb-1">
+                The long answer threaded corner to corner — one word, 6 to 16
+                letters. Without one the list still picks the daily word, but
+                cannot build a Weave board.
+              </span>
+              <input
+                className={FIELD}
+                value={spangram}
+                placeholder="employeeowned"
+                onChange={(e) => setSpangram(e.target.value)}
+              />
+            </label>
+          </div>
+
           <div className="flex flex-wrap items-center gap-2">
             <button className={BUTTON} disabled={busy} onClick={() => void save()}>
               {busy ? 'Saving…' : 'Save list'}
