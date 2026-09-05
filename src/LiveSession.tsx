@@ -744,13 +744,29 @@ export default function LiveSession({ session, host }: { session: string; host: 
    *  other derived values because the poll below reads it. */
   const holding = !host && (justAnswered !== null || gameOver || outOfTime);
   // Stable, so WordGame's effects do not re-run on every render of this one.
-  const finishGame = useCallback(() => setGameOver(true), []);
   const [board, setBoard] = useState<Leaderboard | null>(null);
   const [mine, setMine] = useState<{ points?: number; scored?: number } | null>(null);
   const [first, setFirst] = useState<{ name?: string | null; seconds?: number | null } | null>(
     null
   );
   const itemId = useRef<string | undefined>(undefined);
+
+  /** Just the standing, without serving anything. `pull` cannot be used here:
+   *  in open mode reading the current item is what hands out the next question
+   *  and starts its clock, which is the last thing to do to somebody who is
+   *  still reading the last one. */
+  const refreshStanding = useCallback(async () => {
+    if (host) return;
+    const m = await readMyStanding(session);
+    setMine(m.ok ? m : null);
+  }, [session, host]);
+
+  /** A finished board is an answered question, and the same reasoning applies:
+   *  they have watched it be marked, so the total below it should include it. */
+  const finishGame = useCallback(() => {
+    setGameOver(true);
+    void refreshStanding();
+  }, [refreshStanding]);
 
   const pull = useCallback(async () => {
     // The presenter's header comes back on the same beat as the item, inside
@@ -906,6 +922,16 @@ export default function LiveSession({ session, host }: { session: string; host: 
     // question stays on screen until they choose to move on.
     if (res.ok && item.mode === 'open') {
       setJustAnswered({ ...item, state: 'revealed', mine: value, answer: res.answer });
+      // The standing, once, on the way into the held screen.
+      //
+      // The poll stops while somebody is looking at how they did, so without
+      // this the total below the answer is the one from before the question
+      // they are looking at — while the "of" beside it already counts that
+      // question, because a question counts once it has been put in front of
+      // anybody. So it read as though the answer they can see marked in front
+      // of them had not been counted. There is nothing to protect: they have
+      // just been shown whether they got it right.
+      void refreshStanding();
       return;
     }
     if (res.ok) void pull();

@@ -166,6 +166,66 @@ select pg_temp.check('and it is on the board',
      (public.session_leaderboard(((select v->>'id' from t where k='sess'))::uuid))->'standings') e
    where e->>'name' = 'Ada') = 1);
 
+-- ---------------------------------------------------------------------------
+-- A board survives being played
+--
+-- Reported from a session: the word game "expired after one wrong guess". The
+-- clock had nothing to do with it. Every other kind answers once, so open mode
+-- read "has a row in responses" as "this one is behind them" — and a word game
+-- writes a row per guess, which is how a half-played board survives a reload.
+-- So the five-second poll served the next question instead, and the board went
+-- away mid-round.
+-- ---------------------------------------------------------------------------
+set session "test.uid" = '11111111-1111-1111-1111-111111111111';
+insert into t select 'open', public.create_session('Played at their own pace', 'strict', 'open', true);
+insert into t select 'og', public.save_item(
+  ((select v->>'id' from t where k='open'))::uuid, null, 'game', 'Guess the word',
+  '{"slug":"guess","tries":6}'::jsonb, '{"word":"OWNERS"}'::jsonb);
+insert into t select 'after', public.save_item(
+  ((select v->>'id' from t where k='open'))::uuid, null, 'survey', 'And afterwards?',
+  '{"options":["yes","no"]}'::jsonb, null);
+select public.advance_session(((select v->>'id' from t where k='open'))::uuid, 'start');
+insert into public.words (word, len, sorted) values ('planet', 6, 'aelnpt')
+on conflict do nothing;
+
+set session "test.uid" = '33333333-3333-3333-3333-333333333333';
+select pg_temp.check('the board is what gets served first',
+  (public.current_item(((select v->>'id' from t where k='open'))::uuid)->>'prompt')
+    = 'Guess the word');
+select pg_temp.check('a wrong guess is taken',
+  (public.guess_word(((select v->>'id' from t where k='og'))::uuid, 'planet')->>'ok') = 'true');
+-- The check that would have caught it.
+select pg_temp.check('and the board is still the question in front of them',
+  (public.current_item(((select v->>'id' from t where k='open'))::uuid)->>'prompt')
+    = 'Guess the word');
+select pg_temp.check('and it still counts as the one they are on, not one behind',
+  (public.current_item(((select v->>'id' from t where k='open'))::uuid)->>'done')::int = 0);
+
+select public.guess_word(((select v->>'id' from t where k='og'))::uuid, 'owners');
+select pg_temp.check('solving it does move them on',
+  (public.current_item(((select v->>'id' from t where k='open'))::uuid)->>'prompt')
+    = 'And afterwards?');
+
+-- Running out of guesses is the other way a board finishes.
+set session "test.uid" = '11111111-1111-1111-1111-111111111111';
+insert into t select 'open2', public.create_session('Out of guesses', 'strict', 'open', true);
+insert into t select 'og2', public.save_item(
+  ((select v->>'id' from t where k='open2'))::uuid, null, 'game', 'Guess again',
+  '{"slug":"guess","tries":2}'::jsonb, '{"word":"OWNERS"}'::jsonb);
+insert into t select 'after2', public.save_item(
+  ((select v->>'id' from t where k='open2'))::uuid, null, 'survey', 'Done?',
+  '{"options":["yes"]}'::jsonb, null);
+select public.advance_session(((select v->>'id' from t where k='open2'))::uuid, 'start');
+set session "test.uid" = '33333333-3333-3333-3333-333333333333';
+select public.current_item(((select v->>'id' from t where k='open2'))::uuid);
+select public.guess_word(((select v->>'id' from t where k='og2'))::uuid, 'planet');
+select pg_temp.check('one of two guesses leaves them on the board',
+  (public.current_item(((select v->>'id' from t where k='open2'))::uuid)->>'prompt')
+    = 'Guess again');
+select public.guess_word(((select v->>'id' from t where k='og2'))::uuid, 'planet');
+select pg_temp.check('and running out of them moves them on',
+  (public.current_item(((select v->>'id' from t where k='open2'))::uuid)->>'prompt') = 'Done?');
+
 set session "test.uid" = '';
 select pg_temp.check('anon may not guess',
   not has_function_privilege('anon', 'public.guess_word(uuid, text)', 'execute'));
