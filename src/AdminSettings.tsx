@@ -14,6 +14,7 @@ import { refreshSettings } from '@/settings';
 import { pathOf } from '@/routes';
 import AdminPeople from '@/AdminPeople';
 import AdminWordLists from '@/AdminWordLists';
+import AdminFeatures from '@/AdminFeatures';
 
 const FIELD =
   'w-full rounded-lg bg-white/5 border border-white/15 px-3 py-2 text-sm text-slate-100 ' +
@@ -192,6 +193,10 @@ export default function AdminSettings() {
           outlive any one of them: a themed list is written once and drawn from
           by rounds for a month. Gated on games.setup, so an editor who can
           build a session can write the words it draws from. */}
+      <div className="mt-10">
+        <AdminFeatures />
+      </div>
+
       <div className="mt-10">
         <AdminWordLists />
       </div>

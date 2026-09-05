@@ -1108,6 +1108,41 @@ A headless synthetic pointer does not drop a capture the way a hand on a real
 browser does, and the capture version passes all three. They are guards against
 the behaviour returning, not proof of the diagnosis.
 
+### What is on offer, and from when
+
+`/admin` carries a switch for every game, every way of playing and every
+difficulty, each with an optional window. Everything is on unless somebody says
+otherwise: the table stores only the **exceptions**, so an empty one is the
+ordinary state, a fresh deployment is complete without switching anything on,
+and turning something back on deletes its row rather than storing "on".
+
+Two reasons it exists. A game that is not ready is better hidden than explained,
+and a game a week is a reason to come back — the window is for the second, the
+switch for the first, and most of these will only ever be switched.
+
+**Switched off means gone from the menu *and* refused at its own address.** That
+is the difference between this and the per-user hiding in `storage.ts`: hiding a
+game is a preference, so `visibleModes` falls back to showing everything if
+somebody hid the lot, and a link can drag a hidden game back for one visit.
+Neither applies here. A deployment's decision is not negotiable from the
+browser, or switching a game off would mean nothing to anybody holding a
+bookmark.
+
+It is still only the client's half, and worth saying plainly: **this is not a
+security boundary.** A switched-off game's daily is still in the feed and its
+RPCs still answer. What it decides is what the deployment is *offering*, which
+is a presentation question. Treating it as protection would be the wrong kind of
+confidence.
+
+The vocabulary — `game:hive`, `view:solve`, `difficulty:extreme` — is keyed by
+**slug**, not by mode. They are different words for eight of the ten games (hive
+is `bee` internally, guess is `pattern`, scramble is `descramble`), and the slug
+is what the address bar and the admin page both use. Getting that wrong is how
+the first version of this filtered nothing while looking correct. The list of
+what exists stays in `src/games.ts`; the database validates a shape and stores
+whatever it is handed, because a copy of the game list in SQL would be a copy to
+keep in step.
+
 ### Word lists of your own
 
 The dictionary in `public.words` is the English language — the right source for

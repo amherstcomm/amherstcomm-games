@@ -2,6 +2,7 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import App from './App.tsx';
 import { refreshSettings, setting } from '@/settings';
+import { refreshAvailability } from '@/availability';
 import { wireOfficeZone } from '@/schedule';
 import './index.css';
 
@@ -15,6 +16,7 @@ wireOfficeZone(() => setting('office_zone'));
 // rare flicker for a guaranteed wait, and for a white screen whenever the
 // database is the thing that is down.
 void refreshSettings();
+void refreshAvailability();
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

@@ -7,6 +7,7 @@ import AccountModal from '@/AccountModal';
 import { stashInvite } from '@/friends';
 import { OskContext } from '@/MobileKeyInput';
 import { KeySinkContext, type KeySink } from '@/keySink';
+import { isOffered, offered, useUnavailable } from '@/availability';
 import SettingsModal from '@/SettingsModal';
 import KeyboardHelp from '@/KeyboardHelp';
 import { colorWords, PALETTES, PaletteContext, resolveTheme, TEXT_SCALES, THEME_MODES, useTheme, type Palette, type TextScale, type ThemeMode } from '@/theme';
@@ -898,15 +899,44 @@ function App() {
   // for this visit: dropping someone on the wrong page because of a setting
   // they made months ago is worse than showing them one game they'd switched
   // off. It doesn't unhide anything — the setting is untouched.
+  // Two layers, and they are not the same kind of thing. `hidden*` is what this
+  // person chose not to see and can choose again; `unavailable` is what the
+  // deployment is not offering, which a preference cannot overrule — so the
+  // link-mode exception below, which drags a hidden game back for the length of
+  // one visit, does not apply to it.
+  const unavailable = useUnavailable();
+  /** The games still on offer, by mode — the switches are named by slug. */
+  const offeredModes = (off: string[]) =>
+    ALL_MODES.filter((m) => offered(off, 'game', [MODE_SLUG[m]]).length > 0);
+
+  // A game switched off is gone from the menu *and* refused at its own address.
+  // Hiding it from the menu alone would leave it playable to anybody who had
+  // bookmarked it, which is not what switching a game off means — and during an
+  // event the whole point is that a game not ready yet is not reachable.
+  //
+  // The first game still on is where it lands, rather than a dead end: whoever
+  // followed the link wanted to play something.
+  useEffect(() => {
+    // Keyed by *slug*, not by mode. They are different words for eight of the
+    // ten games — hive is `bee` internally, guess is `pattern`, scramble is
+    // `descramble` — and the slug is the one the address bar and the admin page
+    // both use, so it is the one the switch is named after.
+    if (isOffered(`game:${MODE_SLUG[mode]}`)) return;
+    const first = offeredModes(unavailable)[0];
+    if (first) setMode(first);
+  }, [mode, unavailable]);
+
   const shownModes = useMemo(() => {
     const vis = visibleModes(hiddenModes);
-    return ALL_MODES.filter((m) => vis.includes(m) || m === linkMode);
-  }, [hiddenModes]);
+    return offeredModes(unavailable).filter((m) => vis.includes(m) || m === linkMode);
+  }, [hiddenModes, unavailable]);
 
   const shownViews = useMemo(() => {
     const vis = visibleViews(hiddenViews);
-    return ALL_VIEWS.filter((v) => vis.includes(v) || v === entryGame()?.view);
-  }, [hiddenViews]);
+    return offered(unavailable, 'view', ALL_VIEWS).filter(
+      (v) => vis.includes(v) || v === entryGame()?.view
+    );
+  }, [hiddenViews, unavailable]);
 
   const playFlags: Record<Mode, [boolean, (v: boolean) => void]> = {
     pattern: [patternPlay, setPatternPlay],
