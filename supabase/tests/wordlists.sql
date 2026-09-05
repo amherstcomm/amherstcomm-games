@@ -271,18 +271,4 @@ select pg_temp.check('and no web role may',
   not has_function_privilege('authenticated', 'public.daily_theme(date)', 'execute')
   and not has_function_privilege('anon', 'public.daily_theme(date)', 'execute'));
 
--- How many of them could actually be a daily, which is fewer and is worth
--- saying: a daily is validated against the dictionary that ships with the
--- client, so a themed word it has never heard of makes an unanswerable day.
-insert into public.words (word, len, sorted) values ('dividend', 8, 'dddeiinv')
-on conflict do nothing;
-select pg_temp.check('the sheet says how many the dictionary knows',
-  (select (e->>'dictionary')::int from jsonb_array_elements(
-     public.word_lists_sheet()->'lists') e
-   where e->>'name' = 'Anniversary week') = 1);
-select pg_temp.check('which is fewer than the list holds',
-  (select (e->>'dictionary')::int < (e->>'words')::int from jsonb_array_elements(
-     public.word_lists_sheet()->'lists') e
-   where e->>'name' = 'Anniversary week'));
-
 \echo '--- word list checks passed ---'

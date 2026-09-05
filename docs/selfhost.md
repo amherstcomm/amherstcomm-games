@@ -1160,14 +1160,23 @@ A list with **dates** on it themes the daily puzzles for those days. Two of the
 ten games can take a plain word list, and they are the two this touches:
 
 - **The daily word.** Per length, the pool narrows to the theme's own words —
-  but only the ones the pool already allowed, which is the whole safety of it. A
-  daily answer has to be typeable, and the board validates against the
-  dictionary bundled with the client, so a themed word it has never heard of
-  would be an unanswerable day. ESOP is a fine answer inside a session, where
-  the server marks and the round's list is allowed on top of the language; it is
-  not a fine answer for a daily. The admin page says how many of a list's words
-  the dictionary knows, because that number is usually smaller than the list and
-  explains why a short list themes fewer boards than expected.
+  **including ones no dictionary carries**. That is the point rather than an
+  edge case: ESOP, the name of the building, the thing only this company says.
+  Being absent from a dictionary is what makes a word the company's.
+
+  For that to work the day ships its own words beside the answer and the board
+  accepts them alongside the dictionary. Nothing is revealed by carrying them —
+  the answers themselves already ship in the same payload, base64'd against a
+  casual glance rather than as a secret, because it is a client-side game and
+  the board on your machine has always known what it wants you to type.
+
+  **Reversal, and it was wrong for about an hour.** The first version
+  intersected the theme with the day's ordinary pool, so a themed word the
+  dictionary had never heard of was silently dropped and ESOP could be an answer
+  inside a session but not a daily. Backwards, and the fix was the board rather
+  than the list. The one thing still applied is the blocklist: a curated list is
+  somebody's paste, and never handing anybody a slur as an answer is not a rule
+  to relax because the words came from inside the building.
 - **Weave**, whose whole premise is a themed word set — the list becomes the
   theme, so the board spells out the event's own words. It needs a **clue** (the
   list's name by default) and a **spangram**: one word of 6 to 16 letters,

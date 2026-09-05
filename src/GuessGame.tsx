@@ -29,6 +29,7 @@ import { usePalette } from '@/theme';
 import { recordGuessFinish } from '@/stats';
 import { formatElapsed, useUpTimer } from '@/useUpTimer';
 import { store as siteStore } from '@/siteStorage';
+import { acceptedAt, themedWords } from '@/themedWords';
 
 export type LetterState = 'correct' | 'present' | 'absent';
 export type GuessGameHandle = { pressKey: (k: string) => void };
@@ -180,6 +181,7 @@ const GuessGame = forwardRef<
         const d = { ...raw, ...chosen.board };
         if (typeof d?.date !== 'string' || typeof d?.words !== 'object') throw new Error('bad payload');
         setDailyData({ date: d.date, words: d.words });
+        setThemed(themedWords(d));
         // a new day resets all daily boards; same-day boards whose answer no
         // longer matches the feed (e.g. the daily source changed) reset too
         setStore((prev) => {
@@ -204,12 +206,20 @@ const GuessGame = forwardRef<
   }, [difficultyTick]);
 
   const commonSet = useMemo(() => (commonWords ? new Set(commonWords) : null), [commonWords]);
-  const fullSetForLen = useMemo(
-    () => (fullWords ? new Set(fullWords.filter((w) => w.length === length)) : null),
-    [fullWords, length]
-  );
+
+  // Only the daily has a theme. Practice draws from the dictionary, so letting
+  // these through there would accept words with no board to be the answer of.
+  const [themed, setThemed] = useState<string[]>([]);
 
   const dailyMode = store.dailyMode;
+  // The dictionary, plus whatever a themed day brought with it. During an
+  // event the answer can be a word the dictionary has never heard of, and a
+  // board that will not let you type its own answer is an unanswerable day.
+  const fullSetForLen = useMemo(
+    () => acceptedAt(fullWords, dailyMode ? themed : [], length),
+    [fullWords, themed, dailyMode, length]
+  );
+
   const lenKey = String(length);
 
   function pickPracticeWord(): string | null {

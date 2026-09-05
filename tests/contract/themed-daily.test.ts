@@ -17,15 +17,15 @@ const run = promisify(execFile);
 
 const DATE = '2026-10-08';
 
-/** A theme shaped like one somebody would write for an event month. The words
- *  are deliberately ordinary — the intersection only keeps words the daily
- *  pools already allow, so a list of invented ones would theme nothing and the
- *  test would pass for the wrong reason. */
+/** A theme shaped like one somebody would write for an event month — ordinary
+ *  words, and `esop`, which no dictionary carries and which the whole point of
+ *  this is to allow. */
 const THEME = {
   name: 'Employee ownership',
   clue: 'What we all are',
   spangram: 'employeeowned',
   words: [
+    'esop',
     'shares', 'dividend', 'owner', 'equity', 'buyout', 'vesting', 'stake', 'payout',
     'profit', 'capital', 'shared', 'invest', 'earned', 'worker', 'stock', 'value',
     'trustee', 'voting', 'growth', 'reward',
@@ -90,9 +90,27 @@ describe('the daily word', () => {
     }
   });
 
-  // The safety of the whole thing. A daily answer has to be typeable, and the
-  // board validates against the dictionary that shipped with the client — so a
-  // themed answer is only ever a word the ordinary pool already allowed.
+  // The reversal, and the reason the payload grew a field. A themed answer no
+  // longer has to be in the dictionary — the words an event most wants are
+  // exactly the ones a dictionary does not carry — so the day ships its own
+  // words and the board accepts them. Without that the answer would be
+  // untypeable, which is worse than not theming at all.
+  it('and the day carries the words the board must accept', async () => {
+    const payload = await read(themed, 'daily-words.json');
+    expect(typeof payload.themed).toBe('string');
+    const carried = Buffer.from(payload.themed, 'base64').toString().split(' ');
+    expect(carried).toContain('esop');
+    // Every answer it chose is in there, which is the property that makes the
+    // day playable rather than merely themed.
+    for (const word of Object.values(words(payload, 'easy'))) {
+      if (THEME.words.includes(word)) expect(carried).toContain(word);
+    }
+  });
+
+  it('and an ordinary day carries none', async () => {
+    expect((await read(plain, 'daily-words.json')).themed).toBeUndefined();
+  });
+
   it('and every themed answer is the right length for its board', async () => {
     const got = words(await read(themed, 'daily-words.json'), 'easy');
     for (const [len, word] of Object.entries(got)) {

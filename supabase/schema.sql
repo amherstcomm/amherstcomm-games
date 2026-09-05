@@ -5053,15 +5053,13 @@ as $fn$
                 'id', l.id,
                 'name', l.name,
                 'words', (select count(*) from public.word_list_entries e where e.list_id = l.id),
-                -- How many could be a *daily* answer, which is fewer and is
-                -- worth saying. A daily is validated against the dictionary
-                -- that ships with the client, so a themed word it has never
-                -- heard of makes an unanswerable day and is left out. Inside a
-                -- session the same word is fine, because the server marks and
-                -- the round's own list is allowed on top of the language.
-                'dictionary', (select count(*) from public.word_list_entries e
-                               join public.words w on w.word = e.word
-                               where e.list_id = l.id),
+                -- There was a 'dictionary' count here, for how many of a
+                -- list's words the bundled dictionary knew. It existed because
+                -- a daily answer had to be in it, and that stopped being true:
+                -- a themed day ships its own words and the board accepts them,
+                -- so ESOP is as good an answer as SHARES. Removed rather than
+                -- left, because a number nothing depends on is a number
+                -- somebody will make a decision on.
                 'clue', l.clue,
                 'spangram', l.spangram,
                 'daily_from', l.daily_from,

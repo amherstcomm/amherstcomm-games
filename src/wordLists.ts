@@ -14,10 +14,6 @@ export type WordList = {
   id: string;
   name: string;
   words: number;
-  /** how many of them could be a *daily* answer — fewer, because a daily is
-   *  validated against the dictionary bundled with the client and a themed
-   *  word it has never heard of would make an unanswerable day */
-  dictionary: number;
   /** the Weave clue, and its long corner-to-corner answer */
   clue: string | null;
   spangram: string | null;

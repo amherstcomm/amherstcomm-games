@@ -473,7 +473,7 @@ for (const variant of ['', 'dev']) {
       // intersection rather than the theme alone. Per length, so a list with no
       // seven-letter words still themes the other boards, and empty falls
       // straight back to the day the site would have had anyway.
-      const themed = themedPool(pool, theme?.words, len);
+      const themed = themedPool(theme?.words, len, blockedFromAnswers);
       if (themed.length > 0) pool = themed;
       words[len] = Buffer.from(pool[Math.floor(rng() * pool.length)]).toString('base64');
     }
@@ -488,6 +488,16 @@ for (const variant of ['', 'dev']) {
       {
         date: etDate,
         byDifficulty: guessByDifficulty,
+        // The theme's own words, for the board to accept alongside the
+        // dictionary. Without this a themed answer the dictionary has never
+        // heard of cannot be typed, which makes it an unanswerable day — and
+        // the words an event most wants are exactly the ones a dictionary does
+        // not carry. Base64 for the same reason the answers are: to keep them
+        // out of a casual glance at the file, not to hide them, since the
+        // answers themselves already ship here.
+        ...(theme
+          ? { themed: Buffer.from(theme.words.join(' ')).toString('base64') }
+          : {}),
         fetchedAt: stamp,
       },
       null,

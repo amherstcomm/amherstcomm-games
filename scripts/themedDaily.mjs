@@ -68,23 +68,31 @@ export function normaliseTheme(raw) {
   };
 }
 
-/** The themed words of one length that the day's pool would also have allowed.
+/** The theme's own words of one length, ready to be a daily answer.
  *
- *  The intersection, and it is the whole safety of this. A daily answer has to
- *  be a word the player can type, and the board validates against the
- *  dictionary that shipped with the client — so a themed word the dictionary
- *  has never heard of is an unanswerable day. ESOP is a fine answer inside a
- *  session, where the server marks and the round's own list is allowed on top;
- *  it is not a fine answer for a daily.
+ *  Reversal, and the one that matters. This used to intersect with the day's
+ *  ordinary pool, so a themed word the bundled dictionary had never heard of
+ *  was dropped — ESOP could be the answer inside a session but not a daily.
+ *  That was the wrong way round: the words an event most wants are exactly the
+ *  ones a dictionary does not carry, which is what makes them the company's.
+ *
+ *  The board is what changed, not this. A themed day now ships its own words
+ *  alongside the answer and the board accepts them, so being in the dictionary
+ *  stopped being the test. What is still applied is the blocklist — a curated
+ *  list is somebody's paste, and never handing anybody a slur as an answer is
+ *  not a rule to relax because the words came from inside the building.
  *
  *  Empty means this length has nothing themed to offer, and the caller falls
- *  back to the ordinary pool for it. That is per length rather than per day, so
- *  a list with no seven-letter words still themes the other twelve boards.
+ *  back to the ordinary pool for it: per length, so a list with no seven-letter
+ *  words still themes the other twelve boards.
  */
-export function themedPool(pool, themeWords, length) {
+export function themedPool(themeWords, length, blocked) {
   if (!themeWords || themeWords.length === 0) return [];
-  const allowed = new Set(pool);
-  return themeWords.filter((w) => w.length === length && allowed.has(w)).sort();
+  return themeWords
+    .filter((w) => w.length === length && !(blocked && blocked.has(w)))
+    // Sorted because the daily draws by index: an unsorted pool would make the
+    // same seed pick different words for no reason anybody could see.
+    .sort();
 }
 
 /** The theme as Weave wants it: a clue, a spangram, and members of 4 to 10
