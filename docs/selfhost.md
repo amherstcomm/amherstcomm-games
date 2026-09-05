@@ -1255,6 +1255,24 @@ takes the first that tiles. One theme on one date is a theme for that date; six
 across October is a month that does not repeat itself. Put the same date in both
 fields for a single day, and leave both empty for a theme kept but not scheduled.
 
+#### Pasting a month at once
+
+Both panels take a blob. The case is thirty-one themes written somewhere else —
+a spreadsheet, a model, somebody's notes — where typing them into a form one at
+a time is what stops it happening.
+
+Tolerant about shape and strict about reporting, which are two different jobs.
+It accepts `theme` or `clue`, words as an array or as a line of text, and
+**ignores the fields that are arithmetic rather than data** — `word_count`,
+`total_letters`, `spangram_length` — because a hand-edited blob is exactly where
+those go stale. A date it cannot read plainly is left off rather than guessed at:
+a date read wrong is a theme that appears in the wrong week.
+
+What it will not do is lose one quietly. Every entry it cannot use comes back
+with its position and a reason before anything is saved, and the preview shows
+each theme with **which boards it fills** — a theme that fills none imports
+perfectly and then never appears, which is the worst way to find out.
+
 #### The calculator, and why there is one
 
 Weave fills the whole grid. The words have to sum **exactly** to the cells the

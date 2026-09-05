@@ -18,6 +18,8 @@ import {
   type WeaveTheme,
 } from '@/weaveThemes';
 import { BOARD_CELLS, fitsBoards } from '@/weaveFit';
+import ImportBox from '@/ImportBox';
+import { parseWeaveThemes, type ParsedTheme } from '@/importing';
 
 const FIELD =
   'w-full rounded-lg bg-white/5 border border-white/15 px-3 py-2 text-sm text-slate-100 ' +
@@ -194,9 +196,45 @@ export default function AdminWeaveThemes() {
           )}
 
           {editing === null ? (
-            <button className={BUTTON} onClick={startNew}>
-              New theme
-            </button>
+            <div className="flex flex-wrap gap-2">
+              <button className={BUTTON} onClick={startNew}>
+                New theme
+              </button>
+              {/* A month at a time, which is the case this is for: thirty-one
+                  themes written somewhere else and typed in one at a time is
+                  what stops it happening. */}
+              <ImportBox<ParsedTheme>
+                label="Paste themes"
+                placeholder={
+                  '[{ "theme": "Profit sharing", "spangram": "profitsharing",\n' +
+                  '   "words": ["metrics","payout","reward","target","bonus","split"],\n' +
+                  '   "starts_on": "2026-10-01", "ends_on": "2026-10-01" }]'
+                }
+                parse={parseWeaveThemes}
+                describe={(t) => {
+                  // The fit, in the preview, because a theme that fills no board
+                  // imports perfectly and then never appears.
+                  const fits = Object.entries(fitsBoards(t.spangram, t.words))
+                    .filter(([, f]) => f.fits)
+                    .map(([tier]) => tier);
+                  const when = t.from ? ` · ${t.from}${t.until && t.until !== t.from ? `–${t.until}` : ''}` : '';
+                  return `${t.clue} (${t.spangram}, ${t.words.length} words)${when} — ${
+                    fits.length > 0 ? `fills ${fits.join(', ')}` : 'fills no board'
+                  }`;
+                }}
+                save={(t) =>
+                  saveWeaveTheme({
+                    id: null,
+                    clue: t.clue,
+                    spangram: t.spangram,
+                    words: t.words.join(' '),
+                    from: t.from,
+                    until: t.until,
+                  })
+                }
+                onDone={() => void pull()}
+              />
+            </div>
           ) : (
             <div className="rounded-xl border border-white/15 p-4 space-y-3">
               <label className="block">
