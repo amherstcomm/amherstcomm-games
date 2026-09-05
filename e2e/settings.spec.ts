@@ -225,3 +225,76 @@ test('and the last-administrator refusal is shown against the person it is about
   await page.getByRole('combobox', { name: /What Ray may do/ }).selectOption('games.edit');
   await expect(page.getByText(/last administrator/)).toBeVisible();
 });
+
+// ---------------------------------------------------------------------------
+// Word lists
+//
+// A textarea, because that is what a list of words is. What is worth asserting
+// is that whatever gets pasted goes to the server as typed — the splitting and
+// dropping happen there, on purpose, so the page and the server cannot disagree
+// about what counts as a word — and that the count that comes back is what gets
+// shown, rather than the number of lines the person typed.
+// ---------------------------------------------------------------------------
+
+const LISTS = {
+  ok: true,
+  lists: [
+    {
+      id: 'l1',
+      name: 'Employee ownership',
+      words: 8,
+      lengths: [4, 5, 6, 7, 8],
+      created_at: '2026-09-01T00:00:00Z',
+    },
+  ],
+};
+
+test('a word list can be written by pasting whatever comes to hand', async ({ page }) => {
+  const sent: Record<string, string>[] = [];
+  await page.route('**/rest/v1/rpc/**', (route) => {
+    const url = route.request().url();
+    if (url.includes('save_word_list')) {
+      sent.push(JSON.parse(route.request().postData() ?? '{}'));
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        // Six typed, five kept: "a" is too short to be a word.
+        body: JSON.stringify({ ok: true, id: 'l2', words: 5 }),
+      });
+    }
+    const body = url.includes('site_settings_sheet')
+      ? SETTINGS
+      : url.includes('word_lists_sheet')
+        ? LISTS
+        : url.includes('people_with_roles')
+          ? PEOPLE
+          : [];
+    return route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(body),
+    });
+  });
+  await page.goto('/admin');
+
+  await expect(page.getByText('Employee ownership')).toBeVisible();
+  // The sizes it can fill a board with, because that is what picking one for a
+  // round turns on.
+  await expect(page.getByText(/8 words · 4, 5, 6, 7, 8 letters/)).toBeVisible();
+
+  await page.getByRole('button', { name: 'New list' }).click();
+  // Exact, because a settings field above has the word "name" in its own
+  // description and so answers to the same label.
+  await page.getByLabel('Name', { exact: true }).fill('Telecom');
+  await page.getByLabel(/^Words/).fill('fibre, splice\nconduit\na\nrouter switch');
+
+  await page.getByRole('button', { name: 'Save list' }).click();
+  await expect.poll(() => sent.length).toBe(1);
+  // Sent as typed. Splitting on anything that is not a letter is the server's
+  // job, and doing it twice is how the two come to disagree.
+  expect(sent[0].p_words).toBe('fibre, splice\nconduit\na\nrouter switch');
+  expect(sent[0].p_name).toBe('Telecom');
+
+  // What landed, not what was typed.
+  await expect(page.getByText('Saved — 5 words.')).toBeVisible();
+});

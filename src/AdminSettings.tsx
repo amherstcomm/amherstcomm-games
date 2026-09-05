@@ -13,6 +13,7 @@ import { readSiteSettings, setSiteSetting, type SettingRow } from '@/settingsAdm
 import { refreshSettings } from '@/settings';
 import { pathOf } from '@/routes';
 import AdminPeople from '@/AdminPeople';
+import AdminWordLists from '@/AdminWordLists';
 
 const FIELD =
   'w-full rounded-lg bg-white/5 border border-white/15 px-3 py-2 text-sm text-slate-100 ' +
@@ -187,6 +188,14 @@ export default function AdminSettings() {
           buys nothing. It draws itself, including its own refusal — the two
           halves are gated on different capabilities (site.settings and
           users.manage) and a deployment is free to hand them out separately. */}
+      {/* Word lists sit here rather than with the sessions because they
+          outlive any one of them: a themed list is written once and drawn from
+          by rounds for a month. Gated on games.setup, so an editor who can
+          build a session can write the words it draws from. */}
+      <div className="mt-10">
+        <AdminWordLists />
+      </div>
+
       <div className="mt-10">
         <AdminPeople />
       </div>
