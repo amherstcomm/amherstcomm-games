@@ -818,3 +818,101 @@ test('the total under a marked answer counts that answer', async ({ page }) => {
   // hands out the next question and starts its clock.
   expect(served, 'the next question was served while they were still reading').toBe(before);
 });
+
+// ---------------------------------------------------------------------------
+// Ranking by dragging
+//
+// The arithmetic is tests/unit/ranking.test.ts. What only a browser can say is
+// whether a real pointer sequence actually moves the row — the gesture depends
+// on pointer capture, on the rows being measured as they reorder underneath,
+// and on `touch-action: none`, none of which a unit test exercises.
+// ---------------------------------------------------------------------------
+
+async function ranking(page: import('@playwright/test').Page, sent: unknown[]) {
+  await page.route('**/rest/v1/rpc/**', (route) => {
+    const url = route.request().url();
+    if (url.includes('answer_item')) {
+      sent.push(JSON.parse(route.request().postData() ?? '{}'));
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ ok: true, answer: { order: ['a', 'b', 'c'] } }),
+      });
+    }
+    const body = url.includes('current_item')
+      ? {
+          state: 'open',
+          mode: 'live',
+          id: 'q1',
+          position: 1,
+          opened_at: new Date().toISOString(),
+          seconds: null,
+          now: new Date().toISOString(),
+          mine: null,
+          answer: null,
+          ...ITEMS.rank,
+        }
+      : url.includes('my_standing')
+        ? { ok: true, points: 0, scored: 0 }
+        : {};
+    return route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(body),
+    });
+  });
+  await page.goto(`/live/${SESSION}`);
+  await expect(page.getByRole('listitem').filter({ hasText: 'a' }).first()).toBeVisible();
+}
+
+/** The options in the order they are drawn. */
+const shown = (page: import('@playwright/test').Page) =>
+  page.locator('ol > li').evaluateAll((els) =>
+    els.map((el) => el.textContent?.replace(/[^abc]/g, '') ?? '')
+  );
+
+test('an option can be dragged into a different place', async ({ page }) => {
+  const sent: Record<string, unknown>[] = [];
+  await ranking(page, sent);
+  expect(await shown(page)).toEqual(['a', 'b', 'c']);
+
+  const first = page.locator('li').filter({ has: page.locator('[data-grip]') }).first();
+  const last = page.locator('li').filter({ has: page.locator('[data-grip]') }).last();
+  const grip = first.locator('[data-grip]');
+  const from = await grip.boundingBox();
+  const to = await last.boundingBox();
+  expect(from && to).toBeTruthy();
+
+  // A real gesture: press, move past the middle of each row in turn, release.
+  // One jump to the end would work too, but moving through the rows is what a
+  // finger does and is what exercises re-measuring as they reorder.
+  await page.mouse.move(from!.x + from!.width / 2, from!.y + from!.height / 2);
+  await page.mouse.down();
+  for (let y = from!.y; y <= to!.y + to!.height; y += 8) {
+    await page.mouse.move(from!.x + from!.width / 2, y);
+  }
+  await page.mouse.up();
+
+  // Moved, not swapped: the other two came up one each.
+  expect(await shown(page)).toEqual(['b', 'c', 'a']);
+
+  // The one thing a mouse cannot prove here. Without `touch-action: none` the
+  // browser claims the gesture for scrolling and the row never moves on a
+  // phone, which is where this question is actually answered — and the page
+  // would look perfect on a laptop.
+  await expect(grip).toHaveCSS('touch-action', 'none');
+
+  await page.getByRole('button', { name: 'Send order' }).click();
+  await expect.poll(() => sent.at(-1)?.p_value).toEqual(['b', 'c', 'a']);
+});
+
+// The drag is an addition, not a replacement: the arrows are how this question
+// is answered without a pointer at all, and they have to leave the same list.
+test('and the arrows still move it, to the same place', async ({ page }) => {
+  const sent: Record<string, unknown>[] = [];
+  await ranking(page, sent);
+  await page.getByRole('button', { name: 'Move a down' }).click();
+  expect(await shown(page)).toEqual(['b', 'a', 'c']);
+  await page.getByRole('button', { name: 'Move a down' }).click();
+  expect(await shown(page)).toEqual(['b', 'c', 'a']);
+});
