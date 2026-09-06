@@ -74,13 +74,19 @@ select pg_temp.check('a second difficulty is a second pin',
 -- ---------------------------------------------------------------------------
 -- What is refused
 -- ---------------------------------------------------------------------------
--- The two games with no themed shortlist: the grid is dice, and Squares draws
--- from a wider pool than a theme has. There is nothing to choose between.
+-- The one game with no themed shortlist: a grid is dice, so there is nothing
+-- to choose between.
 select pg_temp.check('the grid has nothing to pin',
   (public.pin_puzzle(date '2026-10-08', 'grid', null, '{"cells": []}'::jsonb)->>'reason')
     = 'grid has no themed candidates to choose between');
-select pg_temp.check('nor does Squares',
-  (public.pin_puzzle(date '2026-10-08', 'squares', null, '{}'::jsonb)->>'ok') = 'false');
+-- Squares was refused here too, and is not any more: a themed square is a
+-- theme word heading it, which happens often enough to curate. This check
+-- fails against the old function, which is the point of keeping it.
+select pg_temp.check('but a square can be pinned',
+  (public.pin_puzzle(date '2026-10-08', 'squares', 'easy',
+     '{"first": "vote", "rows": ["vote","area","tips","east"]}'::jsonb)->>'ok') = 'true');
+select pg_temp.check('and the generator is handed the board, not just the word',
+  public.daily_pins(date '2026-10-08')->'squares'->'easy'->>'first' = 'vote');
 select pg_temp.check('a difficulty that is not one is refused',
   (public.pin_puzzle(date '2026-10-08', 'boxed', 'medium', '{"from": []}'::jsonb)->>'reason')
     = 'a difficulty is easy, hard or extreme');
@@ -94,7 +100,7 @@ select pg_temp.check('and a pin with no date',
 -- The sheet, and unpinning
 -- ---------------------------------------------------------------------------
 select pg_temp.check('the page sees a range of them',
-  jsonb_array_length(public.pins_sheet(date '2026-10-01', date '2026-10-31')->'pins') = 3);
+  jsonb_array_length(public.pins_sheet(date '2026-10-01', date '2026-10-31')->'pins') = 4);
 select pg_temp.check('and not the ones outside it',
   jsonb_array_length(public.pins_sheet(date '2026-11-01', date '2026-11-30')->'pins') = 0);
 select pg_temp.check('a range cannot finish before it starts',

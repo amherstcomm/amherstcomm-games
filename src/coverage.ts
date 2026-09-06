@@ -11,7 +11,13 @@
 // the same dates. What is worked out here is what the generator will then *do*
 // with the answer, which is the part a browser can compute and a person cannot.
 import { supabase } from '@/supabase';
-import { boxesFrom, bridgesFrom, laddersFrom, LADDER_TIERS } from '@/themeCalculators';
+import {
+  boxesFrom,
+  bridgesFrom,
+  laddersFrom,
+  squareHeadedBy,
+  LADDER_TIERS,
+} from '@/themeCalculators';
 import { TIERS, tiersFor } from '@/cryptogramFit';
 import { BOARD_CELLS, fitsBoard } from '@/weaveFit';
 
@@ -77,6 +83,9 @@ export type DayYield = {
   ladders: string[] | null;
   /** theme words that could seed the day's hive */
   hives: number;
+  /** the square sizes one of the day's own words can head, or null while the
+   *  dictionary is still on its way */
+  squares: number[] | null;
   /** the board sizes at least one of the day's Weave themes tiles */
   tiles: string[];
   /** the cryptogram difficulties at least one of the day's passages can play */
@@ -90,6 +99,41 @@ export function tilesFor(themes: WeaveTheme[]): string[] {
   return Object.entries(BOARD_CELLS)
     .filter(([, cells]) => themes.some((t) => fitsBoard(t.spangram, t.words, cells).fits))
     .map(([tier]) => tier);
+}
+
+/** The square sizes the site builds: 4x4 for easy, 5x5 for hard and extreme.
+ *  Kept beside the measurement rather than imported from the generator because
+ *  the generator's copy is a node script; tests/unit/coverage.test.ts asserts
+ *  the two agree. */
+export const SQUARE_SIZES = [4, 5];
+
+/** How many of a day's words are tried per size before the answer is "no".
+ *
+ *  A word that cannot head a square costs about 70ms to rule out at 5x5
+ *  (measured: 120 misses in 8.2s against the easy pool), so an uncapped sweep
+ *  of a long list is seconds of held page for a question whose answer is
+ *  almost always decided by the first few words. A hit stops the search, so
+ *  this only bounds the misses — and the limit of the claim is that a size
+ *  reported as unreachable was unreachable *from these words*, which for a
+ *  themed list of the size anybody writes is all of them. */
+export const SQUARE_SEEDS = 24;
+
+/** Which square sizes one of these words can head.
+ *
+ *  Heading is the whole question: ten dictionary words will not contain a
+ *  theme word by accident, so a themed square is one whose top line is the
+ *  company's and whose rest is ordinary. Measured against a 448-word list, 22
+ *  of 23 four-letter words head a 4x4 and 12 of 20 five-letter words head a
+ *  5x5 — which is why this is per size rather than a yes for the day. */
+export function squaresFor(words: string[], dictionary?: string[]): number[] | null {
+  if (!dictionary) return null;
+  return SQUARE_SIZES.filter((n) => {
+    const seeds = words
+      .map((w) => w.trim().toLowerCase())
+      .filter((w) => w.length === n && /^[a-z]+$/.test(w))
+      .slice(0, SQUARE_SEEDS);
+    return seeds.some((seed) => squareHeadedBy(seed, n, dictionary) !== null);
+  });
 }
 
 /** What one day's words yield. Taken as words rather than as a day so the
@@ -117,6 +161,7 @@ export function yieldOf(words: string[], dictionary?: string[], rungs?: Set<stri
     boxes: boxes.length,
     shortest: boxes.length > 0 ? Math.min(...boxes.map((b) => b.par)) : null,
     bridges: bridgesFrom(words).length,
+    squares: squaresFor(words, dictionary),
   };
 }
 
@@ -157,6 +202,9 @@ export type Summary = {
    *  how few words it costs rather than whether it can be done at all */
   boxes: { days: number; shortest: number | null };
   bridges: { days: number };
+  /** days a theme word can head a square, and which sizes — null until the
+   *  dictionary arrives, for the same reason the ladder count is */
+  squares: { days: number | null; perSize: Record<number, number> };
   /** days whose theme could supply the board itself, not just bonus words */
   scramble: { days: number };
   hive: { days: number };
@@ -245,6 +293,14 @@ export function fold(days: CoverageDay[], yields: DayYield[]): Summary {
       })(),
     },
     bridges: { days: yields.filter((y) => y.bridges > 0).length },
+    squares: {
+      days: yields.every((y) => y.squares !== null)
+        ? yields.filter((y) => (y.squares ?? []).length > 0).length
+        : null,
+      perSize: Object.fromEntries(
+        SQUARE_SIZES.map((n) => [n, yields.filter((y) => (y.squares ?? []).includes(n)).length])
+      ),
+    },
     scramble: { days: yields.filter((y) => y.racks > 0).length },
     hive: { days: yields.filter((y) => y.hives > 0).length },
     ladder: {
@@ -319,8 +375,15 @@ export async function summariseSlowly(
   const seen = new Map<string, ReturnType<typeof yieldOf>>();
   const yields: DayYield[] = [];
   for (const day of days) {
+    // Fresh work or a memo hit, decided before the measurement rather than
+    // after: a day whose words have been measured costs nothing, and a day
+    // that has not can cost a second and a half on its own now that the square
+    // search runs here. So the slice is "SLICE days, or one day that actually
+    // worked" — a month of one list is still a handful of round trips, and a
+    // month of thirty-one lists hands the browser back between each.
+    const fresh = !seen.has((day.theme?.words ?? []).join(' '));
     yields.push(oneYield(day, dictionary, rungs, seen));
-    if (yields.length % SLICE === 0 && yields.length < days.length) {
+    if ((fresh || yields.length % SLICE === 0) && yields.length < days.length) {
       onProgress?.(yields.length, days.length);
       await pause();
     }

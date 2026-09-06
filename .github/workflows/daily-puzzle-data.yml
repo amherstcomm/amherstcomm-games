@@ -27,8 +27,15 @@ jobs:
       - run: npm ci --ignore-scripts
       - run: node scripts/fetch-puzzles.mjs
         env:
-          # the same salt the window publish uses, so today's files and
-          # today's rows are the same boards
+          # No database credentials here, and none possible: Supabase answers on
+          # the internal network and a hosted runner is not on it. So this run
+          # publishes the *unthemed* file feed, which is the fallback the client
+          # uses when the RPC does not answer.
+          #
+          # The themed puzzles come from the VM — ops/publish-puzzles.sh, whose
+          # rows the client reads first. A themed month lives there, not here,
+          # and a workflow that pretended otherwise would publish thirty-one
+          # ordinary days over the top of it.
           PUZZLES_SEED_SALT: ${{ secrets.PUZZLES_SEED_SALT }}
       - name: Publish a fortnight of rows to Postgres
         # rows for today through +13, behind an RPC that never serves past
@@ -36,6 +43,9 @@ jobs:
         # the secret exists, and a failure here must not stop the branch
         # publish below — that's today's live feed.
         env:
+          # Kept for a deployment whose Supabase is reachable from GitHub, which
+          # this one's is not — the step below skips politely without them.
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           PUZZLES_SEED_SALT: ${{ secrets.PUZZLES_SEED_SALT }}
         run: |

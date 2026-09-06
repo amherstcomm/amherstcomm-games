@@ -22,7 +22,11 @@ import {
   SLUG_MODE,
 } from './games.mjs';
 
-const SUPABASE_URL = process.env.SUPABASE_URL || 'https://kopsojnfqlzgyisexmrd.supabase.co';
+// No default. This file was forked from a project whose own URL was the
+// fallback, so an unset SUPABASE_URL sent this deployment's key to somebody
+// else's database — which answers, politely, that nothing is there. A missing
+// URL has to look like a missing URL.
+const SUPABASE_URL = process.env.SUPABASE_URL;
 const KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
 if (!KEY) throw new Error('SUPABASE_SERVICE_ROLE_KEY is not set');

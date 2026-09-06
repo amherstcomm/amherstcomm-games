@@ -61,6 +61,44 @@ export type Squares = {
  *  workers would load the dictionary twice, and two counters would let one
  *  calculator's stale answer land while the other's is still honest.
  */
+/** Only the squares, for a page that has the rest already.
+ *
+ *  Choosing a day works its shortlists out on the spot -- the box and ladder
+ *  searches are milliseconds -- but ruling a word out at 5x5 costs about 70ms,
+ *  so a list of twenty five-letter words would hold the page for a second and a
+ *  half every time somebody looked up a date. This asks the same worker the
+ *  calculators use and hands the answer over when it lands.
+ */
+export function useSquares(words: string[], delay = 0) {
+  const [squares, setSquares] = useState<Squares>({ four: [], five: [], searching: false });
+  const asked = useRef(0);
+
+  const worker = useWorker((reply) => {
+    if (reply.at !== asked.current || reply.kind !== 'squares') return;
+    setSquares({ four: reply.four, five: reply.five, searching: false });
+  });
+
+  const key = useMemo(() => words.join(' '), [words]);
+
+  useEffect(() => {
+    if (words.length === 0) {
+      asked.current += 1;
+      setSquares({ four: [], five: [], searching: false });
+      return;
+    }
+    setSquares((was) => ({ ...was, searching: true }));
+    const id = window.setTimeout(() => {
+      asked.current += 1;
+      const request: CalcRequest = { kind: 'squares', at: asked.current, words };
+      worker.current?.postMessage(request);
+    }, delay);
+    return () => window.clearTimeout(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key, delay]);
+
+  return squares;
+}
+
 export function useCalculators(words: string[], boxFilter?: string[], delay = 400) {
   const [boxes, setBoxes] = useState<Boxes>({
     boards: [],

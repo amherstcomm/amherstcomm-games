@@ -76,19 +76,26 @@ if (!Number.isFinite(days) || days < 1 || days > 62) {
 const themeFile = args.theme ? resolve(process.cwd(), args.theme) : null;
 const theme = themeFile ? await readFile(themeFile, 'utf8') : null;
 
-// The same default the other scripts carry, so the service key is the only
-// thing anybody has to have.
-const env = {
-  ...process.env,
-  SUPABASE_URL: process.env.SUPABASE_URL || 'https://kopsojnfqlzgyisexmrd.supabase.co',
-};
-const live = !theme && Boolean(env.SUPABASE_SERVICE_ROLE_KEY);
+// Both, or neither. The first version of this defaulted the URL to the project
+// this repository was forked from, so it asked *anagrimoire's* database what
+// covered a day in October, was told nothing did, and reported "an ordinary
+// day" for a month that had been set up. A tool that reads the wrong database
+// confidently is worse than one that refuses.
+const env = { ...process.env };
+const live = !theme && Boolean(env.SUPABASE_URL) && Boolean(env.SUPABASE_SERVICE_ROLE_KEY);
 
 if (!theme && !live) {
+  const missing = [
+    env.SUPABASE_URL ? null : 'SUPABASE_URL',
+    env.SUPABASE_SERVICE_ROLE_KEY ? null : 'SUPABASE_SERVICE_ROLE_KEY',
+  ].filter(Boolean);
   console.error(
-    'Nothing to read. Set SUPABASE_SERVICE_ROLE_KEY to preview what the admin\n' +
-      'pages have set up, or pass --theme <file> to try a list that is not saved\n' +
-      'yet. Previewing ordinary days would look like a theme that did not work.'
+    `Nothing to read: ${missing.join(' and ')} not set.\n\n` +
+      'Both are needed to see what the admin pages have set up — the URL says\n' +
+      'which database, and this repository must not guess at that. Or pass\n' +
+      '--theme <file> to try a list that is not saved yet.\n\n' +
+      'Previewing ordinary days would look exactly like a themed month that did\n' +
+      'not work, so this refuses instead.'
   );
   process.exit(1);
 }

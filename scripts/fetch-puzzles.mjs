@@ -1160,7 +1160,24 @@ for (const variant of ['', 'dev']) {
     // cannot head falls back to the ordinary square with a line in the log.
     const squareTheme = themeIn('squares');
     let sq = null;
-    if (squareTheme) {
+    // A pinned square, first: it carries the whole board rather than a seed
+    // word, because the fill was searched once when somebody looked at it and
+    // a second search could land on a different one. Checked all the same --
+    // a pin written for one size cannot be laid on another.
+    const squarePin = pinned('squares', difficulty);
+    if (squarePin) {
+      const rows = Array.isArray(squarePin.rows) ? squarePin.rows.map(String) : [];
+      if (rows.length === n && rows.every((r) => r.length === n)) {
+        sq = {
+          rows,
+          given: chooseGiven(rows, n, sqRng, given, indexWords([...uniquenessWords()], n)),
+        };
+        console.log(`Squares ${difficulty}: pinned, headed by ${rows[0]}`);
+      } else {
+        missedPin('squares', difficulty, `that square is not ${n}x${n}`);
+      }
+    }
+    if (!sq && squareTheme) {
       const headed = themedSquares(
         squareTheme.words,
         n,

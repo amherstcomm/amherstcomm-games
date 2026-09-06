@@ -24,7 +24,11 @@ const GAME_NAME = Object.fromEntries(
   MODES.map((m) => [FEED_NAME[m], NAME_FULL[m]])
 );
 
-const SUPABASE_URL = process.env.SUPABASE_URL || 'https://kopsojnfqlzgyisexmrd.supabase.co';
+// No default. This file was forked from a project whose own URL was the
+// fallback, so an unset SUPABASE_URL sent this deployment's key to somebody
+// else's database — which answers, politely, that nothing is there. A missing
+// URL has to look like a missing URL.
+const SUPABASE_URL = process.env.SUPABASE_URL;
 const KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const RESEND_KEY = process.env.RESEND_API_KEY;
 const TO = process.env.REPORT_DIGEST_TO;

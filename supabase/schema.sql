@@ -9064,9 +9064,15 @@ begin
   if v_game !~ '^[a-z]{3,12}$' then
     return jsonb_build_object('ok', false, 'reason', 'it needs a game');
   end if;
-  -- The two with no themed shortlist to choose from: the grid is dice and
-  -- Squares draws from a wider pool than a theme has.
-  if v_game in ('grid', 'squares') then
+  -- The one with no themed shortlist to choose from: a grid is dice, so
+  -- there is nothing themed to pick between.
+  --
+  -- Reversal: Squares was refused here too, on the grounds that it draws from
+  -- a wider pool than a theme has. That answered the wrong question -- a
+  -- themed square is a theme word *heading* it, and against a 448-word list 22
+  -- of 23 four-letter words could and 12 of 20 five-letter words could. It
+  -- generates themed, so it can be curated.
+  if v_game in ('grid') then
     return jsonb_build_object('ok', false, 'reason',
       format('%s has no themed candidates to choose between', v_game));
   end if;

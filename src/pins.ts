@@ -6,7 +6,7 @@
 // looks like: it offers candidates it worked out with the same searches the
 // generator uses, and the generator refuses a pin it can no longer build.
 import { supabase } from '@/supabase';
-import { boxesFrom, laddersFrom } from '@/themeCalculators';
+import { boxesFrom, laddersFrom, type ThemedSquare } from '@/themeCalculators';
 import { canSeedHive, RACK_SIZE, type CoverageDay } from '@/coverage';
 import { SLUG_NAME } from '@/games';
 import { tiersFor } from '@/cryptogramFit';
@@ -48,6 +48,7 @@ export const SIZE_LABEL: Partial<Record<Pinnable, string>> = {
   hive: 'Letters',
   boxed: 'Words in the chain',
   ladder: 'Steps',
+  squares: 'Board',
 };
 
 /** The same thing in the space a chip has. The long name is what a screen
@@ -58,6 +59,7 @@ export const SIZE_SHORT: Partial<Record<Pinnable, string>> = {
   hive: 'letters',
   boxed: 'chain',
   ladder: 'steps',
+  squares: 'board',
 };
 
 const fail = (reason: string) => ({ ok: false as const, reason });
@@ -100,16 +102,24 @@ export async function unpinPuzzle(id: string): Promise<{ ok: boolean; reason?: s
 /** The games that have a themed shortlist to choose between, in the order the
  *  page shows them.
  *
- *  The grid and Squares are absent, and not because they were forgotten: a grid
- *  is dice and Squares draws from a wider pool than a theme has, so there are
- *  no themed candidates for either. The server refuses a pin naming them for
- *  the same reason. */
+ *  The grid is absent, and not because it was forgotten: a grid is dice, so
+ *  there is nothing themed to choose between. The server refuses a pin naming
+ *  it for the same reason.
+ *
+ *  Reversal: Squares was listed here as unpinnable on the same grounds — "it
+ *  draws from a wider pool than a theme has" — which was answering the wrong
+ *  question. Ten dictionary words will not *contain* a theme word by accident,
+ *  but a theme word can head one, and that is a board whose top line is the
+ *  company's. Measured against a 448-word list: 22 of 23 four-letter words head
+ *  a 4x4 and 12 of 20 five-letter words head a 5x5. So it generates themed, and
+ *  what generates themed is worth curating. */
 export const PINNABLE = [
   'guess',
   'scramble',
   'hive',
   'boxed',
   'ladder',
+  'squares',
   'weave',
   'cryptogram',
 ] as const;
@@ -133,6 +143,7 @@ export function describePin(game: string, choice: Record<string, unknown>): stri
   if (typeof choice.a === 'string' && typeof choice.b === 'string') {
     return `${choice.a} → ${choice.b}`;
   }
+  if (typeof choice.first === 'string') return choice.first;
   if (typeof choice.clue === 'string') return choice.clue;
   if (typeof choice.text === 'string') {
     const text = choice.text;
@@ -156,7 +167,15 @@ export function candidatesFor(
    *  where they narrow the *search* rather than its results. A long list makes
    *  more boards than any search will enumerate, so filtering afterwards can
    *  hide a board that exists. */
-  must?: string[]
+  must?: string[],
+  /** the squares the day's words can head, worked out elsewhere.
+   *
+   *  Passed in rather than searched here because ruling a word out at 5x5
+   *  costs about 70ms — a list of twenty five-letter words is a second and a
+   *  half — and everything else on this page is milliseconds. The page asks
+   *  the calculators' worker, so the shortlist fills in when the answer lands
+   *  instead of holding the day still. */
+  squares?: ThemedSquare[]
 ): Candidate[] {
   const words = day.theme?.words ?? [];
   switch (game) {
@@ -220,6 +239,18 @@ export function candidatesFor(
             sortAs: pair.a,
           }))
         : [];
+    case 'squares':
+      // The square rides along in the pin: it was searched once already, and
+      // the generator filling the rest of the board again could land on a
+      // different fill than the one somebody looked at and chose.
+      return (squares ?? []).map((square) => ({
+        label: `${square.first} — ${square.rows.slice(1).join(' / ')}`,
+        choice: { first: square.first, rows: square.rows },
+        // The size of the board, which decides the difficulties it can be
+        // pinned for: 4x4 is easy, 5x5 is hard and extreme.
+        size: square.rows.length,
+        sortAs: square.first,
+      }));
     case 'weave':
       return (day.weave ?? []).map((theme) => {
         const fits = fitsBoards(theme.spangram, theme.words);

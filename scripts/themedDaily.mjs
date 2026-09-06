@@ -20,6 +20,30 @@
 // before any of this existed — because a themed month is a nice thing to have
 // and a daily puzzle is not optional.
 
+/** Said once per run when the database cannot be asked at all.
+ *
+ *  Silence here is what let a themed month fail quietly: with a service key and
+ *  no SUPABASE_URL every one of these functions returned "nothing covers this
+ *  day", which is indistinguishable from a day nobody themed — so the run
+ *  published ordinary puzzles and said nothing about it. A deployment that
+ *  means to theme a month has both; one that has neither is not themed and
+ *  needs no warning. Having one and not the other is the mistake. */
+let saidAboutCredentials = false;
+export function credentialsFor(env) {
+  const url = env.SUPABASE_URL;
+  const key = env.SUPABASE_SERVICE_ROLE_KEY;
+  if (url && key) return { url, key };
+  if ((url || key) && !saidAboutCredentials) {
+    saidAboutCredentials = true;
+    console.warn(
+      `::warning::${url ? 'SUPABASE_SERVICE_ROLE_KEY' : 'SUPABASE_URL'} is not set, so ` +
+        'no word lists, Weave themes, passages, word rules or pins were read — ' +
+        'these are the puzzles this day would have had with nothing set up.'
+    );
+  }
+  return null;
+}
+
 /** Ask the database which theme covers a date. Null for "generate as usual".
  *
  *  `PUZZLES_THEME` short-circuits it with inline JSON. That exists for the
@@ -34,9 +58,9 @@ export async function themeFor(date, env = process.env, fetchImpl = fetch) {
       throw new Error('PUZZLES_THEME is set but is not valid JSON');
     }
   }
-  const url = env.SUPABASE_URL;
-  const key = env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!url || !key) return null;
+  const credentials = credentialsFor(env);
+  if (!credentials) return null;
+  const { url, key } = credentials;
   try {
     const res = await fetchImpl(`${url}/rest/v1/rpc/daily_theme`, {
       method: 'POST',
@@ -79,9 +103,9 @@ export async function weaveThemesFor(date, env = process.env, fetchImpl = fetch)
       throw new Error('PUZZLES_WEAVE_THEMES is set but is not valid JSON');
     }
   }
-  const url = env.SUPABASE_URL;
-  const key = env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!url || !key) return [];
+  const credentials = credentialsFor(env);
+  if (!credentials) return [];
+  const { url, key } = credentials;
   try {
     const res = await fetchImpl(`${url}/rest/v1/rpc/daily_weave_themes`, {
       method: 'POST',
@@ -219,9 +243,9 @@ export async function passagesFor(date, env = process.env, fetchImpl = fetch) {
       throw new Error('PUZZLES_PASSAGES is set but is not valid JSON');
     }
   }
-  const url = env.SUPABASE_URL;
-  const key = env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!url || !key) return [];
+  const credentials = credentialsFor(env);
+  if (!credentials) return [];
+  const { url, key } = credentials;
   try {
     const res = await fetchImpl(`${url}/rest/v1/rpc/daily_cryptogram_passages`, {
       method: 'POST',
@@ -295,9 +319,9 @@ export async function policyFor(date, env = process.env, fetchImpl = fetch) {
       throw new Error('PUZZLES_POLICY is set but is not valid JSON');
     }
   }
-  const url = env.SUPABASE_URL;
-  const key = env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!url || !key) return {};
+  const credentials = credentialsFor(env);
+  if (!credentials) return {};
+  const { url, key } = credentials;
   try {
     const res = await fetchImpl(`${url}/rest/v1/rpc/daily_word_policy`, {
       method: 'POST',
@@ -357,9 +381,9 @@ export async function pinsFor(date, env = process.env, fetchImpl = fetch) {
       throw new Error('PUZZLES_PINS is set but is not valid JSON');
     }
   }
-  const url = env.SUPABASE_URL;
-  const key = env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!url || !key) return {};
+  const credentials = credentialsFor(env);
+  if (!credentials) return {};
+  const { url, key } = credentials;
   try {
     const res = await fetchImpl(`${url}/rest/v1/rpc/daily_pins`, {
       method: 'POST',

@@ -315,6 +315,31 @@ export default function ThemeCoverage() {
               {sum.bridges.days > 0 ? '✓' : '·'} Bridge — {sum.bridges.days} days have two
               compounds sharing a stem
             </p>
+            {/* Null while the dictionary is on its way, like the ladder above:
+                a square is a theme word heading it and the dictionary filling
+                the rest, so it cannot be answered from the theme alone. */}
+            <p
+              className={
+                sum.squares.days === null || sum.squares.days === 0
+                  ? 'text-slate-500'
+                  : 'text-emerald-300'
+              }
+            >
+              {sum.squares.days === null ? '·' : sum.squares.days > 0 ? '✓' : '·'} Squares —{' '}
+              {sum.squares.days === null
+                ? 'looking for squares…'
+                : `${sum.squares.days} days have a theme word that can head one`}
+            </p>
+            {sum.squares.days !== null && sum.squares.days > 0 && (
+              <p className="text-slate-400 pl-3">
+                {Object.entries(sum.squares.perSize)
+                  .map(([n, days]) => `${n}×${n} ${days}`)
+                  .join(' · ')}{' '}
+                — 4×4 is easy, 5×5 is hard and extreme; a size the theme cannot
+                head builds the ordinary square, which is the same board anybody
+                else would have got.
+              </p>
+            )}
           </div>
 
           {/* Only when something has been said: a day with no rule accepts the

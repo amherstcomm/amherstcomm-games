@@ -32,13 +32,17 @@ jobs:
           node-version: 22
       - name: Read and send
         env:
+          # Only useful where Supabase is reachable from GitHub. On a
+          # deployment whose database is internal this digest runs on the VM
+          # instead; the script now refuses rather than guessing at a URL.
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
           REPORT_DIGEST_TO: ${{ secrets.REPORT_DIGEST_TO }}
           REPORT_DIGEST_FROM: ${{ secrets.REPORT_DIGEST_FROM }}
         run: |
-          if [ -z "$SUPABASE_SERVICE_ROLE_KEY" ]; then
-            echo "::warning::SUPABASE_SERVICE_ROLE_KEY not set; nothing to read"
+          if [ -z "$SUPABASE_URL" ] || [ -z "$SUPABASE_SERVICE_ROLE_KEY" ]; then
+            echo "::warning::SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY not set; nothing to read"
             exit 0
           fi
           node scripts/report-digest.mjs
@@ -48,10 +52,15 @@ jobs:
       # is supposed to be ours rather than an outage's.
       - name: Do the client and the database still agree about the games?
         env:
+          # Both, or the check has no database to ask. The key used to be here
+          # alone, back when the script fell back to the URL of the project this
+          # one was forked from -- so it ran, asked somebody else's database
+          # what games it had, and disagreed for a reason nobody would guess.
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
         run: |
-          if [ -z "$SUPABASE_SERVICE_ROLE_KEY" ]; then
-            echo "::warning::SUPABASE_SERVICE_ROLE_KEY not set; skipping the games check"
+          if [ -z "$SUPABASE_URL" ] || [ -z "$SUPABASE_SERVICE_ROLE_KEY" ]; then
+            echo "::warning::SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY not set; skipping the games check"
             exit 0
           fi
           node scripts/check-games.mjs
