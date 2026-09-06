@@ -974,3 +974,72 @@ test('a day s puzzles can be picked from what its words can make', async ({ page
     p_choice: { word: 'capital' },
   });
 });
+
+// A day's boxes run to thousands and its pangrams to three, so each list gets
+// its own filter and its own way to see the rest of itself. One filter for the
+// page would mean typing to find a rack also hid every box.
+test('and a long shortlist can be filtered and paged through', async ({ page }) => {
+  const day = {
+    date: '2026-10-08',
+    theme: {
+      name: 'October',
+      words: [
+        'ownership', 'invested', 'investing', 'dividend', 'dividends', 'rewards', 'charter',
+        'sharing', 'network', 'growth', 'payouts', 'vesting', 'meeting', 'capital', 'trustee',
+        'voting', 'shared', 'budget', 'router', 'stake', 'board', 'esop',
+      ],
+    },
+    weave: [],
+    passages: [],
+  };
+  await page.route('**/rest/v1/rpc/**', (route) => {
+    const url = route.request().url();
+    const body = url.includes('theme_coverage')
+      ? { ok: true, days: [day] }
+      : url.includes('pins_sheet')
+        ? { ok: true, pins: [] }
+        : [];
+    return route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(body),
+    });
+  });
+
+  await page.goto('/admin/pins');
+  await page.getByLabel('Pin date').fill('2026-10-08');
+  await page.getByRole('button', { name: 'Look' }).click();
+
+  // Scoped to the box list: three lists can show a `more` button at once, and
+  // "the first one" is the daily word's.
+  const boxList = page.locator('[data-shortlist="boxed"]');
+  const boxes = boxList.getByRole('button', { name: /solvable in/ });
+  await expect(boxes.first()).toBeVisible();
+  const firstPage = await boxes.count();
+  expect(firstPage).toBe(12);
+  await boxList.getByRole('button', { name: /\d+ more/ }).click();
+  expect(await boxes.count()).toBeGreaterThan(firstPage);
+
+  // Every word of the filter has to appear somewhere in the label, in any
+  // order, so nobody has to remember which way round the page prints a pair.
+  // Taken out of a board that is actually on the page rather than written down
+  // here: which pairs a list makes is a fact about the list, and the mechanism
+  // is what is being tested.
+  const label = (await boxes.first().textContent()) ?? '';
+  const [left, right] = label.split(' — ')[0].split(' + ');
+  const before = await boxes.count();
+  await page.getByLabel('Filter Letter box').fill(`${right} ${left}`);
+  await expect.poll(async () => (await boxes.count()) < before).toBe(true);
+  // Every one that survived carries both, which is the rule — not one, because
+  // a seed of three or four words can carry the same two.
+  for (const text of await boxes.allTextContents()) {
+    expect(text).toContain(left);
+    expect(text).toContain(right);
+  }
+
+  // And the filter belongs to its own list: the daily word's is untouched by
+  // what was typed at the boxes, still showing its own first page.
+  const wordList = page.locator('[data-shortlist="guess"]');
+  await expect(wordList.getByRole('button', { name: /\(\d+\)$/ })).toHaveCount(12);
+  await expect(wordList.getByLabel('Filter The daily word')).toHaveValue('');
+});
