@@ -25,11 +25,15 @@ export type Box = {
   sides: string[];
   /** every theme word the finished box can spell — the words a player finds */
   holds: string[];
-  /** the chained words that solve it, which are the words it was built from:
-   *  the seed is the answer, not a source of letters that happens to sit near
-   *  one */
+  /** the chain of the theme's own words that solves it, which is the chain it
+   *  was built from — a solution, and the shortest one made of your words */
   solution: string[];
-  /** how few words it takes, which is the length of that chain */
+  /** a shorter route through ordinary words, where the day accepts them and one
+   *  exists: a themed chain of three beside an ordinary pair is a board
+   *  solvable in two, and saying three would be wrong */
+  ordinary: string[] | null;
+  /** how few words it takes — the shortest anybody could do under what the day
+   *  accepts */
   par: number;
 };
 
@@ -90,6 +94,71 @@ const bits = (mask: number) => {
   return n;
 };
 
+/** The dictionary prepared once for the search below: each word a bitmask of
+ *  its letters, so a box rejects almost everything with one integer operation.
+ *  A doubled letter is dropped here — the second always lands on the side the
+ *  first is on, whatever the layout. */
+type Indexed = { word: string; mask: number; last: string };
+
+function indexed(dictionary: string[]): Indexed[] {
+  const out: Indexed[] = [];
+  for (const word of dictionary) {
+    if (word.length < 3 || !noDouble(word)) continue;
+    let mask = 0;
+    let ok = true;
+    for (let i = 0; i < word.length; i += 1) {
+      const bit = word.charCodeAt(i) - 97;
+      if (bit < 0 || bit > 25) {
+        ok = false;
+        break;
+      }
+      mask |= 1 << bit;
+    }
+    if (ok) out.push({ word, mask, last: word[word.length - 1] });
+  }
+  return out;
+}
+
+/** The shortest chain of ordinary words that solves the box — two or three — or
+ *  null when neither does.
+ *
+ *  The board has more solutions than the one it was built from, and on a day
+ *  that accepts the dictionary a player can reach them. A themed chain of three
+ *  beside an ordinary pair is a board solvable in two.
+ */
+export function ordinarySolution(
+  sideOf: Record<string, number>,
+  boxMask: number,
+  dictionary: Indexed[]
+): string[] | null {
+  const usable = dictionary.filter(
+    (e) => (e.mask & ~boxMask) === 0 && spellable(e.word, sideOf)
+  );
+  const byFirst = new Map<string, Indexed[]>();
+  for (const e of usable) {
+    const list = byFirst.get(e.word[0]);
+    if (list) list.push(e);
+    else byFirst.set(e.word[0], [e]);
+  }
+
+  const states = new Map<string, string[]>();
+  for (const first of usable) {
+    for (const second of byFirst.get(first.last) ?? []) {
+      const covered = first.mask | second.mask;
+      if (bits(covered) === BOX_LETTERS) return [first.word, second.word];
+      states.set(`${second.last} ${covered}`, [first.word, second.word]);
+    }
+  }
+  for (const [state, pair] of states) {
+    const [letter, covered] = state.split(' ');
+    const left = ~Number(covered) & boxMask;
+    for (const e of byFirst.get(letter) ?? []) {
+      if ((left & ~e.mask) === 0) return [...pair, e.word];
+    }
+  }
+  return null;
+}
+
 export const MAX_SEED_WORDS = 4;
 
 /** Every chain of the theme's own words covering exactly twelve distinct
@@ -146,17 +215,23 @@ export function seedChains(words: string[], maxSeeds = MAX_SEED_WORDS): string[]
  *  theme's own words the finished board spells, since that is what a player
  *  finds, and then the shortest chain.
  *
- *  No dictionary: the seed chain *is* the solution, so the guarantee comes from
- *  the construction rather than from a search. `limit` stops early for a caller
- *  that wants a page rather than all of them.
+ *  The seed chain is the guarantee and needs no dictionary. `dictionary` is for
+ *  the other question — what else solves the board, and in how few words, on a
+ *  day that accepts more than the theme. Pass none, as a themed-only day would,
+ *  and the answer is the chain the board was made of.
  */
 export function boxesFrom(
   words: string[],
-  { maxSeeds = MAX_SEED_WORDS, limit = Infinity }: { maxSeeds?: number; limit?: number } = {}
+  {
+    dictionary,
+    maxSeeds = MAX_SEED_WORDS,
+    limit = Infinity,
+  }: { dictionary?: string[]; maxSeeds?: number; limit?: number } = {}
 ): Box[] {
   const all = [...new Set(words.map((w) => w.trim().toLowerCase()))].filter((w) =>
     /^[a-z]{3,}$/.test(w)
   );
+  const pool = dictionary ? indexed(dictionary) : null;
   const out: Box[] = [];
 
   for (const from of seedChains(words, maxSeeds)) {
@@ -164,12 +239,16 @@ export function boxesFrom(
     // Not every chain can be laid out: four sides of three, and no word may
     // step twice on one side. More words is more constraints.
     if (!laid) continue;
+    let boxMask = 0;
+    for (const c of from.join('')) boxMask |= 1 << (c.charCodeAt(0) - 97);
+    const ordinary = pool ? ordinarySolution(laid.sideOf, boxMask, pool) : null;
     out.push({
       from,
       sides: laid.sides,
       holds: all.filter((w) => spellable(w, laid.sideOf)),
       solution: from,
-      par: from.length,
+      ordinary: ordinary && ordinary.length < from.length ? ordinary : null,
+      par: ordinary ? Math.min(from.length, ordinary.length) : from.length,
     });
     if (out.length >= limit) break;
   }

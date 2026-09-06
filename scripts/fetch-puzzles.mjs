@@ -851,10 +851,22 @@ for (const variant of ['', 'dev']) {
   const boxTheme = themeIn('boxed');
   // The seed chain is the answer, so there is nothing to search a dictionary
   // for: the words that make the board are the words that solve it.
-  const themedBoxen = boxTheme ? themedBoxes(boxTheme.words) : [];
+  //
+  // The chain guarantees the board can be solved. What the *board* promises is
+  // the shortest solution a player could actually reach, so the dictionary is
+  // searched as well — unless the day accepts the theme's words alone, in which
+  // case the chain is all there is.
+  const themedBoxen = boxTheme
+    ? themedBoxes(boxTheme.words, {
+        dictionary:
+          accepts('boxed') === 'themed' ? null : [...poolsFor('easy').cumulative],
+      })
+    : [];
   if (boxTheme) {
+    const shorter = themedBoxen.filter((b) => b.ordinary).length;
     console.log(
-      `Themed boxes for ${etDate}: ${themedBoxen.length} from chains of the theme's own words`
+      `Themed boxes for ${etDate}: ${themedBoxen.length} from chains of the theme's own words` +
+        (shorter > 0 ? `, ${shorter} with a shorter ordinary route` : '')
     );
   }
   // Which board each difficulty gets, worked out once for the day.
@@ -902,7 +914,8 @@ for (const variant of ['', 'dev']) {
       const box = pinnedBox ?? themedBoxOrder[tier];
       console.log(
         `Box ${difficulty}: ${box.sides.join('/')} — ${box.solution.join(' → ')} ` +
-          `(spells ${box.holds.length})`
+          `(par ${box.par}${box.ordinary ? `, ${box.ordinary.join(' → ')}` : ''}` +
+          `, spells ${box.holds.length})`
       );
       // The board says what it takes. Two is preferred and comes first in the
       // list; three is a real answer rather than a consolation, and a board of

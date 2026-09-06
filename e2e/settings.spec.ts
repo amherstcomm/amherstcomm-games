@@ -1044,7 +1044,9 @@ test('and a long shortlist can be filtered and paged through', async ({ page }) 
   // chain except the chain, because there is nothing else on it: the words the
   // board was built from *are* the answer.
   const label = (await boxes.first().textContent()) ?? '';
-  expect(label).toMatch(/^\w+\/\w+\/\w+\/\w+ — \w+( → \w+)+$/);
+  // The board, the chain of the day's own words that solves it, and — where an
+  // ordinary pair beats it — what the board will actually promise.
+  expect(label).toMatch(/^\w+\/\w+\/\w+\/\w+ — \w+( → \w+)+( \(par \d+: .+\))?$/);
   const [left, right] = label.split(' — ')[1].split(' → ');
   const before = await boxes.count();
   await page.getByLabel('Filter Letter box').fill(`${right} ${left}`);

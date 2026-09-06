@@ -439,26 +439,49 @@ describe('a box built from the theme', () => {
     expect(spelled.length, `${board.sides.join('/')} spells no theme word`).toBeGreaterThanOrEqual(2);
   });
 
-  // The promise the board makes, and the whole of the game: the words the board
-  // was built from are the words that solve it, so they chain — each starting
-  // with the last letter of the one before — and cover all twelve between them.
-  // Re-derived here from the letters, because the payload carries the board and
-  // not the answer.
-  it('and the theme words that made it chain, and solve it', async () => {
+  // Two things, and they are different. The board was built from a chain of the
+  // theme's own words, which is what makes it themed and guarantees it can be
+  // solved at all. What it *promises* is the shortest route a player could
+  // actually take, and on a day that accepts the dictionary that is often an
+  // ordinary pair rather than the themed chain — so par may be less than the
+  // chain it was made of, and must never be more.
+  it('was built from a chain of the theme s own words', async () => {
     const payload = await read(themed, 'daily-box.json');
     const board = sidesOf(payload, 'easy');
-    expect(board.par).toBeGreaterThanOrEqual(2);
-    expect(board.par).toBeLessThanOrEqual(4);
     const letters = new Set(board.sides.join(''));
-
     const usable = THEME.words.filter(
       (w) => spellable(board.sides, w) && [...w].every((c) => letters.has(c))
     );
-    const solves = (chain: string[]) =>
-      new Set(chain.join('')).size === 12 && chain.length === board.par;
+    const walk = (chain: string[]): number | null => {
+      if (chain.length >= 2 && new Set(chain.join('')).size === 12) return chain.length;
+      if (chain.length >= 4) return null;
+      for (const word of usable) {
+        if (chain.includes(word)) continue;
+        if (chain.length > 0 && chain[chain.length - 1].at(-1) !== word[0]) continue;
+        const found = walk([...chain, word]);
+        if (found) return found;
+      }
+      return null;
+    };
+    const themedChain = walk([]);
+    expect(themedChain, `${board.sides.join('/')} has no chain of theme words`).not.toBeNull();
+    expect(board.par).toBeLessThanOrEqual(themedChain!);
+  });
+
+  it('and promises a number some chain of ordinary words can meet', async () => {
+    const payload = await read(themed, 'daily-box.json');
+    const board = sidesOf(payload, 'easy');
+    const letters = new Set(board.sides.join(''));
+    const pool: string[] = [];
+    for (const band of ['band-10', 'band-20', 'band-35']) {
+      pool.push(...JSON.parse(await readFile(`src/wordbands/${band}.json`, 'utf8')).words);
+    }
+    const usable = [
+      ...pool.filter((w) => w.length >= 3 && [...w].every((c) => letters.has(c))),
+      ...THEME.words,
+    ].filter((w) => spellable(board.sides, w));
     const walk = (chain: string[]): boolean => {
-      if (chain.length > 0 && solves(chain)) return true;
-      if (chain.length >= board.par) return false;
+      if (chain.length === board.par) return new Set(chain.join('')).size === 12;
       for (const word of usable) {
         if (chain.includes(word)) continue;
         if (chain.length > 0 && chain[chain.length - 1].at(-1) !== word[0]) continue;
@@ -466,7 +489,7 @@ describe('a box built from the theme', () => {
       }
       return false;
     };
-    expect(walk([]), `${board.sides.join('/')} has no chain of theme words`).toBe(true);
+    expect(walk([]), `${board.sides.join('/')} cannot be solved in ${board.par}`).toBe(true);
   });
 
   it('while an ordinary day is built the way it always was', async () => {

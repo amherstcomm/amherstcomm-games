@@ -1328,13 +1328,19 @@ can fix.
 
 **Boxed.** Two to four of the list's own words that **chain** — each starting
 with the last letter of the one before — and cover exactly twelve distinct
-letters between them. Those letters are the board and that chain is its answer,
-so the panel names the chain rather than counting it:
+letters between them. Those letters are the board and that chain solves it:
 
 ```
 ✓ Boxed — 74 boards whose letters these words chain through
-  best: aot | yus | hrn | ipg — payouts → sharing — finds 3: payouts, sharing, sharp
+  best: eai | dht | rwn | cvs — charter → reward → dividends (par 2: advances → switcher)
 ```
+
+**The seed is one solution, not the only one.** A board is a board — other pairs
+and longer chains solve it too — so what the board *promises* is the shortest
+route a player could actually take, which depends on what that day accepts. On a
+day that takes the dictionary as well, an ordinary pair often beats a themed
+chain of three, and the panel says so in brackets. On a themed-only day the
+chain is all there is, and the par is its length.
 
 **Reversal, three times over.** Two theme words almost never chain into twelve
 letters — three pairs on a 66-word list — so a search over pairs reported
@@ -1342,8 +1348,9 @@ nothing and dropping the chain looked like the fix. It was not: a seed that does
 not solve the board it makes is a seed of nothing in particular, and printing
 `acquire + negotiations` says those two chain when e does not lead to n. Chains
 of three manage it a hundred and sixty times and of four three hundred and
-twenty-nine. No dictionary is searched for an answer any more, because the seed
-*is* the answer — which also made the search twenty times faster.
+twenty-nine. The dictionary is still searched, but for a different question than
+before: not *whether* the board can be solved — the chain settles that — but in
+how few words.
 
 **Ladder.** Two of the list's own words the same length, three to eight
 one-letter steps apart through the everyday dictionary, reported per step-count

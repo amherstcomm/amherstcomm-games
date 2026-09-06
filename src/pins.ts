@@ -150,7 +150,7 @@ export function candidatesFor(
       // Sixty rather than everything: the generator works through thousands
       // overnight, and measuring a board takes three milliseconds, so the page
       // asks for as many as somebody might page through and no more.
-      return boxesFrom(words, { limit: 60 })
+      return boxesFrom(words, { dictionary, limit: 60 })
         .map((box) => ({
           // The chain that solves it, not just how long it is. The words the
           // board was built from never chain with each other — they are where
@@ -163,9 +163,11 @@ export function candidatesFor(
           // one — e does not lead to n, and it was never meant to. That is what
           // the letters were built from, not what solves the board.
           label:
-            // The chain is the board and the board is the chain: these are the
-            // words it was built from *and* the words that solve it, in order.
-            `${box.sides.join('/')} — ${box.solution.join(' → ')}`,
+            // The board, then the chain of your own words that solves it —
+            // and, where a day taking the dictionary has a shorter route, what
+            // the board will actually promise.
+            `${box.sides.join('/')} — ${box.solution.join(' → ')}` +
+            (box.ordinary ? ` (par ${box.par}: ${box.ordinary.join(' → ')})` : ''),
           choice: { from: box.from },
         }));
     case 'ladder':

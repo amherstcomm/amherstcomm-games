@@ -11,7 +11,7 @@
 // and their two-word guarantee is simply unknown, which is said rather than
 // guessed at.
 import { useEffect, useMemo, useState } from 'react';
-import { getDictionary } from '@/dictionaries';
+import { getDictionary, getDifficultyPool } from '@/dictionaries';
 import {
   boxesFrom,
   bridgesFrom,
@@ -26,9 +26,24 @@ export default function ThemeYield({ words }: { words: string }) {
     [words]
   );
   // Deferred, like the ladder below: the search walks every chain of two to
-  // four of these words, and a long list makes hundreds of boards. It needs no
-  // dictionary any more — a box is a chain of the list's own words, so it comes
-  // with its answer rather than waiting on a pool to be searched for one.
+  // four of these words, and a long list makes hundreds of boards.
+  //
+  // The chain is the guarantee and needs no dictionary. The pool is for the
+  // other question — whether an ordinary pair beats the chain, which is what
+  // the board will promise on a day that accepts the dictionary — so the boxes
+  // are counted the moment they are known and the par catches up when it lands.
+  const [dictionary, setDictionary] = useState<string[] | null>(null);
+  useEffect(() => {
+    if (list.length < 2 || dictionary) return;
+    let alive = true;
+    void getDifficultyPool('easy').then((pool) => {
+      if (alive) setDictionary(pool);
+    });
+    return () => {
+      alive = false;
+    };
+  }, [list.length, dictionary]);
+
   const [boxes, setBoxes] = useState<Box[]>([]);
   useEffect(() => {
     if (list.length < 2) {
@@ -36,11 +51,11 @@ export default function ThemeYield({ words }: { words: string }) {
       return;
     }
     const id = window.setTimeout(
-      () => setBoxes(boxesFrom(list, { limit: 24 })),
+      () => setBoxes(boxesFrom(list, { dictionary: dictionary ?? undefined, limit: 24 })),
       400
     );
     return () => window.clearTimeout(id);
-  }, [list]);
+  }, [list, dictionary]);
   const bridges = useMemo(() => bridgesFrom(list), [list]);
 
   // The ladder search is the one measurement here that cannot ride along with a
@@ -88,7 +103,8 @@ export default function ThemeYield({ words }: { words: string }) {
         </p>
         {best && (
           <p className="text-slate-400 pl-3">
-            best: {best.sides.join(' | ')} — {best.solution.join(' → ')} — finds{' '}
+            best: {best.sides.join(' | ')} — {best.solution.join(' → ')}
+            {best.ordinary ? ` (par ${best.par}: ${best.ordinary.join(' → ')})` : ''} — finds{' '}
             {best.holds.length}: {best.holds.slice(0, 8).join(', ')}
             {best.holds.length > 8 && '…'}
           </p>

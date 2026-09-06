@@ -18,6 +18,14 @@
 // hundred and sixty, and of four three hundred and twenty-nine. So the seed is
 // a chain of two to four words rather than a pair of them.
 //
+// The chain is *a* solution and the shortest one made of the theme's own words,
+// because the search keeps the shortest chain per set of twelve letters. It is
+// not the only one: a board is a board, and other pairs and longer chains solve
+// it too. Which of them a player may use is the day's business — see the word
+// policy — so the par the board promises is the shortest solution available
+// under what that day accepts. On a day that takes the dictionary as well, two
+// ordinary words often beat a chain of three of yours.
+//
 // The same search runs in the browser (src/themeCalculators.ts) to say what a
 // list can make and to offer the boards a day can be pinned to. Two
 // implementations of one rule, asserted against each other by
@@ -76,6 +84,64 @@ const bits = (mask) => {
   return n;
 };
 
+/** The dictionary prepared once for the search below: each word a bitmask of
+ *  its letters, so a box rejects almost everything with one integer operation.
+ *  A doubled letter is dropped here — the second one always lands on the side
+ *  the first is on, whatever the layout. */
+function indexed(dictionary) {
+  const out = [];
+  for (const word of dictionary) {
+    if (word.length < 3 || !noDouble(word)) continue;
+    let mask = 0;
+    let ok = true;
+    for (let i = 0; i < word.length; i++) {
+      const bit = word.charCodeAt(i) - 97;
+      if (bit < 0 || bit > 25) {
+        ok = false;
+        break;
+      }
+      mask |= 1 << bit;
+    }
+    if (ok) out.push({ word, mask, last: word[word.length - 1] });
+  }
+  return out;
+}
+
+/** The shortest chain of ordinary words that solves the box — two of them or
+ *  three — or null when neither does.
+ *
+ *  The board has more solutions than the one it was built from, and on a day
+ *  that accepts the dictionary a player can reach them. So this is what decides
+ *  what the board promises: a themed chain of three beside an ordinary pair is
+ *  a board solvable in two, and saying three would be wrong.
+ */
+export function ordinarySolution(sideOf, boxMask, dictionary) {
+  const usable = dictionary.filter((e) => (e.mask & ~boxMask) === 0 && spellable(e.word, sideOf));
+  const byFirst = new Map();
+  for (const e of usable) {
+    const list = byFirst.get(e.word[0]);
+    if (list) list.push(e);
+    else byFirst.set(e.word[0], [e]);
+  }
+
+  const states = new Map();
+  for (const first of usable) {
+    for (const second of byFirst.get(first.last) ?? []) {
+      const covered = first.mask | second.mask;
+      if (bits(covered) === BOX_LETTERS) return [first.word, second.word];
+      states.set(`${second.last} ${covered}`, [first.word, second.word]);
+    }
+  }
+  for (const [state, pair] of states) {
+    const [letter, covered] = state.split(' ');
+    const left = ~Number(covered) & boxMask;
+    for (const e of byFirst.get(letter) ?? []) {
+      if ((left & ~e.mask) === 0) return [...pair, e.word];
+    }
+  }
+  return null;
+}
+
 export const MAX_SEED_WORDS = 4;
 
 /** Every chain of the theme's own words covering exactly twelve distinct
@@ -127,15 +193,20 @@ export function seedChains(themeWords, maxSeeds = MAX_SEED_WORDS) {
 
 /** Every box the theme can make, best first — best being how many of the
  *  theme's own words the finished board spells, since that is what a player
- *  finds, and then the shortest chain.
+ *  finds, and then the shortest solution.
  *
- *  No dictionary: the seed chain *is* the solution, so the guarantee comes from
- *  the construction rather than from a search. `limit` stops early for a caller
- *  that wants a page of them rather than all of them.
+ *  The seed chain is the guarantee and needs no dictionary. `dictionary` is for
+ *  the other question: what else solves the board, and in how few words, for a
+ *  day that accepts more than the theme. Pass none — a themed-only day — and
+ *  the answer is the chain the board was made of.
  */
-export function themedBoxes(themeWords, { maxSeeds = MAX_SEED_WORDS, limit = Infinity } = {}) {
+export function themedBoxes(
+  themeWords,
+  { dictionary = null, maxSeeds = MAX_SEED_WORDS, limit = Infinity } = {}
+) {
   const words = [...new Set((themeWords ?? []).map((w) => w.trim().toLowerCase()))];
   const all = words.filter((w) => /^[a-z]{3,}$/.test(w));
+  const pool = dictionary ? indexed(dictionary) : null;
   const out = [];
 
   for (const from of seedChains(words, maxSeeds)) {
@@ -143,13 +214,21 @@ export function themedBoxes(themeWords, { maxSeeds = MAX_SEED_WORDS, limit = Inf
     // Not every chain can be laid out: four sides of three, and no word may
     // step twice on one side. More words is more constraints.
     if (!laid) continue;
+    let boxMask = 0;
+    for (const c of from.join('')) boxMask |= 1 << (c.charCodeAt(0) - 97);
+    const ordinary = pool ? ordinarySolution(laid.sideOf, boxMask, pool) : null;
     out.push({
       from,
       sides: laid.sides,
       holds: all.filter((w) => spellable(w, laid.sideOf)),
-      // The chain the board was built from, which is the chain that solves it.
+      // The chain the board was built from: a solution, and the shortest made
+      // of the theme's own words.
       solution: from,
-      par: from.length,
+      // The shortest an ordinary player could find on a day that accepts the
+      // dictionary, where there is one shorter than the theme's own chain.
+      ordinary: ordinary && ordinary.length < from.length ? ordinary : null,
+      // What the board promises, which is the shortest anybody could do.
+      par: ordinary ? Math.min(from.length, ordinary.length) : from.length,
     });
     if (out.length >= limit) break;
   }

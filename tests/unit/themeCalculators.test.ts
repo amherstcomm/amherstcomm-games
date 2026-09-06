@@ -24,6 +24,18 @@ import {
   LADDER_TIERS,
 } from '@/themeCalculators';
 
+/** Two words that chain and cover a board's twelve letters, built from the
+ *  board itself: a walk taking one letter per side in turn is spellable by
+ *  construction, and splitting it with an overlap gives words that chain.
+ *  Invented rather than English, because what is being tested is the rule. */
+const ordinaryPair = (sides: string[]) => {
+  const bySide = sides.map((side) => [...side]);
+  const walk: string[] = [];
+  for (let i = 0; i < 12; i += 1) walk.push(bySide[i % 4][Math.floor(i / 4)]);
+  const whole = walk.join('');
+  return [whole.slice(0, 7), whole.slice(6)];
+};
+
 describe('boxesFrom', () => {
   // A chain: payouts ends in s, sharing begins with one, and between them they
   // cover exactly twelve distinct letters.
@@ -45,6 +57,34 @@ describe('boxesFrom', () => {
     for (let i = 1; i < box.solution.length; i += 1) {
       expect(box.solution[i][0]).toBe(box.solution[i - 1].at(-1));
     }
+  });
+
+  // The seed is *a* solution, not the only one. A board is a board: other pairs
+  // and longer chains solve it too, and on a day that accepts the dictionary a
+  // player can reach them — so what the board promises is the shortest of them.
+  it('takes the shorter of the theme s chain and an ordinary one', () => {
+    // A three-word themed chain with an ordinary pair over the same letters.
+    const themed = ['dividends', 'stocks', 'service', 'esop'];
+    const chained = boxesFrom(themed)[0];
+    expect(chained.par).toBe(chained.solution.length);
+    expect(chained.ordinary).toBeNull();
+
+    // `vote` then a walk of the remaining letters: two words, spellable by
+    // construction, so the board is solvable in two whatever the seed took.
+    const box = boxesFrom(themed, { dictionary: ordinaryPair(chained.sides) })[0];
+    expect(box.par).toBe(2);
+    expect(box.ordinary).toHaveLength(2);
+    // And the themed chain is still there, because it is still the route made
+    // of the day's own words.
+    expect(box.solution).toEqual(chained.solution);
+  });
+
+  it('and says nothing about an ordinary route that is no shorter', () => {
+    const box = boxesFrom(CHAIN, { dictionary: ordinaryPair(boxesFrom(CHAIN)[0].sides) })[0];
+    expect(box.par).toBe(2);
+    // Two either way, so there is nothing to report: the theme's own chain
+    // already does it in two.
+    expect(box.ordinary).toBeNull();
   });
 
   it('and every word of it can be spelled on the board it made', () => {
@@ -231,11 +271,22 @@ describe('the box search, in both places', () => {
 
   // The page promises a board and the generator has to build it, so what is
   // asserted is that both searches find the same chains in the same order.
-  it('agrees chain for chain', () => {
-    const say = (b: { sides: string[]; solution: string[] }) =>
-      `${b.sides.join('|')} ${b.solution.join('>')}`;
-    const mine = boxesFrom(THEME).map(say);
-    const theirs = (themedBoxes(THEME) as { sides: string[]; solution: string[] }[]).map(say);
+  it('agrees chain for chain, and on what the board promises', () => {
+    // With a dictionary, so the ordinary route and the par are compared too:
+    // two searches agreeing on the chain while disagreeing about how few words
+    // a player needs would be two searches nobody could trust.
+    const dictionary = ['sharing', 'growth', 'payouts', 'stocks', 'esop', 'service'];
+    const say = (b: { sides: string[]; solution: string[]; ordinary: string[] | null; par: number }) =>
+      `${b.sides.join('|')} ${b.solution.join('>')} ${b.par} ${(b.ordinary ?? []).join('>')}`;
+    const mine = boxesFrom(THEME, { dictionary }).map(say);
+    const theirs = (
+      themedBoxes(THEME, { dictionary }) as {
+        sides: string[];
+        solution: string[];
+        ordinary: string[] | null;
+        par: number;
+      }[]
+    ).map(say);
     expect(mine).toEqual(theirs);
     expect(mine.length).toBeGreaterThan(0);
   });
