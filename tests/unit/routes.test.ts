@@ -229,6 +229,7 @@ describe('the admin tabs', () => {
   // The browser tab says which panel, because six of them share this address.
   it('and each says what it is in the title', () => {
     expect(titleOf({ kind: 'admin', tab: 'coverage' })).toMatch(/^Coverage/);
+    expect(titleOf({ kind: 'admin', tab: 'pins' })).toMatch(/^Choosing a day/);
     expect(titleOf({ kind: 'admin', tab: 'people' })).toMatch(/^Who may do what/);
   });
 });

@@ -998,6 +998,7 @@ per statement, unless it is declared deferrable.
 | `/admin/lists` | the word lists a themed month draws from |
 | `/admin/weave` | the themes Weave builds boards out of |
 | `/admin/passages` | the passages the daily cryptogram enciphers |
+| `/admin/pins` | which of a themed day's candidates it actually uses |
 | `/admin/coverage` | what all of them add up to over a range of days |
 | `/admin/people` | who may do any of it |
 
@@ -1652,6 +1653,47 @@ solved by a chain of the theme's own words (1 in two, 100 in three) against
 The decision reaches the browser as an `accept` field on the day's payload — the
 board obeys what the database decided rather than deciding for itself — and an
 ordinary themed day carries no field, which is what it always was.
+
+#### Choosing a day's puzzles
+
+A themed day has far more candidates than it can use: a 66-word list makes
+thousands of boxes, seventeen racks and three pangrams, and the generator picks
+one against the day's seed. That is right for a month nobody is watching and
+wrong for the morning of the meeting, when the box should be the one made of
+OWNERSHIP and INVESTED rather than whichever the seed landed on.
+
+`/admin/pins` takes a date, shows what that day's own words can make, and pins
+one per game — for every difficulty, or for one. Days left alone are dealt as
+usual.
+
+**A pin is a seed, not a board.** `{"word": "capital"}`, `{"base": "employer"}`,
+`{"from": ["voting", "shared"]}` — the generator builds from it exactly as it
+builds its own choice, so a pin cannot produce a shape the game does not
+understand, and none of the pinning surface has to know what a board looks like.
+Nothing about the seed is validated in the database either: what a seed may be
+is the game's business, and a copy of those rules in a table would be a staler
+copy.
+
+**A pin that has stopped working is passed over**, with a line in the nightly
+log — the word left the list, the box lost its two-word answer, the two ladder
+ends no longer have a route:
+
+```
+ladder easy: the pin could not be used (those two words no longer have a route
+between them) — dealing as usual
+```
+
+That is the whole reason a pin is a seed and not a board: a board saved in
+September and published in October would be published however wrong it had gone.
+
+**Two games cannot be pinned**, and are refused by name rather than offered:
+the grid is dice and Squares draws from a wider pool than a theme has, so
+neither has themed candidates to choose between.
+
+The candidates are worked out **in the browser**, from the day's own words —
+which the coverage call already carries — using the same searches the generator
+runs. The box and ladder searches are the shared ones, asserted against the
+generator's own pair for pair by `tests/unit/themeCalculators.test.ts`.
 
 #### Coverage: what a month actually adds up to
 

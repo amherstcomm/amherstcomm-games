@@ -8923,6 +8923,192 @@ $fn$;
 revoke all on function public.delete_word_policy(uuid) from public, anon;
 grant execute on function public.delete_word_policy(uuid) to authenticated;
 
+-- ---------------------------------------------------------------------------
+-- Pinning a themed puzzle to a date
+--
+-- A themed day has more candidates than it can use: a word list makes dozens of
+-- boxes, a handful of racks, several pangrams. The generator picks one against
+-- the day's seed, which is fine for a month nobody is watching and not fine for
+-- the morning of the meeting.
+--
+-- So a pin: for one date, one game and one difficulty, *this* candidate. Not a
+-- board — a seed. The generator builds the board from it exactly as it would
+-- have built its own, so a pin cannot produce a shape the game does not
+-- understand, and a pin that has stopped working (the word left the list, the
+-- box no longer has a two-word answer) falls back to the ordinary draw with a
+-- line in the log rather than publishing something broken.
+--
+-- Themed days only, and only the games a theme can supply: the guess word, the
+-- rack, the hive, the box, the ladder, the Weave theme, the cryptogram passage.
+-- The grid is dice and Squares draws from a wider pool than a theme has — there
+-- is no themed shortlist to choose from, so there is nothing to pin.
+-- ---------------------------------------------------------------------------
+create table if not exists public.puzzle_pins (
+  id uuid primary key default gen_random_uuid(),
+  on_date date not null,
+  game text not null check (game ~ '^[a-z]{3,12}$'),
+  -- Null is every difficulty, which is what somebody pinning "the box for the
+  -- meeting" means; a difficulty names one board.
+  difficulty text check (difficulty is null or difficulty in ('easy', 'hard', 'extreme')),
+  -- The seed, in the shape the game's own shortlist offers: {"word": "capital"}
+  -- for a rack, {"from": ["voting", "shared"]} for a box, {"a": …, "b": …} for a
+  -- ladder, {"id": …} for a Weave theme or a passage.
+  choice jsonb not null,
+  created_by uuid references auth.users (id) on delete set null,
+  created_at timestamptz not null default now(),
+  -- One pin per board. Pinning twice is changing your mind, not queueing.
+  unique (on_date, game, difficulty)
+);
+alter table public.puzzle_pins enable row level security;
+
+create index if not exists puzzle_pins_date_idx on public.puzzle_pins (on_date);
+
+/*
+ * The pins for one day, for the generator: `{"boxed": {"easy": {...}}}`.
+ *
+ * `all` is the key for a pin that names no difficulty, because JSON has no null
+ * key and "every board of this game" is a real answer somebody chose.
+ */
+create or replace function public.daily_pins(p_date date)
+returns jsonb
+language sql
+stable
+security definer
+set search_path = ''
+as $fn$
+  select coalesce(
+    (select jsonb_object_agg(game, boards)
+     from (
+       select p.game,
+              jsonb_object_agg(coalesce(p.difficulty, 'all'), p.choice) as boards
+       from public.puzzle_pins p
+       where p.on_date = p_date
+       group by p.game
+     ) by_game),
+    '{}'::jsonb)
+$fn$;
+
+revoke all on function public.daily_pins(date) from public, anon, authenticated;
+grant execute on function public.daily_pins(date) to service_role;
+
+/*
+ * What is pinned over a range, for the page that does the pinning.
+ *
+ * A range rather than everything: the page shows a month at a time, and a
+ * deployment that has been running for two years should not send two years of
+ * pins to draw one of them.
+ */
+create or replace function public.pins_sheet(p_from date, p_until date)
+returns jsonb
+language sql
+stable
+security definer
+set search_path = ''
+as $fn$
+  select case
+    when not public.can('games.setup')
+      then jsonb_build_object('ok', false, 'reason', 'not allowed')
+    when p_from is null or p_until is null
+      then jsonb_build_object('ok', false, 'reason', 'it needs both dates')
+    when p_until < p_from
+      then jsonb_build_object('ok', false, 'reason', 'it cannot finish before it starts')
+    else jsonb_build_object('ok', true, 'pins', coalesce(
+      (select jsonb_agg(jsonb_build_object(
+                'id', p.id,
+                'on_date', p.on_date,
+                'game', p.game,
+                'difficulty', p.difficulty,
+                'choice', p.choice)
+              order by p.on_date, p.game, p.difficulty nulls first)
+       from public.puzzle_pins p
+       where p.on_date between p_from and p_until),
+      '[]'::jsonb))
+  end
+$fn$;
+
+revoke all on function public.pins_sheet(date, date) from public, anon;
+grant execute on function public.pins_sheet(date, date) to authenticated;
+
+/*
+ * Pinning one, or changing your mind about one.
+ *
+ * The choice is not validated here beyond being an object. What a seed has to
+ * be is the game's business and the generator's — a rack is a word of the
+ * rack's length, a box is words whose letters are twelve distinct — and this
+ * table would be a second, staler copy of every one of those rules. The page
+ * only offers candidates it worked out, and the generator falls back rather
+ * than publishing a board it cannot build.
+ */
+create or replace function public.pin_puzzle(
+  p_date date,
+  p_game text,
+  p_difficulty text,
+  p_choice jsonb
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $fn$
+declare
+  v_id uuid;
+  v_game text := btrim(lower(coalesce(p_game, '')));
+  v_difficulty text := nullif(btrim(lower(coalesce(p_difficulty, ''))), '');
+begin
+  if not public.can('games.setup') then
+    return jsonb_build_object('ok', false, 'reason', 'not allowed');
+  end if;
+  if p_date is null then
+    return jsonb_build_object('ok', false, 'reason', 'it needs a date');
+  end if;
+  if v_game !~ '^[a-z]{3,12}$' then
+    return jsonb_build_object('ok', false, 'reason', 'it needs a game');
+  end if;
+  -- The two with no themed shortlist to choose from: the grid is dice and
+  -- Squares draws from a wider pool than a theme has.
+  if v_game in ('grid', 'squares') then
+    return jsonb_build_object('ok', false, 'reason',
+      format('%s has no themed candidates to choose between', v_game));
+  end if;
+  if v_difficulty is not null and v_difficulty not in ('easy', 'hard', 'extreme') then
+    return jsonb_build_object('ok', false, 'reason', 'a difficulty is easy, hard or extreme');
+  end if;
+  if p_choice is null or jsonb_typeof(p_choice) <> 'object' then
+    return jsonb_build_object('ok', false, 'reason', 'it needs a candidate');
+  end if;
+
+  insert into public.puzzle_pins (on_date, game, difficulty, choice, created_by)
+  values (p_date, v_game, v_difficulty, p_choice, (select auth.uid()))
+  on conflict (on_date, game, difficulty)
+    do update set choice = excluded.choice, created_by = excluded.created_by,
+                  created_at = now()
+  returning puzzle_pins.id into v_id;
+
+  return jsonb_build_object('ok', true, 'id', v_id);
+end;
+$fn$;
+
+revoke all on function public.pin_puzzle(date, text, text, jsonb) from public, anon;
+grant execute on function public.pin_puzzle(date, text, text, jsonb) to authenticated;
+
+create or replace function public.unpin_puzzle(p_pin uuid)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $fn$
+begin
+  if not public.can('games.setup') then
+    return jsonb_build_object('ok', false, 'reason', 'not allowed');
+  end if;
+  delete from public.puzzle_pins where id = p_pin;
+  return jsonb_build_object('ok', true);
+end;
+$fn$;
+
+revoke all on function public.unpin_puzzle(uuid) from public, anon;
+grant execute on function public.unpin_puzzle(uuid) to authenticated;
+
 /*
  * What every list and theme adds up to, day by day, over a range.
  *
@@ -8977,7 +9163,11 @@ as $fn$
                'passages', public.daily_cryptogram_passages(d::date),
                -- What each game will take as a word that day. Read through the
                -- generator's own function, like the three above.
-               'policy', public.daily_word_policy(d::date))
+               'policy', public.daily_word_policy(d::date),
+               -- And what has already been pinned, so the page offering the
+               -- candidates can show which one was chosen without a second
+               -- round trip per day.
+               'pins', public.daily_pins(d::date))
              order by d)
       from generate_series(p_from, p_until, interval '1 day') d), '[]'::jsonb))
   end

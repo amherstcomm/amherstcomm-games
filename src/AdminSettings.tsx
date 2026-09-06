@@ -18,6 +18,7 @@ import AdminWordLists from '@/AdminWordLists';
 import AdminFeatures from '@/AdminFeatures';
 import AdminWeaveThemes from '@/AdminWeaveThemes';
 import AdminPassages from '@/AdminPassages';
+import AdminPins from '@/AdminPins';
 import ThemeCoverage from '@/ThemeCoverage';
 
 const FIELD =
@@ -202,6 +203,10 @@ const PANEL: Record<AdminTab, () => JSX.Element> = {
   // passage is a sentence rather than a set of words, and the thing it needs
   // said while it is being written is its length in letters.
   passages: AdminPassages,
+  // Between the things a month is written from and the page that counts them:
+  // it is the one surface where somebody looks at a single day rather than at a
+  // list or at a range.
+  pins: AdminPins,
   // After both, because it is about both: a month is themed by several lists
   // and several Weave themes with overlapping windows, and whether it is
   // covered is a question no single one of them can answer.
