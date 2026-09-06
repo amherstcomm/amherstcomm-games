@@ -145,9 +145,10 @@ export function candidatesFor(
         .sort()
         .map((base) => ({ label: base, choice: { base } }));
     case 'boxed':
-      // A dozen: the generator works through thousands overnight and a person
-      // choosing one wants a page, not a catalogue.
-      return boxesFrom(words, dictionary, { limit: 12 })
+      // Sixty rather than everything: the generator works through thousands
+      // overnight, and measuring a board takes three milliseconds, so the page
+      // asks for as many as somebody might page through and no more.
+      return boxesFrom(words, dictionary, { limit: 60 })
         .filter((box) => box.par !== null)
         .map((box) => ({
           label: `${box.from.join(' + ')} — ${box.sides.join('/')}, solvable in ${box.par}`,

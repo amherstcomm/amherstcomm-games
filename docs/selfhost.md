@@ -1690,6 +1690,18 @@ September and published in October would be published however wrong it had gone.
 the grid is dice and Squares draws from a wider pool than a theme has, so
 neither has themed candidates to choose between.
 
+**Each list has its own filter and its own `more`.** A day's boxes run to
+thousands and its pangrams to three, so one control for the page would be wrong
+in both directions — typing `ing` to find VESTING among the racks would also
+hide every box. Twelve at a time, and the filter matches every word you type
+anywhere in the label, in any order, so `shar vot` finds the box made of voting
+and shared without anybody remembering which way round it is printed.
+
+The daily word is the one list where a pin is about a single *board* rather than
+the day: a pinned word takes the board of its own length and leaves the other
+nine to be dealt as usual, which is why the candidates are labelled with their
+lengths and sorted by them.
+
 The candidates are worked out **in the browser**, from the day's own words —
 which the coverage call already carries — using the same searches the generator
 runs. The box and ladder searches are the shared ones, asserted against the
