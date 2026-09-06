@@ -9,6 +9,8 @@ import { generateWeave } from './weave.mjs';
 import { generateSquare, GIVEN_TARGET } from './squares.mjs';
 import { THEMES } from './themes.mjs';
 import {
+  passagesFor,
+  passagesForBand,
   themeFor,
   themedHiveBases,
   themedPool,
@@ -455,6 +457,15 @@ const theme = await themeFor(etDate);
 // board rather than a bag of words. Every theme covering the day is a
 // candidate.
 const weaveThemesToday = await weaveThemesFor(etDate);
+// A deployment's own cryptogram passages for the day, if it wrote any. Asked
+// once for the run, like the theme: three difficulties choose from one pool.
+const customPassages = await passagesFor(etDate);
+if (customPassages.length > 0) {
+  console.log(
+    `${customPassages.length} custom cryptogram ` +
+      `${customPassages.length === 1 ? 'passage' : 'passages'} for ${etDate}`
+  );
+}
 if (weaveThemesToday.length > 0) {
   console.log(
     `Theming ${etDate} Weave from ${weaveThemesToday.length} ` +
@@ -840,19 +851,36 @@ for (const variant of ['', 'dev']) {
   // other game.
   const cryptogramByDifficulty = {};
   DIFFICULTIES.forEach((difficulty, di) => {
-    const passagePool = passagePoolFor(difficulty);
-    const position = epochDay + di * Math.floor(passagePool.length / 3);
-    const cycle = cycleOf(position, passagePool.length);
-    // seeded by the cycle, not the date: every day in a cycle must deal the
-    // same permutation or the no-repeat walk is just random picks again
-    const cycleRng = mulberry32(
-      xmur3(`${SEED_SALT}anagrimoire-cryptogram-cycle-${cycle}${salt}`)()
-    );
-    const passage = passagePool[permutedIndex(cycleRng, passagePool.length, position)];
-    dailyCryptogramTexts.add(passage.text);
     const rng = mulberry32(
       xmur3(`${SEED_SALT}anagrimoire-cryptogram-${etDate}${salt}${diffSalt(difficulty)}`)()
     );
+    // A deployment's own passages, where it has one this tier could play. The
+    // bands are the reason this is per difficulty rather than per day: 50 to
+    // 100 letters at easy and hard, 35 to 49 at extreme, so a month of long
+    // passages themes two tiers and leaves the third on the curated pool.
+    const custom = passagesForBand(customPassages, TIER_BAND[difficulty]);
+    let passage;
+    if (custom.length > 0) {
+      passage = custom[Math.floor(rng() * custom.length)];
+      console.log(
+        `Cryptogram ${difficulty} from a custom passage (${passage.letters} letters)` +
+          `${custom.length > 1 ? ` of ${custom.length}` : ''}`
+      );
+    } else {
+      const passagePool = passagePoolFor(difficulty);
+      const position = epochDay + di * Math.floor(passagePool.length / 3);
+      const cycle = cycleOf(position, passagePool.length);
+      // seeded by the cycle, not the date: every day in a cycle must deal the
+      // same permutation or the no-repeat walk is just random picks again
+      const cycleRng = mulberry32(
+        xmur3(`${SEED_SALT}anagrimoire-cryptogram-cycle-${cycle}${salt}`)()
+      );
+      passage = passagePool[permutedIndex(cycleRng, passagePool.length, position)];
+      // Held out of the practice pool, so practising cannot spoil today's
+      // board. A custom passage needs no such holding out: the practice pool is
+      // built from the curated one and has never contained it.
+      dailyCryptogramTexts.add(passage.text);
+    }
     // which cipher today is, drawn from the tier's own pool — the board
     // announces it, so the variety is something a player can learn to use
     const options = TIER_VARIANTS[difficulty];

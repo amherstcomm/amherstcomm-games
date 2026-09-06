@@ -29,6 +29,13 @@ export type ParsedList = {
   until?: string;
 };
 
+export type ParsedPassage = {
+  text: string;
+  author?: string;
+  from?: string;
+  until?: string;
+};
+
 export type Parsed<T> = {
   items: T[];
   /** one per entry that could not be used, in the words of somebody looking at
@@ -53,7 +60,7 @@ function entries(value: unknown): unknown[] {
   if (Array.isArray(value)) return value;
   // `{ themes: [...] }` and `{ lists: [...] }` are what a wrapper looks like.
   if (value && typeof value === 'object') {
-    for (const key of ['themes', 'lists', 'items', 'data']) {
+    for (const key of ['themes', 'lists', 'passages', 'quotes', 'items', 'data']) {
       const inner = (value as Record<string, unknown>)[key];
       if (Array.isArray(inner)) return inner;
     }
@@ -161,6 +168,57 @@ export function parseWordLists(input: string): Parsed<ParsedList> {
       spangrams: spangrams.length > 0 ? spangrams : undefined,
       from: date(o.from ?? o.daily_from ?? o.start),
       until: date(o.until ?? o.daily_until ?? o.end),
+    });
+  });
+  return { items, problems };
+}
+
+/** A month of cryptogram passages.
+ *
+ *  The loosest of the three, because a passage is a sentence: a bare string is
+ *  an entry, so `["...", "..."]` imports, and the curated file's own shape
+ *  (`{ quotes: [{ text, author }] }`) imports as well — which is what makes it
+ *  possible to lift a handful out of scripts/cryptogram-passages.json rather
+ *  than retyping them.
+ *
+ *  What it will not do is judge the length. The server refuses a passage no
+ *  board can take and says how many letters it had, and a paste of thirty
+ *  entries wants that reported per entry rather than pre-empted here — the two
+ *  would then have to agree about the bands forever.
+ */
+export function parsePassages(input: string): Parsed<ParsedPassage> {
+  const loaded = load(input);
+  if ('error' in loaded) return { items: [], problems: [loaded.error] };
+
+  const items: ParsedPassage[] = [];
+  const problems: string[] = [];
+  entries(loaded.value).forEach((raw, i) => {
+    const at = `Entry ${i + 1}`;
+    // A bare string is the passage itself.
+    if (typeof raw === 'string') {
+      const body = raw.trim();
+      if (body === '') {
+        problems.push(`${at} is empty.`);
+        return;
+      }
+      items.push({ text: body });
+      return;
+    }
+    if (!raw || typeof raw !== 'object') {
+      problems.push(`${at} is not a passage.`);
+      return;
+    }
+    const o = raw as Record<string, unknown>;
+    const body = text(o.text) || text(o.passage) || text(o.quote);
+    if (!body) {
+      problems.push(`${at} has no text.`);
+      return;
+    }
+    items.push({
+      text: body,
+      author: text(o.author) || text(o.who) || undefined,
+      from: date(o.from ?? o.starts_on ?? o.start),
+      until: date(o.until ?? o.ends_on ?? o.end),
     });
   });
   return { items, problems };

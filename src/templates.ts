@@ -25,6 +25,15 @@ const README_LISTS =
   'fifteen letters. daily_from and daily_until are optional and make the list ' +
   'take over the daily word for those days.';
 
+const README_PASSAGES =
+  'Passages for the daily cryptogram. Length is counted in letters — spaces ' +
+  'and punctuation are carried through as themselves and do not count. 50 to ' +
+  '100 letters plays at easy and hard; 35 to 49 plays at extreme; anything ' +
+  'outside 35 to 100 has no board and is refused. The author is optional and ' +
+  'is shown under the solved puzzle. Dates are optional: the same date in ' +
+  'both for a single day, or a range to add the passage to the pool for those ' +
+  'days.';
+
 export const THEME_TEMPLATE = {
   _readme: README_THEMES,
   themes: [
@@ -55,6 +64,26 @@ export const LIST_TEMPLATE = {
     {
       name: 'Around the office',
       words: ['fibre', 'splice', 'conduit', 'router', 'switch'],
+    },
+  ],
+};
+
+export const PASSAGE_TEMPLATE = {
+  _readme: README_PASSAGES,
+  passages: [
+    {
+      // 52 letters: easy and hard.
+      text: 'We own this place together, and every share of it was earned here.',
+      author: 'The charter',
+      starts_on: '2026-10-01',
+      ends_on: '2026-10-31',
+    },
+    {
+      // 39 letters: the short band, which extreme plays.
+      text: 'One share each, and the year we all earned it here.',
+      author: null,
+      starts_on: '2026-10-01',
+      ends_on: '2026-10-31',
     },
   ],
 };

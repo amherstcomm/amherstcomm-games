@@ -48,7 +48,15 @@ export type AccountTab = (typeof ACCOUNT_TABS)[number];
 // offers, the words a themed month draws from, the boards Weave builds, whether
 // a month is covered, and who may do any of it. One scroll made the last of
 // them a thing nobody found.
-export const ADMIN_TABS = ['site', 'games', 'lists', 'weave', 'coverage', 'people'] as const;
+export const ADMIN_TABS = [
+  'site',
+  'games',
+  'lists',
+  'weave',
+  'passages',
+  'coverage',
+  'people',
+] as const;
 export type AdminTab = (typeof ADMIN_TABS)[number];
 
 const VIEWS = ALL_VIEWS;
@@ -162,6 +170,7 @@ export const ADMIN_TITLE: Record<AdminTab, string> = {
   games: 'Games offered',
   lists: 'Word lists',
   weave: 'Weave themes',
+  passages: 'Cryptogram passages',
   coverage: 'Coverage',
   people: 'Who may do what',
 };

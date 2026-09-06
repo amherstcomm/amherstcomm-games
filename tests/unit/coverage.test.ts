@@ -12,6 +12,7 @@ import { describe, expect, it } from 'vitest';
 import { themedHiveBases, themedPool, themedRackBases } from '../../scripts/themedDaily.mjs';
 import {
   canSeedHive,
+  ciphersFor,
   GUESS_LENGTHS,
   RACK_SIZE,
   runsOf,
@@ -246,5 +247,54 @@ describe('measuring without holding the page still', () => {
       breaths += 1;
     });
     expect(breaths).toBe(0);
+  });
+});
+
+// The cryptogram half, which is per difficulty for the same reason the daily
+// word is per length: the bands differ, so a month of long passages themes two
+// tiers of three and leaves the last on the curated pool.
+describe('passages of the deployment s own', () => {
+  const long = {
+    text: 'We own this place together, and every share of it was earned here.',
+    author: 'The charter',
+    letters: 52,
+  };
+  const short = { text: 'One share each, and the year we all earned it here.', author: null, letters: 39 };
+  const unusable = { text: 'Far too short.', author: null, letters: 12 };
+
+  const day = (n: number, passages: typeof long[]): CoverageDay => ({
+    date: october(n),
+    theme: null,
+    weave: [],
+    passages,
+  });
+
+  it('says which difficulties a day s passages can play', () => {
+    expect(ciphersFor([long])).toEqual(['easy', 'hard']);
+    expect(ciphersFor([short])).toEqual(['extreme']);
+    expect(ciphersFor([long, short])).toEqual(['easy', 'hard', 'extreme']);
+    expect(ciphersFor([])).toEqual([]);
+  });
+
+  it('counts the days that play one, per tier', () => {
+    const sum = summarise([day(1, [long]), day(2, [long, short]), day(3, [])]);
+    expect(sum.cryptogram.days).toBe(2);
+    expect(sum.cryptogram.perTier.easy).toBe(2);
+    expect(sum.cryptogram.perTier.extreme).toBe(1);
+  });
+
+  // The failure that looks like success, and the reason the two counts are
+  // separate: a passage was written for the day, and no board can take it.
+  it('and separates a day with a passage from a day with a usable one', () => {
+    const sum = summarise([day(1, [unusable]), day(2, [long])]);
+    expect(sum.cryptogram.withPassage).toBe(2);
+    expect(sum.cryptogram.days).toBe(1);
+  });
+
+  // Most of the year, and the shape the server sends before anybody writes one.
+  it('copes with a day that has no passages field at all', () => {
+    const sum = summarise([list(october(1), ['shares'])]);
+    expect(sum.cryptogram.withPassage).toBe(0);
+    expect(sum.cryptogram.days).toBe(0);
   });
 });

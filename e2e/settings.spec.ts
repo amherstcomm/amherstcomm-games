@@ -583,6 +583,20 @@ test('coverage says which days of a month are themed, and with how much', async 
               'employer',
             ],
           },
+      // A passage of the deployment's own on the first five days, and one no
+      // board can take on the sixth — the failure that reads as a covered day.
+      passages:
+        i < 5
+          ? [
+              {
+                text: 'We own this place together, and every share of it was earned here.',
+                author: 'The charter',
+                letters: 52,
+              },
+            ]
+          : i === 5
+            ? [{ text: 'Far too short.', author: null, letters: 12 }]
+            : [],
       weave:
         i < 10
           ? [
@@ -660,6 +674,13 @@ test('coverage says which days of a month are themed, and with how much', async 
   // a box out of the theme.
   await expect(page.getByText(/Boxed — 29 days/)).toBeVisible();
 
+  await expect(
+    page.getByText('Cryptogram — 5 of 31 days play a passage of your own')
+  ).toBeVisible();
+  // Written for the day and unusable is its own line, because the day reads as
+  // covered and is not.
+  await expect(page.getByText(/1 days have a passage no board can take/)).toBeVisible();
+
   // The two boards the theme can be built *from* rather than merely scored in.
   await expect(page.getByText(/Scramble — 29 days can build the rack/)).toBeVisible();
   await expect(page.getByText(/Hive — 29 days have a theme word/)).toBeVisible();
@@ -729,4 +750,91 @@ test('the admin page shows one panel at a time, and says which in the address', 
   // And one typed straight in works, which is the half a bookmark needs.
   await page.goto('/admin/people');
   await expect(page.getByRole('heading', { name: 'Who may do what' })).toBeVisible();
+});
+
+// ---------------------------------------------------------------------------
+// Cryptogram passages
+//
+// The length is the whole difficulty of writing one, and it is counted in
+// letters rather than characters — so it is said while somebody types rather
+// than after they press Save, and long before a nightly run quietly reaches for
+// a curated quotation instead.
+// ---------------------------------------------------------------------------
+
+async function passagesPage(page: import('@playwright/test').Page, saved: Record<string, unknown>[]) {
+  await page.route('**/rest/v1/rpc/**', (route) => {
+    const url = route.request().url();
+    if (url.includes('save_cryptogram_passage')) {
+      saved.push(JSON.parse(route.request().postData() ?? '{}'));
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ ok: true, letters: 52 }),
+      });
+    }
+    return route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(
+        url.includes('cryptogram_passages_sheet') ? { ok: true, passages: [] } : []
+      ),
+    });
+  });
+  await page.goto('/admin/passages');
+}
+
+test('a passage says which boards it can go on while you write it', async ({ page }) => {
+  await passagesPage(page, []);
+  await page.getByRole('button', { name: 'New passage' }).click();
+
+  // 52 letters: the standard band, which easy and hard play.
+  await page
+    .getByLabel(/^Passage/)
+    .fill('We own this place together, and every share of it was earned here.');
+  await expect(page.getByText('52 letters — plays at easy, hard')).toBeVisible();
+
+  // 39: the short band, which only extreme plays — and which nothing checks
+  // for a second reading, so it is said.
+  await page.getByLabel(/^Passage/).fill('One share each, and the year we all earned it here.');
+  await expect(page.getByText('39 letters — plays at extreme')).toBeVisible();
+  await expect(page.getByText(/checked for that; this one is not/)).toBeVisible();
+
+  // And one no board takes, said in the direction that fixes it.
+  await page.getByLabel(/^Passage/).fill('Far too short for this.');
+  await expect(page.getByText(/short of the smallest board/)).toBeVisible();
+});
+
+test('and a month of them can be pasted at once', async ({ page }) => {
+  const saved: Record<string, unknown>[] = [];
+  await passagesPage(page, saved);
+  await page.getByRole('button', { name: 'Paste passages' }).click();
+
+  await page.getByLabel('Paste passages from a file').setInputFiles({
+    name: 'october.json',
+    mimeType: 'application/json',
+    buffer: Buffer.from(
+      JSON.stringify({
+        _readme: 'ignored, because it is a sentence rather than an entry',
+        passages: [
+          {
+            text: 'We own this place together, and every share of it was earned here.',
+            author: 'The charter',
+            starts_on: '2026-10-01',
+            ends_on: '2026-10-31',
+          },
+          // A bare string, which is the loosest shape the parser takes.
+          'One share each, and the year we all earned it here.',
+        ],
+      })
+    ),
+  });
+
+  // The preview says what each one can play, because a passage no board takes
+  // imports and is then refused one at a time.
+  await expect(page.getByText(/52 letters.*easy, hard/)).toBeVisible();
+  await expect(page.getByText(/39 letters.*extreme/)).toBeVisible();
+
+  await page.getByRole('button', { name: /^Import 2$/ }).click();
+  await expect(page.getByText('Imported 2 of 2.')).toBeVisible();
+  expect(saved.map((s) => s.p_author)).toEqual(['The charter', null]);
 });

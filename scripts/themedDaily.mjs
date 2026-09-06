@@ -201,3 +201,79 @@ export function themedHiveBases(themeWords, blocked) {
     )
     .sort();
 }
+
+/** The custom cryptogram passages covering a date: a pool, not one.
+ *
+ *  Same shape as the Weave themes above and for the same reason — the generator
+ *  picks per difficulty from the ones that fit that tier's band, so handing it
+ *  the pool is what makes a month of custom passages a month of different ones.
+ *
+ *  `PUZZLES_PASSAGES` short-circuits it with inline JSON, for the contract test
+ *  and for trying a passage before committing to dates. */
+export async function passagesFor(date, env = process.env, fetchImpl = fetch) {
+  const inline = (env.PUZZLES_PASSAGES || '').trim();
+  if (inline) {
+    try {
+      return cleanPassages(JSON.parse(inline));
+    } catch {
+      throw new Error('PUZZLES_PASSAGES is set but is not valid JSON');
+    }
+  }
+  const url = env.SUPABASE_URL;
+  const key = env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !key) return [];
+  try {
+    const res = await fetchImpl(`${url}/rest/v1/rpc/daily_cryptogram_passages`, {
+      method: 'POST',
+      headers: {
+        apikey: key,
+        authorization: `Bearer ${key}`,
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({ p_date: date }),
+    });
+    if (!res.ok) return [];
+    return cleanPassages(await res.json());
+  } catch {
+    // Unreachable is a reason to publish a curated passage, not no puzzle.
+    return [];
+  }
+}
+
+/** What the cipher can rely on. The letter count is recomputed here rather than
+ *  trusted from the database: it decides which board a passage may go on, and a
+ *  number that arrived over the wire is a number that can be wrong. */
+export function cleanPassages(raw) {
+  if (!Array.isArray(raw)) return [];
+  const out = [];
+  for (const p of raw) {
+    if (!p || typeof p !== 'object') continue;
+    const text = typeof p.text === 'string' ? p.text.trim() : '';
+    if (!text) continue;
+    const letters = (text.toLowerCase().match(/[a-z]/g) ?? []).length;
+    if (letters === 0) continue;
+    out.push({
+      text,
+      author: typeof p.author === 'string' && p.author.trim() ? p.author.trim() : null,
+      letters,
+      source: 'custom',
+    });
+  }
+  return out;
+}
+
+/** The custom passages a tier could play, longest first.
+ *
+ *  The bands are the generator's own (scripts/cryptogram.mjs): 50 to 100
+ *  letters for the standard band, 35 to 49 for the short one. A tier with
+ *  nothing that fits falls straight back to the curated pool — per tier, so a
+ *  month of long passages still themes easy and hard and leaves extreme alone.
+ */
+export function passagesForBand(passages, band) {
+  const [low, high] = band === 'short' ? [35, 49] : [50, 100];
+  return (passages ?? [])
+    .filter((p) => p.letters >= low && p.letters <= high)
+    // Deterministic: the pick below is by index, and insertion order out of the
+    // database is not something to lean on.
+    .sort((a, b) => a.text.localeCompare(b.text));
+}

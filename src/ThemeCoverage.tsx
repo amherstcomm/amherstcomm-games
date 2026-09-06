@@ -220,6 +220,35 @@ export default function ThemeCoverage() {
             )}
           </div>
 
+          <div>
+            <p
+              className={
+                sum.cryptogram.days > 0 ? 'text-emerald-300' : 'text-slate-500'
+              }
+            >
+              {sum.cryptogram.days > 0 ? '✓' : '·'} Cryptogram — {sum.cryptogram.days} of{' '}
+              {sum.days} days play a passage of your own
+            </p>
+            {sum.cryptogram.withPassage > 0 && (
+              <p className="text-slate-400 pl-3">
+                {Object.entries(sum.cryptogram.perTier)
+                  .map(([tier, n]) => `${tier} ${n}`)
+                  .join(' · ')}{' '}
+                — a difficulty whose length band nothing fits plays a curated
+                quotation, which is the same as every other day of the year.
+              </p>
+            )}
+            {/* The failure that looks like success: a passage was written for
+                the day and no board can take it, so the day reads as covered
+                and is not. */}
+            {sum.cryptogram.withPassage > sum.cryptogram.days && (
+              <p className="text-amber-300 pl-3">
+                {sum.cryptogram.withPassage - sum.cryptogram.days} days have a
+                passage no board can take — 35 to 100 letters is the whole range.
+              </p>
+            )}
+          </div>
+
           {/* The two boards a theme can be built *from* rather than merely
               scored in: a scramble rack is a theme word shuffled, and a hive is
               seeded by one with seven distinct letters. Days without one still

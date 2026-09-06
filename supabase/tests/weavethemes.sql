@@ -102,4 +102,32 @@ select pg_temp.check('and no web role may ask what is on tomorrow',
 select pg_temp.check('while the generator may',
   has_function_privilege('service_role', 'public.daily_weave_themes(date)', 'execute'));
 
+-- ---------------------------------------------------------------------------
+-- Editing one
+--
+-- Written because it was broken. `set clue = clue` assigned the column from
+-- itself and Postgres refused to guess between the column and the plpgsql local
+-- of the same name — "column reference clue is ambiguous", every time anybody
+-- edited a theme. It shipped because nothing here edited one: every check above
+-- writes a new theme, and the insert path has no such collision.
+-- ---------------------------------------------------------------------------
+-- Back to somebody who may: the section above left the session as a player, and
+-- a refusal here would look exactly like the bug this is about.
+set session "test.uid" = 'c1111111-1111-1111-1111-111111111111';
+create temp table edited (id uuid);
+insert into edited
+select (public.save_weave_theme(
+  null, 'Before', 'profitsharing', 'metrics payout reward target bonus split',
+  date '2027-03-01', date '2027-03-07')->>'id')::uuid;
+select public.save_weave_theme((select id from edited),
+  'After', 'stakeholders', 'voting shares trustee',
+  date '2027-03-02', date '2027-03-08');
+select pg_temp.check('a theme can be edited at all',
+  exists (select 1 from public.weave_themes where id = (select id from edited)));
+select pg_temp.check('and the clue is the new one',
+  (select clue from public.weave_themes where id = (select id from edited)) = 'After');
+select pg_temp.check('with the spangram, words and dates that came with it',
+  (select spangram = 'stakeholders' and words @> array['trustee'] and starts_on = date '2027-03-02'
+   from public.weave_themes where id = (select id from edited)));
+
 \echo '--- weave theme checks passed ---'

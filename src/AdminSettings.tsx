@@ -17,6 +17,7 @@ import AdminPeople from '@/AdminPeople';
 import AdminWordLists from '@/AdminWordLists';
 import AdminFeatures from '@/AdminFeatures';
 import AdminWeaveThemes from '@/AdminWeaveThemes';
+import AdminPassages from '@/AdminPassages';
 import ThemeCoverage from '@/ThemeCoverage';
 
 const FIELD =
@@ -197,6 +198,10 @@ const PANEL: Record<AdminTab, () => JSX.Element> = {
   // tiles a board, a word list is a bag of words, and making one shape serve
   // both made a worse version of each.
   weave: AdminWeaveThemes,
+  // The cryptogram's own, and the only panel here whose content is prose: a
+  // passage is a sentence rather than a set of words, and the thing it needs
+  // said while it is being written is its length in letters.
+  passages: AdminPassages,
   // After both, because it is about both: a month is themed by several lists
   // and several Weave themes with overlapping windows, and whether it is
   // covered is a question no single one of them can answer.

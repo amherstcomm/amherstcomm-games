@@ -37,7 +37,13 @@ const THEME = {
 let plain: string;
 let themed: string;
 
-async function generate(dir: string, theme?: object, date = DATE, weave?: object[]) {
+async function generate(
+  dir: string,
+  theme?: object,
+  date = DATE,
+  weave?: object[],
+  passages?: object[]
+) {
   await run('node', ['scripts/fetch-puzzles.mjs'], {
     env: {
       ...process.env,
@@ -47,6 +53,7 @@ async function generate(dir: string, theme?: object, date = DATE, weave?: object
       PUZZLES_SEED_SALT: 'themed-test-salt',
       ...(theme ? { PUZZLES_THEME: JSON.stringify(theme) } : {}),
       ...(weave ? { PUZZLES_WEAVE_THEMES: JSON.stringify(weave) } : {}),
+      ...(passages ? { PUZZLES_PASSAGES: JSON.stringify(passages) } : {}),
     },
     maxBuffer: 10 * 1024 * 1024,
   });
@@ -231,6 +238,88 @@ describe('the boards built from the theme', () => {
       expect(typeof payload.themed, `${file} carries no theme`).toBe('string');
       expect(Buffer.from(payload.themed, 'base64').toString().split(' ')).toContain('esop');
       expect((await read(plain, file)).themed, `${file} themed an ordinary day`).toBeUndefined();
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Cryptogram passages of a deployment's own
+//
+// Two bands, and they are why this is asserted per difficulty rather than per
+// day: easy and hard play 50 to 100 letters, extreme plays 35 to 49. A month of
+// long passages should theme two tiers and leave the third exactly as it was.
+// ---------------------------------------------------------------------------
+
+/** 52 letters, so easy and hard can take it; nothing here fits the short band. */
+const LONG_ONLY = [
+  {
+    text: 'We own this place together, and every share of it was earned here.',
+    author: 'The charter',
+  },
+];
+
+/** And the short one, for the tier that plays one. */
+const BOTH_BANDS = [
+  ...LONG_ONLY,
+  { text: 'One share each, and the year we all earned it here.', author: null },
+];
+
+const plaintext = (payload: { byDifficulty: Record<string, { answer: string }> }, tier: string) =>
+  JSON.parse(Buffer.from(payload.byDifficulty[tier].answer, 'base64').toString()) as {
+    text: string;
+    author: string | null;
+  };
+
+describe('a cryptogram passage of your own', () => {
+  let both: string;
+  let longOnly: string;
+
+  beforeAll(async () => {
+    both = await mkdtemp(join(tmpdir(), 'anagrimoire-passages-'));
+    longOnly = await mkdtemp(join(tmpdir(), 'anagrimoire-passage-long-'));
+    await Promise.all([
+      generate(both, undefined, DATE, undefined, BOTH_BANDS),
+      generate(longOnly, undefined, DATE, undefined, LONG_ONLY),
+    ]);
+  });
+  afterAll(async () =>
+    Promise.all([
+      rm(both, { recursive: true, force: true }),
+      rm(longOnly, { recursive: true, force: true }),
+    ])
+  );
+
+  it('is what the day enciphers', async () => {
+    const payload = await read(both, 'daily-cryptogram.json');
+    for (const tier of ['easy', 'hard', 'extreme']) {
+      expect(BOTH_BANDS.map((p) => p.text), tier).toContain(plaintext(payload, tier).text);
+    }
+  });
+
+  it('and its author rides along to be shown under the solved board', async () => {
+    expect(plaintext(await read(both, 'daily-cryptogram.json'), 'easy').author).toBe(
+      'The charter'
+    );
+  });
+
+  // Per tier, which is the whole reason the bands are modelled: 52 letters is
+  // no board at extreme, and that difficulty should be the day it would have
+  // had anyway rather than a day with a puzzle it cannot make.
+  it('while a tier whose band nothing fits keeps its curated quotation', async () => {
+    const payload = await read(longOnly, 'daily-cryptogram.json');
+    expect(plaintext(payload, 'easy').text).toBe(LONG_ONLY[0].text);
+    expect(plaintext(payload, 'extreme').text).not.toBe(LONG_ONLY[0].text);
+    // And it is the same board that difficulty would have had with no custom
+    // passages at all — not merely a different one.
+    expect(plaintext(payload, 'extreme').text).toBe(
+      plaintext(await read(plain, 'daily-cryptogram.json'), 'extreme').text
+    );
+  });
+
+  it('and an ordinary day is untouched throughout', async () => {
+    const payload = await read(plain, 'daily-cryptogram.json');
+    for (const tier of ['easy', 'hard', 'extreme']) {
+      expect(BOTH_BANDS.map((p) => p.text), tier).not.toContain(plaintext(payload, tier).text);
     }
   });
 });
