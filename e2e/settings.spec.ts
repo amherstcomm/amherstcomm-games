@@ -557,7 +557,11 @@ test('a word list says what it can make while you write it', async ({ page }) =>
   // The ladder search waits for a pause in typing rather than running per
   // keystroke — a walk per word over forty thousand rungs is a tenth of a
   // second — so this is the one line that is not there immediately.
+  // Both of the expensive calculators run in the worker and say so while they
+  // work, so the panel is honest about being behind rather than showing the
+  // last answer as though it were current.
   await expect(page.getByText(/Ladder — \d+ pairs/)).toBeVisible();
+  await expect(page.getByText('working…')).toHaveCount(0);
 
   // A list of plain nouns makes no bridge, which is the answer rather than a
   // fault in the list — so it says what one would need.

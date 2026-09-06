@@ -1752,8 +1752,13 @@ list makes more boards than a search will enumerate, so filtering what is on
 screen can hide a board that exists. Typing `charter` re-runs the search for
 chains containing it.
 
-**The box search runs in a worker.** Measured, because the answer decides where
-it can run:
+**The two expensive calculators run in a worker.** The box search walks every
+chain a list can make; the ladder walks forty thousand rungs breadth-first once
+per word. Everything else on the panel — the bridge, the Weave fit, a passage's
+length — is arithmetic over the words themselves and lands before a keystroke
+does.
+
+Measured, because the numbers decide where the work can run:
 
 | words | boards | time |
 |---|---|---|
@@ -1763,13 +1768,24 @@ it can run:
 | 1,000 | 5,881 | 870ms |
 | 1,500 | 68,705 | 43s |
 
-A themed list lives in the first two rows and would never have needed one; a
+A themed list is the first two rows and would never have needed a worker; a
 pasted document is the last row, and the page cannot tell which it has been
-handed until it has looked. So it looks off the main thread, says it is looking,
-and stops after twenty thousand boards — far past anything a theme makes, and
-said out loud when it happens. The old cap of sixty was the opposite of this:
-small enough to bite on real lists, and applied before the sort, so the filter
-searched a page rather than the list.
+handed until it has looked.
+
+**Both say when they are working**, and neither leaves its last answer up while
+the list has moved on — somebody writing a list would read that as the answer
+for what they had just typed. The searches are asked again when the typing stops,
+each answer carries the number of the question it answers, and a reply about a
+list that has since changed is dropped.
+
+The worker owns its dictionaries rather than being handed them: the rung list is
+forty thousand words and posting it across for every question would cost more
+than the question. It also means `vite.config.ts` sets `worker: { format: 'es' }`
+— the default cannot code-split, and the build fails outright rather than
+shipping something broken, which is how that was found.
+
+The stop is twenty thousand boards, far past anything a theme makes, and it is
+said out loud when it is reached.
 
 **A pinned word is the day's only board.** The guess game publishes ten boards a
 day, one per length, and during a theme that is ten puzzles where the point was
