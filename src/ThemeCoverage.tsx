@@ -316,6 +316,22 @@ export default function ThemeCoverage() {
             </p>
           </div>
 
+          {/* Only when something has been said: a day with no rule accepts the
+              dictionary and its own words, which is every ordinary themed day
+              and not worth a line. */}
+          {sum.rules.days > 0 && (
+            <div>
+              <p className="text-slate-300">
+                Word rules — {sum.rules.days} of {sum.days} days
+              </p>
+              <p className="text-slate-400 pl-3">
+                {sum.rules.said.join(' · ')} — a game whose board would be left
+                unplayable keeps both, and the nightly run says when that
+                happens.
+              </p>
+            </div>
+          )}
+
           <div>
             <button
               className="text-slate-400 hover:text-slate-200 underline"

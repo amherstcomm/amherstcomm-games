@@ -22,6 +22,7 @@ import ImportBox from '@/ImportBox';
 import { LIST_TEMPLATE } from '@/templates';
 import { parseWordLists, type ParsedList } from '@/importing';
 import ThemeYield from '@/ThemeYield';
+import AdminWordPolicies from '@/AdminWordPolicies';
 
 const FIELD =
   'w-full rounded-lg bg-white/5 border border-white/15 px-3 py-2 text-sm text-slate-100 ' +
@@ -244,6 +245,13 @@ export default function AdminWordLists() {
       )}
 
       {note && <p className="text-xs text-slate-400 mt-3">{note}</p>}
+
+      {/* Under the lists rather than in a tab of its own: it is a rule about
+          what a themed day does, and a themed day is what a list makes. It has
+          no meaning at all until one exists. */}
+      <div className="mt-10">
+        <AdminWordPolicies />
+      </div>
     </section>
   );
 }

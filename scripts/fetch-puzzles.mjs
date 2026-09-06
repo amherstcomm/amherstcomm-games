@@ -10,6 +10,8 @@ import { generateSquare, GIVEN_TARGET } from './squares.mjs';
 import { THEMES } from './themes.mjs';
 import {
   passagesFor,
+  policyFor,
+  policyOf,
   passagesForBand,
   themeFor,
   themedHiveBases,
@@ -473,8 +475,17 @@ const dailyBridgePrompts = new Set();
 // where a board scores, to score a bonus for. Written into every payload a
 // theme touches rather than only into the daily word, because a rack built out
 // of ESOPPLAN that will not accept ESOP is a rack nobody can finish.
-const themedBlob = (t) =>
-  t ? { themed: Buffer.from(t.words.join(' ')).toString('base64') } : {};
+//
+// `accept` rides along when the day has said something other than "both": the
+// browser obeys a decision taken in the database rather than making one, and an
+// ordinary themed day carries no field at all, which is what it always was.
+const themedBlob = (t, accept = 'both') =>
+  t
+    ? {
+        themed: Buffer.from(t.words.join(' ')).toString('base64'),
+        ...(accept === 'themed' ? { accept } : {}),
+      }
+    : {};
 
 // Which theme, if any, covers the day being generated. Asked once for the run
 // rather than per game, and asked about the *puzzle* date rather than today's:
@@ -487,6 +498,77 @@ const theme = await themeFor(etDate);
 // board rather than a bag of words. Every theme covering the day is a
 // candidate.
 const weaveThemesToday = await weaveThemesFor(etDate);
+// What each game will take as a word today: both, themed, or dictionary. Asked
+// once for the run, like the theme itself.
+//
+// `dictionary` un-themes a game outright rather than theming it and then
+// refusing its words — a rack built out of ESOPPLAN whose board will not accept
+// ESOP is a rack nobody can finish, and the honest reading of "the dictionary
+// alone" is the day the site would have had. So each game asks for the theme
+// through this, and a game told `dictionary` simply has no theme.
+const wordPolicy = await policyFor(etDate);
+const accepts = (game) => policyOf(wordPolicy, game);
+
+// How many of the day's own words a board has to leave findable before it may
+// be published as themed-only. Below this the day says one thing and the board
+// is another: a hive of seven letters and a word list usually leaves one or two
+// words, which is not a puzzle, and the rule is that the game still has to
+// work. A game that falls short keeps both — the dictionary and the day's own
+// words — and the run says so rather than leaving it to be noticed in October.
+const THEMED_FLOOR = { guess: 6, scramble: 6, hive: 8, grid: 6 };
+
+/** What to stamp on a payload: the day's answer, or `both` when themed-only
+ *  would leave a board nobody could play. */
+const acceptFor = (game, findable) => {
+  const answer = accepts(game);
+  if (answer !== 'themed') return answer;
+  const floor = THEMED_FLOOR[game] ?? 1;
+  if (findable >= floor) return 'themed';
+  console.log(
+    `${game}: themed-only would leave ${findable} findable ` +
+      `${findable === 1 ? 'word' : 'words'}, under the ${floor} it needs — using both`
+  );
+  return 'both';
+};
+
+/** Whether a word can be traced on a grid, which is the grid's own rule and the
+ *  only way to count what a themed-only board would leave. */
+const traceable = (cells, cols, word) => {
+  const rows = Math.ceil(cells.length / cols);
+  const at = (r, c) => cells[r * cols + c];
+  const walk = (r, c, i, seen) => {
+    if (at(r, c) !== word[i]) return false;
+    if (i === word.length - 1) return true;
+    seen.add(r * cols + c);
+    for (let dr = -1; dr <= 1; dr++) {
+      for (let dc = -1; dc <= 1; dc++) {
+        const nr = r + dr;
+        const nc = c + dc;
+        if ((dr === 0 && dc === 0) || nr < 0 || nc < 0 || nr >= rows || nc >= cols) continue;
+        if (seen.has(nr * cols + nc)) continue;
+        if (walk(nr, nc, i + 1, seen)) return true;
+      }
+    }
+    seen.delete(r * cols + c);
+    return false;
+  };
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) if (walk(r, c, 0, new Set())) return true;
+  }
+  return false;
+};
+const said = new Set();
+/** The theme this game is playing under, which is nothing at all when the day
+ *  has told it to use the dictionary. */
+const themeIn = (game) => {
+  const answer = accepts(game);
+  if (theme && answer !== 'both' && !said.has(game)) {
+    said.add(game);
+    console.log(`Words for ${game} today: ${answer}`);
+  }
+  return answer === 'dictionary' ? null : theme;
+};
+
 // A deployment's own cryptogram passages for the day, if it wrote any. Asked
 // once for the run, like the theme: three difficulties choose from one pool.
 const customPassages = await passagesFor(etDate);
@@ -541,7 +623,7 @@ for (const variant of ['', 'dev']) {
       // intersection rather than the theme alone. Per length, so a list with no
       // seven-letter words still themes the other boards, and empty falls
       // straight back to the day the site would have had anyway.
-      const themed = themedPool(theme?.words, len, blockedFromAnswers);
+      const themed = themedPool(themeIn('guess')?.words, len, blockedFromAnswers);
       if (themed.length > 0) pool = themed;
       words[len] = Buffer.from(pool[Math.floor(rng() * pool.length)]).toString('base64');
     }
@@ -563,7 +645,19 @@ for (const variant of ['', 'dev']) {
         // not carry. Base64 for the same reason the answers are: to keep them
         // out of a casual glance at the file, not to hide them, since the
         // answers themselves already ship here.
-        ...themedBlob(theme),
+        ...themedBlob(
+          themeIn('guess'),
+          // The thinnest board decides: themed-only means a length with no
+          // themed words is a board nothing can be typed into.
+          acceptFor(
+            'guess',
+            Math.min(
+              ...Array.from({ length: 10 }, (_, i) =>
+                themedPool(themeIn('guess')?.words, i + 3, blockedFromAnswers).length
+              )
+            )
+          )
+        ),
         fetchedAt: stamp,
       },
       null,
@@ -574,6 +668,10 @@ for (const variant of ['', 'dev']) {
 
   // hive: seeded from a pangram so it is always completable
   const hiveByDifficulty = {};
+  // The thinnest of the three boards decides whether the day's themed-only rule
+  // can stand: one rule is stamped on the file, so it has to be true of all of
+  // them.
+  let hiveThemedFindable = Infinity;
   for (const difficulty of DIFFICULTIES) {
     const hiveRng = mulberry32(xmur3(`${SEED_SALT}anagrimoire-hive-${etDate}${salt}${diffSalt(difficulty)}`)());
     const { hiveBases } = poolsFor(difficulty);
@@ -593,7 +691,7 @@ for (const variant of ['', 'dev']) {
     // dealt the *same* hive every day of the month and never once used the
     // other two. Found by generating three consecutive days and reading the
     // letters, which is the only way it could have been found.
-    const themedBases = themedHiveBases(theme?.words, blockedFromAnswers)
+    const themedBases = themedHiveBases(themeIn('hive')?.words, blockedFromAnswers)
       .map((base) => ({ base, at: hiveRng() }))
       .sort((x, y) => x.at - y.at)
       .map(({ base }) => base);
@@ -648,11 +746,27 @@ for (const variant of ['', 'dev']) {
     const outers = picked.letters.filter((c) => c !== picked.center).sort(() => hiveRng() - 0.5);
     hiveByDifficulty[difficulty] = { center: picked.center, outers };
     hiveByDifficulty[difficulty].words = picked.count;
+    // Under `themed` the dictionary is not on the board, so the count above —
+    // which is what the dictionary yields — is not what a player would find.
+    // Say what they would actually be left with, because seven letters and the
+    // theme alone is usually a handful of words.
+    if (themeIn('hive')) {
+      const letters = new Set(picked.letters);
+      const findable = themeIn('hive').words.filter(
+        (w) => w.length >= 4 && w.includes(picked.center) && [...w].every((c) => letters.has(c))
+      );
+      hiveThemedFindable = Math.min(hiveThemedFindable, findable.length);
+    }
   }
   await writeFile(
     `${DATA_DIR}/${prefix}daily-hive.json`,
     JSON.stringify(
-      { date: etDate, byDifficulty: hiveByDifficulty, ...themedBlob(theme), fetchedAt: stamp },
+      {
+        date: etDate,
+        byDifficulty: hiveByDifficulty,
+        ...themedBlob(themeIn('hive'), acceptFor('hive', hiveThemedFindable)),
+        fetchedAt: stamp,
+      },
       null,
       2
     ) + '\n'
@@ -690,11 +804,19 @@ for (const variant of ['', 'dev']) {
   // all three — and one search means one list of boxes, which is what lets the
   // three difficulties take different ones. A box only the widest dictionary
   // could finish is not offered; that is the conservative half of the trade.
-  const themedBoxen = theme
-    ? themedBoxes(theme.words, [...poolsFor('easy').cumulative]).filter((b) => b.par !== null)
+  const boxTheme = themeIn('boxed');
+  // Under `themed` the chain has to be made of the theme's own words, so the
+  // solution is searched for among them rather than in the dictionary. It is a
+  // far narrower question — measured on a 66-word list, 101 boards against
+  // 4,318 — and a day with no themed-only answer falls back rather than
+  // publishing a board nobody can finish.
+  const boxPool =
+    accepts('boxed') === 'themed' ? boxTheme?.words ?? [] : [...poolsFor('easy').cumulative];
+  const themedBoxen = boxTheme
+    ? themedBoxes(boxTheme.words, boxPool).filter((b) => b.par !== null)
     : [];
-  if (theme) {
-    const all = themedBoxes(theme.words).length;
+  if (boxTheme) {
+    const all = themedBoxes(boxTheme.words).length;
     const two = themedBoxen.filter((b) => b.par === 2).length;
     console.log(
       `Themed boxes for ${etDate}: ${all} from the theme's own pairs, ` +
@@ -722,6 +844,7 @@ for (const variant of ['', 'dev']) {
     ];
   })();
   const boxByDifficulty = {};
+  let boxWasThemed = themedBoxen.length >= DIFFICULTIES.length;
   for (const difficulty of DIFFICULTIES) {
     const boxRng = mulberry32(xmur3(`${SEED_SALT}anagrimoire-box-${etDate}${salt}${diffSalt(difficulty)}`)());
     const { boxWords, boxByFirst } = poolsFor(difficulty);
@@ -760,7 +883,15 @@ for (const variant of ['', 'dev']) {
   await writeFile(
     `${DATA_DIR}/${prefix}daily-box.json`,
     JSON.stringify(
-      { date: etDate, byDifficulty: boxByDifficulty, ...themedBlob(theme), fetchedAt: stamp },
+      {
+        date: etDate,
+        byDifficulty: boxByDifficulty,
+        // Themed-only stands only where the board actually is themed: a day
+        // whose theme could not make a solvable box gets the ordinary one, and
+        // stamping "our words only" on that is a board nobody can finish.
+        ...themedBlob(boxTheme, boxWasThemed ? accepts('boxed') : 'both'),
+        fetchedAt: stamp,
+      },
       null,
       2
     ) + '\n'
@@ -772,6 +903,7 @@ for (const variant of ['', 'dev']) {
 
   // scramble rack: shuffled seven-letter word, full-rack bonus guaranteed
   const scrambleByDifficulty = {};
+  let scrambleThemedFindable = Infinity;
   for (const difficulty of DIFFICULTIES) {
     const scrambleRng = mulberry32(
       xmur3(`${SEED_SALT}anagrimoire-scramble-${etDate}${salt}${diffSalt(difficulty)}`)()
@@ -782,7 +914,7 @@ for (const variant of ['', 'dev']) {
     // and the word need not be in the dictionary, because the board ships the
     // day's words and takes them, which is what makes a full rack of ESOPPLAN
     // findable rather than a cruel joke.
-    const themedRacks = themedRackBases(theme?.words, RACK_SIZE, blockedFromAnswers);
+    const themedRacks = themedRackBases(themeIn('scramble')?.words, RACK_SIZE, blockedFromAnswers);
     const pool = themedRacks.length > 0 ? themedRacks : rackBases;
     const rackBase = pool[Math.floor(scrambleRng() * pool.length)];
     if (themedRacks.length > 0) {
@@ -791,6 +923,20 @@ for (const variant of ['', 'dev']) {
     scrambleByDifficulty[difficulty] = {
       letters: rackBase.split('').sort(() => scrambleRng() - 0.5),
     };
+    if (themeIn('scramble')) {
+      // Spellable from the rack, each letter once — the board's own rule.
+      const findable = themeIn('scramble').words.filter((w) => {
+        if (w.length < 3) return false;
+        const left = [...rackBase];
+        for (const c of w) {
+          const at = left.indexOf(c);
+          if (at < 0) return false;
+          left.splice(at, 1);
+        }
+        return true;
+      });
+      scrambleThemedFindable = Math.min(scrambleThemedFindable, findable.length);
+    }
   }
   await writeFile(
     `${DATA_DIR}/${prefix}daily-scramble.json`,
@@ -798,7 +944,7 @@ for (const variant of ['', 'dev']) {
       {
         date: etDate,
         byDifficulty: scrambleByDifficulty,
-        ...themedBlob(theme),
+        ...themedBlob(themeIn('scramble'), acceptFor('scramble', scrambleThemedFindable)),
         fetchedAt: stamp,
       },
       null,
@@ -810,6 +956,7 @@ for (const variant of ['', 'dev']) {
       DIFFICULTIES.map((d) => scrambleByDifficulty[d].letters.join('')).join(' ')
   );
 
+  let gridThemedFindable = Infinity;
   // 4x4 grid from the classic dice (q treated as a plain letter)
   const gridRng = mulberry32(xmur3(`${SEED_SALT}anagrimoire-grid-${etDate}${salt}`)());
   const gridByDifficulty = {};
@@ -821,6 +968,14 @@ for (const variant of ['', 'dev']) {
     gridByDifficulty[difficulty] = {
       cells: dice.map((d) => d[Math.floor(gridRng() * 6)]).sort(() => gridRng() - 0.5),
     };
+    if (themeIn('grid')) {
+      const { cells } = gridByDifficulty[difficulty];
+      const cols = Math.round(Math.sqrt(cells.length));
+      const findable = themeIn('grid').words.filter(
+        (w) => w.length >= 3 && traceable(cells, cols, w)
+      );
+      gridThemedFindable = Math.min(gridThemedFindable, findable.length);
+    }
   }
   await writeFile(
     `${DATA_DIR}/${prefix}daily-grid.json`,
@@ -831,7 +986,7 @@ for (const variant of ['', 'dev']) {
         // Dice, so the board cannot be built out of the theme — but a theme
         // word that happens to be traceable on it should count, and count for
         // more. The blob is what makes that possible.
-        ...themedBlob(theme),
+        ...themedBlob(themeIn('grid'), acceptFor('grid', gridThemedFindable)),
         fetchedAt: stamp,
       },
       null,

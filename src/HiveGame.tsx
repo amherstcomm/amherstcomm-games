@@ -28,7 +28,7 @@ import { useDailySync } from '@/useDailySync';
 import { buildShare } from '@/share';
 import { recordHiveWord } from '@/stats';
 import { store as siteStore } from '@/siteStorage';
-import { THEME_BONUS, themedWords, withThemed } from '@/themedWords';
+import { acceptRule, THEME_BONUS, themedWords, withThemed } from '@/themedWords';
 
 export type HiveGameHandle = { pressKey: (k: string) => void };
 
@@ -145,6 +145,8 @@ const HiveGame = forwardRef<
 >(function HiveGame({ standardWords, commonWords, onLetterStates, onReveal, practiceWords }, ref) {
   const [store, setStore] = useState<HiveStore>(loadStore);
   const [themed, setThemed] = useState<string[]>([]);
+  // What the day said this board takes: its own words alone, or both.
+  const [accept, setAccept] = useState<'both' | 'themed'>('both');
   const { practiceAllowed } = usePrefs();
   // pinned to the daily: someone who switched practice off shouldn't be left
   // looking at a practice board they can no longer leave
@@ -205,6 +207,8 @@ const HiveGame = forwardRef<
         // The day's own words: on a themed day the seven letters are a theme
         // word, and the others it can spell are what a player goes looking for.
         setThemed(themedWords(raw));
+      setAccept(acceptRule(raw));
+        setAccept(acceptRule(raw));
         const center = String(d.center).toLowerCase();
         const outers = (d.outers as string[]).map((c) => String(c).toLowerCase());
         if (!/^[a-z]$/.test(center) || outers.length !== 6) throw new Error('bad payload');
@@ -260,7 +264,7 @@ const HiveGame = forwardRef<
   // theme behind it.
   const themedNow = useMemo(() => (store.dailyMode ? themed : []), [store.dailyMode, themed]);
   const themedSet = useMemo(() => new Set(themedNow), [themedNow]);
-  const accepted = useMemo(() => withThemed(standardWords, themedNow), [standardWords, themedNow]);
+  const accepted = useMemo(() => withThemed(standardWords, themedNow, accept), [standardWords, themedNow, accept]);
   const hiveSet = useMemo(
     () => (record ? new Set([record.center, ...record.outers]) : null),
     [record]

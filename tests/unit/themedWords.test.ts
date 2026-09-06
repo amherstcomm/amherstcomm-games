@@ -4,7 +4,7 @@
 // a word no dictionary carries; without this the board refuses to let anybody
 // type it, which is an unanswerable day and worse than not theming at all.
 import { describe, expect, it } from 'vitest';
-import { acceptedAt, THEME_BONUS, themedWords, withThemed } from '@/themedWords';
+import { acceptedAt, acceptRule, THEME_BONUS, themedWords, withThemed } from '@/themedWords';
 
 const encode = (words: string[]) => btoa(words.join(' '));
 
@@ -95,5 +95,33 @@ describe('withThemed', () => {
   it('is worth less than a pangram', () => {
     expect(THEME_BONUS).toBeGreaterThan(0);
     expect(THEME_BONUS).toBeLessThan(7);
+  });
+});
+
+// The day may say the board takes its own words and nothing else.
+describe('acceptRule', () => {
+  it('reads the day s rule off the payload', () => {
+    expect(acceptRule({ accept: 'themed' })).toBe('themed');
+  });
+
+  // Absent is what every ordinary day carries, and what a themed day carried
+  // before this existed — so it has to mean both rather than an error.
+  it('and takes both for a payload that says nothing', () => {
+    expect(acceptRule({})).toBe('both');
+    expect(acceptRule(null)).toBe('both');
+    // `dictionary` never reaches a browser: a game told to use the dictionary
+    // is simply not themed by the generator, so there are no words to refuse.
+    expect(acceptRule({ accept: 'dictionary' })).toBe('both');
+  });
+
+  it('and the board then takes the day s words alone', () => {
+    expect(withThemed(['share', 'plane'], ['esop'], 'themed')).toEqual(['esop']);
+    expect(withThemed(['share', 'plane'], ['esop'], 'both')).toEqual(['share', 'plane', 'esop']);
+  });
+
+  // Still nothing at all until the dictionary lands, because the games show
+  // that as "still loading" rather than as a refusal.
+  it('but not before the dictionary arrives', () => {
+    expect(withThemed(null, ['esop'], 'themed')).toBeNull();
   });
 });

@@ -850,3 +850,55 @@ test('and a month of them can be pasted at once', async ({ page }) => {
   await expect(page.getByText('Imported 2 of 2.')).toBeVisible();
   expect(saved.map((s) => s.p_author)).toEqual(['The charter', null]);
 });
+
+// What a themed day accepts as a word: per day and per game, because several
+// lists can cover one day and "only our words" is a fine letter box and an
+// unplayable hive.
+test('a day can be told which words its games accept', async ({ page }) => {
+  const saved: Record<string, unknown>[] = [];
+  await page.route('**/rest/v1/rpc/**', (route) => {
+    const url = route.request().url();
+    if (url.includes('save_word_policy')) {
+      saved.push(JSON.parse(route.request().postData() ?? '{}'));
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ ok: true, id: 'p1' }),
+      });
+    }
+    const body = url.includes('word_policies_sheet')
+      ? { ok: true, policies: [] }
+      : url.includes('word_lists_sheet')
+        ? { ok: true, lists: [] }
+        : [];
+    return route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(body),
+    });
+  });
+
+  await page.goto('/admin/lists');
+  await page.getByRole('button', { name: 'New rule' }).click();
+
+  // The ladder is not on offer at all, rather than offered and refused: its par
+  // is the shortest route through the words a player may use.
+  const games = await page.getByLabel('Which game').locator('option').allTextContents();
+  expect(games.some((name) => /ladder/i.test(name))).toBe(false);
+  expect(games.some((name) => /^Boxed$/.test(name))).toBe(true);
+
+  await page.getByLabel('Which game').selectOption('boxed');
+  await page.getByRole('radio', { name: 'themed', exact: true }).check();
+  await page.getByLabel('Rule from').fill('2026-10-05');
+  await page.getByLabel('Rule until').fill('2026-10-09');
+  await page.getByRole('button', { name: 'Save rule' }).click();
+
+  await expect(page.getByText('Saved.')).toBeVisible();
+  expect(saved).toHaveLength(1);
+  expect(saved[0]).toMatchObject({
+    p_game: 'boxed',
+    p_policy: 'themed',
+    p_from: '2026-10-05',
+    p_until: '2026-10-09',
+  });
+});

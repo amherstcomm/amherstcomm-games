@@ -13,7 +13,7 @@
 // applied here is the blocklist.
 import { describe, expect, it } from 'vitest';
 // @ts-expect-error plain-JS module without a declaration file
-import { normaliseTheme, themedHiveBases, themedPool, themedRackBases } from '../../scripts/themedDaily.mjs';
+import { cleanPolicy, normaliseTheme, policyOf, themedHiveBases, themedPool, themedRackBases } from '../../scripts/themedDaily.mjs';
 
 describe('themedPool', () => {
   const BLOCKED = new Set(['damned']);
@@ -119,5 +119,41 @@ describe('themedHiveBases', () => {
   it('and a short word cannot seed one', () => {
     expect(themedHiveBases(['owner'])).toEqual([]);
     expect(themedHiveBases([])).toEqual([]);
+  });
+});
+
+// What a themed day accepts as a word: both, themed, or dictionary. Decided per
+// day and per game, because "only our words" is a fine letter box and an
+// unplayable hive.
+describe('the word policy', () => {
+  it('gives a game its own answer, and falls back to the day s', () => {
+    const policy = { default: 'themed', boxed: 'both' };
+    expect(policyOf(policy, 'boxed')).toBe('both');
+    expect(policyOf(policy, 'hive')).toBe('themed');
+  });
+
+  // Eleven months of the year there is no rule at all, and that has to mean
+  // what a themed day has always done rather than an answer to guess at.
+  it('and to both when the day says nothing', () => {
+    expect(policyOf({}, 'hive')).toBe('both');
+    expect(policyOf(null, 'hive')).toBe('both');
+  });
+
+  it('drops an answer it does not know', () => {
+    expect(cleanPolicy({ default: 'sometimes', hive: 'themed' })).toEqual({ hive: 'themed' });
+  });
+
+  // Refused when it is written and again here. Par is the shortest route
+  // through the words a player may use, so narrowing them changes the answer
+  // rather than the difficulty — the rungs are always the dictionary.
+  it('and refuses the ladder wherever it comes from', () => {
+    expect(cleanPolicy({ ladder: 'themed', default: 'themed' })).toEqual({ default: 'themed' });
+    expect(policyOf(cleanPolicy({ ladder: 'themed' }), 'ladder')).toBe('both');
+  });
+
+  it('and copes with a shape it did not expect', () => {
+    expect(cleanPolicy(null)).toEqual({});
+    expect(cleanPolicy(['themed'])).toEqual({});
+    expect(cleanPolicy({ hive: 7 })).toEqual({});
   });
 });

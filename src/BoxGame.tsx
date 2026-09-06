@@ -28,7 +28,7 @@ import { useDailySync } from '@/useDailySync';
 import { buildShare } from '@/share';
 import { recordBoxSolve } from '@/stats';
 import { store as siteStore } from '@/siteStorage';
-import { themedWords, withThemed } from '@/themedWords';
+import { acceptRule, themedWords, withThemed } from '@/themedWords';
 
 export type BoxGameHandle = { pressKey: (k: string) => void };
 
@@ -208,6 +208,8 @@ const BoxGame = forwardRef<
 >(function BoxGame({ standardWords, commonWords, onLetterStates, onReveal, practiceWords }, ref) {
   const [store, setStore] = useState<BoxStore>(loadStore);
   const [themed, setThemed] = useState<string[]>([]);
+  // What the day said this board takes: its own words alone, or both.
+  const [accept, setAccept] = useState<'both' | 'themed'>('both');
   const { practiceAllowed } = usePrefs();
   // pinned to the daily: someone who switched practice off shouldn't be left
   // looking at a practice board they can no longer leave
@@ -266,6 +268,8 @@ const BoxGame = forwardRef<
         // whichever difficulty was resolved
         const d = { ...raw, ...chosen.board };
         setThemed(themedWords(raw));
+      setAccept(acceptRule(raw));
+        setAccept(acceptRule(raw));
       const rec = sanitizeRecord({ sides: d.sides, par: d.par, chain: [] });
         if (!rec || typeof d.date !== 'string') throw new Error('bad payload');
         // reset when the date changes OR the sides differ (e.g. the daily
@@ -310,9 +314,9 @@ const BoxGame = forwardRef<
   const themedNow = useMemo(() => (store.dailyMode ? themed : []), [store.dailyMode, themed]);
   const themedSet = useMemo(() => new Set(themedNow), [themedNow]);
   const standardSet = useMemo(() => {
-    const accepted = withThemed(standardWords, themedNow);
+    const accepted = withThemed(standardWords, themedNow, accept);
     return accepted ? new Set(accepted) : null;
-  }, [standardWords, themedNow]);
+  }, [standardWords, themedNow, accept]);
 
   const chain = useMemo(() => record?.chain ?? [], [record]);
   const committedCovered = useMemo(() => {

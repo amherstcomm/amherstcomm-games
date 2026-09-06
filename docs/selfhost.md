@@ -1593,6 +1593,57 @@ file's own `{ quotes: [{ text, author }] }` shape, so a handful lifted out of
 **not** judge length — that is the server's answer, reported per entry, rather
 than a second copy of the bands that would have to agree forever.
 
+#### What a themed day accepts as a word
+
+A themed day ships the list's own words and the boards take them **alongside**
+the dictionary. That is one of three things a deployment might want, and
+`/admin/lists` carries a rule for a run of days:
+
+| | |
+|---|---|
+| `both` | the dictionary and the day's own words — what a themed day has always done, and what a day with no rule does |
+| `themed` | only the day's own words |
+| `dictionary` | the dictionary alone, as though nothing were themed |
+
+**Per day, not per word list.** Several lists can cover one day, so a list is
+the wrong place to keep an answer about the day. **Per game as well**, because
+the answer is not the same for all of them: "only our words" is a fine letter
+box and an unplayable hive. A rule naming a game beats the day's default; among
+rules of equal standing the most recent wins, and nothing is merged, because
+half-themed is not a thing a board can be.
+
+**`dictionary` un-themes the game outright** rather than theming it and then
+refusing its words. A rack built out of ESOPPLAN whose board will not accept
+ESOP is a rack nobody can finish, and the honest reading of "the dictionary
+alone" is the day the site would have had.
+
+**The ladder takes no rule**, and is refused by name when one is written. Its
+par is the length of the shortest route through the words a player may use, so
+narrowing that set changes the *answer* rather than the difficulty — the rungs
+between the two ends are always the everyday dictionary.
+
+**A themed-only board still has to be playable, and mostly is not.** The
+generator counts what the day's own words would leave findable on the board it
+built and refuses to publish `themed` below a floor — six words for the guess
+board, the rack and the grid, eight for the hive. Measured on a 22-word list:
+
+```
+guess: themed-only would leave 0 findable words, under the 6 it needs — using both
+hive: themed-only would leave 1 findable word, under the 8 it needs — using both
+scramble: themed-only would leave 1 findable word, under the 6 it needs — using both
+grid: themed-only would leave 0 findable words, under the 6 it needs — using both
+```
+
+The letter box is the one that carries it, because its twelve letters *are* the
+theme's words: on a 66-word list, 101 boards can be solved by a chain of the
+theme's own words (1 in two, 100 in three) against 4,318 solvable from the
+dictionary. So a themed-only box is a real puzzle and a themed-only hive is not,
+and the run says which you got.
+
+The decision reaches the browser as an `accept` field on the day's payload — the
+board obeys what the database decided rather than deciding for itself — and an
+ordinary themed day carries no field, which is what it always was.
+
 #### Coverage: what a month actually adds up to
 
 The panel beside a list says what that list can make. Once several lists and
@@ -1622,6 +1673,8 @@ it reports:
   board size. A day whose themes all fail to tile gets a curated board, not no
   board — which is exactly why it is invisible without this.
 - **Boxed and Bridge**, the days whose pooled words can build one.
+- **Word rules**, the days a rule narrows and what those rules say — only where
+  one was written, since a day without one accepts both.
 - **Cryptogram**, the days that play a passage of your own and which
   difficulties reach it — plus, said separately, days that have a passage *no
   board can take*, which is the failure that reads as a covered day.
