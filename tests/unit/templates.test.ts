@@ -5,9 +5,10 @@
 // template — it looks like the shape and is not, and the person who filled it
 // in finds out after doing the work.
 import { describe, expect, it } from 'vitest';
-import { LIST_TEMPLATE, THEME_TEMPLATE } from '@/templates';
-import { parseWeaveThemes, parseWordLists } from '@/importing';
+import { LIST_TEMPLATE, PASSAGE_TEMPLATE, THEME_TEMPLATE } from '@/templates';
+import { parsePassages, parseWeaveThemes, parseWordLists } from '@/importing';
 import { fitsBoards } from '@/weaveFit';
+import { tiersFor } from '@/cryptogramFit';
 
 describe('the theme template', () => {
   it('imports cleanly through the parser it is for', () => {
@@ -59,5 +60,30 @@ describe('the list template', () => {
   it('and an example word no dictionary carries', () => {
     const { items } = parseWordLists(JSON.stringify(LIST_TEMPLATE));
     expect(items[0].words).toContain('esop');
+  });
+});
+
+describe('the passage template', () => {
+  it('imports cleanly through the parser it is for', () => {
+    const { items, problems } = parsePassages(JSON.stringify(PASSAGE_TEMPLATE));
+    expect(problems).toEqual([]);
+    expect(items).toHaveLength(2);
+  });
+
+  it('carries its instructions where the parser ignores them', () => {
+    expect(PASSAGE_TEMPLATE._readme.length).toBeGreaterThan(80);
+  });
+
+  // The whole difficulty of writing one is the length, so an example that no
+  // board would take teaches exactly the wrong thing — and between them the two
+  // examples have to show both bands, because one of each is the lesson.
+  it('and examples a board can actually take, one per band', () => {
+    const { items } = parsePassages(JSON.stringify(PASSAGE_TEMPLATE));
+    const tiers = items.map((p) => tiersFor(p.text));
+    for (const [i, t] of tiers.entries()) {
+      expect(t, `example ${i + 1} fits no board`).not.toEqual([]);
+    }
+    expect(tiers.some((t) => t.includes('easy'))).toBe(true);
+    expect(tiers.some((t) => t.includes('extreme'))).toBe(true);
   });
 });

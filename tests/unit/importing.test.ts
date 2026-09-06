@@ -6,7 +6,7 @@
 // reporting, because an import that says "imported twenty-nine" when
 // thirty-one were pasted has lost two and said so in the same breath.
 import { describe, expect, it } from 'vitest';
-import { parseWeaveThemes, parseWordLists } from '@/importing';
+import { parsePassages, parseWeaveThemes, parseWordLists } from '@/importing';
 
 // Ray's own shape, derived fields and all.
 const RAYS = JSON.stringify([
@@ -150,5 +150,59 @@ describe('parseWordLists', () => {
     );
     expect(items).toEqual([]);
     expect(problems).toHaveLength(2);
+  });
+});
+
+// A passage is a sentence rather than a set of words, so this parser is the
+// loosest of the three — and the length is deliberately not its business.
+describe('parsePassages', () => {
+  it('takes the shape the template is written in', () => {
+    const { items, problems } = parsePassages(
+      JSON.stringify({
+        passages: [
+          { text: 'We own this place.', author: 'The charter', starts_on: '2026-10-01', ends_on: '2026-10-31' },
+        ],
+      })
+    );
+    expect(problems).toEqual([]);
+    expect(items[0]).toEqual({
+      text: 'We own this place.',
+      author: 'The charter',
+      from: '2026-10-01',
+      until: '2026-10-31',
+    });
+  });
+
+  // Which is what makes lifting a handful out of the curated file possible
+  // without reshaping them first.
+  it('and the curated file s own shape', () => {
+    const { items, problems } = parsePassages(
+      JSON.stringify({ quotes: [{ text: 'A stitch in time.', author: 'Proverb', source: 'bartletts' }] })
+    );
+    expect(problems).toEqual([]);
+    expect(items[0].author).toBe('Proverb');
+  });
+
+  // A bare string is a passage. Nothing else here would be worth accepting as
+  // one, and pasting a list of sentences is the obvious thing to try.
+  it('and a plain list of sentences', () => {
+    const { items, problems } = parsePassages(JSON.stringify(['One sentence.', 'Another one.']));
+    expect(problems).toEqual([]);
+    expect(items.map((p) => p.text)).toEqual(['One sentence.', 'Another one.']);
+  });
+
+  // The server refuses what no board can take, and says how many letters it
+  // had. Doing it here as well would be two places that have to agree about
+  // the bands forever, and the paste would lose the entry silently.
+  it('does not judge the length, which is the server s job', () => {
+    const { items, problems } = parsePassages(JSON.stringify(['Too short.']));
+    expect(problems).toEqual([]);
+    expect(items).toHaveLength(1);
+  });
+
+  it('and names what it could not use', () => {
+    const { items, problems } = parsePassages(JSON.stringify([{ author: 'Nobody' }, '', 7]));
+    expect(items).toEqual([]);
+    expect(problems).toHaveLength(3);
   });
 });

@@ -8463,14 +8463,14 @@ set search_path = ''
 as $fn$
 declare
   id uuid;
-  clue text := btrim(coalesce(p_clue, ''));
+  v_clue text := btrim(coalesce(p_clue, ''));
   span text := lower(btrim(coalesce(p_spangram, '')));
   list text[];
 begin
   if not public.can('games.setup') then
     return jsonb_build_object('ok', false, 'reason', 'not allowed');
   end if;
-  if clue = '' then
+  if v_clue = '' then
     return jsonb_build_object('ok', false, 'reason', 'it needs a clue');
   end if;
   if span !~ '^[a-z]{6,16}$' then
@@ -8495,11 +8495,17 @@ begin
 
   if p_id is null then
     insert into public.weave_themes (clue, spangram, words, starts_on, ends_on, created_by)
-    values (clue, span, list, p_from, p_until, (select auth.uid()))
+    values (v_clue, span, list, p_from, p_until, (select auth.uid()))
     returning weave_themes.id into id;
   else
+    -- `set clue = clue` was the whole of this line, and it raised "column
+    -- reference clue is ambiguous" every time somebody edited a theme —
+    -- Postgres will not guess between the column and the local of the same
+    -- name. It shipped because nothing edited one: every test wrote a new
+    -- theme, and the insert path has no such collision. The local is named
+    -- apart now, and supabase/tests/weavethemes.sql edits one.
     update public.weave_themes
-       set clue = clue, spangram = span, words = list,
+       set clue = v_clue, spangram = span, words = list,
            starts_on = p_from, ends_on = p_until
      where weave_themes.id = p_id
     returning weave_themes.id into id;
@@ -8534,6 +8540,206 @@ $fn$;
 
 revoke all on function public.delete_weave_theme(uuid) from public, anon;
 grant execute on function public.delete_weave_theme(uuid) to authenticated;
+
+-- ---------------------------------------------------------------------------
+-- Cryptogram passages of somebody's own
+--
+-- The daily cryptogram draws from 2,590 curated quotations. During an event a
+-- deployment wants its own: the founder's line, what the co-op charter says,
+-- something somebody said at the last annual meeting. Same shape as the Weave
+-- themes above — text with a run of days on it — and the same rule about who
+-- may read it.
+--
+-- Two length bands, and they are the generator's rather than this file's
+-- invention: easy and hard play 50 to 100 letters, extreme plays 35 to 49. A
+-- passage outside 35 to 100 is refused because there is no day it could ever be
+-- used on. Inside it, which tiers it can serve is arithmetic the admin page
+-- shows while somebody is typing rather than a refusal after the fact.
+-- ---------------------------------------------------------------------------
+create table if not exists public.cryptogram_passages (
+  id uuid primary key default gen_random_uuid(),
+  text text not null,
+  -- Optional, and shown under the solved board. A line out of the charter has
+  -- no author worth naming; a quotation does.
+  author text,
+  -- Both null is a passage nobody has scheduled yet: kept, editable, unused.
+  starts_on date,
+  ends_on date,
+  created_by uuid references auth.users (id) on delete set null,
+  created_at timestamptz not null default now()
+);
+alter table public.cryptogram_passages enable row level security;
+
+/*
+ * How many letters a passage carries, which is the only measurement anything
+ * makes of one.
+ *
+ * Its own function because three callers need the same answer: the save below
+ * refuses on it, the sheet reports it, and the admin page says what a passage
+ * being typed can serve. Spaces and punctuation are not enciphered, so they are
+ * not counted.
+ */
+create or replace function public.passage_letters(p_text text)
+returns int
+language sql
+immutable
+set search_path = ''
+as $fn$
+  select length(regexp_replace(lower(coalesce(p_text, '')), '[^a-z]', '', 'g'))
+$fn$;
+
+/*
+ * The passages covering one day, for the generator.
+ *
+ * Service-role only, like every other answer: a cryptogram's plaintext is its
+ * solution, and a browser that could ask for tomorrow's has been handed it.
+ *
+ * All of them, not one. The generator picks per difficulty from those that fit
+ * that tier's band, so handing over the pool is what lets a month of custom
+ * passages be a month of different ones — and a tier with nothing that fits
+ * falls back to the curated pool rather than costing the day.
+ */
+create or replace function public.daily_cryptogram_passages(p_date date)
+returns jsonb
+language sql
+stable
+security definer
+set search_path = ''
+as $fn$
+  select coalesce(
+    (select jsonb_agg(jsonb_build_object(
+              'text', p.text,
+              'author', p.author,
+              'letters', public.passage_letters(p.text))
+            order by p.created_at, p.id)
+     from public.cryptogram_passages p
+     where p.starts_on is not null and p.ends_on is not null
+       and p_date between p.starts_on and p.ends_on),
+    '[]'::jsonb)
+$fn$;
+
+revoke all on function public.daily_cryptogram_passages(date) from public, anon, authenticated;
+grant execute on function public.daily_cryptogram_passages(date) to service_role;
+
+create or replace function public.cryptogram_passages_sheet()
+returns jsonb
+language sql
+stable
+security definer
+set search_path = ''
+as $fn$
+  select case
+    when not public.can('games.setup')
+      then jsonb_build_object('ok', false, 'reason', 'not allowed')
+    else jsonb_build_object('ok', true, 'passages', coalesce(
+      (select jsonb_agg(jsonb_build_object(
+                'id', p.id,
+                'text', p.text,
+                'author', p.author,
+                'letters', public.passage_letters(p.text),
+                'starts_on', p.starts_on,
+                'ends_on', p.ends_on)
+              order by p.starts_on nulls last, p.created_at)
+       from public.cryptogram_passages p),
+      '[]'::jsonb))
+  end
+$fn$;
+
+revoke all on function public.cryptogram_passages_sheet() from public, anon;
+grant execute on function public.cryptogram_passages_sheet() to authenticated;
+
+/*
+ * Writing one.
+ *
+ * What is refused is what can never be right: nothing to encipher, and a length
+ * no band will ever take. Whether a *particular* cipher can make a board worth
+ * solving out of a passage is the generator's business, and is re-dealt there
+ * exactly as it is for the curated pool.
+ *
+ * The uniqueness guard is not run here, and that is a limit rather than an
+ * oversight. scripts/cryptogram-guard.ts checks that a short passage has only
+ * one common-word reading, because a second reading is a solution the answer
+ * check calls wrong; it needs the whole dictionary and a search. A passage
+ * somebody wrote for their own event is worth the trade, and the admin page
+ * says so where a short one is being written.
+ */
+create or replace function public.save_cryptogram_passage(
+  p_id uuid,
+  p_text text,
+  p_author text default null,
+  p_from date default null,
+  p_until date default null
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $fn$
+declare
+  v_id uuid;
+  v_text text := btrim(coalesce(p_text, ''));
+  v_author text := nullif(btrim(coalesce(p_author, '')), '');
+  v_letters int;
+begin
+  if not public.can('games.setup') then
+    return jsonb_build_object('ok', false, 'reason', 'not allowed');
+  end if;
+  v_letters := public.passage_letters(v_text);
+  if v_letters = 0 then
+    return jsonb_build_object('ok', false, 'reason', 'it needs some words');
+  end if;
+  if v_letters < 35 then
+    return jsonb_build_object('ok', false, 'reason',
+      format('that is %s letters; the shortest board takes 35', v_letters));
+  end if;
+  if v_letters > 100 then
+    return jsonb_build_object('ok', false, 'reason',
+      format('that is %s letters; the longest board takes 100', v_letters));
+  end if;
+  if p_from is not null and p_until is not null and p_until < p_from then
+    return jsonb_build_object('ok', false, 'reason', 'it cannot finish before it starts');
+  end if;
+
+  if p_id is null then
+    insert into public.cryptogram_passages (text, author, starts_on, ends_on, created_by)
+    values (v_text, v_author, p_from, p_until, (select auth.uid()))
+    returning cryptogram_passages.id into v_id;
+  else
+    update public.cryptogram_passages
+       set text = v_text, author = v_author, starts_on = p_from, ends_on = p_until
+     where cryptogram_passages.id = p_id
+    returning cryptogram_passages.id into v_id;
+    if v_id is null then
+      return jsonb_build_object('ok', false, 'reason', 'no such passage');
+    end if;
+  end if;
+
+  return jsonb_build_object('ok', true, 'id', v_id, 'letters', v_letters);
+end;
+$fn$;
+
+revoke all on function public.save_cryptogram_passage(uuid, text, text, date, date)
+  from public, anon;
+grant execute on function public.save_cryptogram_passage(uuid, text, text, date, date)
+  to authenticated;
+
+create or replace function public.delete_cryptogram_passage(p_passage uuid)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $fn$
+begin
+  if not public.can('games.setup') then
+    return jsonb_build_object('ok', false, 'reason', 'not allowed');
+  end if;
+  delete from public.cryptogram_passages where id = p_passage;
+  return jsonb_build_object('ok', true);
+end;
+$fn$;
+
+revoke all on function public.delete_cryptogram_passage(uuid) from public, anon;
+grant execute on function public.delete_cryptogram_passage(uuid) to authenticated;
 
 /*
  * What every list and theme adds up to, day by day, over a range.
@@ -8582,7 +8788,11 @@ as $fn$
                -- it: that is the ordinary state for eleven months of the year
                -- and means "the day the site would have had anyway".
                'theme', public.daily_theme(d::date),
-               'weave', public.daily_weave_themes(d::date))
+               'weave', public.daily_weave_themes(d::date),
+               -- Added after the fact, and by the same rule as the other two:
+               -- the page asks the generator's own function rather than
+               -- working out for itself which passages cover a day.
+               'passages', public.daily_cryptogram_passages(d::date))
              order by d)
       from generate_series(p_from, p_until, interval '1 day') d), '[]'::jsonb))
   end

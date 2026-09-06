@@ -997,6 +997,7 @@ per statement, unless it is declared deferrable.
 | `/admin/games` | which games and modes are offered, and when |
 | `/admin/lists` | the word lists a themed month draws from |
 | `/admin/weave` | the themes Weave builds boards out of |
+| `/admin/passages` | the passages the daily cryptogram enciphers |
 | `/admin/coverage` | what all of them add up to over a range of days |
 | `/admin/people` | who may do any of it |
 
@@ -1433,9 +1434,12 @@ spell it, the hive has to reach it through its centre, the grid has to trace it.
 The solver already answers that question for every other word, and asking it a
 second way here is exactly how two halves come apart.
 
-The remaining five — boxed, squares, cryptogram, ladder, bridge — need letter
-boxes, curated passages or pairs. What a list can make of the first and last of
-those is measured rather than guessed: see the calculators above.
+The remaining five — boxed, squares, cryptogram, ladder, bridge — cannot be
+built from a bag of words: they need letter boxes, passages or curated pairs.
+The cryptogram takes content of its own by a different door, one passage at a
+time rather than from a word list — see [Cryptogram passages](#cryptogram-passages)
+below. What a list can make of boxed and bridge is measured rather than guessed:
+see the calculators above.
 
 **Dates rather than a switch**, and that is not a preference. The window is
 generated a fortnight ahead, so the run on 25 September already writes 1
@@ -1470,6 +1474,47 @@ day. The rest of the generator's chatter is discarded, but which days a list
 took over is worth seeing in the log: the first of the month is a bad morning to
 discover that "trust me, it is themed" was wrong.
 
+### Cryptogram passages
+
+The daily cryptogram enciphers one of 2,590 curated quotations. `/admin/passages`
+adds a deployment's own — a line out of the charter, something said at the
+annual meeting — with the same dates-on-a-row shape as the Weave themes.
+
+**Length is the whole difficulty, and it is counted in letters.** Spaces and
+punctuation are carried through as themselves, so a long-looking sentence of
+short words is shorter than it looks. The two bands are the generator's:
+
+| band | letters | played by |
+|---|---|---|
+| standard | 50–100 | easy, hard |
+| short | 35–49 | extreme |
+
+They meet, so anything from 35 to 100 has a board and anything outside has none
+— which is what the server refuses, saying how many letters it counted rather
+than leaving somebody to count by hand. Inside the range, the page says what a
+passage plays at while it is being typed.
+
+**Per difficulty, not per day.** Each tier picks from the passages whose band it
+can take; a tier with nothing that fits plays its curated quotation, exactly as
+on every other day of the year. So a month of 60-letter passages themes easy and
+hard and leaves extreme alone, and the coverage page reports the three
+separately.
+
+**The uniqueness guard does not run on these, and that is a real limit.**
+`scripts/cryptogram-guard.ts` checks that a short passage has only one
+common-word reading — a second reading is a solution the answer check calls
+wrong — and it needs the whole dictionary and a search. Every curated short
+passage went through it; one written here does not. The page says so where a
+short passage is being written, because 35–49 letters is exactly where a second
+reading is likeliest.
+
+Paste or upload a month at once, same as the other two panels. The parser is the
+loosest of the three: a bare list of sentences works, and so does the curated
+file's own `{ quotes: [{ text, author }] }` shape, so a handful lifted out of
+`scripts/cryptogram-passages.json` imports without being reshaped. It does
+**not** judge length — that is the server's answer, reported per entry, rather
+than a second copy of the bands that would have to agree forever.
+
 #### Coverage: what a month actually adds up to
 
 The panel beside a list says what that list can make. Once several lists and
@@ -1499,6 +1544,9 @@ it reports:
   board size. A day whose themes all fail to tile gets a curated board, not no
   board — which is exactly why it is invisible without this.
 - **Boxed and Bridge**, the days whose pooled words can build one.
+- **Cryptogram**, the days that play a passage of your own and which
+  difficulties reach it — plus, said separately, days that have a passage *no
+  board can take*, which is the failure that reads as a covered day.
 - **Scramble and Hive**, the days whose theme can supply the board itself: a
   word of the rack's length, and one of seven distinct letters. A day without
   either still gets the theme's words as bonus points — the board is simply the

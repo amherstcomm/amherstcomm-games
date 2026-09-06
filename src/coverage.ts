@@ -12,6 +12,7 @@
 // with the answer, which is the part a browser can compute and a person cannot.
 import { supabase } from '@/supabase';
 import { boxesFrom, bridgesFrom } from '@/themeCalculators';
+import { TIERS, tiersFor } from '@/cryptogramFit';
 import { BOARD_CELLS, fitsBoard } from '@/weaveFit';
 
 /** The lengths the daily word is generated for — scripts/fetch-puzzles.mjs
@@ -32,10 +33,13 @@ export const canSeedHive = (word: string) =>
   word.length >= 7 && new Set(word).size === 7 && !word.includes('s');
 
 export type WeaveTheme = { clue: string; spangram: string; words: string[] };
+export type DayPassage = { text: string; author: string | null; letters: number };
 export type CoverageDay = {
   date: string;
   theme: { name: string; words: string[] } | null;
   weave: WeaveTheme[];
+  /** the cryptogram passages written for the day, if any */
+  passages?: DayPassage[];
 };
 
 export async function readCoverage(
@@ -68,6 +72,8 @@ export type DayYield = {
   hives: number;
   /** the board sizes at least one of the day's Weave themes tiles */
   tiles: string[];
+  /** the cryptogram difficulties at least one of the day's passages can play */
+  ciphers: string[];
 };
 
 /** The board sizes at least one of a day's Weave themes tiles. Separate from
@@ -97,6 +103,16 @@ export function yieldOf(words: string[], dictionary?: string[]) {
   };
 }
 
+/** The cryptogram difficulties a day's own passages could play.
+ *
+ *  Per tier rather than per day, for the same reason the daily word is per
+ *  length: the bands differ, so a month of 60-letter passages themes easy and
+ *  hard and leaves extreme on the curated pool. A day that themes two of three
+ *  looks themed and is two-thirds themed. */
+export function ciphersFor(passages: DayPassage[] = []): string[] {
+  return TIERS.filter((tier) => passages.some((p) => tiersFor(p.text).includes(tier)));
+}
+
 export function yieldFor(day: CoverageDay, dictionary?: string[]): DayYield {
   const words = day.theme?.words ?? [];
   return {
@@ -105,6 +121,7 @@ export function yieldFor(day: CoverageDay, dictionary?: string[]): DayYield {
     words,
     ...yieldOf(words, dictionary),
     tiles: tilesFor(day.weave),
+    ciphers: ciphersFor(day.passages),
   };
 }
 
@@ -123,6 +140,8 @@ export type Summary = {
   /** days whose theme could supply the board itself, not just bonus words */
   scramble: { days: number };
   hive: { days: number };
+  /** days with a passage of the deployment's own, and which tiers it reaches */
+  cryptogram: { withPassage: number; days: number; perTier: Record<string, number> };
 };
 
 /** What each day yields, memoised by the words it has.
@@ -149,7 +168,14 @@ function oneYield(
     made = yieldOf(words, dictionary);
     seen.set(key, made);
   }
-  return { date: day.date, name: day.theme?.name ?? '', words, ...made, tiles: tilesFor(day.weave) };
+  return {
+    date: day.date,
+    name: day.theme?.name ?? '',
+    words,
+    ...made,
+    tiles: tilesFor(day.weave),
+    ciphers: ciphersFor(day.passages),
+  };
 }
 
 /** The counting, once the days have been measured. Cheap, and deliberately
@@ -192,6 +218,16 @@ export function fold(days: CoverageDay[], yields: DayYield[]): Summary {
     bridges: { days: yields.filter((y) => y.bridges > 0).length },
     scramble: { days: yields.filter((y) => y.racks > 0).length },
     hive: { days: yields.filter((y) => y.hives > 0).length },
+    cryptogram: {
+      // Written for the day, against actually usable by some tier: a passage
+      // no band takes is the one failure worth separating out, because it
+      // looks like a day that is covered and is a day that is not.
+      withPassage: days.filter((d) => (d.passages?.length ?? 0) > 0).length,
+      days: yields.filter((y) => y.ciphers.length > 0).length,
+      perTier: Object.fromEntries(
+        TIERS.map((tier) => [tier, yields.filter((y) => y.ciphers.includes(tier)).length])
+      ),
+    },
   };
 }
 
