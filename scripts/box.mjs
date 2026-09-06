@@ -99,7 +99,14 @@ const bits = (mask) => {
   return n;
 };
 
-/** In how few ordinary words the box can be solved: 2, 3, or null for neither.
+/** The words that solve the box, chained — two of them or three — or null when
+ *  neither can be found.
+ *
+ *  The words rather than the count, because the count on its own is a claim and
+ *  the words are the evidence. The page that offers a board shows them, and
+ *  somebody looking at `acquire + negotiations` can see that the board is solved
+ *  by `acquire → escorting` rather than by the two words it was made from,
+ *  which never chain.
  *
  *  Two is what an ordinary daily promises, because it is built out of a
  *  chaining pair and inherits the answer. A themed box has to earn the promise
@@ -119,32 +126,24 @@ export function solvableIn(sideOf, boxMask, dictionary, max = 3) {
     if (list) list.push(e);
     else byFirst.set(e.word[0], [e]);
   }
-  // Distinct masks per starting letter: the third word is only ever asked
-  // "does anything starting here cover what is left", and a thousand words
-  // that cover the same letters answer that once.
-  const masksByFirst = new Map();
-  for (const [letter, list] of byFirst) {
-    masksByFirst.set(letter, [...new Set(list.map((e) => e.mask))]);
-  }
-
   // Two, and every pair that fails becomes a state for three: what is covered
   // so far, and which letter the next word has to start with. Collapsed by
   // (letter, covered) — the words that got there do not matter afterwards.
-  const states = new Set();
+  const states = new Map();
   for (const first of usable) {
     for (const second of byFirst.get(first.last) ?? []) {
       const covered = first.mask | second.mask;
-      if (bits(covered) === BOX_LETTERS) return 2;
-      if (max >= 3) states.add(`${second.last} ${covered}`);
+      if (bits(covered) === BOX_LETTERS) return [first.word, second.word];
+      if (max >= 3) states.set(`${second.last} ${covered}`, [first.word, second.word]);
     }
   }
   if (max < 3) return null;
 
-  for (const state of states) {
+  for (const [state, pair] of states) {
     const [letter, covered] = state.split(' ');
     const left = ~Number(covered) & boxMask;
-    for (const mask of masksByFirst.get(letter) ?? []) {
-      if ((left & ~mask) === 0) return 3;
+    for (const e of byFirst.get(letter) ?? []) {
+      if ((left & ~e.mask) === 0) return [...pair, e.word];
     }
   }
   return null;
@@ -234,7 +233,12 @@ export function themedBoxes(themeWords, dictionary, { maxSeeds = MAX_SEED_WORDS,
       from,
       sides: laid.sides,
       holds: all.filter((w) => spellable(w, laid.sideOf)),
-      par: pool ? solvableIn(laid.sideOf, boxMask, pool) : null,
+      // The chain that solves it, and the count derived from that rather than
+      // claimed beside it.
+      solution: pool ? solvableIn(laid.sideOf, boxMask, pool) : null,
+      get par() {
+        return this.solution ? this.solution.length : null;
+      },
     });
     if (out.length >= limit) break;
   }

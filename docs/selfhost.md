@@ -1674,6 +1674,17 @@ Nothing about the seed is validated in the database either: what a seed may be
 is the game's business, and a copy of those rules in a table would be a staler
 copy.
 
+**A box candidate names the chain that solves it**, not just how long it is:
+
+```
+acquire + negotiations — iec/oaq/ntu/rgs, solved by acquire → escorting
+```
+
+The two words on the left are where the twelve letters came from and are not the
+answer — theme words essentially never chain with each other — so a label saying
+only "solvable in 2" beside them reads as a board that cannot be played. The
+count is a claim; the words are the evidence, and the search now returns them.
+
 **A pin that has stopped working is passed over**, with a line in the nightly
 log — the word left the list, the box lost its two-word answer, the two ladder
 ends no longer have a route:

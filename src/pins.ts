@@ -151,7 +151,14 @@ export function candidatesFor(
       return boxesFrom(words, dictionary, { limit: 60 })
         .filter((box) => box.par !== null)
         .map((box) => ({
-          label: `${box.from.join(' + ')} — ${box.sides.join('/')}, solvable in ${box.par}`,
+          // The chain that solves it, not just how long it is. The words the
+          // board was built from never chain with each other — they are where
+          // the twelve letters came from — so a label saying "solvable in 2"
+          // beside two words that plainly do not chain reads as a board that
+          // does not work.
+          label:
+            `${box.from.join(' + ')} — ${box.sides.join('/')}` +
+            `, solved by ${(box.solution ?? []).join(' → ')}`,
           choice: { from: box.from },
         }));
     case 'ladder':

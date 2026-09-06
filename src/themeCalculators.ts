@@ -24,13 +24,16 @@ export type Box = {
   sides: string[];
   /** every theme word the finished box can spell — the words a player finds */
   holds: string[];
-  /** in how few ordinary words it can be solved — 2 if a chaining pair covers
-   *  all twelve, 3 if it takes a chain of three, null if neither (or if no
-   *  dictionary was given, which is unknown rather than unsolvable).
+  /** the chained words that solve it — two of them, or three — or null when
+   *  neither can be found (or when no dictionary was given, which is unknown
+   *  rather than unsolvable).
    *
-   *  Two is what an ordinary daily inherits from being built out of a chaining
-   *  pair. A themed box has to earn it, and three is a real answer rather than
-   *  a consolation — the board still says what it takes. */
+   *  The words rather than a count, because a count is a claim and the words
+   *  are the evidence: a board made of `acquire + negotiations` is solved by
+   *  `acquire → escorting`, and the two it was built from never chain. */
+  solution: string[] | null;
+  /** how few words it takes, derived from the solution rather than claimed
+   *  beside it */
   par: number | null;
 };
 
@@ -200,11 +203,14 @@ export function boxesFrom(
     // twice on one side. More seed words is more constraints, so this refuses
     // more often than a pair does.
     if (!laid) continue;
+    // The mask is the key the seed sets came back under: the twelve letters.
+    const solution = pool ? solvableIn(laid.sideOf, boxMask, pool) : null;
     out.push({
       from,
       sides: laid.sides,
       holds: all.filter((w) => spellable(w, laid.sideOf)),
-      par: pool ? solvableIn(laid.sideOf, boxMask, pool) : null,
+      solution,
+      par: solution ? solution.length : null,
     });
     if (out.length >= limit) break;
   }
@@ -216,7 +222,7 @@ export function boxesFrom(
   );
 }
 
-/** In how few chained words the box can be solved: 2, 3, or null for neither.
+/** The chained words that solve the box — two of them or three — or null.
  *
  *  Chained throughout, because that is the game: the second word starts with
  *  the first word's last letter, the third with the second's. What changes with
@@ -229,7 +235,7 @@ function solvableIn(
   sideOf: Record<string, number>,
   boxMask: number,
   dictionary: Indexed[]
-): number | null {
+): string[] | null {
   const usable = dictionary.filter(
     (e) => (e.mask & ~boxMask) === 0 && spellable(e.word, sideOf)
   );
@@ -239,31 +245,25 @@ function solvableIn(
     if (list) list.push(e);
     else byFirst.set(e.word[0], [e]);
   }
-  // Distinct masks per starting letter: the third word is only ever asked
-  // "does anything starting here cover what is left", and a thousand words
-  // covering the same letters answer that once.
-  const masksByFirst = new Map<string, number[]>();
-  for (const [letter, list] of byFirst) {
-    masksByFirst.set(letter, [...new Set(list.map((e) => e.mask))]);
-  }
 
   // Two, and every pair that falls short becomes a state for three: what is
   // covered, and the letter the next word has to start with. Collapsed by the
-  // two of them, because which words got there does not matter afterwards.
-  const states = new Set<string>();
+  // two of them, keeping one pair that got there — which pair does not matter
+  // to the search and does matter to whoever reads the answer.
+  const states = new Map<string, string[]>();
   for (const first of usable) {
     for (const second of byFirst.get(first.last) ?? []) {
       const covered = first.mask | second.mask;
-      if (bits(covered) === BOX_LETTERS) return 2;
-      states.add(`${second.last} ${covered}`);
+      if (bits(covered) === BOX_LETTERS) return [first.word, second.word];
+      states.set(`${second.last} ${covered}`, [first.word, second.word]);
     }
   }
 
-  for (const state of states) {
+  for (const [state, pair] of states) {
     const [letter, covered] = state.split(' ');
     const left = ~Number(covered) & boxMask;
-    for (const mask of masksByFirst.get(letter) ?? []) {
-      if ((left & ~mask) === 0) return 3;
+    for (const e of byFirst.get(letter) ?? []) {
+      if ((left & ~e.mask) === 0) return [...pair, e.word];
     }
   }
   return null;

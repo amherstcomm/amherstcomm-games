@@ -103,7 +103,12 @@ describe('boxesFrom', () => {
     const [box] = boxesFrom(VOTING_SHARED);
     const two = chainOf(box.sides, [7]);
     expect(new Set(two.join('')).size).toBe(12);
-    expect(boxesFrom(VOTING_SHARED, two)[0].par).toBe(2);
+    const solved = boxesFrom(VOTING_SHARED, two)[0];
+    expect(solved.par).toBe(2);
+    // The words, because a count is a claim: the board it was built from does
+    // not chain, so "solvable in 2" without them reads as a board that cannot
+    // be played.
+    expect(solved.solution).toEqual(two);
   });
 
   // Three is a real answer, and the board says which it takes. The chain rule
@@ -256,10 +261,15 @@ describe('the box search, in both places', () => {
   const DICT = ['vote', 'eindsharg', 'shared', 'voting', 'gash', 'dev', 'invested'];
 
   it('agrees pair for pair, and on how few words each takes', () => {
-    const mine = boxesFrom(THEME, DICT).map((b) => `${b.from.join('+')} ${b.sides.join('|')} ${b.par}`);
+    // The solution as well as the count: the words are the evidence and the
+    // count is the claim, and two searches that agreed on the claim while
+    // finding different boards would be two searches nobody could compare.
+    const say = (b: { from: string[]; sides: string[]; solution: string[] | null }) =>
+      `${b.from.join('+')} ${b.sides.join('|')} ${(b.solution ?? ['none']).join('>')}`;
+    const mine = boxesFrom(THEME, DICT).map(say);
     const theirs = (
-      themedBoxes(THEME, DICT) as { from: string[]; sides: string[]; par: number | null }[]
-    ).map((b) => `${b.from.join('+')} ${b.sides.join('|')} ${b.par}`);
+      themedBoxes(THEME, DICT) as { from: string[]; sides: string[]; solution: string[] | null }[]
+    ).map(say);
     expect(mine).toEqual(theirs);
     expect(mine.length).toBeGreaterThan(0);
   });

@@ -548,7 +548,9 @@ test('a word list says what it can make while you write it', async ({ page }) =>
   // solve. Which words those are depends on the list, so what is asserted is
   // the shape: a seed of at least two, the four sides, and the number.
   await expect(page.getByText(/best: \w+( \+ \w+)+ → \w+ \| \w+ \| \w+ \| \w+/)).toBeVisible();
-  await expect(page.getByText(/\(solvable in [23]\)/)).toBeVisible();
+  // The chain that solves it, because the words it was built from do not chain
+  // with each other and a bare "solvable in 2" beside them reads as broken.
+  await expect(page.getByText(/solved by \w+ → \w+/)).toBeVisible();
 
   // The ladder search waits for a pause in typing rather than running per
   // keystroke — a walk per word over forty thousand rungs is a tenth of a
@@ -1013,7 +1015,7 @@ test('and a long shortlist can be filtered and paged through', async ({ page }) 
   // Scoped to the box list: three lists can show a `more` button at once, and
   // "the first one" is the daily word's.
   const boxList = page.locator('[data-shortlist="boxed"]');
-  const boxes = boxList.getByRole('button', { name: /solvable in/ });
+  const boxes = boxList.getByRole('button', { name: /solved by/ });
   await expect(boxes.first()).toBeVisible();
   const firstPage = await boxes.count();
   expect(firstPage).toBe(12);
@@ -1025,7 +1027,11 @@ test('and a long shortlist can be filtered and paged through', async ({ page }) 
   // Taken out of a board that is actually on the page rather than written down
   // here: which pairs a list makes is a fact about the list, and the mechanism
   // is what is being tested.
+  // The label names what the board is made of, the letters, and the chain that
+  // solves it — the seed words never chain with each other, so a board saying
+  // only "solvable in 2" beside them reads as broken.
   const label = (await boxes.first().textContent()) ?? '';
+  expect(label).toMatch(/solved by \w+ → \w+/);
   const [left, right] = label.split(' — ')[0].split(' + ');
   const before = await boxes.count();
   await page.getByLabel('Filter Letter box').fill(`${right} ${left}`);

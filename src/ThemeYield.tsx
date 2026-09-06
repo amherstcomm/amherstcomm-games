@@ -101,14 +101,14 @@ export default function ThemeYield({ words }: { words: string }) {
           {boxes.length > 0 ? '✓' : '·'} Boxed — {boxes.length}{' '}
           {boxes.length === 1 ? 'board' : 'boards'} from sets of these words
           {dictionary && boxes.length > 0 &&
-            `, ${boxes.filter((b) => b.par === 2).length} solvable in two words and ` +
-              `${boxes.filter((b) => b.par === 3).length} in three`}
+            `, ${boxes.filter((b) => b.par === 2).length} solved by two chained words and ` +
+              `${boxes.filter((b) => b.par === 3).length} by three`}
           {boxes.length >= 24 && ' (the first two dozen — there are more)'}
         </p>
         {best && (
           <p className="text-slate-400 pl-3">
             best: {best.from.join(' + ')} → {best.sides.join(' | ')}
-            {best.par ? ` (solvable in ${best.par})` : ''} — finds{' '}
+            {best.solution ? ` — solved by ${best.solution.join(' → ')}` : ''} — finds{' '}
             {best.holds.length}: {best.holds.slice(0, 8).join(', ')}
             {best.holds.length > 8 && '…'}
           </p>
