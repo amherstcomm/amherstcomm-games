@@ -987,8 +987,41 @@ per statement, unless it is declared deferrable.
 
 ## Settings, without a rebuild
 
-`/admin` — gated on `site.settings`, which only `games.admin` holds — carries
-the handful of values that describe an *event* rather than a deployment.
+### Six jobs at one address
+
+`/admin` is a tab strip, and the tab is part of the address:
+
+| | |
+|---|---|
+| `/admin/site` | what the site says — subtitle, notice, contact, timezone |
+| `/admin/games` | which games and modes are offered, and when |
+| `/admin/lists` | the word lists a themed month draws from |
+| `/admin/weave` | the themes Weave builds boards out of |
+| `/admin/coverage` | what all of them add up to over a range of days |
+| `/admin/people` | who may do any of it |
+
+It was one long scroll until it wasn't: six panels, each a page's worth, with
+the last of them two thousand pixels down and every one of them fetching on
+mount — so opening the page to change the subtitle read every word list, every
+theme and everybody's roles.
+
+The tab is in the URL rather than in a piece of state for the reason the rest of
+the site already does it: one state, one address. A month gets written over
+several sittings, so "the word lists" has to be something you can bookmark and
+send to the other administrator. A bare `/admin` settles on the first tab; a tab
+that does not exist is not an address at all, because one that quietly means the
+front page hides the typo.
+
+Each panel is gated separately and draws its own refusal — `site.settings` for
+the first, `games.setup` for the middle four, `users.manage` for the last — so a
+deployment is free to hand them out separately and nothing here has to guess
+which it did.
+
+### What the site says
+
+`/admin/site` — gated on `site.settings`, which only `games.admin` holds —
+carries the handful of values that describe an *event* rather than a
+deployment.
 A name, an origin, an SSO provider are facts about the deployment and stay
 `VITE_` values, rebuilt when they change. "Employee Ownership Month" is true in
 October and false in November, and a container rebuild is an absurd way to say
@@ -1508,7 +1541,7 @@ for a case nobody has hit.
 
 ### Who may do what
 
-The second half of `/admin`, gated on `users.manage`. Until now a privilege was
+`/admin/people`, gated on `users.manage`. Until now a privilege was
 a row inserted by hand, which is fine for a deployment with one administrator
 and bad for an event month — the thing most likely to be needed at short notice
 is a second person who can build a round.

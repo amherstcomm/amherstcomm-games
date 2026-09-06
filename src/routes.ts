@@ -44,6 +44,13 @@ export type SettingsTab = (typeof SETTINGS_TABS)[number];
 export const ACCOUNT_TABS = ['personal', 'friends'] as const;
 export type AccountTab = (typeof ACCOUNT_TABS)[number];
 
+// The admin page is six unrelated jobs — what the site says, which games it
+// offers, the words a themed month draws from, the boards Weave builds, whether
+// a month is covered, and who may do any of it. One scroll made the last of
+// them a thing nobody found.
+export const ADMIN_TABS = ['site', 'games', 'lists', 'weave', 'coverage', 'people'] as const;
+export type AdminTab = (typeof ADMIN_TABS)[number];
+
 const VIEWS = ALL_VIEWS;
 
 // A panel with tabs names the tab, always — /stats/overall rather than a bare
@@ -53,6 +60,7 @@ const DEFAULT_STATS: StatsTab = 'overall';
 const DEFAULT_SETTINGS: SettingsTab = 'site';
 const DEFAULT_DOC: LegalDoc = 'notices';
 const DEFAULT_ACCOUNT: AccountTab = 'personal';
+const DEFAULT_ADMIN: AdminTab = 'site';
 
 // Share from dev and the link points at dev; www is folded into the apex so
 // shared text reads the way the site is canonically named.
@@ -99,7 +107,7 @@ export type Route =
   // the editor and a separate /sessions/list would be a second name for the
   // same page.
   | { kind: 'sessions'; session?: string }
-  | { kind: 'admin' }
+  | { kind: 'admin'; tab: AdminTab }
   // The way in. `/join` is the list and the code box; `/join/<code>` is the
   // short address that fits on a slide and lands straight in the room.
   | { kind: 'join'; code?: string }
@@ -137,7 +145,7 @@ export function pathOf(route: Route): string {
     case 'sessions':
       return route.session ? `/sessions/${route.session}` : '/sessions';
     case 'admin':
-      return '/admin';
+      return `/admin/${route.tab}`;
     case 'join':
       return route.code ? `/join/${route.code}` : '/join';
     case 'scores':
@@ -146,6 +154,17 @@ export function pathOf(route: Route): string {
 }
 
 const VIEW_WORD: Record<View, string> = { play: 'Play', learn: 'How to play' };
+
+/** What each admin tab is called, in the tab strip and in the browser tab —
+ *  one table, so the two cannot drift. */
+export const ADMIN_TITLE: Record<AdminTab, string> = {
+  site: 'Site settings',
+  games: 'Games offered',
+  lists: 'Word lists',
+  weave: 'Weave themes',
+  coverage: 'Coverage',
+  people: 'Who may do what',
+};
 
 /** What the tab says, and what a search result would show. Every address
  *  returning one title makes 33 sitemap entries look like 33 copies of the
@@ -189,7 +208,10 @@ export function titleOf(route: Route): string {
     case 'sessions':
       return `Sessions${suffix}`;
     case 'admin':
-      return `Site settings${suffix}`;
+      // Named by the tab, because six jobs share this address and a tab that
+      // says "Site settings" while showing the word lists is a tab nobody can
+      // find twice.
+      return `${ADMIN_TITLE[route.tab]}${suffix}`;
     case 'join':
       return `Join a session${suffix}`;
     case 'scores':
@@ -286,7 +308,12 @@ export function parsePath(pathname: string): Route | null {
 
   // /sign-in and /account are the same panel wearing whichever face fits
   if (first === 'sign-in' || first === 'signin') return { kind: 'account', tab: DEFAULT_ACCOUNT };
-  if (first === 'admin' && parts.length === 1) return { kind: 'admin' };
+  if (first === 'admin') {
+    if (second === undefined) return { kind: 'admin', tab: DEFAULT_ADMIN };
+    return ADMIN_TABS.includes(second as AdminTab)
+      ? { kind: 'admin', tab: second as AdminTab }
+      : null;
+  }
   if (PANELS.includes(first as Panel)) return { kind: 'panel', panel: first as Panel };
 
   // 'solve' is not a view any more, but the address is out there in shared

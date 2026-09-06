@@ -19,6 +19,7 @@ import {
   DOCS,
   PANELS,
   SETTINGS_TABS,
+  ADMIN_TABS,
   STATS_TABS,
   legacyRoute,
   parsePath,
@@ -54,6 +55,7 @@ const EVERY_ROUTE: Route[] = [
   ...STATS_TABS.map((tab) => ({ kind: 'stats', tab }) as const),
   ...SETTINGS_TABS.map((tab) => ({ kind: 'settings', tab }) as const),
   ...ACCOUNT_TABS.map((tab) => ({ kind: 'account', tab }) as const),
+  ...ADMIN_TABS.map((tab) => ({ kind: 'admin', tab }) as const),
   ...ALL_SLUGS.flatMap((slug) =>
     ALL_VIEWS.map((view) => ({ kind: 'game', view, slug, daily: view === 'play' }) as const)
   ),
@@ -202,5 +204,31 @@ describe('the parts that are easy to get subtly wrong', () => {
     expect(parsePath(`/live/${id}`)).toEqual({ kind: 'live', session: id, host: false });
     expect(parsePath(`/live/${id}/host`)).toEqual({ kind: 'live', session: id, host: true });
     expect(titleOf({ kind: 'live', session: id, host: true })).toMatch(/Presenting/);
+  });
+});
+
+// Six jobs at one address, and the tab is part of the address so a month
+// written over several sittings can be bookmarked and sent on.
+describe('the admin tabs', () => {
+  it('name themselves in the path', () => {
+    expect(pathOf({ kind: 'admin', tab: 'lists' })).toBe('/admin/lists');
+  });
+
+  // The rule the rest of the panels already follow: a bare address settles on
+  // the first tab rather than meaning a second thing.
+  it('and a bare /admin settles on the first', () => {
+    expect(parsePath('/admin')).toEqual({ kind: 'admin', tab: 'site' });
+  });
+
+  // Not the front page: an address that quietly means something else is worse
+  // than one that fails, because the failure is visible.
+  it('while a tab that does not exist is not an address', () => {
+    expect(parsePath('/admin/nonsense')).toBeNull();
+  });
+
+  // The browser tab says which panel, because six of them share this address.
+  it('and each says what it is in the title', () => {
+    expect(titleOf({ kind: 'admin', tab: 'coverage' })).toMatch(/^Coverage/);
+    expect(titleOf({ kind: 'admin', tab: 'people' })).toMatch(/^Who may do what/);
   });
 });

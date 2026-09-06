@@ -65,7 +65,9 @@ const FOUND = [
 async function admin(
   page: import('@playwright/test').Page,
   sent: Record<string, string>[],
-  { refuse = '' } = {}
+  // Which panel. The page is six jobs at one address now, one at a time, so a
+  // test has to say which one it came for.
+  { refuse = '', tab = 'site' } = {}
 ) {
   await page.route('**/rest/v1/rpc/**', (route) => {
     const url = route.request().url();
@@ -96,7 +98,7 @@ async function admin(
       body: JSON.stringify(body),
     });
   });
-  await page.goto('/admin');
+  await page.goto(`/admin/${tab}`);
 }
 
 test('the settings page renders, which is not a given', async ({ page }) => {
@@ -176,7 +178,7 @@ test('and somebody who may not is told so rather than shown an empty form', asyn
 // ---------------------------------------------------------------------------
 
 test('it lists who can do more than play', async ({ page }) => {
-  await admin(page, []);
+  await admin(page, [], { tab: 'people' });
   await expect(page.getByRole('heading', { name: 'Who may do what' })).toBeVisible();
   await expect(page.getByRole('combobox', { name: /What Ray may do/ })).toHaveValue(
     'games.admin'
@@ -188,13 +190,13 @@ test('it lists who can do more than play', async ({ page }) => {
 });
 
 test('and marks which one is you', async ({ page }) => {
-  await admin(page, []);
+  await admin(page, [], { tab: 'people' });
   await expect(page.getByText('— you')).toBeVisible();
 });
 
 test('changing somebody sends the rung they were moved to', async ({ page }) => {
   const sent: Record<string, string>[] = [];
-  await admin(page, sent);
+  await admin(page, sent, { tab: 'people' });
   await page
     .getByRole('combobox', { name: /What editor@amherstcomm.net may do/ })
     .selectOption('games.admin');
@@ -205,7 +207,7 @@ test('changing somebody sends the rung they were moved to', async ({ page }) => 
 
 test('somebody who holds nothing can be found and given something', async ({ page }) => {
   const sent: Record<string, string>[] = [];
-  await admin(page, sent);
+  await admin(page, sent, { tab: 'people' });
   await page.getByLabel('Search for somebody').fill('dave');
   // They hold nothing, so the control starts at the floor rather than empty.
   const control = page.getByRole('combobox', { name: /What Dave Jones may do/ });
@@ -220,6 +222,7 @@ test('and the last-administrator refusal is shown against the person it is about
   page,
 }) => {
   await admin(page, [], {
+    tab: 'people',
     refuse: 'that is the last administrator — appoint another one first',
   });
   await page.getByRole('combobox', { name: /What Ray may do/ }).selectOption('games.edit');
@@ -275,7 +278,7 @@ test('a word list can be written by pasting whatever comes to hand', async ({ pa
       body: JSON.stringify(body),
     });
   });
-  await page.goto('/admin');
+  await page.goto('/admin/lists');
 
   await expect(page.getByText('Employee ownership')).toBeVisible();
   // The sizes it can fill a board with, because that is what picking one for a
@@ -338,7 +341,7 @@ test('a month of Weave themes can be pasted in one go', async ({ page }) => {
       body: JSON.stringify(body),
     });
   });
-  await page.goto('/admin');
+  await page.goto('/admin/weave');
 
   // Ray's own shape, three of them, one dated — plus one that cannot be used.
   const blob = JSON.stringify([
@@ -406,7 +409,7 @@ test('and several word lists at once, with a template to start from', async ({ p
       body: JSON.stringify(body),
     });
   });
-  await page.goto('/admin');
+  await page.goto('/admin/lists');
 
   await page.getByRole('button', { name: 'Paste lists' }).click();
 
@@ -474,7 +477,7 @@ test('a month can be opened from a file rather than pasted', async ({ page }) =>
       body: JSON.stringify(body),
     });
   });
-  await page.goto('/admin');
+  await page.goto('/admin/weave');
   await page.getByRole('button', { name: 'Paste themes' }).click();
 
   await page.getByLabel('Paste themes from a file').setInputFiles({
@@ -531,7 +534,7 @@ test('a word list says what it can make while you write it', async ({ page }) =>
       body: JSON.stringify(body),
     });
   });
-  await page.goto('/admin');
+  await page.goto('/admin/lists');
   await page.getByRole('button', { name: 'New list' }).click();
 
   // voting + shared is twelve distinct letters, measured in
@@ -630,7 +633,7 @@ test('coverage says which days of a month are themed, and with how much', async 
     });
   });
 
-  await page.goto('/admin');
+  await page.goto('/admin/coverage');
   // The dates the lists already carry: checking October is one click, not two
   // date fields and a guess at which month somebody meant.
   await expect(page.getByLabel('Coverage from')).toHaveValue('2026-10-01');
@@ -664,4 +667,66 @@ test('coverage says which days of a month are themed, and with how much', async 
   await page.getByRole('button', { name: 'Show every day' }).click();
   await expect(page.getByText('no list')).toHaveCount(2);
   await expect(page.getByText('no weave theme')).toHaveCount(21);
+});
+
+// ---------------------------------------------------------------------------
+// Six jobs, one at a time
+//
+// It was one scroll, and the last panel on it was two thousand pixels down.
+// What matters about the split is not that it looks tidier: the tab is in the
+// address, so a month written over several sittings can be bookmarked and sent
+// to the other administrator, and each panel fetches only when it is the one
+// being looked at.
+// ---------------------------------------------------------------------------
+
+test('the admin page shows one panel at a time, and says which in the address', async ({
+  page,
+}) => {
+  const asked: string[] = [];
+  await page.route('**/rest/v1/rpc/**', (route) => {
+    const url = route.request().url();
+    asked.push(url.split('/rpc/')[1].split('?')[0]);
+    const body = url.includes('site_settings_sheet')
+      ? { ok: true, settings: [] }
+      : url.includes('word_lists_sheet')
+        ? { ok: true, lists: [] }
+        : url.includes('weave_themes_sheet')
+          ? { ok: true, themes: [] }
+          : url.includes('feature_windows_sheet')
+            ? { ok: true, features: [] }
+            : url.includes('people_with_roles')
+              ? { ok: true, people: [] }
+              : [];
+    return route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(body),
+    });
+  });
+
+  // The bare address settles on the first tab rather than meaning a second
+  // thing, which is the rule the rest of the site's panels already follow.
+  await page.goto('/admin');
+  await expect(page.getByRole('heading', { name: 'Site settings' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Word lists' })).toHaveCount(0);
+  // And it asked for nothing else: opening this page to change the subtitle
+  // used to read every word list, every theme and everybody's roles.
+  expect(asked.some((rpc) => rpc.includes('word_lists_sheet'))).toBe(false);
+
+  await page.getByRole('link', { name: 'Word lists' }).click();
+  await expect(page).toHaveURL(/\/admin\/lists$/);
+  await expect(page.getByRole('heading', { name: 'Word lists' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Site settings' })).toHaveCount(0);
+
+  // Back walks the tabs, because they are addresses rather than state. It
+  // lands on /admin/site rather than /admin: the address bar follows the state,
+  // and the state is a named tab — the bare form is an accepted address, not a
+  // second name the site keeps using.
+  await page.goBack();
+  await expect(page).toHaveURL(/\/admin\/site$/);
+  await expect(page.getByRole('heading', { name: 'Site settings' })).toBeVisible();
+
+  // And one typed straight in works, which is the half a bookmark needs.
+  await page.goto('/admin/people');
+  await expect(page.getByRole('heading', { name: 'Who may do what' })).toBeVisible();
 });

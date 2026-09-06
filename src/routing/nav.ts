@@ -21,6 +21,7 @@
 
 import type {
   AccountTab,
+  AdminTab,
   LegalDoc,
   Panel,
   Route,
@@ -39,7 +40,7 @@ export type Page =
   | { kind: 'reportQueue' }
   | { kind: 'live'; session: string; host: boolean }
   | { kind: 'sessions'; session?: string }
-  | { kind: 'admin' }
+  | { kind: 'admin'; tab: AdminTab }
   | { kind: 'join'; code?: string }
   | { kind: 'scores'; session: string };
 
@@ -59,6 +60,10 @@ export type Tabs = {
   settings: SettingsTab;
   account: AccountTab;
   legal: LegalDoc;
+  // A page rather than an overlay, and remembered for the same reason: an
+  // administrator halfway through writing a month leaves for the site and comes
+  // back to the word lists, not to the first tab.
+  admin: AdminTab;
 };
 
 export type Nav = { page: Page; overlays: Overlay[]; last: Tabs };
@@ -72,6 +77,7 @@ export const DEFAULT_TABS: Tabs = {
   settings: 'site',
   account: 'personal',
   legal: 'notices',
+  admin: 'site',
 };
 
 /** The address, from the state. Two lines and total: whatever is on top, or the
@@ -132,7 +138,10 @@ export function navOf(route: Route, last: Tabs = DEFAULT_TABS): { nav: Nav; game
     case 'sessions':
       return { nav: page({ kind: 'sessions', session: route.session }), game: null };
     case 'admin':
-      return { nav: page({ kind: 'admin' }), game: null };
+      return {
+        nav: { page: { kind: 'admin', tab: route.tab }, overlays: [], last: { ...last, admin: route.tab } },
+        game: null,
+      };
     case 'join':
       return { nav: page({ kind: 'join', code: route.code }), game: null };
     case 'scores':
