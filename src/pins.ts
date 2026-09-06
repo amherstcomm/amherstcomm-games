@@ -100,7 +100,9 @@ export const PIN_TITLE: Record<Pinnable, string> = {
  *  themselves differently. */
 export function describePin(game: string, choice: Record<string, unknown>): string {
   if (typeof choice.word === 'string') return choice.word;
-  if (Array.isArray(choice.from)) return (choice.from as string[]).join(' + ');
+  // Commas, not `+`: these are where the letters came from and never chain
+  // with each other, and a plus sign between them says otherwise.
+  if (Array.isArray(choice.from)) return `letters from ${(choice.from as string[]).join(', ')}`;
   if (typeof choice.base === 'string') return choice.base;
   if (typeof choice.a === 'string' && typeof choice.b === 'string') {
     return `${choice.a} → ${choice.b}`;
@@ -148,17 +150,22 @@ export function candidatesFor(
       // Sixty rather than everything: the generator works through thousands
       // overnight, and measuring a board takes three milliseconds, so the page
       // asks for as many as somebody might page through and no more.
-      return boxesFrom(words, dictionary, { limit: 60 })
-        .filter((box) => box.par !== null)
+      return boxesFrom(words, { limit: 60 })
         .map((box) => ({
           // The chain that solves it, not just how long it is. The words the
           // board was built from never chain with each other — they are where
           // the twelve letters came from — so a label saying "solvable in 2"
           // beside two words that plainly do not chain reads as a board that
           // does not work.
+          // The chain first, because the chain is the puzzle. The words the
+          // twelve letters came from are named after it and with commas: `+`
+          // between them reads as a chain, and `acquire + negotiations` is not
+          // one — e does not lead to n, and it was never meant to. That is what
+          // the letters were built from, not what solves the board.
           label:
-            `${box.from.join(' + ')} — ${box.sides.join('/')}` +
-            `, solved by ${(box.solution ?? []).join(' → ')}`,
+            // The chain is the board and the board is the chain: these are the
+            // words it was built from *and* the words that solve it, in order.
+            `${box.sides.join('/')} — ${box.solution.join(' → ')}`,
           choice: { from: box.from },
         }));
     case 'ladder':
