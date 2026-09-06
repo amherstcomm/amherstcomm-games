@@ -1357,22 +1357,15 @@ ten games can take a plain word list, and they are the two this touches:
   than the list. The one thing still applied is the blocklist: a curated list is
   somebody's paste, and never handing anybody a slur as an answer is not a rule
   to relax because the words came from inside the building.
-- **Weave**, whose whole premise is a themed word set — the list becomes the
-  theme, so the board spells out the event's own words. It needs a **clue** (the
-  list's name by default) and **spangrams**: the long answers threaded corner to
-  corner, one word each of 6 to 16 letters.
+- **Weave**, whose whole premise is a themed word set — but from `weave_themes`
+  rather than from a list. See [Weave themes](#weave-themes) above.
 
-  **Plural, and give several.** A theme that runs for a month builds a board
-  every day of it, and one spangram threads the same long answer through all
-  thirty-one — the board rearranges, the word does not, and by the third day
-  nobody is looking for it. Each spangram becomes a candidate handed to Weave's
-  own generator, which shuffles them against the day's seed and takes the first
-  that tiles: so the day picks, the pick is deterministic, and one that will not
-  fit a given shape is passed over rather than costing the board. Four across a
-  month reads as four different puzzles.
-
-  Without any, the list still picks the daily word and simply cannot build a
-  board.
+  **Reversal.** A list used to become a Weave theme: its name was the clue and
+  its `spangrams` column held the long corner-to-corner answers. That went when
+  lists were allowed to overlap, because merging two of them would have had to
+  invent a rule for whose clue won — the sort of rule nobody can remember
+  afterwards. The columns are still there and still validated on save; nothing
+  reads them. A list themes the word, a theme themes the board.
 
 The other eight need pangrams, letter grids or curated pairs, and a bag of words
 cannot supply those.
@@ -1409,6 +1402,55 @@ The nightly window prints one `Theming <date> from "<name>"` line per themed
 day. The rest of the generator's chatter is discarded, but which days a list
 took over is worth seeing in the log: the first of the month is a bad morning to
 discover that "trust me, it is themed" was wrong.
+
+#### Coverage: what a month actually adds up to
+
+The panel beside a list says what that list can make. Once several lists and
+several Weave themes are written, with overlapping windows on purpose, a second
+question appears that no single one of them can answer: **is October covered?**
+
+`/admin` answers it over a range of days — the dates the lists already carry, so
+checking the month is one button rather than two date fields and a guess. What
+it reports:
+
+- **The daily word**, per length. This is the finding the panel exists for, and
+  it surprises everyone the first time: a day is not themed or unthemed. The
+  generator draws a board for each of ten word lengths every day and takes the
+  theme's own words *of that length*, so a list of six-letter words themes one
+  board in ten and leaves nine ordinary. The only symptom otherwise is a month
+  that reads as though the theme barely showed up.
+
+  Beside each length is the smallest pool any themed day draws from, and a
+  **will repeat** where that pool is smaller than the run of days. The draw is
+  per day against that day's seed rather than a rotation, so four words across
+  thirty-one days does not mean each appears eight times in turn — it means the
+  same answer can come round the next morning.
+- **Days nothing covers**, as ranges rather than a column of dates. Not a
+  failure: the generator makes the day it would have made anyway. It is worth
+  knowing in the one month somebody cares which days those are.
+- **Weave**, how many days have a theme that actually tiles a board, and per
+  board size. A day whose themes all fail to tile gets a curated board, not no
+  board — which is exactly why it is invisible without this.
+- **Boxed and Bridge**, the days whose pooled words can build one.
+
+The days themselves come from `theme_coverage(from, until)`, which calls
+`daily_theme` and `daily_weave_themes` per day: **the same two functions the
+nightly generator calls, with the same dates.** That is the whole design of it.
+A coverage page that re-implemented "which lists cover this day" would agree
+right up until somebody changed one of them, and would then quietly reassure
+people about a month that was not themed. `supabase/tests/wordlists.sql` asserts
+the agreement day by day across a range that runs off both ends of the window.
+
+It hands answers to a browser, where `daily_theme` refuses to. The difference is
+who is asking: `theme_coverage` is gated on `games.setup`, the capability that
+already lets somebody open the list and read every word in it. A player gets the
+same `not allowed` they get everywhere else, and `anon` cannot call it at all.
+
+What it does **not** model is the blocklist. The generator drops a blocked word
+from a themed pool, so a pool of four containing one could really be three. The
+lists this is for are written inside the building, and a coverage page that
+loaded the blocklist to shave a word off a count would be carrying that weight
+for a case nobody has hit.
 
 ### Who may do what
 

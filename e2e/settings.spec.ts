@@ -549,3 +549,99 @@ test('a word list says what it can make while you write it', async ({ page }) =>
   await page.getByLabel(/^Words/).fill('nonprofit\nprofitable');
   await expect(page.getByText('non · profit · able')).toBeVisible();
 });
+
+// The same question asked of a month rather than a list: lists overlap, so
+// whether October is covered is a thing no single list knows.
+test('coverage says which days of a month are themed, and with how much', async ({ page }) => {
+  const days = Array.from({ length: 31 }, (_, i) => {
+    const date = `2026-10-${String(i + 1).padStart(2, '0')}`;
+    // Two days nothing covers, and Weave running out after the tenth: both are
+    // ordinary states rather than failures, and both are the thing to know
+    // about in the month an event is in.
+    const gap = i === 4 || i === 5;
+    return {
+      date,
+      theme: gap
+        ? null
+        : { name: 'October', words: ['esop', 'shares', 'equity', 'voting', 'shared', 'dividend'] },
+      weave:
+        i < 10
+          ? [
+              {
+                clue: 'Profit sharing',
+                spangram: 'profitsharing',
+                words: ['metrics', 'payout', 'reward', 'target', 'bonus', 'split'],
+              },
+            ]
+          : [],
+    };
+  });
+
+  await page.route('**/rest/v1/rpc/**', (route) => {
+    const url = route.request().url();
+    const body = url.includes('theme_coverage')
+      ? { ok: true, days }
+      : url.includes('word_lists_sheet')
+        ? {
+            ok: true,
+            lists: [
+              {
+                id: 'l1',
+                name: 'October',
+                words: 6,
+                clue: null,
+                spangrams: [],
+                daily_from: '2026-10-01',
+                daily_until: '2026-10-31',
+                lengths: [4, 6, 8],
+                created_at: '2026-09-01',
+              },
+            ],
+          }
+        : url.includes('site_settings_sheet')
+          ? { ok: true, settings: [] }
+          : url.includes('weave_themes_sheet')
+            ? { ok: true, themes: [] }
+            : url.includes('feature_windows_sheet')
+              ? { ok: true, features: [] }
+              : url.includes('people_with_roles')
+                ? { ok: true, people: [] }
+                : [];
+    return route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(body),
+    });
+  });
+
+  await page.goto('/admin');
+  // The dates the lists already carry: checking October is one click, not two
+  // date fields and a guess at which month somebody meant.
+  await expect(page.getByLabel('Coverage from')).toHaveValue('2026-10-01');
+  await expect(page.getByLabel('Coverage until')).toHaveValue('2026-10-31');
+  await page.getByRole('button', { name: 'Check' }).click();
+
+  await expect(page.getByText('The daily word — 29 of 31 days have a list')).toBeVisible();
+  await expect(page.getByText(/unthemed, so an ordinary word: Oct 5.Oct 6/)).toBeVisible();
+
+  // Per length, which is how the generator themes and the finding the panel
+  // exists for: this list themes three boards in ten and leaves seven ordinary.
+  await expect(page.getByText('6 letters — 29 of 31 days, drawing from 4')).toBeVisible();
+  await expect(page.getByText('5 letters — no themed words, ordinary every day')).toBeVisible();
+  // Fewer words than days, so the same answer comes round again.
+  await expect(page.getByText(/4 letters — 29 of 31 days, drawing from 1/)).toBeVisible();
+  await expect(page.getByText('will repeat').first()).toBeVisible();
+
+  await expect(
+    page.getByText('Weave — 10 of 31 days have a theme that tiles a board')
+  ).toBeVisible();
+  await expect(page.getByText(/curated: Oct 11.Oct 31/)).toBeVisible();
+
+  // voting + shared is twelve distinct letters, so every themed day can build
+  // a box out of the theme.
+  await expect(page.getByText(/Boxed — 29 days/)).toBeVisible();
+
+  await page.getByRole('button', { name: 'Show every day' }).click();
+  await expect(page.getByText('no list')).toHaveCount(2);
+  await expect(page.getByText('no weave theme')).toHaveCount(21);
+});

@@ -8534,3 +8534,59 @@ $fn$;
 
 revoke all on function public.delete_weave_theme(uuid) from public, anon;
 grant execute on function public.delete_weave_theme(uuid) to authenticated;
+
+/*
+ * What every list and theme adds up to, day by day, over a range.
+ *
+ * The panels beside a list answer "what can this one make". This answers the
+ * question that only has an answer once they are all written: is October
+ * covered? A month is themed by several lists with overlapping windows, and the
+ * thing nobody can hold in their head is which days that actually leaves
+ * themed, with what, and where the gaps are.
+ *
+ * It calls daily_theme and daily_weave_themes rather than repeating their
+ * rules. That is the whole point of it: a coverage page that re-implemented
+ * "which lists cover this day" would agree with the generator right up until
+ * the moment somebody changed one of them, and would then quietly reassure
+ * people about a month that was not themed. These are the same two functions
+ * the nightly run asks, asked with the same dates.
+ *
+ * Which means it hands answers to a browser, where daily_theme refuses to. The
+ * difference is who is asking: this is gated on games.setup, the capability
+ * that already lets somebody open the list and read every word in it. Nothing
+ * here is knowable to a player that was not already knowable to the person who
+ * typed it.
+ */
+create or replace function public.theme_coverage(p_from date, p_until date)
+returns jsonb
+language sql
+stable
+security definer
+set search_path = ''
+as $fn$
+  select case
+    when not public.can('games.setup')
+      then jsonb_build_object('ok', false, 'reason', 'not allowed')
+    when p_from is null or p_until is null
+      then jsonb_build_object('ok', false, 'reason', 'it needs both dates')
+    when p_until < p_from
+      then jsonb_build_object('ok', false, 'reason', 'it cannot finish before it starts')
+    -- A year is far more than anybody asks for and stops a typo in a date field
+    -- from asking for ten thousand days of it.
+    when p_until - p_from > 365
+      then jsonb_build_object('ok', false, 'reason', 'a year at a time at most')
+    else jsonb_build_object('ok', true, 'days', coalesce((
+      select jsonb_agg(jsonb_build_object(
+               'date', d::date,
+               -- Null for a day nothing covers, exactly as the generator sees
+               -- it: that is the ordinary state for eleven months of the year
+               -- and means "the day the site would have had anyway".
+               'theme', public.daily_theme(d::date),
+               'weave', public.daily_weave_themes(d::date))
+             order by d)
+      from generate_series(p_from, p_until, interval '1 day') d), '[]'::jsonb))
+  end
+$fn$;
+
+revoke all on function public.theme_coverage(date, date) from public, anon;
+grant execute on function public.theme_coverage(date, date) to authenticated;

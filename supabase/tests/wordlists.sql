@@ -294,4 +294,60 @@ select pg_temp.check('and no web role may',
   not has_function_privilege('authenticated', 'public.daily_theme(date)', 'execute')
   and not has_function_privilege('anon', 'public.daily_theme(date)', 'execute'));
 
+-- ---------------------------------------------------------------------------
+-- Coverage, over a range
+--
+-- The page beside a list says what that list can make. This says what a month
+-- will be, which is a different question: lists overlap, so no single one of
+-- them knows which days it is carrying alone.
+--
+-- What is asserted is the thing that would otherwise rot quietly — that
+-- coverage answers with daily_theme's own answer rather than a second
+-- implementation of "which lists cover this day". A copy would agree until
+-- somebody changed one of them, and would then reassure people about a month
+-- that was not themed.
+-- ---------------------------------------------------------------------------
+select pg_temp.check('a range comes back a day at a time, both ends included',
+  jsonb_array_length(public.theme_coverage(date '2026-10-01', date '2026-10-31')->'days') = 31);
+select pg_temp.check('and one day is one day',
+  jsonb_array_length(public.theme_coverage(date '2026-10-08', date '2026-10-08')->'days') = 1);
+
+select pg_temp.check('every day carries the theme daily_theme would give the generator',
+  not exists (
+    select 1 from jsonb_array_elements(
+      public.theme_coverage(date '2026-09-28', date '2026-11-02')->'days') d
+    where d->'theme' is distinct from
+      coalesce(public.daily_theme((d->>'date')::date), 'null'::jsonb)));
+select pg_temp.check('and the Weave themes daily_weave_themes would give it',
+  not exists (
+    select 1 from jsonb_array_elements(
+      public.theme_coverage(date '2026-09-28', date '2026-11-02')->'days') d
+    where d->'weave' is distinct from public.daily_weave_themes((d->>'date')::date)));
+
+-- Which is what the page reads to say "unthemed, so an ordinary word".
+select pg_temp.check('a day nothing covers says so rather than being left out',
+  (select d->'theme' from jsonb_array_elements(
+     public.theme_coverage(date '2026-09-29', date '2026-09-30')->'days') d
+   where d->>'date' = '2026-09-30') = 'null'::jsonb);
+
+select pg_temp.check('a range cannot finish before it starts',
+  (public.theme_coverage(date '2026-10-31', date '2026-10-01')->>'reason')
+    = 'it cannot finish before it starts');
+-- A typo in a date field asks for ten thousand days otherwise.
+select pg_temp.check('nor run for years',
+  (public.theme_coverage(date '2026-01-01', date '2030-01-01')->>'reason')
+    = 'a year at a time at most');
+select pg_temp.check('and needs both dates',
+  (public.theme_coverage(date '2026-10-01', null)->>'ok') = 'false');
+
+set session "test.uid" = 'e3333333-3333-3333-3333-333333333333';
+-- It hands a browser what daily_theme refuses to hand one. The difference is
+-- the capability: whoever may read this may already open the list and read
+-- every word in it.
+select pg_temp.check('a player cannot ask what October holds',
+  (public.theme_coverage(date '2026-10-01', date '2026-10-31')->>'ok') = 'false');
+select pg_temp.check('and anon may not call it at all',
+  not has_function_privilege('anon', 'public.theme_coverage(date, date)', 'execute'));
+set session "test.uid" = 'e1111111-1111-1111-1111-111111111111';
+
 \echo '--- word list checks passed ---'
