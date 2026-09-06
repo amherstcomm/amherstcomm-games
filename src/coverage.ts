@@ -11,7 +11,7 @@
 // the same dates. What is worked out here is what the generator will then *do*
 // with the answer, which is the part a browser can compute and a person cannot.
 import { supabase } from '@/supabase';
-import { boxesFrom, bridgesFrom } from '@/themeCalculators';
+import { boxesFrom, bridgesFrom, laddersFrom, LADDER_TIERS } from '@/themeCalculators';
 import { TIERS, tiersFor } from '@/cryptogramFit';
 import { BOARD_CELLS, fitsBoard } from '@/weaveFit';
 
@@ -68,6 +68,9 @@ export type DayYield = {
   bridges: number;
   /** theme words that could be the day's scramble rack */
   racks: number;
+  /** the ladder tiers the day's own words could set a pair for, or null while
+   *  the rung list is still on its way */
+  ladders: string[] | null;
   /** theme words that could seed the day's hive */
   hives: number;
   /** the board sizes at least one of the day's Weave themes tiles */
@@ -88,11 +91,18 @@ export function tilesFor(themes: WeaveTheme[]): string[] {
 /** What one day's words yield. Taken as words rather than as a day so the
  *  answer can be reused: a list covering a month hands back thirty-one
  *  identical sets, and the box search is the only costly thing here. */
-export function yieldOf(words: string[], dictionary?: string[]) {
+export function yieldOf(words: string[], dictionary?: string[], rungs?: Set<string>) {
   const pools: Record<number, number> = {};
   for (const len of GUESS_LENGTHS) pools[len] = words.filter((w) => w.length === len).length;
   const boxes = boxesFrom(words, dictionary);
+  // Both ends of a ladder have to be the theme's own and both have to be words
+  // the board accepts as rungs, so this is the one measurement here that needs
+  // the everyday dictionary rather than the generation pool.
+  const pairs = rungs ? laddersFrom(words, rungs) : null;
   return {
+    ladders: pairs
+      ? Object.keys(LADDER_TIERS).filter((tier) => pairs.some((p) => p.tier === tier))
+      : null,
     pools,
     // The two boards a theme can be *built* from rather than merely scored in.
     racks: words.filter((w) => w.length === RACK_SIZE).length,
@@ -113,13 +123,13 @@ export function ciphersFor(passages: DayPassage[] = []): string[] {
   return TIERS.filter((tier) => passages.some((p) => tiersFor(p.text).includes(tier)));
 }
 
-export function yieldFor(day: CoverageDay, dictionary?: string[]): DayYield {
+export function yieldFor(day: CoverageDay, dictionary?: string[], rungs?: Set<string>): DayYield {
   const words = day.theme?.words ?? [];
   return {
     date: day.date,
     name: day.theme?.name ?? '',
     words,
-    ...yieldOf(words, dictionary),
+    ...yieldOf(words, dictionary, rungs),
     tiles: tilesFor(day.weave),
     ciphers: ciphersFor(day.passages),
   };
@@ -140,6 +150,9 @@ export type Summary = {
   /** days whose theme could supply the board itself, not just bonus words */
   scramble: { days: number };
   hive: { days: number };
+  /** days whose own words can set a ladder, and which tiers they reach —
+   *  null until the rung list arrives, rather than nought */
+  ladder: { days: number | null; perTier: Record<string, number> };
   /** days with a passage of the deployment's own, and which tiers it reaches */
   cryptogram: { withPassage: number; days: number; perTier: Record<string, number> };
 };
@@ -151,21 +164,26 @@ export type Summary = {
  *  month of different unions, so the memo helps least exactly when the range is
  *  most interesting.
  */
-export function yieldsFor(days: CoverageDay[], dictionary?: string[]): DayYield[] {
+export function yieldsFor(
+  days: CoverageDay[],
+  dictionary?: string[],
+  rungs?: Set<string>
+): DayYield[] {
   const seen = new Map<string, ReturnType<typeof yieldOf>>();
-  return days.map((day) => oneYield(day, dictionary, seen));
+  return days.map((day) => oneYield(day, dictionary, rungs, seen));
 }
 
 function oneYield(
   day: CoverageDay,
   dictionary: string[] | undefined,
+  rungs: Set<string> | undefined,
   seen: Map<string, ReturnType<typeof yieldOf>>
 ): DayYield {
   const words = day.theme?.words ?? [];
   const key = words.join(' ');
   let made = seen.get(key);
   if (!made) {
-    made = yieldOf(words, dictionary);
+    made = yieldOf(words, dictionary, rungs);
     seen.set(key, made);
   }
   return {
@@ -218,6 +236,17 @@ export function fold(days: CoverageDay[], yields: DayYield[]): Summary {
     bridges: { days: yields.filter((y) => y.bridges > 0).length },
     scramble: { days: yields.filter((y) => y.racks > 0).length },
     hive: { days: yields.filter((y) => y.hives > 0).length },
+    ladder: {
+      days: yields.every((y) => y.ladders !== null)
+        ? yields.filter((y) => (y.ladders ?? []).length > 0).length
+        : null,
+      perTier: Object.fromEntries(
+        Object.keys(LADDER_TIERS).map((tier) => [
+          tier,
+          yields.filter((y) => (y.ladders ?? []).includes(tier)).length,
+        ])
+      ),
+    },
     cryptogram: {
       // Written for the day, against actually usable by some tier: a passage
       // no band takes is the one failure worth separating out, because it
@@ -231,8 +260,12 @@ export function fold(days: CoverageDay[], yields: DayYield[]): Summary {
   };
 }
 
-export function summarise(days: CoverageDay[], dictionary?: string[]): Summary {
-  return fold(days, yieldsFor(days, dictionary));
+export function summarise(
+  days: CoverageDay[],
+  dictionary?: string[],
+  rungs?: Set<string>
+): Summary {
+  return fold(days, yieldsFor(days, dictionary, rungs));
 }
 
 /** How many days are measured before the browser is handed back. Small enough
@@ -257,12 +290,13 @@ export async function summariseSlowly(
   days: CoverageDay[],
   dictionary?: string[],
   onProgress?: (done: number, total: number) => void,
-  pause: () => Promise<void> = () => new Promise((resolve) => setTimeout(resolve, 0))
+  pause: () => Promise<void> = () => new Promise((resolve) => setTimeout(resolve, 0)),
+  rungs?: Set<string>
 ): Promise<Summary> {
   const seen = new Map<string, ReturnType<typeof yieldOf>>();
   const yields: DayYield[] = [];
   for (const day of days) {
-    yields.push(oneYield(day, dictionary, seen));
+    yields.push(oneYield(day, dictionary, rungs, seen));
     if (yields.length % SLICE === 0 && yields.length < days.length) {
       onProgress?.(yields.length, days.length);
       await pause();

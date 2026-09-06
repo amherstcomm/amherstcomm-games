@@ -543,6 +543,11 @@ test('a word list says what it can make while you write it', async ({ page }) =>
   await expect(page.getByText(/Boxed — \d+ boards? from pairs/)).toBeVisible();
   await expect(page.getByText(/voting \+ shared/)).toBeVisible();
 
+  // The ladder search waits for a pause in typing rather than running per
+  // keystroke — a walk per word over forty thousand rungs is a tenth of a
+  // second — so this is the one line that is not there immediately.
+  await expect(page.getByText(/Ladder — \d+ pairs/)).toBeVisible();
+
   // A list of plain nouns makes no bridge, which is the answer rather than a
   // fault in the list — so it says what one would need.
   await expect(page.getByText(/Bridge — 0 prompts/)).toBeVisible();

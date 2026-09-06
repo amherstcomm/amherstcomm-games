@@ -298,3 +298,38 @@ describe('passages of the deployment s own', () => {
     expect(sum.cryptogram.days).toBe(0);
   });
 });
+
+// The ladder half. Both ends have to be the theme's own *and* words the board
+// accepts as rungs, so this is the one measurement that needs the everyday
+// dictionary rather than the generation pool — and the one that reports
+// "unknown" rather than nought until it arrives.
+describe('themed ladders, over a range', () => {
+  const rungs = new Set(['stake', 'stoke', 'stock', 'store', 'stole', 'stale', 'shale', 'share']);
+
+  it('says which tiers a day s words can set a pair for', () => {
+    // stake → stoke → stock is two steps, which is under the shortest par any
+    // tier plays; stake → stale → shale → share is three, which easy plays.
+    const sum = summarise(
+      [list(october(1), ['stake', 'share']), list(october(2), ['stake'])],
+      undefined,
+      rungs
+    );
+    expect(sum.ladder.days).toBe(1);
+    expect(sum.ladder.perTier.easy).toBe(1);
+    expect(sum.ladder.perTier.extreme).toBe(0);
+  });
+
+  // Nought would read as "no day can set a ladder", which is a different
+  // answer from "nobody has asked yet".
+  it('and reports it as unknown until the rungs arrive', () => {
+    const sum = summarise([list(october(1), ['stake', 'share'])]);
+    expect(sum.ladder.days).toBeNull();
+  });
+
+  it('and the sliced version gets there too', async () => {
+    const days = [list(october(1), ['stake', 'share']), list(october(2), ['stake', 'share'])];
+    const slowly = await summariseSlowly(days, undefined, undefined, async () => {}, rungs);
+    expect(slowly).toEqual(summarise(days, undefined, rungs));
+    expect(slowly.ladder.days).toBe(2);
+  });
+});

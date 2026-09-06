@@ -205,3 +205,95 @@ export function bridgesFrom(words: string[]): BridgePrompt[] {
   }
   return out;
 }
+
+// ---------------------------------------------------------------------------
+// Ladders
+// ---------------------------------------------------------------------------
+// A ladder is two words of the same length and the shortest chain of real words
+// between them. The curated pairs are related in WordNet — COLD and WARM — and
+// that relation is what makes a pair read as a puzzle somebody set. A themed
+// month has a relation of its own, and it only holds when *both* ends are the
+// company's own words: `shares → elopes` is a ladder, but it is not a themed
+// one, and pairing one theme word with any destination offers sixteen thousand
+// of those against twenty-one of the real thing.
+//
+// Both ends have to be rungs as well. The board checks every rung against the
+// common tier and par is the length of the shortest route through the words a
+// player may use, so an end the tier does not have is an end nobody can type —
+// and this one cannot be fixed by shipping the day's words the way the guess
+// board is, because widening what counts as a rung changes par. ESOP does not
+// play this game, and the panel says which words were left out.
+
+export const LADDER_MIN_PAR = 3;
+export const LADDER_MAX_PAR = 8;
+
+/** Which tier plays which par. The generator's own bands, pinned to
+ *  scripts/ladder.mjs by tests/unit/themeCalculators.test.ts. */
+export const LADDER_TIERS: Record<string, [number, number]> = {
+  easy: [3, 4],
+  hard: [5, 6],
+  extreme: [7, 8],
+};
+
+export type LadderPair = { a: string; b: string; par: number; tier: string };
+
+const tierOf = (par: number) =>
+  Object.entries(LADDER_TIERS).find(([, [lo, hi]]) => par >= lo && par <= hi)?.[0] ?? '';
+
+/** Every ladder this list can set: both ends its own, 3 to 8 steps apart
+ *  through the common tier.
+ *
+ *  `rungs` is the same set the board checks against — src/dictionaries.ts
+ *  `common` — because par measured over anything else is a par the game will
+ *  not agree with. */
+export function laddersFrom(words: string[], rungs: Set<string>): LadderPair[] {
+  const byLength = new Map<number, Set<string>>();
+  for (const w of rungs) {
+    let bucket = byLength.get(w.length);
+    if (!bucket) byLength.set(w.length, (bucket = new Set()));
+    bucket.add(w);
+  }
+  const usable = [
+    ...new Set(words.map((w) => w.trim().toLowerCase())),
+  ]
+    .filter((w) => rungs.has(w))
+    .sort();
+
+  const out: LadderPair[] = [];
+  for (let i = 0; i < usable.length; i += 1) {
+    // One walk per word rather than one per pair: the distance to every other
+    // theme word of that length falls out of the same search.
+    const dist = distancesFrom(usable[i], byLength);
+    for (let j = i + 1; j < usable.length; j += 1) {
+      const b = usable[j];
+      if (b.length !== usable[i].length) continue;
+      const par = dist.get(b);
+      if (par === undefined || par < LADDER_MIN_PAR || par > LADDER_MAX_PAR) continue;
+      out.push({ a: usable[i], b, par, tier: tierOf(par) });
+    }
+  }
+  return out;
+}
+
+/** How far every same-length rung is from `word`, breadth first, giving up at
+ *  the longest par any tier plays. */
+function distancesFrom(word: string, byLength: Map<number, Set<string>>): Map<string, number> {
+  const pool = byLength.get(word.length) ?? new Set<string>();
+  const dist = new Map([[word, 0]]);
+  const queue = [word];
+  for (let i = 0; i < queue.length; i += 1) {
+    const w = queue[i];
+    const d = dist.get(w)!;
+    if (d >= LADDER_MAX_PAR) continue;
+    for (let p = 0; p < w.length; p += 1) {
+      for (let c = 97; c < 123; c += 1) {
+        const next = w.slice(0, p) + String.fromCharCode(c) + w.slice(p + 1);
+        if (next !== w && pool.has(next) && !dist.has(next)) {
+          dist.set(next, d + 1);
+          queue.push(next);
+        }
+      }
+    }
+  }
+  return dist;
+}

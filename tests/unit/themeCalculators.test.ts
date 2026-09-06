@@ -4,8 +4,18 @@
 // theme words make a box when their letters are twelve distinct, and they do
 // **not** have to chain. Requiring the chain is what made the first search
 // report zero from a list that has twenty-one.
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { assignSides, boxesFrom, bridgesFrom } from '@/themeCalculators';
+// @ts-expect-error plain-JS module without a declaration file
+import { themedLadderPairs, TIER_PAR } from '../../scripts/ladder.mjs';
+import {
+  assignSides,
+  boxesFrom,
+  bridgesFrom,
+  laddersFrom,
+  LADDER_TIERS,
+} from '@/themeCalculators';
 
 // Measured against the real dictionary in scripts/feasibility.mjs: these two
 // have exactly twelve distinct letters between them.
@@ -121,5 +131,79 @@ describe('bridgesFrom', () => {
   it('does not offer the same prompt twice', () => {
     const out = bridgesFrom(['nonprofit', 'profitable', 'nonprofit']);
     expect(out).toHaveLength(1);
+  });
+});
+
+// The ladder half, and the one place in this file where the browser and the
+// generator do the same search. They are two implementations of one rule, so
+// what is asserted is that they agree — on the real bands, with a real list.
+describe('laddersFrom', () => {
+  // The rungs the board itself checks against: src/dictionaries.ts calls this
+  // set `common`, the harvest reads the same three files, and par measured
+  // over anything else is a par the game will not agree with.
+  const rungs = new Set<string>();
+  for (const band of ['band-10', 'band-20', 'band-35']) {
+    for (const w of JSON.parse(
+      readFileSync(join(process.cwd(), `src/wordbands/${band}.json`), 'utf8')
+    ).words as string[]) {
+      rungs.add(w);
+    }
+  }
+
+  const THEME = [
+    'shares', 'shared', 'worker', 'earned', 'stake', 'stock', 'board', 'bonus',
+    'vesting', 'meeting', 'router', 'budget',
+    // In the list and not in the common tier: it cannot be an end, because the
+    // board would refuse it as a rung.
+    'esop',
+  ];
+
+  it('pairs two theme words with a route between them', () => {
+    const pairs = laddersFrom(THEME, rungs);
+    expect(pairs.length).toBeGreaterThan(0);
+    for (const p of pairs) {
+      expect(THEME).toContain(p.a);
+      expect(THEME).toContain(p.b);
+      expect(p.a.length).toBe(p.b.length);
+      expect(p.par).toBeGreaterThanOrEqual(3);
+      expect(p.par).toBeLessThanOrEqual(8);
+    }
+  });
+
+  // Two implementations of one rule, which is the thing this repo keeps
+  // getting wrong. The generator deals the pair; the page promises it exists.
+  it('and agrees with the generator, pair for pair', () => {
+    const mine = laddersFrom(THEME, rungs).map((p) => `${p.a} ${p.b} ${p.par}`);
+    const theirs = (themedLadderPairs(THEME, rungs) as { a: string; b: string; par: number }[]).map(
+      (p) => `${p.a} ${p.b} ${p.par}`
+    );
+    expect(mine).toEqual(theirs);
+    expect(mine.length).toBeGreaterThan(0);
+  });
+
+  it('and the tier bands are the generator s own', () => {
+    expect(LADDER_TIERS).toEqual(TIER_PAR);
+  });
+
+  // The limit worth stating: a word the common tier has never heard of cannot
+  // be an end, because every rung is checked against that tier — and unlike the
+  // guess board this cannot be fixed by shipping the day's words, since
+  // widening what counts as a rung changes par.
+  it('leaves out a theme word the rungs do not have', () => {
+    const pairs = laddersFrom(THEME, rungs);
+    expect(pairs.some((p) => p.a === 'esop' || p.b === 'esop')).toBe(false);
+  });
+
+  it('and has nothing to offer a list of one length nobody shares', () => {
+    expect(laddersFrom(['shares'], rungs)).toEqual([]);
+    expect(laddersFrom([], rungs)).toEqual([]);
+  });
+
+  // Sorted, because the generator deals by index: an unsorted pool would make
+  // the same seed set a different ladder for no reason anybody could see.
+  it('comes back in a stable order', () => {
+    const once = laddersFrom(THEME, rungs);
+    const again = laddersFrom([...THEME].reverse(), rungs);
+    expect(again).toEqual(once);
   });
 });

@@ -11,8 +11,8 @@
 // and their two-word guarantee is simply unknown, which is said rather than
 // guessed at.
 import { useEffect, useMemo, useState } from 'react';
-import { getDifficultyPool } from '@/dictionaries';
-import { boxesFrom, bridgesFrom } from '@/themeCalculators';
+import { getDictionary, getDifficultyPool } from '@/dictionaries';
+import { boxesFrom, bridgesFrom, laddersFrom, type LadderPair } from '@/themeCalculators';
 
 export default function ThemeYield({ words }: { words: string }) {
   const list = useMemo(
@@ -39,6 +39,32 @@ export default function ThemeYield({ words }: { words: string }) {
     [list, dictionary]
   );
   const bridges = useMemo(() => bridgesFrom(list), [list]);
+
+  // The ladder search is the one measurement here that cannot ride along with a
+  // keystroke: a breadth-first walk per word over forty thousand rungs is about
+  // a tenth of a second for a two-dozen-word list, and doing that on every
+  // letter typed makes the box stutter. So it waits for a pause, and says it is
+  // working rather than showing a stale answer as though it were current.
+  const [rungs, setRungs] = useState<Set<string> | null>(null);
+  const [ladders, setLadders] = useState<LadderPair[] | null>(null);
+
+  useEffect(() => {
+    if (list.length < 2 || rungs) return;
+    let alive = true;
+    void getDictionary('common').then((words) => {
+      if (alive) setRungs(new Set(words));
+    });
+    return () => {
+      alive = false;
+    };
+  }, [list.length, rungs]);
+
+  useEffect(() => {
+    if (!rungs || list.length < 2) return;
+    setLadders(null);
+    const id = window.setTimeout(() => setLadders(laddersFrom(list, rungs)), 400);
+    return () => window.clearTimeout(id);
+  }, [list, rungs]);
 
   if (list.length < 2) return null;
 
@@ -74,6 +100,47 @@ export default function ThemeYield({ words }: { words: string }) {
         )}
         {!dictionary && boxes.length > 0 && (
           <p className="text-slate-500 pl-3">checking which can be solved…</p>
+        )}
+      </div>
+
+      <div>
+        {/* Both ends have to be the theme's own, and both have to be words the
+            board will accept as rungs — so a list can have plenty of words and
+            still set no ladder, which is worth seeing before October. */}
+        <p
+          className={
+            ladders === null
+              ? 'text-slate-500'
+              : ladders.length > 0
+                ? 'text-emerald-300'
+                : 'text-slate-500'
+          }
+        >
+          {ladders === null ? '·' : ladders.length > 0 ? '✓' : '·'} Ladder —{' '}
+          {ladders === null
+            ? 'looking for routes…'
+            : `${ladders.length} ${ladders.length === 1 ? 'pair' : 'pairs'}`}
+          {ladders !== null && ladders.length > 0 &&
+            ` (${['easy', 'hard', 'extreme']
+              .map((tier) => `${tier} ${ladders.filter((l) => l.tier === tier).length}`)
+              .join(' · ')})`}
+        </p>
+        {ladders !== null && ladders.length > 0 && (
+          <p className="text-slate-400 pl-3">
+            {ladders
+              .slice(0, 3)
+              .map((l) => `${l.a} → ${l.b} in ${l.par}`)
+              .join('  |  ')}
+          </p>
+        )}
+        {ladders !== null && ladders.length === 0 && (
+          // Said plainly, because the reason is not obvious from the list: it
+          // needs two words of the same length with a route between them, and
+          // both have to be ordinary enough for the board to accept as rungs.
+          <p className="text-slate-500 pl-3">
+            Needs two words of the same length, both in the everyday dictionary,
+            three to eight one-letter steps apart.
+          </p>
         )}
       </div>
 

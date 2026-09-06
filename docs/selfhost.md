@@ -1320,7 +1320,7 @@ perfectly and then never appears, which is the worst way to find out.
 
 #### What a list can make
 
-The same idea for the other two games a list could drive, shown on the word list
+The same idea for the other games a list could drive, shown on the word list
 while it is being written — which is the only time the answer is any use. A list
 finished in September and found to make one puzzle in October is a list nobody
 can fix.
@@ -1333,6 +1333,19 @@ with twenty-one. The two-word solution the daily promises comes from the
 dictionary instead, so the panel says how many of the boxes have one; a themed
 box that cannot be finished in two words is the failure worth catching, and it
 is stated rather than left as a smaller number.
+
+**Ladder.** Two of the list's own words the same length, three to eight
+one-letter steps apart through the everyday dictionary, reported per step-count
+band. It is the slowest of these — a breadth-first walk per word over forty
+thousand rungs is about a tenth of a second for a two-dozen-word list — so it
+waits for a pause in the typing rather than running on every keystroke, and says
+it is looking rather than showing the last answer as though it were current.
+
+The search exists twice, in `src/themeCalculators.ts` for the page and in
+`scripts/ladder.mjs` for the generator, because one is a browser and the other
+is not. `tests/unit/themeCalculators.test.ts` runs both over the real bands and
+requires them to agree pair for pair — the page promises the ladder exists and
+the generator has to deal it.
 
 **Bridge.** The themed thing is the compounds either side, not the answer
 between them: `nonprofit` and `profitable` share `profit`, giving
@@ -1370,8 +1383,8 @@ it starts.
 
 #### Taking over the dailies
 
-A list with **dates** on it themes the daily puzzles for those days. Four of the
-ten games can be built out of one, and a fifth scores it:
+A list with **dates** on it themes the daily puzzles for those days. Five of the
+ten games take their content from one, and a sixth scores it:
 
 - **The daily word.** Per length, the pool narrows to the theme's own words —
   **including ones no dictionary carries**. That is the point rather than an
@@ -1411,6 +1424,23 @@ ten games can be built out of one, and a fifth scores it:
   ordinary dictionary, so a themed seed whose letters yield fewer than thirty
   words is passed over for an ordinary one, and the run says so in the log
   rather than leaving it to be worked out from the letters.
+- **Ladder**, which is *dealt* from the theme rather than built out of it: two
+  of its own words the same length, three to eight one-letter steps apart. Both
+  ends, never one — the relation is what makes a pair a puzzle somebody set, and
+  for a themed month the relation is that both ends are the company's. Measured
+  on a 49-word list: both-ends gives **21 pairs** (easy 3, hard 7, extreme 11)
+  and one-end gives sixteen thousand, of which `shares → elopes` is typical and
+  reads as no theme at all.
+
+  Both ends must also be in the everyday dictionary, and this is the one place a
+  themed word cannot be rescued by shipping it with the day. Every rung is
+  checked against the common tier, and **par is the length of the shortest route
+  through the words a player may use** — so widening what counts as a rung
+  changes the answer to the puzzle. ESOP does not play this game; the word-list
+  panel says which words were left out and why.
+
+  Per difficulty by step count: the bands are 3-4, 5-6 and 7-8, and a tier with
+  no themed pair in its band walks the curated pairs exactly as it always has.
 - **Grid** cannot be built out of anything — the board is dealt from Boggle dice
   — but a theme word the board can trace scores the bonus like anywhere else.
 
@@ -1434,8 +1464,8 @@ spell it, the hive has to reach it through its centre, the grid has to trace it.
 The solver already answers that question for every other word, and asking it a
 second way here is exactly how two halves come apart.
 
-The remaining five — boxed, squares, cryptogram, ladder, bridge — cannot be
-built from a bag of words: they need letter boxes, passages or curated pairs.
+The remaining four — boxed, squares, cryptogram, bridge — cannot be built from a
+bag of words: they need letter boxes, passages or curated prompts.
 The cryptogram takes content of its own by a different door, one passage at a
 time rather than from a word list — see [Cryptogram passages](#cryptogram-passages)
 below. What a list can make of boxed and bridge is measured rather than guessed:
@@ -1547,6 +1577,8 @@ it reports:
 - **Cryptogram**, the days that play a passage of your own and which
   difficulties reach it — plus, said separately, days that have a passage *no
   board can take*, which is the failure that reads as a covered day.
+- **Ladder**, the days whose own words can set a pair, and which step-count
+  bands they reach.
 - **Scramble and Hive**, the days whose theme can supply the board itself: a
   word of the rack's length, and one of seven distinct letters. A day without
   either still gets the theme's words as bonus points — the board is simply the
