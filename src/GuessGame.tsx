@@ -554,9 +554,14 @@ const GuessGame = forwardRef<
           explanation, which reads as broken rather than as absent. */}
       {noDailyAtLength && !dailyError && (
         <p className="text-sm text-slate-400 py-8">
-          No daily puzzle at {length} letters — today&apos;s run from{' '}
-          {dailyLengths[0]} to {dailyLengths[dailyLengths.length - 1]}. Practice
-          works at every length.
+          No daily puzzle at {length} letters —{' '}
+          {/* A themed day whose word was chosen offers that board and no other,
+              so the sentence has to be able to say "the word is seven letters"
+              rather than "the run is from seven to seven". */}
+          {dailyLengths.length === 1
+            ? `today's word is ${dailyLengths[0]} letters`
+            : `today's run from ${dailyLengths[0]} to ${dailyLengths[dailyLengths.length - 1]}`}
+          . Practice works at every length.
         </p>
       )}
 

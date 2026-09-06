@@ -627,6 +627,11 @@ for (const variant of ['', 'dev']) {
   // below 12 the thinnest stream becomes length 3, not the long end.
   const guessByDifficulty = {};
   for (const difficulty of DIFFICULTIES) {
+    // A pinned word is the day's word, so the day offers that board and no
+    // other: during a theme, choosing one is choosing *the* puzzle rather than
+    // one of ten. An unpinned day keeps the whole run of lengths, because
+    // drawing from a pool is not choosing anything.
+    let onlyLength = null;
     // Salted per difficulty. Without it the same seed draws the same index
     // from three nested pools and lands on the same word more often than
     // chance would.
@@ -660,6 +665,7 @@ for (const variant of ['', 'dev']) {
       if (pin && typeof pin.word === 'string' && pin.word.length === len) {
         if (pool.includes(pin.word) || themedPool([pin.word], len, blockedFromAnswers).length > 0) {
           words[len] = Buffer.from(pin.word).toString('base64');
+          onlyLength = len;
           continue;
         }
         missedPin('guess', difficulty, `${pin.word} is not a word this board can set`);
@@ -669,7 +675,14 @@ for (const variant of ['', 'dev']) {
     // wrapped in { words } so every byDifficulty entry has the same field
     // names as the top level — the client merges one over the other, and a
     // variant shaped differently silently leaves the easy board in place
-    guessByDifficulty[difficulty] = { words };
+    guessByDifficulty[difficulty] = {
+      words: onlyLength === null ? words : { [onlyLength]: words[onlyLength] },
+    };
+    if (onlyLength !== null) {
+      console.log(
+        `Guess ${difficulty}: the pinned word is the day's only board (${onlyLength} letters)`
+      );
+    }
   }
   await writeFile(
     `${DATA_DIR}/${prefix}daily-words.json`,

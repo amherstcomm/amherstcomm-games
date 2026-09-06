@@ -1697,10 +1697,21 @@ hide every box. Twelve at a time, and the filter matches every word you type
 anywhere in the label, in any order, so `shar vot` finds the box made of voting
 and shared without anybody remembering which way round it is printed.
 
-The daily word is the one list where a pin is about a single *board* rather than
-the day: a pinned word takes the board of its own length and leaves the other
-nine to be dealt as usual, which is why the candidates are labelled with their
-lengths and sorted by them.
+**A pinned word is the day's only board.** The guess game publishes ten boards a
+day, one per length, and during a theme that is ten puzzles where the point was
+one: choosing a word is choosing *the* puzzle, so the day offers that length and
+no other. A day nobody pinned keeps the whole run, because drawing from a pool
+is not choosing anything.
+
+The board already knew how to say so — a length with no daily explains itself
+rather than rendering empty — and it now says "today's word is seven letters"
+where it used to say "today's run from seven to seven". The candidates are
+labelled with their lengths and sorted by them, so the filter finds a word by
+either.
+
+**Reversal.** The first version of this took the pinned word's own board and
+left the other nine to be dealt as usual, which is the right answer for a pin
+and the wrong one for a themed month: it left the chosen word as one of ten.
 
 The candidates are worked out **in the browser**, from the day's own words —
 which the coverage call already carries — using the same searches the generator

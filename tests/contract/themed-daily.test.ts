@@ -609,12 +609,19 @@ describe('a pinned day', () => {
     );
   });
 
-  // Per length, because a pinned word is a sentence about one board: the other
-  // nine are dealt as usual.
-  it('and sets the daily word at that word s own length', async () => {
+  // A pinned word is *the* word: during a theme, choosing one is choosing the
+  // day's puzzle rather than one of ten, so the day offers that board and no
+  // other. An unpinned day keeps the whole run, because drawing from a pool is
+  // not choosing anything.
+  it('and the pinned word is the day s only board', async () => {
     const got = words(await read(dir, 'daily-words.json'), 'easy');
+    expect(Object.keys(got)).toEqual(['7']);
     expect(got['7']).toBe('trustee');
-    expect(got['6']).not.toBe('trustee');
+  });
+
+  it('while an unpinned themed day keeps every length', async () => {
+    const got = words(await read(themed, 'daily-words.json'), 'easy');
+    expect(Object.keys(got).length).toBe(10);
   });
 
   // The important half. A pin that has stopped working — the word left the
