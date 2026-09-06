@@ -11,7 +11,8 @@ import { useCallback, useEffect, useState } from 'react';
 import { Loader2 } from 'lucide-react';
 import { readSiteSettings, setSiteSetting, type SettingRow } from '@/settingsAdmin';
 import { refreshSettings } from '@/settings';
-import { pathOf } from '@/routes';
+import { ADMIN_TABS, ADMIN_TITLE, pathOf, type AdminTab } from '@/routes';
+import RouteLink from '@/RouteLink';
 import AdminPeople from '@/AdminPeople';
 import AdminWordLists from '@/AdminWordLists';
 import AdminFeatures from '@/AdminFeatures';
@@ -137,7 +138,8 @@ function Field({ row, onSaved }: { row: SettingRow; onSaved: () => void }) {
   );
 }
 
-export default function AdminSettings() {
+/** The site's own settings: the half of this page that is a form. */
+function SiteSettings() {
   const [rows, setRows] = useState<SettingRow[] | null>(null);
   const [refused, setRefused] = useState('');
 
@@ -162,6 +164,72 @@ export default function AdminSettings() {
   }, [pull]);
 
   if (rows === null) return <Loader2 className="w-4 h-4 animate-spin text-slate-500 m-8" />;
+  if (refused) return <p className="text-sm text-slate-400">{refused}</p>;
+
+  return (
+    <section>
+      <h2 className="text-lg font-bold text-white mb-1">Site settings</h2>
+      <p className="text-sm text-slate-400 mb-4">
+        Changes take effect for everybody on their next page load. Nothing here
+        needs a rebuild.
+      </p>
+      <div className="space-y-3">
+        {rows.map((row) => (
+          <Field key={row.key} row={row} onSaved={afterSave} />
+        ))}
+      </div>
+    </section>
+  );
+}
+
+/** Which panel each tab draws. One table rather than a chain of conditionals,
+ *  so a tab added to ADMIN_TABS and forgotten here fails to compile instead of
+ *  rendering an empty page. */
+const PANEL: Record<AdminTab, () => JSX.Element> = {
+  site: SiteSettings,
+  // Gated on games.setup rather than site.settings — an editor who can build a
+  // session can write the words it draws from — and each panel draws its own
+  // refusal, because a deployment is free to hand the capabilities out
+  // separately and only the server knows which it did.
+  games: AdminFeatures,
+  lists: AdminWordLists,
+  // Beside the word lists rather than inside them: a Weave theme is a set that
+  // tiles a board, a word list is a bag of words, and making one shape serve
+  // both made a worse version of each.
+  weave: AdminWeaveThemes,
+  // After both, because it is about both: a month is themed by several lists
+  // and several Weave themes with overlapping windows, and whether it is
+  // covered is a question no single one of them can answer.
+  coverage: ThemeCoverage,
+  people: AdminPeople,
+};
+
+/**
+ * Six jobs at one address, one at a time.
+ *
+ * It was one scroll: settings, then games, then lists, then themes, then
+ * coverage, then people. Each is a page's worth on its own and the last of them
+ * was two thousand pixels down — and every one of them fetches on mount, so
+ * opening the page to change the subtitle also read every word list, every
+ * theme and everybody's roles.
+ *
+ * The tab is in the address (`/admin/lists`) rather than in a piece of state,
+ * for the reason the rest of the site already does it: one state, one address.
+ * A month is written over several sittings, and "the word lists" has to be a
+ * thing somebody can bookmark, send to the other administrator, and come back
+ * to. The bare `/admin` still works and settles on the first tab.
+ */
+export default function AdminSettings({
+  tab,
+  // The address *and* the click, from one value — the routing hook lives in
+  // App, and an anchor whose href and handler are worked out separately is four
+  // links that disagree, which this codebase has already had.
+  tabLink,
+}: {
+  tab: AdminTab;
+  tabLink: (tab: AdminTab) => { to: string; onGo: () => void };
+}) {
+  const Panel = PANEL[tab];
 
   return (
     <div className="max-w-2xl mx-auto px-4 py-8">
@@ -170,56 +238,28 @@ export default function AdminSettings() {
           Home
         </a>
       </p>
-      <h1 className="text-2xl font-bold text-white mt-1">Site settings</h1>
-      <p className="text-sm text-slate-400 mb-6">
-        Changes take effect for everybody on their next page load. Nothing here
-        needs a rebuild.
-      </p>
+      <h1 className="text-2xl font-bold text-white mt-1 mb-4">Administration</h1>
 
-      {refused ? (
-        <p className="text-sm text-slate-400">{refused}</p>
-      ) : (
-        <div className="space-y-3">
-          {rows.map((row) => (
-            <Field key={row.key} row={row} onSaved={afterSave} />
-          ))}
-        </div>
-      )}
+      {/* Links rather than buttons: they are addresses, so they open in a new
+          tab, they can be copied, and the back button walks them. */}
+      <nav className="inline-flex flex-wrap rounded-xl bg-white/5 border border-white/10 p-1 gap-1 mb-6">
+        {ADMIN_TABS.map((id) => (
+          <RouteLink
+            key={id}
+            {...tabLink(id)}
+            aria-current={tab === id ? 'page' : undefined}
+            className={`px-3 h-9 inline-flex items-center rounded-lg text-sm font-semibold transition-colors
+              ${tab === id ? 'bg-accent text-ink' : 'text-slate-300 hover:bg-white/10'}`}
+          >
+            {ADMIN_TITLE[id]}
+          </RouteLink>
+        ))}
+      </nav>
 
-      {/* Its own section rather than its own page: both halves are "things one
-          person changes about the deployment", and a second address to remember
-          buys nothing. It draws itself, including its own refusal — the two
-          halves are gated on different capabilities (site.settings and
-          users.manage) and a deployment is free to hand them out separately. */}
-      {/* Word lists sit here rather than with the sessions because they
-          outlive any one of them: a themed list is written once and drawn from
-          by rounds for a month. Gated on games.setup, so an editor who can
-          build a session can write the words it draws from. */}
-      <div className="mt-10">
-        <AdminFeatures />
-      </div>
-
-      <div className="mt-10">
-        <AdminWordLists />
-      </div>
-
-      {/* Beside the word lists rather than inside them: a Weave theme is a set
-          that tiles a board, a word list is a bag of words, and making one shape
-          serve both made a worse version of each. */}
-      <div className="mt-10">
-        <AdminWeaveThemes />
-      </div>
-
-      {/* After both, because it is about both: a month is themed by several
-          lists and several Weave themes with overlapping windows, and whether
-          it is covered is a question no single one of them can answer. */}
-      <div className="mt-10">
-        <ThemeCoverage />
-      </div>
-
-      <div className="mt-10">
-        <AdminPeople />
-      </div>
+      {/* Keyed by the tab, so leaving one and coming back re-reads rather than
+          showing what was true ten minutes ago — and so a half-typed list is
+          not carried onto a different panel. */}
+      <Panel key={tab} />
     </div>
   );
 }

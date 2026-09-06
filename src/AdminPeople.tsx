@@ -1,6 +1,6 @@
 // Who may do what.
 //
-// The second half of /admin, and the one that changes who can help during an
+// /admin/people, and the panel that changes who can help during an
 // event month: handing somebody games.edit here is the difference between a
 // colleague building a round and a colleague asking the one person who can run
 // SQL.

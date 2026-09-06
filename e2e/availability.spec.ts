@@ -108,7 +108,7 @@ test('switching a game off from the admin page actually removes it', async ({ pa
     });
   });
 
-  await page.goto('/admin');
+  await page.goto('/admin/games');
   // Hive, deliberately: its mode is `bee`, so it is one of the three the bug
   // was invisible on.
   // click rather than uncheck: the control is driven by a round trip, and

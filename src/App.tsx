@@ -1821,7 +1821,10 @@ function App() {
             <LiveSession session={reportPage.session} host={reportPage.host} />
           )}
           {sessionsOn && reportPage?.kind === 'sessions' && <SessionEditor session={reportPage.session} />}
-          {reportPage?.kind === 'admin' && <AdminSettings />}
+          {reportPage?.kind === 'admin' && <AdminSettings
+              tab={reportPage.tab}
+              tabLink={(tab) => pageLink({ kind: 'admin', tab })}
+            />}
           {sessionsOn && reportPage?.kind === 'join' && <JoinSession code={reportPage.code} />}
           {sessionsOn && reportPage?.kind === 'scores' && <Scoreboard session={reportPage.session} />}
           {reportPage?.kind === 'reportAction' && (
@@ -2443,7 +2446,7 @@ function App() {
             )}
             {canAdmin && (
               <RouteLink
-                {...pageLink({ kind: 'admin' })}
+                {...pageLink({ kind: 'admin', tab: nav.last.admin })}
                 className="inline-flex items-center gap-1.5 text-accent hover:brightness-110 transition"
               >
                 <SlidersHorizontal className="w-3.5 h-3.5" aria-hidden="true" />
