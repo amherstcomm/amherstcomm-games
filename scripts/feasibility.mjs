@@ -10,17 +10,27 @@
 //
 // What it measures, and why each is the question it is:
 //
-//   Boxed    needs two chainable words covering *exactly* twelve distinct
-//            letters with no doubles, and sides assignable so no adjacent pair
-//            shares one. Both from the theme, or one themed and one ordinary.
-//   Bridge   needs x + M and M + y to both be words, with M the themed answer.
+//   Boxed    is twelve letters. The first version asked whether two *theme*
+//            words could solve it, which is not what a themed box is — Ray's
+//            correction. The question is how many theme words a twelve-letter
+//            box can hold, since those are the words a player finds; the
+//            solution is a guarantee, not the theme.
+//   Bridge   the themed thing is not the middle answer, it is the compounds
+//            either side of it — nonprofit and profitable give non · profit ·
+//            able. So it needs theme words that are compounds sharing a stem,
+//            which is why it is thin.
 //   Squares  needs a themed word to head a double word square — every row and
 //            every column a word.
 //
-// The finding that mattered: from a forty-word list, *zero* pairs of theme
-// words can build a Boxed board, and 621 can if the second word is an ordinary
-// one. That is the difference between "not worth building" and "build it this
-// way", and no amount of reading the generator would have said which.
+// The finding that mattered, once the question was the right one: a twelve
+// letter box holding *nine* theme words exists, and it takes three ordinary
+// words to solve rather than two. So Boxed is buildable and the cost is the
+// two-word guarantee, which is a difficulty choice rather than a rule of the
+// game.
+//
+// The search over letter sets is greedy — one box per seed word — so a count
+// here is a lower bound on what exists, never a proof that nothing better
+// does.
 import { readFileSync } from 'node:fs';
 
 const SAMPLE = [
@@ -51,81 +61,160 @@ const accepted = new Set(
 console.log(`theme: ${theme.length} words · dictionary: ${accepted.size} accepted\n`);
 
 // --------------------------------------------------------------------- Boxed
-const noDouble = (w) => !/(.)\1/.test(w);
-const distinct = (s) => new Set(s).size;
+//
+// The generator builds a box *from* two chainable words: their twelve distinct
+// letters are the box, and the sides are assigned so neither word steps twice
+// on one side. The two-word solution is guaranteed because the box was built
+// out of it.
+//
+// Two ways to theme that, both measured, because the first version of this file
+// measured a third that answered nothing. It asked whether two theme words
+// could be that seed pair — twelve distinct letters *and* chainable — and got
+// zero. The zero was the extra constraint: theme words do not chain. Dropping
+// it is Ray's proposal, and it works.
+//
+//   from the theme   two theme words whose letters are twelve distinct. Both
+//                    are then spellable, and the guaranteed two-word solution
+//                    comes from the dictionary instead of from them.
+//   from the pool    keep the ordinary seed pair, and choose among the two
+//                    hundred thousand of them by how many theme words the
+//                    resulting box happens to spell.
+//
+// Both keep the guarantee. The second holds more theme words; the first is a
+// smaller search and the box is visibly made of the theme.
+const noDouble = (w) => !/(\w)\1/.test(w);
 
-function assignable(w1, w2) {
-  const letters = [...new Set(w1 + w2)];
+const spellable = (w, sideOf) => {
+  if (![...w].every((c) => c in sideOf)) return false;
+  for (let i = 1; i < w.length; i += 1) if (sideOf[w[i - 1]] === sideOf[w[i]]) return false;
+  return true;
+};
+
+/** Twelve letters into four sides of three, so every word in `must` is
+ *  spellable — no word may step twice on one side. */
+function assignSides(must) {
+  const letters = [...new Set(must.join(''))];
   const adj = new Set();
-  for (const w of [w1, w2]) {
-    for (let i = 1; i < w.length; i++) {
+  for (const w of must) {
+    for (let i = 1; i < w.length; i += 1) {
       adj.add(w[i - 1] + w[i]);
       adj.add(w[i] + w[i - 1]);
     }
   }
+  const degree = (c) => letters.filter((x) => adj.has(c + x)).length;
+  letters.sort((a, b) => degree(b) - degree(a));
   const sides = [[], [], [], []];
   const bt = (i) => {
     if (i === letters.length) return true;
-    const c = letters[i];
-    for (let s = 0; s < 4; s++) {
-      if (sides[s].length >= 3) continue;
-      if (sides[s].some((x) => adj.has(x + c))) continue;
-      sides[s].push(c);
+    for (let sd = 0; sd < 4; sd += 1) {
+      if (sides[sd].length >= 3) continue;
+      if (sides[sd].some((x) => adj.has(x + letters[i]))) continue;
+      sides[sd].push(letters[i]);
       if (bt(i + 1)) return true;
-      sides[s].pop();
+      sides[sd].pop();
     }
     return false;
   };
-  return bt(0);
+  if (!bt(0)) return null;
+  const sideOf = {};
+  sides.forEach((side, i) => side.forEach((c) => { sideOf[c] = i; }));
+  return { sides: sides.map((x) => x.join('')), sideOf };
 }
 
-const boxable = theme.filter((w) => w.length >= 4 && noDouble(w));
-const boxPool = generatable.filter((w) => w.length >= 4 && noDouble(w));
-const byFirst = new Map();
-for (const w of boxPool) {
-  if (!byFirst.has(w[0])) byFirst.set(w[0], []);
-  byFirst.get(w[0]).push(w);
+const boxPool = generatable.filter((w) => w.length >= 3);
+const seedPool = boxPool.filter((w) => w.length >= 4 && noDouble(w));
+const seedByFirst = new Map();
+for (const w of seedPool) {
+  if (!seedByFirst.has(w[0])) seedByFirst.set(w[0], []);
+  seedByFirst.get(w[0]).push(w);
 }
 
-const count = (second) => {
-  let pairs = 0;
-  const covered = new Set();
-  const eg = [];
-  for (const a of boxable) {
-    for (const b of second(a)) {
-      if (a === b || distinct(a + b) !== 12 || !assignable(a, b)) continue;
-      pairs += 1;
-      covered.add(a);
-      if (eg.length < 3) eg.push(`${a} → ${b}`);
-    }
-  }
-  return { pairs, covered: covered.size, eg };
+/** Is there any two ordinary words that finish this box? That is the guarantee
+ *  the generator makes, and it has to survive whatever chose the letters. */
+const twoWordSolution = (sideOf, size) => {
+  const usable = boxPool.filter((w) => spellable(w, sideOf));
+  return usable.some((x) =>
+    usable.some((y) => y[0] === x.at(-1) && new Set(x + y).size === size)
+  );
 };
 
-const bothThemed = count((a) => boxable.filter((b) => b[0] === a[a.length - 1]));
-const oneThemed = count((a) => byFirst.get(a[a.length - 1]) ?? []);
-console.log('Boxed — two chainable words, exactly 12 distinct letters');
-console.log(`  both from the theme: ${bothThemed.pairs} pairs, ${bothThemed.covered}/${boxable.length} words`);
-console.log(`  themed + ordinary:   ${oneThemed.pairs} pairs, ${oneThemed.covered}/${boxable.length} words`);
-if (oneThemed.eg.length) console.log(`  e.g. ${oneThemed.eg.join(', ')}`);
+const boxable = theme.filter((w) => w.length >= 4 && noDouble(w));
+
+// --- from the theme
+let pairs = 0;
+let guaranteed = 0;
+let bestThemed = null;
+for (let i = 0; i < boxable.length; i += 1) {
+  for (let j = i + 1; j < boxable.length; j += 1) {
+    const a = boxable[i];
+    const b = boxable[j];
+    if (new Set(a + b).size !== 12) continue;
+    pairs += 1;
+    const laid = assignSides([a, b]);
+    if (!laid) continue;
+    if (!twoWordSolution(laid.sideOf, 12)) continue;
+    guaranteed += 1;
+    const held = theme.filter((w) => spellable(w, laid.sideOf));
+    if (!bestThemed || held.length > bestThemed.held.length) {
+      bestThemed = { a, b, laid, held };
+    }
+  }
+}
+console.log('Boxed — a box built from two theme words');
+console.log(`  ${pairs} theme pairs make twelve distinct letters`);
+console.log(`  ${guaranteed} of those still have an ordinary two-word solution`);
+if (bestThemed) {
+  console.log(`  best: ${bestThemed.a} + ${bestThemed.b} → ${bestThemed.laid.sides.join(' | ')}`);
+  console.log(`  spells ${bestThemed.held.length}: ${bestThemed.held.join(', ')}`);
+}
+
+// --- from the pool
+let candidates = 0;
+let bestPool = null;
+for (const a of seedPool) {
+  for (const b of seedByFirst.get(a.at(-1)) ?? []) {
+    if (a === b) continue;
+    const letters = new Set(a + b);
+    if (letters.size !== 12) continue;
+    candidates += 1;
+    // Cheap first: a theme word cannot be spelled unless every letter is there.
+    const possible = theme.filter((w) => [...w].every((c) => letters.has(c)));
+    if (bestPool && possible.length <= bestPool.held.length) continue;
+    const laid = assignSides([a, b]);
+    if (!laid) continue;
+    const held = theme.filter((w) => spellable(w, laid.sideOf));
+    if (!bestPool || held.length > bestPool.held.length) bestPool = { a, b, laid, held };
+  }
+}
+console.log('\nBoxed — an ordinary seed pair, chosen by what its box spells');
+console.log(`  ${candidates} two-word boxes exist in the pool`);
+if (bestPool) {
+  console.log(`  best: ${bestPool.a} → ${bestPool.b} → ${bestPool.laid.sides.join(' | ')}`);
+  console.log(`  spells ${bestPool.held.length}: ${bestPool.held.join(', ')}`);
+}
 
 // -------------------------------------------------------------------- Bridge
-const parts = [...accepted].filter((w) => w.length >= 3 && w.length <= 6);
-let prompts = 0;
-const bridged = new Set();
-const bridgeEg = [];
-for (const m of theme) {
-  const lefts = parts.filter((x) => accepted.has(x + m));
-  if (lefts.length === 0) continue;
-  const rights = parts.filter((y) => accepted.has(m + y));
-  if (rights.length === 0) continue;
-  bridged.add(m);
-  prompts += lefts.length * rights.length;
-  if (bridgeEg.length < 4) bridgeEg.push(`${lefts[0]} · ${m} · ${rights[0]}`);
+// The compounds are the theme, not the answer between them: nonprofit and
+// profitable share `profit`, which makes non · profit · able.
+const themeSet = new Set(theme);
+const prompts = [];
+for (const a of themeSet) {
+  for (const b of themeSet) {
+    if (a === b) continue;
+    for (let i = 2; i <= a.length - 3; i += 1) {
+      const stem = a.slice(i);
+      if (stem.length < 3 || !b.startsWith(stem)) continue;
+      const x = a.slice(0, i);
+      const y = b.slice(stem.length);
+      if (x.length < 2 || y.length < 2) continue;
+      prompts.push(`${x} · ${stem} · ${y}  (${a} / ${b})`);
+    }
+  }
 }
-console.log('\nBridge — x + answer and answer + y are both words');
-console.log(`  ${bridged.size}/${theme.length} theme words can be an answer (${prompts} prompts)`);
-if (bridgeEg.length) console.log(`  e.g. ${bridgeEg.join(' | ')}`);
+console.log(`
+Bridge — theme words that are compounds sharing a stem`);
+console.log(`  ${prompts.length} prompts`);
+for (const p of prompts.slice(0, 6)) console.log(`  ${p}`);
 
 // ------------------------------------------------------------------- Squares
 // The pool is the whole story here, which is worth knowing before building
@@ -186,7 +275,11 @@ for (const N of [4, 5]) {
 }
 
 console.log(
-  '\nOnly one word of each board is themed — the second Boxed word, the two' +
-    '\nBridge fragments and every Squares row but the first are ordinary. Whether' +
-    "\nthat reads as themed to somebody playing it is a judgement, not a number."
+  '\nWhat each would feel like, which no number settles:' +
+    '\n  Boxed   the words a player finds are theme words. The solution that' +
+    '\n          guarantees it can be finished is ordinary, and takes three' +
+    '\n          words rather than two.' +
+    '\n  Bridge  thin: it needs theme words that are compounds sharing a stem,' +
+    '\n          and most themes have one or two.' +
+    '\n  Squares only the first row is themed, and only with a wide pool.'
 );

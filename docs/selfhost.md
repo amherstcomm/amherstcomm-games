@@ -1284,6 +1284,36 @@ with its position and a reason before anything is saved, and the preview shows
 each theme with **which boards it fills** — a theme that fills none imports
 perfectly and then never appears, which is the worst way to find out.
 
+#### What a list can make
+
+The same idea for the other two games a list could drive, shown on the word list
+while it is being written — which is the only time the answer is any use. A list
+finished in September and found to make one puzzle in October is a list nobody
+can fix.
+
+**Boxed.** Two theme words whose letters are exactly twelve distinct make the
+box: those letters *are* the board, and both words are then findable in it. They
+do **not** have to chain, which is the thing two versions of this got wrong —
+theme words essentially never do, and requiring it reported zero from a list
+with twenty-one. The two-word solution the daily promises comes from the
+dictionary instead, so the panel says how many of the boxes have one; a themed
+box that cannot be finished in two words is the failure worth catching, and it
+is stated rather than left as a smaller number.
+
+**Bridge.** The themed thing is the compounds either side, not the answer
+between them: `nonprofit` and `profitable` share `profit`, giving
+non · profit · able. It needs two theme words that are compounds sharing a
+stem, so most lists make none — which is the answer rather than a fault in the
+list, and the panel says what one would need instead of just showing a zero.
+
+**Squares** is not offered. It themes only its first row, and only with a pool
+wider than the one other puzzles generate from; it has a switch on this same
+page instead.
+
+`scripts/feasibility.mjs` asks the same questions from the command line, against
+the same rules and the real dictionary, which is where the numbers above came
+from.
+
 #### The calculator, and why there is one
 
 Weave fills the whole grid. The words have to sum **exactly** to the cells the

@@ -21,6 +21,7 @@ import {
 import ImportBox from '@/ImportBox';
 import { LIST_TEMPLATE } from '@/templates';
 import { parseWordLists, type ParsedList } from '@/importing';
+import ThemeYield from '@/ThemeYield';
 
 const FIELD =
   'w-full rounded-lg bg-white/5 border border-white/15 px-3 py-2 text-sm text-slate-100 ' +
@@ -191,6 +192,12 @@ export default function AdminWordLists() {
               Everything below is only for taking over the daily puzzles, which
               most lists never do — hence the heading rather than four more
               fields with no explanation. */}
+          {/* What this list can actually make, while it is still being
+              written — which is the only time the answer is useful. A list
+              finished in September and found to make one puzzle in October is
+              a list nobody can fix. */}
+          <ThemeYield words={words} />
+
           <div className="rounded-lg border border-white/15 p-3 space-y-3">
             <p className="text-xs uppercase tracking-wider text-slate-500">
               Take over the daily word (optional)

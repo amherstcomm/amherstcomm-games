@@ -508,3 +508,44 @@ test('a month can be opened from a file rather than pasted', async ({ page }) =>
   await expect(page.getByText('Imported 2 of 2.')).toBeVisible();
   expect(saved.map((s) => s.p_clue)).toEqual(['Profit sharing', 'On the board']);
 });
+
+// The calculator, on the list while it is being written — which is the only
+// time the answer is any use.
+test('a word list says what it can make while you write it', async ({ page }) => {
+  await page.route('**/rest/v1/rpc/**', (route) => {
+    const url = route.request().url();
+    const body = url.includes('word_lists_sheet')
+      ? { ok: true, lists: [] }
+      : url.includes('site_settings_sheet')
+        ? { ok: true, settings: [] }
+        : url.includes('weave_themes_sheet')
+          ? { ok: true, themes: [] }
+          : url.includes('feature_windows_sheet')
+            ? { ok: true, features: [] }
+            : url.includes('people_with_roles')
+              ? { ok: true, people: [] }
+              : [];
+    return route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(body),
+    });
+  });
+  await page.goto('/admin');
+  await page.getByRole('button', { name: 'New list' }).click();
+
+  // voting + shared is twelve distinct letters, measured in
+  // scripts/feasibility.mjs against the real dictionary.
+  await page.getByLabel(/^Words/).fill('voting\nshared\nvote\ngain\nearn\ndividend');
+  await expect(page.getByText(/Boxed — \d+ boards? from pairs/)).toBeVisible();
+  await expect(page.getByText(/voting \+ shared/)).toBeVisible();
+
+  // A list of plain nouns makes no bridge, which is the answer rather than a
+  // fault in the list — so it says what one would need.
+  await expect(page.getByText(/Bridge — 0 prompts/)).toBeVisible();
+  await expect(page.getByText(/compounds sharing a stem/)).toBeVisible();
+
+  // And two compounds that do share one.
+  await page.getByLabel(/^Words/).fill('nonprofit\nprofitable');
+  await expect(page.getByText('non · profit · able')).toBeVisible();
+});
