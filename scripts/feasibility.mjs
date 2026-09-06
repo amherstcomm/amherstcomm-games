@@ -61,38 +61,57 @@ const accepted = new Set(
 console.log(`theme: ${theme.length} words · dictionary: ${accepted.size} accepted\n`);
 
 // --------------------------------------------------------------------- Boxed
-// How many theme words a twelve-letter box can hold, and what it costs to solve.
-/** No consecutive repeat: a box cannot spell one, because the second letter
- *  would step on the same side as the first. */
+//
+// The generator builds a box *from* two chainable words: their twelve distinct
+// letters are the box, and the sides are assigned so neither word steps twice
+// on one side. The two-word solution is guaranteed because the box was built
+// out of it.
+//
+// Two ways to theme that, both measured, because the first version of this file
+// measured a third that answered nothing. It asked whether two theme words
+// could be that seed pair — twelve distinct letters *and* chainable — and got
+// zero. The zero was the extra constraint: theme words do not chain. Dropping
+// it is Ray's proposal, and it works.
+//
+//   from the theme   two theme words whose letters are twelve distinct. Both
+//                    are then spellable, and the guaranteed two-word solution
+//                    comes from the dictionary instead of from them.
+//   from the pool    keep the ordinary seed pair, and choose among the two
+//                    hundred thousand of them by how many theme words the
+//                    resulting box happens to spell.
+//
+// Both keep the guarantee. The second holds more theme words; the first is a
+// smaller search and the box is visibly made of the theme.
 const noDouble = (w) => !/(\w)\1/.test(w);
 
 const spellable = (w, sideOf) => {
   if (![...w].every((c) => c in sideOf)) return false;
-  for (let i = 1; i < w.length; i++) if (sideOf[w[i - 1]] === sideOf[w[i]]) return false;
+  for (let i = 1; i < w.length; i += 1) if (sideOf[w[i - 1]] === sideOf[w[i]]) return false;
   return true;
 };
 
 /** Twelve letters into four sides of three, so every word in `must` is
  *  spellable — no word may step twice on one side. */
-function layout(letters, must) {
+function assignSides(must) {
+  const letters = [...new Set(must.join(''))];
   const adj = new Set();
   for (const w of must) {
-    for (let i = 1; i < w.length; i++) {
+    for (let i = 1; i < w.length; i += 1) {
       adj.add(w[i - 1] + w[i]);
       adj.add(w[i] + w[i - 1]);
     }
   }
-  const degree = (c) => [...letters].filter((x) => adj.has(c + x)).length;
-  const order = [...letters].sort((a, b) => degree(b) - degree(a));
+  const degree = (c) => letters.filter((x) => adj.has(c + x)).length;
+  letters.sort((a, b) => degree(b) - degree(a));
   const sides = [[], [], [], []];
   const bt = (i) => {
-    if (i === order.length) return true;
-    for (let s = 0; s < 4; s++) {
-      if (sides[s].length >= 3) continue;
-      if (sides[s].some((x) => adj.has(x + order[i]))) continue;
-      sides[s].push(order[i]);
+    if (i === letters.length) return true;
+    for (let sd = 0; sd < 4; sd += 1) {
+      if (sides[sd].length >= 3) continue;
+      if (sides[sd].some((x) => adj.has(x + letters[i]))) continue;
+      sides[sd].push(letters[i]);
       if (bt(i + 1)) return true;
-      sides[s].pop();
+      sides[sd].pop();
     }
     return false;
   };
@@ -102,64 +121,76 @@ function layout(letters, must) {
   return { sides: sides.map((x) => x.join('')), sideOf };
 }
 
-/** The shortest chain of words covering every letter, up to `maxWords`. */
-function solve(pool, letters, maxWords) {
-  const need = [...letters];
-  const seen = new Set();
-  let frontier = pool.map((w) => ({ chain: [w], covered: new Set(w), last: w.at(-1) }));
-  for (let depth = 1; depth <= maxWords; depth += 1) {
-    const next = [];
-    for (const st of frontier) {
-      if (need.every((c) => st.covered.has(c))) return st.chain;
-      const key = st.last + [...st.covered].sort().join('');
-      if (seen.has(key)) continue;
-      seen.add(key);
-      for (const w of pool) {
-        if (w[0] !== st.last) continue;
-        next.push({ chain: [...st.chain, w], covered: new Set([...st.covered, ...w]), last: w.at(-1) });
-      }
-    }
-    // Bounded: this answers "is there one", and an unbounded frontier on a
-    // twelve-letter box grows past patience without changing the answer.
-    frontier = next.length > 60_000 ? next.slice(0, 60_000) : next;
-  }
-  return null;
+const boxPool = generatable.filter((w) => w.length >= 3);
+const seedPool = boxPool.filter((w) => w.length >= 4 && noDouble(w));
+const seedByFirst = new Map();
+for (const w of seedPool) {
+  if (!seedByFirst.has(w[0])) seedByFirst.set(w[0], []);
+  seedByFirst.get(w[0]).push(w);
 }
+
+/** Is there any two ordinary words that finish this box? That is the guarantee
+ *  the generator makes, and it has to survive whatever chose the letters. */
+const twoWordSolution = (sideOf, size) => {
+  const usable = boxPool.filter((w) => spellable(w, sideOf));
+  return usable.some((x) =>
+    usable.some((y) => y[0] === x.at(-1) && new Set(x + y).size === size)
+  );
+};
 
 const boxable = theme.filter((w) => w.length >= 4 && noDouble(w));
-let best = null;
-// Greedy, one box per seed: a lower bound on what exists, never a proof that
-// nothing better does.
-for (const seed of boxable) {
-  let letters = new Set(seed);
-  const chosen = [seed];
-  for (const w of boxable) {
-    if (w === seed) continue;
-    const merged = new Set([...letters, ...w]);
-    if (merged.size > 12) continue;
-    letters = merged;
-    chosen.push(w);
+
+// --- from the theme
+let pairs = 0;
+let guaranteed = 0;
+let bestThemed = null;
+for (let i = 0; i < boxable.length; i += 1) {
+  for (let j = i + 1; j < boxable.length; j += 1) {
+    const a = boxable[i];
+    const b = boxable[j];
+    if (new Set(a + b).size !== 12) continue;
+    pairs += 1;
+    const laid = assignSides([a, b]);
+    if (!laid) continue;
+    if (!twoWordSolution(laid.sideOf, 12)) continue;
+    guaranteed += 1;
+    const held = theme.filter((w) => spellable(w, laid.sideOf));
+    if (!bestThemed || held.length > bestThemed.held.length) {
+      bestThemed = { a, b, laid, held };
+    }
   }
-  if (letters.size !== 12) continue;
-  const laid = layout(letters, chosen);
-  if (!laid) continue;
-  const held = chosen.filter((w) => spellable(w, laid.sideOf));
-  if (!best || held.length > best.held.length) best = { letters, held, laid };
+}
+console.log('Boxed — a box built from two theme words');
+console.log(`  ${pairs} theme pairs make twelve distinct letters`);
+console.log(`  ${guaranteed} of those still have an ordinary two-word solution`);
+if (bestThemed) {
+  console.log(`  best: ${bestThemed.a} + ${bestThemed.b} → ${bestThemed.laid.sides.join(' | ')}`);
+  console.log(`  spells ${bestThemed.held.length}: ${bestThemed.held.join(', ')}`);
 }
 
-console.log('Boxed — how many theme words a twelve-letter box holds');
-if (!best) {
-  console.log('  no twelve-letter box covers a group of these words');
-} else {
-  console.log(`  ${best.held.length} words: ${best.held.join(', ')}`);
-  console.log(`  sides ${best.laid.sides.join(' | ')}`);
-  const ordinary = generatable.filter((w) => w.length >= 3 && spellable(w, best.laid.sideOf));
-  const themedSolution = solve(best.held, best.letters, 4);
-  console.log(`  solvable with theme words alone: ${themedSolution ? themedSolution.join(' → ') : 'no'}`);
-  for (const cap of [2, 3]) {
-    const sol = solve(ordinary, best.letters, cap);
-    console.log(`  in ${cap} ordinary words: ${sol ? sol.join(' → ') : 'no'}`);
+// --- from the pool
+let candidates = 0;
+let bestPool = null;
+for (const a of seedPool) {
+  for (const b of seedByFirst.get(a.at(-1)) ?? []) {
+    if (a === b) continue;
+    const letters = new Set(a + b);
+    if (letters.size !== 12) continue;
+    candidates += 1;
+    // Cheap first: a theme word cannot be spelled unless every letter is there.
+    const possible = theme.filter((w) => [...w].every((c) => letters.has(c)));
+    if (bestPool && possible.length <= bestPool.held.length) continue;
+    const laid = assignSides([a, b]);
+    if (!laid) continue;
+    const held = theme.filter((w) => spellable(w, laid.sideOf));
+    if (!bestPool || held.length > bestPool.held.length) bestPool = { a, b, laid, held };
   }
+}
+console.log('\nBoxed — an ordinary seed pair, chosen by what its box spells');
+console.log(`  ${candidates} two-word boxes exist in the pool`);
+if (bestPool) {
+  console.log(`  best: ${bestPool.a} → ${bestPool.b} → ${bestPool.laid.sides.join(' | ')}`);
+  console.log(`  spells ${bestPool.held.length}: ${bestPool.held.join(', ')}`);
 }
 
 // -------------------------------------------------------------------- Bridge
