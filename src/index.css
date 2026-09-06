@@ -499,23 +499,32 @@
 }
 
 /* By day the ground inverts to a paper that still carries the hue, and the
- * accent becomes the navy itself — #191D5C at 13.9:1 on this page, where the
+ * accent becomes the navy itself — #191D5C at 12.9:1 on this page, where the
  * sky blue would have been far too pale to read. Same two brand colours,
- * trading places. */
+ * trading places.
+ *
+ * The paper carries more of the navy than it did. It was #f4f7fd over panels of
+ * #fcfdff — a white page with white cards on it, where the brand was only in
+ * the text. The ground is #e6ecf8 now and the panels #f4f7fd: the page reads as
+ * navy-tinted paper, a panel lifts off it by a step somebody can see, and the
+ * edges at 700 went from a 1.4:1 whisper to something that draws a line. Every
+ * pair is measured in tests/unit/palettes.test.ts; the text tiers all clear AA
+ * with the deeper ground rather than in spite of it. */
 :root[data-theme='light'][data-palette='amherst'] {
-  --c-slate-950: 244 247 253;
-  --c-slate-900: 252 253 255;
-  --c-slate-800: 226 232 246;
-  --c-slate-700: 198 208 234;
-  --c-slate-600: 88 100 148;
-  --c-slate-500: 62 74 124;
-  --c-slate-400: 62 74 124;
-  --c-slate-300: 44 54 104;
+  --c-slate-950: 230 236 248;
+  --c-slate-900: 244 247 253;
+  --c-slate-800: 210 219 241;
+  --c-slate-700: 176 190 224;
+  --c-slate-600: 74 87 137;
+  --c-slate-500: 56 68 120;
+  --c-slate-400: 56 68 120;
+  --c-slate-300: 40 50 102;
   --c-slate-200: 25 29 92;
 
   --c-white: 25 29 92;
   --c-focus: 25 29 92;
   --c-accent: 25 29 92;
+
 
   /* By day these tiers invert: 100-300 are ink on a pale ground rather than
    * fills on a dark one, so they go dark. amber-400 has to be restated here

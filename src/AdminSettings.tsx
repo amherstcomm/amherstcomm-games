@@ -22,7 +22,7 @@ import AdminPins from '@/AdminPins';
 import ThemeCoverage from '@/ThemeCoverage';
 
 const FIELD =
-  'w-full rounded-lg bg-white/5 border border-white/15 px-3 py-2 text-sm text-slate-100 ' +
+  'w-full rounded-lg bg-white/5 border border-white/15 px-3 py-2 text-sm text-slate-200 ' +
   'placeholder:text-slate-500 focus:outline-none focus:border-accent';
 const BUTTON =
   'inline-flex items-center justify-center px-3 h-9 rounded-lg text-sm font-semibold ' +
@@ -259,7 +259,7 @@ export default function AdminSettings({
             {...tabLink(id)}
             aria-current={tab === id ? 'page' : undefined}
             className={`px-3 h-9 inline-flex items-center rounded-lg text-sm font-semibold transition-colors
-              ${tab === id ? 'bg-accent text-ink' : 'text-slate-300 hover:bg-white/10'}`}
+              ${tab === id ? 'bg-accent text-slate-950' : 'text-slate-300 hover:bg-white/10'}`}
           >
             {ADMIN_TITLE[id]}
           </RouteLink>

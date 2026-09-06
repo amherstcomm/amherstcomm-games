@@ -22,6 +22,10 @@ const ROUTES = [
   ['hive', '/daily/hive'],
   ['cryptogram', '/daily/cryptogram'],
   ['settings', '/settings/site'],
+  // The admin form, added after a text class fell through to Tailwind's own
+  // palette and rendered an input at 1.05:1 in this very combination. It is
+  // behind a capability, so the sweep would have skipped it and did.
+  ['admin', '/admin/lists'],
 ] as const;
 
 for (const palette of PALETTES) {
@@ -36,6 +40,24 @@ for (const palette of PALETTES) {
         [theme, palette] as const
       );
 
+      // The admin route draws nothing without these, and a page that renders
+      // its refusal is a page with no colours to check.
+      await page.route('**/rest/v1/rpc/**', (route) => {
+        const url = route.request().url();
+        const body = url.includes('my_capabilities')
+          ? ['site.settings', 'users.manage', 'games.setup']
+          : url.includes('word_lists_sheet')
+            ? { ok: true, lists: [] }
+            : url.includes('word_policies_sheet')
+              ? { ok: true, policies: [] }
+              : { ok: true };
+        return route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify(body),
+        });
+      });
+
       const failures: unknown[] = [];
       for (const [name, path] of ROUTES) {
         await page.goto(path);
@@ -45,6 +67,12 @@ for (const palette of PALETTES) {
         // make this whole sweep a very slow way of testing one palette
         await expect(page.locator('html')).toHaveAttribute('data-palette', palette);
         await expect(page.locator('html')).toHaveAttribute('data-theme', theme);
+
+        // The form is only on screen once somebody is writing a list, and the
+        // field that was invisible is in it.
+        if (name === 'admin') {
+          await page.getByRole('button', { name: 'New list' }).click();
+        }
 
         const results = await new AxeBuilder({ page }).withRules(['color-contrast']).analyze();
         for (const v of results.violations) {
