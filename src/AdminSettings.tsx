@@ -16,6 +16,7 @@ import AdminPeople from '@/AdminPeople';
 import AdminWordLists from '@/AdminWordLists';
 import AdminFeatures from '@/AdminFeatures';
 import AdminWeaveThemes from '@/AdminWeaveThemes';
+import ThemeCoverage from '@/ThemeCoverage';
 
 const FIELD =
   'w-full rounded-lg bg-white/5 border border-white/15 px-3 py-2 text-sm text-slate-100 ' +
@@ -207,6 +208,13 @@ export default function AdminSettings() {
           serve both made a worse version of each. */}
       <div className="mt-10">
         <AdminWeaveThemes />
+      </div>
+
+      {/* After both, because it is about both: a month is themed by several
+          lists and several Weave themes with overlapping windows, and whether
+          it is covered is a question no single one of them can answer. */}
+      <div className="mt-10">
+        <ThemeCoverage />
       </div>
 
       <div className="mt-10">
