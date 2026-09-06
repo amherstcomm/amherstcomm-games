@@ -1077,8 +1077,9 @@ test('and a long shortlist can be filtered and paged through', async ({ page }) 
 });
 
 // The three lists with a number worth narrowing by: letters in the word, words
-// in the chain, steps in the ladder. Named as the site names the games, because
-// a page that invents a second name for Boxed is a page nobody can talk about.
+// in the chain, steps in the ladder. Chips rather than dropdowns — four choices
+// you can see all of — and named as the site names the games, because a page
+// that invents a second name for Boxed is a page nobody can talk about.
 test('and a list can be narrowed by size and sorted', async ({ page }) => {
   const day = {
     date: '2026-10-08',
@@ -1117,21 +1118,21 @@ test('and a list can be narrowed by size and sorted', async ({ page }) => {
 
   // Guess, by letters: every word left is that long.
   const words = page.locator('[data-shortlist="guess"]');
-  await words.getByLabel('Letters in Guess the Word').selectOption('7');
+  await words.getByRole('button', { name: 'Letters: 7' }).click();
   for (const text of await words.getByRole('button', { name: /\(\d+\)$/ }).allTextContents()) {
     expect(text).toMatch(/\(7\)$/);
   }
 
   // Boxed, by how many words the chain takes.
   const boxes = page.locator('[data-shortlist="boxed"]');
-  await boxes.getByLabel('Words in the chain in Boxed').selectOption('2');
+  await boxes.getByRole('button', { name: 'Words in the chain: 2' }).click();
   for (const text of await boxes.getByRole('button', { name: /→/ }).allTextContents()) {
     expect(text.split(' — ')[1].split(' → ')).toHaveLength(2);
   }
 
   // And A to Z, which sorts a box by its words rather than by its letters —
   // nobody looks for a board by its sides.
-  await boxes.getByLabel('Order Boxed').selectOption('az');
+  await boxes.getByRole('button', { name: 'Boxed A to Z' }).click();
   const sorted = (await boxes.getByRole('button', { name: /→/ }).allTextContents()).map(
     (text) => text.split(' — ')[1]
   );

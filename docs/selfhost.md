@@ -1747,6 +1747,11 @@ hundreds and its pangrams to three, so one control for the page would be wrong
 in both directions. Twelve at a time, and the filter matches every word typed
 anywhere in the label, in any order.
 
+The controls are chips rather than dropdowns: four choices you can see all of,
+and a dropdown hides what is on offer until it is opened, which is the opposite
+of what a shortlist is for. The chip carries the short word — `chain`, `steps` —
+and the long one is its accessible name.
+
 **Each list is narrowed by the one number that tells its candidates apart** —
 letters for the daily word, the rack and the hive; words in the chain for the
 box; steps for the ladder — and sorted best first, A to Z, or by that number.
