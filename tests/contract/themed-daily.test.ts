@@ -402,22 +402,30 @@ describe('a box built from the theme', () => {
     return true;
   };
 
-  it('lays the twelve letters of two theme words', async () => {
+  it('lays the twelve letters of the theme s own words', async () => {
     const payload = await read(themed, 'daily-box.json');
     const board = sidesOf(payload, 'easy');
     const letters = board.sides.join('');
     expect(letters).toHaveLength(12);
     expect(new Set(letters).size).toBe(12);
-    // Some pair of theme words accounts for exactly these letters, which is
-    // what "built from the theme" means.
-    const pairs = THEME.words.flatMap((a) =>
-      THEME.words.map((b) => (a < b ? [a, b] : null)).filter(Boolean) as string[][]
-    );
-    const made = pairs.some(
-      ([a, b]) =>
-        new Set(a + b).size === 12 && [...new Set(a + b)].every((c) => letters.includes(c))
-    );
-    expect(made, `no theme pair makes ${board.sides.join('/')}`).toBe(true);
+    // Some set of two to four theme words accounts for exactly these letters,
+    // which is what "built from the theme" means. Depth first, because the seed
+    // is no longer always a pair: a box needs twelve distinct letters and two
+    // six-letter words rarely have twelve between them.
+    const covers = (chosen: string[]) =>
+      new Set(chosen.join('')).size === 12 &&
+      [...new Set(chosen.join(''))].every((c) => letters.includes(c));
+    const madeFrom = (from: number, chosen: string[]): boolean => {
+      if (chosen.length >= 2 && covers(chosen)) return true;
+      if (chosen.length >= 4) return false;
+      for (let i = from; i < THEME.words.length; i += 1) {
+        const next = [...chosen, THEME.words[i]];
+        if (new Set(next.join('')).size > 12) continue;
+        if (madeFrom(i + 1, next)) return true;
+      }
+      return false;
+    };
+    expect(madeFrom(0, []), `no theme words make ${board.sides.join('/')}`).toBe(true);
   });
 
   it('and both of those words can be spelled on it', async () => {

@@ -12,7 +12,13 @@
 // guessed at.
 import { useEffect, useMemo, useState } from 'react';
 import { getDictionary, getDifficultyPool } from '@/dictionaries';
-import { boxesFrom, bridgesFrom, laddersFrom, type LadderPair } from '@/themeCalculators';
+import {
+  boxesFrom,
+  bridgesFrom,
+  laddersFrom,
+  type Box,
+  type LadderPair,
+} from '@/themeCalculators';
 
 export default function ThemeYield({ words }: { words: string }) {
   const list = useMemo(
@@ -34,10 +40,23 @@ export default function ThemeYield({ words }: { words: string }) {
     };
   }, [list.length, dictionary]);
 
-  const boxes = useMemo(
-    () => (list.length >= 2 ? boxesFrom(list, dictionary ?? undefined) : []),
-    [list, dictionary]
-  );
+  // Deferred, like the ladder below and for the same reason: the search now
+  // takes sets of up to four words, and measuring how few words each board
+  // needs is three milliseconds a board. A couple of dozen is all this line
+  // says anything about, so it asks for that rather than the four thousand the
+  // generator works through overnight.
+  const [boxes, setBoxes] = useState<Box[]>([]);
+  useEffect(() => {
+    if (list.length < 2) {
+      setBoxes([]);
+      return;
+    }
+    const id = window.setTimeout(
+      () => setBoxes(boxesFrom(list, dictionary ?? undefined, { limit: 24 })),
+      400
+    );
+    return () => window.clearTimeout(id);
+  }, [list, dictionary]);
   const bridges = useMemo(() => bridgesFrom(list), [list]);
 
   // The ladder search is the one measurement here that cannot ride along with a
@@ -80,10 +99,11 @@ export default function ThemeYield({ words }: { words: string }) {
       <div>
         <p className={boxes.length > 0 ? 'text-emerald-300' : 'text-slate-500'}>
           {boxes.length > 0 ? '✓' : '·'} Boxed — {boxes.length}{' '}
-          {boxes.length === 1 ? 'board' : 'boards'} from pairs of these words
+          {boxes.length === 1 ? 'board' : 'boards'} from sets of these words
           {dictionary && boxes.length > 0 &&
             `, ${boxes.filter((b) => b.par === 2).length} solvable in two words and ` +
               `${boxes.filter((b) => b.par === 3).length} in three`}
+          {boxes.length >= 24 && ' (the first two dozen — there are more)'}
         </p>
         {best && (
           <p className="text-slate-400 pl-3">

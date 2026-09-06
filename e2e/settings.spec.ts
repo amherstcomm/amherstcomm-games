@@ -540,8 +540,15 @@ test('a word list says what it can make while you write it', async ({ page }) =>
   // voting + shared is twelve distinct letters, measured in
   // scripts/feasibility.mjs against the real dictionary.
   await page.getByLabel(/^Words/).fill('voting\nshared\nvote\ngain\nearn\ndividend');
-  await expect(page.getByText(/Boxed — \d+ boards? from pairs/)).toBeVisible();
-  await expect(page.getByText(/voting \+ shared/)).toBeVisible();
+  // Deferred now, like the ladder: the search takes sets of up to four words
+  // and measuring each board is milliseconds, so it waits for a pause rather
+  // than running on every keystroke.
+  await expect(page.getByText(/Boxed — \d+ boards? from sets/)).toBeVisible();
+  // The best board, named by the words it was built from and what it takes to
+  // solve. Which words those are depends on the list, so what is asserted is
+  // the shape: a seed of at least two, the four sides, and the number.
+  await expect(page.getByText(/best: \w+( \+ \w+)+ → \w+ \| \w+ \| \w+ \| \w+/)).toBeVisible();
+  await expect(page.getByText(/\(solvable in [23]\)/)).toBeVisible();
 
   // The ladder search waits for a pause in typing rather than running per
   // keystroke — a walk per word over forty thousand rungs is a tenth of a

@@ -1325,18 +1325,26 @@ while it is being written — which is the only time the answer is any use. A li
 finished in September and found to make one puzzle in October is a list nobody
 can fix.
 
-**Boxed.** Two theme words whose letters are exactly twelve distinct make the
-box: those letters *are* the board, and both words are then findable in it. The
-two do **not** have to chain with each other, which is the thing two versions of
-this got wrong — theme words essentially never do, and requiring it reported
-zero from a list with twenty-one.
+**Boxed.** Theme words whose letters are exactly twelve distinct make the box —
+two of them, or three, or four. Those letters *are* the board, and every word of
+the seed is then findable in it. They do **not** have to chain with each other,
+which is the thing two versions of this got wrong — theme words essentially
+never do, and requiring it reported zero from a list with twenty-one.
 
 That is about the *seed*, not the puzzle: the solution still chains, every word
 starting with the last letter of the one before. What it means is that the
-answer is searched for in the dictionary rather than inherited from the pair, so
+answer is searched for in the dictionary rather than inherited from the seed, so
 the panel says how many boards can be solved in two words and how many in three.
 A board that can be solved in neither would never be set, and that is the
 failure worth catching — stated rather than left as a smaller number.
+
+Enumerating the seed sets is five milliseconds; working out how few words each
+board takes is three per board, and a sixty-word list makes four thousand of
+them. So the page asks for the first two dozen and says when it has hit the cap,
+the coverage page asks for a dozen a day, and the generator — which has a night
+— works through all of them. A limited answer is the same boards every time and
+a subset of the full one; it is not the best few, and the page does not claim to
+be.
 
 **Ladder.** Two of the list's own words the same length, three to eight
 one-letter steps apart through the everyday dictionary, reported per step-count
@@ -1445,8 +1453,13 @@ ten games take their content from one, and a seventh scores it:
 
   Per difficulty by step count: the bands are 3-4, 5-6 and 7-8, and a tier with
   no themed pair in its band walks the curated pairs exactly as it always has.
-- **Boxed**, whose twelve letters are two theme words: exactly twelve distinct
-  between them, laid so both can be spelled on the finished board.
+- **Boxed**, whose twelve letters are the theme's own words: **two of them, or
+  three, or four**, exactly twelve distinct between them, laid so every one can
+  be spelled on the finished board. Pairs alone left most of a list unused — two
+  six-letter words rarely have twelve distinct letters between them, while
+  `vote` + `gain` + `shared` do. On a 66-word list that is 52 boards against
+  4,388, and the bigger seeds spell far more of the theme back at the player
+  (sixteen of its own words against three).
 
   **Chaining is the game and is not relaxed.** Every word still starts with the
   last letter of the one before, letters still come off the four sides, and no

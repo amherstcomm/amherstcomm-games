@@ -18,8 +18,8 @@ const noDouble = (w: string) => !/(\w)\1/.test(w);
 export const BOX_LETTERS = 12;
 
 export type Box = {
-  /** the two theme words whose letters make it */
-  from: [string, string];
+  /** the theme words whose letters make it — two of them, or three, or four */
+  from: string[];
   /** four sides of three */
   sides: string[];
   /** every theme word the finished box can spell — the words a player finds */
@@ -85,40 +85,6 @@ export function assignSides(must: string[]): { sides: string[]; sideOf: Record<s
  *  from the dictionary instead, which is what `dictionary` is for; pass none and
  *  `guaranteed` is simply unknown rather than false.
  */
-export function boxesFrom(words: string[], dictionary?: string[]): Box[] {
-  const usable = [...new Set(words.map((w) => w.trim().toLowerCase()))].filter(
-    (w) => /^[a-z]+$/.test(w) && w.length >= 4 && noDouble(w)
-  );
-  const all = [...new Set(words.map((w) => w.trim().toLowerCase()))].filter((w) =>
-    /^[a-z]{3,}$/.test(w)
-  );
-  const out: Box[] = [];
-  // Once, not per box — see indexed() for the six seconds this cost.
-  const pool = dictionary ? indexed(dictionary) : null;
-
-  for (let i = 0; i < usable.length; i += 1) {
-    for (let j = i + 1; j < usable.length; j += 1) {
-      const a = usable[i];
-      const b = usable[j];
-      if (new Set(a + b).size !== BOX_LETTERS) continue;
-      const laid = assignSides([a, b]);
-      if (!laid) continue;
-      let boxMask = 0;
-      for (const c of a + b) boxMask |= 1 << (c.charCodeAt(0) - 97);
-      out.push({
-        from: [a, b],
-        sides: laid.sides,
-        holds: all.filter((w) => spellable(w, laid.sideOf)),
-        par: pool ? solvableIn(laid.sideOf, boxMask, pool) : null,
-      });
-    }
-  }
-  // Ordered the way a day should choose: solvable in two first, then in three,
-  // and within each by how many theme words the board spells — which is the
-  // number that matters, because it is what a player finds.
-  return out.sort((x, y) => (x.par ?? 9) - (y.par ?? 9) || y.holds.length - x.holds.length);
-}
-
 /** The dictionary, prepared once for the box search.
  *
  *  Written this way after measuring: the first version filtered the whole
@@ -158,6 +124,97 @@ const bits = (mask: number) => {
   for (let m = mask; m !== 0; m &= m - 1) n += 1;
   return n;
 };
+
+export const MAX_SEED_WORDS = 4;
+
+/** Every set of theme words whose letters are exactly twelve distinct: two of
+ *  them, or three, or four.
+ *
+ *  Pairs alone leave most of a list unused — a box needs twelve distinct
+ *  letters and two six-letter words rarely have twelve between them, while
+ *  `vote` + `gain` + `shared` do. Measured on a 66-word list: 52 boards from
+ *  pairs against 4,388 from sets of up to four, and the bigger seeds spell far
+ *  more of the theme.
+ *
+ *  Depth first with the letters carried along, so a branch is abandoned as soon
+ *  as it passes twelve. Two sets making the same twelve letters are the same
+ *  board, and the fewest words wins.
+ */
+export function seedSets(words: string[], maxSeeds = MAX_SEED_WORDS): [number, string[]][] {
+  const seeds = [...new Set(words.map((w) => w.trim().toLowerCase()))]
+    .filter((w) => /^[a-z]+$/.test(w) && w.length >= 3 && noDouble(w))
+    .sort();
+  const masks = new Map(
+    seeds.map((w) => {
+      let mask = 0;
+      for (const c of w) mask |= 1 << (c.charCodeAt(0) - 97);
+      return [w, mask] as const;
+    })
+  );
+
+  const found = new Map<number, string[]>();
+  const chosen: string[] = [];
+  const walk = (from: number, mask: number) => {
+    const size = bits(mask);
+    if (size > BOX_LETTERS) return;
+    if (size === BOX_LETTERS && chosen.length >= 2) {
+      const had = found.get(mask);
+      if (!had || had.length > chosen.length) found.set(mask, [...chosen]);
+      return;
+    }
+    if (chosen.length >= maxSeeds) return;
+    for (let i = from; i < seeds.length; i += 1) {
+      chosen.push(seeds[i]);
+      walk(i + 1, mask | masks.get(seeds[i])!);
+      chosen.pop();
+    }
+  };
+  walk(0, 0);
+  return [...found];
+}
+
+/** Every box those sets can make, best first.
+ *
+ *  `limit` stops once that many boards have been laid and measured. Enumerating
+ *  the sets is five milliseconds; working out how few words each board takes is
+ *  three per board, and a sixty-word list makes four thousand of them. The
+ *  generator wants all of them — it deals three a day out of the best — and the
+ *  page only needs to say what the list can make, so it asks for a couple of
+ *  dozen. The order is deterministic, so a limited answer is a stable prefix
+ *  rather than a sample.
+ */
+export function boxesFrom(
+  words: string[],
+  dictionary?: string[],
+  { maxSeeds = MAX_SEED_WORDS, limit = Infinity }: { maxSeeds?: number; limit?: number } = {}
+): Box[] {
+  const all = [...new Set(words.map((w) => w.trim().toLowerCase()))].filter((w) =>
+    /^[a-z]{3,}$/.test(w)
+  );
+  const pool = dictionary ? indexed(dictionary) : null;
+
+  const out: Box[] = [];
+  for (const [boxMask, from] of seedSets(words, maxSeeds)) {
+    const laid = assignSides(from);
+    // Not every set can be laid out: four sides of three, and no word may step
+    // twice on one side. More seed words is more constraints, so this refuses
+    // more often than a pair does.
+    if (!laid) continue;
+    out.push({
+      from,
+      sides: laid.sides,
+      holds: all.filter((w) => spellable(w, laid.sideOf)),
+      par: pool ? solvableIn(laid.sideOf, boxMask, pool) : null,
+    });
+    if (out.length >= limit) break;
+  }
+  return out.sort(
+    (x, y) =>
+      (x.par ?? 9) - (y.par ?? 9) ||
+      y.holds.length - x.holds.length ||
+      x.from.length - y.from.length
+  );
+}
 
 /** In how few chained words the box can be solved: 2, 3, or null for neither.
  *

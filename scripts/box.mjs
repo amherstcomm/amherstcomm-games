@@ -5,7 +5,9 @@
 // construction hands over the two-word solution for free: the board was made
 // out of it.
 //
-// A themed box is the same twelve letters from two *theme* words, and they do
+// A themed box is the same twelve letters from the theme's own words — two of
+// them, or three, or four, because a box needs twelve distinct letters and two
+// six-letter words rarely have twelve between them. They do
 // not chain — theme words essentially never do, and requiring it reported zero
 // pairs from a list with twenty-one. The chaining rule is not relaxed by that:
 // it is the game. What changes is that the answer is no longer inherited from
@@ -156,29 +158,90 @@ export function solvableIn(sideOf, boxMask, dictionary, max = 3) {
  *
  *  `dictionary` is the pool the board will accept. Pass none and `par` is null,
  *  meaning unknown rather than unsolvable. */
-export function themedBoxes(themeWords, dictionary) {
+export const MAX_SEED_WORDS = 4;
+
+/** Every set of theme words whose letters are exactly twelve distinct: two of
+ *  them, or three, or four.
+ *
+ *  Pairs alone leave most of a list unused — a box needs twelve distinct
+ *  letters and two six-letter words rarely have twelve between them, while
+ *  `vote` + `gain` + `shared` do. Measured on a 66-word list: 52 boards from
+ *  pairs, 4,388 from sets of up to four, and the bigger seeds spell far more of
+ *  the theme (sixteen of its own words against three).
+ *
+ *  Depth first with the letters carried along, so a branch is abandoned the
+ *  moment it passes twelve rather than after the whole combination is built.
+ *  Two word sets that make the same twelve letters are the same board: the
+ *  fewest words wins, so the answer does not depend on the order the search
+ *  reached them in.
+ */
+export function seedSets(themeWords, maxSeeds = MAX_SEED_WORDS) {
+  const seeds = [
+    ...new Set((themeWords ?? []).map((w) => w.trim().toLowerCase())),
+  ]
+    .filter((w) => /^[a-z]+$/.test(w) && w.length >= 3 && noDouble(w))
+    .sort();
+  const masks = new Map(
+    seeds.map((w) => {
+      let mask = 0;
+      for (const c of w) mask |= 1 << (c.charCodeAt(0) - 97);
+      return [w, mask];
+    })
+  );
+
+  const found = new Map();
+  const chosen = [];
+  const walk = (from, mask) => {
+    const size = bits(mask);
+    if (size > BOX_LETTERS) return;
+    if (size === BOX_LETTERS && chosen.length >= 2) {
+      const had = found.get(mask);
+      if (!had || had.length > chosen.length) found.set(mask, [...chosen]);
+      return;
+    }
+    if (chosen.length >= maxSeeds) return;
+    for (let i = from; i < seeds.length; i++) {
+      chosen.push(seeds[i]);
+      walk(i + 1, mask | masks.get(seeds[i]));
+      chosen.pop();
+    }
+  };
+  walk(0, 0);
+  return [...found];
+}
+
+/** Every box those sets can make, best first.
+ *
+ *  `limit` stops once that many boards have been laid and measured. The
+ *  generator wants them all — it deals three a day out of the best of them —
+ *  but the admin page only needs to say what a list can make, and measuring
+ *  four thousand boards takes ten seconds. The enumeration order is
+ *  deterministic, so a limited answer is a stable prefix rather than a sample.
+ */
+export function themedBoxes(themeWords, dictionary, { maxSeeds = MAX_SEED_WORDS, limit = Infinity } = {}) {
   const words = [...new Set((themeWords ?? []).map((w) => w.trim().toLowerCase()))];
-  const seeds = words.filter((w) => /^[a-z]+$/.test(w) && w.length >= 4 && noDouble(w));
   const all = words.filter((w) => /^[a-z]{3,}$/.test(w));
   const pool = dictionary ? indexed(dictionary) : null;
-  const out = [];
 
-  for (let i = 0; i < seeds.length; i++) {
-    for (let j = i + 1; j < seeds.length; j++) {
-      const a = seeds[i];
-      const b = seeds[j];
-      if (new Set(a + b).size !== BOX_LETTERS) continue;
-      const laid = assignThemedSides([a, b]);
-      if (!laid) continue;
-      let boxMask = 0;
-      for (const c of a + b) boxMask |= 1 << (c.charCodeAt(0) - 97);
-      out.push({
-        from: [a, b],
-        sides: laid.sides,
-        holds: all.filter((w) => spellable(w, laid.sideOf)),
-        par: pool ? solvableIn(laid.sideOf, boxMask, pool) : null,
-      });
-    }
+  const out = [];
+  for (const [boxMask, from] of seedSets(words, maxSeeds)) {
+    const laid = assignThemedSides(from);
+    // Not every set can be laid out: four sides of three, and no word may step
+    // twice on one side. More seed words is more constraints, so this refuses
+    // more often than a pair does.
+    if (!laid) continue;
+    out.push({
+      from,
+      sides: laid.sides,
+      holds: all.filter((w) => spellable(w, laid.sideOf)),
+      par: pool ? solvableIn(laid.sideOf, boxMask, pool) : null,
+    });
+    if (out.length >= limit) break;
   }
-  return out.sort((x, y) => (x.par ?? 9) - (y.par ?? 9) || y.holds.length - x.holds.length);
+  return out.sort(
+    (x, y) =>
+      (x.par ?? 9) - (y.par ?? 9) ||
+      y.holds.length - x.holds.length ||
+      x.from.length - y.from.length
+  );
 }

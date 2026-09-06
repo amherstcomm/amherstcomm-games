@@ -94,7 +94,10 @@ export function tilesFor(themes: WeaveTheme[]): string[] {
 export function yieldOf(words: string[], dictionary?: string[], rungs?: Set<string>) {
   const pools: Record<number, number> = {};
   for (const len of GUESS_LENGTHS) pools[len] = words.filter((w) => w.length === len).length;
-  const boxes = boxesFrom(words, dictionary);
+  // A dozen is enough to answer "can this day make a box"; the full search is
+  // four thousand boards and eleven seconds, which the generator can afford
+  // overnight and a page asking about thirty-one days cannot.
+  const boxes = boxesFrom(words, dictionary, { limit: 12 });
   // Both ends of a ladder have to be the theme's own and both have to be words
   // the board accepts as rungs, so this is the one measurement here that needs
   // the everyday dictionary rather than the generation pool.
