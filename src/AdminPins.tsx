@@ -23,6 +23,7 @@ import { readCoverage, type CoverageDay } from '@/coverage';
 import {
   candidatesFor,
   describePin,
+  SIZE_LABEL,
   type Candidate,
   pinPuzzle,
   PIN_TITLE,
@@ -73,47 +74,94 @@ function Shortlist({
   onUnpin: (id: string) => void;
 }) {
   const [filter, setFilter] = useState('');
+  // The one number that tells this game's candidates apart: letters in the
+  // word, words in the chain, steps in the ladder. Empty is all of them.
+  const [size, setSize] = useState('');
+  const [order, setOrder] = useState<'best' | 'az' | 'size'>('best');
   const [showing, setShowing] = useState(PAGE);
 
-  // Every word of the filter has to appear somewhere in the label, in any
-  // order: `vot shar` finds the box made of voting and shared without anybody
-  // having to remember which way round the page prints them.
+  const sizes = useMemo(
+    () => [...new Set(candidates.map((c) => c.size).filter((n): n is number => n !== undefined))]
+      .sort((a, b) => a - b),
+    [candidates]
+  );
+
   const matching = useMemo(() => {
     const terms = filter.toLowerCase().split(/\s+/).filter(Boolean);
-    if (terms.length === 0) return candidates;
     // Where the list is searched rather than merely listed — the box, whose
-    // boards run to thousands — the filter goes into the search. Filtering a
-    // bounded result set afterwards hides boards that exist, which is exactly
-    // what happened.
-    const searched = refine ? refine(terms) : candidates;
-    return searched.filter((candidate) => {
+    // boards run to thousands — the words go into the search. Filtering a
+    // bounded result set afterwards hides boards that exist.
+    const searched = terms.length > 0 && refine ? refine(terms) : candidates;
+    const found = searched.filter((candidate) => {
+      if (size && candidate.size !== Number(size)) return false;
       const label = candidate.label.toLowerCase();
       return terms.every((term) => label.includes(term));
     });
-  }, [candidates, filter, refine]);
+    if (order === 'best') return found;
+    // A copy, because the searches hand back their own order and sorting in
+    // place would rearrange what the memo above is holding.
+    return [...found].sort((x, y) =>
+      order === 'az'
+        ? (x.sortAs ?? x.label).localeCompare(y.sortAs ?? y.label)
+        : (x.size ?? 0) - (y.size ?? 0) ||
+          (x.sortAs ?? x.label).localeCompare(y.sortAs ?? y.label)
+    );
+  }, [candidates, filter, refine, size, order]);
 
-  // A filter that has narrowed things is a filter somebody is reading all of,
-  // so the page grows back to a page when it changes.
-  useEffect(() => setShowing(PAGE), [filter]);
+  // Narrowing is somebody reading all of what is left, so the page grows back
+  // to a page whenever the question changes.
+  useEffect(() => setShowing(PAGE), [filter, size, order]);
+
+  const label = PIN_TITLE[game];
+  const sizeLabel = SIZE_LABEL[game];
 
   return (
     // Named in the markup because the lists are otherwise indistinguishable to
     // anything reading the page: three of them can show a `more` button at
     // once, and a test clicking "the first one" clicks the wrong list.
     <div data-shortlist={game}>
-      <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <p className="text-sm font-semibold text-slate-200">{PIN_TITLE[game]}</p>
-        {candidates.length > PAGE && (
+      <p className="text-sm font-semibold text-slate-200">{label}</p>
+
+      {candidates.length > 1 && (
+        <div className="flex flex-wrap items-center gap-2 mt-1 mb-1">
           <input
             type="search"
-            aria-label={`Filter ${PIN_TITLE[game]}`}
+            aria-label={`Filter ${label}`}
             placeholder={`Filter ${candidates.length}…`}
             className={FIELD + ' w-auto py-1 text-xs'}
             value={filter}
             onChange={(e) => setFilter(e.target.value)}
           />
-        )}
-      </div>
+          {/* Only where the number means something and there is more than one
+              of it: a day with three-letter chains alone has nothing to choose
+              between. */}
+          {sizeLabel && sizes.length > 1 && (
+            <select
+              aria-label={`${sizeLabel} in ${label}`}
+              className={FIELD + ' w-auto py-1 text-xs'}
+              value={size}
+              onChange={(e) => setSize(e.target.value)}
+            >
+              <option value="">{sizeLabel}: any</option>
+              {sizes.map((n) => (
+                <option key={n} value={String(n)}>
+                  {sizeLabel}: {n}
+                </option>
+              ))}
+            </select>
+          )}
+          <select
+            aria-label={`Order ${label}`}
+            className={FIELD + ' w-auto py-1 text-xs'}
+            value={order}
+            onChange={(e) => setOrder(e.target.value as 'best' | 'az' | 'size')}
+          >
+            <option value="best">Best first</option>
+            <option value="az">A to Z</option>
+            {sizeLabel && <option value="size">By {sizeLabel.toLowerCase()}</option>}
+          </select>
+        </div>
+      )}
 
       {pinned && (
         <p className="text-xs text-accent mb-1">
@@ -128,7 +176,7 @@ function Shortlist({
         <p className="text-xs text-slate-500">Nothing that day’s words can make.</p>
       ) : matching.length === 0 ? (
         <p className="text-xs text-slate-500">
-          Nothing here matches “{filter}”. {candidates.length} without it.
+          Nothing here matches. {candidates.length} without the filter.
         </p>
       ) : (
         <ul className="flex flex-wrap gap-1.5 mt-1">
