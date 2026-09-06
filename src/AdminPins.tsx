@@ -24,6 +24,7 @@ import {
   candidatesFor,
   describePin,
   SIZE_LABEL,
+  SIZE_SHORT,
   type Candidate,
   pinPuzzle,
   PIN_TITLE,
@@ -54,6 +55,38 @@ const PAGE = 12;
  *  not also hide every box. And its own `more` for the same reason: a day's
  *  boxes run to thousands and its pangrams to three.
  */
+/** A small pressable label. The size and order controls were dropdowns, which
+ *  is a lot of furniture for four choices you can see all of — and they hide
+ *  what is on offer until you open them, which is the opposite of what a
+ *  shortlist is for. */
+function Chip({
+  on,
+  label,
+  onClick,
+  children,
+}: {
+  on: boolean;
+  label: string;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      aria-pressed={on}
+      onClick={onClick}
+      className={`px-2 h-6 rounded-md text-xs font-semibold transition-colors ${
+        on
+          ? 'bg-accent text-ink'
+          : 'bg-white/5 border border-white/10 text-slate-400 hover:text-slate-200 hover:bg-white/10'
+      }`}
+    >
+      {children}
+    </button>
+  );
+}
+
 function Shortlist({
   game,
   candidates,
@@ -114,6 +147,7 @@ function Shortlist({
 
   const label = PIN_TITLE[game];
   const sizeLabel = SIZE_LABEL[game];
+  const sizeShort = SIZE_SHORT[game];
 
   return (
     // Named in the markup because the lists are otherwise indistinguishable to
@@ -123,43 +157,56 @@ function Shortlist({
       <p className="text-sm font-semibold text-slate-200">{label}</p>
 
       {candidates.length > 1 && (
-        <div className="flex flex-wrap items-center gap-2 mt-1 mb-1">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 mt-1 mb-1.5">
           <input
             type="search"
             aria-label={`Filter ${label}`}
             placeholder={`Filter ${candidates.length}…`}
-            className={FIELD + ' w-auto py-1 text-xs'}
+            className={FIELD + ' w-auto max-w-[14rem] py-1 text-xs'}
             value={filter}
             onChange={(e) => setFilter(e.target.value)}
           />
+
           {/* Only where the number means something and there is more than one
-              of it: a day with three-letter chains alone has nothing to choose
-              between. */}
+              of it: a day whose chains are all three words has nothing to
+              choose between. */}
           {sizeLabel && sizes.length > 1 && (
-            <select
-              aria-label={`${sizeLabel} in ${label}`}
-              className={FIELD + ' w-auto py-1 text-xs'}
-              value={size}
-              onChange={(e) => setSize(e.target.value)}
-            >
-              <option value="">{sizeLabel}: any</option>
+            <div className="flex flex-wrap items-center gap-1">
+              <span className="text-xs text-slate-500">{sizeShort}</span>
+              <Chip on={size === ''} label={`${sizeLabel}: any`} onClick={() => setSize('')}>
+                any
+              </Chip>
               {sizes.map((n) => (
-                <option key={n} value={String(n)}>
-                  {sizeLabel}: {n}
-                </option>
+                <Chip
+                  key={n}
+                  on={size === String(n)}
+                  label={`${sizeLabel}: ${n}`}
+                  onClick={() => setSize(String(n))}
+                >
+                  {n}
+                </Chip>
               ))}
-            </select>
+            </div>
           )}
-          <select
-            aria-label={`Order ${label}`}
-            className={FIELD + ' w-auto py-1 text-xs'}
-            value={order}
-            onChange={(e) => setOrder(e.target.value as 'best' | 'az' | 'size')}
-          >
-            <option value="best">Best first</option>
-            <option value="az">A to Z</option>
-            {sizeLabel && <option value="size">By {sizeLabel.toLowerCase()}</option>}
-          </select>
+
+          <div className="flex flex-wrap items-center gap-1">
+            <span className="text-xs text-slate-500">Order</span>
+            <Chip on={order === 'best'} label={`${label} best first`} onClick={() => setOrder('best')}>
+              best
+            </Chip>
+            <Chip on={order === 'az'} label={`${label} A to Z`} onClick={() => setOrder('az')}>
+              A–Z
+            </Chip>
+            {sizeLabel && (
+              <Chip
+                on={order === 'size'}
+                label={`${label} by ${sizeLabel.toLowerCase()}`}
+                onClick={() => setOrder('size')}
+              >
+                {sizeShort}
+              </Chip>
+            )}
+          </div>
         </div>
       )}
 

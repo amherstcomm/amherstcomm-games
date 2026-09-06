@@ -50,6 +50,16 @@ export const SIZE_LABEL: Partial<Record<Pinnable, string>> = {
   ladder: 'Steps',
 };
 
+/** The same thing in the space a chip has. The long name is what a screen
+ *  reader and a test ask for; this is what fits beside four numbers. */
+export const SIZE_SHORT: Partial<Record<Pinnable, string>> = {
+  guess: 'letters',
+  scramble: 'letters',
+  hive: 'letters',
+  boxed: 'chain',
+  ladder: 'steps',
+};
+
 const fail = (reason: string) => ({ ok: false as const, reason });
 
 export async function readPins(
