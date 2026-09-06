@@ -600,6 +600,11 @@ describe('a pinned day', () => {
       // Two words with no route between them, and of different lengths: a pin
       // that cannot be built, which the day has to survive.
       ladder: { all: { a: 'esop', b: 'meeting' } },
+      // A square carries the whole board rather than a seed word, because the
+      // fill was searched once when somebody chose it and a second search
+      // could land on a different one. Easy only: the 5x5 boards keep their
+      // own answer, which is also how the size check gets exercised.
+      squares: { easy: { first: 'vote', rows: ['vote', 'idea', 'soar', 'arks'] } },
     });
   });
   afterAll(async () => rm(dir, { recursive: true, force: true }));
@@ -639,6 +644,34 @@ describe('a pinned day', () => {
     expect(ladder.from).not.toBe('esop');
     expect(ladder.from.length).toBe(ladder.to.length);
     expect(ladder.par).toBeGreaterThanOrEqual(3);
+  });
+});
+
+// A pinned square is the board somebody looked at, letter for letter.
+describe('a pinned square', () => {
+  let dir: string;
+
+  beforeAll(async () => {
+    dir = await mkdtemp(join(tmpdir(), 'anagrimoire-pinned-square-'));
+    await generate(dir, THEME, DATE, undefined, undefined, undefined, {
+      squares: { easy: { first: 'vote', rows: ['vote', 'idea', 'soar', 'arks'] } },
+    });
+  });
+  afterAll(async () => rm(dir, { recursive: true, force: true }));
+
+  it('builds the board it was handed', async () => {
+    const board = (await read(dir, 'daily-squares.json')).byDifficulty.easy;
+    const rows = JSON.parse(Buffer.from(board.answer, 'base64').toString()).rows;
+    expect(rows).toEqual(['vote', 'idea', 'soar', 'arks']);
+  });
+
+  // The 5x5 difficulties were not pinned, so they are the day's own — a pin
+  // for one size cannot be laid on another, and a page that pinned easy has
+  // not silently pinned the rest.
+  it('and leaves the sizes it was not pinned for alone', async () => {
+    const hard = (await read(dir, 'daily-squares.json')).byDifficulty.hard;
+    const rows = JSON.parse(Buffer.from(hard.answer, 'base64').toString()).rows;
+    expect(rows.length).toBe(5);
   });
 });
 

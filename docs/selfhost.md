@@ -1747,10 +1747,30 @@ between them) — dealing as usual
 
 That is the whole reason a pin is a seed and not a board: a board saved in
 September and published in October would be published however wrong it had gone.
+Squares is the exception, and says why below.
 
-**Two games cannot be pinned**, and are refused by name rather than offered:
-the grid is dice and Squares draws from a wider pool than a theme has, so
-neither has themed candidates to choose between.
+**One game cannot be pinned**, and is refused by name rather than offered: the
+grid is dice, so there is nothing themed to choose between.
+
+Squares was refused here too, and is not any more. The reasoning was that it
+draws from a wider pool than a theme has, which answers the wrong question: ten
+dictionary words will not *contain* a theme word by accident, but a theme word
+can head a board, and that is a square whose top line is the company's.
+Measured against a 448-word list, 22 of 23 four-letter words could head a 4x4
+and 12 of 20 five-letter words a 5x5. So it generates themed, and what
+generates themed can be curated.
+
+A pinned square carries the whole board rather than a seed word — the only pin
+that does. The fill was searched once when somebody looked at it, and searching
+again could land on a different one, so what was chosen is what is published. A
+pin written for one size is not laid on another: pin the 4x4 and the 5x5
+difficulties still get the day's own board.
+
+The search runs in the calculators' worker rather than on the page, because
+ruling a word out at 5x5 costs about 70ms — a list of twenty five-letter words
+would hold the page for a second and a half every time somebody looked up a
+date. The Squares list says `Looking…` until the answer lands, which is not the
+same sentence as "nothing that day's words can make".
 
 **Each list has its own filter and its own `more`.** A day's boxes run to
 hundreds and its pangrams to three, so one control for the page would be wrong
@@ -1916,6 +1936,14 @@ it reports:
   board can take*, which is the failure that reads as a covered day.
 - **Ladder**, the days whose own words can set a pair, and which step-count
   bands they reach.
+- **Squares**, the days one of the theme's own words can *head* a board, per
+  size: 4x4 is easy, 5x5 is hard and extreme. Heading is the question a themed
+  square turns on — ten dictionary words will not contain a theme word by
+  accident, measured at 0 of 200, but heading one is common. A size the theme
+  cannot head builds the ordinary square, which is the board anybody else would
+  have got. Both this and the ladder read `·` until the dictionary they need
+  arrives, because nought would say "no day can" and that is a different
+  answer.
 - **Scramble and Hive**, the days whose theme can supply the board itself: a
   word of the rack's length, and one of seven distinct letters. A day without
   either still gets the theme's words as bonus points — the board is simply the

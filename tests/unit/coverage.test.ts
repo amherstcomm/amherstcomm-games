@@ -17,6 +17,8 @@ import {
   RACK_SIZE,
   runsOf,
   SLICE,
+  squaresFor,
+  SQUARE_SEEDS,
   summarise,
   summariseSlowly,
   tilesFor,
@@ -223,16 +225,35 @@ describe('measuring without holding the page still', () => {
     expect(slowly).toEqual(summarise(month));
   });
 
-  it('and hands the browser back between slices', async () => {
+  // The rule changed when the square search moved in here: a day whose words
+  // have not been measured can cost a second and a half on its own, so a slice
+  // of four of them is six seconds of held page -- exactly the thing the
+  // slicing was written to stop. So a day that actually worked hands the
+  // browser back on its own, and the slice of four is what carries a run of
+  // days that were free.
+  it('and hands the browser back after every day it actually measures', async () => {
     let breaths = 0;
     await summariseSlowly(month, undefined, undefined, async () => {
       breaths += 1;
     });
-    // Nine days in slices of four: it pauses after the fourth and the eighth,
-    // and not after the last — a pause with nothing left to do is a frame
-    // spent on nothing.
-    expect(breaths).toBe(Math.floor((month.length - 1) / SLICE));
-    expect(breaths).toBeGreaterThan(0);
+    // Nine different lists is nine measurements, and no pause after the last:
+    // a frame spent with nothing left to do.
+    expect(breaths).toBe(month.length - 1);
+  });
+
+  it('and not for the days it already knows the answer for', async () => {
+    // One list all month, which is what a themed October actually looks like:
+    // the measurement happens once and the rest are memo hits, so the pausing
+    // falls back to the slice.
+    const repeated = Array.from({ length: 9 }, (_, i) =>
+      list(october(i + 1), ['voting', 'shared', 'esop'])
+    );
+    let breaths = 0;
+    await summariseSlowly(repeated, undefined, undefined, async () => {
+      breaths += 1;
+    });
+    // The first day is fresh; after that only the slice boundaries.
+    expect(breaths).toBe(1 + Math.floor((repeated.length - 1) / SLICE));
   });
 
   it('and says how far it has got', async () => {
@@ -241,15 +262,18 @@ describe('measuring without holding the page still', () => {
       expect(total).toBe(month.length);
       seen.push(n);
     }, async () => {});
-    expect(seen).toEqual([SLICE, SLICE * 2]);
+    expect(seen).toEqual([1, 2, 3, 4, 5, 6, 7, 8]);
   });
 
-  it('and does not pause at all for a range that fits in one slice', async () => {
+  it('and pauses once for a short range of one list, not once a day', async () => {
+    // Days that are all the same list: one measurement to hand the browser
+    // back after, and four days is inside the slice, so nothing else.
     let breaths = 0;
-    await summariseSlowly(month.slice(0, SLICE), undefined, undefined, async () => {
+    const same = Array.from({ length: SLICE }, (_, i) => list(october(i + 1), ['voting', 'shared']));
+    await summariseSlowly(same, undefined, undefined, async () => {
       breaths += 1;
     });
-    expect(breaths).toBe(0);
+    expect(breaths).toBe(1);
   });
 });
 
@@ -334,6 +358,58 @@ describe('themed ladders, over a range', () => {
     const slowly = await summariseSlowly(days, undefined, undefined, async () => {}, rungs);
     expect(slowly).toEqual(summarise(days, undefined, rungs));
     expect(slowly.ladder.days).toBe(2);
+  });
+});
+
+// Themed squares, over a range.
+//
+// The question is whether a theme word can *head* a square, not whether one
+// turns up in a square by accident -- the second was measured at 0 of 200 and
+// is the answer to the wrong question. So a day counts when one of its own
+// words tops a board the dictionary can finish.
+describe('themed squares, over a range', () => {
+  // A real 4x4 double word square, taken out of the everyday pool: vote / idea
+  // / soar / arks across, visa / odor / teak / ears down. The dictionary here
+  // is those eight words and nothing else, so the search either finds this
+  // board or finds none.
+  const square = ['vote', 'idea', 'soar', 'arks'];
+  const dictionary = [...square, 'visa', 'odor', 'teak', 'ears'];
+
+  it('says which sizes a day s own words can head', () => {
+    const sum = summarise([list(october(1), ['vote']), list(october(2), ['payouts'])], dictionary);
+    expect(sum.squares.days).toBe(1);
+    expect(sum.squares.perSize[4]).toBe(1);
+    expect(sum.squares.perSize[5]).toBe(0);
+  });
+
+  it('and reports it as unknown until the dictionary arrives', () => {
+    // Nought would read as "no day can head a square", which is a different
+    // answer from "nobody has looked yet" -- the same distinction the ladder
+    // count makes.
+    const sum = summarise([list(october(1), ['vote'])]);
+    expect(sum.squares.days).toBeNull();
+    expect(squaresFor(['vote'])).toBeNull();
+  });
+
+  it('and only tries as many words as it says it will', () => {
+    // The cap is what keeps a long list from holding the page: ruling a word
+    // out at 5x5 costs about 70ms, so an uncapped list of them is seconds. It
+    // bounds the misses only -- a hit stops the search -- and the limit of the
+    // claim is that "no" means no from the first SQUARE_SEEDS words of that
+    // length.
+    const filler = Array.from({ length: SQUARE_SEEDS }, (_, i) =>
+      `qqa${String.fromCharCode(97 + i)}`
+    );
+    expect(squaresFor([...filler, 'vote'], dictionary)).toEqual([]);
+    // The same word, inside the allowance, is found.
+    expect(squaresFor([...filler.slice(0, SQUARE_SEEDS - 1), 'vote'], dictionary)).toEqual([4]);
+  });
+
+  it('and the sliced version gets there too', async () => {
+    const days = [list(october(1), ['vote']), list(october(2), ['vote'])];
+    const slowly = await summariseSlowly(days, dictionary, undefined, async () => {});
+    expect(slowly).toEqual(summarise(days, dictionary));
+    expect(slowly.squares.days).toBe(2);
   });
 });
 

@@ -19,6 +19,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Loader2 } from 'lucide-react';
 import { getDictionary } from '@/dictionaries';
+import { useSquares } from '@/useCalculators';
 import { readCoverage, type CoverageDay } from '@/coverage';
 import {
   candidatesFor,
@@ -93,11 +94,16 @@ function Shortlist({
   refine,
   pinned,
   busy,
+  searching,
   onPin,
   onUnpin,
 }: {
   game: Pinnable;
   candidates: Candidate[];
+  /** the search behind this list is still running, so an empty list is not yet
+   *  an answer -- "nothing that day's words can make" and "not measured yet"
+   *  are different sentences and this page has told the wrong one before */
+  searching?: boolean;
   /** re-run the search for the words typed, where the list is bigger than a
    *  search will enumerate */
   refine?: (terms: string[]) => Candidate[];
@@ -219,7 +225,9 @@ function Shortlist({
         </p>
       )}
 
-      {candidates.length === 0 ? (
+      {searching && candidates.length === 0 ? (
+        <p className="text-xs text-slate-500">Looking…</p>
+      ) : candidates.length === 0 ? (
         <p className="text-xs text-slate-500">Nothing that day’s words can make.</p>
       ) : matching.length === 0 ? (
         <p className="text-xs text-slate-500">
@@ -290,16 +298,27 @@ export default function AdminPins() {
     setPins(pinned.pins);
   }, [date]);
 
+  // The squares come from the calculators' worker rather than from here: they
+  // are the one search on this page measured in seconds rather than
+  // milliseconds, and they need the everyday pool, which the worker has
+  // loaded. Until they land the Squares shortlist is empty and says so.
+  const themeWords = useMemo(() => day?.theme?.words ?? [], [day]);
+  const squares = useSquares(themeWords);
+  const headed = useMemo(() => [...squares.four, ...squares.five], [squares]);
+
   // Worked out once per day rather than once per render: the box search alone
   // is three milliseconds a board, and pinning one re-renders the page.
   const shortlists = useMemo(
     () =>
       day
         ? Object.fromEntries(
-            PINNABLE.map((game) => [game, candidatesFor(day, game, rungs ?? undefined)])
+            PINNABLE.map((game) => [
+              game,
+              candidatesFor(day, game, rungs ?? undefined, undefined, headed),
+            ])
           )
         : {},
-    [day, rungs]
+    [day, rungs, headed]
   ) as Record<Pinnable, Candidate[]>;
 
   const pinnedHere = useMemo(() => {
@@ -387,6 +406,7 @@ export default function AdminPins() {
               key={game}
               game={game}
               candidates={shortlists[game] ?? []}
+              searching={game === 'squares' && squares.searching}
               refine={
                 game === 'boxed' && day
                   ? (terms) => candidatesFor(day, 'boxed', rungs ?? undefined, terms)
