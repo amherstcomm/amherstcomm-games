@@ -563,7 +563,23 @@ test('coverage says which days of a month are themed, and with how much', async 
       date,
       theme: gap
         ? null
-        : { name: 'October', words: ['esop', 'shares', 'equity', 'voting', 'shared', 'dividend'] },
+        : {
+            name: 'October',
+            // `trustee` is seven letters, so it can be shuffled into a rack;
+            // `employer` is seven distinct letters with no s, so it can seed a
+            // hive. Both are in here because a count of nought agrees with a
+            // panel that is wired to nothing.
+            words: [
+              'esop',
+              'shares',
+              'equity',
+              'voting',
+              'shared',
+              'dividend',
+              'trustee',
+              'employer',
+            ],
+          },
       weave:
         i < 10
           ? [
@@ -640,6 +656,10 @@ test('coverage says which days of a month are themed, and with how much', async 
   // voting + shared is twelve distinct letters, so every themed day can build
   // a box out of the theme.
   await expect(page.getByText(/Boxed — 29 days/)).toBeVisible();
+
+  // The two boards the theme can be built *from* rather than merely scored in.
+  await expect(page.getByText(/Scramble — 29 days can build the rack/)).toBeVisible();
+  await expect(page.getByText(/Hive — 29 days have a theme word/)).toBeVisible();
 
   await page.getByRole('button', { name: 'Show every day' }).click();
   await expect(page.getByText('no list')).toHaveCount(2);

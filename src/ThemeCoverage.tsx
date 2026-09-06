@@ -13,7 +13,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Loader2 } from 'lucide-react';
 import { getDifficultyPool } from '@/dictionaries';
-import { readCoverage, runsOf, summarise, type CoverageDay } from '@/coverage';
+import { RACK_SIZE, readCoverage, runsOf, summarise, type CoverageDay } from '@/coverage';
 import { readWordLists } from '@/wordLists';
 import { readWeaveThemes } from '@/weaveThemes';
 
@@ -183,6 +183,22 @@ export default function ThemeCoverage() {
             {sum.weave.gaps.length > 0 && (
               <p className="text-slate-400 pl-3">curated: {days(sum.weave.gaps).join(', ')}</p>
             )}
+          </div>
+
+          {/* The two boards a theme can be built *from* rather than merely
+              scored in: a scramble rack is a theme word shuffled, and a hive is
+              seeded by one with seven distinct letters. Days without one still
+              get the theme's words as bonus points — the board is just the
+              language's that day. */}
+          <div>
+            <p className={sum.scramble.days > 0 ? 'text-emerald-300' : 'text-slate-500'}>
+              {sum.scramble.days > 0 ? '✓' : '·'} Scramble — {sum.scramble.days} days can build
+              the rack from a theme word ({RACK_SIZE} letters)
+            </p>
+            <p className={sum.hive.days > 0 ? 'text-emerald-300' : 'text-slate-500'}>
+              {sum.hive.days > 0 ? '✓' : '·'} Hive — {sum.hive.days} days have a theme word of
+              seven distinct letters to seed it
+            </p>
           </div>
 
           <div>

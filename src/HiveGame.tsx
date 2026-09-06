@@ -28,6 +28,7 @@ import { useDailySync } from '@/useDailySync';
 import { buildShare } from '@/share';
 import { recordHiveWord } from '@/stats';
 import { store as siteStore } from '@/siteStorage';
+import { THEME_BONUS, themedWords, withThemed } from '@/themedWords';
 
 export type HiveGameHandle = { pressKey: (k: string) => void };
 
@@ -121,8 +122,14 @@ function readStore(): HiveStore {
   }
 }
 
-function wordScore(word: string, isPangram: boolean): number {
-  return (word.length === 4 ? 1 : word.length) + (isPangram ? 7 : 0);
+function wordScore(word: string, isPangram: boolean, themed?: Set<string>): number {
+  return (
+    (word.length === 4 ? 1 : word.length) +
+    (isPangram ? 7 : 0) +
+    // Below the pangram on purpose: on a themed day the hive is built from one
+    // of the event's own pangrams, and finding it is still the bigger thing.
+    (themed?.has(word) ? THEME_BONUS : 0)
+  );
 }
 
 const HiveGame = forwardRef<
@@ -137,6 +144,7 @@ const HiveGame = forwardRef<
   }
 >(function HiveGame({ standardWords, commonWords, onLetterStates, onReveal, practiceWords }, ref) {
   const [store, setStore] = useState<HiveStore>(loadStore);
+  const [themed, setThemed] = useState<string[]>([]);
   const { practiceAllowed } = usePrefs();
   // pinned to the daily: someone who switched practice off shouldn't be left
   // looking at a practice board they can no longer leave
@@ -194,6 +202,9 @@ const HiveGame = forwardRef<
         // the date lives at the top level; the board's own fields come from
         // whichever difficulty was resolved
         const d = { ...raw, ...chosen.board };
+        // The day's own words: on a themed day the seven letters are a theme
+        // word, and the others it can spell are what a player goes looking for.
+        setThemed(themedWords(raw));
         const center = String(d.center).toLowerCase();
         const outers = (d.outers as string[]).map((c) => String(c).toLowerCase());
         if (!/^[a-z]$/.test(center) || outers.length !== 6) throw new Error('bad payload');
@@ -245,36 +256,41 @@ const HiveGame = forwardRef<
   }, [store.dailyMode, store.practice, commonWords]);
 
   const record = store.dailyMode ? store.daily : store.practice;
+  // Only on the daily: a practice hive is drawn from the language and has no
+  // theme behind it.
+  const themedNow = useMemo(() => (store.dailyMode ? themed : []), [store.dailyMode, themed]);
+  const themedSet = useMemo(() => new Set(themedNow), [themedNow]);
+  const accepted = useMemo(() => withThemed(standardWords, themedNow), [standardWords, themedNow]);
   const hiveSet = useMemo(
     () => (record ? new Set([record.center, ...record.outers]) : null),
     [record]
   );
 
   const answers = useMemo(() => {
-    if (!standardWords || !record || !hiveSet) return null;
-    const list = standardWords.filter((w) => {
+    if (!accepted || !record || !hiveSet) return null;
+    const list = accepted.filter((w) => {
       if (w.length < 4 || !w.includes(record.center)) return false;
       for (let i = 0; i < w.length; i++) if (!hiveSet.has(w[i])) return false;
       return true;
     });
     return new Set(list);
-  }, [standardWords, record, hiveSet]);
+  }, [accepted, record, hiveSet]);
 
   const isPangram = (w: string) => new Set(w).size === 7;
 
   const maxScore = useMemo(() => {
     if (!answers) return 0;
     let s = 0;
-    for (const w of answers) s += wordScore(w, isPangram(w));
+    for (const w of answers) s += wordScore(w, isPangram(w), themedSet);
     return s;
-  }, [answers]);
+  }, [answers, themedSet]);
 
   const score = useMemo(() => {
     if (!record) return 0;
     let s = 0;
-    for (const w of record.found) s += wordScore(w, isPangram(w));
+    for (const w of record.found) s += wordScore(w, isPangram(w), themedSet);
     return s;
-  }, [record]);
+  }, [record, themedSet]);
 
   const rank = useMemo(() => {
     if (!maxScore) return RANKS[0][0];
@@ -366,7 +382,7 @@ const HiveGame = forwardRef<
       return;
     }
     const pangram = isPangram(word);
-    const newScore = score + wordScore(word, pangram);
+    const newScore = score + wordScore(word, pangram, themedSet);
     recordHiveWord(
       store.dailyMode,
       pangram,
@@ -376,7 +392,15 @@ const HiveGame = forwardRef<
       store.dailyMode ? store.dailyDate || null : null
     );
     updateRecord((r) => ({ ...r, found: [word, ...r.found] }));
-    showFlash(pangram ? `Pangram! +${wordScore(word, true)}` : `+${wordScore(word, false)}`, true);
+    const points = wordScore(word, pangram, themedSet);
+    showFlash(
+      pangram
+        ? `Pangram! +${points}`
+        : themedSet.has(word)
+          ? `Theme word! +${points}`
+          : `+${points}`,
+      true
+    );
   }
 
   function pressKey(k: string) {
@@ -651,6 +675,7 @@ const HiveGame = forwardRef<
 
           <p className="mt-5 text-xs text-slate-500">
             Scored against the word list for the difficulty you&apos;re playing — nothing is checked against any publisher&apos;s list.
+            {themedNow.length > 0 && ` Today's letters come from a theme — its words are worth +${THEME_BONUS} each.`}
             {store.dailyMode && ' A fresh daily hive arrives about 15 minutes after 3:00 a.m. Eastern.'}
           </p>
         </>

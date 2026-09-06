@@ -20,6 +20,17 @@ import { BOARD_CELLS, fitsBoard } from '@/weaveFit';
  *  nine. Pinned to the generator's own loop by the unit tests. */
 export const GUESS_LENGTHS = [3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
 
+/** A scramble rack is one word shuffled, so a themed rack needs a theme word of
+ *  exactly this length. Read out of the generator by the unit tests. */
+export const RACK_SIZE = 7;
+
+/** Whether a theme word could seed a hive: seven distinct letters, so the board
+ *  is completable by the word it was built from, and no `s` or plurals flood
+ *  the answer list. The same rule as scripts/themedDaily.mjs, asserted against
+ *  that function rather than against a copy of the sentence. */
+export const canSeedHive = (word: string) =>
+  word.length >= 7 && new Set(word).size === 7 && !word.includes('s');
+
 export type WeaveTheme = { clue: string; spangram: string; words: string[] };
 export type CoverageDay = {
   date: string;
@@ -51,6 +62,10 @@ export type DayYield = {
    *  dictionary is still on its way */
   playable: number | null;
   bridges: number;
+  /** theme words that could be the day's scramble rack */
+  racks: number;
+  /** theme words that could seed the day's hive */
+  hives: number;
   /** the board sizes at least one of the day's Weave themes tiles */
   tiles: string[];
 };
@@ -73,6 +88,9 @@ export function yieldOf(words: string[], dictionary?: string[]) {
   const boxes = boxesFrom(words, dictionary);
   return {
     pools,
+    // The two boards a theme can be *built* from rather than merely scored in.
+    racks: words.filter((w) => w.length === RACK_SIZE).length,
+    hives: words.filter(canSeedHive).length,
     boxes: boxes.length,
     playable: dictionary ? boxes.filter((b) => b.guaranteed).length : null,
     bridges: bridgesFrom(words).length,
@@ -102,6 +120,9 @@ export type Summary = {
   weave: { withTheme: number; tiling: number; gaps: string[]; perTier: Record<string, number> };
   boxes: { days: number; playable: number | null };
   bridges: { days: number };
+  /** days whose theme could supply the board itself, not just bonus words */
+  scramble: { days: number };
+  hive: { days: number };
 };
 
 export function summarise(days: CoverageDay[], dictionary?: string[]): Summary {
@@ -149,6 +170,8 @@ export function summarise(days: CoverageDay[], dictionary?: string[]): Summary {
     },
     boxes: { days: yields.filter((y) => y.boxes > 0).length, playable: withDictionary },
     bridges: { days: yields.filter((y) => y.bridges > 0).length },
+    scramble: { days: yields.filter((y) => y.racks > 0).length },
+    hive: { days: yields.filter((y) => y.hives > 0).length },
   };
 }
 

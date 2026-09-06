@@ -1,10 +1,19 @@
 // A themed month, in the daily puzzles.
 //
 // For an event — Employee Ownership Month — the dailies can be drawn from a
-// word list somebody wrote rather than from the language. Two of the ten games
-// can take a plain list: the guess word, which is a word, and Weave, whose
-// whole premise is a themed set. The rest need pangrams, letter grids or
-// curated pairs, and a bag of words cannot supply those.
+// word list somebody wrote rather than from the language.
+//
+// Four of the ten games can be *built* out of one. The guess word is a word.
+// Weave has its own themes, in the shape a board needs. A scramble rack is one
+// word shuffled, so a theme word of the rack's length is a themed rack. A hive
+// is seeded from a pangram, so a theme word of seven distinct letters is a
+// themed hive. (It said "two" here until the last two were measured; the reason
+// they were left out was that a bag of words cannot supply a pangram, which is
+// true of the bag and not of the words in it.)
+//
+// A fifth, the grid, is dealt from dice and cannot be built out of anything —
+// but it scores the theme's words where the board can trace them, like the
+// other three do. The rest need letter grids or curated pairs.
 //
 // Everything here degrades rather than fails. A generator that cannot reach the
 // database, or a day nothing covers, produces exactly the puzzles it produced
@@ -151,5 +160,44 @@ export function themedPool(themeWords, length, blocked) {
     .filter((w) => w.length === length && !(blocked && blocked.has(w)))
     // Sorted because the daily draws by index: an unsorted pool would make the
     // same seed pick different words for no reason anybody could see.
+    .sort();
+}
+
+/** The theme's own words that could be a scramble rack.
+ *
+ *  A rack is one word shuffled, so the themed version is simply a theme word of
+ *  the rack's length. It does not have to be in the dictionary — the board
+ *  ships the day's words and accepts them, same as the daily answer does, which
+ *  is what lets a rack spell out ESOPPLAN and still be solvable.
+ *
+ *  Sorted, because the draw is by index and an unsorted pool would make the same
+ *  seed pick different racks for no reason anybody could see.
+ */
+export function themedRackBases(themeWords, size, blocked) {
+  if (!themeWords || themeWords.length === 0) return [];
+  return themeWords.filter((w) => w.length === size && !(blocked && blocked.has(w))).sort();
+}
+
+/** The theme's own words that could seed a hive.
+ *
+ *  A hive is seeded from a pangram: seven distinct letters, so the board is
+ *  always completable by the word it was built from. The extra rule is the same
+ *  one the ordinary pool uses — no `s`, or plurals flood the answer list.
+ *
+ *  Whether the resulting board is worth playing is a different question and is
+ *  not asked here: the caller counts what the dictionary yields for each centre
+ *  and falls back to an ordinary base if a themed one leaves too thin a board.
+ *  A themed hive nobody can fill is worse than an unthemed one.
+ */
+export function themedHiveBases(themeWords, blocked) {
+  if (!themeWords || themeWords.length === 0) return [];
+  return themeWords
+    .filter(
+      (w) =>
+        w.length >= 7 &&
+        new Set(w).size === 7 &&
+        !w.includes('s') &&
+        !(blocked && blocked.has(w))
+    )
     .sort();
 }

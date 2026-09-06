@@ -49,3 +49,31 @@ export function acceptedAt(
   for (const word of themed) if (word.length === length) out.add(word);
   return out;
 }
+
+/** What a theme word is worth on top of what it would score anyway.
+ *
+ *  Flat rather than a multiplier, and five rather than three. A multiplier is
+ *  invisible on the short words that make up most of a scramble — doubling a
+ *  three-letter word is one point — and a flat bonus reads the same in every
+ *  game that has a score. Five sits below the hive's pangram (+7) on purpose:
+ *  finding the seven-letter word is still the bigger thing.
+ */
+export const THEME_BONUS = 5;
+
+/** The day's words a board should accept on top of its dictionary.
+ *
+ *  Handed to the solver rather than checked at the door, so a themed word is
+ *  only accepted if the board can actually make it — the rack has to spell it,
+ *  the hive has to reach it, the grid has to trace it. The solver already
+ *  answers that question for every other word, and asking it here as well is
+ *  how the two halves come apart.
+ *
+ *  Null while the dictionary is still on its way, which the games already show
+ *  as "still loading" rather than as a refusal.
+ */
+export function withThemed(dictionary: string[] | null, themed: string[]): string[] | null {
+  if (!dictionary) return null;
+  if (themed.length === 0) return dictionary;
+  const known = new Set(dictionary);
+  return [...dictionary, ...themed.filter((w) => !known.has(w))];
+}

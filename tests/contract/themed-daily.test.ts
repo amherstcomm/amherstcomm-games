@@ -28,6 +28,9 @@ const THEME = {
     'shares', 'dividend', 'owner', 'equity', 'buyout', 'vesting', 'stake', 'payout',
     'profit', 'capital', 'shared', 'invest', 'earned', 'worker', 'stock', 'value',
     'trustee', 'voting', 'growth', 'reward',
+    // Seven distinct letters and no `s`, so it can seed a hive — the only word
+    // here that can, which is itself the finding the admin page reports.
+    'employer',
   ],
 };
 
@@ -182,5 +185,52 @@ describe('a Weave theme of its own', () => {
     const board = await read(dir, 'daily-weave.json');
     expect(board.byDifficulty.hard.clue).not.toBe('Profit sharing');
     expect(board.byDifficulty.extreme.clue).not.toBe('Profit sharing');
+  });
+});
+
+// The boards a theme can be built *from*, rather than merely scored in. Both
+// are wired at their own point in a nine-hundred-line script, and a wiring that
+// reads correctly can still be wired to nothing — which is what this is for.
+describe('the boards built from the theme', () => {
+  it('shuffles a theme word into the scramble rack', async () => {
+    const rack = (await read(themed, 'daily-scramble.json')).byDifficulty.easy.letters as string[];
+    const spelled = [...rack].sort().join('');
+    const matches = THEME.words.filter((w) => [...w].sort().join('') === spelled);
+    expect(matches.length, `rack ${rack.join('')} is not a theme word`).toBeGreaterThan(0);
+  });
+
+  it('and leaves an ordinary day s rack to the language', async () => {
+    const rack = (await read(plain, 'daily-scramble.json')).byDifficulty.easy.letters as string[];
+    const spelled = [...rack].sort().join('');
+    expect(THEME.words.some((w) => [...w].sort().join('') === spelled)).toBe(false);
+  });
+
+  it('seeds the hive from the theme s own pangram', async () => {
+    const hive = (await read(themed, 'daily-hive.json')).byDifficulty.easy;
+    const letters = [hive.center, ...hive.outers].sort().join('');
+    // The seed is the word with seven distinct letters and no `s`; the hive is
+    // exactly its letters, which is what makes the word findable on the board
+    // it built.
+    const seeds = THEME.words.filter(
+      (w) => [...new Set(w)].sort().join('') === letters
+    );
+    expect(seeds, `hive ${letters} came from no theme word`).toContain('employer');
+  });
+
+  it('and an ordinary day s hive from the dictionary', async () => {
+    const hive = (await read(plain, 'daily-hive.json')).byDifficulty.easy;
+    const letters = [hive.center, ...hive.outers].sort().join('');
+    expect(THEME.words.some((w) => [...new Set(w)].sort().join('') === letters)).toBe(false);
+  });
+
+  // Every board that scores has to be able to accept a word the dictionary has
+  // never heard of, or the bonus is for words nobody can enter.
+  it('carries the day s words into every board that scores them', async () => {
+    for (const file of ['daily-scramble.json', 'daily-hive.json', 'daily-grid.json']) {
+      const payload = await read(themed, file);
+      expect(typeof payload.themed, `${file} carries no theme`).toBe('string');
+      expect(Buffer.from(payload.themed, 'base64').toString().split(' ')).toContain('esop');
+      expect((await read(plain, file)).themed, `${file} themed an ordinary day`).toBeUndefined();
+    }
   });
 });

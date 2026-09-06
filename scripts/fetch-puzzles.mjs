@@ -8,7 +8,13 @@ import { createRequire } from 'node:module';
 import { generateWeave } from './weave.mjs';
 import { generateSquare, GIVEN_TARGET } from './squares.mjs';
 import { THEMES } from './themes.mjs';
-import { themeFor, themedPool, weaveThemesFor } from './themedDaily.mjs';
+import {
+  themeFor,
+  themedHiveBases,
+  themedPool,
+  themedRackBases,
+  weaveThemesFor,
+} from './themedDaily.mjs';
 import {
   generateCryptogram,
   generatePlayable,
@@ -272,6 +278,10 @@ const uniquenessWords = () => (uniquenessSet ??= loadTierSet(STANDARD_FILES));
 // Counted against the list the game actually accepts, so the number here is
 // the number a player can reach.
 const HIVE_MIN_WORDS = 30;
+// A scramble rack is one word shuffled, so the rack size *is* the length the
+// base has to be. Named because a themed day now picks its base from a
+// different pool and the two have to ask for the same length.
+const RACK_SIZE = 7;
 
 let hiveIndex = null;
 function hiveWordIndex() {
@@ -365,8 +375,8 @@ function poolsFor(difficulty) {
     .sort();
   if (!hiveBases.length) throw new Error(`No pangram bases for ${difficulty} hive`);
 
-  const rackBases = [...answers].filter((w) => w.length === 7).sort();
-  if (!rackBases.length) throw new Error(`No seven-letter rack bases for ${difficulty}`);
+  const rackBases = [...answers].filter((w) => w.length === RACK_SIZE).sort();
+  if (!rackBases.length) throw new Error(`No ${RACK_SIZE}-letter rack bases for ${difficulty}`);
 
   const boxWords = [...answers].filter((w) => w.length >= 4 && !/(.)\1/.test(w)).sort();
   const boxByFirst = new Map();
@@ -427,6 +437,13 @@ const dailyWeaveClues = new Set();
 const dailyCryptogramTexts = new Set();
 const dailyLadderPairs = new Set();
 const dailyBridgePrompts = new Set();
+// The theme's own words, for a board to accept alongside its dictionary — and,
+// where a board scores, to score a bonus for. Written into every payload a
+// theme touches rather than only into the daily word, because a rack built out
+// of ESOPPLAN that will not accept ESOP is a rack nobody can finish.
+const themedBlob = (t) =>
+  t ? { themed: Buffer.from(t.words.join(' ')).toString('base64') } : {};
+
 // Which theme, if any, covers the day being generated. Asked once for the run
 // rather than per game, and asked about the *puzzle* date rather than today's:
 // the window is generated a fortnight ahead, so this run is writing days that
@@ -505,9 +522,7 @@ for (const variant of ['', 'dev']) {
         // not carry. Base64 for the same reason the answers are: to keep them
         // out of a casual glance at the file, not to hide them, since the
         // answers themselves already ship here.
-        ...(theme
-          ? { themed: Buffer.from(theme.words.join(' ')).toString('base64') }
-          : {}),
+        ...themedBlob(theme),
         fetchedAt: stamp,
       },
       null,
@@ -521,12 +536,44 @@ for (const variant of ['', 'dev']) {
   for (const difficulty of DIFFICULTIES) {
     const hiveRng = mulberry32(xmur3(`${SEED_SALT}anagrimoire-hive-${etDate}${salt}${diffSalt(difficulty)}`)());
     const { hiveBases } = poolsFor(difficulty);
+    // A themed day seeds the hive from the theme's own pangram where it has
+    // one, so the seven letters spell out something of the event's rather than
+    // something of the language's. Same shape as any other base — seven
+    // distinct letters, no `s` — and it does not have to be in the dictionary,
+    // because the board ships the day's words and accepts them.
+    //
+    // Tried first and not insisted on. The hive still has to yield a board
+    // worth playing, and what fills it is the ordinary dictionary: a themed
+    // seed whose letters happen to make thirty words is a worse day than an
+    // unthemed one, so the fallback below is the same loop it always was.
+    const themedBases = themedHiveBases(theme?.words, blockedFromAnswers);
+    let picked = null;
+    let best = null;
+    for (const base of themedBases) {
+      const letters = [...new Set(base)];
+      for (const center of letters.slice().sort(() => hiveRng() - 0.5)) {
+        const count = hiveWordCount(letters, center);
+        if (count >= HIVE_MIN_WORDS) {
+          picked = { letters, center, count, base };
+          break;
+        }
+      }
+      if (picked) break;
+    }
+    if (picked) {
+      console.log(`Hive ${difficulty} seeded from the theme: ${picked.base} (${picked.count}w)`);
+    } else if (themedBases.length > 0) {
+      // Said rather than silent: "the theme had a pangram and it was not used"
+      // is the one thing somebody would otherwise have to work out from the
+      // letters.
+      console.log(
+        `Hive ${difficulty}: no themed pangram reached ${HIVE_MIN_WORDS} words, using an ordinary one`
+      );
+    }
     // Keep looking until the board is worth playing. The centre matters as
     // much as the letters — the same seven letters can yield 9 words with one
     // centre and 90 with another — so every centre is tried before the base is
     // given up on.
-    let picked = null;
-    let best = null;
     for (let attempt = 0; attempt < 300 && !picked; attempt++) {
       const base = hiveBases[Math.floor(hiveRng() * hiveBases.length)];
       const letters = [...new Set(base)];
@@ -555,7 +602,7 @@ for (const variant of ['', 'dev']) {
   await writeFile(
     `${DATA_DIR}/${prefix}daily-hive.json`,
     JSON.stringify(
-      { date: etDate, byDifficulty: hiveByDifficulty, fetchedAt: stamp },
+      { date: etDate, byDifficulty: hiveByDifficulty, ...themedBlob(theme), fetchedAt: stamp },
       null,
       2
     ) + '\n'
@@ -606,7 +653,17 @@ for (const variant of ['', 'dev']) {
       xmur3(`${SEED_SALT}anagrimoire-scramble-${etDate}${salt}${diffSalt(difficulty)}`)()
     );
     const { rackBases } = poolsFor(difficulty);
-    const rackBase = rackBases[Math.floor(scrambleRng() * rackBases.length)];
+    // A themed day shuffles one of the theme's own words where it has one the
+    // right length. The rack is one word shuffled, so this is the whole of it —
+    // and the word need not be in the dictionary, because the board ships the
+    // day's words and takes them, which is what makes a full rack of ESOPPLAN
+    // findable rather than a cruel joke.
+    const themedRacks = themedRackBases(theme?.words, RACK_SIZE, blockedFromAnswers);
+    const pool = themedRacks.length > 0 ? themedRacks : rackBases;
+    const rackBase = pool[Math.floor(scrambleRng() * pool.length)];
+    if (themedRacks.length > 0) {
+      console.log(`Scramble ${difficulty} seeded from the theme: ${rackBase}`);
+    }
     scrambleByDifficulty[difficulty] = {
       letters: rackBase.split('').sort(() => scrambleRng() - 0.5),
     };
@@ -617,6 +674,7 @@ for (const variant of ['', 'dev']) {
       {
         date: etDate,
         byDifficulty: scrambleByDifficulty,
+        ...themedBlob(theme),
         fetchedAt: stamp,
       },
       null,
@@ -646,6 +704,10 @@ for (const variant of ['', 'dev']) {
       {
         date: etDate,
         byDifficulty: gridByDifficulty,
+        // Dice, so the board cannot be built out of the theme — but a theme
+        // word that happens to be traceable on it should count, and count for
+        // more. The blob is what makes that possible.
+        ...themedBlob(theme),
         fetchedAt: stamp,
       },
       null,

@@ -4,7 +4,7 @@
 // a word no dictionary carries; without this the board refuses to let anybody
 // type it, which is an unanswerable day and worse than not theming at all.
 import { describe, expect, it } from 'vitest';
-import { acceptedAt, themedWords } from '@/themedWords';
+import { acceptedAt, THEME_BONUS, themedWords, withThemed } from '@/themedWords';
 
 const encode = (words: string[]) => btoa(words.join(' '));
 
@@ -59,5 +59,41 @@ describe('acceptedAt', () => {
   // if this says "not yet" rather than "nothing".
   it('and is nothing at all until the dictionary arrives', () => {
     expect(acceptedAt(null, ['esop'], 4)).toBeNull();
+  });
+});
+
+// The other half of the same idea, for the boards that score. A themed day
+// builds the rack and the hive out of the event's own words, so the rest of
+// the list is what a player is meant to go looking for — and a word the board
+// will not accept cannot be worth anything.
+describe('withThemed', () => {
+  it('hands the solver the day s words as well as the dictionary', () => {
+    expect(withThemed(['share', 'plane'], ['esop'])).toEqual(['share', 'plane', 'esop']);
+  });
+
+  // Handed to the solver rather than checked at the door: the rack still has
+  // to spell it, the hive still has to reach it, the grid still has to trace
+  // it. Adding a word twice would score it twice in the day's maximum.
+  it('and does not add one the dictionary already had', () => {
+    expect(withThemed(['share', 'esop'], ['esop'])).toEqual(['share', 'esop']);
+  });
+
+  it('leaves an ordinary day exactly as it was', () => {
+    const dictionary = ['share', 'plane'];
+    expect(withThemed(dictionary, [])).toBe(dictionary);
+  });
+
+  // Null is "still loading", which the games show as such. A board that
+  // refused a guess because a fetch was slow reads as the board calling you
+  // wrong.
+  it('and is nothing at all until the dictionary arrives', () => {
+    expect(withThemed(null, ['esop'])).toBeNull();
+  });
+
+  // Below the hive's pangram (+7) on purpose: finding the seven-letter word is
+  // still the bigger thing.
+  it('is worth less than a pangram', () => {
+    expect(THEME_BONUS).toBeGreaterThan(0);
+    expect(THEME_BONUS).toBeLessThan(7);
   });
 });
