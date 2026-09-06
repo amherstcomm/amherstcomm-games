@@ -9,8 +9,17 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 // @ts-expect-error plain-JS module without a declaration file
-import { themedPool } from '../../scripts/themedDaily.mjs';
-import { GUESS_LENGTHS, runsOf, summarise, tilesFor, yieldOf, type CoverageDay } from '@/coverage';
+import { themedHiveBases, themedPool, themedRackBases } from '../../scripts/themedDaily.mjs';
+import {
+  canSeedHive,
+  GUESS_LENGTHS,
+  RACK_SIZE,
+  runsOf,
+  summarise,
+  tilesFor,
+  yieldOf,
+  type CoverageDay,
+} from '@/coverage';
 
 const list = (date: string, words: string[], name = 'October'): CoverageDay => ({
   date,
@@ -144,5 +153,49 @@ describe('runsOf', () => {
 
   it('has nothing to say about nothing', () => {
     expect(runsOf([])).toEqual([]);
+  });
+});
+
+// The two boards a theme can be built *from*. Both rules live in the generator;
+// what is asserted here is that the page's copy answers the same, word for
+// word, rather than agreeing today and drifting the first time one is changed.
+describe('the boards a theme can seed', () => {
+  const words = ['employer', 'payouts', 'buyout', 'shares', 'dividend', 'trustee', 'ownership'];
+
+  it('takes the rack size from the generator', () => {
+    const gen = readFileSync(join(process.cwd(), 'scripts/fetch-puzzles.mjs'), 'utf8');
+    const size = gen.match(/const RACK_SIZE = (\d+);/);
+    expect(size, 'RACK_SIZE moved or changed shape').not.toBeNull();
+    expect(RACK_SIZE).toBe(Number(size![1]));
+  });
+
+  it('counts exactly the racks the generator would shuffle', () => {
+    expect(yieldOf(words).racks).toBe(themedRackBases(words, RACK_SIZE, null).length);
+    // And it is a real count rather than nought agreeing with nought.
+    expect(yieldOf(words).racks).toBeGreaterThan(0);
+  });
+
+  it('and exactly the pangram bases it would seed a hive from', () => {
+    expect(words.filter(canSeedHive)).toEqual(themedHiveBases(words, null));
+    // Refused for two different reasons, both of them the generator's:
+    // `payouts` has seven distinct letters and an s, which would flood the
+    // answer list with plurals; `ownership` has nine distinct and cannot be a
+    // hive at all. Dropping either rule would count a day that cannot be built.
+    expect(words.filter(canSeedHive)).toEqual(['employer']);
+  });
+
+  it('and a month of six-letter words can seed neither', () => {
+    const sum = summarise([1, 2, 3].map((n) => list(october(n), ['shares', 'payout', 'equity'])));
+    expect(sum.scramble.days).toBe(0);
+    expect(sum.hive.days).toBe(0);
+  });
+
+  it('while one that can says which days', () => {
+    const sum = summarise([
+      list(october(1), ['employer', 'payouts']),
+      list(october(2), ['shares']),
+    ]);
+    expect(sum.scramble.days).toBe(1);
+    expect(sum.hive.days).toBe(1);
   });
 });

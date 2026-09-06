@@ -13,7 +13,7 @@
 // applied here is the blocklist.
 import { describe, expect, it } from 'vitest';
 // @ts-expect-error plain-JS module without a declaration file
-import { normaliseTheme, themedPool } from '../../scripts/themedDaily.mjs';
+import { normaliseTheme, themedHiveBases, themedPool, themedRackBases } from '../../scripts/themedDaily.mjs';
 
 describe('themedPool', () => {
   const BLOCKED = new Set(['damned']);
@@ -73,5 +73,51 @@ describe('normaliseTheme', () => {
   it('is nothing at all when there are no words to use', () => {
     expect(normaliseTheme({ name: 'n', words: [] })).toBeNull();
     expect(normaliseTheme(null)).toBeNull();
+  });
+});
+
+// The two boards a theme can be built *from* rather than merely scored in.
+describe('themedRackBases', () => {
+  // A rack is one word shuffled, so this is the whole of the rule.
+  it('is the theme s own words of the rack s length', () => {
+    expect(themedRackBases(['payouts', 'trustee', 'buyout', 'esop'], 7)).toEqual([
+      'payouts',
+      'trustee',
+    ]);
+  });
+
+  // Not the dictionary's, which is the point: a rack that spells out a word
+  // only this company uses is the whole idea, and the board ships the day's
+  // words and accepts them.
+  it('and does not ask whether the dictionary has heard of them', () => {
+    expect(themedRackBases(['esopplan'], 8)).toEqual(['esopplan']);
+  });
+
+  it('drops a blocked word rather than dealing it as a rack', () => {
+    expect(themedRackBases(['payouts', 'trustee'], 7, new Set(['payouts']))).toEqual(['trustee']);
+  });
+
+  it('has nothing to offer a list with nothing that long', () => {
+    expect(themedRackBases(['esop', 'shares'], 7)).toEqual([]);
+    expect(themedRackBases(null, 7)).toEqual([]);
+  });
+});
+
+describe('themedHiveBases', () => {
+  it('takes a theme word of seven distinct letters', () => {
+    expect(themedHiveBases(['employer', 'buyout'])).toEqual(['employer']);
+  });
+
+  // Two different refusals, and both matter. Eight distinct letters is not a
+  // hive at all; an `s` is a hive whose answer list is drowned in plurals,
+  // which is the same rule the ordinary pool applies.
+  it('refuses one that is not seven distinct, or that carries an s', () => {
+    expect(themedHiveBases(['ownership'])).toEqual([]);
+    expect(themedHiveBases(['payouts'])).toEqual([]);
+  });
+
+  it('and a short word cannot seed one', () => {
+    expect(themedHiveBases(['owner'])).toEqual([]);
+    expect(themedHiveBases([])).toEqual([]);
   });
 });

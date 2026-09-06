@@ -1336,8 +1336,8 @@ it starts.
 
 #### Taking over the dailies
 
-A list with **dates** on it themes the daily puzzles for those days. Two of the
-ten games can take a plain word list, and they are the two this touches:
+A list with **dates** on it themes the daily puzzles for those days. Four of the
+ten games can be built out of one, and a fifth scores it:
 
 - **The daily word.** Per length, the pool narrows to the theme's own words —
   **including ones no dictionary carries**. That is the point rather than an
@@ -1367,8 +1367,42 @@ ten games can take a plain word list, and they are the two this touches:
   afterwards. The columns are still there and still validated on save; nothing
   reads them. A list themes the word, a theme themes the board.
 
-The other eight need pangrams, letter grids or curated pairs, and a bag of words
-cannot supply those.
+- **Scramble**, whose rack is one word shuffled. A theme word of the rack's
+  length *is* a themed rack, and it need not be in the dictionary — the board
+  ships the day's words and accepts them, which is what lets a rack spell out
+  something only this company says and still be solvable.
+- **Hive**, which is seeded from a pangram so the board is always completable by
+  the word it was built from. A theme word of seven distinct letters and no `s`
+  can be that seed. Tried first and not insisted on: what *fills* a hive is the
+  ordinary dictionary, so a themed seed whose letters yield fewer than thirty
+  words is passed over for an ordinary one, and the run says so in the log
+  rather than leaving it to be worked out from the letters.
+- **Grid** cannot be built out of anything — the board is dealt from Boggle dice
+  — but a theme word the board can trace scores the bonus like anywhere else.
+
+**Reversal.** This section said "two of the ten games" and that the other eight
+"need pangrams, letter grids or curated pairs, and a bag of words cannot supply
+those". True of the bag and not of the words in it: a rack is one word, and a
+pangram is one word. Measuring it is what showed the sentence was doing the
+thinking.
+
+**The bonus.** On a themed day every board that scores pays **+5** for one of
+the day's own words, on top of what the word would score anyway. Flat rather
+than a multiplier, because doubling a three-letter word is one point and the
+short words are most of a scramble; below the hive's pangram (+7) on purpose,
+because finding the seven-letter word is still the bigger thing. It applies to
+the daily only — a practice rack is drawn from the language and has no theme
+behind it.
+
+The day's words are handed to the **solver** rather than checked at the door, so
+a themed word only counts if the board can genuinely make it: the rack has to
+spell it, the hive has to reach it through its centre, the grid has to trace it.
+The solver already answers that question for every other word, and asking it a
+second way here is exactly how two halves come apart.
+
+The remaining five — boxed, squares, cryptogram, ladder, bridge — need letter
+boxes, curated passages or pairs. What a list can make of the first and last of
+those is measured rather than guessed: see the calculators above.
 
 **Dates rather than a switch**, and that is not a preference. The window is
 generated a fortnight ahead, so the run on 25 September already writes 1
@@ -1432,6 +1466,10 @@ it reports:
   board size. A day whose themes all fail to tile gets a curated board, not no
   board — which is exactly why it is invisible without this.
 - **Boxed and Bridge**, the days whose pooled words can build one.
+- **Scramble and Hive**, the days whose theme can supply the board itself: a
+  word of the rack's length, and one of seven distinct letters. A day without
+  either still gets the theme's words as bonus points — the board is simply the
+  language's that day.
 
 The days themselves come from `theme_coverage(from, until)`, which calls
 `daily_theme` and `daily_weave_themes` per day: **the same two functions the

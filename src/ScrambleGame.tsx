@@ -28,6 +28,7 @@ import { useDailySync } from '@/useDailySync';
 import { buildShare } from '@/share';
 import { recordSprint } from '@/stats';
 import { store as siteStore } from '@/siteStorage';
+import { THEME_BONUS, themedWords, withThemed } from '@/themedWords';
 
 export type ScrambleGameHandle = { pressKey: (k: string) => void };
 
@@ -99,8 +100,14 @@ function readStore(): ScrambleStore {
   }
 }
 
-function wordScore(word: string, rackSize: number): number {
-  return (word.length === 3 ? 1 : word.length) + (word.length === rackSize ? 7 : 0);
+function wordScore(word: string, rackSize: number, themed?: Set<string>): number {
+  return (
+    (word.length === 3 ? 1 : word.length) +
+    (word.length === rackSize ? 7 : 0) +
+    // A themed day builds the rack out of one of the event's own words, so the
+    // rest of them are what a player is meant to go looking for.
+    (themed?.has(word) ? THEME_BONUS : 0)
+  );
 }
 
 const ScrambleGame = forwardRef<
@@ -115,6 +122,7 @@ const ScrambleGame = forwardRef<
   }
 >(function ScrambleGame({ standardWords, commonWords, onLetterStates, onReveal, practiceWords }, ref) {
   const [store, setStore] = useState<ScrambleStore>(loadStore);
+  const [themed, setThemed] = useState<string[]>([]);
   const { practiceAllowed } = usePrefs();
   // pinned to the daily: someone who switched practice off shouldn't be left
   // looking at a practice board they can no longer leave
@@ -173,6 +181,10 @@ const ScrambleGame = forwardRef<
         // the date lives at the top level; the board's own fields come from
         // whichever difficulty was resolved
         const d = { ...raw, ...chosen.board };
+        // The day's own words. A themed rack is a theme word shuffled, and the
+        // rest of the list is findable in it more often than not — neither is
+        // any use if the board will not take a word the dictionary lacks.
+        setThemed(themedWords(raw));
         const rec = sanitizeRecord({ rack: d.letters, found: [], endsAt: null, finished: false });
         if (!rec || typeof d.date !== 'string') throw new Error('bad payload');
         // reset when the date changes OR the rack differs (e.g. the daily
@@ -245,25 +257,35 @@ const ScrambleGame = forwardRef<
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [running, remaining]);
 
+  // Only on the daily: a practice rack is drawn from the language and has no
+  // theme behind it, so scoring one would be scoring a word nobody was asked
+  // to find.
+  const themedNow = useMemo(
+    () => (store.dailyMode ? themed : []),
+    [store.dailyMode, themed]
+  );
+  const themedSet = useMemo(() => new Set(themedNow), [themedNow]);
+  const accepted = useMemo(() => withThemed(standardWords, themedNow), [standardWords, themedNow]);
+
   const answers = useMemo(() => {
-    if (!standardWords || !record) return null;
-    return solveDescramble(standardWords, {
+    if (!accepted || !record) return null;
+    return solveDescramble(accepted, {
       letters: record.rack,
       wildcards: 0,
       useAll: false,
       minLength: 3,
     });
-  }, [standardWords, record]);
+  }, [accepted, record]);
   const answersSet = useMemo(() => (answers ? new Set(answers) : null), [answers]);
   const maxScore = useMemo(() => {
     if (!answers || !record) return 0;
-    return answers.reduce((n, w) => n + wordScore(w, record.rack.length), 0);
-  }, [answers, record]);
+    return answers.reduce((n, w) => n + wordScore(w, record.rack.length, themedSet), 0);
+  }, [answers, record, themedSet]);
 
   const score = useMemo(() => {
     if (!record) return 0;
-    return record.found.reduce((n, w) => n + wordScore(w, record.rack.length), 0);
-  }, [record]);
+    return record.found.reduce((n, w) => n + wordScore(w, record.rack.length, themedSet), 0);
+  }, [record, themedSet]);
 
   const syncing = useDailySync({
     difficulty: playedAt,
@@ -334,10 +356,13 @@ const ScrambleGame = forwardRef<
       return;
     }
     updateRecord((r) => ({ ...r, found: [word, ...r.found] }));
+    const points = wordScore(word, record.rack.length, themedSet);
     showFlash(
       word.length === record.rack.length
-        ? `Full rack! +${wordScore(word, record.rack.length)}`
-        : `+${wordScore(word, record.rack.length)}`,
+        ? `Full rack! +${points}`
+        : themedSet.has(word)
+          ? `Theme word! +${points}`
+          : `+${points}`,
       true
     );
   }
@@ -642,6 +667,7 @@ const ScrambleGame = forwardRef<
             Words are 3+ letters from the rack (each letter once). 3-letter words score 1,
             longer words their length; using the whole rack is +7. Scored against the
             word list for the difficulty you&apos;re playing.
+            {themedNow.length > 0 && ` Today's rack comes from a theme — its words are worth +${THEME_BONUS} each.`}
             {store.dailyMode && ' A fresh daily rack arrives about 15 minutes after 3:00 a.m. Eastern.'}
           </p>
         </>

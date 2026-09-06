@@ -28,6 +28,7 @@ import { useDailySync } from '@/useDailySync';
 import { buildShare } from '@/share';
 import { recordSprint } from '@/stats';
 import { store as siteStore } from '@/siteStorage';
+import { THEME_BONUS, themedWords, withThemed } from '@/themedWords';
 
 export type GridGameHandle = { pressKey: (k: string) => void };
 
@@ -125,12 +126,16 @@ function readStore(): GridStore {
 }
 
 // classic Boggle scoring
-function wordScore(word: string): number {
-  if (word.length <= 4) return 1;
-  if (word.length === 5) return 2;
-  if (word.length === 6) return 3;
-  if (word.length === 7) return 5;
-  return 11;
+function wordScore(word: string, themed?: Set<string>): number {
+  // The dice decide the board, so a themed day cannot build one out of the
+  // event's words the way the rack and the hive can. What it can do is pay for
+  // the ones that happen to be traceable.
+  const bonus = themed?.has(word) ? THEME_BONUS : 0;
+  if (word.length <= 4) return 1 + bonus;
+  if (word.length === 5) return 2 + bonus;
+  if (word.length === 6) return 3 + bonus;
+  if (word.length === 7) return 5 + bonus;
+  return 11 + bonus;
 }
 
 const GridGame = forwardRef<
@@ -144,6 +149,7 @@ const GridGame = forwardRef<
   }
 >(function GridGame({ standardWords, displayWord, onLetterStates, onReveal }, ref) {
   const [store, setStore] = useState<GridStore>(loadStore);
+  const [themed, setThemed] = useState<string[]>([]);
   const [playedAt, setPlayedAt] = useState<Difficulty>(difficulty);
   const [difficultyTick, setDifficultyTick] = useState(0);
   useEffect(
@@ -221,6 +227,7 @@ const GridGame = forwardRef<
         if (!chosen.board) throw new Error('bad payload');
         setPlayedAt(chosen.difficulty);
         const d = { ...raw, ...chosen.board };
+        setThemed(themedWords(raw));
         const rec = sanitizeRecord({ cells: d.cells, found: [], endsAt: null, finished: false });
         if (!rec || typeof d.date !== 'string') throw new Error('bad payload');
         // reset when the date changes OR the cells differ (e.g. the daily
@@ -281,26 +288,32 @@ const GridGame = forwardRef<
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [running, remaining]);
 
+  // Only on the daily: a practice board is dealt from the dice with no theme
+  // behind it.
+  const themedNow = useMemo(() => (store.dailyMode ? themed : []), [store.dailyMode, themed]);
+  const themedSet = useMemo(() => new Set(themedNow), [themedNow]);
+  const accepted = useMemo(() => withThemed(standardWords, themedNow), [standardWords, themedNow]);
+
   // every path-reachable dictionary word; also serves as submit validation
   const answers = useMemo(() => {
-    if (!standardWords || !record) return null;
-    return solveGrid(standardWords, {
+    if (!accepted || !record) return null;
+    return solveGrid(accepted, {
       cells: record.cells,
       cols: Math.round(Math.sqrt(record.cells.length)),
     });
-  }, [standardWords, record]);
+  }, [accepted, record]);
   const answersSet = useMemo(() => (answers ? new Set(answers) : null), [answers]);
-  const standardSet = useMemo(
-    () => (standardWords ? new Set(standardWords) : null),
-    [standardWords]
-  );
+  // What the day will take at all, themed words included: it separates "not a
+  // word" from "no path for that word", and a theme word with no path deserves
+  // the second answer rather than being called nonsense.
+  const standardSet = useMemo(() => (accepted ? new Set(accepted) : null), [accepted]);
   const maxScore = useMemo(
-    () => (answers ? answers.reduce((n, w) => n + wordScore(w), 0) : 0),
-    [answers]
+    () => (answers ? answers.reduce((n, w) => n + wordScore(w, themedSet), 0) : 0),
+    [answers, themedSet]
   );
   const score = useMemo(
-    () => (record ? record.found.reduce((n, w) => n + wordScore(w), 0) : 0),
-    [record]
+    () => (record ? record.found.reduce((n, w) => n + wordScore(w, themedSet), 0) : 0),
+    [record, themedSet]
   );
 
   const syncing = useDailySync({
@@ -375,7 +388,12 @@ const GridGame = forwardRef<
       return;
     }
     updateRecord((r) => ({ ...r, found: [word, ...r.found] }));
-    showFlash(`+${wordScore(word)}`, true);
+    showFlash(
+      themedSet.has(word)
+        ? `Theme word! +${wordScore(word, themedSet)}`
+        : `+${wordScore(word, themedSet)}`,
+      true
+    );
   }
 
   function submit() {
@@ -803,6 +821,7 @@ const GridGame = forwardRef<
             Words are 3+ letters traced through adjacent cells (diagonals count), using each
             cell once. Scoring: 3–4 letters 1&nbsp;pt, 5 letters 2, 6 letters 3, 7 letters 5,
             8+ letters 11. Scored against the word list for the difficulty you&apos;re playing.
+            {themedNow.length > 0 && ` A theme is running — its words are worth +${THEME_BONUS} each where the board can trace them.`}
             {store.dailyMode && ' A fresh daily grid arrives about 15 minutes after 3:00 a.m. Eastern.'}
           </p>
         </>
