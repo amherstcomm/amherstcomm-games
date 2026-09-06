@@ -1371,9 +1371,19 @@ non · profit · able. It needs two theme words that are compounds sharing a
 stem, so most lists make none — which is the answer rather than a fault in the
 list, and the panel says what one would need instead of just showing a zero.
 
-**Squares** is not offered. It themes only its first row, and only with a pool
-wider than the one other puzzles generate from; it has a switch on this same
-page instead.
+**Squares** is not offered, and this is the measurement rather than a hunch. A
+word square needs every row *and* every column to be a word, and an
+employee-ownership list of thirty-eight words has one four-letter word in it —
+`esop`, which no dictionary carries — and seven five-letter ones. Generating two
+hundred squares of each size and looking for any theme word in them at all:
+
+| | contains any theme word |
+|---|---|
+| 4×4 | 0 of 200 |
+| 5×5 | 2 of 200 |
+
+A calculator here would print zero every time it was asked, which is why there
+is not one. Squares has a switch on `/admin/games` instead.
 
 `scripts/feasibility.mjs` asks the same questions from the command line, against
 the same rules and the real dictionary, which is where the numbers above came
@@ -1823,6 +1833,51 @@ The candidates are worked out **in the browser**, from the day's own words —
 which the coverage call already carries — using the same searches the generator
 runs. The box and ladder searches are the shared ones, asserted against the
 generator's own pair for pair by `tests/unit/themeCalculators.test.ts`.
+
+#### Seeing the month before it runs
+
+Everything else about a themed month can be checked except the thing that
+matters. The word-list panel says what a list *can* make, the coverage page says
+which days are covered, the contract tests prove the generator obeys a theme —
+and none of them answers *show me the first week of October*.
+
+```
+npm run preview-month -- --from 2026-10-01 --until 2026-10-07
+npm run preview-month -- --from 2026-10-01 --days 3 --theme october.json
+```
+
+It runs the **real generator**, once per date, into a throwaway directory, and
+reads back what it wrote:
+
+```
+2026-10-01 · themed
+  guess      10 boards, 3–12 letters  e.g. woe, esop, owned, growth…
+  scramble   nrkeowt
+  hive       t/noekrw (65 words)
+  boxed      rsw/eao/tdf/kpi — solvable in 2
+  ladder     shares → stocks in 4
+  weave      Ahoy, matey
+  cryptogram What sought they thus afar? Bright jewels of the mine…
+             Theming 2026-10-01 from "Employee ownership" (38 words)
+             Hive easy seeded from the theme: network (65w)
+             Box easy: rsw/eao/tdf/kpi — rewards → stake → esop → profit
+             Ladder easy from the theme: shares → stocks (4)
+```
+
+Under the board is the run's own account of what it did — which is where a pin
+it could not use, a hive that fell back, and a themed-only board with nothing on
+it get said.
+
+**Nothing is published.** Each day goes into a temporary directory that is
+deleted straight after, so this is safe to run against the live database on a
+Tuesday afternoon. With `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` set it
+reads the real lists, themes, passages, rules and pins — the same questions the
+nightly run asks. With `--theme` it reads a file instead, which is how to try a
+list *before* writing it into the database.
+
+`tests/contract/preview.test.ts` runs it for one day and reads the output back,
+because a preview that quietly shows one variant's boards while the site
+publishes the other's would be worse than not having one.
 
 #### Coverage: what a month actually adds up to
 

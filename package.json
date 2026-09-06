@@ -19,6 +19,7 @@
     "word-stats": "node scripts/word-stats.mjs",
     "name-blocklist": "node scripts/name-blocklist.mjs",
     "build-words": "node scripts/build-words.mjs",
+    "preview-month": "node scripts/preview-month.mjs",
     "test": "vitest run",
     "test:unit": "vitest run --project unit",
     "test:contract": "vitest run --project contract",
