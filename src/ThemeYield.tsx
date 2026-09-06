@@ -26,7 +26,7 @@ export default function ThemeYield({ words }: { words: string }) {
   // forty thousand rungs once per word. Neither can run on the thread somebody
   // is typing on, and neither may show its last answer while the list has
   // moved on — so both say when they are working.
-  const { boxes, ladders } = useCalculators(list);
+  const { boxes, ladders, squares } = useCalculators(list);
 
   // The dictionary is for one question only: whether an ordinary pair beats the
   // chain on the best board, which is what the daily would promise. The boards
@@ -142,6 +142,33 @@ export default function ThemeYield({ words }: { words: string }) {
           <p className="text-slate-500 pl-3">
             Needs two words of the same length, both in the everyday dictionary,
             three to eight one-letter steps apart.
+          </p>
+        )}
+      </div>
+
+      <div>
+        {/* A square is ten words, so one will not contain a theme word by
+            accident — none of two hundred did. What a list can do is *head*
+            one, which at four letters it almost always can and at five seldom. */}
+        <p
+          className={
+            squares.searching || squares.four.length + squares.five.length === 0
+              ? 'text-slate-500'
+              : 'text-emerald-300'
+          }
+        >
+          {squares.searching
+            ? '· Squares — working…'
+            : squares.four.length + squares.five.length > 0
+              ? `✓ Squares — ${squares.four.length} of these words can head a 4×4, ${squares.five.length} a 5×5`
+              : '· Squares — none of these words can head one'}
+        </p>
+        {!squares.searching && squares.four.length + squares.five.length > 0 && (
+          <p className="text-slate-400 pl-3">
+            {[...squares.four, ...squares.five]
+              .slice(0, 3)
+              .map((s) => `${s.first}: ${s.rows.join(' / ')}`)
+              .join('  |  ')}
           </p>
         )}
       </div>

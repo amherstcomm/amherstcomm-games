@@ -84,3 +84,27 @@ describe('the month preview', () => {
     expect(stdout.trim()).toBe('');
   });
 });
+
+// The refusal, which matters more than it looks. Previewing ordinary days when
+// there is nothing to read would show a themed month that "did not work" — the
+// same output a broken setup produces, from a tool that was never told to look.
+describe('the preview with nothing to read', () => {
+  it('refuses rather than showing ordinary days', async () => {
+    await expect(
+      run('node', ['scripts/preview-month.mjs', '--from', '2026-10-08', '--days', '1'], {
+        cwd: process.cwd(),
+        env: { ...process.env, SUPABASE_SERVICE_ROLE_KEY: '' },
+      })
+    ).rejects.toMatchObject({ code: 1 });
+  });
+
+  it('and says what would let it look', async () => {
+    const failed = await run(
+      'node',
+      ['scripts/preview-month.mjs', '--from', '2026-10-08', '--days', '1'],
+      { cwd: process.cwd(), env: { ...process.env, SUPABASE_SERVICE_ROLE_KEY: '' } }
+    ).catch((e: { stderr: string }) => e);
+    expect((failed as { stderr: string }).stderr).toContain('SUPABASE_SERVICE_ROLE_KEY');
+    expect((failed as { stderr: string }).stderr).toContain('--theme');
+  });
+});

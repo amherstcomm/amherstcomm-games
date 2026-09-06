@@ -1,0 +1,74 @@
+# Show what a run of days would publish, using the settings that are actually
+# saved — without waiting for the run that would publish them.
+#
+# The window is generated a fortnight ahead, so "did the October setup work?"
+# had a two-week answer: set the lists up, wait, look. This asks the database
+# the same five questions the nightly run asks — which lists cover the day,
+# which Weave themes, which passages, what each game accepts, what is pinned —
+# prints what came back, then prints the boards built from it.
+#
+# Run it from the Actions tab. It needs no local credentials, which is the point
+# of it living here: the service-role key is a repository secret and belongs
+# nowhere else.
+#
+# Nothing is published. Each day is generated into a temporary directory that is
+# deleted straight after; no branch is written, no row is touched, and the live
+# feed is untouched whether this passes or fails.
+name: Preview a month
+
+on:
+  workflow_dispatch:
+    inputs:
+      from:
+        description: First day (YYYY-MM-DD)
+        required: true
+      until:
+        description: Last day (YYYY-MM-DD) — leave blank for seven days
+        required: false
+
+# Least privilege: this checks the repository out, asks Supabase what the admin
+# pages have set up with its own secret, and writes its answer to the job
+# summary. It has no business writing anything back to GitHub — nothing is
+# published by a preview, which is the whole point of one.
+#
+# Explicit rather than inherited, because a repository created before February
+# 2023 defaults to read-write and a workflow that says nothing takes it. CodeQL
+# flagged this one: every other workflow here declares its permissions and this
+# was the only one that did not.
+permissions:
+  contents: read
+
+jobs:
+  preview:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci --ignore-scripts
+      - name: Preview
+        env:
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          # The same salt the nightly run uses, or the boards below would be a
+          # different day's boards — right in shape and wrong in every letter.
+          PUZZLES_SEED_SALT: ${{ secrets.PUZZLES_SEED_SALT }}
+        run: |
+          if [ -z "$SUPABASE_SERVICE_ROLE_KEY" ]; then
+            echo "::error::SUPABASE_SERVICE_ROLE_KEY is not set, so there are no settings to read"
+            exit 1
+          fi
+          node scripts/preview-month.mjs \
+            --from "${{ inputs.from }}" \
+            ${{ inputs.until && format('--until {0}', inputs.until) || '' }} \
+            | tee preview.txt
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo '## What those days would publish'
+            echo
+            echo '```'
+            cat preview.txt || echo 'nothing to show'
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

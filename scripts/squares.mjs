@@ -139,7 +139,7 @@ export function countSolutions({ pool, byPrefix }, grid, n, cap = 2) {
  *
  *  Every row and column keeps at least one letter: a line with nothing in it
  *  is a word pulled out of thin air rather than deduced. */
-function chooseGiven(rows, n, rng, target, valIndex) {
+export function chooseGiven(rows, n, rng, target, valIndex) {
   const flat = rows.join('').split('');
   const given = new Set([...Array(n * n).keys()]);
   const rowLeft = Array(n).fill(n);
@@ -187,3 +187,76 @@ export function generateSquare(rng, n, genWords, valWords, target, attempts = 40
 
 /** how many letters each size starts with — the difficulty dial */
 export const GIVEN_TARGET = { 4: 6, 5: 10 };
+
+/** A square whose top row is a word you chose, and whose other rows and every
+ *  column come from the dictionary.
+ *
+ *  This is what theming a square means, and measuring the wrong thing is what
+ *  made it look impossible. Asking whether an *unseeded* square happens to
+ *  contain a theme word answers no — 0 of 200 at 4x4 — because a square is ten
+ *  words drawn from tens of thousands. Asking whether a theme word can *head*
+ *  one answers yes almost always: 22 of 23 ordinary four-letter words did, and
+ *  12 of 20 five-letter ones.
+ *
+ *  Null when the word cannot head one, which is the honest answer for a word
+ *  whose letters no column can follow.
+ */
+export function squareHeadedBy(first, n, words, rng, nodeBudget = 2_000_000) {
+  if (!first || first.length !== n) return null;
+  const { pool, byPrefix } = indexWords(words, n);
+  const order = shuffled(pool, rng);
+  const rows = [first];
+  let nodes = 0;
+
+  const fitsHere = (w) => {
+    for (let c = 0; c < n; c++) {
+      let prefix = '';
+      for (const r of rows) prefix += r[c];
+      if (!byPrefix.has(prefix + w[c])) return false;
+    }
+    return true;
+  };
+
+  const place = () => {
+    if (rows.length === n) {
+      // Every column a word, and ten different words rather than five read
+      // twice — the same rule the unseeded builder holds itself to.
+      const seen = [];
+      for (let c = 0; c < n; c++) {
+        let w = '';
+        for (const r of rows) w += r[c];
+        if (!byPrefix.has(w) || seen.includes(w) || rows.includes(w)) return false;
+        seen.push(w);
+      }
+      return true;
+    }
+    if (nodes > nodeBudget) return false;
+    for (const w of order) {
+      if (rows.includes(w)) continue;
+      nodes += 1;
+      if (nodes > nodeBudget) return false;
+      if (!fitsHere(w)) continue;
+      rows.push(w);
+      if (place()) return true;
+      rows.pop();
+    }
+    return false;
+  };
+
+  return place() ? [...rows] : null;
+}
+
+/** The theme's own words that could head a square of this size, with the square
+ *  each one makes — so a page can say which of them work rather than how many
+ *  might. */
+export function themedSquares(themeWords, n, words, rng) {
+  const seeds = [...new Set((themeWords ?? []).map((w) => w.trim().toLowerCase()))]
+    .filter((w) => w.length === n && /^[a-z]+$/.test(w))
+    .sort();
+  const out = [];
+  for (const first of seeds) {
+    const rows = squareHeadedBy(first, n, words, rng);
+    if (rows) out.push({ first, rows });
+  }
+  return out;
+}

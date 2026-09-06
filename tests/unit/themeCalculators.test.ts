@@ -15,10 +15,14 @@ import { describe, expect, it } from 'vitest';
 // @ts-expect-error plain-JS module without a declaration file
 import { themedBoxes } from '../../scripts/box.mjs';
 // @ts-expect-error plain-JS module without a declaration file
+import { themedSquares } from '../../scripts/squares.mjs';
+// @ts-expect-error plain-JS module without a declaration file
 import { themedLadderPairs, TIER_PAR } from '../../scripts/ladder.mjs';
 import {
   assignSides,
   boxesFrom,
+  squareHeadedBy,
+  squaresFrom,
   seedChains,
   bridgesFrom,
   laddersFrom,
@@ -297,5 +301,64 @@ describe('the box search, in both places', () => {
     const mine = boxesFrom(THEME).map((b) => b.holds.join(','));
     const theirs = (themedBoxes(THEME) as { holds: string[] }[]).map((b) => b.holds.join(','));
     expect(mine).toEqual(theirs);
+  });
+});
+
+// Word squares, where the useful question is not the obvious one.
+describe('squaresFrom', () => {
+  // The everyday tier, which is what the generator builds a square out of at
+  // every difficulty: the words are the answer and have to be guessable.
+  const dictionary: string[] = [];
+  for (const band of ['band-10', 'band-20', 'band-35']) {
+    dictionary.push(
+      ...(JSON.parse(
+        readFileSync(join(process.cwd(), `src/wordbands/${band}.json`), 'utf8')
+      ).words as string[])
+    );
+  }
+
+  const THEME = ['gain', 'vote', 'earn', 'cost', 'esop', 'share', 'owned', 'staff', 'stake'];
+
+  it('finds the words that can head a square, and the square each makes', () => {
+    const four = squaresFrom(THEME, 4, dictionary);
+    expect(four.length).toBeGreaterThan(0);
+    for (const square of four) {
+      expect(square.rows[0]).toBe(square.first);
+      expect(square.rows).toHaveLength(4);
+      // Every column a word, which is the whole of what a square is.
+      for (let c = 0; c < 4; c += 1) {
+        const down = square.rows.map((row) => row[c]).join('');
+        expect(dictionary, `${down} is not a word`).toContain(down);
+      }
+    }
+  });
+
+  // The measurement that decided this was worth building, and the one I got
+  // wrong first: asking whether an unseeded square happens to contain a theme
+  // word answers no, because a square is ten words out of tens of thousands.
+  // Asking whether a theme word can head one answers yes at four letters.
+  it('and four letters heads one far more often than five', () => {
+    const four = squaresFrom(THEME, 4, dictionary).length;
+    const five = squaresFrom(THEME, 5, dictionary).length;
+    const fours = THEME.filter((w) => w.length === 4).length;
+    expect(four / fours).toBeGreaterThan(0.5);
+    expect(five).toBeLessThan(THEME.filter((w) => w.length === 5).length);
+  });
+
+  it('and says nothing for a word no column can follow', () => {
+    expect(squareHeadedBy('zyzz', 4, dictionary)).toBeNull();
+    expect(squaresFrom(['esop'], 5, dictionary)).toEqual([]);
+  });
+
+  // Two implementations of one search again: the page says a list can head a
+  // square and the generator has to build it.
+  it('and agrees with the generator about which words can', () => {
+    const rng = () => 0.5;
+    const mine = squaresFrom(THEME, 4, dictionary).map((s) => s.first);
+    const theirs = (
+      themedSquares(THEME, 4, dictionary, rng) as { first: string }[]
+    ).map((s) => s.first);
+    expect(mine).toEqual(theirs);
+    expect(mine.length).toBeGreaterThan(0);
   });
 });

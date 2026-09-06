@@ -402,3 +402,95 @@ function distancesFrom(word: string, byLength: Map<number, Set<string>>): Map<st
   }
   return dist;
 }
+
+// ---------------------------------------------------------------------------
+// Word squares
+// ---------------------------------------------------------------------------
+// A square is N words across and N down, every one of them real. Ten words
+// drawn from tens of thousands will not contain a theme word by accident —
+// measured, none of two hundred 4x4 boards did — which is what made this look
+// impossible. The question that has an answer is the other one: can a theme
+// word *head* a square, with the dictionary filling the rest? At four letters
+// almost always, at five seldom.
+//
+// The same search runs in scripts/squares.mjs for the generator, and
+// tests/unit/themeCalculators.test.ts requires the two to agree.
+
+export type ThemedSquare = { first: string; rows: string[] };
+
+/** Words of length n, and every prefix of them, so a partial column can be
+ *  abandoned the moment nothing can finish it. */
+function squareIndex(words: string[], n: number) {
+  const pool: string[] = [];
+  const byPrefix = new Set<string>();
+  for (const w of words) {
+    if (w.length !== n) continue;
+    pool.push(w);
+    for (let k = 1; k <= n; k += 1) byPrefix.add(w.slice(0, k));
+  }
+  return { pool, byPrefix };
+}
+
+/** A square headed by `first`, or null when that word cannot head one. */
+export function squareHeadedBy(
+  first: string,
+  n: number,
+  words: string[],
+  nodeBudget = 2_000_000
+): string[] | null {
+  if (first.length !== n) return null;
+  const { pool, byPrefix } = squareIndex(words, n);
+  const rows = [first];
+  let nodes = 0;
+
+  const fitsHere = (w: string) => {
+    for (let c = 0; c < n; c += 1) {
+      let prefix = '';
+      for (const r of rows) prefix += r[c];
+      if (!byPrefix.has(prefix + w[c])) return false;
+    }
+    return true;
+  };
+
+  const place = (): boolean => {
+    if (rows.length === n) {
+      // Every column a word, and n different words rather than a symmetric
+      // square read twice.
+      const seen: string[] = [];
+      for (let c = 0; c < n; c += 1) {
+        let w = '';
+        for (const r of rows) w += r[c];
+        if (!byPrefix.has(w) || seen.includes(w) || rows.includes(w)) return false;
+        seen.push(w);
+      }
+      return true;
+    }
+    if (nodes > nodeBudget) return false;
+    for (const w of pool) {
+      if (rows.includes(w)) continue;
+      nodes += 1;
+      if (nodes > nodeBudget) return false;
+      if (!fitsHere(w)) continue;
+      rows.push(w);
+      if (place()) return true;
+      rows.pop();
+    }
+    return false;
+  };
+
+  return place() ? [...rows] : null;
+}
+
+/** Which of these words can head a square of this size, and the square each
+ *  makes — the number a page shows, and the board behind it. */
+export function squaresFrom(words: string[], n: number, dictionary: string[]): ThemedSquare[] {
+  const seeds = [...new Set(words.map((w) => w.trim().toLowerCase()))]
+    .filter((w) => w.length === n && /^[a-z]+$/.test(w))
+    .sort();
+  const out: ThemedSquare[] = [];
+  for (const first of seeds) {
+    const rows = squareHeadedBy(first, n, dictionary);
+    if (rows) out.push({ first, rows });
+  }
+  return out;
+}

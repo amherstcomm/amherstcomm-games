@@ -1836,48 +1836,49 @@ generator's own pair for pair by `tests/unit/themeCalculators.test.ts`.
 
 #### Seeing the month before it runs
 
-Everything else about a themed month can be checked except the thing that
-matters. The word-list panel says what a list *can* make, the coverage page says
-which days are covered, the contract tests prove the generator obeys a theme —
-and none of them answers *show me the first week of October*.
+The window is generated a fortnight ahead, so *did the October setup work?* had
+a two-week answer: save the lists, wait, look. The **Preview a month** workflow
+answers it now, from the Actions tab, with no local credentials — the
+service-role key is a repository secret and belongs nowhere else.
 
-```
-npm run preview-month -- --from 2026-10-01 --until 2026-10-07
-npm run preview-month -- --from 2026-10-01 --days 3 --theme october.json
-```
-
-It runs the **real generator**, once per date, into a throwaway directory, and
-reads back what it wrote:
+It asks the database the same five questions the nightly run asks — which lists
+cover the day, which Weave themes, which passages, what each game accepts, what
+is pinned — prints what came back, and then prints the boards built from it:
 
 ```
 2026-10-01 · themed
+  settings   word list "Employee ownership" (38 words) · 2 Weave themes · rules boxed=themed
   guess      10 boards, 3–12 letters  e.g. woe, esop, owned, growth…
   scramble   nrkeowt
   hive       t/noekrw (65 words)
   boxed      rsw/eao/tdf/kpi — solvable in 2
   ladder     shares → stocks in 4
-  weave      Ahoy, matey
   cryptogram What sought they thus afar? Bright jewels of the mine…
              Theming 2026-10-01 from "Employee ownership" (38 words)
-             Hive easy seeded from the theme: network (65w)
              Box easy: rsw/eao/tdf/kpi — rewards → stake → esop → profit
-             Ladder easy from the theme: shares → stocks (4)
 ```
 
-Under the board is the run's own account of what it did — which is where a pin
-it could not use, a hive that fell back, and a themed-only board with nothing on
-it get said.
+**The `settings` line is the point.** The boards under it are only interesting
+because that line says where they came from: it is the admin pages being read,
+not a theme typed on a command line.
 
-**Nothing is published.** Each day goes into a temporary directory that is
-deleted straight after, so this is safe to run against the live database on a
-Tuesday afternoon. With `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` set it
-reads the real lists, themes, passages, rules and pins — the same questions the
-nightly run asks. With `--theme` it reads a file instead, which is how to try a
-list *before* writing it into the database.
+Locally it is the same tool, needing only the service key:
 
-`tests/contract/preview.test.ts` runs it for one day and reads the output back,
-because a preview that quietly shows one variant's boards while the site
-publishes the other's would be worse than not having one.
+```
+SUPABASE_SERVICE_ROLE_KEY=… npm run preview-month -- --from 2026-10-01 --until 2026-10-07
+```
+
+**With neither the key nor `--theme` it refuses.** Previewing ordinary days
+would print exactly what a themed month that had not worked prints, from a tool
+that was never told where to look — which is worse than no preview at all, and
+is what the first version of this did. `--theme october.json` reads a list from
+a file, for trying one *before* it is saved; the header says so, because it
+proves nothing about the settings.
+
+**Nothing is published.** Each day is generated into a temporary directory that
+is deleted straight after: no branch written, no row touched, the live feed
+untouched whether it passes or fails. Safe to run against the live database in
+the middle of the afternoon.
 
 #### Coverage: what a month actually adds up to
 
