@@ -24,9 +24,14 @@ export type Box = {
   sides: string[];
   /** every theme word the finished box can spell — the words a player finds */
   holds: string[];
-  /** whether two ordinary words finish it, which is the guarantee the daily
-   *  makes and the thing a themed box can quietly lose */
-  guaranteed: boolean;
+  /** in how few ordinary words it can be solved — 2 if a chaining pair covers
+   *  all twelve, 3 if it takes a chain of three, null if neither (or if no
+   *  dictionary was given, which is unknown rather than unsolvable).
+   *
+   *  Two is what an ordinary daily inherits from being built out of a chaining
+   *  pair. A themed box has to earn it, and three is a real answer rather than
+   *  a consolation — the board still says what it takes. */
+  par: number | null;
 };
 
 const spellable = (word: string, sideOf: Record<string, number>) => {
@@ -104,12 +109,14 @@ export function boxesFrom(words: string[], dictionary?: string[]): Box[] {
         from: [a, b],
         sides: laid.sides,
         holds: all.filter((w) => spellable(w, laid.sideOf)),
-        guaranteed: pool ? finishable(laid.sideOf, boxMask, pool) : false,
+        par: pool ? solvableIn(laid.sideOf, boxMask, pool) : null,
       });
     }
   }
-  // Best first: the number that matters is how many theme words a player finds.
-  return out.sort((x, y) => y.holds.length - x.holds.length);
+  // Ordered the way a day should choose: solvable in two first, then in three,
+  // and within each by how many theme words the board spells — which is the
+  // number that matters, because it is what a player finds.
+  return out.sort((x, y) => (x.par ?? 9) - (y.par ?? 9) || y.holds.length - x.holds.length);
 }
 
 /** The dictionary, prepared once for the box search.
@@ -152,8 +159,20 @@ const bits = (mask: number) => {
   return n;
 };
 
-/** Whether two ordinary words spell every letter of the box between them. */
-function finishable(sideOf: Record<string, number>, boxMask: number, dictionary: Indexed[]): boolean {
+/** In how few chained words the box can be solved: 2, 3, or null for neither.
+ *
+ *  Chained throughout, because that is the game: the second word starts with
+ *  the first word's last letter, the third with the second's. What changes with
+ *  three is the number the board promises, not the rule.
+ *
+ *  Four is not offered — past three the board stops being a puzzle with a shape
+ *  and the number on screen stops being something to aim at.
+ */
+function solvableIn(
+  sideOf: Record<string, number>,
+  boxMask: number,
+  dictionary: Indexed[]
+): number | null {
   const usable = dictionary.filter(
     (e) => (e.mask & ~boxMask) === 0 && spellable(e.word, sideOf)
   );
@@ -163,12 +182,34 @@ function finishable(sideOf: Record<string, number>, boxMask: number, dictionary:
     if (list) list.push(e);
     else byFirst.set(e.word[0], [e]);
   }
+  // Distinct masks per starting letter: the third word is only ever asked
+  // "does anything starting here cover what is left", and a thousand words
+  // covering the same letters answer that once.
+  const masksByFirst = new Map<string, number[]>();
+  for (const [letter, list] of byFirst) {
+    masksByFirst.set(letter, [...new Set(list.map((e) => e.mask))]);
+  }
+
+  // Two, and every pair that falls short becomes a state for three: what is
+  // covered, and the letter the next word has to start with. Collapsed by the
+  // two of them, because which words got there does not matter afterwards.
+  const states = new Set<string>();
   for (const first of usable) {
     for (const second of byFirst.get(first.last) ?? []) {
-      if (bits(first.mask | second.mask) === BOX_LETTERS) return true;
+      const covered = first.mask | second.mask;
+      if (bits(covered) === BOX_LETTERS) return 2;
+      states.add(`${second.last} ${covered}`);
     }
   }
-  return false;
+
+  for (const state of states) {
+    const [letter, covered] = state.split(' ');
+    const left = ~Number(covered) & boxMask;
+    for (const mask of masksByFirst.get(letter) ?? []) {
+      if ((left & ~mask) === 0) return 3;
+    }
+  }
+  return null;
 }
 
 export type BridgePrompt = { x: string; middle: string; y: string; from: [string, string] };

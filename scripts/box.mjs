@@ -7,10 +7,15 @@
 //
 // A themed box is the same twelve letters from two *theme* words, and they do
 // not chain — theme words essentially never do, and requiring it reported zero
-// pairs from a list with twenty-one. So the guarantee has to be found rather
-// than assumed: some two ordinary words that chain and cover all twelve. A
-// themed box without one is a board whose promise ("solvable in 2") is false,
-// which is worse than an unthemed board, so it is not used.
+// pairs from a list with twenty-one. The chaining rule is not relaxed by that:
+// it is the game. What changes is that the answer is no longer inherited from
+// the construction, so it has to be found — words that chain, each starting
+// with the last letter of the one before, covering all twelve between them.
+//
+// Two is preferred; three is allowed and is a real answer rather than a
+// consolation, and the board says which it takes. A box that can be solved in
+// neither is not published, because a board whose promise is false is worse
+// than an unthemed one.
 //
 // The same search runs in the browser (src/themeCalculators.ts) to tell
 // somebody writing a list what it can make. Two implementations of one rule,
@@ -92,8 +97,19 @@ const bits = (mask) => {
   return n;
 };
 
-/** Whether two ordinary words chain and cover every letter of the box. */
-function finishable(sideOf, boxMask, dictionary) {
+/** In how few ordinary words the box can be solved: 2, 3, or null for neither.
+ *
+ *  Two is what an ordinary daily promises, because it is built out of a
+ *  chaining pair and inherits the answer. A themed box has to earn the promise
+ *  instead, and three is a real answer rather than a consolation — Letter Boxed
+ *  itself sets boards that take three, and a board made of the company's own
+ *  words is worth the extra rung. Two is still preferred where it exists.
+ *
+ *  Four is not offered. Past three the board stops being a puzzle with a shape
+ *  and becomes a word hunt, and the number on screen stops meaning anything a
+ *  player can aim at.
+ */
+export function solvableIn(sideOf, boxMask, dictionary, max = 3) {
   const usable = dictionary.filter((e) => (e.mask & ~boxMask) === 0 && spellable(e.word, sideOf));
   const byFirst = new Map();
   for (const e of usable) {
@@ -101,20 +117,45 @@ function finishable(sideOf, boxMask, dictionary) {
     if (list) list.push(e);
     else byFirst.set(e.word[0], [e]);
   }
+  // Distinct masks per starting letter: the third word is only ever asked
+  // "does anything starting here cover what is left", and a thousand words
+  // that cover the same letters answer that once.
+  const masksByFirst = new Map();
+  for (const [letter, list] of byFirst) {
+    masksByFirst.set(letter, [...new Set(list.map((e) => e.mask))]);
+  }
+
+  // Two, and every pair that fails becomes a state for three: what is covered
+  // so far, and which letter the next word has to start with. Collapsed by
+  // (letter, covered) — the words that got there do not matter afterwards.
+  const states = new Set();
   for (const first of usable) {
     for (const second of byFirst.get(first.last) ?? []) {
-      if (bits(first.mask | second.mask) === BOX_LETTERS) return true;
+      const covered = first.mask | second.mask;
+      if (bits(covered) === BOX_LETTERS) return 2;
+      if (max >= 3) states.add(`${second.last} ${covered}`);
     }
   }
-  return false;
+  if (max < 3) return null;
+
+  for (const state of states) {
+    const [letter, covered] = state.split(' ');
+    const left = ~Number(covered) & boxMask;
+    for (const mask of masksByFirst.get(letter) ?? []) {
+      if ((left & ~mask) === 0) return 3;
+    }
+  }
+  return null;
 }
 
-/** Every box two of these theme words can make, best first — best being how
- *  many of the theme's own words the finished board can spell, since that is
- *  what a player finds.
+/** Every box two of these theme words can make.
  *
- *  `dictionary` is the pool the board will accept. Pass none and `guaranteed`
- *  is simply unknown rather than false. */
+ *  Ordered the way a day should choose: the boards that can be solved in two
+ *  first, then the ones that take three, and within each by how many of the
+ *  theme's own words the finished board spells — which is what a player finds.
+ *
+ *  `dictionary` is the pool the board will accept. Pass none and `par` is null,
+ *  meaning unknown rather than unsolvable. */
 export function themedBoxes(themeWords, dictionary) {
   const words = [...new Set((themeWords ?? []).map((w) => w.trim().toLowerCase()))];
   const seeds = words.filter((w) => /^[a-z]+$/.test(w) && w.length >= 4 && noDouble(w));
@@ -135,9 +176,9 @@ export function themedBoxes(themeWords, dictionary) {
         from: [a, b],
         sides: laid.sides,
         holds: all.filter((w) => spellable(w, laid.sideOf)),
-        guaranteed: pool ? finishable(laid.sideOf, boxMask, pool) : false,
+        par: pool ? solvableIn(laid.sideOf, boxMask, pool) : null,
       });
     }
   }
-  return out.sort((x, y) => y.holds.length - x.holds.length);
+  return out.sort((x, y) => (x.par ?? 9) - (y.par ?? 9) || y.holds.length - x.holds.length);
 }

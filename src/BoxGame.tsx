@@ -308,6 +308,7 @@ const BoxGame = forwardRef<
   // a board with a hole in it. No bonus, because a box is scored in how few
   // words the chain takes rather than in points.
   const themedNow = useMemo(() => (store.dailyMode ? themed : []), [store.dailyMode, themed]);
+  const themedSet = useMemo(() => new Set(themedNow), [themedNow]);
   const standardSet = useMemo(() => {
     const accepted = withThemed(standardWords, themedNow);
     return accepted ? new Set(accepted) : null;
@@ -443,9 +444,23 @@ const BoxGame = forwardRef<
         record.elapsedMs ?? 0,
         store.dailyMode ? store.dailyDate || null : null
       );
-      showFlash(`Solved in ${nextChain.length} word${nextChain.length === 1 ? '' : 's'}! 🎉`, true);
+      const own = nextChain.filter((w) => themedSet.has(w)).length;
+      showFlash(
+        `Solved in ${nextChain.length} word${nextChain.length === 1 ? '' : 's'}! 🎉` +
+          // A box is scored in how few words it takes rather than in points, so
+          // a theme word cannot be worth five of anything here. What it can be
+          // is said: on a board built out of the event's own words, using them
+          // is the thing to have done.
+          (own > 0 ? ` ${own} of them the theme's own.` : ''),
+        true
+      );
     } else {
-      showFlash(`+${new Set(word).size} letters`, true);
+      showFlash(
+        themedSet.has(word)
+          ? `Theme word! +${new Set(word).size} letters`
+          : `+${new Set(word).size} letters`,
+        true
+      );
     }
   }
 

@@ -587,7 +587,16 @@ for (const variant of ['', 'dev']) {
     // worth playing, and what fills it is the ordinary dictionary: a themed
     // seed whose letters happen to make thirty words is a worse day than an
     // unthemed one, so the fallback below is the same loop it always was.
-    const themedBases = themedHiveBases(theme?.words, blockedFromAnswers);
+    // Shuffled against the day's seed, not taken in order. The first version
+    // scanned them sorted and stopped at the first base that made a board worth
+    // playing — which is a fixed answer, so a list with three pangrams in it
+    // dealt the *same* hive every day of the month and never once used the
+    // other two. Found by generating three consecutive days and reading the
+    // letters, which is the only way it could have been found.
+    const themedBases = themedHiveBases(theme?.words, blockedFromAnswers)
+      .map((base) => ({ base, at: hiveRng() }))
+      .sort((x, y) => x.at - y.at)
+      .map(({ base }) => base);
     let picked = null;
     let best = null;
     for (const base of themedBases) {
@@ -664,11 +673,17 @@ for (const variant of ['', 'dev']) {
   //
   // They do not chain, which is what makes this different from the ordinary
   // construction below — theme words essentially never chain, and requiring it
-  // reported zero pairs from a list with twenty-one. So the two-word solution
-  // the board promises has to be *found* rather than inherited: some two words
-  // chaining and covering all twelve. A themed box without one is a board whose
-  // "solvable in 2" is a lie, which is worse than an unthemed board, so it is
-  // passed over and the day gets the box it would have had.
+  // reported zero pairs from a list with twenty-one. So the solution the board
+  // promises has to be *found* rather than inherited: words that chain, each
+  // starting with the last letter of the one before, covering all twelve
+  // between them. Chaining is the game and is not relaxed anywhere.
+  //
+  // Two is preferred and three is allowed. An ordinary box inherits two from
+  // the pair it was built out of; a themed box earns whichever it can, and the
+  // board says which — "solvable in 3" is a real answer rather than a
+  // consolation, and measured on a 66-word list it is the difference between
+  // 59 usable boards and 74. A box that cannot be solved in either is not
+  // published: a board whose promise is false is worse than an unthemed one.
   //
   // Searched once against the *easy* pool rather than once per difficulty. The
   // accept tiers are nested, so a solution in the narrowest is a solution in
@@ -676,24 +691,36 @@ for (const variant of ['', 'dev']) {
   // three difficulties take different ones. A box only the widest dictionary
   // could finish is not offered; that is the conservative half of the trade.
   const themedBoxen = theme
-    ? themedBoxes(theme.words, [...poolsFor('easy').cumulative]).filter((b) => b.guaranteed)
+    ? themedBoxes(theme.words, [...poolsFor('easy').cumulative]).filter((b) => b.par !== null)
     : [];
   if (theme) {
     const all = themedBoxes(theme.words).length;
+    const two = themedBoxen.filter((b) => b.par === 2).length;
     console.log(
       `Themed boxes for ${etDate}: ${all} from the theme's own pairs, ` +
-        `${themedBoxen.length} solvable in two ordinary words`
+        `${two} solvable in two words and ${themedBoxen.length - two} in three`
     );
   }
-  // One offset for the day rather than one per difficulty: the three step
-  // through the same list from the same place, which is what makes their boards
-  // different. Three independent draws would collide as often as not.
-  const themedBoxOffset = themedBoxen.length
-    ? Math.floor(
-        mulberry32(xmur3(`${SEED_SALT}anagrimoire-box-themed-${etDate}${salt}`)())() *
-          themedBoxen.length
-      )
-    : 0;
+  // Which board each difficulty gets, worked out once for the day.
+  //
+  // Two before three, because two is what the game strives for: the boards
+  // solvable in two are dealt out first and the three-word ones only fill what
+  // is left. Rotated inside each group by a day offset, so a month does not
+  // hand out the same three boards every morning — and one offset for the whole
+  // day rather than one per difficulty, because three independent draws
+  // collided as often as not and gave all three the same board.
+  const themedBoxRng = mulberry32(xmur3(`${SEED_SALT}anagrimoire-box-themed-${etDate}${salt}`)());
+  const rotate = (list, at) => list.map((_, i) => list[(i + at) % list.length]);
+  const themedBoxOrder = (() => {
+    if (themedBoxen.length === 0) return [];
+    const at = Math.floor(themedBoxRng() * themedBoxen.length);
+    const twos = themedBoxen.filter((b) => b.par === 2);
+    const threes = themedBoxen.filter((b) => b.par !== 2);
+    return [
+      ...(twos.length ? rotate(twos, at % twos.length) : []),
+      ...(threes.length ? rotate(threes, at % threes.length) : []),
+    ];
+  })();
   const boxByDifficulty = {};
   for (const difficulty of DIFFICULTIES) {
     const boxRng = mulberry32(xmur3(`${SEED_SALT}anagrimoire-box-${etDate}${salt}${diffSalt(difficulty)}`)());
@@ -704,13 +731,16 @@ for (const variant of ['', 'dev']) {
     // all. A theme themes as many difficulties as it has distinct boxes to
     // give, starting at easy; the rest get the board they would have had.
     const tier = DIFFICULTIES.indexOf(difficulty);
-    if (themedBoxen.length > tier) {
-      const box = themedBoxen[(themedBoxOffset + tier) % themedBoxen.length];
+    if (themedBoxOrder.length > tier) {
+      const box = themedBoxOrder[tier];
       console.log(
         `Box ${difficulty} from the theme: ${box.from.join(' + ')} → ` +
-          `${box.sides.join('/')} (spells ${box.holds.length})`
+          `${box.sides.join('/')} (solvable in ${box.par}, spells ${box.holds.length})`
       );
-      boxByDifficulty[difficulty] = { sides: box.sides, par: 2 };
+      // The board says what it takes. Two is preferred and comes first in the
+      // list; three is a real answer rather than a consolation, and a board of
+      // the company's own words is worth the extra rung.
+      boxByDifficulty[difficulty] = { sides: box.sides, par: box.par };
       continue;
     }
 

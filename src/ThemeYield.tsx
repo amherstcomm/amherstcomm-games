@@ -68,7 +68,7 @@ export default function ThemeYield({ words }: { words: string }) {
 
   if (list.length < 2) return null;
 
-  const playable = boxes.filter((b) => b.guaranteed);
+  const playable = boxes.filter((b) => b.par !== null);
   const best = playable[0] ?? boxes[0];
 
   return (
@@ -81,11 +81,14 @@ export default function ThemeYield({ words }: { words: string }) {
         <p className={boxes.length > 0 ? 'text-emerald-300' : 'text-slate-500'}>
           {boxes.length > 0 ? '✓' : '·'} Boxed — {boxes.length}{' '}
           {boxes.length === 1 ? 'board' : 'boards'} from pairs of these words
-          {dictionary && boxes.length > 0 && `, ${playable.length} solvable in two ordinary words`}
+          {dictionary && boxes.length > 0 &&
+            `, ${boxes.filter((b) => b.par === 2).length} solvable in two words and ` +
+              `${boxes.filter((b) => b.par === 3).length} in three`}
         </p>
         {best && (
           <p className="text-slate-400 pl-3">
-            best: {best.from.join(' + ')} → {best.sides.join(' | ')} — finds{' '}
+            best: {best.from.join(' + ')} → {best.sides.join(' | ')}
+            {best.par ? ` (solvable in ${best.par})` : ''} — finds{' '}
             {best.holds.length}: {best.holds.slice(0, 8).join(', ')}
             {best.holds.length > 8 && '…'}
           </p>
@@ -94,7 +97,7 @@ export default function ThemeYield({ words }: { words: string }) {
             absence is stated rather than left as a smaller number. */}
         {dictionary && boxes.length > 0 && playable.length === 0 && (
           <p className="text-amber-300 pl-3">
-            None can be finished in two words, which is what the daily promises.
+            None can be finished in two words or three, so none would be set.
             More words, or longer ones, widen the letters.
           </p>
         )}

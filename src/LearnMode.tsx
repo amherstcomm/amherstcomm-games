@@ -1230,7 +1230,11 @@ function LearnBoxed({ dict, register }: { dict: Set<string> | null; register: Re
             'Words are 3+ letters, and letters may be reused.',
             'Consecutive letters can never come from the same side — every step must cross the box.',
             'Each new word must start with the last letter of the previous word. That’s the chain.',
-            'Every board here is solvable in two words.',
+            // Was "every board here is solvable in two words", which stopped
+            // being true when a box could be built out of an event's own words:
+            // those are not a chaining pair, so the answer is searched for and
+            // is sometimes three. The board has always shown the number.
+            'Every board can be solved in the number it shows — two words, usually.',
           ]}
         />
       </Section>

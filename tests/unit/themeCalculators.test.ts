@@ -66,18 +66,37 @@ describe('boxesFrom', () => {
     expect(boxesFrom(['betterment', 'quixotic']).length).toBe(0);
   });
 
-  it('reports the guarantee as unknown when given no dictionary', () => {
-    expect(boxesFrom(VOTING_SHARED)[0].guaranteed).toBe(false);
+  it('reports the par as unknown when given no dictionary', () => {
+    expect(boxesFrom(VOTING_SHARED)[0].par).toBeNull();
   });
 
   // The pair is invented rather than English, and deliberately: what is being
   // tested is the rule, and every real pair that finishes this particular box
   // would be a fact about the dictionary as well. `vote` then `eindsharg`
   // chains, covers all twelve, and steps sides in turn.
-  it('and finds it when two ordinary words finish the box', () => {
+  it('and finds it when two chained words finish the box', () => {
     const [box] = boxesFrom(VOTING_SHARED, ['vote', 'eindsharg']);
-    expect(box.guaranteed).toBe(true);
+    expect(box.par).toBe(2);
     expect(new Set('vote' + 'eindsharg').size).toBe(12);
+  });
+
+  // Three is a real answer, and the board says which it takes. The chain rule
+  // is untouched: each word starts with the last letter of the one before.
+  it('and settles for three when two will not do', () => {
+    // vote → eind → dsharg: chained, twelve letters between them, and no pair
+    // of these covers twelve on its own.
+    const [box] = boxesFrom(VOTING_SHARED, ['vote', 'eind', 'dsharg']);
+    expect(box.par).toBe(3);
+  });
+
+  it('but not for a chain that does not chain', () => {
+    // The same three letters split so the second does not start where the
+    // first ended.
+    expect(boxesFrom(VOTING_SHARED, ['vote', 'sharg', 'eind'])[0].par).toBeNull();
+  });
+
+  it('nor for four, which stops being a puzzle with a shape', () => {
+    expect(boxesFrom(VOTING_SHARED, ['vot', 'tei', 'ind', 'dsharg'])[0].par).toBeNull();
   });
 
   // The two ways a candidate is thrown out before the side check, both of them
@@ -86,15 +105,15 @@ describe('boxesFrom', () => {
   it('but not out of a word carrying a letter the box does not have', () => {
     // z for g: still twelve letters between them, and one of them is not on
     // the board.
-    expect(boxesFrom(VOTING_SHARED, ['vote', 'eindsharz'])[0].guaranteed).toBe(false);
+    expect(boxesFrom(VOTING_SHARED, ['vote', 'eindsharz'])[0].par).toBeNull();
   });
 
   it('nor out of one with a doubled letter, which no box can spell', () => {
-    expect(boxesFrom(VOTING_SHARED, ['vote', 'eeindsharg'])[0].guaranteed).toBe(false);
+    expect(boxesFrom(VOTING_SHARED, ['vote', 'eeindsharg'])[0].par).toBeNull();
   });
 
   it('nor when the two do not chain', () => {
-    expect(boxesFrom(VOTING_SHARED, ['vote', 'indsharge'])[0].guaranteed).toBe(false);
+    expect(boxesFrom(VOTING_SHARED, ['vote', 'indsharge'])[0].par).toBeNull();
   });
 });
 
@@ -219,11 +238,11 @@ describe('the box search, in both places', () => {
   // enough to be read here: a pair that chains and covers all twelve.
   const DICT = ['vote', 'eindsharg', 'shared', 'voting', 'gash', 'dev', 'invested'];
 
-  it('agrees pair for pair, and on which can be finished', () => {
-    const mine = boxesFrom(THEME, DICT).map((b) => `${b.from.join('+')} ${b.sides.join('|')} ${b.guaranteed}`);
+  it('agrees pair for pair, and on how few words each takes', () => {
+    const mine = boxesFrom(THEME, DICT).map((b) => `${b.from.join('+')} ${b.sides.join('|')} ${b.par}`);
     const theirs = (
-      themedBoxes(THEME, DICT) as { from: string[]; sides: string[]; guaranteed: boolean }[]
-    ).map((b) => `${b.from.join('+')} ${b.sides.join('|')} ${b.guaranteed}`);
+      themedBoxes(THEME, DICT) as { from: string[]; sides: string[]; par: number | null }[]
+    ).map((b) => `${b.from.join('+')} ${b.sides.join('|')} ${b.par}`);
     expect(mine).toEqual(theirs);
     expect(mine.length).toBeGreaterThan(0);
   });

@@ -427,13 +427,15 @@ describe('a box built from the theme', () => {
     expect(spelled.length, `${board.sides.join('/')} spells no theme word`).toBeGreaterThanOrEqual(2);
   });
 
-  // The promise the board makes. A themed pair does not chain, so this is not
-  // inherited from the construction the way an ordinary box's is — it is
-  // searched for, and a box without one is not published.
-  it('and it really is solvable in two ordinary words', async () => {
+  // The promise the board makes, and the whole of the work: a themed pair does
+  // not chain, so the answer is not inherited from the construction the way an
+  // ordinary box's is. It is searched for — chained, each word starting with
+  // the last letter of the one before — and a box with no answer in two or
+  // three is not published at all.
+  it('and it really is solvable in the number it says', async () => {
     const payload = await read(themed, 'daily-box.json');
     const board = sidesOf(payload, 'easy');
-    expect(board.par).toBe(2);
+    expect([2, 3]).toContain(board.par);
     const letters = new Set(board.sides.join(''));
     // The everyday bands, which are inside every difficulty's accept pool — so
     // a solution found here is one any player of any tier could type.
@@ -450,12 +452,26 @@ describe('a box built from the theme', () => {
       if (list) list.push(w);
       else byFirst.set(w[0], [w]);
     }
-    const solved = usable.some((first) =>
+    // Two, chained.
+    const inTwo = usable.some((first) =>
       (byFirst.get(first[first.length - 1]) ?? []).some(
         (second) => new Set(first + second).size === 12
       )
     );
-    expect(solved, `${board.sides.join('/')} cannot be solved in two`).toBe(true);
+    // Or three, chained the same way — never four, and never unchained.
+    const inThree =
+      !inTwo &&
+      usable.some((first) =>
+        (byFirst.get(first[first.length - 1]) ?? []).some((second) =>
+          (byFirst.get(second[second.length - 1]) ?? []).some(
+            (third) => new Set(first + second + third).size === 12
+          )
+        )
+      );
+    expect(
+      inTwo ? 2 : inThree ? 3 : 0,
+      `${board.sides.join('/')} says ${board.par} and cannot be solved in it`
+    ).toBe(board.par);
   });
 
   it('while an ordinary day is built the way it always was', async () => {
