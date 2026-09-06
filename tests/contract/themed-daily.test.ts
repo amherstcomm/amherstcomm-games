@@ -31,6 +31,10 @@ const THEME = {
     // Seven distinct letters and no `s`, so it can seed a hive — the only word
     // here that can, which is itself the finding the admin page reports.
     'employer',
+    // Ladder ends: everyday words with routes between them. `esop` is in this
+    // list too and cannot be one, because every rung is checked against the
+    // common tier.
+    'meeting', 'board', 'budget', 'router', 'bonus',
   ],
 };
 
@@ -320,6 +324,58 @@ describe('a cryptogram passage of your own', () => {
     const payload = await read(plain, 'daily-cryptogram.json');
     for (const tier of ['easy', 'hard', 'extreme']) {
       expect(BOTH_BANDS.map((p) => p.text), tier).not.toContain(plaintext(payload, tier).text);
+    }
+  });
+});
+
+// The ladder, which is dealt from the theme rather than built out of it: two of
+// its own words the same length, with a route of the right number of steps.
+describe('a ladder between two theme words', () => {
+  const ends = (payload: { byDifficulty: Record<string, { from: string; to: string; par: number }> }, tier: string) =>
+    payload.byDifficulty[tier];
+
+  it('sets at least one difficulty from the theme s own words', async () => {
+    const payload = await read(themed, 'daily-ladder.json');
+    const themedTiers = ['easy', 'hard', 'extreme'].filter((tier) => {
+      const board = ends(payload, tier);
+      return THEME.words.includes(board.from) && THEME.words.includes(board.to);
+    });
+    expect(themedTiers.length, `no tier used the theme: ${JSON.stringify(payload.byDifficulty)}`)
+      .toBeGreaterThan(0);
+  });
+
+  // Both ends, never one. A theme word paired with an arbitrary destination is
+  // not a themed ladder, it is a ladder that happens to start somewhere.
+  it('and never pairs one of its words with something else', async () => {
+    const payload = await read(themed, 'daily-ladder.json');
+    for (const tier of ['easy', 'hard', 'extreme']) {
+      const board = ends(payload, tier);
+      const themedEnds = [board.from, board.to].filter((w) => THEME.words.includes(w));
+      expect(themedEnds.length, `${tier}: ${board.from} → ${board.to}`).not.toBe(1);
+    }
+  });
+
+  // The par a tier plays is the band it plays, so a themed pair that lands in
+  // the wrong band would be a puzzle of the wrong size wearing the right name.
+  it('with a par inside the band that difficulty plays', async () => {
+    const payload = await read(themed, 'daily-ladder.json');
+    const bands: Record<string, [number, number]> = {
+      easy: [3, 4],
+      hard: [5, 6],
+      extreme: [7, 8],
+    };
+    for (const [tier, [lo, hi]] of Object.entries(bands)) {
+      const board = ends(payload, tier);
+      expect(board.par, `${tier} par`).toBeGreaterThanOrEqual(lo);
+      expect(board.par, `${tier} par`).toBeLessThanOrEqual(hi);
+    }
+  });
+
+  it('and an ordinary day is dealt the curated pairs as always', async () => {
+    const payload = await read(plain, 'daily-ladder.json');
+    for (const tier of ['easy', 'hard', 'extreme']) {
+      const board = ends(payload, tier);
+      expect(THEME.words).not.toContain(board.from);
     }
   });
 });

@@ -12,7 +12,7 @@
 // themed.
 import { useCallback, useEffect, useState } from 'react';
 import { Loader2 } from 'lucide-react';
-import { getDifficultyPool } from '@/dictionaries';
+import { getDictionary, getDifficultyPool } from '@/dictionaries';
 import {
   RACK_SIZE,
   readCoverage,
@@ -47,6 +47,10 @@ export default function ThemeCoverage() {
   const [note, setNote] = useState('');
   const [busy, setBusy] = useState(false);
   const [dictionary, setDictionary] = useState<string[] | null>(null);
+  // The everyday words, which are what a ladder's rungs have to be. A separate
+  // list from the one above: boxes are built out of the generation pool and
+  // ladders are walked through the tier the board checks against.
+  const [rungs, setRungs] = useState<Set<string> | null>(null);
   const [expanded, setExpanded] = useState(false);
 
   // The dates the lists and themes already carry, so the common case — "check
@@ -84,7 +88,8 @@ export default function ThemeCoverage() {
     // Only now, and only once: the pool is a fetch, and it is what turns "21
     // boards" into "21 boards a player can finish".
     if (!dictionary) void getDifficultyPool('easy').then(setDictionary);
-  }, [from, until, dictionary]);
+    if (!rungs) void getDictionary('common').then((words) => setRungs(new Set(words)));
+  }, [from, until, dictionary, rungs]);
 
   // Measured a slice at a time rather than in one go. A month of two
   // overlapping lists is a month of different unions, and working all of them
@@ -101,9 +106,15 @@ export default function ThemeCoverage() {
     }
     let alive = true;
     setDone(0);
-    void summariseSlowly(result, dictionary ?? undefined, (n) => {
-      if (alive) setDone(n);
-    }).then((made) => {
+    void summariseSlowly(
+      result,
+      dictionary ?? undefined,
+      (n) => {
+        if (alive) setDone(n);
+      },
+      undefined,
+      rungs ?? undefined
+    ).then((made) => {
       if (alive) setSum(made);
     });
     // A second range asked for while the first is still being measured: the
@@ -111,7 +122,7 @@ export default function ThemeCoverage() {
     return () => {
       alive = false;
     };
-  }, [result, dictionary]);
+  }, [result, dictionary, rungs]);
 
   return (
     <section>
@@ -254,6 +265,34 @@ export default function ThemeCoverage() {
               seeded by one with seven distinct letters. Days without one still
               get the theme's words as bonus points — the board is just the
               language's that day. */}
+          <div>
+            {/* Null while the rung list is on its way: nought would read as
+                "this list can set no ladder", which is a different answer. */}
+            <p
+              className={
+                sum.ladder.days === null
+                  ? 'text-slate-500'
+                  : sum.ladder.days > 0
+                    ? 'text-emerald-300'
+                    : 'text-slate-500'
+              }
+            >
+              {sum.ladder.days === null ? '·' : sum.ladder.days > 0 ? '✓' : '·'} Ladder —{' '}
+              {sum.ladder.days === null
+                ? 'looking for routes…'
+                : `${sum.ladder.days} days can set one between two theme words`}
+            </p>
+            {sum.ladder.days !== null && sum.ladder.days > 0 && (
+              <p className="text-slate-400 pl-3">
+                {Object.entries(sum.ladder.perTier)
+                  .map(([tier, n]) => `${tier} ${n}`)
+                  .join(' · ')}{' '}
+                — a difficulty with no themed pair in its step count walks the
+                curated pairs, as every other day does.
+              </p>
+            )}
+          </div>
+
           <div>
             <p className={sum.scramble.days > 0 ? 'text-emerald-300' : 'text-slate-500'}>
               {sum.scramble.days > 0 ? '✓' : '·'} Scramble — {sum.scramble.days} days can build

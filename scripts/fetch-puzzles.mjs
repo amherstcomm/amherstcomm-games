@@ -24,7 +24,13 @@ import {
   TIER_BAND,
   TIER_VARIANTS,
 } from './cryptogram.mjs';
-import { generateLadder, livePairs, poolFor, TIER_PAR } from './ladder.mjs';
+import {
+  generateLadder,
+  livePairs,
+  poolFor,
+  themedLadderPairs,
+  TIER_PAR,
+} from './ladder.mjs';
 import {
   BOARD_SIZE,
   generateBoard,
@@ -226,6 +232,29 @@ const ladderPairs = livePairs(
   JSON.parse(readFileSync(new URL('./ladder-pairs.json', import.meta.url), 'utf8')),
   neverPublish
 );
+// The rungs a ladder may be walked through, read from the published bands
+// rather than from wordlist-english. It has to be *the client's* set: the board
+// checks every rung against `getDictionary('common')`, and par is the length of
+// the shortest route through whatever the player may use — so a pool that
+// differs by one word is a par that can be wrong by one step. The harvest reads
+// the same three files for the same reason.
+//
+// Built once and only when a themed day asks for it: eleven months of the year
+// nothing here is loaded at all.
+let ladderRungs = null;
+function rungsForLadders() {
+  if (ladderRungs) return ladderRungs;
+  ladderRungs = new Set();
+  for (const b of ['band-10', 'band-20', 'band-35']) {
+    for (const w of JSON.parse(
+      readFileSync(new URL(`../src/wordbands/${b}.json`, import.meta.url), 'utf8')
+    ).words) {
+      if (/^[a-z]+$/.test(w) && !blockedFromAnswers.has(w)) ladderRungs.add(w);
+    }
+  }
+  return ladderRungs;
+}
+
 const ladderPools = Object.fromEntries(
   Object.keys(TIER_PAR).map((d) => [d, poolFor(ladderPairs, d)])
 );
@@ -919,8 +948,40 @@ for (const variant of ['', 'dev']) {
   // No answer is published, because there isn't one to publish. A ladder is
   // checked by rule rather than against a stored route, so the feed carries
   // what the player can already see: both ends, and the number of steps.
+  //
+  // A themed day sets its ladder between two of the theme's own words, where it
+  // has two the same length with a route of the right length between them. Both
+  // ends, not one: the relation is what makes a pair a puzzle somebody set, and
+  // for a themed month the relation is that both ends are the company's. A
+  // theme word paired with an arbitrary destination has no relation at all —
+  // measured on a 49-word list, both-ends gives 21 pairs and one-end gives
+  // sixteen thousand, of which `shares → elopes` is typical.
+  //
+  // Per difficulty, by par: the tier bands are 3-4, 5-6 and 7-8 steps, and a
+  // tier with no themed pair in its band walks the curated pool exactly as it
+  // always has.
+  const themedLadders = theme
+    ? themedLadderPairs(theme.words, rungsForLadders(), blockedFromAnswers)
+    : [];
+  if (themedLadders.length > 0) {
+    console.log(
+      `${themedLadders.length} themed ladder ` +
+        `${themedLadders.length === 1 ? 'pair' : 'pairs'} for ${etDate}`
+    );
+  }
   const ladderByDifficulty = {};
   DIFFICULTIES.forEach((difficulty) => {
+    const rng = mulberry32(
+      xmur3(`${SEED_SALT}anagrimoire-ladder-themed-${etDate}${salt}${diffSalt(difficulty)}`)()
+    );
+    const themedHere = poolFor(themedLadders, difficulty);
+    if (themedHere.length > 0) {
+      const pair = themedHere[Math.floor(rng() * themedHere.length)];
+      console.log(`Ladder ${difficulty} from the theme: ${pair.a} → ${pair.b} (${pair.par})`);
+      dailyLadderPairs.add(`${pair.a} ${pair.b}`);
+      ladderByDifficulty[difficulty] = generateLadder(pair);
+      return;
+    }
     const pool = ladderPools[difficulty];
     const cycle = cycleOf(epochDay, pool.length);
     const cycleRng = mulberry32(
