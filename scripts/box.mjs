@@ -144,18 +144,30 @@ export function ordinarySolution(sideOf, boxMask, dictionary) {
 
 export const MAX_SEED_WORDS = 4;
 
+/** How many boards a search will find before it stops. A themed list makes
+ *  hundreds; a pasted document makes tens of thousands and takes most of a
+ *  minute, which is the case this is for. */
+export const BOARD_BUDGET = 2000;
+
 /** Every chain of the theme's own words covering exactly twelve distinct
  *  letters: two of them, or three, or four.
  *
  *  A chain, not a set — each word starts with the last letter of the one
  *  before, because the chain is the answer to the board its letters make.
  *
- *  Depth first with the letters carried along, so a branch is abandoned the
- *  moment it passes twelve. Two chains covering the same twelve letters are the
- *  same board: the shortest wins, so the answer does not depend on the order
- *  the search happened to reach them in.
+ *  Two bounds, both measured rather than guessed. `budget` stops the walk after
+ *  that many boards: a list of sixty words makes three hundred, and one of
+ *  fifteen hundred makes sixty-eight thousand and takes forty-three seconds,
+ *  which is a pasted document rather than a theme but is a thing somebody can
+ *  paste. `must` keeps only chains containing a word it likes, which is how a
+ *  filter typed on the page searches the whole list instead of a page of it —
+ *  the cap that only trimmed the *results* was worse than useless, because a
+ *  board that existed could not be found.
  */
-export function seedChains(themeWords, maxSeeds = MAX_SEED_WORDS) {
+export function seedChains(
+  themeWords,
+  { maxSeeds = MAX_SEED_WORDS, budget = BOARD_BUDGET, must } = {}
+) {
   const seeds = [...new Set((themeWords ?? []).map((w) => w.trim().toLowerCase()))]
     .filter((w) => /^[a-z]{3,}$/.test(w) && noDouble(w))
     .sort();
@@ -173,10 +185,13 @@ export function seedChains(themeWords, maxSeeds = MAX_SEED_WORDS) {
     const size = bits(mask);
     if (size > BOX_LETTERS) return;
     if (size === BOX_LETTERS && chain.length >= 2) {
-      const had = found.get(mask);
-      if (!had || had.length > chain.length) found.set(mask, [...chain]);
+      if (!must || chain.some(must)) {
+        const had = found.get(mask);
+        if (!had || had.length > chain.length) found.set(mask, [...chain]);
+      }
       return;
     }
+    if (found.size >= budget) return;
     if (chain.length >= maxSeeds) return;
     for (const word of seeds) {
       if (chain.includes(word)) continue;
@@ -202,14 +217,14 @@ export function seedChains(themeWords, maxSeeds = MAX_SEED_WORDS) {
  */
 export function themedBoxes(
   themeWords,
-  { dictionary = null, maxSeeds = MAX_SEED_WORDS, limit = Infinity } = {}
+  { dictionary = null, maxSeeds = MAX_SEED_WORDS, budget = BOARD_BUDGET, must } = {}
 ) {
   const words = [...new Set((themeWords ?? []).map((w) => w.trim().toLowerCase()))];
   const all = words.filter((w) => /^[a-z]{3,}$/.test(w));
   const pool = dictionary ? indexed(dictionary) : null;
   const out = [];
 
-  for (const from of seedChains(words, maxSeeds)) {
+  for (const from of seedChains(words, { maxSeeds, budget, must })) {
     const laid = assignThemedSides(from);
     // Not every chain can be laid out: four sides of three, and no word may
     // step twice on one side. More words is more constraints.
@@ -230,7 +245,6 @@ export function themedBoxes(
       // What the board promises, which is the shortest anybody could do.
       par: ordinary ? Math.min(from.length, ordinary.length) : from.length,
     });
-    if (out.length >= limit) break;
   }
   return out.sort((x, y) => y.holds.length - x.holds.length || x.par - y.par);
 }

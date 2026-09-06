@@ -19,6 +19,7 @@ import { themedLadderPairs, TIER_PAR } from '../../scripts/ladder.mjs';
 import {
   assignSides,
   boxesFrom,
+  seedChains,
   bridgesFrom,
   laddersFrom,
   LADDER_TIERS,
@@ -135,16 +136,17 @@ describe('boxesFrom', () => {
     }
   });
 
-  // What the limit promises: the same boards every time and a subset of the
-  // full answer — not the best few, because the sort happens among what was
-  // looked at.
-  it('and a limited answer is a stable subset of the full one', () => {
+
+  // The cap that turned out to be a bug: it stopped the search *before* the
+  // sort, so a filter typed at the shortlist searched the first sixty in
+  // enumeration order — which all began with the same word — and a board that
+  // existed could not be found. There is no cap now: enumerating a sixty-word
+  // list is fifteen milliseconds, so there was nothing to save.
+  it('offers every board it can make, in a stable order', () => {
     const words = ['payouts', 'sharing', 'shares', 'stock', 'growth', 'service', 'esop', 'dividends'];
-    const full = boxesFrom(words).map((b) => b.solution.join('>'));
-    const some = boxesFrom(words, { limit: 2 });
-    expect(some).toHaveLength(2);
-    for (const box of some) expect(full).toContain(box.solution.join('>'));
-    expect(boxesFrom(words, { limit: 2 })).toEqual(some);
+    const once = boxesFrom(words);
+    expect(once.length).toBe(seedChains(words).length);
+    expect(boxesFrom(words)).toEqual(once);
   });
 });
 

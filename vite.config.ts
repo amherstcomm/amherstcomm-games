@@ -70,6 +70,11 @@ function sitemapXml(origin: string): string {
 
 // https://vitejs.dev/config/
 export default defineConfig({
+  // The calculators run in a worker that loads a word band of its own, so the
+  // worker bundle has to be able to split. Vite's default is `iife`, which
+  // cannot — the build fails outright rather than shipping something broken,
+  // which is how this was found.
+  worker: { format: 'es' },
   plugins: [
     react(),
     {

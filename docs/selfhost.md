@@ -1743,11 +1743,49 @@ the grid is dice and Squares draws from a wider pool than a theme has, so
 neither has themed candidates to choose between.
 
 **Each list has its own filter and its own `more`.** A day's boxes run to
-thousands and its pangrams to three, so one control for the page would be wrong
-in both directions — typing `ing` to find VESTING among the racks would also
-hide every box. Twelve at a time, and the filter matches every word you type
-anywhere in the label, in any order, so `shar vot` finds the box made of voting
-and shared without anybody remembering which way round it is printed.
+hundreds and its pangrams to three, so one control for the page would be wrong
+in both directions. Twelve at a time, and the filter matches every word typed
+anywhere in the label, in any order.
+
+**At the box list the filter goes into the search, not the results.** A word
+list makes more boards than a search will enumerate, so filtering what is on
+screen can hide a board that exists. Typing `charter` re-runs the search for
+chains containing it.
+
+**The two expensive calculators run in a worker.** The box search walks every
+chain a list can make; the ladder walks forty thousand rungs breadth-first once
+per word. Everything else on the panel — the bridge, the Weave fit, a passage's
+length — is arithmetic over the words themselves and lands before a keystroke
+does.
+
+Measured, because the numbers decide where the work can run:
+
+| words | boards | time |
+|---|---|---|
+| 40 | 0 | 1ms |
+| 300 | 192 | 16ms |
+| 600 | 1,699 | 148ms |
+| 1,000 | 5,881 | 870ms |
+| 1,500 | 68,705 | 43s |
+
+A themed list is the first two rows and would never have needed a worker; a
+pasted document is the last row, and the page cannot tell which it has been
+handed until it has looked.
+
+**Both say when they are working**, and neither leaves its last answer up while
+the list has moved on — somebody writing a list would read that as the answer
+for what they had just typed. The searches are asked again when the typing stops,
+each answer carries the number of the question it answers, and a reply about a
+list that has since changed is dropped.
+
+The worker owns its dictionaries rather than being handed them: the rung list is
+forty thousand words and posting it across for every question would cost more
+than the question. It also means `vite.config.ts` sets `worker: { format: 'es' }`
+— the default cannot code-split, and the build fails outright rather than
+shipping something broken, which is how that was found.
+
+The stop is twenty thousand boards, far past anything a theme makes, and it is
+said out loud when it is reached.
 
 **A pinned word is the day's only board.** The guess game publishes ten boards a
 day, one per length, and during a theme that is ten puzzles where the point was

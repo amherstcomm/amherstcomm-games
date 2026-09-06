@@ -98,10 +98,10 @@ export function tilesFor(themes: WeaveTheme[]): string[] {
 export function yieldOf(words: string[], dictionary?: string[], rungs?: Set<string>) {
   const pools: Record<number, number> = {};
   for (const len of GUESS_LENGTHS) pools[len] = words.filter((w) => w.length === len).length;
-  // A dozen is enough to answer "can this day make a box". The search no longer
-  // needs a dictionary — a box is a chain of the theme's own words, so it comes
-  // with its answer — which also makes it far cheaper than it was.
-  const boxes = boxesFrom(words, { limit: 12 });
+  // Every one of them, and no dictionary: enumerating the chains is fifteen
+  // milliseconds for a sixty-word list, and the chain is the answer. A cap here
+  // would be a count that means "at least this many", which is not a count.
+  const boxes = boxesFrom(words);
   // Both ends of a ladder have to be the theme's own and both have to be words
   // the board accepts as rungs, so this is the one measurement here that needs
   // the everyday dictionary rather than the generation pool.

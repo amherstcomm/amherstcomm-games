@@ -543,9 +543,10 @@ test('a word list says what it can make while you write it', async ({ page }) =>
   await page
     .getByLabel(/^Words/)
     .fill('payouts\nsharing\nshared\nworker\nvoting\nvote\ngain\nearn\ndividend');
-  // Deferred, like the ladder below: the search walks every chain of two to
-  // four of these words, so it waits for a pause rather than running on every
-  // keystroke.
+  // The search runs in a worker: milliseconds for a themed list, most of a
+  // minute for a pasted document, and the page cannot tell which it has until
+  // it looks — so it looks somewhere that cannot freeze the box being typed
+  // into. Which is why this line arrives rather than being there.
   await expect(
     page.getByText(/Boxed — \d+ boards? whose letters these words chain through/)
   ).toBeVisible();
@@ -556,7 +557,11 @@ test('a word list says what it can make while you write it', async ({ page }) =>
   // The ladder search waits for a pause in typing rather than running per
   // keystroke — a walk per word over forty thousand rungs is a tenth of a
   // second — so this is the one line that is not there immediately.
+  // Both of the expensive calculators run in the worker and say so while they
+  // work, so the panel is honest about being behind rather than showing the
+  // last answer as though it were current.
   await expect(page.getByText(/Ladder — \d+ pairs/)).toBeVisible();
+  await expect(page.getByText('working…')).toHaveCount(0);
 
   // A list of plain nouns makes no bridge, which is the answer rather than a
   // fault in the list — so it says what one would need.
@@ -1026,9 +1031,11 @@ test('and a long shortlist can be filtered and paged through', async ({ page }) 
   const boxList = page.locator('[data-shortlist="boxed"]');
   const boxes = boxList.getByRole('button', { name: /→/ });
   await expect(boxes.first()).toBeVisible();
-  // A page of them, which is twelve unless the day makes fewer.
+  // A page of them, and the rest behind the button — not a capped search: the
+  // filter has to be able to find a board that exists, which the cap made
+  // impossible.
   const firstPage = await boxes.count();
-  expect(firstPage).toBeGreaterThan(1);
+  expect(firstPage).toBe(12);
   await boxList.getByRole('button', { name: /\d+ more/ }).click();
   expect(await boxes.count()).toBeGreaterThan(firstPage);
 
@@ -1046,9 +1053,13 @@ test('and a long shortlist can be filtered and paged through', async ({ page }) 
   const label = (await boxes.first().textContent()) ?? '';
   // The board, the chain of the day's own words that solves it, and — where an
   // ordinary pair beats it — what the board will actually promise.
-  expect(label).toMatch(/^\w+\/\w+\/\w+\/\w+ — \w+( → \w+)+( \(par \d+: .+\))?$/);
+  expect(label).toMatch(/^\w+\/\w+\/\w+\/\w+ — \w+( → \w+)+$/);
   const [left, right] = label.split(' — ')[1].split(' → ');
   const before = await boxes.count();
+  // Typing at the box list re-runs the search for those words rather than
+  // trimming what is on screen: a long list makes more boards than any search
+  // enumerates, so filtering the page can hide a board that exists — which is
+  // what "charter isn't in the list" was.
   await page.getByLabel('Filter Letter box').fill(`${right} ${left}`);
   await expect.poll(async () => (await boxes.count()) < before).toBe(true);
   // Every one that survived carries both, which is the rule — not one, because

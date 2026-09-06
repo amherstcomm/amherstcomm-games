@@ -11,27 +11,26 @@
 // and their two-word guarantee is simply unknown, which is said rather than
 // guessed at.
 import { useEffect, useMemo, useState } from 'react';
-import { getDictionary, getDifficultyPool } from '@/dictionaries';
-import {
-  boxesFrom,
-  bridgesFrom,
-  laddersFrom,
-  type Box,
-  type LadderPair,
-} from '@/themeCalculators';
+import { getDifficultyPool } from '@/dictionaries';
+import { boxesFrom, bridgesFrom } from '@/themeCalculators';
+import { useCalculators } from '@/useCalculators';
 
 export default function ThemeYield({ words }: { words: string }) {
   const list = useMemo(
     () => words.split(/[^A-Za-z]+/).filter((w) => w.length >= 3),
     [words]
   );
-  // Deferred, like the ladder below: the search walks every chain of two to
-  // four of these words, and a long list makes hundreds of boards.
-  //
-  // The chain is the guarantee and needs no dictionary. The pool is for the
-  // other question — whether an ordinary pair beats the chain, which is what
-  // the board will promise on a day that accepts the dictionary — so the boxes
-  // are counted the moment they are known and the par catches up when it lands.
+  // Both of the searches that cost anything, off the main thread and asked
+  // again whenever the list stops changing. The box search is milliseconds for
+  // a themed list and most of a minute for a pasted document; the ladder walks
+  // forty thousand rungs once per word. Neither can run on the thread somebody
+  // is typing on, and neither may show its last answer while the list has
+  // moved on — so both say when they are working.
+  const { boxes, ladders } = useCalculators(list);
+
+  // The dictionary is for one question only: whether an ordinary pair beats the
+  // chain on the best board, which is what the daily would promise. The boards
+  // themselves need none — the chain is the answer.
   const [dictionary, setDictionary] = useState<string[] | null>(null);
   useEffect(() => {
     if (list.length < 2 || dictionary) return;
@@ -44,67 +43,54 @@ export default function ThemeYield({ words }: { words: string }) {
     };
   }, [list.length, dictionary]);
 
-  const [boxes, setBoxes] = useState<Box[]>([]);
-  useEffect(() => {
-    if (list.length < 2) {
-      setBoxes([]);
-      return;
-    }
-    const id = window.setTimeout(
-      () => setBoxes(boxesFrom(list, { dictionary: dictionary ?? undefined, limit: 24 })),
-      400
-    );
-    return () => window.clearTimeout(id);
-  }, [list, dictionary]);
   const bridges = useMemo(() => bridgesFrom(list), [list]);
 
-  // The ladder search is the one measurement here that cannot ride along with a
-  // keystroke: a breadth-first walk per word over forty thousand rungs is about
-  // a tenth of a second for a two-dozen-word list, and doing that on every
-  // letter typed makes the box stutter. So it waits for a pause, and says it is
-  // working rather than showing a stale answer as though it were current.
-  const [rungs, setRungs] = useState<Set<string> | null>(null);
-  const [ladders, setLadders] = useState<LadderPair[] | null>(null);
-
-  useEffect(() => {
-    if (list.length < 2 || rungs) return;
-    let alive = true;
-    void getDictionary('common').then((words) => {
-      if (alive) setRungs(new Set(words));
-    });
-    return () => {
-      alive = false;
-    };
-  }, [list.length, rungs]);
-
-  useEffect(() => {
-    if (!rungs || list.length < 2) return;
-    setLadders(null);
-    const id = window.setTimeout(() => setLadders(laddersFrom(list, rungs)), 400);
-    return () => window.clearTimeout(id);
-  }, [list, rungs]);
+  const best = boxes.boards[0];
+  // The one board worth measuring: whether an ordinary pair beats its chain,
+  // which is what the daily would promise. Above the early return, because a
+  // hook below one is a hook that runs on some renders and not others — React
+  // #310, a blank page, and the reason this file has a browser test at all.
+  const shortest = useMemo(() => {
+    if (!best || !dictionary) return null;
+    const measured = boxesFrom(best.from, { dictionary })[0];
+    return measured?.ordinary ?? null;
+  }, [best, dictionary]);
 
   if (list.length < 2) return null;
-
-  const best = boxes[0];
 
   return (
     <div className="rounded-lg border border-white/15 p-3 text-xs space-y-2">
       <p className="text-xs uppercase tracking-wider text-slate-500">
         What this list can make
+        {(boxes.searching || ladders.searching) && (
+          <span className="normal-case tracking-normal text-slate-400">
+            {' '}— working these out; they update when you stop typing
+          </span>
+        )}
       </p>
 
       <div>
-        <p className={boxes.length > 0 ? 'text-emerald-300' : 'text-slate-500'}>
-          {boxes.length > 0 ? '✓' : '·'} Boxed — {boxes.length}{' '}
-          {boxes.length === 1 ? 'board' : 'boards'} whose letters these words
-          chain through
-          {boxes.length >= 24 && ' (the first two dozen — there are more)'}
+        <p
+          className={
+            boxes.searching || boxes.boards.length === 0
+              ? 'text-slate-500'
+              : 'text-emerald-300'
+          }
+        >
+          {boxes.searching ? '·' : boxes.boards.length > 0 ? '✓' : '·'} Boxed —{' '}
+          {boxes.searching
+            ? 'working…'
+            : `${boxes.boards.length} ${boxes.boards.length === 1 ? 'board' : 'boards'} whose letters these words chain through`}
+          {boxes.truncated && ' (stopped counting — that is a lot of words)'}
         </p>
-        {best && (
+        {!boxes.searching && best && (
           <p className="text-slate-400 pl-3">
             best: {best.sides.join(' | ')} — {best.solution.join(' → ')}
-            {best.ordinary ? ` (par ${best.par}: ${best.ordinary.join(' → ')})` : ''} — finds{' '}
+            {/* Only the best board is measured against the dictionary: knowing
+                whether an ordinary pair beats the chain costs three
+                milliseconds a board, which is a second across a long list, to
+                say something every board says for itself once it is set. */}
+            {shortest && ` (par ${shortest.length}: ${shortest.join(' → ')})`} — finds{' '}
             {best.holds.length}: {best.holds.slice(0, 8).join(', ')}
             {best.holds.length > 8 && '…'}
           </p>
@@ -112,7 +98,7 @@ export default function ThemeYield({ words }: { words: string }) {
         {/* Said plainly, because the reason is not obvious from a long list:
             the words have to chain into each other and cover twelve distinct
             letters between them, which two words rarely do and three often do. */}
-        {list.length >= 2 && boxes.length === 0 && (
+        {!boxes.searching && boxes.boards.length === 0 && (
           <p className="text-slate-500 pl-3">
             Needs two to four of these words that chain — each starting with the
             last letter of the one before — and cover twelve distinct letters
@@ -127,31 +113,29 @@ export default function ThemeYield({ words }: { words: string }) {
             still set no ladder, which is worth seeing before October. */}
         <p
           className={
-            ladders === null
+            ladders.searching || ladders.pairs.length === 0
               ? 'text-slate-500'
-              : ladders.length > 0
-                ? 'text-emerald-300'
-                : 'text-slate-500'
+              : 'text-emerald-300'
           }
         >
-          {ladders === null ? '·' : ladders.length > 0 ? '✓' : '·'} Ladder —{' '}
-          {ladders === null
-            ? 'looking for routes…'
-            : `${ladders.length} ${ladders.length === 1 ? 'pair' : 'pairs'}`}
-          {ladders !== null && ladders.length > 0 &&
+          {ladders.searching ? '·' : ladders.pairs.length > 0 ? '✓' : '·'} Ladder —{' '}
+          {ladders.searching
+            ? 'working…'
+            : `${ladders.pairs.length} ${ladders.pairs.length === 1 ? 'pair' : 'pairs'}`}
+          {!ladders.searching && ladders.pairs.length > 0 &&
             ` (${['easy', 'hard', 'extreme']
-              .map((tier) => `${tier} ${ladders.filter((l) => l.tier === tier).length}`)
+              .map((tier) => `${tier} ${ladders.pairs.filter((l) => l.tier === tier).length}`)
               .join(' · ')})`}
         </p>
-        {ladders !== null && ladders.length > 0 && (
+        {!ladders.searching && ladders.pairs.length > 0 && (
           <p className="text-slate-400 pl-3">
-            {ladders
+            {ladders.pairs
               .slice(0, 3)
               .map((l) => `${l.a} → ${l.b} in ${l.par}`)
               .join('  |  ')}
           </p>
         )}
-        {ladders !== null && ladders.length === 0 && (
+        {!ladders.searching && ladders.pairs.length === 0 && (
           // Said plainly, because the reason is not obvious from the list: it
           // needs two words of the same length with a route between them, and
           // both have to be ordinary enough for the board to accept as rungs.
