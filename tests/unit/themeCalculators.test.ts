@@ -58,15 +58,31 @@ describe('boxesFrom', () => {
     expect(boxesFrom(VOTING_SHARED)[0].guaranteed).toBe(false);
   });
 
+  // The pair is invented rather than English, and deliberately: what is being
+  // tested is the rule, and every real pair that finishes this particular box
+  // would be a fact about the dictionary as well. `vote` then `eindsharg`
+  // chains, covers all twelve, and steps sides in turn.
   it('and finds it when two ordinary words finish the box', () => {
-    const [box] = boxesFrom(VOTING_SHARED);
-    const letters = box.sides.join('');
-    // A pair that between them use all twelve and chain.
-    const first = 'voting';
-    const second = 'gashed';
-    expect(new Set(first + second).size).toBeLessThanOrEqual(letters.length);
-    const withDict = boxesFrom(VOTING_SHARED, ['voting', 'gashed', 'shared', 'dev']);
-    expect(typeof withDict[0].guaranteed).toBe('boolean');
+    const [box] = boxesFrom(VOTING_SHARED, ['vote', 'eindsharg']);
+    expect(box.guaranteed).toBe(true);
+    expect(new Set('vote' + 'eindsharg').size).toBe(12);
+  });
+
+  // The two ways a candidate is thrown out before the side check, both of them
+  // worth pinning because they were folded into an index for speed and an
+  // index is a place to be quietly wrong.
+  it('but not out of a word carrying a letter the box does not have', () => {
+    // z for g: still twelve letters between them, and one of them is not on
+    // the board.
+    expect(boxesFrom(VOTING_SHARED, ['vote', 'eindsharz'])[0].guaranteed).toBe(false);
+  });
+
+  it('nor out of one with a doubled letter, which no box can spell', () => {
+    expect(boxesFrom(VOTING_SHARED, ['vote', 'eeindsharg'])[0].guaranteed).toBe(false);
+  });
+
+  it('nor when the two do not chain', () => {
+    expect(boxesFrom(VOTING_SHARED, ['vote', 'indsharge'])[0].guaranteed).toBe(false);
   });
 });
 

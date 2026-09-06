@@ -10,10 +10,17 @@
 // that rule has one home, and a second copy of it would agree until somebody
 // changed it and then quietly reassure people about a month that was not
 // themed.
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Loader2 } from 'lucide-react';
 import { getDifficultyPool } from '@/dictionaries';
-import { RACK_SIZE, readCoverage, runsOf, summarise, type CoverageDay } from '@/coverage';
+import {
+  RACK_SIZE,
+  readCoverage,
+  runsOf,
+  summariseSlowly,
+  type CoverageDay,
+  type Summary,
+} from '@/coverage';
 import { readWordLists } from '@/wordLists';
 import { readWeaveThemes } from '@/weaveThemes';
 
@@ -79,10 +86,32 @@ export default function ThemeCoverage() {
     if (!dictionary) void getDifficultyPool('easy').then(setDictionary);
   }, [from, until, dictionary]);
 
-  const sum = useMemo(
-    () => (result ? summarise(result, dictionary ?? undefined) : null),
-    [result, dictionary]
-  );
+  // Measured a slice at a time rather than in one go. A month of two
+  // overlapping lists is a month of different unions, and working all of them
+  // out at once held the page still for seconds — see summariseSlowly. The
+  // answer is the same one; what changed is that the browser gets a turn
+  // between days, and says how far it has got.
+  const [sum, setSum] = useState<Summary | null>(null);
+  const [done, setDone] = useState(0);
+
+  useEffect(() => {
+    if (!result) {
+      setSum(null);
+      return;
+    }
+    let alive = true;
+    setDone(0);
+    void summariseSlowly(result, dictionary ?? undefined, (n) => {
+      if (alive) setDone(n);
+    }).then((made) => {
+      if (alive) setSum(made);
+    });
+    // A second range asked for while the first is still being measured: the
+    // stale one must not land on top of the new one.
+    return () => {
+      alive = false;
+    };
+  }, [result, dictionary]);
 
   return (
     <section>
@@ -123,6 +152,12 @@ export default function ThemeCoverage() {
       </div>
 
       {note && <p className="text-xs text-amber-300 mb-3">{note}</p>}
+
+      {result && !sum && (
+        <p className="text-xs text-slate-400 mb-3">
+          Measuring {done} of {result.length} days…
+        </p>
+      )}
 
       {sum && asked && (
         <div className="rounded-xl border border-white/15 p-4 text-xs space-y-4" data-coverage>

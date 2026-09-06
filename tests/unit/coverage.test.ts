@@ -15,7 +15,9 @@ import {
   GUESS_LENGTHS,
   RACK_SIZE,
   runsOf,
+  SLICE,
   summarise,
+  summariseSlowly,
   tilesFor,
   yieldOf,
   type CoverageDay,
@@ -197,5 +199,52 @@ describe('the boards a theme can seed', () => {
     ]);
     expect(sum.scramble.days).toBe(1);
     expect(sum.hive.days).toBe(1);
+  });
+});
+
+// Why there are two ways to ask the same question.
+//
+// Measured, not guessed at: a month of two overlapping lists is a month of
+// different unions, and working them all out in one go held the page still for
+// six seconds. That is what "coverage locks up the browser" was.
+describe('measuring without holding the page still', () => {
+  const month = Array.from({ length: 9 }, (_, i) =>
+    // A different union every day, which is what overlapping lists produce and
+    // the case where nothing can be reused.
+    list(october(i + 1), ['voting', 'shared', 'esop', `filler${i}`])
+  );
+
+  it('gets the answer the all-at-once version gets', async () => {
+    const slowly = await summariseSlowly(month, undefined, undefined, async () => {});
+    expect(slowly).toEqual(summarise(month));
+  });
+
+  it('and hands the browser back between slices', async () => {
+    let breaths = 0;
+    await summariseSlowly(month, undefined, undefined, async () => {
+      breaths += 1;
+    });
+    // Nine days in slices of four: it pauses after the fourth and the eighth,
+    // and not after the last — a pause with nothing left to do is a frame
+    // spent on nothing.
+    expect(breaths).toBe(Math.floor((month.length - 1) / SLICE));
+    expect(breaths).toBeGreaterThan(0);
+  });
+
+  it('and says how far it has got', async () => {
+    const seen: number[] = [];
+    await summariseSlowly(month, undefined, (n, total) => {
+      expect(total).toBe(month.length);
+      seen.push(n);
+    }, async () => {});
+    expect(seen).toEqual([SLICE, SLICE * 2]);
+  });
+
+  it('and does not pause at all for a range that fits in one slice', async () => {
+    let breaths = 0;
+    await summariseSlowly(month.slice(0, SLICE), undefined, undefined, async () => {
+      breaths += 1;
+    });
+    expect(breaths).toBe(0);
   });
 });

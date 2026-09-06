@@ -125,22 +125,36 @@ export type Summary = {
   hive: { days: number };
 };
 
-export function summarise(days: CoverageDay[], dictionary?: string[]): Summary {
-  // One search per distinct set of words rather than per day: a list covering a
-  // month hands back the same thirty-one sets, and the box search is the only
-  // costly thing in here.
+/** What each day yields, memoised by the words it has.
+ *
+ *  Separated from the fold below so the same work can be done a slice at a
+ *  time: this is where all the cost is, and a month of overlapping lists is a
+ *  month of different unions, so the memo helps least exactly when the range is
+ *  most interesting.
+ */
+export function yieldsFor(days: CoverageDay[], dictionary?: string[]): DayYield[] {
   const seen = new Map<string, ReturnType<typeof yieldOf>>();
-  const yields: DayYield[] = days.map((day) => {
-    const words = day.theme?.words ?? [];
-    const key = words.join(' ');
-    let made = seen.get(key);
-    if (!made) {
-      made = yieldOf(words, dictionary);
-      seen.set(key, made);
-    }
-    return { date: day.date, name: day.theme?.name ?? '', words, ...made, tiles: tilesFor(day.weave) };
-  });
+  return days.map((day) => oneYield(day, dictionary, seen));
+}
 
+function oneYield(
+  day: CoverageDay,
+  dictionary: string[] | undefined,
+  seen: Map<string, ReturnType<typeof yieldOf>>
+): DayYield {
+  const words = day.theme?.words ?? [];
+  const key = words.join(' ');
+  let made = seen.get(key);
+  if (!made) {
+    made = yieldOf(words, dictionary);
+    seen.set(key, made);
+  }
+  return { date: day.date, name: day.theme?.name ?? '', words, ...made, tiles: tilesFor(day.weave) };
+}
+
+/** The counting, once the days have been measured. Cheap, and deliberately
+ *  separate: it is the half that must not be written twice. */
+export function fold(days: CoverageDay[], yields: DayYield[]): Summary {
   const lengths = GUESS_LENGTHS.map((length) => {
     const themed = yields.filter((y) => y.pools[length] > 0);
     return {
@@ -155,7 +169,10 @@ export function summarise(days: CoverageDay[], dictionary?: string[]): Summary {
     perTier[tier] = yields.filter((y) => y.tiles.includes(tier)).length;
   }
 
-  const withDictionary = dictionary ? yields.filter((y) => (y.playable ?? 0) > 0).length : null;
+  // Unknown rather than nought when the dictionary never arrived: every day
+  // reports its guarantee as unknown, and a count of nought would read as "none
+  // of them can be finished".
+  const knownGuarantee = yields.every((y) => y.playable !== null);
 
   return {
     days: days.length,
@@ -168,11 +185,54 @@ export function summarise(days: CoverageDay[], dictionary?: string[]): Summary {
       gaps: yields.filter((y) => y.tiles.length === 0).map((y) => y.date),
       perTier,
     },
-    boxes: { days: yields.filter((y) => y.boxes > 0).length, playable: withDictionary },
+    boxes: {
+      days: yields.filter((y) => y.boxes > 0).length,
+      playable: knownGuarantee ? yields.filter((y) => (y.playable ?? 0) > 0).length : null,
+    },
     bridges: { days: yields.filter((y) => y.bridges > 0).length },
     scramble: { days: yields.filter((y) => y.racks > 0).length },
     hive: { days: yields.filter((y) => y.hives > 0).length },
   };
+}
+
+export function summarise(days: CoverageDay[], dictionary?: string[]): Summary {
+  return fold(days, yieldsFor(days, dictionary));
+}
+
+/** How many days are measured before the browser is handed back. Small enough
+ *  that a slice is a frame or two even on the expensive days, big enough that a
+ *  month is a handful of slices rather than thirty-one round trips. */
+export const SLICE = 4;
+
+/** The same answer, computed without holding the page still.
+ *
+ *  Measured rather than assumed: a month of two overlapping lists took six
+ *  seconds of blocked main thread, which is what "coverage locks up the
+ *  browser" was. Indexing the dictionary once took that to under half a
+ *  second — and a year of it would still be seconds, so the work is also
+ *  handed back between slices. Both, because the second alone leaves a page
+ *  that is responsive and slow, and the first alone leaves a page that freezes
+ *  whenever somebody asks for more than a month.
+ *
+ *  `pause` is injectable so a test can prove it actually yields rather than
+ *  merely being async.
+ */
+export async function summariseSlowly(
+  days: CoverageDay[],
+  dictionary?: string[],
+  onProgress?: (done: number, total: number) => void,
+  pause: () => Promise<void> = () => new Promise((resolve) => setTimeout(resolve, 0))
+): Promise<Summary> {
+  const seen = new Map<string, ReturnType<typeof yieldOf>>();
+  const yields: DayYield[] = [];
+  for (const day of days) {
+    yields.push(oneYield(day, dictionary, seen));
+    if (yields.length % SLICE === 0 && yields.length < days.length) {
+      onProgress?.(yields.length, days.length);
+      await pause();
+    }
+  }
+  return fold(days, yields);
 }
 
 /** Consecutive dates as ranges: eleven separate dates is a list nobody reads,
