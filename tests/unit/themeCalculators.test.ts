@@ -8,6 +8,8 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 // @ts-expect-error plain-JS module without a declaration file
+import { themedBoxes } from '../../scripts/box.mjs';
+// @ts-expect-error plain-JS module without a declaration file
 import { themedLadderPairs, TIER_PAR } from '../../scripts/ladder.mjs';
 import {
   assignSides,
@@ -205,5 +207,30 @@ describe('laddersFrom', () => {
     const once = laddersFrom(THEME, rungs);
     const again = laddersFrom([...THEME].reverse(), rungs);
     expect(again).toEqual(once);
+  });
+});
+
+// The box search exists twice as well — the page promises a themed box can be
+// built and the generator has to build it — so the two are run over the same
+// words and the same dictionary and required to answer the same.
+describe('the box search, in both places', () => {
+  const THEME = ['voting', 'shared', 'vote', 'gain', 'earn', 'dividend', 'invest', 'employer'];
+  // Enough of a dictionary to make the guarantee mean something, and small
+  // enough to be read here: a pair that chains and covers all twelve.
+  const DICT = ['vote', 'eindsharg', 'shared', 'voting', 'gash', 'dev', 'invested'];
+
+  it('agrees pair for pair, and on which can be finished', () => {
+    const mine = boxesFrom(THEME, DICT).map((b) => `${b.from.join('+')} ${b.sides.join('|')} ${b.guaranteed}`);
+    const theirs = (
+      themedBoxes(THEME, DICT) as { from: string[]; sides: string[]; guaranteed: boolean }[]
+    ).map((b) => `${b.from.join('+')} ${b.sides.join('|')} ${b.guaranteed}`);
+    expect(mine).toEqual(theirs);
+    expect(mine.length).toBeGreaterThan(0);
+  });
+
+  it('and on what the finished board spells', () => {
+    const mine = boxesFrom(THEME).map((b) => b.holds.join(','));
+    const theirs = (themedBoxes(THEME) as { holds: string[] }[]).map((b) => b.holds.join(','));
+    expect(mine).toEqual(theirs);
   });
 });

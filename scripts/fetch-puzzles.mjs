@@ -24,6 +24,7 @@ import {
   TIER_BAND,
   TIER_VARIANTS,
 } from './cryptogram.mjs';
+import { themedBoxes } from './box.mjs';
 import {
   generateLadder,
   livePairs,
@@ -656,10 +657,63 @@ for (const variant of ['', 'dev']) {
   );
 
   // box: two chainable words covering exactly 12 distinct letters
+  //
+  // A themed day builds the box out of two of the theme's own words: their
+  // letters are exactly twelve distinct, and the sides are laid so both can be
+  // spelled on the finished board.
+  //
+  // They do not chain, which is what makes this different from the ordinary
+  // construction below — theme words essentially never chain, and requiring it
+  // reported zero pairs from a list with twenty-one. So the two-word solution
+  // the board promises has to be *found* rather than inherited: some two words
+  // chaining and covering all twelve. A themed box without one is a board whose
+  // "solvable in 2" is a lie, which is worse than an unthemed board, so it is
+  // passed over and the day gets the box it would have had.
+  //
+  // Searched once against the *easy* pool rather than once per difficulty. The
+  // accept tiers are nested, so a solution in the narrowest is a solution in
+  // all three — and one search means one list of boxes, which is what lets the
+  // three difficulties take different ones. A box only the widest dictionary
+  // could finish is not offered; that is the conservative half of the trade.
+  const themedBoxen = theme
+    ? themedBoxes(theme.words, [...poolsFor('easy').cumulative]).filter((b) => b.guaranteed)
+    : [];
+  if (theme) {
+    const all = themedBoxes(theme.words).length;
+    console.log(
+      `Themed boxes for ${etDate}: ${all} from the theme's own pairs, ` +
+        `${themedBoxen.length} solvable in two ordinary words`
+    );
+  }
+  // One offset for the day rather than one per difficulty: the three step
+  // through the same list from the same place, which is what makes their boards
+  // different. Three independent draws would collide as often as not.
+  const themedBoxOffset = themedBoxen.length
+    ? Math.floor(
+        mulberry32(xmur3(`${SEED_SALT}anagrimoire-box-themed-${etDate}${salt}`)())() *
+          themedBoxen.length
+      )
+    : 0;
   const boxByDifficulty = {};
   for (const difficulty of DIFFICULTIES) {
     const boxRng = mulberry32(xmur3(`${SEED_SALT}anagrimoire-box-${etDate}${salt}${diffSalt(difficulty)}`)());
     const { boxWords, boxByFirst } = poolsFor(difficulty);
+
+    // One themed box handed to all three difficulties is one puzzle wearing
+    // three names — the letters are the letters, so solving it once solves them
+    // all. A theme themes as many difficulties as it has distinct boxes to
+    // give, starting at easy; the rest get the board they would have had.
+    const tier = DIFFICULTIES.indexOf(difficulty);
+    if (themedBoxen.length > tier) {
+      const box = themedBoxen[(themedBoxOffset + tier) % themedBoxen.length];
+      console.log(
+        `Box ${difficulty} from the theme: ${box.from.join(' + ')} → ` +
+          `${box.sides.join('/')} (spells ${box.holds.length})`
+      );
+      boxByDifficulty[difficulty] = { sides: box.sides, par: 2 };
+      continue;
+    }
+
     let boxSides = null;
     for (let attempt = 0; attempt < 2000 && !boxSides; attempt++) {
       const w1 = boxWords[Math.floor(boxRng() * boxWords.length)];
@@ -676,7 +730,7 @@ for (const variant of ['', 'dev']) {
   await writeFile(
     `${DATA_DIR}/${prefix}daily-box.json`,
     JSON.stringify(
-      { date: etDate, byDifficulty: boxByDifficulty, fetchedAt: stamp },
+      { date: etDate, byDifficulty: boxByDifficulty, ...themedBlob(theme), fetchedAt: stamp },
       null,
       2
     ) + '\n'

@@ -35,6 +35,9 @@ const THEME = {
     // list too and cannot be one, because every rung is checked against the
     // common tier.
     'meeting', 'board', 'budget', 'router', 'bonus',
+    // And a pair whose letters are exactly twelve distinct, which is what a box
+    // is made of.
+    'gain', 'earn', 'vote', 'share',
   ],
 };
 
@@ -377,5 +380,96 @@ describe('a ladder between two theme words', () => {
       const board = ends(payload, tier);
       expect(THEME.words).not.toContain(board.from);
     }
+  });
+});
+
+// The box, which is built out of two theme words rather than dealt: their
+// letters are the board. The promise on the board is "solvable in 2", and for a
+// themed box that has to be found rather than inherited — so what is asserted
+// here is the promise, not just the provenance.
+describe('a box built from the theme', () => {
+  const sidesOf = (payload: { byDifficulty: Record<string, { sides: string[]; par: number }> }, tier: string) =>
+    payload.byDifficulty[tier];
+
+  /** Every word this board can spell, out of a list. */
+  const spellable = (sides: string[], word: string) => {
+    const sideOf = new Map<string, number>();
+    sides.forEach((side, i) => [...side].forEach((c) => sideOf.set(c, i)));
+    if (![...word].every((c) => sideOf.has(c))) return false;
+    for (let i = 1; i < word.length; i += 1) {
+      if (sideOf.get(word[i - 1]) === sideOf.get(word[i])) return false;
+    }
+    return true;
+  };
+
+  it('lays the twelve letters of two theme words', async () => {
+    const payload = await read(themed, 'daily-box.json');
+    const board = sidesOf(payload, 'easy');
+    const letters = board.sides.join('');
+    expect(letters).toHaveLength(12);
+    expect(new Set(letters).size).toBe(12);
+    // Some pair of theme words accounts for exactly these letters, which is
+    // what "built from the theme" means.
+    const pairs = THEME.words.flatMap((a) =>
+      THEME.words.map((b) => (a < b ? [a, b] : null)).filter(Boolean) as string[][]
+    );
+    const made = pairs.some(
+      ([a, b]) =>
+        new Set(a + b).size === 12 && [...new Set(a + b)].every((c) => letters.includes(c))
+    );
+    expect(made, `no theme pair makes ${board.sides.join('/')}`).toBe(true);
+  });
+
+  it('and both of those words can be spelled on it', async () => {
+    const payload = await read(themed, 'daily-box.json');
+    const board = sidesOf(payload, 'easy');
+    const spelled = THEME.words.filter((w) => spellable(board.sides, w));
+    expect(spelled.length, `${board.sides.join('/')} spells no theme word`).toBeGreaterThanOrEqual(2);
+  });
+
+  // The promise the board makes. A themed pair does not chain, so this is not
+  // inherited from the construction the way an ordinary box's is — it is
+  // searched for, and a box without one is not published.
+  it('and it really is solvable in two ordinary words', async () => {
+    const payload = await read(themed, 'daily-box.json');
+    const board = sidesOf(payload, 'easy');
+    expect(board.par).toBe(2);
+    const letters = new Set(board.sides.join(''));
+    // The everyday bands, which are inside every difficulty's accept pool — so
+    // a solution found here is one any player of any tier could type.
+    const pool: string[] = [];
+    for (const band of ['band-10', 'band-20', 'band-35']) {
+      pool.push(...JSON.parse(await readFile(`src/wordbands/${band}.json`, 'utf8')).words);
+    }
+    const usable = pool.filter(
+      (w) => w.length >= 3 && [...w].every((c) => letters.has(c)) && spellable(board.sides, w)
+    );
+    const byFirst = new Map<string, string[]>();
+    for (const w of usable) {
+      const list = byFirst.get(w[0]);
+      if (list) list.push(w);
+      else byFirst.set(w[0], [w]);
+    }
+    const solved = usable.some((first) =>
+      (byFirst.get(first[first.length - 1]) ?? []).some(
+        (second) => new Set(first + second).size === 12
+      )
+    );
+    expect(solved, `${board.sides.join('/')} cannot be solved in two`).toBe(true);
+  });
+
+  it('while an ordinary day is built the way it always was', async () => {
+    const before = sidesOf(await read(plain, 'daily-box.json'), 'easy');
+    const after = sidesOf(await read(themed, 'daily-box.json'), 'easy');
+    expect(before.sides.join('')).not.toBe(after.sides.join(''));
+  });
+
+  // The board may be made of words no dictionary carries, so it has to accept
+  // them the way the rack and the hive do.
+  it('and the day s own words ride along for the board to accept', async () => {
+    const payload = await read(themed, 'daily-box.json');
+    expect(typeof payload.themed).toBe('string');
+    expect(Buffer.from(payload.themed, 'base64').toString().split(' ')).toContain('esop');
+    expect((await read(plain, 'daily-box.json')).themed).toBeUndefined();
   });
 });

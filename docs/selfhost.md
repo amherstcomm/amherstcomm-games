@@ -1383,8 +1383,8 @@ it starts.
 
 #### Taking over the dailies
 
-A list with **dates** on it themes the daily puzzles for those days. Five of the
-ten games take their content from one, and a sixth scores it:
+A list with **dates** on it themes the daily puzzles for those days. Six of the
+ten games take their content from one, and a seventh scores it:
 
 - **The daily word.** Per length, the pool narrows to the theme's own words —
   **including ones no dictionary carries**. That is the point rather than an
@@ -1441,6 +1441,25 @@ ten games take their content from one, and a sixth scores it:
 
   Per difficulty by step count: the bands are 3-4, 5-6 and 7-8, and a tier with
   no themed pair in its band walks the curated pairs exactly as it always has.
+- **Boxed**, whose twelve letters are two theme words: exactly twelve distinct
+  between them, laid so both can be spelled on the finished board.
+
+  The two-word solution is where this differs from the ordinary construction.
+  An ordinary box is built *from* a chaining pair, so "solvable in 2" comes free
+  — theme words essentially never chain, so it has to be found instead: some two
+  everyday words that chain and cover all twelve. A themed box without one is a
+  board whose promise is false, which is worse than an unthemed board, so it is
+  passed over and the day gets the box it would have had.
+
+  Searched once against the *easy* pool rather than per difficulty. The accept
+  tiers are nested, so a solution in the narrowest is a solution in all three;
+  the conservative half of the trade is that a box only the widest dictionary
+  could finish is never offered.
+
+  **One box does not theme three difficulties.** The letters are the letters, so
+  the same board at three levels is one puzzle wearing three names — a theme
+  themes as many difficulties as it has *distinct* boxes to give, starting at
+  easy, and the run says which ones went without.
 - **Grid** cannot be built out of anything — the board is dealt from Boggle dice
   — but a theme word the board can trace scores the bonus like anywhere else.
 
@@ -1464,12 +1483,11 @@ spell it, the hive has to reach it through its centre, the grid has to trace it.
 The solver already answers that question for every other word, and asking it a
 second way here is exactly how two halves come apart.
 
-The remaining four — boxed, squares, cryptogram, bridge — cannot be built from a
-bag of words: they need letter boxes, passages or curated prompts.
-The cryptogram takes content of its own by a different door, one passage at a
-time rather than from a word list — see [Cryptogram passages](#cryptogram-passages)
-below. What a list can make of boxed and bridge is measured rather than guessed:
-see the calculators above.
+The remaining three — squares, cryptogram, bridge — cannot be built from a bag
+of words: they need a wider pool, passages, or curated prompts. The cryptogram
+takes content of its own by a different door, one passage at a time — see
+[Cryptogram passages](#cryptogram-passages) below. What a list can make of the
+games above is measured rather than guessed: see the calculators.
 
 **Dates rather than a switch**, and that is not a preference. The window is
 generated a fortnight ahead, so the run on 25 September already writes 1

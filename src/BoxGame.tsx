@@ -28,6 +28,7 @@ import { useDailySync } from '@/useDailySync';
 import { buildShare } from '@/share';
 import { recordBoxSolve } from '@/stats';
 import { store as siteStore } from '@/siteStorage';
+import { themedWords, withThemed } from '@/themedWords';
 
 export type BoxGameHandle = { pressKey: (k: string) => void };
 
@@ -206,6 +207,7 @@ const BoxGame = forwardRef<
   }
 >(function BoxGame({ standardWords, commonWords, onLetterStates, onReveal, practiceWords }, ref) {
   const [store, setStore] = useState<BoxStore>(loadStore);
+  const [themed, setThemed] = useState<string[]>([]);
   const { practiceAllowed } = usePrefs();
   // pinned to the daily: someone who switched practice off shouldn't be left
   // looking at a practice board they can no longer leave
@@ -263,7 +265,8 @@ const BoxGame = forwardRef<
         // the date lives at the top level; the board's own fields come from
         // whichever difficulty was resolved
         const d = { ...raw, ...chosen.board };
-        const rec = sanitizeRecord({ sides: d.sides, par: d.par, chain: [] });
+        setThemed(themedWords(raw));
+      const rec = sanitizeRecord({ sides: d.sides, par: d.par, chain: [] });
         if (!rec || typeof d.date !== 'string') throw new Error('bad payload');
         // reset when the date changes OR the sides differ (e.g. the daily
         // source changed mid-day)
@@ -300,10 +303,15 @@ const BoxGame = forwardRef<
     return m;
   }, [record]);
 
-  const standardSet = useMemo(
-    () => (standardWords ? new Set(standardWords) : null),
-    [standardWords]
-  );
+  // The day's own words as well, on a themed day: the box may be built out of
+  // two of them, and a board that will not accept the words it was made from is
+  // a board with a hole in it. No bonus, because a box is scored in how few
+  // words the chain takes rather than in points.
+  const themedNow = useMemo(() => (store.dailyMode ? themed : []), [store.dailyMode, themed]);
+  const standardSet = useMemo(() => {
+    const accepted = withThemed(standardWords, themedNow);
+    return accepted ? new Set(accepted) : null;
+  }, [standardWords, themedNow]);
 
   const chain = useMemo(() => record?.chain ?? [], [record]);
   const committedCovered = useMemo(() => {
