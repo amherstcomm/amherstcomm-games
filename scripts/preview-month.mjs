@@ -1,31 +1,44 @@
 // What a run of days would actually publish, before it publishes it.
 //
-// The gap this fills: everything about a themed month can be checked except the
-// thing that matters. The admin page says what a list *can* make, the coverage
-// page says which days are covered, the contract tests prove the generator
-// obeys a theme — and none of them answers "show me the first week of October".
-// The only honest answer to that is the generator's own output, so this runs
-// the real generator, once per date, and reads back what it wrote.
+// The gap this fills: a themed month is set up in the admin pages, and until
+// this existed the only way to see whether the settings reached the puzzles was
+// to wait for the run — which writes a fortnight ahead, so "did October work"
+// was a question with a two-week answer.
+//
+// So it reads the *database*: the same five questions the nightly run asks —
+// which lists cover the day, which Weave themes, which cryptogram passages,
+// what each game accepts, and what somebody pinned — and prints what came back
+// before printing the boards built from it. The point is not the boards. The
+// point is the line above them saying "read from the database: October (38
+// words)", which is the settings being used, not a theme somebody typed on the
+// command line.
+//
+//   npm run preview-month -- --from 2026-10-01 --until 2026-10-07
+//
+// It needs SUPABASE_SERVICE_ROLE_KEY, because what covers a day is the day's
+// answer key and nothing else may read it. Without one it refuses rather than
+// quietly showing ordinary days, which reads as "the theme did not work".
+//
+// `--theme october.json` reads a list from a file instead — for trying a list
+// *before* it is written into the admin pages. It proves nothing about what is
+// in the settings, and says so.
 //
 // Nothing is published. Each day is generated into a throwaway directory and
-// thrown away; the live feed is never touched, so this is safe to run against
-// the real database on a Tuesday afternoon.
-//
-//   node scripts/preview-month.mjs --from 2026-10-01 --until 2026-10-07
-//   node scripts/preview-month.mjs --from 2026-10-01 --days 3 --theme october.json
-//
-// With SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY set it reads the real lists,
-// themes, passages, word rules and pins — the same four questions the nightly
-// run asks. With `--theme` it reads a file instead, which is how to try a list
-// before writing it into the database:
-//
-//   { "name": "October", "words": ["shares", "esop", "..."] }
+// deleted, so this is safe against the live database in the middle of the
+// afternoon.
 import { execFile } from 'node:child_process';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
+import {
+  passagesFor,
+  pinsFor,
+  policyFor,
+  themeFor,
+  weaveThemesFor,
+} from './themedDaily.mjs';
 
 const run = promisify(execFile);
 const here = dirname(fileURLToPath(import.meta.url));
@@ -62,12 +75,29 @@ if (!Number.isFinite(days) || days < 1 || days > 62) {
 // drive letters in it, and the test that runs this tool is what found that.
 const themeFile = args.theme ? resolve(process.cwd(), args.theme) : null;
 const theme = themeFile ? await readFile(themeFile, 'utf8') : null;
-const reading = theme
-  ? `the list in ${args.theme}`
-  : process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY
-    ? 'the database'
-    : 'nothing — no theme file and no database credentials, so these are the ordinary days';
-console.log(`Previewing ${days} day${days === 1 ? '' : 's'} from ${from}, reading ${reading}.\n`);
+
+// The same default the other scripts carry, so the service key is the only
+// thing anybody has to have.
+const env = {
+  ...process.env,
+  SUPABASE_URL: process.env.SUPABASE_URL || 'https://kopsojnfqlzgyisexmrd.supabase.co',
+};
+const live = !theme && Boolean(env.SUPABASE_SERVICE_ROLE_KEY);
+
+if (!theme && !live) {
+  console.error(
+    'Nothing to read. Set SUPABASE_SERVICE_ROLE_KEY to preview what the admin\n' +
+      'pages have set up, or pass --theme <file> to try a list that is not saved\n' +
+      'yet. Previewing ordinary days would look like a theme that did not work.'
+  );
+  process.exit(1);
+}
+
+console.log(
+  `Previewing ${days} day${days === 1 ? '' : 's'} from ${from}, reading ` +
+    (live ? `the database at ${env.SUPABASE_URL}` : `the list in ${args.theme} (not the settings)`) +
+    '.\n'
+);
 
 const at = (i) => new Date(Date.parse(`${from}T12:00:00Z`) + i * 86_400_000).toISOString().slice(0, 10);
 const decode = (b64) => Buffer.from(b64, 'base64').toString();
@@ -85,10 +115,11 @@ for (let i = 0; i < days; i++) {
     const { stdout } = await run('node', ['scripts/fetch-puzzles.mjs'], {
       cwd: root,
       env: {
-        ...process.env,
+        ...env,
         SKIP_SOLVER_DATA: '1',
         PUZZLES_DATE: date,
         PUZZLES_DATA_DIR: dir,
+        ...env,
         ...(theme ? { PUZZLES_THEME: theme } : {}),
       },
       maxBuffer: 20 * 1024 * 1024,
@@ -107,6 +138,31 @@ for (let i = 0; i < days; i++) {
     const themed = words.themed ? ' · themed' : '';
     const accept = words.accept ? ` · accepts ${words.accept}` : '';
     console.log(`${date}${themed}${accept}`);
+
+    // What the settings said about this day, asked the way the generator asks
+    // it. This is the half that matters: the boards below are only interesting
+    // because this line says where they came from.
+    if (live) {
+      const [list, weaveThemes, passages, policy, pins] = await Promise.all([
+        themeFor(date, env),
+        weaveThemesFor(date, env),
+        passagesFor(date, env),
+        policyFor(date, env),
+        pinsFor(date, env),
+      ]);
+      const said = [
+        list ? `word list ${JSON.stringify(list.name)} (${list.words.length} words)` : null,
+        weaveThemes.length ? `${weaveThemes.length} Weave theme${weaveThemes.length === 1 ? '' : 's'}` : null,
+        passages.length ? `${passages.length} cryptogram passage${passages.length === 1 ? '' : 's'}` : null,
+        Object.keys(policy).length
+          ? `rules ${Object.entries(policy).map(([g, p]) => `${g}=${p}`).join(', ')}`
+          : null,
+        Object.keys(pins).length ? `pinned ${Object.keys(pins).join(', ')}` : null,
+      ].filter(Boolean);
+      console.log(
+        `  settings   ${said.length ? said.join(' · ') : 'nothing covers this day — it is an ordinary one'}`
+      );
+    }
     console.log(
       `  guess      ${lengths.length === 1
         ? `${decode(guess[lengths[0]])} (the day's only board)`

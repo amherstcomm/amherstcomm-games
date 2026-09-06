@@ -36,8 +36,9 @@ const THEME = {
     // common tier.
     'meeting', 'board', 'budget', 'router', 'bonus',
     // And a pair whose letters are exactly twelve distinct, which is what a box
-    // is made of.
-    'gain', 'earn', 'vote', 'share',
+    // is made of. `cost` and `gain` are also four letters, which is what a
+    // square is headed by.
+    'gain', 'earn', 'vote', 'share', 'cost', 'team',
   ],
 };
 
@@ -638,5 +639,41 @@ describe('a pinned day', () => {
     expect(ladder.from).not.toBe('esop');
     expect(ladder.from.length).toBe(ladder.to.length);
     expect(ladder.par).toBeGreaterThanOrEqual(3);
+  });
+});
+
+// Word squares, where the theme heads the board rather than filling it. Ten
+// words drawn from tens of thousands will not contain a theme word by accident
+// — measured, none of two hundred 4x4 boards did — so the theme goes in the
+// top row and the dictionary fills the rest.
+describe('a square headed by the theme', () => {
+  it('starts the 4x4 with one of the theme s own words', async () => {
+    const board = (await read(themed, 'daily-squares.json')).byDifficulty.easy;
+    const first = board.answer
+      ? JSON.parse(Buffer.from(board.answer, 'base64').toString()).rows[0]
+      : null;
+    expect(first, 'no answer on the board to read').not.toBeNull();
+    expect(THEME.words).toContain(first);
+  });
+
+  it('and every row and column of it is still a word', async () => {
+    const board = (await read(themed, 'daily-squares.json')).byDifficulty.easy;
+    const rows: string[] = JSON.parse(Buffer.from(board.answer, 'base64').toString()).rows;
+    const pool: string[] = [];
+    for (const band of ['band-10', 'band-20', 'band-35']) {
+      pool.push(...JSON.parse(await readFile(`src/wordbands/${band}.json`, 'utf8')).words);
+    }
+    const words = new Set(pool);
+    for (const row of rows.slice(1)) expect(words.has(row), `${row} across`).toBe(true);
+    for (let c = 0; c < rows.length; c += 1) {
+      const down = rows.map((row) => row[c]).join('');
+      expect(words.has(down), `${down} down`).toBe(true);
+    }
+  });
+
+  it('while an ordinary day s square owes nothing to the theme', async () => {
+    const board = (await read(plain, 'daily-squares.json')).byDifficulty.easy;
+    const rows: string[] = JSON.parse(Buffer.from(board.answer, 'base64').toString()).rows;
+    expect(THEME.words).not.toContain(rows[0]);
   });
 });

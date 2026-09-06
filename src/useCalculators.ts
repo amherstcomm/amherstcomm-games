@@ -11,7 +11,7 @@
 // somebody writing a list would read it as the answer for what they had just
 // typed.
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type { Box, LadderPair } from '@/themeCalculators';
+import type { Box, LadderPair, ThemedSquare } from '@/themeCalculators';
 import type { CalcReply, CalcRequest } from '@/calculators.worker';
 
 /** One worker, made when the component asks and thrown away with it. */
@@ -48,6 +48,13 @@ export type Ladders = {
   searching: boolean;
 };
 
+export type Squares = {
+  /** the words that can head a 4x4, and those that can head a 5x5 */
+  four: ThemedSquare[];
+  five: ThemedSquare[];
+  searching: boolean;
+};
+
 /** The boxes a list can make, and the ladders it can set.
  *
  *  One hook for both, because they share a worker and a question number: two
@@ -61,6 +68,7 @@ export function useCalculators(words: string[], boxFilter?: string[], delay = 40
     truncated: false,
   });
   const [ladders, setLadders] = useState<Ladders>({ pairs: [], searching: false });
+  const [squares, setSquares] = useState<Squares>({ four: [], five: [], searching: false });
   const asked = useRef(0);
 
   const worker = useWorker((reply) => {
@@ -69,6 +77,8 @@ export function useCalculators(words: string[], boxFilter?: string[], delay = 40
     if (reply.at !== asked.current) return;
     if (reply.kind === 'boxes') {
       setBoxes({ boards: reply.boards, searching: false, truncated: reply.truncated });
+    } else if (reply.kind === 'squares') {
+      setSquares({ four: reply.four, five: reply.five, searching: false });
     } else {
       setLadders({ pairs: reply.pairs, searching: false });
     }
@@ -86,21 +96,25 @@ export function useCalculators(words: string[], boxFilter?: string[], delay = 40
       asked.current += 1;
       setBoxes({ boards: [], searching: false, truncated: false });
       setLadders({ pairs: [], searching: false });
+      setSquares({ four: [], five: [], searching: false });
       return;
     }
     setBoxes((was) => ({ ...was, searching: true }));
     setLadders((was) => ({ ...was, searching: true }));
+    setSquares((was) => ({ ...was, searching: true }));
     const id = window.setTimeout(() => {
       asked.current += 1;
       const at = asked.current;
       const boxRequest: CalcRequest = { kind: 'boxes', at, words, must: boxFilter };
       const ladderRequest: CalcRequest = { kind: 'ladders', at, words };
+      const squareRequest: CalcRequest = { kind: 'squares', at, words };
       worker.current?.postMessage(boxRequest);
       worker.current?.postMessage(ladderRequest);
+      worker.current?.postMessage(squareRequest);
     }, delay);
     return () => window.clearTimeout(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key, delay]);
 
-  return { boxes, ladders };
+  return { boxes, ladders, squares };
 }

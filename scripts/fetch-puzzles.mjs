@@ -6,7 +6,13 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { generateWeave } from './weave.mjs';
-import { generateSquare, GIVEN_TARGET } from './squares.mjs';
+import {
+  chooseGiven,
+  generateSquare,
+  GIVEN_TARGET,
+  indexWords,
+  themedSquares,
+} from './squares.mjs';
 import { THEMES } from './themes.mjs';
 import {
   passagesFor,
@@ -1141,9 +1147,45 @@ for (const variant of ['', 'dev']) {
     const sqRng = mulberry32(
       xmur3(`${SEED_SALT}anagrimoire-squares-${etDate}${salt}${diffSalt(difficulty)}`)()
     );
+    // A themed day heads the square with one of the theme's own words and
+    // fills the rest from the dictionary, which is what theming a square can
+    // mean: ten words drawn from tens of thousands will not contain a theme
+    // word by accident — measured, 0 of 200 at 4x4 — but a theme word can
+    // almost always *head* one, and that is a board whose first line is the
+    // company's.
+    //
+    // Almost always at 4x4, and seldom at 5x5: nine of nine four-letter words
+    // headed a square and one of nine five-letter ones did. So easy is themed
+    // reliably, the bigger boards take it when they can, and a size the theme
+    // cannot head falls back to the ordinary square with a line in the log.
+    const squareTheme = themeIn('squares');
+    let sq = null;
+    if (squareTheme) {
+      const headed = themedSquares(
+        squareTheme.words,
+        n,
+        [...poolsFor('easy').answers],
+        sqRng
+      );
+      if (headed.length > 0) {
+        const chosen = headed[Math.floor(sqRng() * headed.length)];
+        sq = {
+          rows: chosen.rows,
+          given: chooseGiven(chosen.rows, n, sqRng, given, indexWords([...uniquenessWords()], n)),
+        };
+        console.log(
+          `Squares ${difficulty} headed by the theme: ${chosen.first} ` +
+            `(${headed.length} of the theme's ${n}-letter words could)`
+        );
+      } else {
+        console.log(
+          `Squares ${difficulty}: no ${n}-letter theme word can head a square — using an ordinary one`
+        );
+      }
+    }
     // built from the easy tier at every difficulty: these words are the answer
     // and have to be guessable, whatever the shape asks of you
-    const sq = generateSquare(
+    sq ??= generateSquare(
       sqRng,
       n,
       [...poolsFor('easy').answers],
