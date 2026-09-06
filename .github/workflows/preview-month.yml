@@ -26,6 +26,18 @@ on:
         description: Last day (YYYY-MM-DD) — leave blank for seven days
         required: false
 
+# Least privilege: this checks the repository out, asks Supabase what the admin
+# pages have set up with its own secret, and writes its answer to the job
+# summary. It has no business writing anything back to GitHub — nothing is
+# published by a preview, which is the whole point of one.
+#
+# Explicit rather than inherited, because a repository created before February
+# 2023 defaults to read-write and a workflow that says nothing takes it. CodeQL
+# flagged this one: every other workflow here declares its permissions and this
+# was the only one that did not.
+permissions:
+  contents: read
+
 jobs:
   preview:
     runs-on: ubuntu-latest
