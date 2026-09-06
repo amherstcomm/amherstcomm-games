@@ -5190,18 +5190,12 @@ begin
   if p_from is not null and p_until is not null and p_until < p_from then
     return jsonb_build_object('ok', false, 'reason', 'it cannot finish before it starts');
   end if;
-  -- One theme per day. Two lists covering the same date would make the daily
-  -- depend on which row was read first, which is a puzzle that changes when
-  -- nobody changed anything.
-  if p_from is not null and p_until is not null and exists (
-    select 1 from public.word_lists l
-    where l.id is distinct from p_id
-      and l.daily_from is not null and l.daily_until is not null
-      and daterange(l.daily_from, l.daily_until, '[]') && daterange(p_from, p_until, '[]')
-  ) then
-    return jsonb_build_object('ok', false, 'reason',
-      'another list already covers some of those days');
-  end if;
+  -- Lists may overlap. This used to refuse it, on the grounds that two lists
+  -- covering a day would make the daily depend on which row was read first —
+  -- which was true of the answer given then, and is the wrong fix. A day now
+  -- takes the *union* of every list covering it, so there is nothing to decide
+  -- and no order to depend on: a standing list for the month and a narrower one
+  -- for a week are both simply available that week.
 
   if p_id is null then
     insert into public.word_lists (name, created_by, clue, spangrams, daily_from, daily_until)
@@ -5263,21 +5257,29 @@ stable
 security definer
 set search_path = ''
 as $fn$
-  select jsonb_build_object(
-    'name', l.name,
-    -- The name is the obvious clue and usually the right one, so it stands in
-    -- rather than making somebody type it twice.
-    'clue', coalesce(nullif(btrim(l.clue), ''), l.name),
-    'spangrams', to_jsonb(coalesce(l.spangrams, '{}')),
+  -- Every list covering the day, merged. Lists may overlap, so a day has no
+  -- single owner and needs none: the words are pooled and the daily draws from
+  -- the pool per length. A standing list for a month and a narrower one for a
+  -- week both simply apply that week.
+  --
+  -- Words only. Weave used to be themed from a list's clue and spangrams, and
+  -- is not any more — weave_themes does that, in the shape a board actually
+  -- needs. Merging two lists would have had to invent a rule for whose clue
+  -- won, which is the sort of rule nobody can remember afterwards.
+  select case when count(*) = 0 then null else jsonb_build_object(
+    'name', string_agg(distinct l.name, ', ' order by l.name),
     'words', coalesce(
-      (select jsonb_agg(e.word order by e.word)
-       from public.word_list_entries e where e.list_id = l.id),
+      (select jsonb_agg(distinct e.word)
+       from public.word_list_entries e
+       where e.list_id in (
+         select l2.id from public.word_lists l2
+         where l2.daily_from is not null and l2.daily_until is not null
+           and p_date between l2.daily_from and l2.daily_until)),
       '[]'::jsonb))
+  end
   from public.word_lists l
   where l.daily_from is not null and l.daily_until is not null
     and p_date between l.daily_from and l.daily_until
-  order by l.daily_from
-  limit 1
 $fn$;
 
 revoke all on function public.daily_theme(date) from public, anon, authenticated;

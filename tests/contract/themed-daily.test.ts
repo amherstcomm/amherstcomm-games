@@ -23,7 +23,6 @@ const DATE = '2026-10-08';
 const THEME = {
   name: 'Employee ownership',
   clue: 'What we all are',
-  spangrams: ['employeeowned', 'sharedreward', 'ownership', 'stakeholders'],
   words: [
     'esop',
     'shares', 'dividend', 'owner', 'equity', 'buyout', 'vesting', 'stake', 'payout',
@@ -34,16 +33,6 @@ const THEME = {
 
 let plain: string;
 let themed: string;
-/** More themed days. One spangram would thread the same long answer through
- *  every board of a month-long theme — the board rearranges and the word does
- *  not.
- *
- *  Three days rather than two, and the assertion is "more than one spangram
- *  across them" rather than "each differs from the last". Two consecutive days
- *  landing on the same one is ordinary with four to choose from; a month stuck
- *  on one is the failure. */
-const MORE = ['2026-10-09', '2026-10-10'];
-let themedMore: string[] = [];
 
 async function generate(dir: string, theme?: object, date = DATE, weave?: object[]) {
   await run('node', ['scripts/fetch-puzzles.mjs'], {
@@ -74,20 +63,15 @@ const words = (payload: { byDifficulty: Record<string, { words: Record<string, s
 beforeAll(async () => {
   plain = await mkdtemp(join(tmpdir(), 'anagrimoire-plain-'));
   themed = await mkdtemp(join(tmpdir(), 'anagrimoire-themed-'));
-  themedMore = await Promise.all(
-    MORE.map(() => mkdtemp(join(tmpdir(), 'anagrimoire-themed-more-')))
-  );
   await Promise.all([
     generate(plain),
     generate(themed, THEME),
-    ...themedMore.map((dir, i) => generate(dir, THEME, MORE[i])),
   ]);
 });
 
 afterAll(async () => {
   await rm(plain, { recursive: true, force: true });
   await rm(themed, { recursive: true, force: true });
-  await Promise.all(themedMore.map((dir) => rm(dir, { recursive: true, force: true })));
 });
 
 describe('the daily word', () => {
@@ -143,47 +127,12 @@ describe('the daily word', () => {
   });
 });
 
-describe('the Weave board', () => {
-  it('is built from the theme, clue and all', async () => {
-    const board = await read(themed, 'daily-weave.json');
-    for (const tier of ['easy', 'hard', 'extreme']) {
-      expect(board.byDifficulty[tier].clue).toBe(THEME.clue);
-    }
-  });
-
-  it('and its answers are the theme s own words', async () => {
-    const board = await read(themed, 'daily-weave.json');
-    // Each answer is a word *and its path* through the board, so the word is
-    // `w` rather than the entry itself.
-    const solved: { spangram: { w: string }; words: { w: string }[] } = JSON.parse(
-      Buffer.from(board.byDifficulty.easy.answers, 'base64').toString()
-    );
-    expect(THEME.spangrams).toContain(solved.spangram.w);
-    for (const { w } of solved.words) {
-      expect(THEME.words).toContain(w.toLowerCase());
-    }
-  });
-
-  // The whole reason a list carries several. A month of boards threading the
-  // same long answer is a month of one puzzle: by the third day nobody is
-  // looking for it.
-  it('and a run of days does not thread the same one every time', async () => {
-    const spangramOf = async (dir: string) =>
-      JSON.parse(
-        Buffer.from(
-          (await read(dir, 'daily-weave.json')).byDifficulty.easy.answers,
-          'base64'
-        ).toString()
-      ).spangram.w as string;
-    const used = new Set(await Promise.all([themed, ...themedMore].map(spangramOf)));
-    expect(used.size, `every day threaded ${[...used][0]}`).toBeGreaterThan(1);
-  });
-
-  it('while the unthemed day gets a curated one', async () => {
-    const board = await read(plain, 'daily-weave.json');
-    expect(board.byDifficulty.easy.clue).not.toBe(THEME.clue);
-  });
-});
+// The Weave board used to be themed from a word list — a clue and spangrams on
+// the list itself — and those tests lived here. That route went when lists were
+// allowed to overlap: merging two lists would have had to invent a rule for
+// whose clue and whose spangram won, and weave_themes already says it properly.
+// A list themes the daily word; a theme themes the board. What follows is the
+// theme half.
 
 // ---------------------------------------------------------------------------
 // Weave themes written as themes

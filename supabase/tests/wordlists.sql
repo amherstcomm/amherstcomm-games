@@ -213,14 +213,14 @@ select pg_temp.check('a list can be given a run of days',
   (select v->>'ok' from t where k='oct') = 'true');
 
 select pg_temp.check('and the generator finds it by date',
-  public.daily_theme(date '2026-10-08')->>'clue' = 'What we all are');
+  public.daily_theme(date '2026-10-08')->>'name' = 'October');
 select pg_temp.check('with the words it needs',
   jsonb_array_length(public.daily_theme(date '2026-10-08')->'words') = 6);
--- Several, because a list that runs for a month builds a board every day of it
--- and one spangram would thread the same word through all thirty-one.
-select pg_temp.check('and every spangram it was given',
-  public.daily_theme(date '2026-10-08')->'spangrams'
-    @> '["employeeowned","sharedreward","ownership"]'::jsonb);
+-- Words only. Weave is themed from weave_themes now, in the shape a board
+-- actually needs, so merging two lists never has to invent a rule for whose
+-- clue wins.
+select pg_temp.check('and nothing about Weave, which has its own themes',
+  not (public.daily_theme(date '2026-10-08') ? 'spangrams'));
 -- Eleven months of the year there is no theme, and that is the ordinary state
 -- rather than a failure: the generator makes the day it would have made.
 select pg_temp.check('a day nothing covers has no theme',
@@ -237,12 +237,8 @@ golden
 decade
 planet',
   null, null, date '2026-12-01', date '2026-12-07');
-select pg_temp.check('a list with no clue of its own is called by its name',
-  public.daily_theme(date '2026-12-03')->>'clue' = 'Anniversary week');
--- Without a spangram it can still pick the daily word; it just cannot build a
--- Weave board, which the generator decides rather than this.
-select pg_temp.check('and may have none at all',
-  public.daily_theme(date '2026-12-03')->'spangrams' = '[]'::jsonb);
+select pg_temp.check('a list is named by its name',
+  public.daily_theme(date '2026-12-03')->>'name' = 'Anniversary week');
 
 -- ---------------------------------------------------------------------------
 -- What is refused
@@ -267,11 +263,20 @@ select pg_temp.check('and both were kept',
 select pg_temp.check('a window cannot finish before it starts',
   (public.save_word_list(null, 'Backwards', 'shares', null, null,
      date '2027-02-10', date '2027-02-01')->>'reason') = 'it cannot finish before it starts');
--- Two themes covering one day would make the daily depend on which row was read
--- first: a puzzle that changes when nobody changed anything.
-select pg_temp.check('and two lists cannot cover the same day',
-  (public.save_word_list(null, 'Also October', 'shares', null, null,
-     date '2026-10-15', date '2026-10-20')->>'reason') like 'another list already covers%');
+-- Lists may overlap. A standing list for the month and a narrower one for a
+-- week are both simply available that week, and the day takes the union rather
+-- than picking an owner — so there is no order for the answer to depend on.
+select pg_temp.check('two lists may cover the same day',
+  (public.save_word_list(null, 'Also October', 'buyout trustee', null, null,
+     date '2026-10-15', date '2026-10-20')->>'ok') = 'true');
+select pg_temp.check('and a day they share has both their words',
+  (select public.daily_theme(date '2026-10-16')->'words') @> '["buyout","trustee"]'::jsonb
+  and (select public.daily_theme(date '2026-10-16')->'words') @> '["shares","dividend"]'::jsonb);
+select pg_temp.check('while a day only one covers has only its own',
+  not ((select public.daily_theme(date '2026-10-08')->'words') @> '["trustee"]'::jsonb));
+-- The name says which, for the line the nightly log prints.
+select pg_temp.check('and the name says which lists are in play',
+  public.daily_theme(date '2026-10-16')->>'name' = 'Also October, October');
 select pg_temp.check('though a list may be edited without colliding with itself',
   (public.save_word_list(((select v->>'id' from t where k='oct'))::uuid, 'October',
      'shares dividend owner', 'What we all are', 'employeeowned',
