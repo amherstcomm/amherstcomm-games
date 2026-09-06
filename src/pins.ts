@@ -8,6 +8,7 @@
 import { supabase } from '@/supabase';
 import { boxesFrom, laddersFrom } from '@/themeCalculators';
 import { canSeedHive, RACK_SIZE, type CoverageDay } from '@/coverage';
+import { SLUG_NAME } from '@/games';
 import { tiersFor } from '@/cryptogramFit';
 import { fitsBoards } from '@/weaveFit';
 
@@ -29,6 +30,24 @@ export type Candidate = {
   choice: Record<string, unknown>;
   /** which difficulties it could serve, when that is not all of them */
   tiers?: string[];
+  /** the one number that tells these apart — letters in the word, words in the
+   *  chain, steps in the ladder — so a list of hundreds can be narrowed to the
+   *  ones of a given size and sorted by it */
+  size?: number;
+  /** the word the alphabetical sort uses, which is not always the label: a box
+   *  is named by its sides and found by its words */
+  sortAs?: string;
+};
+
+/** What that number is called, per game. Absent means the game has no such
+ *  number: a Weave theme and a cryptogram passage are chosen by what they say,
+ *  not by their size. */
+export const SIZE_LABEL: Partial<Record<Pinnable, string>> = {
+  guess: 'Letters',
+  scramble: 'Letters',
+  hive: 'Letters',
+  boxed: 'Words in the chain',
+  ladder: 'Steps',
 };
 
 const fail = (reason: string) => ({ ok: false as const, reason });
@@ -86,15 +105,12 @@ export const PINNABLE = [
 ] as const;
 export type Pinnable = (typeof PINNABLE)[number];
 
-export const PIN_TITLE: Record<Pinnable, string> = {
-  guess: 'The daily word',
-  scramble: 'Scramble rack',
-  hive: 'Hive letters',
-  boxed: 'Letter box',
-  ladder: 'Word ladder',
-  weave: 'Weave theme',
-  cryptogram: 'Cryptogram passage',
-};
+/** What each game is called — the site's own name for it, from src/games.ts,
+ *  because a page that invents a second name for Boxed is a page nobody can
+ *  search or talk about. */
+export const PIN_TITLE: Record<Pinnable, string> = Object.fromEntries(
+  PINNABLE.map((slug) => [slug, SLUG_NAME[slug]])
+) as Record<Pinnable, string>;
 
 /** What a pin means, said once so a saved pin and a candidate cannot describe
  *  themselves differently. */
@@ -139,17 +155,22 @@ export function candidatesFor(
       // nine-letter answer somebody was looking for.
       return [...words]
         .sort((a, b) => a.length - b.length || a.localeCompare(b))
-        .map((word) => ({ label: `${word} (${word.length})`, choice: { word } }));
+        .map((word) => ({
+          label: `${word} (${word.length})`,
+          choice: { word },
+          size: word.length,
+          sortAs: word,
+        }));
     case 'scramble':
       return words
         .filter((w) => w.length === RACK_SIZE)
         .sort()
-        .map((word) => ({ label: word, choice: { word } }));
+        .map((word) => ({ label: word, choice: { word }, size: word.length, sortAs: word }));
     case 'hive':
       return words
         .filter(canSeedHive)
         .sort()
-        .map((base) => ({ label: base, choice: { base } }));
+        .map((base) => ({ label: base, choice: { base }, size: base.length, sortAs: base }));
     case 'boxed':
       // Every one of them, not a capped page. The cap was a real bug: it
       // stopped the search early, *before* the sort, so a filter typed into
@@ -170,6 +191,12 @@ export function candidatesFor(
       }).map((box) => ({
         label: `${box.sides.join('/')} — ${box.solution.join(' → ')}`,
         choice: { from: box.from },
+        // How many words the chain takes, which is the thing somebody choosing
+        // a box is choosing between.
+        size: box.solution.length,
+        // Sorted by the words rather than by the sides: nobody looks for a
+        // board by its letters.
+        sortAs: box.solution.join(' '),
       }));
     case 'ladder':
       return rungs
@@ -177,6 +204,10 @@ export function candidatesFor(
             label: `${pair.a} → ${pair.b} in ${pair.par}`,
             choice: { a: pair.a, b: pair.b },
             tiers: [pair.tier],
+            // Steps, which is what the tier is decided by and what a player
+            // sees on the board.
+            size: pair.par,
+            sortAs: pair.a,
           }))
         : [];
     case 'weave':

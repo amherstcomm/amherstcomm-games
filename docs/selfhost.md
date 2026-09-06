@@ -1747,6 +1747,17 @@ hundreds and its pangrams to three, so one control for the page would be wrong
 in both directions. Twelve at a time, and the filter matches every word typed
 anywhere in the label, in any order.
 
+**Each list is narrowed by the one number that tells its candidates apart** —
+letters for the daily word, the rack and the hive; words in the chain for the
+box; steps for the ladder — and sorted best first, A to Z, or by that number.
+Alphabetical sorts a box by its *words* rather than by its sides, because nobody
+looks for a board by its letters. The Weave themes and the cryptogram passages
+have no such number: they are chosen by what they say.
+
+The lists are headed with the site's own names for the games — Guess the Word,
+Boxed, Word Ladder — read from `src/games.ts` rather than invented here. A page
+that calls Boxed "the letter box" is a page nobody can search or talk about.
+
 **At the box list the filter goes into the search, not the results.** A word
 list makes more boards than a search will enumerate, so filtering what is on
 screen can hide a board that exists. Typing `charter` re-runs the search for

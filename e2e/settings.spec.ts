@@ -1060,7 +1060,7 @@ test('and a long shortlist can be filtered and paged through', async ({ page }) 
   // trimming what is on screen: a long list makes more boards than any search
   // enumerates, so filtering the page can hide a board that exists — which is
   // what "charter isn't in the list" was.
-  await page.getByLabel('Filter Letter box').fill(`${right} ${left}`);
+  await page.getByLabel('Filter Boxed').fill(`${right} ${left}`);
   await expect.poll(async () => (await boxes.count()) < before).toBe(true);
   // Every one that survived carries both, which is the rule — not one, because
   // a seed of three or four words can carry the same two.
@@ -1073,5 +1073,67 @@ test('and a long shortlist can be filtered and paged through', async ({ page }) 
   // what was typed at the boxes, still showing its own first page.
   const wordList = page.locator('[data-shortlist="guess"]');
   await expect(wordList.getByRole('button', { name: /\(\d+\)$/ })).toHaveCount(12);
-  await expect(wordList.getByLabel('Filter The daily word')).toHaveValue('');
+  await expect(wordList.getByLabel('Filter Guess the Word')).toHaveValue('');
+});
+
+// The three lists with a number worth narrowing by: letters in the word, words
+// in the chain, steps in the ladder. Named as the site names the games, because
+// a page that invents a second name for Boxed is a page nobody can talk about.
+test('and a list can be narrowed by size and sorted', async ({ page }) => {
+  const day = {
+    date: '2026-10-08',
+    theme: {
+      name: 'October',
+      words: [
+        'payouts', 'sharing', 'shares', 'shared', 'stock', 'stocks', 'service', 'esop',
+        'dividends', 'dividend', 'owned', 'owner', 'ownership', 'policy', 'earned',
+        'charter', 'reward', 'rewards', 'growth', 'trustee', 'equity', 'voting',
+      ],
+    },
+    weave: [],
+    passages: [],
+  };
+  await page.route('**/rest/v1/rpc/**', (route) => {
+    const url = route.request().url();
+    const body = url.includes('theme_coverage')
+      ? { ok: true, days: [day] }
+      : url.includes('pins_sheet')
+        ? { ok: true, pins: [] }
+        : [];
+    return route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(body),
+    });
+  });
+
+  await page.goto('/admin/pins');
+  await page.getByLabel('Pin date').fill('2026-10-08');
+  await page.getByRole('button', { name: 'Look' }).click();
+
+  // The site's own names, not ones invented here.
+  await expect(page.getByText('Guess the Word', { exact: true })).toBeVisible();
+  await expect(page.getByText('Word Ladder', { exact: true })).toBeVisible();
+
+  // Guess, by letters: every word left is that long.
+  const words = page.locator('[data-shortlist="guess"]');
+  await words.getByLabel('Letters in Guess the Word').selectOption('7');
+  for (const text of await words.getByRole('button', { name: /\(\d+\)$/ }).allTextContents()) {
+    expect(text).toMatch(/\(7\)$/);
+  }
+
+  // Boxed, by how many words the chain takes.
+  const boxes = page.locator('[data-shortlist="boxed"]');
+  await boxes.getByLabel('Words in the chain in Boxed').selectOption('2');
+  for (const text of await boxes.getByRole('button', { name: /→/ }).allTextContents()) {
+    expect(text.split(' — ')[1].split(' → ')).toHaveLength(2);
+  }
+
+  // And A to Z, which sorts a box by its words rather than by its letters —
+  // nobody looks for a board by its sides.
+  await boxes.getByLabel('Order Boxed').selectOption('az');
+  const sorted = (await boxes.getByRole('button', { name: /→/ }).allTextContents()).map(
+    (text) => text.split(' — ')[1]
+  );
+  expect(sorted).toEqual([...sorted].sort((a, b) => a.localeCompare(b)));
 });
