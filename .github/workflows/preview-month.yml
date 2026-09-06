@@ -49,13 +49,14 @@ jobs:
       - run: npm ci --ignore-scripts
       - name: Preview
         env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           # The same salt the nightly run uses, or the boards below would be a
           # different day's boards — right in shape and wrong in every letter.
           PUZZLES_SEED_SALT: ${{ secrets.PUZZLES_SEED_SALT }}
         run: |
-          if [ -z "$SUPABASE_SERVICE_ROLE_KEY" ]; then
-            echo "::error::SUPABASE_SERVICE_ROLE_KEY is not set, so there are no settings to read"
+          if [ -z "$SUPABASE_URL" ] || [ -z "$SUPABASE_SERVICE_ROLE_KEY" ]; then
+            echo "::error::SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY must both be set — the URL says which database, and this repository must not guess"
             exit 1
           fi
           node scripts/preview-month.mjs \

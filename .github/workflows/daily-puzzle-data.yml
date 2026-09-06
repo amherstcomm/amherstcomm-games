@@ -27,6 +27,17 @@ jobs:
       - run: npm ci --ignore-scripts
       - run: node scripts/fetch-puzzles.mjs
         env:
+          # Which database the themed month lives in. Without it every
+          # lookup — word lists, Weave themes, passages, word rules, pins —
+          # returns nothing and the run publishes ordinary days without
+          # saying so, which is how a themed October would have gone out
+          # unthemed and unnoticed.
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          # And the key, which this step never had: it was on the publish step
+          # below and nowhere else, so the *generator* could not read a theme
+          # even where the URL was set. Both, on the step that builds the
+          # puzzles, or a themed month is a month of ordinary days.
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           # the same salt the window publish uses, so today's files and
           # today's rows are the same boards
           PUZZLES_SEED_SALT: ${{ secrets.PUZZLES_SEED_SALT }}
@@ -36,6 +47,7 @@ jobs:
         # the secret exists, and a failure here must not stop the branch
         # publish below — that's today's live feed.
         env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           PUZZLES_SEED_SALT: ${{ secrets.PUZZLES_SEED_SALT }}
         run: |
