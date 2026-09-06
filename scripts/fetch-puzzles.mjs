@@ -835,46 +835,38 @@ for (const variant of ['', 'dev']) {
 
   // box: two chainable words covering exactly 12 distinct letters
   //
-  // A themed day builds the box out of two of the theme's own words: their
-  // letters are exactly twelve distinct, and the sides are laid so both can be
-  // spelled on the finished board.
+  // A themed day builds the box out of the theme's own words: two to four of
+  // them that *chain* — each starting with the last letter of the one before —
+  // and cover exactly twelve distinct letters between them. Those letters are
+  // the board, and that chain is its answer. It is the ordinary construction
+  // with the theme's words in place of the language's.
   //
-  // They do not chain, which is what makes this different from the ordinary
-  // construction below — theme words essentially never chain, and requiring it
-  // reported zero pairs from a list with twenty-one. So the solution the board
-  // promises has to be *found* rather than inherited: words that chain, each
-  // starting with the last letter of the one before, covering all twelve
-  // between them. Chaining is the game and is not relaxed anywhere.
-  //
-  // Two is preferred and three is allowed. An ordinary box inherits two from
-  // the pair it was built out of; a themed box earns whichever it can, and the
-  // board says which — "solvable in 3" is a real answer rather than a
-  // consolation, and measured on a 66-word list it is the difference between
-  // 59 usable boards and 74. A box that cannot be solved in either is not
-  // published: a board whose promise is false is worse than an unthemed one.
-  //
-  // Searched once against the *easy* pool rather than once per difficulty. The
-  // accept tiers are nested, so a solution in the narrowest is a solution in
-  // all three — and one search means one list of boxes, which is what lets the
-  // three difficulties take different ones. A box only the widest dictionary
-  // could finish is not offered; that is the conservative half of the trade.
+  // Two versions of this dropped the chain rather than the pair. Two theme
+  // words almost never chain into twelve distinct letters — measured on a
+  // 66-word list, three do — so a search over pairs reported nothing, and the
+  // fix looked like "the seeds need not chain". Chains of three manage it a
+  // hundred and sixty times and of four three hundred and twenty-nine, so the
+  // seed is a chain of two to four rather than a pair, and the board is solved
+  // by the words it is made of.
   const boxTheme = themeIn('boxed');
-  // Under `themed` the chain has to be made of the theme's own words, so the
-  // solution is searched for among them rather than in the dictionary. It is a
-  // far narrower question — measured on a 66-word list, 101 boards against
-  // 4,318 — and a day with no themed-only answer falls back rather than
-  // publishing a board nobody can finish.
-  const boxPool =
-    accepts('boxed') === 'themed' ? boxTheme?.words ?? [] : [...poolsFor('easy').cumulative];
+  // The seed chain is the answer, so there is nothing to search a dictionary
+  // for: the words that make the board are the words that solve it.
+  //
+  // The chain guarantees the board can be solved. What the *board* promises is
+  // the shortest solution a player could actually reach, so the dictionary is
+  // searched as well — unless the day accepts the theme's words alone, in which
+  // case the chain is all there is.
   const themedBoxen = boxTheme
-    ? themedBoxes(boxTheme.words, boxPool).filter((b) => b.par !== null)
+    ? themedBoxes(boxTheme.words, {
+        dictionary:
+          accepts('boxed') === 'themed' ? null : [...poolsFor('easy').cumulative],
+      })
     : [];
   if (boxTheme) {
-    const all = themedBoxes(boxTheme.words).length;
-    const two = themedBoxen.filter((b) => b.par === 2).length;
+    const shorter = themedBoxen.filter((b) => b.ordinary).length;
     console.log(
-      `Themed boxes for ${etDate}: ${all} from the theme's own pairs, ` +
-        `${two} solvable in two words and ${themedBoxen.length - two} in three`
+      `Themed boxes for ${etDate}: ${themedBoxen.length} from chains of the theme's own words` +
+        (shorter > 0 ? `, ${shorter} with a shorter ordinary route` : '')
     );
   }
   // Which board each difficulty gets, worked out once for the day.
@@ -921,8 +913,9 @@ for (const variant of ['', 'dev']) {
     if (pinnedBox || themedBoxOrder.length > tier) {
       const box = pinnedBox ?? themedBoxOrder[tier];
       console.log(
-        `Box ${difficulty} from the theme: ${box.from.join(' + ')} → ` +
-          `${box.sides.join('/')} (solvable in ${box.par}, spells ${box.holds.length})`
+        `Box ${difficulty}: ${box.sides.join('/')} — ${box.solution.join(' → ')} ` +
+          `(par ${box.par}${box.ordinary ? `, ${box.ordinary.join(' → ')}` : ''}` +
+          `, spells ${box.holds.length})`
       );
       // The board says what it takes. Two is preferred and comes first in the
       // list; three is a real answer rather than a consolation, and a board of

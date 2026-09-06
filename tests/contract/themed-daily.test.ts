@@ -439,51 +439,57 @@ describe('a box built from the theme', () => {
     expect(spelled.length, `${board.sides.join('/')} spells no theme word`).toBeGreaterThanOrEqual(2);
   });
 
-  // The promise the board makes, and the whole of the work: a themed pair does
-  // not chain, so the answer is not inherited from the construction the way an
-  // ordinary box's is. It is searched for — chained, each word starting with
-  // the last letter of the one before — and a box with no answer in two or
-  // three is not published at all.
-  it('and it really is solvable in the number it says', async () => {
+  // Two things, and they are different. The board was built from a chain of the
+  // theme's own words, which is what makes it themed and guarantees it can be
+  // solved at all. What it *promises* is the shortest route a player could
+  // actually take, and on a day that accepts the dictionary that is often an
+  // ordinary pair rather than the themed chain — so par may be less than the
+  // chain it was made of, and must never be more.
+  it('was built from a chain of the theme s own words', async () => {
     const payload = await read(themed, 'daily-box.json');
     const board = sidesOf(payload, 'easy');
-    expect([2, 3]).toContain(board.par);
     const letters = new Set(board.sides.join(''));
-    // The everyday bands, which are inside every difficulty's accept pool — so
-    // a solution found here is one any player of any tier could type.
+    const usable = THEME.words.filter(
+      (w) => spellable(board.sides, w) && [...w].every((c) => letters.has(c))
+    );
+    const walk = (chain: string[]): number | null => {
+      if (chain.length >= 2 && new Set(chain.join('')).size === 12) return chain.length;
+      if (chain.length >= 4) return null;
+      for (const word of usable) {
+        if (chain.includes(word)) continue;
+        if (chain.length > 0 && chain[chain.length - 1].at(-1) !== word[0]) continue;
+        const found = walk([...chain, word]);
+        if (found) return found;
+      }
+      return null;
+    };
+    const themedChain = walk([]);
+    expect(themedChain, `${board.sides.join('/')} has no chain of theme words`).not.toBeNull();
+    expect(board.par).toBeLessThanOrEqual(themedChain!);
+  });
+
+  it('and promises a number some chain of ordinary words can meet', async () => {
+    const payload = await read(themed, 'daily-box.json');
+    const board = sidesOf(payload, 'easy');
+    const letters = new Set(board.sides.join(''));
     const pool: string[] = [];
     for (const band of ['band-10', 'band-20', 'band-35']) {
       pool.push(...JSON.parse(await readFile(`src/wordbands/${band}.json`, 'utf8')).words);
     }
-    const usable = pool.filter(
-      (w) => w.length >= 3 && [...w].every((c) => letters.has(c)) && spellable(board.sides, w)
-    );
-    const byFirst = new Map<string, string[]>();
-    for (const w of usable) {
-      const list = byFirst.get(w[0]);
-      if (list) list.push(w);
-      else byFirst.set(w[0], [w]);
-    }
-    // Two, chained.
-    const inTwo = usable.some((first) =>
-      (byFirst.get(first[first.length - 1]) ?? []).some(
-        (second) => new Set(first + second).size === 12
-      )
-    );
-    // Or three, chained the same way — never four, and never unchained.
-    const inThree =
-      !inTwo &&
-      usable.some((first) =>
-        (byFirst.get(first[first.length - 1]) ?? []).some((second) =>
-          (byFirst.get(second[second.length - 1]) ?? []).some(
-            (third) => new Set(first + second + third).size === 12
-          )
-        )
-      );
-    expect(
-      inTwo ? 2 : inThree ? 3 : 0,
-      `${board.sides.join('/')} says ${board.par} and cannot be solved in it`
-    ).toBe(board.par);
+    const usable = [
+      ...pool.filter((w) => w.length >= 3 && [...w].every((c) => letters.has(c))),
+      ...THEME.words,
+    ].filter((w) => spellable(board.sides, w));
+    const walk = (chain: string[]): boolean => {
+      if (chain.length === board.par) return new Set(chain.join('')).size === 12;
+      for (const word of usable) {
+        if (chain.includes(word)) continue;
+        if (chain.length > 0 && chain[chain.length - 1].at(-1) !== word[0]) continue;
+        if (walk([...chain, word])) return true;
+      }
+      return false;
+    };
+    expect(walk([]), `${board.sides.join('/')} cannot be solved in ${board.par}`).toBe(true);
   });
 
   it('while an ordinary day is built the way it always was', async () => {

@@ -537,18 +537,21 @@ test('a word list says what it can make while you write it', async ({ page }) =>
   await page.goto('/admin/lists');
   await page.getByRole('button', { name: 'New list' }).click();
 
-  // voting + shared is twelve distinct letters, measured in
-  // scripts/feasibility.mjs against the real dictionary.
-  await page.getByLabel(/^Words/).fill('voting\nshared\nvote\ngain\nearn\ndividend');
-  // Deferred now, like the ladder: the search takes sets of up to four words
-  // and measuring each board is milliseconds, so it waits for a pause rather
-  // than running on every keystroke.
-  await expect(page.getByText(/Boxed — \d+ boards? from sets/)).toBeVisible();
-  // The best board, named by the words it was built from and what it takes to
-  // solve. Which words those are depends on the list, so what is asserted is
-  // the shape: a seed of at least two, the four sides, and the number.
-  await expect(page.getByText(/best: \w+( \+ \w+)+ → \w+ \| \w+ \| \w+ \| \w+/)).toBeVisible();
-  await expect(page.getByText(/\(solvable in [23]\)/)).toBeVisible();
+  // payouts → sharing chains — payouts ends in s, sharing begins with one — and
+  // covers exactly twelve distinct letters, which is what a box is. The words
+  // it is built from are the words that solve it.
+  await page
+    .getByLabel(/^Words/)
+    .fill('payouts\nsharing\nshared\nworker\nvoting\nvote\ngain\nearn\ndividend');
+  // Deferred, like the ladder below: the search walks every chain of two to
+  // four of these words, so it waits for a pause rather than running on every
+  // keystroke.
+  await expect(
+    page.getByText(/Boxed — \d+ boards? whose letters these words chain through/)
+  ).toBeVisible();
+  // The board and the chain that solves it — there is nothing else on the line,
+  // because the seed *is* the answer.
+  await expect(page.getByText(/best:/).first()).toContainText('payouts → sharing');
 
   // The ladder search waits for a pause in typing rather than running per
   // keystroke — a walk per word over forty thousand rungs is a tenth of a
@@ -593,6 +596,11 @@ test('coverage says which days of a month are themed, and with how much', async 
               'dividend',
               'trustee',
               'employer',
+              // payouts → sharing chains into twelve distinct letters, which is
+              // what makes a box: the words it is built from are the words that
+              // solve it.
+              'payouts',
+              'sharing',
             ],
           },
       // A passage of the deployment's own on the first five days, and one no
@@ -682,8 +690,8 @@ test('coverage says which days of a month are themed, and with how much', async 
   ).toBeVisible();
   await expect(page.getByText(/curated: Oct 11.Oct 31/)).toBeVisible();
 
-  // voting + shared is twelve distinct letters, so every themed day can build
-  // a box out of the theme.
+  // A chain of the day's own words covering twelve distinct letters, so every
+  // themed day can build a box out of the theme.
   await expect(page.getByText(/Boxed — 29 days/)).toBeVisible();
 
   await expect(
@@ -983,10 +991,13 @@ test('and a long shortlist can be filtered and paged through', async ({ page }) 
     date: '2026-10-08',
     theme: {
       name: 'October',
+      // Chain-friendly on purpose: a box is two to four of these words chaining
+      // into twelve distinct letters, and this list makes dozens — which is
+      // what the `more` button is for.
       words: [
-        'ownership', 'invested', 'investing', 'dividend', 'dividends', 'rewards', 'charter',
-        'sharing', 'network', 'growth', 'payouts', 'vesting', 'meeting', 'capital', 'trustee',
-        'voting', 'shared', 'budget', 'router', 'stake', 'board', 'esop',
+        'payouts', 'sharing', 'shares', 'shared', 'stock', 'stocks', 'service', 'esop',
+        'dividends', 'dividend', 'owned', 'owner', 'ownership', 'policy', 'earned',
+        'charter', 'reward', 'rewards', 'growth', 'trustee', 'equity', 'voting',
       ],
     },
     weave: [],
@@ -1013,10 +1024,11 @@ test('and a long shortlist can be filtered and paged through', async ({ page }) 
   // Scoped to the box list: three lists can show a `more` button at once, and
   // "the first one" is the daily word's.
   const boxList = page.locator('[data-shortlist="boxed"]');
-  const boxes = boxList.getByRole('button', { name: /solvable in/ });
+  const boxes = boxList.getByRole('button', { name: /→/ });
   await expect(boxes.first()).toBeVisible();
+  // A page of them, which is twelve unless the day makes fewer.
   const firstPage = await boxes.count();
-  expect(firstPage).toBe(12);
+  expect(firstPage).toBeGreaterThan(1);
   await boxList.getByRole('button', { name: /\d+ more/ }).click();
   expect(await boxes.count()).toBeGreaterThan(firstPage);
 
@@ -1025,8 +1037,17 @@ test('and a long shortlist can be filtered and paged through', async ({ page }) 
   // Taken out of a board that is actually on the page rather than written down
   // here: which pairs a list makes is a fact about the list, and the mechanism
   // is what is being tested.
+  // The label names what the board is made of, the letters, and the chain that
+  // solves it — the seed words never chain with each other, so a board saying
+  // only "solvable in 2" beside them reads as broken.
+  // The board and the chain that solves it. Nothing on the label reads as a
+  // chain except the chain, because there is nothing else on it: the words the
+  // board was built from *are* the answer.
   const label = (await boxes.first().textContent()) ?? '';
-  const [left, right] = label.split(' — ')[0].split(' + ');
+  // The board, the chain of the day's own words that solves it, and — where an
+  // ordinary pair beats it — what the board will actually promise.
+  expect(label).toMatch(/^\w+\/\w+\/\w+\/\w+ — \w+( → \w+)+( \(par \d+: .+\))?$/);
+  const [left, right] = label.split(' — ')[1].split(' → ');
   const before = await boxes.count();
   await page.getByLabel('Filter Letter box').fill(`${right} ${left}`);
   await expect.poll(async () => (await boxes.count()) < before).toBe(true);

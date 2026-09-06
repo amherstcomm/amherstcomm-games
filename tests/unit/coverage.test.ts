@@ -106,12 +106,15 @@ describe('summarise', () => {
 
   it('counts the days that can make a box', () => {
     const sum = summarise([
-      list(october(1), ['voting', 'shared']),
+      // payouts → sharing chains and covers twelve distinct letters; the pair
+      // below neither chains nor reaches twelve.
+      list(october(1), ['payouts', 'sharing']),
       list(october(2), ['stake', 'stack']),
     ]);
     expect(sum.boxes.days).toBe(1);
-    // Unknown rather than nought until the dictionary is in hand.
-    expect(sum.boxes.playable).toBeNull();
+    // The chain is the answer, so how few words it takes is known without a
+    // dictionary — there is nothing left to look up.
+    expect(sum.boxes.shortest).toBe(2);
   });
 });
 

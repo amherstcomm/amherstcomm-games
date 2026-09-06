@@ -25,11 +25,15 @@ export default function ThemeYield({ words }: { words: string }) {
     () => words.split(/[^A-Za-z]+/).filter((w) => w.length >= 3),
     [words]
   );
+  // Deferred, like the ladder below: the search walks every chain of two to
+  // four of these words, and a long list makes hundreds of boards.
+  //
+  // The chain is the guarantee and needs no dictionary. The pool is for the
+  // other question — whether an ordinary pair beats the chain, which is what
+  // the board will promise on a day that accepts the dictionary — so the boxes
+  // are counted the moment they are known and the par catches up when it lands.
   const [dictionary, setDictionary] = useState<string[] | null>(null);
-
   useEffect(() => {
-    // Not before there is a list worth asking about: the pool is a fetch, and
-    // an empty box should not cost one.
     if (list.length < 2 || dictionary) return;
     let alive = true;
     void getDifficultyPool('easy').then((pool) => {
@@ -40,11 +44,6 @@ export default function ThemeYield({ words }: { words: string }) {
     };
   }, [list.length, dictionary]);
 
-  // Deferred, like the ladder below and for the same reason: the search now
-  // takes sets of up to four words, and measuring how few words each board
-  // needs is three milliseconds a board. A couple of dozen is all this line
-  // says anything about, so it asks for that rather than the four thousand the
-  // generator works through overnight.
   const [boxes, setBoxes] = useState<Box[]>([]);
   useEffect(() => {
     if (list.length < 2) {
@@ -52,7 +51,7 @@ export default function ThemeYield({ words }: { words: string }) {
       return;
     }
     const id = window.setTimeout(
-      () => setBoxes(boxesFrom(list, dictionary ?? undefined, { limit: 24 })),
+      () => setBoxes(boxesFrom(list, { dictionary: dictionary ?? undefined, limit: 24 })),
       400
     );
     return () => window.clearTimeout(id);
@@ -87,8 +86,7 @@ export default function ThemeYield({ words }: { words: string }) {
 
   if (list.length < 2) return null;
 
-  const playable = boxes.filter((b) => b.par !== null);
-  const best = playable[0] ?? boxes[0];
+  const best = boxes[0];
 
   return (
     <div className="rounded-lg border border-white/15 p-3 text-xs space-y-2">
@@ -99,30 +97,27 @@ export default function ThemeYield({ words }: { words: string }) {
       <div>
         <p className={boxes.length > 0 ? 'text-emerald-300' : 'text-slate-500'}>
           {boxes.length > 0 ? '✓' : '·'} Boxed — {boxes.length}{' '}
-          {boxes.length === 1 ? 'board' : 'boards'} from sets of these words
-          {dictionary && boxes.length > 0 &&
-            `, ${boxes.filter((b) => b.par === 2).length} solvable in two words and ` +
-              `${boxes.filter((b) => b.par === 3).length} in three`}
+          {boxes.length === 1 ? 'board' : 'boards'} whose letters these words
+          chain through
           {boxes.length >= 24 && ' (the first two dozen — there are more)'}
         </p>
         {best && (
           <p className="text-slate-400 pl-3">
-            best: {best.from.join(' + ')} → {best.sides.join(' | ')}
-            {best.par ? ` (solvable in ${best.par})` : ''} — finds{' '}
+            best: {best.sides.join(' | ')} — {best.solution.join(' → ')}
+            {best.ordinary ? ` (par ${best.par}: ${best.ordinary.join(' → ')})` : ''} — finds{' '}
             {best.holds.length}: {best.holds.slice(0, 8).join(', ')}
             {best.holds.length > 8 && '…'}
           </p>
         )}
-        {/* The guarantee is the thing a themed box can quietly lose, so its
-            absence is stated rather than left as a smaller number. */}
-        {dictionary && boxes.length > 0 && playable.length === 0 && (
-          <p className="text-amber-300 pl-3">
-            None can be finished in two words or three, so none would be set.
-            More words, or longer ones, widen the letters.
+        {/* Said plainly, because the reason is not obvious from a long list:
+            the words have to chain into each other and cover twelve distinct
+            letters between them, which two words rarely do and three often do. */}
+        {list.length >= 2 && boxes.length === 0 && (
+          <p className="text-slate-500 pl-3">
+            Needs two to four of these words that chain — each starting with the
+            last letter of the one before — and cover twelve distinct letters
+            between them.
           </p>
-        )}
-        {!dictionary && boxes.length > 0 && (
-          <p className="text-slate-500 pl-3">checking which can be solved…</p>
         )}
       </div>
 

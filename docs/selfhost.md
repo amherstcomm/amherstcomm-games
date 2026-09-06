@@ -1326,26 +1326,31 @@ while it is being written — which is the only time the answer is any use. A li
 finished in September and found to make one puzzle in October is a list nobody
 can fix.
 
-**Boxed.** Theme words whose letters are exactly twelve distinct make the box —
-two of them, or three, or four. Those letters *are* the board, and every word of
-the seed is then findable in it. They do **not** have to chain with each other,
-which is the thing two versions of this got wrong — theme words essentially
-never do, and requiring it reported zero from a list with twenty-one.
+**Boxed.** Two to four of the list's own words that **chain** — each starting
+with the last letter of the one before — and cover exactly twelve distinct
+letters between them. Those letters are the board and that chain solves it:
 
-That is about the *seed*, not the puzzle: the solution still chains, every word
-starting with the last letter of the one before. What it means is that the
-answer is searched for in the dictionary rather than inherited from the seed, so
-the panel says how many boards can be solved in two words and how many in three.
-A board that can be solved in neither would never be set, and that is the
-failure worth catching — stated rather than left as a smaller number.
+```
+✓ Boxed — 74 boards whose letters these words chain through
+  best: eai | dht | rwn | cvs — charter → reward → dividends (par 2: advances → switcher)
+```
 
-Enumerating the seed sets is five milliseconds; working out how few words each
-board takes is three per board, and a sixty-word list makes four thousand of
-them. So the page asks for the first two dozen and says when it has hit the cap,
-the coverage page asks for a dozen a day, and the generator — which has a night
-— works through all of them. A limited answer is the same boards every time and
-a subset of the full one; it is not the best few, and the page does not claim to
-be.
+**The seed is one solution, not the only one.** A board is a board — other pairs
+and longer chains solve it too — so what the board *promises* is the shortest
+route a player could actually take, which depends on what that day accepts. On a
+day that takes the dictionary as well, an ordinary pair often beats a themed
+chain of three, and the panel says so in brackets. On a themed-only day the
+chain is all there is, and the par is its length.
+
+**Reversal, three times over.** Two theme words almost never chain into twelve
+letters — three pairs on a 66-word list — so a search over pairs reported
+nothing and dropping the chain looked like the fix. It was not: a seed that does
+not solve the board it makes is a seed of nothing in particular, and printing
+`acquire + negotiations` says those two chain when e does not lead to n. Chains
+of three manage it a hundred and sixty times and of four three hundred and
+twenty-nine. The dictionary is still searched, but for a different question than
+before: not *whether* the board can be solved — the chain settles that — but in
+how few words.
 
 **Ladder.** Two of the list's own words the same length, three to eight
 one-letter steps apart through the everyday dictionary, reported per step-count
@@ -1437,6 +1442,40 @@ ten games take their content from one, and a seventh scores it:
   ordinary dictionary, so a themed seed whose letters yield fewer than thirty
   words is passed over for an ordinary one, and the run says so in the log
   rather than leaving it to be worked out from the letters.
+- **Ladder**, which is *dealt* from the theme rather than built out of it: two
+  of its own words the same length, three to eight one-letter steps apart. Both
+  ends, never one — the relation is what makes a pair a puzzle somebody set, and
+  for a themed month the relation is that both ends are the company's. Measured
+  on a 49-word list: both-ends gives **21 pairs** (easy 3, hard 7, extreme 11)
+  and one-end gives sixteen thousand, of which `shares → elopes` is typical and
+  reads as no theme at all.
+
+  Both ends must also be in the everyday dictionary, and this is the one place a
+  themed word cannot be rescued by shipping it with the day. Every rung is
+  checked against the common tier, and **par is the length of the shortest route
+  through the words a player may use** — so widening what counts as a rung
+  changes the answer to the puzzle. ESOP does not play this game; the word-list
+  panel says which words were left out and why.
+
+  Per difficulty by step count: the bands are 3-4, 5-6 and 7-8, and a tier with
+  no themed pair in its band walks the curated pairs exactly as it always has.
+- **Boxed**, whose twelve letters are the theme's own words — **two to four of
+  them that chain**, each starting with the last letter of the one before, and
+  covering exactly twelve distinct letters between them. Those letters are the
+  board and that chain is its answer: the words it is made of are the words that
+  solve it, which is the ordinary construction with the theme's words in place
+  of the language's.
+
+  **Reversal, three times over.** Two theme words almost never chain into twelve
+  letters — measured on a 66-word list, three pairs do — so a search over pairs
+  reported nothing, and dropping the chain looked like the fix. It was not: a
+  seed that does not solve the board it makes is a seed of nothing in
+  particular, and `acquire + negotiations` printed as a pair says the two chain
+  when e does not lead to n. Chains of three manage it a hundred and sixty times
+  and chains of four three hundred and twenty-nine, so the seed is a chain of
+  two to four rather than a pair — and no dictionary is searched for an answer,
+  because the seed is the answer.
+
 - **Ladder**, which is *dealt* from the theme rather than built out of it: two
   of its own words the same length, three to eight one-letter steps apart. Both
   ends, never one — the relation is what makes a pair a puzzle somebody set, and
@@ -1673,6 +1712,19 @@ understand, and none of the pinning surface has to know what a board looks like.
 Nothing about the seed is validated in the database either: what a seed may be
 is the game's business, and a copy of those rules in a table would be a staler
 copy.
+
+**A box candidate leads with the chain that solves it:**
+
+```
+iec/oaq/ntu/rgs — solved by acquire → escorting — letters from acquire, negotiations
+```
+
+Twice over a label got this wrong. First it said only "solvable in 2", which is
+a claim with no evidence beside it. Then it printed the seed as `acquire +
+negotiations`, and a plus sign between two words in a game about chaining says
+they chain — e does not lead to n, and it was never meant to. Those two are
+where the twelve letters came from; the chain is what solves the board, and it
+goes first. The count is derived from the chain rather than printed beside it.
 
 **A pin that has stopped working is passed over**, with a line in the nightly
 log — the word left the list, the box lost its two-word answer, the two ladder

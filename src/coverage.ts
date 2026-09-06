@@ -65,9 +65,10 @@ export type DayYield = {
    *  visibly a day with only sixes */
   pools: Record<number, number>;
   boxes: number;
-  /** boxes a player could actually finish — in two chained words or in three
-   *  — or null while the dictionary is still on its way */
-  playable: number | null;
+  /** how few words the best of them takes, or null when there are none. Every
+   *  box is finishable now: it is a chain of the theme's own words, so the
+   *  answer is the thing it was built from. */
+  shortest: number | null;
   bridges: number;
   /** theme words that could be the day's scramble rack */
   racks: number;
@@ -97,10 +98,10 @@ export function tilesFor(themes: WeaveTheme[]): string[] {
 export function yieldOf(words: string[], dictionary?: string[], rungs?: Set<string>) {
   const pools: Record<number, number> = {};
   for (const len of GUESS_LENGTHS) pools[len] = words.filter((w) => w.length === len).length;
-  // A dozen is enough to answer "can this day make a box"; the full search is
-  // four thousand boards and eleven seconds, which the generator can afford
-  // overnight and a page asking about thirty-one days cannot.
-  const boxes = boxesFrom(words, dictionary, { limit: 12 });
+  // A dozen is enough to answer "can this day make a box". The search no longer
+  // needs a dictionary — a box is a chain of the theme's own words, so it comes
+  // with its answer — which also makes it far cheaper than it was.
+  const boxes = boxesFrom(words, { limit: 12 });
   // Both ends of a ladder have to be the theme's own and both have to be words
   // the board accepts as rungs, so this is the one measurement here that needs
   // the everyday dictionary rather than the generation pool.
@@ -114,7 +115,7 @@ export function yieldOf(words: string[], dictionary?: string[], rungs?: Set<stri
     racks: words.filter((w) => w.length === RACK_SIZE).length,
     hives: words.filter(canSeedHive).length,
     boxes: boxes.length,
-    playable: dictionary ? boxes.filter((b) => b.par !== null).length : null,
+    shortest: boxes.length > 0 ? Math.min(...boxes.map((b) => b.par)) : null,
     bridges: bridgesFrom(words).length,
   };
 }
@@ -151,7 +152,10 @@ export type Summary = {
    *  the smallest pool any of them draws from */
   lengths: { length: number; days: number; smallest: number }[];
   weave: { withTheme: number; tiling: number; gaps: string[]; perTier: Record<string, number> };
-  boxes: { days: number; playable: number | null };
+  /** days that can make a box, and the shortest chain any of them takes —
+   *  every box is solvable by construction now, so what is worth reporting is
+   *  how few words it costs rather than whether it can be done at all */
+  boxes: { days: number; shortest: number | null };
   bridges: { days: number };
   /** days whose theme could supply the board itself, not just bonus words */
   scramble: { days: number };
@@ -222,11 +226,6 @@ export function fold(days: CoverageDay[], yields: DayYield[]): Summary {
     perTier[tier] = yields.filter((y) => y.tiles.includes(tier)).length;
   }
 
-  // Unknown rather than nought when the dictionary never arrived: every day
-  // reports its guarantee as unknown, and a count of nought would read as "none
-  // of them can be finished".
-  const knownGuarantee = yields.every((y) => y.playable !== null);
-
   return {
     days: days.length,
     themed: yields.filter((y) => y.words.length > 0).length,
@@ -240,7 +239,10 @@ export function fold(days: CoverageDay[], yields: DayYield[]): Summary {
     },
     boxes: {
       days: yields.filter((y) => y.boxes > 0).length,
-      playable: knownGuarantee ? yields.filter((y) => (y.playable ?? 0) > 0).length : null,
+      shortest: (() => {
+        const shortest = yields.map((y) => y.shortest).filter((n): n is number => n !== null);
+        return shortest.length > 0 ? Math.min(...shortest) : null;
+      })(),
     },
     bridges: { days: yields.filter((y) => y.bridges > 0).length },
     scramble: { days: yields.filter((y) => y.racks > 0).length },

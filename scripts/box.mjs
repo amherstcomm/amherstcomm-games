@@ -1,27 +1,35 @@
 // Letter Boxed, built out of a theme.
 //
-// The ordinary daily takes two chainable words whose letters are exactly twelve
-// distinct, and lays the sides so neither word steps twice on one side. That
-// construction hands over the two-word solution for free: the board was made
-// out of it.
+// The ordinary daily takes two chainable words whose twelve distinct letters
+// become the board, and lays the sides so neither word steps twice on one side.
+// The two-word solution is then free: the board was made out of it.
 //
-// A themed box is the same twelve letters from the theme's own words — two of
-// them, or three, or four, because a box needs twelve distinct letters and two
-// six-letter words rarely have twelve between them. They do
-// not chain — theme words essentially never do, and requiring it reported zero
-// pairs from a list with twenty-one. The chaining rule is not relaxed by that:
-// it is the game. What changes is that the answer is no longer inherited from
-// the construction, so it has to be found — words that chain, each starting
-// with the last letter of the one before, covering all twelve between them.
+// A themed box is the same construction with the theme's own words — and the
+// same rule, which two versions of this got wrong by dropping. The seed words
+// must **chain**: each starts with the last letter of the one before, and
+// between them they cover exactly twelve distinct letters. That chain is the
+// answer. `acquire + negotiations` was never one — e does not lead to n — and a
+// board whose seed does not solve it is a board seeded by nothing in
+// particular.
 //
-// Two is preferred; three is allowed and is a real answer rather than a
-// consolation, and the board says which it takes. A box that can be solved in
-// neither is not published, because a board whose promise is false is worse
-// than an unthemed one.
+// Two words rarely manage it, which is what sent the first version wrong: it
+// measured pairs, got zero, and dropped the chain rather than the pair.
+// Measured on a 66-word list, chains of two give three boards, of three a
+// hundred and sixty, and of four three hundred and twenty-nine. So the seed is
+// a chain of two to four words rather than a pair of them.
 //
-// The same search runs in the browser (src/themeCalculators.ts) to tell
-// somebody writing a list what it can make. Two implementations of one rule,
-// asserted against each other by tests/unit/themeCalculators.test.ts.
+// The chain is *a* solution and the shortest one made of the theme's own words,
+// because the search keeps the shortest chain per set of twelve letters. It is
+// not the only one: a board is a board, and other pairs and longer chains solve
+// it too. Which of them a player may use is the day's business — see the word
+// policy — so the par the board promises is the shortest solution available
+// under what that day accepts. On a day that takes the dictionary as well, two
+// ordinary words often beat a chain of three of yours.
+//
+// The same search runs in the browser (src/themeCalculators.ts) to say what a
+// list can make and to offer the boards a day can be pinned to. Two
+// implementations of one rule, asserted against each other by
+// tests/unit/themeCalculators.test.ts.
 
 const noDouble = (w) => !/(\w)\1/.test(w);
 
@@ -70,10 +78,16 @@ export function assignThemedSides(must) {
   return { sides: sides.map((s) => s.join('')), sideOf };
 }
 
-/** The dictionary prepared once: each word a bitmask of its letters, so a box
- *  rejects almost every word with one integer operation. Words with a doubled
- *  letter are dropped here — the second one always lands on the side the first
- *  is on, whatever the layout. */
+const bits = (mask) => {
+  let n = 0;
+  for (let m = mask; m !== 0; m &= m - 1) n++;
+  return n;
+};
+
+/** The dictionary prepared once for the search below: each word a bitmask of
+ *  its letters, so a box rejects almost everything with one integer operation.
+ *  A doubled letter is dropped here — the second one always lands on the side
+ *  the first is on, whatever the layout. */
 function indexed(dictionary) {
   const out = [];
   for (const word of dictionary) {
@@ -93,25 +107,15 @@ function indexed(dictionary) {
   return out;
 }
 
-const bits = (mask) => {
-  let n = 0;
-  for (let m = mask; m !== 0; m &= m - 1) n++;
-  return n;
-};
-
-/** In how few ordinary words the box can be solved: 2, 3, or null for neither.
+/** The shortest chain of ordinary words that solves the box — two of them or
+ *  three — or null when neither does.
  *
- *  Two is what an ordinary daily promises, because it is built out of a
- *  chaining pair and inherits the answer. A themed box has to earn the promise
- *  instead, and three is a real answer rather than a consolation — Letter Boxed
- *  itself sets boards that take three, and a board made of the company's own
- *  words is worth the extra rung. Two is still preferred where it exists.
- *
- *  Four is not offered. Past three the board stops being a puzzle with a shape
- *  and becomes a word hunt, and the number on screen stops meaning anything a
- *  player can aim at.
+ *  The board has more solutions than the one it was built from, and on a day
+ *  that accepts the dictionary a player can reach them. So this is what decides
+ *  what the board promises: a themed chain of three beside an ordinary pair is
+ *  a board solvable in two, and saying three would be wrong.
  */
-export function solvableIn(sideOf, boxMask, dictionary, max = 3) {
+export function ordinarySolution(sideOf, boxMask, dictionary) {
   const usable = dictionary.filter((e) => (e.mask & ~boxMask) === 0 && spellable(e.word, sideOf));
   const byFirst = new Map();
   for (const e of usable) {
@@ -119,67 +123,41 @@ export function solvableIn(sideOf, boxMask, dictionary, max = 3) {
     if (list) list.push(e);
     else byFirst.set(e.word[0], [e]);
   }
-  // Distinct masks per starting letter: the third word is only ever asked
-  // "does anything starting here cover what is left", and a thousand words
-  // that cover the same letters answer that once.
-  const masksByFirst = new Map();
-  for (const [letter, list] of byFirst) {
-    masksByFirst.set(letter, [...new Set(list.map((e) => e.mask))]);
-  }
 
-  // Two, and every pair that fails becomes a state for three: what is covered
-  // so far, and which letter the next word has to start with. Collapsed by
-  // (letter, covered) — the words that got there do not matter afterwards.
-  const states = new Set();
+  const states = new Map();
   for (const first of usable) {
     for (const second of byFirst.get(first.last) ?? []) {
       const covered = first.mask | second.mask;
-      if (bits(covered) === BOX_LETTERS) return 2;
-      if (max >= 3) states.add(`${second.last} ${covered}`);
+      if (bits(covered) === BOX_LETTERS) return [first.word, second.word];
+      states.set(`${second.last} ${covered}`, [first.word, second.word]);
     }
   }
-  if (max < 3) return null;
-
-  for (const state of states) {
+  for (const [state, pair] of states) {
     const [letter, covered] = state.split(' ');
     const left = ~Number(covered) & boxMask;
-    for (const mask of masksByFirst.get(letter) ?? []) {
-      if ((left & ~mask) === 0) return 3;
+    for (const e of byFirst.get(letter) ?? []) {
+      if ((left & ~e.mask) === 0) return [...pair, e.word];
     }
   }
   return null;
 }
 
-/** Every box two of these theme words can make.
- *
- *  Ordered the way a day should choose: the boards that can be solved in two
- *  first, then the ones that take three, and within each by how many of the
- *  theme's own words the finished board spells — which is what a player finds.
- *
- *  `dictionary` is the pool the board will accept. Pass none and `par` is null,
- *  meaning unknown rather than unsolvable. */
 export const MAX_SEED_WORDS = 4;
 
-/** Every set of theme words whose letters are exactly twelve distinct: two of
- *  them, or three, or four.
+/** Every chain of the theme's own words covering exactly twelve distinct
+ *  letters: two of them, or three, or four.
  *
- *  Pairs alone leave most of a list unused — a box needs twelve distinct
- *  letters and two six-letter words rarely have twelve between them, while
- *  `vote` + `gain` + `shared` do. Measured on a 66-word list: 52 boards from
- *  pairs, 4,388 from sets of up to four, and the bigger seeds spell far more of
- *  the theme (sixteen of its own words against three).
+ *  A chain, not a set — each word starts with the last letter of the one
+ *  before, because the chain is the answer to the board its letters make.
  *
  *  Depth first with the letters carried along, so a branch is abandoned the
- *  moment it passes twelve rather than after the whole combination is built.
- *  Two word sets that make the same twelve letters are the same board: the
- *  fewest words wins, so the answer does not depend on the order the search
- *  reached them in.
+ *  moment it passes twelve. Two chains covering the same twelve letters are the
+ *  same board: the shortest wins, so the answer does not depend on the order
+ *  the search happened to reach them in.
  */
-export function seedSets(themeWords, maxSeeds = MAX_SEED_WORDS) {
-  const seeds = [
-    ...new Set((themeWords ?? []).map((w) => w.trim().toLowerCase())),
-  ]
-    .filter((w) => /^[a-z]+$/.test(w) && w.length >= 3 && noDouble(w))
+export function seedChains(themeWords, maxSeeds = MAX_SEED_WORDS) {
+  const seeds = [...new Set((themeWords ?? []).map((w) => w.trim().toLowerCase()))]
+    .filter((w) => /^[a-z]{3,}$/.test(w) && noDouble(w))
     .sort();
   const masks = new Map(
     seeds.map((w) => {
@@ -190,58 +168,69 @@ export function seedSets(themeWords, maxSeeds = MAX_SEED_WORDS) {
   );
 
   const found = new Map();
-  const chosen = [];
-  const walk = (from, mask) => {
+  const chain = [];
+  const walk = (mask) => {
     const size = bits(mask);
     if (size > BOX_LETTERS) return;
-    if (size === BOX_LETTERS && chosen.length >= 2) {
+    if (size === BOX_LETTERS && chain.length >= 2) {
       const had = found.get(mask);
-      if (!had || had.length > chosen.length) found.set(mask, [...chosen]);
+      if (!had || had.length > chain.length) found.set(mask, [...chain]);
       return;
     }
-    if (chosen.length >= maxSeeds) return;
-    for (let i = from; i < seeds.length; i++) {
-      chosen.push(seeds[i]);
-      walk(i + 1, mask | masks.get(seeds[i]));
-      chosen.pop();
+    if (chain.length >= maxSeeds) return;
+    for (const word of seeds) {
+      if (chain.includes(word)) continue;
+      // The chain: this word has to start where the last one ended.
+      if (chain.length > 0 && chain[chain.length - 1].at(-1) !== word[0]) continue;
+      chain.push(word);
+      walk(mask | masks.get(word));
+      chain.pop();
     }
   };
-  walk(0, 0);
-  return [...found];
+  walk(0);
+  return [...found.values()];
 }
 
-/** Every box those sets can make, best first.
+/** Every box the theme can make, best first — best being how many of the
+ *  theme's own words the finished board spells, since that is what a player
+ *  finds, and then the shortest solution.
  *
- *  `limit` stops once that many boards have been laid and measured. The
- *  generator wants them all — it deals three a day out of the best of them —
- *  but the admin page only needs to say what a list can make, and measuring
- *  four thousand boards takes ten seconds. The enumeration order is
- *  deterministic, so a limited answer is a stable prefix rather than a sample.
+ *  The seed chain is the guarantee and needs no dictionary. `dictionary` is for
+ *  the other question: what else solves the board, and in how few words, for a
+ *  day that accepts more than the theme. Pass none — a themed-only day — and
+ *  the answer is the chain the board was made of.
  */
-export function themedBoxes(themeWords, dictionary, { maxSeeds = MAX_SEED_WORDS, limit = Infinity } = {}) {
+export function themedBoxes(
+  themeWords,
+  { dictionary = null, maxSeeds = MAX_SEED_WORDS, limit = Infinity } = {}
+) {
   const words = [...new Set((themeWords ?? []).map((w) => w.trim().toLowerCase()))];
   const all = words.filter((w) => /^[a-z]{3,}$/.test(w));
   const pool = dictionary ? indexed(dictionary) : null;
-
   const out = [];
-  for (const [boxMask, from] of seedSets(words, maxSeeds)) {
+
+  for (const from of seedChains(words, maxSeeds)) {
     const laid = assignThemedSides(from);
-    // Not every set can be laid out: four sides of three, and no word may step
-    // twice on one side. More seed words is more constraints, so this refuses
-    // more often than a pair does.
+    // Not every chain can be laid out: four sides of three, and no word may
+    // step twice on one side. More words is more constraints.
     if (!laid) continue;
+    let boxMask = 0;
+    for (const c of from.join('')) boxMask |= 1 << (c.charCodeAt(0) - 97);
+    const ordinary = pool ? ordinarySolution(laid.sideOf, boxMask, pool) : null;
     out.push({
       from,
       sides: laid.sides,
       holds: all.filter((w) => spellable(w, laid.sideOf)),
-      par: pool ? solvableIn(laid.sideOf, boxMask, pool) : null,
+      // The chain the board was built from: a solution, and the shortest made
+      // of the theme's own words.
+      solution: from,
+      // The shortest an ordinary player could find on a day that accepts the
+      // dictionary, where there is one shorter than the theme's own chain.
+      ordinary: ordinary && ordinary.length < from.length ? ordinary : null,
+      // What the board promises, which is the shortest anybody could do.
+      par: ordinary ? Math.min(from.length, ordinary.length) : from.length,
     });
     if (out.length >= limit) break;
   }
-  return out.sort(
-    (x, y) =>
-      (x.par ?? 9) - (y.par ?? 9) ||
-      y.holds.length - x.holds.length ||
-      x.from.length - y.from.length
-  );
+  return out.sort((x, y) => y.holds.length - x.holds.length || x.par - y.par);
 }
