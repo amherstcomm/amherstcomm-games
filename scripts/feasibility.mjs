@@ -62,7 +62,9 @@ console.log(`theme: ${theme.length} words · dictionary: ${accepted.size} accept
 
 // --------------------------------------------------------------------- Boxed
 // How many theme words a twelve-letter box can hold, and what it costs to solve.
-const noDouble = (w) => !/(.)/.test(w);
+/** No consecutive repeat: a box cannot spell one, because the second letter
+ *  would step on the same side as the first. */
+const noDouble = (w) => !/(\w)\1/.test(w);
 
 const spellable = (w, sideOf) => {
   if (![...w].every((c) => c in sideOf)) return false;
@@ -242,7 +244,11 @@ for (const N of [4, 5]) {
 }
 
 console.log(
-  '\nOnly one word of each board is themed — the second Boxed word, the two' +
-    '\nBridge fragments and every Squares row but the first are ordinary. Whether' +
-    "\nthat reads as themed to somebody playing it is a judgement, not a number."
+  '\nWhat each would feel like, which no number settles:' +
+    '\n  Boxed   the words a player finds are theme words. The solution that' +
+    '\n          guarantees it can be finished is ordinary, and takes three' +
+    '\n          words rather than two.' +
+    '\n  Bridge  thin: it needs theme words that are compounds sharing a stem,' +
+    '\n          and most themes have one or two.' +
+    '\n  Squares only the first row is themed, and only with a wide pool.'
 );
