@@ -18,7 +18,7 @@ import { readFeatureWindows, setFeatureWindow, type FeatureWindow } from '@/feat
 import { fromOfficeInput, toOfficeInput } from '@/schedule';
 
 const FIELD =
-  'rounded-lg bg-white/5 border border-white/15 px-2 py-1 text-xs text-slate-100 ' +
+  'rounded-lg bg-white/5 border border-white/15 px-2 py-1 text-xs text-slate-200 ' +
   'focus:outline-none focus:border-accent';
 
 type Row = { feature: string; label: string };
