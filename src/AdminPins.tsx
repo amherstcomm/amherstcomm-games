@@ -201,10 +201,7 @@ export default function AdminPins() {
     () =>
       day
         ? Object.fromEntries(
-            PINNABLE.map((game) => [
-              game,
-              candidatesFor(day, game, rungs ?? undefined),
-            ])
+            PINNABLE.map((game) => [game, candidatesFor(day, game, rungs ?? undefined)])
           )
         : {},
     [day, rungs]

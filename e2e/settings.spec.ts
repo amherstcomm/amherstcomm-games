@@ -543,9 +543,10 @@ test('a word list says what it can make while you write it', async ({ page }) =>
   await page
     .getByLabel(/^Words/)
     .fill('payouts\nsharing\nshared\nworker\nvoting\nvote\ngain\nearn\ndividend');
-  // Deferred, like the ladder below: the search walks every chain of two to
-  // four of these words, so it waits for a pause rather than running on every
-  // keystroke.
+  // The search runs in a worker: milliseconds for a themed list, most of a
+  // minute for a pasted document, and the page cannot tell which it has until
+  // it looks — so it looks somewhere that cannot freeze the box being typed
+  // into. Which is why this line arrives rather than being there.
   await expect(
     page.getByText(/Boxed — \d+ boards? whose letters these words chain through/)
   ).toBeVisible();

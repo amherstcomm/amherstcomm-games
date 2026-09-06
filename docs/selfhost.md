@@ -1748,10 +1748,28 @@ in both directions. Twelve at a time, and the filter matches every word typed
 anywhere in the label, in any order.
 
 **At the box list the filter goes into the search, not the results.** A word
-list makes more boards than any search enumerates — the search stops at two
-thousand, because fifteen hundred words make sixty-eight thousand boards and
-take forty-three seconds — so filtering what is already on screen can hide a
-board that exists. Typing `charter` re-runs the search for chains containing it.
+list makes more boards than a search will enumerate, so filtering what is on
+screen can hide a board that exists. Typing `charter` re-runs the search for
+chains containing it.
+
+**The box search runs in a worker.** Measured, because the answer decides where
+it can run:
+
+| words | boards | time |
+|---|---|---|
+| 40 | 0 | 1ms |
+| 300 | 192 | 16ms |
+| 600 | 1,699 | 148ms |
+| 1,000 | 5,881 | 870ms |
+| 1,500 | 68,705 | 43s |
+
+A themed list lives in the first two rows and would never have needed one; a
+pasted document is the last row, and the page cannot tell which it has been
+handed until it has looked. So it looks off the main thread, says it is looking,
+and stops after twenty thousand boards — far past anything a theme makes, and
+said out loud when it happens. The old cap of sixty was the opposite of this:
+small enough to bite on real lists, and applied before the sort, so the filter
+searched a page rather than the list.
 
 **A pinned word is the day's only board.** The guess game publishes ten boards a
 day, one per length, and during a theme that is ten puzzles where the point was

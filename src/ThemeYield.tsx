@@ -12,26 +12,23 @@
 // guessed at.
 import { useEffect, useMemo, useState } from 'react';
 import { getDictionary, getDifficultyPool } from '@/dictionaries';
-import {
-  boxesFrom,
-  bridgesFrom,
-  laddersFrom,
-  type Box,
-  type LadderPair,
-} from '@/themeCalculators';
+import { boxesFrom, bridgesFrom, laddersFrom, type LadderPair } from '@/themeCalculators';
+import { useBoxes } from '@/useBoxes';
 
 export default function ThemeYield({ words }: { words: string }) {
   const list = useMemo(
     () => words.split(/[^A-Za-z]+/).filter((w) => w.length >= 3),
     [words]
   );
-  // Deferred, like the ladder below: the search walks every chain of two to
-  // four of these words, and a long list makes hundreds of boards.
-  //
-  // The chain is the guarantee and needs no dictionary. The pool is for the
-  // other question — whether an ordinary pair beats the chain, which is what
-  // the board will promise on a day that accepts the dictionary — so the boxes
-  // are counted the moment they are known and the par catches up when it lands.
+  // Off the main thread. The search is milliseconds for a themed list and most
+  // of a minute for a pasted document, and the page cannot tell which it has
+  // been handed until it has looked — so it looks somewhere that cannot freeze
+  // the box somebody is typing into.
+  const { boards: boxes, searching, truncated } = useBoxes(list);
+
+  // The dictionary is for one question only: whether an ordinary pair beats the
+  // chain on the best board, which is what the daily would promise. The boards
+  // themselves need none — the chain is the answer.
   const [dictionary, setDictionary] = useState<string[] | null>(null);
   useEffect(() => {
     if (list.length < 2 || dictionary) return;
@@ -44,18 +41,6 @@ export default function ThemeYield({ words }: { words: string }) {
     };
   }, [list.length, dictionary]);
 
-  const [boxes, setBoxes] = useState<Box[]>([]);
-  useEffect(() => {
-    if (list.length < 2) {
-      setBoxes([]);
-      return;
-    }
-    const id = window.setTimeout(
-      () => setBoxes(boxesFrom(list)),
-      400
-    );
-    return () => window.clearTimeout(id);
-  }, [list, dictionary]);
   const bridges = useMemo(() => bridgesFrom(list), [list]);
 
   // The ladder search is the one measurement here that cannot ride along with a
@@ -105,9 +90,11 @@ export default function ThemeYield({ words }: { words: string }) {
 
       <div>
         <p className={boxes.length > 0 ? 'text-emerald-300' : 'text-slate-500'}>
-          {boxes.length > 0 ? '✓' : '·'} Boxed — {boxes.length}{' '}
-          {boxes.length === 1 ? 'board' : 'boards'} whose letters these words
-          chain through
+          {searching ? '·' : boxes.length > 0 ? '✓' : '·'} Boxed —{' '}
+          {searching
+            ? 'looking for chains…'
+            : `${boxes.length} ${boxes.length === 1 ? 'board' : 'boards'} whose letters these words chain through`}
+          {truncated && ' (stopped counting — that is a lot of words)'}
 
         </p>
         {best && (
