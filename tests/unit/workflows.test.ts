@@ -19,27 +19,51 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 const workflows = join(process.cwd(), '.github/workflows');
-const read = (file: string) => readFileSync(join(workflows, file), 'utf8');
+/** The file with its prose taken out. These headers explain which secrets a
+ *  workflow needs, so a comment naming one of them read as a step passing it —
+ *  which is how the first version of the check below failed on a file that was
+ *  correct. */
+const read = (file: string) =>
+  readFileSync(join(workflows, file), 'utf8')
+    .split('\n')
+    .filter((line) => !/^\s*#/.test(line))
+    .join('\n');
 
-/** The scripts that ask the database what a day is themed with. */
-const NEEDS_SETTINGS = ['fetch-puzzles.mjs', 'preview-month.mjs', 'publish-window.mjs'];
+/** The file as written, for the checks that are about the whole file. */
+const readAll = (file: string) => readFileSync(join(workflows, file), 'utf8');
 
 describe('the workflows that build puzzles', () => {
-  it('hand both credentials to every step that reads the settings', () => {
-    const missing: string[] = [];
+  // The rule this file was first written with was wrong, and the wrongness is
+  // worth keeping: it asserted that the GitHub steps pass both database
+  // credentials. They cannot. Supabase answers on the internal network here, so
+  // a hosted runner has no route to it whatever secrets it holds — which is why
+  // ops/publish-puzzles.sh exists and why the themed puzzles come from the VM.
+  //
+  // What is worth asserting is that the two paths do not quietly disagree: a
+  // step that runs the generator either has both credentials or neither, since
+  // one without the other reads nothing and says nothing.
+  it('never pass one database credential without the other', () => {
+    const wrong: string[] = [];
     for (const file of readdirSync(workflows)) {
       const yaml = read(file);
-      // Steps are separated by `- run:` / `- name:` at the same indent; near
-      // enough to split on, and the failure it could miss is a step that names
-      // a script and passes nothing, which is the case that matters.
       for (const step of yaml.split(/\n {6}- /)) {
-        if (!NEEDS_SETTINGS.some((script) => step.includes(script))) continue;
-        for (const key of ['SUPABASE_URL', 'SUPABASE_SERVICE_ROLE_KEY']) {
-          if (!step.includes(key)) missing.push(`${file}: a step running a settings-reading script has no ${key}`);
+        const url = step.includes('SUPABASE_URL');
+        const key = step.includes('SUPABASE_SERVICE_ROLE_KEY');
+        if (url !== key) {
+          wrong.push(`${file}: a step passes ${url ? 'SUPABASE_URL' : 'the key'} and not the other`);
         }
       }
     }
-    expect([...new Set(missing)]).toEqual([]);
+    expect([...new Set(wrong)]).toEqual([]);
+  });
+
+  // The preview is an ops script for the same reason the publish is. A
+  // workflow calling it would connect to nothing, or — the way this actually
+  // failed — to somebody else's database.
+  it('and do not try to preview a month from a hosted runner', () => {
+    for (const file of readdirSync(workflows)) {
+      expect(readAll(file), `${file} runs the preview`).not.toContain('preview-month.mjs');
+    }
   });
 });
 
