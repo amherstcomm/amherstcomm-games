@@ -1026,9 +1026,11 @@ test('and a long shortlist can be filtered and paged through', async ({ page }) 
   const boxList = page.locator('[data-shortlist="boxed"]');
   const boxes = boxList.getByRole('button', { name: /→/ });
   await expect(boxes.first()).toBeVisible();
-  // A page of them, which is twelve unless the day makes fewer.
+  // A page of them, and the rest behind the button — not a capped search: the
+  // filter has to be able to find a board that exists, which the cap made
+  // impossible.
   const firstPage = await boxes.count();
-  expect(firstPage).toBeGreaterThan(1);
+  expect(firstPage).toBe(12);
   await boxList.getByRole('button', { name: /\d+ more/ }).click();
   expect(await boxes.count()).toBeGreaterThan(firstPage);
 
@@ -1046,9 +1048,13 @@ test('and a long shortlist can be filtered and paged through', async ({ page }) 
   const label = (await boxes.first().textContent()) ?? '';
   // The board, the chain of the day's own words that solves it, and — where an
   // ordinary pair beats it — what the board will actually promise.
-  expect(label).toMatch(/^\w+\/\w+\/\w+\/\w+ — \w+( → \w+)+( \(par \d+: .+\))?$/);
+  expect(label).toMatch(/^\w+\/\w+\/\w+\/\w+ — \w+( → \w+)+$/);
   const [left, right] = label.split(' — ')[1].split(' → ');
   const before = await boxes.count();
+  // Typing at the box list re-runs the search for those words rather than
+  // trimming what is on screen: a long list makes more boards than any search
+  // enumerates, so filtering the page can hide a board that exists — which is
+  // what "charter isn't in the list" was.
   await page.getByLabel('Filter Letter box').fill(`${right} ${left}`);
   await expect.poll(async () => (await boxes.count()) < before).toBe(true);
   // Every one that survived carries both, which is the rule — not one, because

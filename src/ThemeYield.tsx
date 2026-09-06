@@ -51,7 +51,7 @@ export default function ThemeYield({ words }: { words: string }) {
       return;
     }
     const id = window.setTimeout(
-      () => setBoxes(boxesFrom(list, { dictionary: dictionary ?? undefined, limit: 24 })),
+      () => setBoxes(boxesFrom(list)),
       400
     );
     return () => window.clearTimeout(id);
@@ -84,9 +84,18 @@ export default function ThemeYield({ words }: { words: string }) {
     return () => window.clearTimeout(id);
   }, [list, rungs]);
 
-  if (list.length < 2) return null;
-
   const best = boxes[0];
+  // The one board worth measuring: whether an ordinary pair beats its chain,
+  // which is what the daily would promise. Above the early return, because a
+  // hook below one is a hook that runs on some renders and not others — React
+  // #310, a blank page, and the reason this file has a browser test at all.
+  const shortest = useMemo(() => {
+    if (!best || !dictionary) return null;
+    const measured = boxesFrom(best.from, { dictionary })[0];
+    return measured?.ordinary ?? null;
+  }, [best, dictionary]);
+
+  if (list.length < 2) return null;
 
   return (
     <div className="rounded-lg border border-white/15 p-3 text-xs space-y-2">
@@ -99,12 +108,16 @@ export default function ThemeYield({ words }: { words: string }) {
           {boxes.length > 0 ? '✓' : '·'} Boxed — {boxes.length}{' '}
           {boxes.length === 1 ? 'board' : 'boards'} whose letters these words
           chain through
-          {boxes.length >= 24 && ' (the first two dozen — there are more)'}
+
         </p>
         {best && (
           <p className="text-slate-400 pl-3">
             best: {best.sides.join(' | ')} — {best.solution.join(' → ')}
-            {best.ordinary ? ` (par ${best.par}: ${best.ordinary.join(' → ')})` : ''} — finds{' '}
+            {/* Only the best board is measured against the dictionary: knowing
+                whether an ordinary pair beats the chain costs three
+                milliseconds a board, which is a second across a long list, to
+                say something every board says for itself once it is set. */}
+            {shortest && ` (par ${shortest.length}: ${shortest.join(' → ')})`} — finds{' '}
             {best.holds.length}: {best.holds.slice(0, 8).join(', ')}
             {best.holds.length > 8 && '…'}
           </p>

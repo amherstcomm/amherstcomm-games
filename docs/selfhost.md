@@ -1743,11 +1743,15 @@ the grid is dice and Squares draws from a wider pool than a theme has, so
 neither has themed candidates to choose between.
 
 **Each list has its own filter and its own `more`.** A day's boxes run to
-thousands and its pangrams to three, so one control for the page would be wrong
-in both directions — typing `ing` to find VESTING among the racks would also
-hide every box. Twelve at a time, and the filter matches every word you type
-anywhere in the label, in any order, so `shar vot` finds the box made of voting
-and shared without anybody remembering which way round it is printed.
+hundreds and its pangrams to three, so one control for the page would be wrong
+in both directions. Twelve at a time, and the filter matches every word typed
+anywhere in the label, in any order.
+
+**At the box list the filter goes into the search, not the results.** A word
+list makes more boards than any search enumerates — the search stops at two
+thousand, because fifteen hundred words make sixty-eight thousand boards and
+take forty-three seconds — so filtering what is already on screen can hide a
+board that exists. Typing `charter` re-runs the search for chains containing it.
 
 **A pinned word is the day's only board.** The guess game publishes ten boards a
 day, one per length, and during a theme that is ten puzzles where the point was

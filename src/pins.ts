@@ -125,8 +125,12 @@ export function describePin(game: string, choice: Record<string, unknown>): stri
 export function candidatesFor(
   day: CoverageDay,
   game: Pinnable,
-  dictionary?: string[],
-  rungs?: Set<string>
+  rungs?: Set<string>,
+  /** words the answer must contain, from the filter box — for the box list,
+   *  where they narrow the *search* rather than its results. A long list makes
+   *  more boards than any search will enumerate, so filtering afterwards can
+   *  hide a board that exists. */
+  must?: string[]
 ): Candidate[] {
   const words = day.theme?.words ?? [];
   switch (game) {
@@ -147,29 +151,26 @@ export function candidatesFor(
         .sort()
         .map((base) => ({ label: base, choice: { base } }));
     case 'boxed':
-      // Sixty rather than everything: the generator works through thousands
-      // overnight, and measuring a board takes three milliseconds, so the page
-      // asks for as many as somebody might page through and no more.
-      return boxesFrom(words, { dictionary, limit: 60 })
-        .map((box) => ({
-          // The chain that solves it, not just how long it is. The words the
-          // board was built from never chain with each other — they are where
-          // the twelve letters came from — so a label saying "solvable in 2"
-          // beside two words that plainly do not chain reads as a board that
-          // does not work.
-          // The chain first, because the chain is the puzzle. The words the
-          // twelve letters came from are named after it and with commas: `+`
-          // between them reads as a chain, and `acquire + negotiations` is not
-          // one — e does not lead to n, and it was never meant to. That is what
-          // the letters were built from, not what solves the board.
-          label:
-            // The board, then the chain of your own words that solves it —
-            // and, where a day taking the dictionary has a shorter route, what
-            // the board will actually promise.
-            `${box.sides.join('/')} — ${box.solution.join(' → ')}` +
-            (box.ordinary ? ` (par ${box.par}: ${box.ordinary.join(' → ')})` : ''),
-          choice: { from: box.from },
-        }));
+      // Every one of them, not a capped page. The cap was a real bug: it
+      // stopped the search early, *before* the sort, so a filter typed into
+      // this list was searching the first sixty in enumeration order — which
+      // all began with the same word — and a board that existed could not be
+      // found. Enumerating the chains is fifteen milliseconds for a sixty-word
+      // list, so there was nothing to save.
+      //
+      // No dictionary either, for the same reason it is no longer needed here:
+      // the chain is the answer, and working out whether an ordinary pair beats
+      // it costs three milliseconds a board — a second across a list — to say
+      // something the board will say for itself.
+      return boxesFrom(words, {
+        must:
+          must && must.length > 0
+            ? (word) => must.some((term) => word.includes(term))
+            : undefined,
+      }).map((box) => ({
+        label: `${box.sides.join('/')} — ${box.solution.join(' → ')}`,
+        choice: { from: box.from },
+      }));
     case 'ladder':
       return rungs
         ? laddersFrom(words, rungs).map((pair) => ({

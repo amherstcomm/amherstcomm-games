@@ -18,7 +18,7 @@
 // tests/unit/themeCalculators.test.ts.
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Loader2 } from 'lucide-react';
-import { getDictionary, getDifficultyPool } from '@/dictionaries';
+import { getDictionary } from '@/dictionaries';
 import { readCoverage, type CoverageDay } from '@/coverage';
 import {
   candidatesFor,
@@ -56,6 +56,7 @@ const PAGE = 12;
 function Shortlist({
   game,
   candidates,
+  refine,
   pinned,
   busy,
   onPin,
@@ -63,6 +64,9 @@ function Shortlist({
 }: {
   game: Pinnable;
   candidates: Candidate[];
+  /** re-run the search for the words typed, where the list is bigger than a
+   *  search will enumerate */
+  refine?: (terms: string[]) => Candidate[];
   pinned?: Pin;
   busy: boolean;
   onPin: (choice: Record<string, unknown>) => void;
@@ -77,11 +81,16 @@ function Shortlist({
   const matching = useMemo(() => {
     const terms = filter.toLowerCase().split(/\s+/).filter(Boolean);
     if (terms.length === 0) return candidates;
-    return candidates.filter((candidate) => {
+    // Where the list is searched rather than merely listed — the box, whose
+    // boards run to thousands — the filter goes into the search. Filtering a
+    // bounded result set afterwards hides boards that exist, which is exactly
+    // what happened.
+    const searched = refine ? refine(terms) : candidates;
+    return searched.filter((candidate) => {
       const label = candidate.label.toLowerCase();
       return terms.every((term) => label.includes(term));
     });
-  }, [candidates, filter]);
+  }, [candidates, filter, refine]);
 
   // A filter that has narrowed things is a filter somebody is reading all of,
   // so the page grows back to a page when it changes.
@@ -158,14 +167,14 @@ export default function AdminPins() {
   const [pins, setPins] = useState<Pin[]>([]);
   const [note, setNote] = useState('');
   const [busy, setBusy] = useState(false);
-  const [dictionary, setDictionary] = useState<string[] | null>(null);
+  // The rungs a ladder is walked through. The box search needs no dictionary:
+  // its answer is the chain the board was built from.
   const [rungs, setRungs] = useState<Set<string> | null>(null);
   // Which difficulty a pin is for. Every one of them is the ordinary answer —
   // "the box on the 8th" usually means all three — so it is the default.
   const [tier, setTier] = useState<string>('');
 
   useEffect(() => {
-    void getDifficultyPool('easy').then(setDictionary);
     void getDictionary('common').then((words) => setRungs(new Set(words)));
   }, []);
 
@@ -194,11 +203,11 @@ export default function AdminPins() {
         ? Object.fromEntries(
             PINNABLE.map((game) => [
               game,
-              candidatesFor(day, game, dictionary ?? undefined, rungs ?? undefined),
+              candidatesFor(day, game, rungs ?? undefined),
             ])
           )
         : {},
-    [day, dictionary, rungs]
+    [day, rungs]
   ) as Record<Pinnable, Candidate[]>;
 
   const pinnedHere = useMemo(() => {
@@ -286,6 +295,11 @@ export default function AdminPins() {
               key={game}
               game={game}
               candidates={shortlists[game] ?? []}
+              refine={
+                game === 'boxed' && day
+                  ? (terms) => candidatesFor(day, 'boxed', rungs ?? undefined, terms)
+                  : undefined
+              }
               pinned={pinnedHere.get(`${game} ${tier || 'all'}`)}
               busy={busy}
               onPin={(choice) => void pin(game, choice)}
