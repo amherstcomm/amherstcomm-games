@@ -1479,6 +1479,22 @@ right up until somebody changed one of them, and would then quietly reassure
 people about a month that was not themed. `supabase/tests/wordlists.sql` asserts
 the agreement day by day across a range that runs off both ends of the window.
 
+**It used to lock the page up, and the reason is worth writing down.** A month
+of two overlapping lists is a month of *different* unions, so nothing can be
+reused between days — and the box search asked the same question of the whole
+dictionary once per board: forty thousand per-letter spellability checks each.
+Measured, a thirty-one day range cost **six seconds** of blocked main thread.
+
+Two changes, because either alone leaves a bad version of the page. The
+dictionary is now indexed once per search — each word a bitmask of its letters,
+so a box rejects almost every word with one integer operation, and a word with a
+doubled letter is dropped up front because the second one always lands on the
+side the first is on. That took the same range to **under half a second**. And
+the days are measured a slice at a time with the browser handed back in between,
+so a year-long range stays responsive rather than merely being faster; the panel
+says how far it has got. `summariseSlowly` takes its pause as an argument so the
+tests can prove it actually yields rather than merely being async.
+
 It hands answers to a browser, where `daily_theme` refuses to. The difference is
 who is asking: `theme_coverage` is gated on `games.setup`, the capability that
 already lets somebody open the list and read every word in it. A player gets the

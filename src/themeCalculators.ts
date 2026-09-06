@@ -88,6 +88,8 @@ export function boxesFrom(words: string[], dictionary?: string[]): Box[] {
     /^[a-z]{3,}$/.test(w)
   );
   const out: Box[] = [];
+  // Once, not per box — see indexed() for the six seconds this cost.
+  const pool = dictionary ? indexed(dictionary) : null;
 
   for (let i = 0; i < usable.length; i += 1) {
     for (let j = i + 1; j < usable.length; j += 1) {
@@ -96,11 +98,13 @@ export function boxesFrom(words: string[], dictionary?: string[]): Box[] {
       if (new Set(a + b).size !== BOX_LETTERS) continue;
       const laid = assignSides([a, b]);
       if (!laid) continue;
+      let boxMask = 0;
+      for (const c of a + b) boxMask |= 1 << (c.charCodeAt(0) - 97);
       out.push({
         from: [a, b],
         sides: laid.sides,
         holds: all.filter((w) => spellable(w, laid.sideOf)),
-        guaranteed: dictionary ? finishable(laid.sideOf, dictionary) : false,
+        guaranteed: pool ? finishable(laid.sideOf, boxMask, pool) : false,
       });
     }
   }
@@ -108,18 +112,60 @@ export function boxesFrom(words: string[], dictionary?: string[]): Box[] {
   return out.sort((x, y) => y.holds.length - x.holds.length);
 }
 
+/** The dictionary, prepared once for the box search.
+ *
+ *  Written this way after measuring: the first version filtered the whole
+ *  dictionary again for every box, which is thirty-nine thousand per-letter
+ *  spellability checks each. A month of overlapping lists then cost six seconds
+ *  of a blocked browser, which is what "the page locks up" turned out to be.
+ *
+ *  A word is a bitmask of its letters. A box is twelve letters, so a word can
+ *  only appear in it if its mask is a subset of the box's — one integer
+ *  operation, and it rejects almost everything before the expensive check runs.
+ *  A doubled letter is dropped here rather than per box: the second one would
+ *  always land on the side the first is on, in any arrangement.
+ */
+type Indexed = { word: string; mask: number; last: string };
+
+function indexed(dictionary: string[]): Indexed[] {
+  const out: Indexed[] = [];
+  for (const word of dictionary) {
+    if (word.length < 3 || !noDouble(word)) continue;
+    let mask = 0;
+    let ok = true;
+    for (let i = 0; i < word.length; i += 1) {
+      const bit = word.charCodeAt(i) - 97;
+      if (bit < 0 || bit > 25) {
+        ok = false;
+        break;
+      }
+      mask |= 1 << bit;
+    }
+    if (ok) out.push({ word, mask, last: word[word.length - 1] });
+  }
+  return out;
+}
+
+const bits = (mask: number) => {
+  let n = 0;
+  for (let m = mask; m !== 0; m &= m - 1) n += 1;
+  return n;
+};
+
 /** Whether two ordinary words spell every letter of the box between them. */
-function finishable(sideOf: Record<string, number>, dictionary: string[]): boolean {
-  const usable = dictionary.filter((w) => w.length >= 3 && spellable(w, sideOf));
-  const byFirst = new Map<string, string[]>();
-  for (const w of usable) {
-    const list = byFirst.get(w[0]);
-    if (list) list.push(w);
-    else byFirst.set(w[0], [w]);
+function finishable(sideOf: Record<string, number>, boxMask: number, dictionary: Indexed[]): boolean {
+  const usable = dictionary.filter(
+    (e) => (e.mask & ~boxMask) === 0 && spellable(e.word, sideOf)
+  );
+  const byFirst = new Map<string, Indexed[]>();
+  for (const e of usable) {
+    const list = byFirst.get(e.word[0]);
+    if (list) list.push(e);
+    else byFirst.set(e.word[0], [e]);
   }
   for (const first of usable) {
-    for (const second of byFirst.get(first[first.length - 1]) ?? []) {
-      if (new Set(first + second).size === BOX_LETTERS) return true;
+    for (const second of byFirst.get(first.last) ?? []) {
+      if (bits(first.mask | second.mask) === BOX_LETTERS) return true;
     }
   }
   return false;
