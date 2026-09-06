@@ -62,8 +62,8 @@ export type DayYield = {
    *  visibly a day with only sixes */
   pools: Record<number, number>;
   boxes: number;
-  /** boxes a player could finish in two ordinary words, or null while the
-   *  dictionary is still on its way */
+  /** boxes a player could actually finish — in two chained words or in three
+   *  — or null while the dictionary is still on its way */
   playable: number | null;
   bridges: number;
   /** theme words that could be the day's scramble rack */
@@ -94,7 +94,10 @@ export function tilesFor(themes: WeaveTheme[]): string[] {
 export function yieldOf(words: string[], dictionary?: string[], rungs?: Set<string>) {
   const pools: Record<number, number> = {};
   for (const len of GUESS_LENGTHS) pools[len] = words.filter((w) => w.length === len).length;
-  const boxes = boxesFrom(words, dictionary);
+  // A dozen is enough to answer "can this day make a box"; the full search is
+  // four thousand boards and eleven seconds, which the generator can afford
+  // overnight and a page asking about thirty-one days cannot.
+  const boxes = boxesFrom(words, dictionary, { limit: 12 });
   // Both ends of a ladder have to be the theme's own and both have to be words
   // the board accepts as rungs, so this is the one measurement here that needs
   // the everyday dictionary rather than the generation pool.
@@ -108,7 +111,7 @@ export function yieldOf(words: string[], dictionary?: string[], rungs?: Set<stri
     racks: words.filter((w) => w.length === RACK_SIZE).length,
     hives: words.filter(canSeedHive).length,
     boxes: boxes.length,
-    playable: dictionary ? boxes.filter((b) => b.guaranteed).length : null,
+    playable: dictionary ? boxes.filter((b) => b.par !== null).length : null,
     bridges: bridgesFrom(words).length,
   };
 }

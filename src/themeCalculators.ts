@@ -18,15 +18,20 @@ const noDouble = (w: string) => !/(\w)\1/.test(w);
 export const BOX_LETTERS = 12;
 
 export type Box = {
-  /** the two theme words whose letters make it */
-  from: [string, string];
+  /** the theme words whose letters make it — two of them, or three, or four */
+  from: string[];
   /** four sides of three */
   sides: string[];
   /** every theme word the finished box can spell — the words a player finds */
   holds: string[];
-  /** whether two ordinary words finish it, which is the guarantee the daily
-   *  makes and the thing a themed box can quietly lose */
-  guaranteed: boolean;
+  /** in how few ordinary words it can be solved — 2 if a chaining pair covers
+   *  all twelve, 3 if it takes a chain of three, null if neither (or if no
+   *  dictionary was given, which is unknown rather than unsolvable).
+   *
+   *  Two is what an ordinary daily inherits from being built out of a chaining
+   *  pair. A themed box has to earn it, and three is a real answer rather than
+   *  a consolation — the board still says what it takes. */
+  par: number | null;
 };
 
 const spellable = (word: string, sideOf: Record<string, number>) => {
@@ -80,38 +85,6 @@ export function assignSides(must: string[]): { sides: string[]; sideOf: Record<s
  *  from the dictionary instead, which is what `dictionary` is for; pass none and
  *  `guaranteed` is simply unknown rather than false.
  */
-export function boxesFrom(words: string[], dictionary?: string[]): Box[] {
-  const usable = [...new Set(words.map((w) => w.trim().toLowerCase()))].filter(
-    (w) => /^[a-z]+$/.test(w) && w.length >= 4 && noDouble(w)
-  );
-  const all = [...new Set(words.map((w) => w.trim().toLowerCase()))].filter((w) =>
-    /^[a-z]{3,}$/.test(w)
-  );
-  const out: Box[] = [];
-  // Once, not per box — see indexed() for the six seconds this cost.
-  const pool = dictionary ? indexed(dictionary) : null;
-
-  for (let i = 0; i < usable.length; i += 1) {
-    for (let j = i + 1; j < usable.length; j += 1) {
-      const a = usable[i];
-      const b = usable[j];
-      if (new Set(a + b).size !== BOX_LETTERS) continue;
-      const laid = assignSides([a, b]);
-      if (!laid) continue;
-      let boxMask = 0;
-      for (const c of a + b) boxMask |= 1 << (c.charCodeAt(0) - 97);
-      out.push({
-        from: [a, b],
-        sides: laid.sides,
-        holds: all.filter((w) => spellable(w, laid.sideOf)),
-        guaranteed: pool ? finishable(laid.sideOf, boxMask, pool) : false,
-      });
-    }
-  }
-  // Best first: the number that matters is how many theme words a player finds.
-  return out.sort((x, y) => y.holds.length - x.holds.length);
-}
-
 /** The dictionary, prepared once for the box search.
  *
  *  Written this way after measuring: the first version filtered the whole
@@ -152,8 +125,111 @@ const bits = (mask: number) => {
   return n;
 };
 
-/** Whether two ordinary words spell every letter of the box between them. */
-function finishable(sideOf: Record<string, number>, boxMask: number, dictionary: Indexed[]): boolean {
+export const MAX_SEED_WORDS = 4;
+
+/** Every set of theme words whose letters are exactly twelve distinct: two of
+ *  them, or three, or four.
+ *
+ *  Pairs alone leave most of a list unused — a box needs twelve distinct
+ *  letters and two six-letter words rarely have twelve between them, while
+ *  `vote` + `gain` + `shared` do. Measured on a 66-word list: 52 boards from
+ *  pairs against 4,388 from sets of up to four, and the bigger seeds spell far
+ *  more of the theme.
+ *
+ *  Depth first with the letters carried along, so a branch is abandoned as soon
+ *  as it passes twelve. Two sets making the same twelve letters are the same
+ *  board, and the fewest words wins.
+ */
+export function seedSets(words: string[], maxSeeds = MAX_SEED_WORDS): [number, string[]][] {
+  const seeds = [...new Set(words.map((w) => w.trim().toLowerCase()))]
+    .filter((w) => /^[a-z]+$/.test(w) && w.length >= 3 && noDouble(w))
+    .sort();
+  const masks = new Map(
+    seeds.map((w) => {
+      let mask = 0;
+      for (const c of w) mask |= 1 << (c.charCodeAt(0) - 97);
+      return [w, mask] as const;
+    })
+  );
+
+  const found = new Map<number, string[]>();
+  const chosen: string[] = [];
+  const walk = (from: number, mask: number) => {
+    const size = bits(mask);
+    if (size > BOX_LETTERS) return;
+    if (size === BOX_LETTERS && chosen.length >= 2) {
+      const had = found.get(mask);
+      if (!had || had.length > chosen.length) found.set(mask, [...chosen]);
+      return;
+    }
+    if (chosen.length >= maxSeeds) return;
+    for (let i = from; i < seeds.length; i += 1) {
+      chosen.push(seeds[i]);
+      walk(i + 1, mask | masks.get(seeds[i])!);
+      chosen.pop();
+    }
+  };
+  walk(0, 0);
+  return [...found];
+}
+
+/** Every box those sets can make, best first.
+ *
+ *  `limit` stops once that many boards have been laid and measured. Enumerating
+ *  the sets is five milliseconds; working out how few words each board takes is
+ *  three per board, and a sixty-word list makes four thousand of them. The
+ *  generator wants all of them — it deals three a day out of the best — and the
+ *  page only needs to say what the list can make, so it asks for a couple of
+ *  dozen. The order is deterministic, so a limited answer is a stable prefix
+ *  rather than a sample.
+ */
+export function boxesFrom(
+  words: string[],
+  dictionary?: string[],
+  { maxSeeds = MAX_SEED_WORDS, limit = Infinity }: { maxSeeds?: number; limit?: number } = {}
+): Box[] {
+  const all = [...new Set(words.map((w) => w.trim().toLowerCase()))].filter((w) =>
+    /^[a-z]{3,}$/.test(w)
+  );
+  const pool = dictionary ? indexed(dictionary) : null;
+
+  const out: Box[] = [];
+  for (const [boxMask, from] of seedSets(words, maxSeeds)) {
+    const laid = assignSides(from);
+    // Not every set can be laid out: four sides of three, and no word may step
+    // twice on one side. More seed words is more constraints, so this refuses
+    // more often than a pair does.
+    if (!laid) continue;
+    out.push({
+      from,
+      sides: laid.sides,
+      holds: all.filter((w) => spellable(w, laid.sideOf)),
+      par: pool ? solvableIn(laid.sideOf, boxMask, pool) : null,
+    });
+    if (out.length >= limit) break;
+  }
+  return out.sort(
+    (x, y) =>
+      (x.par ?? 9) - (y.par ?? 9) ||
+      y.holds.length - x.holds.length ||
+      x.from.length - y.from.length
+  );
+}
+
+/** In how few chained words the box can be solved: 2, 3, or null for neither.
+ *
+ *  Chained throughout, because that is the game: the second word starts with
+ *  the first word's last letter, the third with the second's. What changes with
+ *  three is the number the board promises, not the rule.
+ *
+ *  Four is not offered — past three the board stops being a puzzle with a shape
+ *  and the number on screen stops being something to aim at.
+ */
+function solvableIn(
+  sideOf: Record<string, number>,
+  boxMask: number,
+  dictionary: Indexed[]
+): number | null {
   const usable = dictionary.filter(
     (e) => (e.mask & ~boxMask) === 0 && spellable(e.word, sideOf)
   );
@@ -163,12 +239,34 @@ function finishable(sideOf: Record<string, number>, boxMask: number, dictionary:
     if (list) list.push(e);
     else byFirst.set(e.word[0], [e]);
   }
+  // Distinct masks per starting letter: the third word is only ever asked
+  // "does anything starting here cover what is left", and a thousand words
+  // covering the same letters answer that once.
+  const masksByFirst = new Map<string, number[]>();
+  for (const [letter, list] of byFirst) {
+    masksByFirst.set(letter, [...new Set(list.map((e) => e.mask))]);
+  }
+
+  // Two, and every pair that falls short becomes a state for three: what is
+  // covered, and the letter the next word has to start with. Collapsed by the
+  // two of them, because which words got there does not matter afterwards.
+  const states = new Set<string>();
   for (const first of usable) {
     for (const second of byFirst.get(first.last) ?? []) {
-      if (bits(first.mask | second.mask) === BOX_LETTERS) return true;
+      const covered = first.mask | second.mask;
+      if (bits(covered) === BOX_LETTERS) return 2;
+      states.add(`${second.last} ${covered}`);
     }
   }
-  return false;
+
+  for (const state of states) {
+    const [letter, covered] = state.split(' ');
+    const left = ~Number(covered) & boxMask;
+    for (const mask of masksByFirst.get(letter) ?? []) {
+      if ((left & ~mask) === 0) return 3;
+    }
+  }
+  return null;
 }
 
 export type BridgePrompt = { x: string; middle: string; y: string; from: [string, string] };

@@ -1325,14 +1325,26 @@ while it is being written — which is the only time the answer is any use. A li
 finished in September and found to make one puzzle in October is a list nobody
 can fix.
 
-**Boxed.** Two theme words whose letters are exactly twelve distinct make the
-box: those letters *are* the board, and both words are then findable in it. They
-do **not** have to chain, which is the thing two versions of this got wrong —
-theme words essentially never do, and requiring it reported zero from a list
-with twenty-one. The two-word solution the daily promises comes from the
-dictionary instead, so the panel says how many of the boxes have one; a themed
-box that cannot be finished in two words is the failure worth catching, and it
-is stated rather than left as a smaller number.
+**Boxed.** Theme words whose letters are exactly twelve distinct make the box —
+two of them, or three, or four. Those letters *are* the board, and every word of
+the seed is then findable in it. They do **not** have to chain with each other,
+which is the thing two versions of this got wrong — theme words essentially
+never do, and requiring it reported zero from a list with twenty-one.
+
+That is about the *seed*, not the puzzle: the solution still chains, every word
+starting with the last letter of the one before. What it means is that the
+answer is searched for in the dictionary rather than inherited from the seed, so
+the panel says how many boards can be solved in two words and how many in three.
+A board that can be solved in neither would never be set, and that is the
+failure worth catching — stated rather than left as a smaller number.
+
+Enumerating the seed sets is five milliseconds; working out how few words each
+board takes is three per board, and a sixty-word list makes four thousand of
+them. So the page asks for the first two dozen and says when it has hit the cap,
+the coverage page asks for a dozen a day, and the generator — which has a night
+— works through all of them. A limited answer is the same boards every time and
+a subset of the full one; it is not the best few, and the page does not claim to
+be.
 
 **Ladder.** Two of the list's own words the same length, three to eight
 one-letter steps apart through the everyday dictionary, reported per step-count
@@ -1383,8 +1395,8 @@ it starts.
 
 #### Taking over the dailies
 
-A list with **dates** on it themes the daily puzzles for those days. Five of the
-ten games take their content from one, and a sixth scores it:
+A list with **dates** on it themes the daily puzzles for those days. Six of the
+ten games take their content from one, and a seventh scores it:
 
 - **The daily word.** Per length, the pool narrows to the theme's own words —
   **including ones no dictionary carries**. That is the point rather than an
@@ -1441,6 +1453,43 @@ ten games take their content from one, and a sixth scores it:
 
   Per difficulty by step count: the bands are 3-4, 5-6 and 7-8, and a tier with
   no themed pair in its band walks the curated pairs exactly as it always has.
+- **Boxed**, whose twelve letters are the theme's own words: **two of them, or
+  three, or four**, exactly twelve distinct between them, laid so every one can
+  be spelled on the finished board. Pairs alone left most of a list unused — two
+  six-letter words rarely have twelve distinct letters between them, while
+  `vote` + `gain` + `shared` do. On a 66-word list that is 52 boards against
+  4,388, and the bigger seeds spell far more of the theme back at the player
+  (sixteen of its own words against three).
+
+  **Chaining is the game and is not relaxed.** Every word still starts with the
+  last letter of the one before, letters still come off the four sides, and no
+  two consecutive letters share a side. What is different is where the answer
+  comes from: an ordinary box is built *from* a chaining pair, so "solvable in
+  2" is inherited, and theme words essentially never chain — so the answer is
+  searched for instead.
+
+  **Two is preferred, three is allowed.** The board says which it takes, as it
+  always has. Three is a real answer rather than a consolation, and on a 66-word
+  list it is the difference between 59 usable boards and 74. A box that can be
+  solved in neither is not published: a board whose promise is false is worse
+  than an unthemed board, so the day gets the box it would have had.
+
+  Searched once against the *easy* pool rather than per difficulty. The accept
+  tiers are nested, so a solution in the narrowest is a solution in all three;
+  the conservative half of the trade is that a box only the widest dictionary
+  could finish is never offered.
+
+  **One box does not theme three difficulties.** The letters are the letters, so
+  the same board at three levels is one puzzle wearing three names — a theme
+  themes as many difficulties as it has *distinct* boxes to give, starting at
+  easy, and the run says which ones went without. The two-word boards are dealt
+  out before the three-word ones, and each group is rotated by a day offset so a
+  month does not hand out the same three boards every morning.
+
+  Boxed is scored in how few words the chain takes rather than in points, so a
+  theme word cannot be worth a bonus here the way it is in scramble, hive and
+  grid. What it does is get said: playing one flashes *Theme word*, and solving
+  a themed board says how many of the chain were the event's own.
 - **Grid** cannot be built out of anything — the board is dealt from Boggle dice
   — but a theme word the board can trace scores the bonus like anywhere else.
 
@@ -1464,12 +1513,11 @@ spell it, the hive has to reach it through its centre, the grid has to trace it.
 The solver already answers that question for every other word, and asking it a
 second way here is exactly how two halves come apart.
 
-The remaining four — boxed, squares, cryptogram, bridge — cannot be built from a
-bag of words: they need letter boxes, passages or curated prompts.
-The cryptogram takes content of its own by a different door, one passage at a
-time rather than from a word list — see [Cryptogram passages](#cryptogram-passages)
-below. What a list can make of boxed and bridge is measured rather than guessed:
-see the calculators above.
+The remaining three — squares, cryptogram, bridge — cannot be built from a bag
+of words: they need a wider pool, passages, or curated prompts. The cryptogram
+takes content of its own by a different door, one passage at a time — see
+[Cryptogram passages](#cryptogram-passages) below. What a list can make of the
+games above is measured rather than guessed: see the calculators.
 
 **Dates rather than a switch**, and that is not a preference. The window is
 generated a fortnight ahead, so the run on 25 September already writes 1

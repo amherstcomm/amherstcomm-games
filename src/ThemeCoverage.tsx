@@ -308,7 +308,7 @@ export default function ThemeCoverage() {
             <p className={sum.boxes.days > 0 ? 'text-emerald-300' : 'text-slate-500'}>
               {sum.boxes.days > 0 ? '✓' : '·'} Boxed — {sum.boxes.days} days can make a board
               from two theme words
-              {sum.boxes.playable !== null && `, ${sum.boxes.playable} solvable in two ordinary words`}
+              {sum.boxes.playable !== null && `, ${sum.boxes.playable} a player could finish`}
             </p>
             <p className={sum.bridges.days > 0 ? 'text-emerald-300' : 'text-slate-500'}>
               {sum.bridges.days > 0 ? '✓' : '·'} Bridge — {sum.bridges.days} days have two

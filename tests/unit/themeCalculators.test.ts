@@ -1,12 +1,18 @@
 // Whether a word list is rich enough to make puzzles out of.
 //
-// The case worth pinning is the one that produced a wrong answer twice: two
-// theme words make a box when their letters are twelve distinct, and they do
-// **not** have to chain. Requiring the chain is what made the first search
-// report zero from a list that has twenty-one.
+// The case worth pinning is the one that produced a wrong answer twice: theme
+// words make a box when their letters are twelve distinct, and they do **not**
+// have to chain with each other. Requiring the chain is what made the first
+// search report zero from a list that has twenty-one.
+//
+// Two of them, or three, or four. Pairs alone left most of a list unused — two
+// six-letter words rarely have twelve distinct letters between them — and the
+// difference on a real list is 52 boards against 4,388.
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
+// @ts-expect-error plain-JS module without a declaration file
+import { themedBoxes } from '../../scripts/box.mjs';
 // @ts-expect-error plain-JS module without a declaration file
 import { themedLadderPairs, TIER_PAR } from '../../scripts/ladder.mjs';
 import {
@@ -64,18 +70,50 @@ describe('boxesFrom', () => {
     expect(boxesFrom(['betterment', 'quixotic']).length).toBe(0);
   });
 
-  it('reports the guarantee as unknown when given no dictionary', () => {
-    expect(boxesFrom(VOTING_SHARED)[0].guaranteed).toBe(false);
+  it('reports the par as unknown when given no dictionary', () => {
+    expect(boxesFrom(VOTING_SHARED)[0].par).toBeNull();
   });
 
-  // The pair is invented rather than English, and deliberately: what is being
-  // tested is the rule, and every real pair that finishes this particular box
-  // would be a fact about the dictionary as well. `vote` then `eindsharg`
-  // chains, covers all twelve, and steps sides in turn.
-  it('and finds it when two ordinary words finish the box', () => {
-    const [box] = boxesFrom(VOTING_SHARED, ['vote', 'eindsharg']);
-    expect(box.guaranteed).toBe(true);
-    expect(new Set('vote' + 'eindsharg').size).toBe(12);
+  // The words are built from the board rather than written down: what is being
+  // tested is the rule, and a hand-written pair is tied to whichever layout the
+  // search happened to produce — which is how the first version of these two
+  // broke when the seed order changed.
+  //
+  // A walk taking one letter from each side in turn is spellable by
+  // construction and covers all twelve. Splitting it with an overlap gives
+  // words that chain: each starts on the letter the last one ended on.
+  const walkOf = (sides: string[]) => {
+    const bySide = sides.map((side) => [...side]);
+    const out: string[] = [];
+    for (let i = 0; i < 12; i += 1) out.push(bySide[i % 4][Math.floor(i / 4)]);
+    return out.join('');
+  };
+  const chainOf = (sides: string[], cuts: number[]) => {
+    const walk = walkOf(sides);
+    const words: string[] = [];
+    let at = 0;
+    for (const cut of [...cuts, walk.length]) {
+      words.push(walk.slice(at, cut));
+      at = cut - 1;
+    }
+    return words;
+  };
+
+  it('and finds it when two chained words finish the box', () => {
+    const [box] = boxesFrom(VOTING_SHARED);
+    const two = chainOf(box.sides, [7]);
+    expect(new Set(two.join('')).size).toBe(12);
+    expect(boxesFrom(VOTING_SHARED, two)[0].par).toBe(2);
+  });
+
+  // Three is a real answer, and the board says which it takes. The chain rule
+  // is untouched: each word starts with the last letter of the one before.
+  it('and settles for three when two will not do', () => {
+    const [box] = boxesFrom(VOTING_SHARED);
+    const three = chainOf(box.sides, [5, 9]);
+    expect(new Set(three.join('')).size).toBe(12);
+    // No two of these three cover twelve between them, so two is not on offer.
+    expect(boxesFrom(VOTING_SHARED, three)[0].par).toBe(3);
   });
 
   // The two ways a candidate is thrown out before the side check, both of them
@@ -84,15 +122,15 @@ describe('boxesFrom', () => {
   it('but not out of a word carrying a letter the box does not have', () => {
     // z for g: still twelve letters between them, and one of them is not on
     // the board.
-    expect(boxesFrom(VOTING_SHARED, ['vote', 'eindsharz'])[0].guaranteed).toBe(false);
+    expect(boxesFrom(VOTING_SHARED, ['vote', 'eindsharz'])[0].par).toBeNull();
   });
 
   it('nor out of one with a doubled letter, which no box can spell', () => {
-    expect(boxesFrom(VOTING_SHARED, ['vote', 'eeindsharg'])[0].guaranteed).toBe(false);
+    expect(boxesFrom(VOTING_SHARED, ['vote', 'eeindsharg'])[0].par).toBeNull();
   });
 
   it('nor when the two do not chain', () => {
-    expect(boxesFrom(VOTING_SHARED, ['vote', 'indsharge'])[0].guaranteed).toBe(false);
+    expect(boxesFrom(VOTING_SHARED, ['vote', 'indsharge'])[0].par).toBeNull();
   });
 });
 
@@ -205,5 +243,79 @@ describe('laddersFrom', () => {
     const once = laddersFrom(THEME, rungs);
     const again = laddersFrom([...THEME].reverse(), rungs);
     expect(again).toEqual(once);
+  });
+});
+
+// The box search exists twice as well — the page promises a themed box can be
+// built and the generator has to build it — so the two are run over the same
+// words and the same dictionary and required to answer the same.
+describe('the box search, in both places', () => {
+  const THEME = ['voting', 'shared', 'vote', 'gain', 'earn', 'dividend', 'invest', 'employer'];
+  // Enough of a dictionary to make the guarantee mean something, and small
+  // enough to be read here: a pair that chains and covers all twelve.
+  const DICT = ['vote', 'eindsharg', 'shared', 'voting', 'gash', 'dev', 'invested'];
+
+  it('agrees pair for pair, and on how few words each takes', () => {
+    const mine = boxesFrom(THEME, DICT).map((b) => `${b.from.join('+')} ${b.sides.join('|')} ${b.par}`);
+    const theirs = (
+      themedBoxes(THEME, DICT) as { from: string[]; sides: string[]; par: number | null }[]
+    ).map((b) => `${b.from.join('+')} ${b.sides.join('|')} ${b.par}`);
+    expect(mine).toEqual(theirs);
+    expect(mine.length).toBeGreaterThan(0);
+  });
+
+  it('and on what the finished board spells', () => {
+    const mine = boxesFrom(THEME).map((b) => b.holds.join(','));
+    const theirs = (themedBoxes(THEME) as { holds: string[] }[]).map((b) => b.holds.join(','));
+    expect(mine).toEqual(theirs);
+  });
+});
+
+// Seeds of more than two, which is what makes a list usable rather than
+// nearly usable.
+describe('seeds of two, three or four', () => {
+  // Six letters and six letters is twelve only if they share none, which is
+  // rare; three short words reach it easily.
+  const SHORT = ['vote', 'gain', 'shared', 'esop'];
+
+  it('builds a box out of three theme words when no pair will do', () => {
+    // No two of these have twelve distinct letters between them.
+    const pairs = boxesFrom(SHORT, undefined, { maxSeeds: 2 });
+    expect(pairs).toEqual([]);
+    const sets = boxesFrom(SHORT);
+    expect(sets.length).toBeGreaterThan(0);
+    expect(sets[0].from.length).toBe(3);
+    expect(new Set(sets[0].sides.join('')).size).toBe(12);
+  });
+
+  // Every seed word has to be spellable on the board it made, or the board is
+  // not made of them in any sense a player would recognise.
+  it('and every word of the seed can be spelled on it', () => {
+    const [box] = boxesFrom(SHORT);
+    for (const word of box.from) expect(box.holds).toContain(word);
+  });
+
+  it('and never offers a set of one, which is not a box anybody set', () => {
+    // A single twelve-distinct-letter word would otherwise qualify.
+    expect(boxesFrom(['blacksmithy', 'gunpowder']).every((b) => b.from.length >= 2)).toBe(true);
+  });
+
+  it('and stops at four', () => {
+    for (const box of boxesFrom(SHORT)) expect(box.from.length).toBeLessThanOrEqual(4);
+  });
+
+  // What the limit actually promises, which is less than "the best few" — the
+  // first version of this test asserted that and was wrong. The search
+  // enumerates in a fixed order and stops; the sort happens afterwards, among
+  // what it looked at. So a limited answer is the same boards every time and a
+  // subset of the full one, but the best of twenty-four is not the best of four
+  // thousand — which is why the page says so when it hits the cap.
+  it('and a limited answer is a stable subset of the full one', () => {
+    const words = ['vote', 'gain', 'shared', 'worker', 'budget', 'invest', 'payout'];
+    const full = boxesFrom(words).map((b) => b.from.join('+'));
+    const some = boxesFrom(words, undefined, { limit: 3 });
+    expect(some).toHaveLength(3);
+    for (const box of some) expect(full).toContain(box.from.join('+'));
+    expect(boxesFrom(words, undefined, { limit: 3 })).toEqual(some);
   });
 });
