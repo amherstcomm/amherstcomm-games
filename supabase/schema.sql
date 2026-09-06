@@ -8741,6 +8741,188 @@ $fn$;
 revoke all on function public.delete_cryptogram_passage(uuid) from public, anon;
 grant execute on function public.delete_cryptogram_passage(uuid) to authenticated;
 
+-- ---------------------------------------------------------------------------
+-- What a themed day accepts as a word
+--
+-- A themed day ships the list's own words and the boards take them alongside
+-- the dictionary. That is one of three things a deployment might want:
+--
+--   both        the dictionary and the day's own words   (what a themed day
+--                                                         has always done)
+--   themed      only the day's own words
+--   dictionary  the dictionary alone, as though nothing were themed
+--
+-- Per day rather than per word list, and that is not a detail: several lists
+-- can cover the same day, so a list is the wrong place to keep an answer about
+-- the day. Per game as well, because "only our words" is a fine puzzle in the
+-- letter box and an unplayable one in the hive.
+--
+-- The ladder takes no policy at all. Its par is the length of the shortest
+-- route through the words a player may use, so narrowing that set changes the
+-- answer rather than the difficulty — the rungs between the two ends are always
+-- the everyday dictionary. Refused here rather than left to be discovered.
+-- ---------------------------------------------------------------------------
+create table if not exists public.word_policies (
+  id uuid primary key default gen_random_uuid(),
+  -- Null is the day's default; a row naming a game overrides it for that game.
+  game text check (game is null or game ~ '^[a-z]{3,12}$'),
+  policy text not null check (policy in ('both', 'themed', 'dictionary')),
+  starts_on date not null,
+  ends_on date not null,
+  created_by uuid references auth.users (id) on delete set null,
+  created_at timestamptz not null default now()
+);
+alter table public.word_policies enable row level security;
+
+create index if not exists word_policies_window_idx
+  on public.word_policies (starts_on, ends_on);
+
+/*
+ * The policy for one day, for the generator.
+ *
+ * A map rather than a single value: `{"default": "both", "boxed": "themed"}`.
+ * The generator stamps each game's own answer into that game's payload, so a
+ * browser obeys a decision taken here rather than making one — the same shape
+ * as everything else about a themed day.
+ *
+ * Two rules where rows overlap, and they are worth stating because overlapping
+ * windows are the ordinary case: a row naming a game beats the day's default,
+ * and among rows of equal standing the most recently written wins. Nothing is
+ * merged, because "half themed" is not a thing a board can be.
+ *
+ * Service-role only, like the rest of the day's answer key.
+ */
+create or replace function public.daily_word_policy(p_date date)
+returns jsonb
+language sql
+stable
+security definer
+set search_path = ''
+as $fn$
+  select coalesce(
+    (select jsonb_object_agg(coalesce(game, 'default'), policy)
+     from (
+       select distinct on (p.game) p.game, p.policy
+       from public.word_policies p
+       where p_date between p.starts_on and p.ends_on
+       order by p.game, p.created_at desc
+     ) chosen),
+    '{}'::jsonb)
+$fn$;
+
+revoke all on function public.daily_word_policy(date) from public, anon, authenticated;
+grant execute on function public.daily_word_policy(date) to service_role;
+
+create or replace function public.word_policies_sheet()
+returns jsonb
+language sql
+stable
+security definer
+set search_path = ''
+as $fn$
+  select case
+    when not public.can('games.setup')
+      then jsonb_build_object('ok', false, 'reason', 'not allowed')
+    else jsonb_build_object('ok', true, 'policies', coalesce(
+      (select jsonb_agg(jsonb_build_object(
+                'id', p.id,
+                'game', p.game,
+                'policy', p.policy,
+                'starts_on', p.starts_on,
+                'ends_on', p.ends_on)
+              order by p.starts_on, p.game nulls first)
+       from public.word_policies p),
+      '[]'::jsonb))
+  end
+$fn$;
+
+revoke all on function public.word_policies_sheet() from public, anon;
+grant execute on function public.word_policies_sheet() to authenticated;
+
+/*
+ * Writing one.
+ *
+ * The ladder is refused by name, with the reason, because it is the one game
+ * where narrowing the accepted words changes the answer instead of the
+ * difficulty: par is the shortest route through the words a player may use.
+ */
+create or replace function public.save_word_policy(
+  p_id uuid,
+  p_game text,
+  p_policy text,
+  p_from date,
+  p_until date
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $fn$
+declare
+  v_id uuid;
+  v_game text := nullif(btrim(lower(coalesce(p_game, ''))), '');
+  v_policy text := btrim(lower(coalesce(p_policy, '')));
+begin
+  if not public.can('games.setup') then
+    return jsonb_build_object('ok', false, 'reason', 'not allowed');
+  end if;
+  if v_policy not in ('both', 'themed', 'dictionary') then
+    return jsonb_build_object('ok', false, 'reason',
+      'a policy is both, themed or dictionary');
+  end if;
+  if v_game = 'ladder' then
+    return jsonb_build_object('ok', false, 'reason',
+      'the ladder cannot take one: par is the shortest route through the words '
+      'a player may use, so the rungs between the ends are always the dictionary');
+  end if;
+  if p_from is null or p_until is null then
+    return jsonb_build_object('ok', false, 'reason', 'it needs both dates');
+  end if;
+  if p_until < p_from then
+    return jsonb_build_object('ok', false, 'reason', 'it cannot finish before it starts');
+  end if;
+
+  if p_id is null then
+    insert into public.word_policies (game, policy, starts_on, ends_on, created_by)
+    values (v_game, v_policy, p_from, p_until, (select auth.uid()))
+    returning word_policies.id into v_id;
+  else
+    update public.word_policies
+       set game = v_game, policy = v_policy, starts_on = p_from, ends_on = p_until
+     where word_policies.id = p_id
+    returning word_policies.id into v_id;
+    if v_id is null then
+      return jsonb_build_object('ok', false, 'reason', 'no such rule');
+    end if;
+  end if;
+
+  return jsonb_build_object('ok', true, 'id', v_id);
+end;
+$fn$;
+
+revoke all on function public.save_word_policy(uuid, text, text, date, date)
+  from public, anon;
+grant execute on function public.save_word_policy(uuid, text, text, date, date)
+  to authenticated;
+
+create or replace function public.delete_word_policy(p_policy uuid)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $fn$
+begin
+  if not public.can('games.setup') then
+    return jsonb_build_object('ok', false, 'reason', 'not allowed');
+  end if;
+  delete from public.word_policies where id = p_policy;
+  return jsonb_build_object('ok', true);
+end;
+$fn$;
+
+revoke all on function public.delete_word_policy(uuid) from public, anon;
+grant execute on function public.delete_word_policy(uuid) to authenticated;
+
 /*
  * What every list and theme adds up to, day by day, over a range.
  *
@@ -8792,7 +8974,10 @@ as $fn$
                -- Added after the fact, and by the same rule as the other two:
                -- the page asks the generator's own function rather than
                -- working out for itself which passages cover a day.
-               'passages', public.daily_cryptogram_passages(d::date))
+               'passages', public.daily_cryptogram_passages(d::date),
+               -- What each game will take as a word that day. Read through the
+               -- generator's own function, like the three above.
+               'policy', public.daily_word_policy(d::date))
              order by d)
       from generate_series(p_from, p_until, interval '1 day') d), '[]'::jsonb))
   end

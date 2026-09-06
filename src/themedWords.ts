@@ -42,11 +42,21 @@ export function themedWords(payload: unknown): string[] {
 export function acceptedAt(
   dictionary: string[] | null,
   themed: string[],
-  length: number
+  length: number,
+  rule: 'both' | 'themed' = 'both',
+  answer?: string | null
 ): Set<string> | null {
   if (!dictionary) return null;
-  const out = new Set(dictionary.filter((w) => w.length === length));
+  // A themed-only day takes the list's own words of this length and nothing
+  // else. Thin is allowed — that is what a themed board is — but a board that
+  // will not let you type its own answer is not hard, it is impossible, so the
+  // answer is always in. It is the one word that cannot be refused.
+  const out =
+    rule === 'themed'
+      ? new Set<string>()
+      : new Set(dictionary.filter((w) => w.length === length));
   for (const word of themed) if (word.length === length) out.add(word);
+  if (answer && answer.length === length) out.add(answer);
   return out;
 }
 
@@ -60,6 +70,16 @@ export function acceptedAt(
  */
 export const THEME_BONUS = 5;
 
+/** What the day said this board takes: `themed` for the list's own words alone,
+ *  or `both` — which is every other day, and is what an absent field means.
+ *
+ *  `dictionary` never reaches a browser: a game told to use the dictionary is
+ *  simply not themed by the generator, so its payload carries no words at all.
+ *  Reading it here would be a second implementation of that decision. */
+export function acceptRule(payload: unknown): 'both' | 'themed' {
+  return (payload as { accept?: unknown } | null)?.accept === 'themed' ? 'themed' : 'both';
+}
+
 /** The day's words a board should accept on top of its dictionary.
  *
  *  Handed to the solver rather than checked at the door, so a themed word is
@@ -71,9 +91,17 @@ export const THEME_BONUS = 5;
  *  Null while the dictionary is still on its way, which the games already show
  *  as "still loading" rather than as a refusal.
  */
-export function withThemed(dictionary: string[] | null, themed: string[]): string[] | null {
+export function withThemed(
+  dictionary: string[] | null,
+  themed: string[],
+  rule: 'both' | 'themed' = 'both'
+): string[] | null {
   if (!dictionary) return null;
   if (themed.length === 0) return dictionary;
+  // The day may have said the board takes the list's own words and nothing
+  // else. It is still handed to the solver rather than checked at the door, so
+  // a word only counts if the board can genuinely make it.
+  if (rule === 'themed') return themed;
   const known = new Set(dictionary);
   return [...dictionary, ...themed.filter((w) => !known.has(w))];
 }

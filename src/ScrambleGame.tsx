@@ -28,7 +28,7 @@ import { useDailySync } from '@/useDailySync';
 import { buildShare } from '@/share';
 import { recordSprint } from '@/stats';
 import { store as siteStore } from '@/siteStorage';
-import { THEME_BONUS, themedWords, withThemed } from '@/themedWords';
+import { acceptRule, THEME_BONUS, themedWords, withThemed } from '@/themedWords';
 
 export type ScrambleGameHandle = { pressKey: (k: string) => void };
 
@@ -123,6 +123,8 @@ const ScrambleGame = forwardRef<
 >(function ScrambleGame({ standardWords, commonWords, onLetterStates, onReveal, practiceWords }, ref) {
   const [store, setStore] = useState<ScrambleStore>(loadStore);
   const [themed, setThemed] = useState<string[]>([]);
+  // What the day said this board takes: its own words alone, or both.
+  const [accept, setAccept] = useState<'both' | 'themed'>('both');
   const { practiceAllowed } = usePrefs();
   // pinned to the daily: someone who switched practice off shouldn't be left
   // looking at a practice board they can no longer leave
@@ -185,6 +187,8 @@ const ScrambleGame = forwardRef<
         // rest of the list is findable in it more often than not — neither is
         // any use if the board will not take a word the dictionary lacks.
         setThemed(themedWords(raw));
+      setAccept(acceptRule(raw));
+        setAccept(acceptRule(raw));
         const rec = sanitizeRecord({ rack: d.letters, found: [], endsAt: null, finished: false });
         if (!rec || typeof d.date !== 'string') throw new Error('bad payload');
         // reset when the date changes OR the rack differs (e.g. the daily
@@ -265,7 +269,7 @@ const ScrambleGame = forwardRef<
     [store.dailyMode, themed]
   );
   const themedSet = useMemo(() => new Set(themedNow), [themedNow]);
-  const accepted = useMemo(() => withThemed(standardWords, themedNow), [standardWords, themedNow]);
+  const accepted = useMemo(() => withThemed(standardWords, themedNow, accept), [standardWords, themedNow, accept]);
 
   const answers = useMemo(() => {
     if (!accepted || !record) return null;

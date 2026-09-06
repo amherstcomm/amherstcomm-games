@@ -49,7 +49,8 @@ async function generate(
   theme?: object,
   date = DATE,
   weave?: object[],
-  passages?: object[]
+  passages?: object[],
+  policy?: object
 ) {
   await run('node', ['scripts/fetch-puzzles.mjs'], {
     env: {
@@ -61,6 +62,7 @@ async function generate(
       ...(theme ? { PUZZLES_THEME: JSON.stringify(theme) } : {}),
       ...(weave ? { PUZZLES_WEAVE_THEMES: JSON.stringify(weave) } : {}),
       ...(passages ? { PUZZLES_PASSAGES: JSON.stringify(passages) } : {}),
+      ...(policy ? { PUZZLES_POLICY: JSON.stringify(policy) } : {}),
     },
     maxBuffer: 10 * 1024 * 1024,
   });
@@ -495,5 +497,77 @@ describe('a box built from the theme', () => {
     expect(typeof payload.themed).toBe('string');
     expect(Buffer.from(payload.themed, 'base64').toString().split(' ')).toContain('esop');
     expect((await read(plain, 'daily-box.json')).themed).toBeUndefined();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// What a themed day accepts as a word
+//
+// Three answers, decided per day and per game. What matters here is that the
+// generator obeys them *and* that it refuses to obey one that would leave a
+// board nobody could play — "the game still has to work" is the rule, and a
+// hive of seven letters with a word list behind it leaves one or two words.
+// ---------------------------------------------------------------------------
+describe('the word policy', () => {
+  let strict: string;
+  let plainWords: string;
+
+  beforeAll(async () => {
+    strict = await mkdtemp(join(tmpdir(), 'anagrimoire-strict-'));
+    plainWords = await mkdtemp(join(tmpdir(), 'anagrimoire-nodict-'));
+    await Promise.all([
+      generate(strict, THEME, DATE, undefined, undefined, { default: 'themed' }),
+      generate(plainWords, THEME, DATE, undefined, undefined, { guess: 'dictionary' }),
+    ]);
+  });
+  afterAll(async () =>
+    Promise.all([
+      rm(strict, { recursive: true, force: true }),
+      rm(plainWords, { recursive: true, force: true }),
+    ])
+  );
+
+  // `dictionary` un-themes the game outright rather than theming it and then
+  // refusing its words: a board built out of ESOPPLAN that will not accept ESOP
+  // is a board nobody can finish.
+  it('leaves a game told to use the dictionary entirely unthemed', async () => {
+    const payload = await read(plainWords, 'daily-words.json');
+    expect(payload.themed).toBeUndefined();
+    const got = words(payload, 'easy');
+    expect(Object.values(got).some((w) => THEME.words.includes(w))).toBe(false);
+    // And only that game: the rest of the day is themed as usual.
+    expect(typeof (await read(plainWords, 'daily-scramble.json')).themed).toBe('string');
+  });
+
+  it('stamps themed-only on the boards, thin or not', async () => {
+    // Thin is the point of a themed board: the words are the company's, there
+    // are twenty of them rather than forty thousand, and a hive with one
+    // findable word is a stranger puzzle rather than a broken one. The
+    // generator says what it left and does not argue.
+    for (const file of ['daily-box.json', 'daily-hive.json', 'daily-scramble.json']) {
+      expect((await read(strict, file)).accept, file).toBe('themed');
+    }
+  });
+
+  // The guess board keeps its own answer typeable whatever the rule says, so a
+  // length the theme has no words for is a board with exactly one word on it
+  // rather than an impossible one.
+  it('and the guess board too, because its answer is always typeable', async () => {
+    expect((await read(strict, 'daily-words.json')).accept).toBe('themed');
+  });
+
+  // The one thing that is not a difficulty choice. There is no answer to keep
+  // typeable on a grid — a board with nothing traceable on it is not hard, it
+  // is empty — so that game keeps both and says so.
+  it('but not on a board with nothing playable on it at all', async () => {
+    const grid = await read(strict, 'daily-grid.json');
+    expect(grid.accept).toBeUndefined();
+    expect(typeof grid.themed).toBe('string');
+  });
+
+  it('and an ordinary themed day stamps nothing at all', async () => {
+    for (const file of ['daily-box.json', 'daily-hive.json', 'daily-words.json']) {
+      expect((await read(themed, file)).accept, file).toBeUndefined();
+    }
   });
 });

@@ -333,3 +333,30 @@ describe('themed ladders, over a range', () => {
     expect(slowly.ladder.days).toBe(2);
   });
 });
+
+// What a themed day accepts as a word, over a range. Counted only where a rule
+// was written: a day with none accepts both, which is every ordinary themed day.
+describe('word rules, over a range', () => {
+  const withRule = (n: number, policy: Record<string, string>): CoverageDay => ({
+    date: october(n),
+    theme: { name: 'October', words: ['shares'] },
+    weave: [],
+    policy,
+  });
+
+  it('counts the days a rule narrows and says what they say', () => {
+    const sum = summarise([
+      withRule(1, { default: 'both', boxed: 'themed' }),
+      withRule(2, { boxed: 'themed' }),
+      list(october(3), ['shares']),
+    ]);
+    expect(sum.rules.days).toBe(2);
+    expect(sum.rules.said).toEqual(['boxed themed', 'default both']);
+  });
+
+  it('and says nothing at all about a month nobody has ruled on', () => {
+    const sum = summarise([list(october(1), ['shares'])]);
+    expect(sum.rules.days).toBe(0);
+    expect(sum.rules.said).toEqual([]);
+  });
+});

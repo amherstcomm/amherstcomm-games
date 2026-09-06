@@ -1593,6 +1593,66 @@ file's own `{ quotes: [{ text, author }] }` shape, so a handful lifted out of
 **not** judge length — that is the server's answer, reported per entry, rather
 than a second copy of the bands that would have to agree forever.
 
+#### What a themed day accepts as a word
+
+A themed day ships the list's own words and the boards take them **alongside**
+the dictionary. That is one of three things a deployment might want, and
+`/admin/lists` carries a rule for a run of days:
+
+| | |
+|---|---|
+| `both` | the dictionary and the day's own words — what a themed day has always done, and what a day with no rule does |
+| `themed` | only the day's own words |
+| `dictionary` | the dictionary alone, as though nothing were themed |
+
+**Per day, not per word list.** Several lists can cover one day, so a list is
+the wrong place to keep an answer about the day. **Per game as well**, because
+the answer is not the same for all of them: "only our words" is a fine letter
+box and an unplayable hive. A rule naming a game beats the day's default; among
+rules of equal standing the most recent wins, and nothing is merged, because
+half-themed is not a thing a board can be.
+
+**`dictionary` un-themes the game outright** rather than theming it and then
+refusing its words. A rack built out of ESOPPLAN whose board will not accept
+ESOP is a rack nobody can finish, and the honest reading of "the dictionary
+alone" is the day the site would have had.
+
+**The ladder takes no rule**, and is refused by name when one is written. Its
+par is the length of the shortest route through the words a player may use, so
+narrowing that set changes the *answer* rather than the difficulty — the rungs
+between the two ends are always the everyday dictionary.
+
+**A themed-only board is usually a thin one, and that is the point of it.**
+Twenty of your words rather than forty thousand of the language's: a hive with
+one findable word on it is a stranger puzzle, not a broken one. The generator
+says what each board was left with and does not argue:
+
+```
+hive: themed-only, 1 findable word on the board
+scramble: themed-only, 1 findable word on the board
+grid: themed-only would leave nothing playable — using both
+```
+
+**Reversal.** The first version of this refused to publish `themed` below a
+floor — six findable words, eight for the hive — and every game fell back on a
+real list. That was the wrong call: thin is what themed looks like, and the
+choice belongs to whoever wrote the rule. The floor is now one, and it rules out
+only the case that is not a difficulty: a board with **nothing** playable on it.
+
+The guess board keeps its own answer typeable whatever the rule says, so a
+length the theme has no words for is a board with exactly one word on it rather
+than an impossible one. The grid has no such anchor — nothing is guaranteed
+traceable on dice — so it is the game that still falls back.
+
+The letter box is the one that carries themed-only comfortably, because its
+twelve letters *are* the theme's words: on a 66-word list, 101 boards can be
+solved by a chain of the theme's own words (1 in two, 100 in three) against
+4,318 solvable from the dictionary.
+
+The decision reaches the browser as an `accept` field on the day's payload — the
+board obeys what the database decided rather than deciding for itself — and an
+ordinary themed day carries no field, which is what it always was.
+
 #### Coverage: what a month actually adds up to
 
 The panel beside a list says what that list can make. Once several lists and
@@ -1622,6 +1682,8 @@ it reports:
   board size. A day whose themes all fail to tile gets a curated board, not no
   board — which is exactly why it is invisible without this.
 - **Boxed and Bridge**, the days whose pooled words can build one.
+- **Word rules**, the days a rule narrows and what those rules say — only where
+  one was written, since a day without one accepts both.
 - **Cryptogram**, the days that play a passage of your own and which
   difficulties reach it — plus, said separately, days that have a passage *no
   board can take*, which is the failure that reads as a covered day.

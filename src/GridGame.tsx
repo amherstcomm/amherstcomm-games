@@ -28,7 +28,7 @@ import { useDailySync } from '@/useDailySync';
 import { buildShare } from '@/share';
 import { recordSprint } from '@/stats';
 import { store as siteStore } from '@/siteStorage';
-import { THEME_BONUS, themedWords, withThemed } from '@/themedWords';
+import { acceptRule, THEME_BONUS, themedWords, withThemed } from '@/themedWords';
 
 export type GridGameHandle = { pressKey: (k: string) => void };
 
@@ -150,6 +150,8 @@ const GridGame = forwardRef<
 >(function GridGame({ standardWords, displayWord, onLetterStates, onReveal }, ref) {
   const [store, setStore] = useState<GridStore>(loadStore);
   const [themed, setThemed] = useState<string[]>([]);
+  // What the day said this board takes: its own words alone, or both.
+  const [accept, setAccept] = useState<'both' | 'themed'>('both');
   const [playedAt, setPlayedAt] = useState<Difficulty>(difficulty);
   const [difficultyTick, setDifficultyTick] = useState(0);
   useEffect(
@@ -228,6 +230,8 @@ const GridGame = forwardRef<
         setPlayedAt(chosen.difficulty);
         const d = { ...raw, ...chosen.board };
         setThemed(themedWords(raw));
+      setAccept(acceptRule(raw));
+        setAccept(acceptRule(raw));
         const rec = sanitizeRecord({ cells: d.cells, found: [], endsAt: null, finished: false });
         if (!rec || typeof d.date !== 'string') throw new Error('bad payload');
         // reset when the date changes OR the cells differ (e.g. the daily
@@ -292,7 +296,7 @@ const GridGame = forwardRef<
   // behind it.
   const themedNow = useMemo(() => (store.dailyMode ? themed : []), [store.dailyMode, themed]);
   const themedSet = useMemo(() => new Set(themedNow), [themedNow]);
-  const accepted = useMemo(() => withThemed(standardWords, themedNow), [standardWords, themedNow]);
+  const accepted = useMemo(() => withThemed(standardWords, themedNow, accept), [standardWords, themedNow, accept]);
 
   // every path-reachable dictionary word; also serves as submit validation
   const answers = useMemo(() => {

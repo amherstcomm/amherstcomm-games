@@ -277,3 +277,65 @@ export function passagesForBand(passages, band) {
     // database is not something to lean on.
     .sort((a, b) => a.text.localeCompare(b.text));
 }
+
+/** What each game will take as a word on a date: `{default, boxed, ...}`.
+ *
+ *  Three answers — `both`, `themed`, `dictionary` — decided per day rather than
+ *  per word list, because several lists can cover one day and a list is the
+ *  wrong place to keep an answer about the day.
+ *
+ *  `PUZZLES_POLICY` short-circuits it with inline JSON, for the contract test
+ *  and for trying a month before committing to it. */
+export async function policyFor(date, env = process.env, fetchImpl = fetch) {
+  const inline = (env.PUZZLES_POLICY || '').trim();
+  if (inline) {
+    try {
+      return cleanPolicy(JSON.parse(inline));
+    } catch {
+      throw new Error('PUZZLES_POLICY is set but is not valid JSON');
+    }
+  }
+  const url = env.SUPABASE_URL;
+  const key = env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !key) return {};
+  try {
+    const res = await fetchImpl(`${url}/rest/v1/rpc/daily_word_policy`, {
+      method: 'POST',
+      headers: {
+        apikey: key,
+        authorization: `Bearer ${key}`,
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({ p_date: date }),
+    });
+    if (!res.ok) return {};
+    return cleanPolicy(await res.json());
+  } catch {
+    // Unreachable is a reason to publish the day the site would have had, not
+    // to publish nothing — and that day is `both`, which is the empty answer.
+    return {};
+  }
+}
+
+export const POLICIES = ['both', 'themed', 'dictionary'];
+
+/** What the generator can rely on: known games, known answers, nothing else. */
+export function cleanPolicy(raw) {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {};
+  const out = {};
+  for (const [game, policy] of Object.entries(raw)) {
+    if (typeof policy !== 'string' || !POLICIES.includes(policy)) continue;
+    // The ladder is refused when it is written, and again here: par is the
+    // shortest route through the words a player may use, so narrowing them
+    // changes the answer rather than the difficulty.
+    if (game === 'ladder') continue;
+    out[game] = policy;
+  }
+  return out;
+}
+
+/** The answer for one game, falling back to the day's default and then to the
+ *  way a themed day has always worked. */
+export function policyOf(policy, game) {
+  return policy?.[game] ?? policy?.default ?? 'both';
+}

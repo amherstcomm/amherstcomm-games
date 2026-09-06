@@ -40,6 +40,9 @@ export type CoverageDay = {
   weave: WeaveTheme[];
   /** the cryptogram passages written for the day, if any */
   passages?: DayPassage[];
+  /** what each game accepts as a word that day, `{default, boxed, …}` — absent
+   *  or empty is both, which is what a themed day has always done */
+  policy?: Record<string, string>;
 };
 
 export async function readCoverage(
@@ -156,6 +159,9 @@ export type Summary = {
   /** days whose own words can set a ladder, and which tiers they reach —
    *  null until the rung list arrives, rather than nought */
   ladder: { days: number | null; perTier: Record<string, number> };
+  /** days a rule narrows, and what the rules say — a day nobody has written a
+   *  rule for accepts both, which is not worth counting */
+  rules: { days: number; said: string[] };
   /** days with a passage of the deployment's own, and which tiers it reaches */
   cryptogram: { withPassage: number; days: number; perTier: Record<string, number> };
 };
@@ -249,6 +255,18 @@ export function fold(days: CoverageDay[], yields: DayYield[]): Summary {
           yields.filter((y) => (y.ladders ?? []).includes(tier)).length,
         ])
       ),
+    },
+    rules: {
+      days: days.filter((d) => Object.keys(d.policy ?? {}).length > 0).length,
+      // Named rather than counted: "boxed themed" is the thing somebody wants
+      // to check they meant, and there are never many of them.
+      said: [
+        ...new Set(
+          days.flatMap((d) =>
+            Object.entries(d.policy ?? {}).map(([game, answer]) => `${game} ${answer}`)
+          )
+        ),
+      ].sort(),
     },
     cryptogram: {
       // Written for the day, against actually usable by some tier: a passage
