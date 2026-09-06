@@ -902,3 +902,75 @@ test('a day can be told which words its games accept', async ({ page }) => {
     p_until: '2026-10-09',
   });
 });
+
+// Choosing a day's puzzles rather than letting the day choose them. What is
+// pinned is the seed, not the board — so what this asserts is the shortlist
+// being real and the seed reaching the server in the shape the generator reads.
+test('a day s puzzles can be picked from what its words can make', async ({ page }) => {
+  const pinned: Record<string, unknown>[] = [];
+  const day = {
+    date: '2026-10-08',
+    theme: {
+      name: 'October',
+      words: ['voting', 'shared', 'capital', 'employer', 'esop', 'meeting', 'vesting'],
+    },
+    weave: [
+      {
+        clue: 'Profit sharing',
+        spangram: 'profitsharing',
+        words: ['metrics', 'payout', 'reward', 'target', 'bonus', 'split'],
+      },
+    ],
+    passages: [
+      {
+        text: 'We own this place together, and every share of it was earned here.',
+        author: 'The charter',
+        letters: 52,
+      },
+    ],
+  };
+
+  await page.route('**/rest/v1/rpc/**', (route) => {
+    const url = route.request().url();
+    if (url.includes('pin_puzzle')) {
+      pinned.push(JSON.parse(route.request().postData() ?? '{}'));
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ ok: true, id: 'pin1' }),
+      });
+    }
+    const body = url.includes('theme_coverage')
+      ? { ok: true, days: [day] }
+      : url.includes('pins_sheet')
+        ? { ok: true, pins: [] }
+        : [];
+    return route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(body),
+    });
+  });
+
+  await page.goto('/admin/pins');
+  await page.getByLabel('Pin date').fill('2026-10-08');
+  await page.getByRole('button', { name: 'Look' }).click();
+
+  // Each game offers what that day's own words can make, worked out in the
+  // browser with the same searches the generator runs.
+  await expect(page.getByRole('button', { name: 'capital', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'employer', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: /meeting → vesting in 4/ })).toBeVisible();
+  await expect(page.getByRole('button', { name: /Profit sharing/ })).toBeVisible();
+
+  // And the seed reaches the server in the shape the generator reads.
+  await page.getByRole('button', { name: 'capital', exact: true }).click();
+  await expect(page.getByText('Pinned.')).toBeVisible();
+  expect(pinned).toHaveLength(1);
+  expect(pinned[0]).toMatchObject({
+    p_date: '2026-10-08',
+    p_game: 'scramble',
+    p_difficulty: null,
+    p_choice: { word: 'capital' },
+  });
+});

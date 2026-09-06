@@ -54,6 +54,7 @@ export const ADMIN_TABS = [
   'lists',
   'weave',
   'passages',
+  'pins',
   'coverage',
   'people',
 ] as const;
@@ -171,6 +172,7 @@ export const ADMIN_TITLE: Record<AdminTab, string> = {
   lists: 'Word lists',
   weave: 'Weave themes',
   passages: 'Cryptogram passages',
+  pins: 'Choosing a day',
   coverage: 'Coverage',
   people: 'Who may do what',
 };

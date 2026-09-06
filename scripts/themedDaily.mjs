@@ -339,3 +339,65 @@ export function cleanPolicy(raw) {
 export function policyOf(policy, game) {
   return policy?.[game] ?? policy?.default ?? 'both';
 }
+
+/** What a person pinned to this date: `{"boxed": {"easy": {...}}}`.
+ *
+ *  A pin is a seed rather than a board — the word, the pangram, the two words
+ *  the box is made of — so the generator builds from it exactly as it builds
+ *  its own choice, and a pin that has stopped working falls back rather than
+ *  publishing something the game cannot read.
+ *
+ *  `PUZZLES_PINS` short-circuits it with inline JSON, for the contract test. */
+export async function pinsFor(date, env = process.env, fetchImpl = fetch) {
+  const inline = (env.PUZZLES_PINS || '').trim();
+  if (inline) {
+    try {
+      return cleanPins(JSON.parse(inline));
+    } catch {
+      throw new Error('PUZZLES_PINS is set but is not valid JSON');
+    }
+  }
+  const url = env.SUPABASE_URL;
+  const key = env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !key) return {};
+  try {
+    const res = await fetchImpl(`${url}/rest/v1/rpc/daily_pins`, {
+      method: 'POST',
+      headers: {
+        apikey: key,
+        authorization: `Bearer ${key}`,
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({ p_date: date }),
+    });
+    if (!res.ok) return {};
+    return cleanPins(await res.json());
+  } catch {
+    // Unreachable is a reason to deal the day's own draw, not to publish
+    // nothing.
+    return {};
+  }
+}
+
+/** Objects keyed by game and then by difficulty, and nothing else. */
+export function cleanPins(raw) {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {};
+  const out = {};
+  for (const [game, boards] of Object.entries(raw)) {
+    if (!boards || typeof boards !== 'object' || Array.isArray(boards)) continue;
+    const kept = {};
+    for (const [at, choice] of Object.entries(boards)) {
+      if (choice && typeof choice === 'object' && !Array.isArray(choice)) kept[at] = choice;
+    }
+    if (Object.keys(kept).length > 0) out[game] = kept;
+  }
+  return out;
+}
+
+/** The choice pinned for one board: the difficulty's own, or the one pinned for
+ *  every difficulty of that game. Null when nobody pinned anything. */
+export function pinOf(pins, game, difficulty) {
+  const boards = pins?.[game];
+  if (!boards) return null;
+  return boards[difficulty] ?? boards.all ?? null;
+}

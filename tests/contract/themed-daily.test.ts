@@ -50,7 +50,8 @@ async function generate(
   date = DATE,
   weave?: object[],
   passages?: object[],
-  policy?: object
+  policy?: object,
+  pins?: object
 ) {
   await run('node', ['scripts/fetch-puzzles.mjs'], {
     env: {
@@ -63,6 +64,7 @@ async function generate(
       ...(weave ? { PUZZLES_WEAVE_THEMES: JSON.stringify(weave) } : {}),
       ...(passages ? { PUZZLES_PASSAGES: JSON.stringify(passages) } : {}),
       ...(policy ? { PUZZLES_POLICY: JSON.stringify(policy) } : {}),
+      ...(pins ? { PUZZLES_PINS: JSON.stringify(pins) } : {}),
     },
     maxBuffer: 10 * 1024 * 1024,
   });
@@ -569,5 +571,59 @@ describe('the word policy', () => {
     for (const file of ['daily-box.json', 'daily-hive.json', 'daily-words.json']) {
       expect((await read(themed, file)).accept, file).toBeUndefined();
     }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Pinning a day's puzzles
+//
+// A pin is a seed rather than a board, so what has to be true is that the
+// generator built *that* seed's board — and that a pin it can no longer build
+// is passed over rather than published broken.
+// ---------------------------------------------------------------------------
+describe('a pinned day', () => {
+  let dir: string;
+
+  beforeAll(async () => {
+    dir = await mkdtemp(join(tmpdir(), 'anagrimoire-pinned-'));
+    await generate(dir, THEME, DATE, undefined, undefined, undefined, {
+      scramble: { all: { word: 'capital' } },
+      hive: { all: { base: 'employer' } },
+      guess: { all: { word: 'trustee' } },
+      // Two words with no route between them, and of different lengths: a pin
+      // that cannot be built, which the day has to survive.
+      ladder: { all: { a: 'esop', b: 'meeting' } },
+    });
+  });
+  afterAll(async () => rm(dir, { recursive: true, force: true }));
+
+  it('shuffles the rack it was told to', async () => {
+    const rack = (await read(dir, 'daily-scramble.json')).byDifficulty.easy.letters as string[];
+    expect([...rack].sort().join('')).toBe([...'capital'].sort().join(''));
+  });
+
+  it('and seeds the hive from the pangram it was told to', async () => {
+    const hive = (await read(dir, 'daily-hive.json')).byDifficulty.easy;
+    expect([hive.center, ...hive.outers].sort().join('')).toBe(
+      [...new Set('employer')].sort().join('')
+    );
+  });
+
+  // Per length, because a pinned word is a sentence about one board: the other
+  // nine are dealt as usual.
+  it('and sets the daily word at that word s own length', async () => {
+    const got = words(await read(dir, 'daily-words.json'), 'easy');
+    expect(got['7']).toBe('trustee');
+    expect(got['6']).not.toBe('trustee');
+  });
+
+  // The important half. A pin that has stopped working — the word left the
+  // list, the two ends no longer have a route — must not take the day down
+  // with it.
+  it('and deals as usual where the pin could not be built', async () => {
+    const ladder = (await read(dir, 'daily-ladder.json')).byDifficulty.easy;
+    expect(ladder.from).not.toBe('esop');
+    expect(ladder.from.length).toBe(ladder.to.length);
+    expect(ladder.par).toBeGreaterThanOrEqual(3);
   });
 });

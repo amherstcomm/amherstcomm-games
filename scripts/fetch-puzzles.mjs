@@ -10,6 +10,8 @@ import { generateSquare, GIVEN_TARGET } from './squares.mjs';
 import { THEMES } from './themes.mjs';
 import {
   passagesFor,
+  pinOf,
+  pinsFor,
   policyFor,
   policyOf,
   passagesForBand,
@@ -575,6 +577,26 @@ const themeIn = (game) => {
   return answer === 'dictionary' ? null : theme;
 };
 
+// What somebody pinned to this date. A themed day has more candidates than it
+// can use — a word list makes dozens of boxes and a handful of racks — and the
+// draw against the day's seed is fine for a month nobody is watching and not
+// fine for the morning of the meeting.
+//
+// A pin is a seed rather than a board, so everything below builds from it the
+// way it builds its own choice. A pin that has stopped working — the word left
+// the list, the box lost its answer — is passed over with a line in the log,
+// because a board that cannot be built is worse than one somebody did not
+// choose.
+const pins = await pinsFor(etDate);
+const pinnedCount = Object.keys(pins).length;
+if (pinnedCount > 0) {
+  console.log(`${pinnedCount} pinned ${pinnedCount === 1 ? 'game' : 'games'} for ${etDate}`);
+}
+/** The choice pinned for one board, and a line when it could not be used. */
+const pinned = (game, difficulty) => pinOf(pins, game, difficulty);
+const missedPin = (game, difficulty, why) =>
+  console.log(`${game} ${difficulty}: the pin could not be used (${why}) — dealing as usual`);
+
 // A deployment's own cryptogram passages for the day, if it wrote any. Asked
 // once for the run, like the theme: three difficulties choose from one pool.
 const customPassages = await passagesFor(etDate);
@@ -631,6 +653,17 @@ for (const variant of ['', 'dev']) {
       // straight back to the day the site would have had anyway.
       const themed = themedPool(themeIn('guess')?.words, len, blockedFromAnswers);
       if (themed.length > 0) pool = themed;
+      // A pinned word takes the board of its own length and leaves the other
+      // nine alone: "the answer on the 8th is SHARES" is a sentence about one
+      // board, not about the day.
+      const pin = pinned('guess', difficulty);
+      if (pin && typeof pin.word === 'string' && pin.word.length === len) {
+        if (pool.includes(pin.word) || themedPool([pin.word], len, blockedFromAnswers).length > 0) {
+          words[len] = Buffer.from(pin.word).toString('base64');
+          continue;
+        }
+        missedPin('guess', difficulty, `${pin.word} is not a word this board can set`);
+      }
       words[len] = Buffer.from(pool[Math.floor(rng() * pool.length)]).toString('base64');
     }
     // wrapped in { words } so every byDifficulty entry has the same field
@@ -690,7 +723,16 @@ for (const variant of ['', 'dev']) {
     // dealt the *same* hive every day of the month and never once used the
     // other two. Found by generating three consecutive days and reading the
     // letters, which is the only way it could have been found.
-    const themedBases = themedHiveBases(themeIn('hive')?.words, blockedFromAnswers)
+    const hivePin = pinned('hive', difficulty);
+    const themedBases = themedHiveBases(
+      // A pinned pangram is tried before anything else, and only it: pinning is
+      // choosing, so a pin that cannot make a board worth playing falls back to
+      // the ordinary pool rather than to another themed one.
+      hivePin && typeof hivePin.base === 'string'
+        ? [hivePin.base]
+        : themeIn('hive')?.words,
+      blockedFromAnswers
+    )
       .map((base) => ({ base, at: hiveRng() }))
       .sort((x, y) => x.at - y.at)
       .map(({ base }) => base);
@@ -853,8 +895,18 @@ for (const variant of ['', 'dev']) {
     // all. A theme themes as many difficulties as it has distinct boxes to
     // give, starting at easy; the rest get the board they would have had.
     const tier = DIFFICULTIES.indexOf(difficulty);
-    if (themedBoxOrder.length > tier) {
-      const box = themedBoxOrder[tier];
+    const boxPin = pinned('boxed', difficulty);
+    const pinnedBox =
+      boxPin && Array.isArray(boxPin.from)
+        ? themedBoxen.find(
+            (b) => [...b.from].sort().join(' ') === [...boxPin.from].sort().join(' ')
+          )
+        : null;
+    if (boxPin && !pinnedBox) {
+      missedPin('boxed', difficulty, 'those words no longer make a board that can be solved');
+    }
+    if (pinnedBox || themedBoxOrder.length > tier) {
+      const box = pinnedBox ?? themedBoxOrder[tier];
       console.log(
         `Box ${difficulty} from the theme: ${box.from.join(' + ')} → ` +
           `${box.sides.join('/')} (solvable in ${box.par}, spells ${box.holds.length})`
@@ -915,7 +967,12 @@ for (const variant of ['', 'dev']) {
     // findable rather than a cruel joke.
     const themedRacks = themedRackBases(themeIn('scramble')?.words, RACK_SIZE, blockedFromAnswers);
     const pool = themedRacks.length > 0 ? themedRacks : rackBases;
-    const rackBase = pool[Math.floor(scrambleRng() * pool.length)];
+    let rackBase = pool[Math.floor(scrambleRng() * pool.length)];
+    const rackPin = pinned('scramble', difficulty);
+    if (rackPin && typeof rackPin.word === 'string') {
+      if (rackPin.word.length === RACK_SIZE) rackBase = rackPin.word;
+      else missedPin('scramble', difficulty, `${rackPin.word} is not ${RACK_SIZE} letters`);
+    }
     if (themedRacks.length > 0) {
       console.log(`Scramble ${difficulty} seeded from the theme: ${rackBase}`);
     }
@@ -1021,7 +1078,18 @@ for (const variant of ['', 'dev']) {
     // lists were allowed to overlap, because merging two lists would have had
     // to invent a rule for whose clue and whose spangram won. A list themes the
     // daily word; a theme themes the board.
-    const themedBoards = weaveThemesToday;
+    // A pinned theme is the only candidate offered, so pinning is choosing
+    // rather than nudging — and if it will not tile this board the day falls
+    // back to the pool, which is what an unpinned day does anyway.
+    const weavePin = pinned('weave', difficulty);
+    const pinnedTheme =
+      weavePin && typeof weavePin.clue === 'string'
+        ? weaveThemesToday.filter((t) => t.clue === weavePin.clue)
+        : null;
+    if (weavePin && pinnedTheme && pinnedTheme.length === 0) {
+      missedPin('weave', difficulty, `no theme covering today is called ${weavePin.clue}`);
+    }
+    const themedBoards = pinnedTheme?.length ? pinnedTheme : weaveThemesToday;
     const weave =
       (themedBoards.length > 0 && generateWeave(weaveRng, cols, rows, themedBoards)) ||
       generateWeave(weaveRng, cols, rows, THEMES);
@@ -1126,9 +1194,19 @@ for (const variant of ['', 'dev']) {
     // 100 letters at easy and hard, 35 to 49 at extreme, so a month of long
     // passages themes two tiers and leaves the third on the curated pool.
     const custom = passagesForBand(customPassages, TIER_BAND[difficulty]);
+    const passagePin = pinned('cryptogram', difficulty);
+    const pinnedPassage =
+      passagePin && typeof passagePin.text === 'string'
+        ? custom.find((p) => p.text === passagePin.text)
+        : null;
+    if (passagePin && !pinnedPassage) {
+      // Length is the usual reason: a 52-letter passage has no board at
+      // extreme, and pinning it there is a choice that cannot be honoured.
+      missedPin('cryptogram', difficulty, 'that passage is not one this board can take today');
+    }
     let passage;
-    if (custom.length > 0) {
-      passage = custom[Math.floor(rng() * custom.length)];
+    if (pinnedPassage || custom.length > 0) {
+      passage = pinnedPassage ?? custom[Math.floor(rng() * custom.length)];
       console.log(
         `Cryptogram ${difficulty} from a custom passage (${passage.letters} letters)` +
           `${custom.length > 1 ? ` of ${custom.length}` : ''}`
@@ -1213,8 +1291,20 @@ for (const variant of ['', 'dev']) {
       xmur3(`${SEED_SALT}anagrimoire-ladder-themed-${etDate}${salt}${diffSalt(difficulty)}`)()
     );
     const themedHere = poolFor(themedLadders, difficulty);
-    if (themedHere.length > 0) {
-      const pair = themedHere[Math.floor(rng() * themedHere.length)];
+    const ladderPin = pinned('ladder', difficulty);
+    const pinnedPair =
+      ladderPin && typeof ladderPin.a === 'string' && typeof ladderPin.b === 'string'
+        ? themedLadders.find(
+            (p) =>
+              (p.a === ladderPin.a && p.b === ladderPin.b) ||
+              (p.a === ladderPin.b && p.b === ladderPin.a)
+          )
+        : null;
+    if (ladderPin && !pinnedPair) {
+      missedPin('ladder', difficulty, 'those two words no longer have a route between them');
+    }
+    if (pinnedPair || themedHere.length > 0) {
+      const pair = pinnedPair ?? themedHere[Math.floor(rng() * themedHere.length)];
       console.log(`Ladder ${difficulty} from the theme: ${pair.a} → ${pair.b} (${pair.par})`);
       dailyLadderPairs.add(`${pair.a} ${pair.b}`);
       ladderByDifficulty[difficulty] = generateLadder(pair);
