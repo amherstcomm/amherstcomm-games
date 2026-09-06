@@ -509,25 +509,31 @@ const weaveThemesToday = await weaveThemesFor(etDate);
 const wordPolicy = await policyFor(etDate);
 const accepts = (game) => policyOf(wordPolicy, game);
 
-// How many of the day's own words a board has to leave findable before it may
-// be published as themed-only. Below this the day says one thing and the board
-// is another: a hive of seven letters and a word list usually leaves one or two
-// words, which is not a puzzle, and the rule is that the game still has to
-// work. A game that falls short keeps both — the dictionary and the day's own
-// words — and the run says so rather than leaving it to be noticed in October.
-const THEMED_FLOOR = { guess: 6, scramble: 6, hive: 8, grid: 6 };
+// A themed-only board is allowed to be thin. That is the point of one: the
+// words are the company's, there are sixty of them rather than forty thousand,
+// and a board with four answers on it is a harder, stranger puzzle rather than
+// a broken one. The generator says what it left and does not argue.
+//
+// One thing is not a difficulty choice, and it is the only floor left: a board
+// with *nothing* playable on it. A guess board whose answer cannot be typed is
+// not hard, it is impossible — and that is the real case, because the answer at
+// a length the theme has no words for is an ordinary word the themed-only rule
+// would refuse. So a game that would leave zero keeps both, and says so.
+const THEMED_FLOOR = 1;
 
 /** What to stamp on a payload: the day's answer, or `both` when themed-only
- *  would leave a board nobody could play. */
+ *  would leave a board with nothing on it at all. */
 const acceptFor = (game, findable) => {
   const answer = accepts(game);
   if (answer !== 'themed') return answer;
-  const floor = THEMED_FLOOR[game] ?? 1;
-  if (findable >= floor) return 'themed';
-  console.log(
-    `${game}: themed-only would leave ${findable} findable ` +
-      `${findable === 1 ? 'word' : 'words'}, under the ${floor} it needs — using both`
-  );
+  if (findable >= THEMED_FLOOR) {
+    console.log(
+      `${game}: themed-only, ${findable} findable ` +
+        `${findable === 1 ? 'word' : 'words'} on the board`
+    );
+    return 'themed';
+  }
+  console.log(`${game}: themed-only would leave nothing playable — using both`);
   return 'both';
 };
 
@@ -645,19 +651,12 @@ for (const variant of ['', 'dev']) {
         // not carry. Base64 for the same reason the answers are: to keep them
         // out of a casual glance at the file, not to hide them, since the
         // answers themselves already ship here.
-        ...themedBlob(
-          themeIn('guess'),
-          // The thinnest board decides: themed-only means a length with no
-          // themed words is a board nothing can be typed into.
-          acceptFor(
-            'guess',
-            Math.min(
-              ...Array.from({ length: 10 }, (_, i) =>
-                themedPool(themeIn('guess')?.words, i + 3, blockedFromAnswers).length
-              )
-            )
-          )
-        ),
+        // The board keeps its own answer typeable whatever the rule says — see
+        // acceptedAt in src/themedWords.ts — so a length the theme has no words
+        // for is a board with exactly one word on it rather than an impossible
+        // one. Thin is the themed nature of the thing; impossible is not, and
+        // that is the only case this has to rule out.
+        ...themedBlob(themeIn('guess'), accepts('guess')),
         fetchedAt: stamp,
       },
       null,

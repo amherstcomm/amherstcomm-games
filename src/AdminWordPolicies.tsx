@@ -237,10 +237,13 @@ export default function AdminWordPolicies() {
               </div>
 
               <p className="text-xs text-slate-500">
-                Puzzles are generated a fortnight ahead, so set these at least two
-                weeks before the first day. A game with no words to fall back on
-                keeps its ordinary board rather than shipping one nobody can
-                finish — the run says when that happens.
+                Puzzles are generated a fortnight ahead, so set these at least
+                two weeks before the first day. A themed-only board is often a
+                thin one — twenty of your words rather than forty thousand of
+                the language’s — and that is the nature of it rather than a
+                fault; the nightly run prints how many words each board was left
+                with. The one thing that cannot stand is a board with nothing
+                playable on it at all, and that game keeps both.
               </p>
 
               <div className="flex flex-wrap items-center gap-2">

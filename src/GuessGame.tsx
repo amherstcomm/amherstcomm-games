@@ -29,7 +29,7 @@ import { usePalette } from '@/theme';
 import { recordGuessFinish } from '@/stats';
 import { formatElapsed, useUpTimer } from '@/useUpTimer';
 import { store as siteStore } from '@/siteStorage';
-import { acceptedAt, themedWords } from '@/themedWords';
+import { acceptedAt, acceptRule, themedWords } from '@/themedWords';
 
 export type LetterState = 'correct' | 'present' | 'absent';
 export type GuessGameHandle = { pressKey: (k: string) => void };
@@ -182,6 +182,7 @@ const GuessGame = forwardRef<
         if (typeof d?.date !== 'string' || typeof d?.words !== 'object') throw new Error('bad payload');
         setDailyData({ date: d.date, words: d.words });
         setThemed(themedWords(d));
+        setAccept(acceptRule(d));
         // a new day resets all daily boards; same-day boards whose answer no
         // longer matches the feed (e.g. the daily source changed) reset too
         setStore((prev) => {
@@ -210,15 +211,13 @@ const GuessGame = forwardRef<
   // Only the daily has a theme. Practice draws from the dictionary, so letting
   // these through there would accept words with no board to be the answer of.
   const [themed, setThemed] = useState<string[]>([]);
+  // What the day said this board takes: its own words alone, or both.
+  const [accept, setAccept] = useState<'both' | 'themed'>('both');
 
   const dailyMode = store.dailyMode;
   // The dictionary, plus whatever a themed day brought with it. During an
   // event the answer can be a word the dictionary has never heard of, and a
   // board that will not let you type its own answer is an unanswerable day.
-  const fullSetForLen = useMemo(
-    () => acceptedAt(fullWords, dailyMode ? themed : [], length),
-    [fullWords, themed, dailyMode, length]
-  );
 
   const lenKey = String(length);
 
@@ -284,6 +283,22 @@ const GuessGame = forwardRef<
       return null;
     }
   }, [record]);
+
+  // The dictionary, plus whatever a themed day brought with it — or, where the
+  // day said so, the day's own words alone. The answer is always in it either
+  // way: during an event it can be a word no dictionary carries, and a board
+  // that will not let you type its own answer is an unanswerable day.
+  const fullSetForLen = useMemo(
+    () =>
+      acceptedAt(
+        fullWords,
+        dailyMode ? themed : [],
+        length,
+        dailyMode ? accept : 'both',
+        dailyMode ? answer : null
+      ),
+    [fullWords, themed, dailyMode, length, accept, answer]
+  );
 
   const guesses = useMemo(() => record?.guesses ?? [], [record]);
   const won = answer !== null && guesses.includes(answer);

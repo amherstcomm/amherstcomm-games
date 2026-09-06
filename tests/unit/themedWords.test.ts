@@ -125,3 +125,33 @@ describe('acceptRule', () => {
     expect(withThemed(null, ['esop'], 'themed')).toBeNull();
   });
 });
+
+// The guess board under a themed-only day.
+describe('acceptedAt under a rule', () => {
+  const dictionary = ['share', 'plane', 'stone'];
+
+  it('takes the day s own words of that length and nothing else', () => {
+    expect([...acceptedAt(dictionary, ['esops', 'share'], 5, 'themed')!].sort()).toEqual([
+      'esops',
+      'share',
+    ]);
+  });
+
+  // Thin is allowed and impossible is not: a length the theme has no words for
+  // would otherwise be a board that will not accept its own answer.
+  it('and always the answer, even when the theme has nothing that long', () => {
+    expect([...acceptedAt(dictionary, ['esop'], 5, 'themed', 'stone')!]).toEqual(['stone']);
+  });
+
+  it('while both is the dictionary, the theme and the answer', () => {
+    const set = acceptedAt(dictionary, ['esops'], 5, 'both', 'stone')!;
+    expect(set.has('plane')).toBe(true);
+    expect(set.has('esops')).toBe(true);
+    expect(set.has('stone')).toBe(true);
+  });
+
+  // An answer of a different length belongs to a different board.
+  it('and an answer of another length is not smuggled in', () => {
+    expect(acceptedAt(dictionary, [], 5, 'themed', 'esop')!.size).toBe(0);
+  });
+});

@@ -539,23 +539,30 @@ describe('the word policy', () => {
     expect(typeof (await read(plainWords, 'daily-scramble.json')).themed).toBe('string');
   });
 
-  it('stamps themed-only where the board can carry it', async () => {
-    // The box can: its twelve letters are the theme's own words, and a chain of
-    // them solves it.
-    expect((await read(strict, 'daily-box.json')).accept).toBe('themed');
+  it('stamps themed-only on the boards, thin or not', async () => {
+    // Thin is the point of a themed board: the words are the company's, there
+    // are twenty of them rather than forty thousand, and a hive with one
+    // findable word is a stranger puzzle rather than a broken one. The
+    // generator says what it left and does not argue.
+    for (const file of ['daily-box.json', 'daily-hive.json', 'daily-scramble.json']) {
+      expect((await read(strict, file)).accept, file).toBe('themed');
+    }
   });
 
-  // The floors, which are the whole reason this is not just a flag. Seven
-  // letters and a word list leaves a hive with one or two findable words, and
-  // publishing that as "our words only" is publishing an unplayable board.
-  it('and refuses it where the board could not be played', async () => {
-    for (const file of ['daily-hive.json', 'daily-scramble.json', 'daily-words.json']) {
-      const payload = await read(strict, file);
-      expect(payload.accept, `${file} was stamped themed-only`).toBeUndefined();
-      // Still themed, though: the day's words are there and the board takes
-      // them alongside the dictionary, which is what it always did.
-      expect(typeof payload.themed, file).toBe('string');
-    }
+  // The guess board keeps its own answer typeable whatever the rule says, so a
+  // length the theme has no words for is a board with exactly one word on it
+  // rather than an impossible one.
+  it('and the guess board too, because its answer is always typeable', async () => {
+    expect((await read(strict, 'daily-words.json')).accept).toBe('themed');
+  });
+
+  // The one thing that is not a difficulty choice. There is no answer to keep
+  // typeable on a grid — a board with nothing traceable on it is not hard, it
+  // is empty — so that game keeps both and says so.
+  it('but not on a board with nothing playable on it at all', async () => {
+    const grid = await read(strict, 'daily-grid.json');
+    expect(grid.accept).toBeUndefined();
+    expect(typeof grid.themed).toBe('string');
   });
 
   it('and an ordinary themed day stamps nothing at all', async () => {

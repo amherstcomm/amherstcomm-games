@@ -42,11 +42,21 @@ export function themedWords(payload: unknown): string[] {
 export function acceptedAt(
   dictionary: string[] | null,
   themed: string[],
-  length: number
+  length: number,
+  rule: 'both' | 'themed' = 'both',
+  answer?: string | null
 ): Set<string> | null {
   if (!dictionary) return null;
-  const out = new Set(dictionary.filter((w) => w.length === length));
+  // A themed-only day takes the list's own words of this length and nothing
+  // else. Thin is allowed — that is what a themed board is — but a board that
+  // will not let you type its own answer is not hard, it is impossible, so the
+  // answer is always in. It is the one word that cannot be refused.
+  const out =
+    rule === 'themed'
+      ? new Set<string>()
+      : new Set(dictionary.filter((w) => w.length === length));
   for (const word of themed) if (word.length === length) out.add(word);
+  if (answer && answer.length === length) out.add(answer);
   return out;
 }
 

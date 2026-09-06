@@ -1622,23 +1622,32 @@ par is the length of the shortest route through the words a player may use, so
 narrowing that set changes the *answer* rather than the difficulty — the rungs
 between the two ends are always the everyday dictionary.
 
-**A themed-only board still has to be playable, and mostly is not.** The
-generator counts what the day's own words would leave findable on the board it
-built and refuses to publish `themed` below a floor — six words for the guess
-board, the rack and the grid, eight for the hive. Measured on a 22-word list:
+**A themed-only board is usually a thin one, and that is the point of it.**
+Twenty of your words rather than forty thousand of the language's: a hive with
+one findable word on it is a stranger puzzle, not a broken one. The generator
+says what each board was left with and does not argue:
 
 ```
-guess: themed-only would leave 0 findable words, under the 6 it needs — using both
-hive: themed-only would leave 1 findable word, under the 8 it needs — using both
-scramble: themed-only would leave 1 findable word, under the 6 it needs — using both
-grid: themed-only would leave 0 findable words, under the 6 it needs — using both
+hive: themed-only, 1 findable word on the board
+scramble: themed-only, 1 findable word on the board
+grid: themed-only would leave nothing playable — using both
 ```
 
-The letter box is the one that carries it, because its twelve letters *are* the
-theme's words: on a 66-word list, 101 boards can be solved by a chain of the
-theme's own words (1 in two, 100 in three) against 4,318 solvable from the
-dictionary. So a themed-only box is a real puzzle and a themed-only hive is not,
-and the run says which you got.
+**Reversal.** The first version of this refused to publish `themed` below a
+floor — six findable words, eight for the hive — and every game fell back on a
+real list. That was the wrong call: thin is what themed looks like, and the
+choice belongs to whoever wrote the rule. The floor is now one, and it rules out
+only the case that is not a difficulty: a board with **nothing** playable on it.
+
+The guess board keeps its own answer typeable whatever the rule says, so a
+length the theme has no words for is a board with exactly one word on it rather
+than an impossible one. The grid has no such anchor — nothing is guaranteed
+traceable on dice — so it is the game that still falls back.
+
+The letter box is the one that carries themed-only comfortably, because its
+twelve letters *are* the theme's words: on a 66-word list, 101 boards can be
+solved by a chain of the theme's own words (1 in two, 100 in three) against
+4,318 solvable from the dictionary.
 
 The decision reaches the browser as an `accept` field on the day's payload — the
 board obeys what the database decided rather than deciding for itself — and an
