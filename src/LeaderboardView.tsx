@@ -11,7 +11,6 @@ import {
   type Boards,
   type BoardScope,
 } from '@/leaderboard';
-import { formatElapsed } from '@/useUpTimer';
 import { difficulty, onDifficultyChange, type Difficulty } from '@/difficulty';
 import DifficultyTabs from '@/DifficultyTabs';
 import { fetchFriendNames } from '@/friends';
@@ -102,14 +101,14 @@ function Board({
                 {friend && <span className="text-xs font-normal text-sky-300/80"> (friend)</span>}
               </span>
               <span className="tabular-nums shrink-0">{value(r.value)}</span>
-              {r.detail !== null && (
+              {/* One list read twice, not two lists: the four clock-ranked
+                  boards used to be named here *and* left blank in
+                  BOARD_LABELS, so Home showed nothing for them while this
+                  showed a time. The formatting lives with the labels now, and
+                  both surfaces ask the same question. */}
+              {r.detail !== null && detail(r.detail) !== '' && (
                 <span className="text-xs text-slate-500 tabular-nums shrink-0 hidden sm:inline">
-                  {game === 'weave' ||
-                  game === 'squares4' ||
-                  game === 'squares5' ||
-                  game === 'cryptogram'
-                    ? formatElapsed(r.detail)
-                    : detail(r.detail)}
+                  {detail(r.detail)}
                 </span>
               )}
               {/* Not on your own row — reporting yourself is the one case

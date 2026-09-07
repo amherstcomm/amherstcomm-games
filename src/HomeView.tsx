@@ -231,6 +231,17 @@ export default function HomeView({
                             {friend && <span className="text-xs font-normal"> (friend)</span>}
                           </span>
                           <span className="tabular-nums shrink-0">{label.value(r.value)}</span>
+                          {/* What the row was ranked on, where there is such a
+                              thing. Home showed the value alone, so four
+                              clock-ranked boards read as five identical lines
+                              in a deliberate order -- which looks like no
+                              order at all. Hidden on the narrowest screens,
+                              where the name has to win. */}
+                          {label.detail(r.detail ?? 0) !== '' && (
+                            <span className="text-xs text-slate-500 tabular-nums shrink-0 hidden sm:inline">
+                              {label.detail(r.detail ?? 0)}
+                            </span>
+                          )}
                         </li>
                       );
                     })}

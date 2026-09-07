@@ -48,3 +48,20 @@ test('the difficulty tabs re-ask the server for that difficulty', async ({ page,
     )
     .toBeGreaterThanOrEqual(1);
 });
+
+// A board that ranks on the clock says so, on both surfaces.
+//
+// Weave, both Word Squares and Cryptogram rank on the fastest solve. Home
+// showed the value alone and the leaderboard named those four games in a
+// special case of its own, so the same row read two different ways depending
+// on which page you were on -- and on Home, two people on "1 solved" in a
+// deliberate order looked like a tie.
+test('a board ranked on time shows the time, on the front page and the panel', async ({ page }) => {
+  await page.goto('/');
+  const home = page.locator('li', { hasText: 'Anagrimoire' }).filter({ hasText: '1 solved' });
+  await expect(home.first()).toContainText('best 1:35');
+
+  await page.goto('/stats/boards');
+  const panel = page.locator('li', { hasText: 'Anagrimoire' }).filter({ hasText: '1 solved' });
+  await expect(panel.first()).toContainText('best 1:35');
+});

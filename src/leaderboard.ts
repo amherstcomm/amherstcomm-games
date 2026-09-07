@@ -11,6 +11,7 @@ import type { DailyState } from '@/dailyStatus';
 import { nameOfProgress } from '@/games';
 import type { Mode } from '@/storage';
 import { difficulty, type Difficulty } from '@/difficulty';
+import { formatElapsed } from '@/useUpTimer';
 
 // squares fields one board per size — see the note in leaderboard()
 export type BoardGame =
@@ -144,18 +145,32 @@ export const BOARD_LABELS: Record<
     value: (n) => `${n} solved`,
     detail: (n) => `best ${n} word${n === 1 ? '' : 's'}`,
   },
-  weave: { label: nameOfProgress('weave'), value: (n) => `${n} solved`, detail: () => '' },
+  // These four rank on the clock and used to show nothing of it, so a board of
+  // five people read as five identical lines in a deliberate order -- which
+  // looks like no order at all, and reads worse than a missing number: a
+  // hidden ranking is misinformation, and on a board with a prize attached it
+  // is the kind that gets argued about. boards_for has been ranking on the
+  // fastest solve all along; only the projection was thrown away here.
+  weave: {
+    label: nameOfProgress('weave'),
+    value: (n) => `${n} solved`,
+    detail: (n) => (n > 0 ? `best ${formatElapsed(n)}` : ''),
+  },
   squares4: {
     label: `${nameOfProgress('squares')} (4×4)`,
     value: (n) => `${n} solved`,
-    detail: () => '',
+    detail: (n) => (n > 0 ? `best ${formatElapsed(n)}` : ''),
   },
   squares5: {
     label: `${nameOfProgress('squares')} (5×5)`,
     value: (n) => `${n} solved`,
-    detail: () => '',
+    detail: (n) => (n > 0 ? `best ${formatElapsed(n)}` : ''),
   },
-  cryptogram: { label: nameOfProgress('cryptogram'), value: (n) => `${n} solved`, detail: () => '' },
+  cryptogram: {
+    label: nameOfProgress('cryptogram'),
+    value: (n) => `${n} solved`,
+    detail: (n) => (n > 0 ? `best ${formatElapsed(n)}` : ''),
+  },
   // ranked on boards finished, tie-broken on prompts found — a four-of-five
   // day beats a blank one, and one number cannot say both
   bridge: {

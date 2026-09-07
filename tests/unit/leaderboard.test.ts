@@ -3,7 +3,7 @@
 // excluded Hive and Weave for ever, because games with no finish line report
 // "started" until they're given up on.
 import { describe, expect, it } from 'vitest';
-import { boardsToShow, emptyBoards, type Boards } from '@/leaderboard';
+import { BOARD_LABELS, boardsToShow, emptyBoards, type Boards } from '@/leaderboard';
 import type { DailyState } from '@/dailyStatus';
 
 const row = { name: 'Anagrimoire', value: 1, detail: null };
@@ -59,5 +59,35 @@ describe('boardsToShow', () => {
 
   it('no boards at all shows nothing', () => {
     expect(boardsToShow(emptyBoards(), ['pattern'], none)).toEqual([]);
+  });
+});
+
+// What a row was ranked on, said out loud.
+//
+// Four boards -- Weave, both Word Squares and Cryptogram -- rank on the fastest
+// solve and used to render nothing of it, so five people on "1 solved" read as
+// five identical lines in an order the page would not explain. A missing number
+// is a gap; a hidden ranking is misinformation, and on a board with a prize
+// attached it is the kind that gets argued about.
+describe('the number under the number', () => {
+  it('says the time on every board that ranks on it', () => {
+    for (const game of ['weave', 'squares4', 'squares5', 'cryptogram'] as const) {
+      // 95 seconds, as boards_for returns it: milliseconds, from min(timeMs).
+      expect(BOARD_LABELS[game].detail(95_000), game).toBe('best 1:35');
+    }
+  });
+
+  // Nought is "nobody has a time yet", not a solve in no time at all, and a
+  // row saying `best 0:00` would be a lie about a board somebody is leading.
+  it('and says nothing when there is no time to say', () => {
+    expect(BOARD_LABELS.weave.detail(0)).toBe('');
+  });
+
+  // The boards that rank on something else keep saying that something else --
+  // a clock on Hive would rank it on a thing nobody was doing.
+  it('while the boards ranked on other things are untouched', () => {
+    expect(BOARD_LABELS.guess.detail(3)).toBe('best 3/6');
+    expect(BOARD_LABELS.hive.detail(2)).toBe('2 days');
+    expect(BOARD_LABELS.ladder.detail(2)).toContain('par');
   });
 });

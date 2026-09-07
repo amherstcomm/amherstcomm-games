@@ -280,4 +280,9 @@ console.log(
     ? '\nReady. Everything the themed pipeline needs is in place for this range.'
     : `\n${failed} check${failed === 1 ? '' : 's'} failed. The month will publish, but not the way the settings say.`
 );
-process.exit(failed === 0 ? 0 : 1);
+// exitCode rather than process.exit: the fetches above leave handles settling,
+// and killing the process out from under them makes Windows node die with a
+// libuv assertion -- exit 0xC0000409 instead of the 1 this means to report,
+// which is a checker that crashes rather than fails. The same reason
+// publish-puzzles.mjs throws instead of exiting.
+process.exitCode = failed === 0 ? 0 : 1;
