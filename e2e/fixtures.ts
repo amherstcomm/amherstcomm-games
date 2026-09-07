@@ -75,7 +75,12 @@ export const test = base.extend<{ rpcCalls: { fn: string; args: Record<string, u
         // The report functions answer a shape, not null — a stub that says
         // null makes every report read as a transport failure, which would
         // have let the dialog's success path go untested.
-        if (rpc === 'report_puzzle' || rpc === 'report_player' || rpc === 'report_general') {
+        if (
+          rpc === 'report_puzzle' ||
+          rpc === 'report_practice_puzzle' ||
+          rpc === 'report_player' ||
+          rpc === 'report_general'
+        ) {
           return route.fulfill({
             status: 200,
             contentType: 'application/json',

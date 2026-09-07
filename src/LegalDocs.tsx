@@ -302,6 +302,14 @@ export function PrivacyPolicy() {
         is nothing to count you by.
       </P>
       <P>
+        A practice board is the one exception, and it is one because a practice
+        board is dealt in your browser and never published — there is nothing on
+        the server to look up. Reporting one sends the board as your browser has
+        it, the report is marked as a claim rather than a record, and the page
+        says so before you send it. It is still only the board: no session, no
+        identifier, nothing about you.
+      </P>
+      <P>
         The email address is optional and is the one exception. It is used to send
         you a receipt and the outcome, and nothing else. It is never shown
         alongside the report — not on the page where reports are handled, not in

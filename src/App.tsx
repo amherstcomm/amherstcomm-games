@@ -1001,12 +1001,20 @@ function App() {
   // dealer's — it was never published and there is nothing on the server to
   // look up.
   const [dateByMode, setDateByMode] = useState<Partial<Record<Mode, string>>>({});
+  // The practice board each game is showing, for the one report whose evidence
+  // has to come from here — see the note in the listener below.
+  const [boardByMode, setBoardByMode] = useState<Partial<Record<Mode, unknown>>>({});
 
   useEffect(
     () =>
-      onDailyReport((m, daily, date) => {
+      onDailyReport((m, daily, date, board) => {
         setDailyByMode((prev) => (prev[m] === daily ? prev : { ...prev, [m]: daily }));
         setDateByMode((prev) => (prev[m] === date ? prev : { ...prev, [m]: date }));
+        // The practice board on screen, so it can be reported at all: it was
+        // never published, so the server has nothing to look up and the only
+        // evidence there can be is the board itself. Undefined on a daily,
+        // which is reported by naming it instead.
+        setBoardByMode((prev) => (prev[m] === board ? prev : { ...prev, [m]: board }));
       }),
     []
   );
@@ -2458,6 +2466,7 @@ function App() {
                 game: FEED_NAME[mode],
                 gameLabel: GAME_NAME[mode].full,
                 date: dateByMode[mode],
+                board: boardByMode[mode],
                 level,
               }}
             />
@@ -2742,6 +2751,7 @@ function App() {
                           game: FEED_NAME[mode],
                           gameLabel: GAME_NAME[mode].full,
                           date: dateByMode[mode],
+                          board: boardByMode[mode],
                           level,
                         }}
                         label="Report a problem"
@@ -2752,7 +2762,9 @@ function App() {
                       it, a display name, a privacy concern, a broken page, and anything
                       else. You don&apos;t need an account, and for a puzzle or a player
                       there is nothing to copy out — we look the board or the name up
-                      ourselves, so all you need to say is what&apos;s wrong with it.
+                      ourselves, so all you need to say is what&apos;s wrong with it. A
+                      practice board is the exception: it was dealt in your browser and
+                      never published, so reporting one sends the board along with you.
                     </p>
                     <p className="mt-2">
                       You get a reference back. Keep it and{' '}

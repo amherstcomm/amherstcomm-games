@@ -171,7 +171,18 @@ if (open.length) {
 
     // Four kinds became six, and this had two branches once — which is how a
     // site report came to print "name: undefined".
-    if (r.kind === 'puzzle') {
+    if (r.kind === 'puzzle' && r.trust === 'claimed') {
+      // A practice board, which was dealt in somebody's browser and never
+      // published — so unlike every other line in this email, what follows is
+      // what a browser said rather than what this site can be shown to have
+      // served. Said plainly and at the top, because the two look identical
+      // once they are printed, and acting on this one is a judgement about a
+      // word rather than about a board.
+      lines.push(`  Board    ${GAME_NAME[e.game] ?? e.game} · practice`);
+      lines.push('  CLAIMED  sent by the browser. Nothing here was verified against the feed.');
+      lines.push('');
+      lines.push(wrap(JSON.stringify(readable(e.board)), '  '));
+    } else if (r.kind === 'puzzle') {
       // The feed name, made readable. A report about Guess arrived saying
       // "words", which is what daily_puzzles calls it and not what anyone else
       // does — the reader of this email is a person deciding whether a board is

@@ -672,6 +672,21 @@ it once for every game, on every daily board, throughout.
 
 Three things the first build does not do.
 
+**~~Practice boards cannot be reported~~ — done, September 2026.** Filed
+through `report_practice_puzzle`, which takes the board the browser holds and
+marks the row `claimed`; every other report stays `verified`. The digest leads
+with `CLAIMED  sent by the browser`, and the owner's queue says `practice
+(claimed)`, because the two are indistinguishable once printed and only one is
+evidence. The board rides the daily bus from each game, which is the ten wiring
+sites this entry said it needed.
+
+Found while wiring it: the menu on a practice board offered *"Today's
+Scramble"* and would have filed a report about a board the player was not
+looking at, because every game passed the daily's date whatever it was showing.
+`reportDaily` now enforces what its own comment already claimed — the date
+belongs to the daily, the board to the practice deal, and neither survives the
+other. The original entry follows.
+
 **Practice boards cannot be reported.** The whole evidence design rests on the
 server being able to look the thing up, and a practice board was never
 published — there is nothing to look up. That makes it the one case where the

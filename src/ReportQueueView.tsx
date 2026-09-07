@@ -16,6 +16,9 @@ import { ownerReports, type QueuedReport } from '@/reports';
 
 function summarise(r: QueuedReport): string {
   const e = r.evidence;
+  // A practice board carries no date and no difficulty -- it was dealt in a
+  // browser -- so the verified summary would read "undefined · undefined".
+  if (r.kind === 'puzzle' && r.trust === 'claimed') return `${e.game} · practice (claimed)`;
   if (r.kind === 'puzzle') return `${e.game} · ${e.difficulty} · ${e.date}`;
   if (r.kind === 'player') return String(e.name ?? '');
   return String(e.reported_from || 'no page given');

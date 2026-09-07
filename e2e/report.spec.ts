@@ -382,3 +382,41 @@ test('the footer still works while the storage banner is asking', async ({ page 
   await page.getByRole('button', { name: 'Report a problem' }).click({ timeout: 5_000 });
   await expect(page.getByRole('dialog', { name: /What would you like to report/i })).toBeVisible();
 });
+
+// The one report that sends what the browser saw.
+//
+// A practice board is dealt in the page and never published, so there is
+// nothing for the server to look up: reporting one was refused outright until
+// now, which meant somebody looking at an offensive practice board was told to
+// go and find the daily instead. It goes as a claim, and the row and the digest
+// say so.
+test('a practice board can be reported, and goes as a claim', async ({ page, rpcCalls }) => {
+  await page.goto('/play/scramble');
+  // The practice board, not the daily: the toggle is the game's own, and the
+  // address asked for practice.
+  await expect(page.getByRole('button', { name: /New rack|Practice/ }).first()).toBeVisible();
+
+  await openReportMenu(page);
+  const choice = page.getByRole('button', { name: /^A puzzle/ });
+  // It used to be disabled here, and that was the whole complaint.
+  await expect(choice).toBeEnabled();
+  await expect(choice).toContainText('never published');
+  await choice.click();
+
+  const dialog = page.getByRole('dialog', { name: /Report a puzzle/i });
+  // No difficulty picker: a daily is three boards, a practice board is the one
+  // on screen.
+  await expect(dialog.getByRole('combobox')).toHaveCount(0);
+  await expect(dialog.getByText(/dealt in your browser/)).toBeVisible();
+  await dialog.getByRole('textbox', { name: /What.s wrong with it/i }).fill('the rack spells something rude');
+  await dialog.getByRole('button', { name: 'Send report' }).click();
+  await expect(dialog.getByText(/Thank you/)).toBeVisible();
+
+  // The practice function, carrying the board -- not report_puzzle, which
+  // would name a daily this player is not looking at.
+  const sent = rpcCalls.filter((c) => c.fn === 'report_practice_puzzle');
+  expect(sent).toHaveLength(1);
+  expect(sent[0].args.p_game).toBe('scramble');
+  expect(sent[0].args.p_board).toBeTruthy();
+  expect(rpcCalls.filter((c) => c.fn === 'report_puzzle')).toHaveLength(0);
+});

@@ -8,7 +8,7 @@
 
 import type { Mode } from '@/storage';
 
-type Report = (mode: Mode, daily: boolean, date: string) => void;
+type Report = (mode: Mode, daily: boolean, date: string, board?: unknown) => void;
 
 const reporters = new Set<Report>();
 const switches = new Map<Mode, (daily: boolean) => void>();
@@ -23,9 +23,24 @@ const pending = new Map<Mode, boolean>();
  *  open past the 3:15 a.m. roll is still showing yesterday. Anything acting on
  *  the board a player is looking at has to use the board's date, not the
  *  clock's. Empty for a practice board, which has no date because it was
- *  never published. */
-export function reportDaily(mode: Mode, daily: boolean, date = ''): void {
-  for (const fn of reporters) fn(mode, daily, date);
+ *  never published.
+ *
+ *  `board` is that practice board itself, and is the reason this signature
+ *  grew. Reporting a daily sends where it was and the server fetches what it
+ *  was; a practice board was never published, so there is nothing to fetch and
+ *  the only way to report one is to hand it over. Passed only for practice —
+ *  a daily's board must never travel this way, or a report about it would be a
+ *  claim rather than a record. */
+export function reportDaily(mode: Mode, daily: boolean, date = '', board?: unknown): void {
+  // The date belongs to the daily and the board to the practice deal, and
+  // neither survives the other. Enforced here rather than trusted from ten call
+  // sites, because it was not true: every game passes the daily's date whatever
+  // it is showing, so the report menu on a practice board offered "Today's
+  // Scramble" and would have filed a report about a board the player was not
+  // looking at. Nothing else reads this date, so there is nothing else to break.
+  for (const fn of reporters) {
+    fn(mode, daily, daily ? date : '', daily ? undefined : board);
+  }
 }
 
 /** App listening for the above. Returns an unsubscribe. */
