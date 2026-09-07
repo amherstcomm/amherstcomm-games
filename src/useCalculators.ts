@@ -13,6 +13,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { Box, LadderPair, ThemedSquare } from '@/themeCalculators';
 import type { CalcReply, CalcRequest } from '@/calculators.worker';
+import { readSquares, writeSquares } from '@/squareCache';
 
 /** One worker, made when the component asks and thrown away with it. */
 function useWorker(onReply: (reply: CalcReply) => void) {
@@ -76,6 +77,7 @@ export function useSquares(words: string[], delay = 0) {
   const worker = useWorker((reply) => {
     if (reply.at !== asked.current || reply.kind !== 'squares') return;
     setSquares({ four: reply.four, five: reply.five, searching: false });
+    writeSquares(words, { four: reply.four, five: reply.five });
   });
 
   const key = useMemo(() => words.join(' '), [words]);
@@ -84,6 +86,16 @@ export function useSquares(words: string[], delay = 0) {
     if (words.length === 0) {
       asked.current += 1;
       setSquares({ four: [], five: [], searching: false });
+      return;
+    }
+    // Kept from the last time this list was searched, if it has been. The
+    // answer cannot have moved: same words, same dictionary, same squares --
+    // and the search is the one on these pages that costs seconds, which
+    // Choosing a Day was paying on every lookup of a date.
+    const kept = readSquares(words);
+    if (kept) {
+      asked.current += 1;
+      setSquares({ ...kept, searching: false });
       return;
     }
     setSquares((was) => ({ ...was, searching: true }));
@@ -117,6 +129,11 @@ export function useCalculators(words: string[], boxFilter?: string[], delay = 40
       setBoxes({ boards: reply.boards, searching: false, truncated: reply.truncated });
     } else if (reply.kind === 'squares') {
       setSquares({ four: reply.four, five: reply.five, searching: false });
+      // Kept for the pages that only read it. This hook runs where a list is
+      // written, which is the moment the answer is cheap to have: the search
+      // is already happening, and Choosing a Day would otherwise repeat it
+      // from scratch every time somebody looks up a date.
+      writeSquares(words, { four: reply.four, five: reply.five });
     } else {
       setLadders({ pairs: reply.pairs, searching: false });
     }

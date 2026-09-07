@@ -2,7 +2,10 @@
 // membership in the word list rather than a stored answer, a hint is spent on
 // one prompt rather than the board, and the solver can legitimately return more
 // than one word where the daily never does.
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { expect, test } from './fixtures';
+import { DATA_DIR } from './global-setup';
 
 const rows = (page: import('@playwright/test').Page) =>
   page.getByRole('list', { name: 'bridges' }).locator('li');
@@ -36,15 +39,44 @@ test('a word that joins neither side is refused', async ({ page }) => {
   await expect(rows(page).filter({ hasText: 'found' })).toHaveCount(0);
 });
 
-// Coverage deliberately lost, and worth naming rather than quietly dropping:
-// this test also used to prove that a *correct* word is accepted. It found one
-// by asking the site's own Bridge solver, because the prompt is whatever the
-// day's board holds and a hardcoded answer would rot the moment the feed
-// moved. With the solver gone there is no cheap way for a test to discover a
-// valid answer for an arbitrary prompt.
+// Restored. This proved that a *correct* word is accepted until the solver
+// went, which is where it used to find one: the prompt is whatever the day's
+// board holds, so a hardcoded answer would rot the moment the feed moved.
 //
-// Restoring it needs a fixture that pins the bridge daily to a known prompt —
-// worth doing, but it is a change to the fixtures rather than to this file.
+// The answer comes out of the fixture feed instead — the same file the page
+// reads. global-setup runs the real generator into e2e/.data, and a bridge
+// board carries its answers base64'd for the reveal, so the test knows what the
+// board knows on whatever day the run happens.
+//
+// The `dev-` prefix is not decoration: a site on localhost reads the dev feed
+// (src/dailyData.ts), and the plain one alongside it is a different day's
+// board. Reading the wrong one is a test that types a valid answer to somebody
+// else's prompt, which is how this was first written and why it asserts the
+// prompts on screen are the prompts it read.
+test('and one that joins both is taken', async ({ page }) => {
+  const feed = JSON.parse(readFileSync(join(DATA_DIR, 'dev-daily-bridge.json'), 'utf8'));
+  // Easy, because that is the difficulty a board opens on.
+  const board = feed.byDifficulty.easy;
+  const answers: string[] = JSON.parse(Buffer.from(board.answers, 'base64').toString('utf8'));
+  const first = board.prompts[0] as { x: string; y: string };
+
+  await page.goto('/daily/bridge');
+  const input = page.getByRole('textbox', { name: /joins/ });
+  await expect(input).toBeVisible();
+  // The board on screen is the board that was read, or the answer below means
+  // nothing.
+  await expect(page.getByText(`the word that joins ${first.x} and ${first.y}`)).toBeVisible();
+
+  await input.fill(answers[0]);
+  // Pressed until the board can answer, for the same reason the refusal above
+  // is: the word list is fetched, and a board that has not got it yet says so
+  // rather than judging the word.
+  await expect(async () => {
+    await page.getByRole('button', { name: 'Add', exact: true }).click();
+    await expect(rows(page).filter({ hasText: 'found' })).toHaveCount(1, { timeout: 500 });
+  }).toPass({ timeout: 10_000 });
+  await expect(page.getByText('1 / 5 found')).toBeVisible();
+});
 
 test('a hint is spent on one prompt and comes out of the budget', async ({ page }) => {
   await page.goto('/daily/bridge');

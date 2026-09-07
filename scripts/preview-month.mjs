@@ -113,7 +113,7 @@ const read = async (dir, file) => JSON.parse(await readFile(join(dir, file), 'ut
 /** The generator prints a line per themed thing it did. Kept, because "the pin
  *  could not be used" and "themed-only would leave nothing playable" are the
  *  two answers somebody previewing a month most needs. */
-const NOTES = /^(Theming|Themed boxes|Hive|Scramble|Box|Ladder|Guess|Cryptogram|Words for|\d+ (themed|custom|pinned))/;
+const NOTES = /^(Theming|Themed boxes|Hive|Scramble|Box|Ladder|Guess|Cryptogram|Squares|Words for|\d+ (themed|custom|pinned))/;
 
 for (let i = 0; i < days; i++) {
   const date = at(i);
@@ -141,6 +141,17 @@ for (let i = 0; i < days; i++) {
     const ladder = await read(dir, 'daily-ladder.json');
     const weave = await read(dir, 'daily-weave.json');
     const cryptogram = await read(dir, 'daily-cryptogram.json');
+    const squares = await read(dir, 'daily-squares.json');
+
+    // The day's own words, so a board can be said to be the theme's rather
+    // than merely present. From the file when one was passed, and from the
+    // settings otherwise -- the same call the generator makes.
+    const dayTheme = theme
+      ? JSON.parse(theme)
+      : live
+        ? await themeFor(date, env)
+        : null;
+    const themeWords = new Set((dayTheme?.words ?? []).map((w) => String(w).toLowerCase()));
 
     const themed = words.themed ? ' · themed' : '';
     const accept = words.accept ? ` · accepts ${words.accept}` : '';
@@ -150,15 +161,16 @@ for (let i = 0; i < days; i++) {
     // it. This is the half that matters: the boards below are only interesting
     // because this line says where they came from.
     if (live) {
-      const [list, weaveThemes, passages, policy, pins] = await Promise.all([
-        themeFor(date, env),
+      const [weaveThemes, passages, policy, pins] = await Promise.all([
         weaveThemesFor(date, env),
         passagesFor(date, env),
         policyFor(date, env),
         pinsFor(date, env),
       ]);
       const said = [
-        list ? `word list ${JSON.stringify(list.name)} (${list.words.length} words)` : null,
+        dayTheme
+          ? `word list ${JSON.stringify(dayTheme.name)} (${dayTheme.words.length} words)`
+          : null,
         weaveThemes.length ? `${weaveThemes.length} Weave theme${weaveThemes.length === 1 ? '' : 's'}` : null,
         passages.length ? `${passages.length} cryptogram passage${passages.length === 1 ? '' : 's'}` : null,
         Object.keys(policy).length
@@ -183,6 +195,21 @@ for (let i = 0; i < days; i++) {
     console.log(`  boxed      ${boxed.sides.join('/')} — solvable in ${boxed.par}`);
     const rungs = ladder.byDifficulty.easy;
     console.log(`  ladder     ${rungs.from} → ${rungs.to} in ${rungs.par}`);
+    // The square is shown by its top row, because that is the whole of what
+    // theming one means: the theme's word heads the board and the dictionary
+    // fills the rest. Both sizes, since 4x4 themes nearly always and 5x5
+    // seldom -- one line saying "easy is themed and hard is not" is the answer
+    // somebody previewing a themed month is looking for.
+    const square = (difficulty) => {
+      const board = squares.byDifficulty[difficulty];
+      if (!board?.answer) return null;
+      const rows = JSON.parse(decode(board.answer)).rows;
+      const own = themeWords?.has(rows[0].toLowerCase());
+      return `${rows.length}x${rows.length} ${rows[0]}${own ? ' (themed)' : ''}`;
+    };
+    console.log(
+      `  squares    ${[square('easy'), square('hard')].filter(Boolean).join(' · ')}`
+    );
     console.log(`  weave      ${weave.byDifficulty.easy.clue}`);
     const cipher = cryptogram.byDifficulty.easy;
     const plain = JSON.parse(decode(cipher.answer));

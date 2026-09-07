@@ -988,6 +988,75 @@ test('a day s puzzles can be picked from what its words can make', async ({ page
   });
 });
 
+// The square search is the one calculator on this page that costs seconds, and
+// this page was paying it on every lookup of a date. What a list can head
+// cannot change between two lookups, so it is kept -- and the second lookup
+// must not be a wait.
+test('and the squares a list can head are not searched twice', async ({ page }) => {
+  // Enough five-letter words to be a search somebody waits for: that is the
+  // size that mostly cannot head a square, and each one that cannot has to be
+  // ruled out. A short list finishes fast enough that a broken cache still
+  // looks fine, which is how the first version of this test passed without one.
+  // Measured: these forty take three seconds to search (tests/unit timed
+  // squaresFrom against the everyday pool), because five letters is the size
+  // that mostly cannot head a square and every one that cannot has to be ruled
+  // out. A quicker list finishes fast enough that a broken cache still looks
+  // fine, which is how the first version of this test passed without one.
+  const words = [
+    'about', 'above', 'abuse', 'acted', 'added', 'admit', 'adopt', 'after',
+    'again', 'agree', 'ahead', 'aimed', 'alarm', 'album', 'alias', 'alive',
+    'allow', 'alone', 'along', 'alter', 'among', 'amuse', 'angle', 'angry',
+    'annoy', 'apart', 'apple', 'apply', 'areas', 'argue', 'arise', 'aside',
+    'asked', 'avoid', 'awake', 'award', 'aware', 'awful', 'backs', 'badly',
+  ];
+  const day = { date: '2026-10-08', theme: { name: 'October', words }, weave: [] };
+  await page.route('**/rest/v1/rpc/**', (route) => {
+    const url = route.request().url();
+    const body = url.includes('theme_coverage')
+      ? { ok: true, days: [day] }
+      : url.includes('pins_sheet')
+        ? { ok: true, pins: [] }
+        : [];
+    return route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(body),
+    });
+  });
+
+  const squares = () => page.locator('[data-shortlist="squares"]');
+  const look = async () => {
+    await page.getByLabel('Pin date').fill('2026-10-08');
+    await page.getByRole('button', { name: 'Look' }).click();
+  };
+  // Either answer counts as an answer: boards to choose from, or "nothing
+  // that day's words can make" -- a list that heads nothing is a result
+  // somebody waited exactly as long for.
+  const answered = async () => {
+    const text = await squares().innerText();
+    return !text.includes('Looking…') && /Nothing|—/.test(text);
+  };
+
+  await page.goto('/admin/pins');
+  await look();
+  // It searches, and says so. If this ever stops being true the list is small
+  // enough that the rest of this test proves nothing, and it should fail here
+  // rather than pass emptily.
+  await expect(squares().getByText('Looking…')).toBeVisible();
+  await expect.poll(answered, { timeout: 60_000 }).toBe(true);
+
+  // Reloaded rather than looked up again, so what is measured is the kept
+  // answer and not a memo this render would have had anyway.
+  await page.reload();
+  await look();
+  // No search at all this time. Asserted *before* waiting for the answer, not
+  // after: once the answer lands "Looking…" is gone either way, so checking it
+  // afterwards is a test that passes without a cache -- which is exactly what
+  // the first version of this did.
+  await expect(squares().getByText('Looking…')).toHaveCount(0, { timeout: 100 });
+  await expect.poll(answered, { timeout: 2_000 }).toBe(true);
+});
+
 // A day's boxes run to thousands and its pangrams to three, so each list gets
 // its own filter and its own way to see the rest of itself. One filter for the
 // page would mean typing to find a rack also hid every box.

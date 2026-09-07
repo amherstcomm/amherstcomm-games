@@ -39,7 +39,13 @@ describe('the month preview', () => {
       { cwd: process.cwd(), maxBuffer: 20 * 1024 * 1024 }
     );
     out = stdout;
-  }, 120_000);
+    // No timeout of its own. This carried 120s, under the project's 300s
+    // (vitest.config.ts), and that is what failed in CI: one preview is one
+    // full generator run, and it shares a machine with a contract suite that
+    // takes five minutes of it. On a quiet box it passed every time. A number
+    // pinned in two places is wrong in one of them the day it moves, so this
+    // is now the project's number.
+  });
 
   afterAll(async () => rm(dir, { recursive: true, force: true }));
 
