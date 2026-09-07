@@ -161,9 +161,42 @@ for (const row of published) {
   byDate.set(row.puzzle_date, (byDate.get(row.puzzle_date) ?? 0) + 1);
 }
 
+// How far ahead the window runs, which is the only visible sign of a timer that
+// has stopped.
+//
+// The publish writes a rolling fortnight every night, so the far edge sits
+// about thirteen days out and stays there. A timer that died last Tuesday
+// leaves a runway that shortens by one a day and a site that plays perfectly
+// until the morning it does not -- there is no error anywhere in between,
+// because yesterday's publish is still serving today.
+//
+// The freshness is read off the dates rather than off written_at: an upsert
+// leaves written_at at the row's first write, so a re-published day keeps an
+// old stamp and would read as staler than it is.
+const ahead = await rest(
+  'daily_puzzles?select=puzzle_date&env=eq.prod&order=puzzle_date.desc&limit=1'
+);
+const furthest = ahead[0]?.puzzle_date ?? null;
+const runway = furthest
+  ? Math.round((Date.parse(`${furthest}T12:00:00Z`) - Date.parse(`${today}T12:00:00Z`)) / 86_400_000)
+  : -1;
+say(
+  runway >= 3,
+  'the publish window still runs ahead of today',
+  furthest
+    ? `${runway} day${runway === 1 ? '' : 's'}, to ${furthest}` +
+      (runway < 3 ? ' — the timer has probably stopped: systemctl status amherstcomm-games-puzzles.timer' : '')
+    : 'nothing is published at all'
+);
+
 const themedDays = [];
 const missing = [];
 const thin = [];
+// Days a word list covers whose *published board* is not themed. This is the
+// end of the chain and the only check here that proves the theme was used
+// rather than merely set up: the settings say October is themed, and the board
+// somebody will play carries the theme's own words or it does not.
+const unthemed = [];
 for (const date of dates) {
   const games = byDate.get(date) ?? 0;
   if (games === 0) missing.push(date);
@@ -171,7 +204,15 @@ for (const date of dates) {
   // separating from one that never ran: the first leaves a day half-playable.
   else if (games < GAMES) thin.push(`${date} (${games})`);
   const theme = await themeFor(date, env);
-  if (theme) themedDays.push(`${date} ${JSON.stringify(theme.name)}`);
+  if (!theme) continue;
+  themedDays.push(`${date} ${JSON.stringify(theme.name)}`);
+  if (games === 0) continue;
+  // 'words' is the daily word game's feed name, and the payload carries the
+  // theme's own words at the top level when the day was generated themed.
+  const [board] = await rest(
+    `daily_puzzles?select=payload&env=eq.prod&game=eq.words&puzzle_date=eq.${date}`
+  );
+  if (!board?.payload?.themed) unthemed.push(date);
 }
 
 say(
@@ -180,6 +221,17 @@ say(
   missing.length ? `nothing for ${missing.slice(0, 5).join(', ')}${missing.length > 5 ? '…' : ''}` : `${dates.length} days`
 );
 if (thin.length) say(false, `and each published day has all ${GAMES} games`, thin.join(', '));
+
+say(
+  unthemed.length === 0,
+  'and every themed day was published themed',
+  unthemed.length
+    ? `set up but published ordinary: ${unthemed.slice(0, 5).join(', ')}` +
+      `${unthemed.length > 5 ? '…' : ''} — these were generated before the list covered them, so re-run ops/publish-puzzles.sh`
+    : themedDays.length
+      ? `${themedDays.length} day${themedDays.length === 1 ? '' : 's'} carry the list's own words`
+      : 'no themed days in this range'
+);
 
 // The half that matters in October, and the half that cannot be asserted:
 // nobody but you knows whether these days were meant to be themed.
