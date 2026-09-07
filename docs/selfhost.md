@@ -2056,6 +2056,35 @@ than appends — `publish-puzzles.mjs` sends
 `Prefer: resolution=merge-duplicates` — so a catch-up run repairs rather than
 duplicates.
 
+### Before a month that matters
+
+```sh
+ops/preflight.sh                          # today and the fortnight ahead
+ops/preflight.sh --from 2026-10-01 --days 31
+```
+
+Read-only, so it is safe at any hour and safe to repeat. It walks the chain end
+to end rather than checking one link: the database answers, the functions the
+generator calls all exist, `pin_puzzle` is the current one, every day in the
+range has all its games published, and `daily_puzzle()` — the function the
+browser actually calls, not the table behind it — serves today's board.
+
+It exists because every one of those can be checked alone and the *chain* could
+not, and because a break anywhere along it looks, from the admin pages, exactly
+like a month that is set up. The specific failure it was written for: a schema
+that was never re-applied. The fetchers treat "no such function" the same as
+"nothing covers this day", so a stale database publishes ordinary puzzles
+happily, and the coverage page goes on saying 31 of 31 because the browser
+reads the tables directly.
+
+Lines marked `note` are facts rather than verdicts. Whether a word list *should*
+cover these days is the one thing it cannot know — an unthemed June is correct,
+and identical from here to a themed October that failed. Exit code is 0 when
+every check passed.
+
+`ops/preview-month.sh` is the other half of the same question: preflight says
+the pipeline is whole, the preview says what it will actually publish.
+
 ### The other workflows
 
 All four of the remaining ones were written for a public deployment and cannot
