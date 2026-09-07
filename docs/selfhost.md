@@ -2066,8 +2066,26 @@ ops/preflight.sh --from 2026-10-01 --days 31
 Read-only, so it is safe at any hour and safe to repeat. It walks the chain end
 to end rather than checking one link: the database answers, the functions the
 generator calls all exist, `pin_puzzle` is the current one, every day in the
-range has all its games published, and `daily_puzzle()` — the function the
-browser actually calls, not the table behind it — serves today's board.
+range has all its games published, the window still runs ahead of today, every
+day a word list covers was *published* themed, and `daily_puzzle()` — the
+function the browser actually calls, not the table behind it — serves today's
+board.
+
+Two of those are the ones worth having.
+
+**The window still runs ahead.** The publish writes a rolling fortnight every
+night, so the far edge sits about thirteen days out and stays there. A timer
+that died last Tuesday leaves a runway that shortens by one a day and a site
+that plays perfectly until the morning it does not — there is no error anywhere
+in between, because yesterday's publish is still serving today. Under three
+days it fails and names the timer.
+
+**Every themed day was published themed.** This is the end of the chain and the
+only check that proves the theme was *used* rather than merely set up. A day
+generated before the word list covered it publishes an ordinary board, and
+nothing says so: the coverage page reads the settings, not the boards. The fix
+when it fires is to re-run `ops/publish-puzzles.sh`, which regenerates the
+window against the settings as they are now.
 
 It exists because every one of those can be checked alone and the *chain* could
 not, and because a break anywhere along it looks, from the admin pages, exactly

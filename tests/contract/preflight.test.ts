@@ -24,6 +24,10 @@ type Answers = {
   published?: Record<string, number>;
   /** dates a word list covers */
   themed?: string[];
+  /** dates whose published board carries the theme's words */
+  themedBoards?: string[];
+  /** the furthest date the publish window reaches, as the table would answer */
+  furthest?: string;
 };
 
 let server: Server;
@@ -31,6 +35,11 @@ let base: string;
 let answers: Answers = {};
 
 const GAMES = 10;
+
+/** A publish window that runs a fortnight ahead of whatever today is, which is
+ *  what a working timer leaves behind. Relative to the real today because the
+ *  runway is measured against it. */
+const FAR = new Date(Date.now() + 13 * 86_400_000).toISOString().slice(0, 10);
 
 beforeAll(async () => {
   server = createServer((req, res) => {
@@ -68,6 +77,21 @@ beforeAll(async () => {
     if (rpc) return send([]);
 
     if (url.startsWith('/rest/v1/daily_puzzles')) {
+      // The runway probe: one row, the furthest date published.
+      if (url.includes('order=puzzle_date.desc')) {
+        return send(answers.furthest ? [{ puzzle_date: answers.furthest }] : []);
+      }
+      // One day's word board, which is where the themed marker rides.
+      const one = url.match(/puzzle_date=eq\.([\d-]+)/)?.[1];
+      if (one) {
+        return send([
+          {
+            payload: (answers.themedBoards ?? []).includes(one)
+              ? { date: one, themed: 'ZXNvcCBzaGFyZXM=' }
+              : { date: one },
+          },
+        ]);
+      }
       const rows = Object.entries(answers.published ?? {}).flatMap(([date, count]) =>
         Array.from({ length: count }, () => ({ puzzle_date: date, game: 'words', env: 'prod' }))
       );
@@ -102,6 +126,8 @@ describe('the preflight', () => {
     answers = {
       published: { '2026-10-01': GAMES, '2026-10-02': GAMES },
       themed: ['2026-10-01', '2026-10-02'],
+      themedBoards: ['2026-10-01', '2026-10-02'],
+      furthest: FAR,
     };
     const { code, out } = await preflight('2026-10-01', 2);
     expect(out).toContain('Ready.');
@@ -117,6 +143,8 @@ describe('the preflight', () => {
       absent: ['daily_word_policy', 'daily_pins'],
       published: { '2026-10-01': GAMES },
       themed: ['2026-10-01'],
+      themedBoards: ['2026-10-01'],
+      furthest: FAR,
     };
     const { code, out } = await preflight('2026-10-01', 1);
     expect(out).toMatch(/FAIL\s+daily_word_policy\(\) is present/);
@@ -129,14 +157,14 @@ describe('the preflight', () => {
   // refuses the pin rather than breaking anything — which is precisely the kind
   // of thing nobody notices until they try it in front of people.
   it('and notices a schema that still refuses to pin a square', async () => {
-    answers = { stalePins: true, published: { '2026-10-01': GAMES }, themed: [] };
+    answers = { stalePins: true, published: { '2026-10-01': GAMES }, themed: [], furthest: FAR };
     const { code, out } = await preflight('2026-10-01', 1);
     expect(out).toMatch(/FAIL\s+Squares can be pinned/);
     expect(code).toBe(1);
   });
 
   it('and names the days that were never published', async () => {
-    answers = { published: { '2026-10-01': GAMES }, themed: [] };
+    answers = { published: { '2026-10-01': GAMES }, themed: [], furthest: FAR };
     const { code, out } = await preflight('2026-10-01', 3);
     expect(out).toMatch(/FAIL\s+every day in the range is published/);
     expect(out).toContain('2026-10-02');
@@ -146,17 +174,46 @@ describe('the preflight', () => {
   // A publish that fell over half way leaves a day that looks published and is
   // missing games, which is a different fault from one that never ran.
   it('and the days that are only half published', async () => {
-    answers = { published: { '2026-10-01': 4 }, themed: [] };
+    answers = { published: { '2026-10-01': 4 }, themed: [], furthest: FAR };
     const { out } = await preflight('2026-10-01', 1);
     expect(out).toMatch(/FAIL\s+and each published day has all \d+ games/);
     expect(out).toContain('2026-10-01 (4)');
+  });
+
+  // The end of the chain, and the only check that proves the theme was *used*
+  // rather than merely set up. A day generated before the word list covered it
+  // publishes an ordinary board and nothing anywhere says so: the coverage page
+  // reads the settings, not the boards.
+  it('and catches a themed day whose published board is ordinary', async () => {
+    answers = {
+      published: { '2026-10-01': GAMES, '2026-10-02': GAMES },
+      themed: ['2026-10-01', '2026-10-02'],
+      themedBoards: ['2026-10-01'],
+      furthest: FAR,
+    };
+    const { code, out } = await preflight('2026-10-01', 2);
+    expect(out).toMatch(/FAIL\s+and every themed day was published themed/);
+    expect(out).toContain('2026-10-02');
+    expect(out).toContain('re-run ops/publish-puzzles.sh');
+    expect(code).toBe(1);
+  });
+
+  // A timer that stopped is the quietest failure of the lot: yesterday's
+  // publish serves today, and the day it runs out is the first sign.
+  it('and a publish window that has stopped running ahead', async () => {
+    const soon = new Date(Date.now() + 1 * 86_400_000).toISOString().slice(0, 10);
+    answers = { published: { '2026-10-01': GAMES }, themed: [], furthest: soon };
+    const { code, out } = await preflight('2026-10-01', 1);
+    expect(out).toMatch(/FAIL\s+the publish window still runs ahead of today/);
+    expect(out).toContain('the timer has probably stopped');
+    expect(code).toBe(1);
   });
 
   // Not a verdict. Whether these days were meant to be themed is the one thing
   // it cannot know, so it reports and does not judge -- an unthemed June must
   // not read as a broken deployment.
   it('and reports what is themed without calling it right or wrong', async () => {
-    answers = { published: { '2026-10-01': GAMES }, themed: [] };
+    answers = { published: { '2026-10-01': GAMES }, themed: [], furthest: FAR };
     const { code, out } = await preflight('2026-10-01', 1);
     expect(out).toMatch(/note\s+days a word list covers — none in this range/);
     expect(code).toBe(0);
