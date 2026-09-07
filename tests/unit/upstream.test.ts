@@ -15,7 +15,7 @@
 // these looked right. So the rule is asserted against the source: nothing that
 // runs in the browser or on the publish host names the upstream project.
 import { readdirSync, readFileSync, statSync } from 'node:fs';
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 // What this is about is where data and mail come *from*, not who wrote the
@@ -45,7 +45,7 @@ describe('the fork does not read the project it came from', () => {
         // deleting the history of a wrong default is how it comes back.
         if (/^\s*(\/\/|\*|\/\*)/.test(line)) continue;
         if (ATTRIBUTION.test(line)) continue;
-        if (UPSTREAM.test(line)) naming.push(`${file.split(/[\/]/).pop()}: ${line.trim()}`);
+        if (UPSTREAM.test(line)) naming.push(`${basename(file)}: ${line.trim()}`);
       }
     }
     expect(naming).toEqual([]);
@@ -58,7 +58,7 @@ describe('the fork does not read the project it came from', () => {
       for (const line of readFileSync(file, 'utf8').split('\n')) {
         if (/^\s*(\/\/|\*|\/\*)/.test(line)) continue;
         if (ATTRIBUTION.test(line)) continue;
-        if (UPSTREAM.test(line)) naming.push(`${file.split(/[\/]/).pop()}: ${line.trim()}`);
+        if (UPSTREAM.test(line)) naming.push(`${basename(file)}: ${line.trim()}`);
       }
     }
     expect(naming).toEqual([]);
