@@ -689,11 +689,23 @@ the reason it isn't done yet.
 unlimited boards; those two have only the daily. Worth fixing on its own terms,
 and it also removes half of what the paragraph above is for.
 
-**The consent banner covers the footer.** It is `fixed inset-x-0 bottom-0`, so
-until a visitor answers it, every footer control — including the report menu —
-is present, visible, and unclickable. Found by the report tests, which failed
-while a sibling test asserting the button was *visible* passed, which is a
-lesson about what `toBeVisible` does and does not promise.
+**~~The consent banner covers the footer~~ — fixed (September 2026).** It was
+`fixed inset-x-0 bottom-0`, so until a visitor answered it, every footer
+control — including the report menu — was present, visible, and unclickable.
+Found by the report tests, which failed while a sibling test asserting the
+button was *visible* passed: a lesson about what `toBeVisible` does and does
+not promise.
+
+Two changes, because either alone leaves half of it. The banner measures its
+card and makes that much room at the bottom of the page for as long as it is
+asking — measured rather than a constant, since the card is two lines on a
+phone and one on a laptop. And the full-width wrapper around the card catches
+no clicks at all: a transparent strip that swallows them is the same bug in a
+smaller form.
+
+`e2e/report.spec.ts` holds the rule, and is the one test here that arrives the
+way a visitor does — nothing answered, banner up. Every other test starts with
+it answered by the fixture, which is what hid this.
 
 ### Reporter addresses: a retention sweep — proposed August 2026
 
