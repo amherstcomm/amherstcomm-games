@@ -70,7 +70,15 @@ ARG VITE_CONTACT_EMAIL=""
 # America/Chicago in src/schedule.ts rather than to the build machine's zone,
 # which is a thing a container has no business having an opinion about.
 ARG VITE_OFFICE_ZONE=""
-ENV VITE_SITE_NAME=$VITE_SITE_NAME \
+# Where the file feed lives, and whether the word bands try a CDN. Both default
+# to this repository's own answer rather than the upstream project's -- see
+# .env.example. An empty VITE_PUZZLE_FEED_BASE is supported and means the
+# database or nothing.
+ARG VITE_PUZZLE_FEED_BASE=""
+ARG VITE_WORDBANDS_CDN=""
+ENV VITE_PUZZLE_FEED_BASE=$VITE_PUZZLE_FEED_BASE \
+    VITE_WORDBANDS_CDN=$VITE_WORDBANDS_CDN \
+    VITE_SITE_NAME=$VITE_SITE_NAME \
     VITE_CONTACT_EMAIL=$VITE_CONTACT_EMAIL \
     VITE_SITE_SUBTITLE=$VITE_SITE_SUBTITLE \
     VITE_OFFICE_ZONE=$VITE_OFFICE_ZONE \

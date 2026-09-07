@@ -6,7 +6,7 @@ import {
   useRef,
   useState,
 } from 'react';
-import { CornerDownLeft, Delete, Eye, LifeBuoy, RefreshCw, Shuffle, Timer } from 'lucide-react';
+import { CornerDownLeft, Delete, RefreshCw, Shuffle, Timer } from 'lucide-react';
 import { formatElapsed, useUpTimer } from '@/useUpTimer';
 import {
   difficulty,
@@ -140,9 +140,8 @@ const HiveGame = forwardRef<
     /** the words this difficulty draws practice from */
     practiceWords: string[] | null;
     onLetterStates: (states: Record<string, LetterState>) => void;
-    onReveal?: (center: string, outers: string[]) => void;
   }
->(function HiveGame({ standardWords, commonWords, onLetterStates, onReveal, practiceWords }, ref) {
+>(function HiveGame({ standardWords, commonWords, onLetterStates, practiceWords }, ref) {
   const [store, setStore] = useState<HiveStore>(loadStore);
   const [themed, setThemed] = useState<string[]>([]);
   // What the day said this board takes: its own words alone, or both.
@@ -585,43 +584,6 @@ const HiveGame = forwardRef<
             )}
             {/* Both of these end up in the solver, so they go when the solver
                 is hidden — a give-up that shows nothing isn't giving up. */}
-            {onReveal && (
-              <>
-            <button
-              onMouseDown={(e) => e.preventDefault()}
-              onClick={() => onReveal(record.center, record.outers)}
-              title="Peek at the solver — your hive keeps going"
-              className="inline-flex items-center gap-1.5 px-4 h-10 rounded-lg text-sm font-semibold bg-white/5 border border-white/10 text-slate-300 hover:bg-white/10 hover:text-white transition-colors"
-            >
-              <LifeBuoy className="w-4 h-4" />
-              Help
-            </button>
-            {!done && (
-              <button
-                onMouseDown={(e) => e.preventDefault()}
-                onClick={() => {
-                  // persist synchronously — onReveal unmounts this component
-                  // before a state-driven save could run
-                  const next = store.dailyMode
-                    ? { ...store, daily: { ...record, revealed: true } }
-                    : { ...store, practice: { ...record, revealed: true } };
-                  try {
-                    siteStore.setItem(HIVE_KEY, JSON.stringify(next));
-                  } catch {
-                    // best-effort persistence
-                  }
-                  setStore(next);
-                  onReveal(record.center, record.outers);
-                }}
-                title="Give up — ends this hive unfinished and shows every word"
-                className="inline-flex items-center gap-1.5 px-4 h-10 rounded-lg text-sm font-semibold bg-white/5 border border-white/10 text-slate-300 hover:bg-white/10 hover:text-white transition-colors"
-              >
-                <Eye className="w-4 h-4" />
-                Reveal
-              </button>
-            )}
-              </>
-            )}
           </div>
 
           <div className="h-6 mt-3">

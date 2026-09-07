@@ -40,15 +40,35 @@ type BandName = (typeof BAND_NAMES)[number];
 // lazy imports so a band is only ever loaded once, and only when needed
 const bundled = import.meta.glob('./wordbands/band-*.json');
 
+/** A public CDN to try before the bundle, or empty for the bundle alone.
+ *
+ *  What was wrong here was the *repository*, not the CDN: it fetched from the
+ *  project this one was forked from, at upstream's tag, so a band this
+ *  deployment rebuilt and tagged would never have been the one served. It
+ *  points at this repository's own tag now -- same words, published the same
+ *  way, and `words-v6` is there because the rebuild workflow tags it.
+ *
+ *  Reversal, and worth keeping: this defaulted to empty for a day on the
+ *  reasoning that an internal site behind a VPN might not reach a public CDN,
+ *  which was a premise nobody checked. The VPN restricts who can reach the
+ *  site, not what the site can reach. So the four-second timeout below is
+ *  insurance against a slow CDN rather than a cost this deployment pays every
+ *  load.
+ *
+ *  Empty is still supported and still means the bundle alone, which is the
+ *  same data at the right version by construction. The CDN is how new words
+ *  reach a running site without a rebuild. */
+const BAND_CDN = (
+  import.meta.env.VITE_WORDBANDS_CDN ??
+  `https://cdn.jsdelivr.net/gh/amherstcomm/amherstcomm-games@${WORDS_VERSION}/src/wordbands`
+).replace(/\/$/, '');
+
 async function loadBand(name: BandName): Promise<Band> {
-  if (import.meta.env.PROD) {
+  if (import.meta.env.PROD && BAND_CDN) {
     try {
       const ctl = new AbortController();
       const timer = setTimeout(() => ctl.abort(), 4000);
-      const r = await fetch(
-        `https://cdn.jsdelivr.net/gh/rptetzloff/anagrimoire@${WORDS_VERSION}/src/wordbands/${name}.json`,
-        { signal: ctl.signal }
-      );
+      const r = await fetch(`${BAND_CDN}/${name}.json`, { signal: ctl.signal });
       clearTimeout(timer);
       if (r.ok) {
         const band = (await r.json()) as Band;

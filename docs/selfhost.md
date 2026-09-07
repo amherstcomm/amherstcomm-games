@@ -159,16 +159,37 @@ installed.
 
 ## Stage 4 — publish your own daily puzzles
 
-**Skip this and the site serves the upstream project's puzzles, convincingly.**
+**~~Skip this and the site serves the upstream project's puzzles,
+convincingly.~~ — re-pointed, September 2026.**
 
-`src/dailyData.ts` tries the RPC first and falls back to
-`raw.githubusercontent.com/rptetzloff/anagrimoire/puzzle-data`. That fallback is
-reachable from the VM, so an empty `daily_puzzles` table does not produce an
-error — it produces working daily puzzles that are somebody else's. A smoke
-test passes and the campaign ships the wrong content.
+`src/dailyData.ts` tries the RPC first and falls back to a file feed. That
+fallback used to be `raw.githubusercontent.com/rptetzloff/anagrimoire/puzzle-data`,
+which is the worst thing a fallback can do: it is reachable, so an empty
+`daily_puzzles` table produced no error at all — it produced working daily
+puzzles that were somebody else's, unthemed, on the one month this deployment
+is themed. A smoke test passes and the campaign ships the wrong content.
 
-Re-pointing or removing that fallback is part of the rebrand. Until then,
-publishing your own rows is what makes the RPC answer first.
+It is now `VITE_PUZZLE_FEED_BASE`, defaulting to **this** repository's
+`puzzle-data` branch, which `daily-puzzle-data.yml` publishes nightly. Set it
+empty for a deployment that would rather show an error than a puzzle from
+anywhere else: with no base, a database that cannot answer is an error on the
+page rather than a fallback.
+
+The same applies to the word bands, with one correction. `VITE_WORDBANDS_CDN`
+was hard-coded to jsdelivr at *upstream's* tag, so a band this deployment
+rebuilt and tagged would never have been the one served. It now defaults to
+**this** repository's tag, read from `src/wordbands/version.json` so the URL
+follows the words.
+
+That default was empty for a day, on the reasoning that a VPN-only site might
+not reach a public CDN. Wrong premise: the VPN restricts who can reach the
+site, not what the site can reach. Set it empty anyway if you would rather not
+depend on a CDN — the bundled bands are the same data at the right version by
+construction, and there is a four-second timeout either way, so a slow CDN
+costs a wait and never a failure.
+
+Publishing your own rows is still what makes the RPC answer first, and
+`ops/preflight.sh` says whether it does.
 
 ```sh
 export SUPABASE_URL=...                 # the gateway, as the VM sees it
@@ -183,8 +204,9 @@ node scripts/publish-window.mjs
 window's start; it defaults to today.
 
 `SKIP_SOLVER_DATA=1` skips fetching Letter Boxed, Spelling Bee and Strands from
-nytimes.com. Those exist to autofill the solvers, which this deployment is
-dropping — and it removes a dependency on an external site being up.
+nytimes.com. They existed to autofill the solvers, which this deployment has
+now removed outright — so the flag is belt and braces, and the dependency on an
+external site being up is gone either way.
 
 **`PUZZLES_SEED_SALT` is worth keeping deliberately.** The generator is public
 and the date is its only other input, so without a salt every future board is

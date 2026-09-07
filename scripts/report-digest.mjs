@@ -32,8 +32,13 @@ const SUPABASE_URL = process.env.SUPABASE_URL;
 const KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const RESEND_KEY = process.env.RESEND_API_KEY;
 const TO = process.env.REPORT_DIGEST_TO;
-const FROM = process.env.REPORT_DIGEST_FROM || 'reports@anagrimoire.com';
-const SITE = process.env.REPORT_SITE || 'https://anagrimoire.com';
+// No default for either. Both used to fall back to the upstream project's
+// domain: the address would send from a domain this company does not own --
+// which either bounces or looks like spoofing -- and every action link in the
+// email would point at a site the reader cannot reach. A missing value has to
+// look missing.
+const FROM = process.env.REPORT_DIGEST_FROM;
+const SITE = process.env.REPORT_SITE;
 
 if (!KEY) throw new Error('SUPABASE_SERVICE_ROLE_KEY is not set');
 
@@ -55,6 +60,14 @@ const rpc = async (fn, body = {}) => {
 
 const send = async (to, subject, text) => {
   if (!RESEND_KEY) return false;
+  // A from-address is not optional to Resend, and guessing one puts this
+  // deployment's mail on a domain it does not own. Said once, and the digest
+  // still prints to the log either way -- a missing address costs the email,
+  // not the signal.
+  if (!FROM) {
+    console.warn('::warning::REPORT_DIGEST_FROM is not set, so nothing was emailed');
+    return false;
+  }
   const res = await fetch('https://api.resend.com/emails', {
     method: 'POST',
     headers: { Authorization: `Bearer ${RESEND_KEY}`, 'Content-Type': 'application/json' },

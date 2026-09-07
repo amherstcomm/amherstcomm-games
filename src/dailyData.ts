@@ -4,12 +4,30 @@
 // it's the same real puzzle either way.
 const IS_DEV_SITE =
   typeof location !== 'undefined' &&
-  (location.hostname.startsWith('dev.') ||
-    location.hostname === 'localhost' ||
-    // the dev service's Render-assigned hostname (production is anagrimoire-6ado)
-    location.hostname === 'anagrimoire.onrender.com');
+  (location.hostname.startsWith('dev.') || location.hostname === 'localhost');
 
-const BASE = 'https://raw.githubusercontent.com/rptetzloff/anagrimoire/puzzle-data/data';
+/** Where the file feed lives, when there is one.
+ *
+ *  The rows in Postgres are what this site plays; this is the fallback for the
+ *  minutes the database is not answering. It pointed at the project this one
+ *  was forked from, and that is the worst possible thing for a fallback to do:
+ *  an empty table or a database blip did not produce an error, it produced
+ *  working daily puzzles that were somebody else's -- unthemed, on the one
+ *  month this deployment is themed, and convincing enough that a smoke test
+ *  passes. docs/selfhost.md has warned about it since the fork.
+ *
+ *  So it is this repository's own branch, which its own workflow publishes
+ *  nightly, and it is settable per deployment. Empty is a supported answer and
+ *  means "no file fallback": the database or nothing, which is the right choice
+ *  for a deployment that would rather show an error than the wrong puzzle. */
+const BASE = (
+  import.meta.env.VITE_PUZZLE_FEED_BASE ??
+  'https://raw.githubusercontent.com/amherstcomm/amherstcomm-games/puzzle-data/data'
+).replace(/\/$/, '');
+
+/** The file feed, for the modules that read something other than a daily --
+ *  the three NYT-derived solver files. Same base, same reasoning. */
+export const FEED_BASE = BASE;
 
 /** Where a game's daily lives. The feed name comes from the one table that
  *  has it, so a new game needs no line here. */
@@ -72,12 +90,19 @@ async function viaFile(url: string): Promise<unknown> {
 
 export async function fetchDailyData(mode: Mode): Promise<any> {
   const db = await viaRpc(FEED_NAME[mode], DAILY_ENV);
-  return db ?? viaFile(dailyDataUrl(mode));
+  if (db) return db;
+  // No base is a deployment saying "the database or nothing". Thrown rather
+  // than returned empty, because every caller already handles a failed fetch
+  // by saying the daily could not be loaded, and that is the honest answer.
+  if (!BASE) throw new Error('no daily in the database, and no file feed configured');
+  return viaFile(dailyDataUrl(mode));
 }
 
 export async function fetchPool(mode: Mode): Promise<any> {
   const db = await viaRpc(`${FEED_NAME[mode]}-pool`, 'shared');
-  return db ?? viaFile(poolUrl(mode));
+  if (db) return db;
+  if (!BASE) throw new Error('no pool in the database, and no file feed configured');
+  return viaFile(poolUrl(mode));
 }
 
 /* eslint-enable @typescript-eslint/no-explicit-any */
