@@ -26,14 +26,17 @@ set +a
 
 # Fail before doing anything rather than half way through the window.
 #
-# SUPABASE_URL especially: publish-puzzles.mjs defaults it to the *upstream*
-# project's hosted Supabase, so an unset value does not fail obviously, it aims
-# somewhere else entirely.
+# SUPABASE_URL especially. It used to be worse than missing: publish-puzzles.mjs
+# defaulted it to the *upstream* project's hosted Supabase, so an unset value
+# did not fail, it aimed somewhere else entirely and was answered politely. The
+# default is gone (September 2026) and a missing URL now looks like a missing
+# URL, but the check stays -- failing here beats failing half way through a
+# fortnight.
 # No apostrophes in these messages. Inside "${VAR:?word}" bash reads a single
 # quote as an opening quote and the script dies at parse time with an
 # unexpected-EOF forty lines further down, which is a miserable thing to debug
 # for the sake of a possessive.
-: "${SUPABASE_URL:?set it in ops/publish.env — it defaults to the upstream hosted project}"
+: "${SUPABASE_URL:?set it in ops/publish.env}"
 : "${SUPABASE_SERVICE_ROLE_KEY:?set it in ops/publish.env}"
 : "${PUZZLES_SEED_SALT:?set it in ops/publish.env — and never change it, see the example file}"
 

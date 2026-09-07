@@ -685,9 +685,13 @@ cause is a single word, and a word is checkable on its own.
 It needs each game to expose its current board, which is ten wiring sites and
 the reason it isn't done yet.
 
-**Ladder and Bridge have no practice mode at all.** Every other game deals
-unlimited boards; those two have only the daily. Worth fixing on its own terms,
-and it also removes half of what the paragraph above is for.
+**~~Ladder and Bridge have no practice mode at all~~ — done, since written.**
+Both deal from a shared pool now (`newPractice` in `LadderGame` and
+`BridgeGame`, `bridge-pool.json` and the ladder pairs), so this entry was stale
+rather than owed. Recorded rather than deleted: an entry that quietly
+disappears leaves the next reader wondering whether it was done or dropped.
+What it says about the paragraph above still holds — practice boards are the
+ones that cannot be reported, and now every game has them.
 
 **~~The consent banner covers the footer~~ — fixed (September 2026).** It was
 `fixed inset-x-0 bottom-0`, so until a visitor answered it, every footer

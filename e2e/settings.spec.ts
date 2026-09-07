@@ -226,7 +226,19 @@ test('and the last-administrator refusal is shown against the person it is about
     refuse: 'that is the last administrator — appoint another one first',
   });
   await page.getByRole('combobox', { name: /What Ray may do/ }).selectOption('games.edit');
-  await expect(page.getByText(/last administrator/)).toBeVisible();
+
+  // Inside Ray's own row, which is the whole claim in the name of this test --
+  // and not the standing note at the foot of the page, which says the same
+  // words about nobody in particular.
+  //
+  // It used to look for /last administrator/ anywhere on the page, and both
+  // paragraphs match that. Two matches is a strict-mode violation, so the test
+  // failed in CI and passed here: locally the refusal had not arrived yet, one
+  // element matched, and the assertion quietly proved that a paragraph which is
+  // always on the page is on the page. A test that passes before the thing it
+  // is testing happens is worse than a flaky one.
+  const ray = page.getByRole('listitem').filter({ hasText: 'Ray' });
+  await expect(ray.getByText(/that is the last administrator/)).toBeVisible();
 });
 
 // ---------------------------------------------------------------------------
