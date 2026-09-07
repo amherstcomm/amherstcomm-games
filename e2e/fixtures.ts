@@ -21,7 +21,10 @@ export const LEADERBOARD = {
   hive: [row('Anagrimoire', 24)],
   grid: [row('Anagrimoire', 9)],
   box: [],
-  weave: [],
+  // Two rows on the same number of solves, which is the case the boards used
+  // to render as a tie: they are ranked on the clock, and the detail is the
+  // fastest solve in milliseconds, as boards_for returns it.
+  weave: [row('Anagrimoire', 1, 95_000), row('Runner-up', 1, 140_000)],
   squares4: [],
   squares5: [],
   cryptogram: [],

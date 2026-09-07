@@ -209,6 +209,19 @@ describe('the preflight', () => {
     expect(code).toBe(1);
   });
 
+  // The whole tool reports by exit code, so the exit path is part of what it
+  // does. This crashed once: process.exit() while the fetches were still
+  // settling gave Windows node a libuv assertion and exit 0xC0000409 -- a
+  // checker that dies instead of failing, and it only showed up when the suite
+  // was loaded enough to slow the sockets down.
+  it('and fails by exiting 1, every time, not by falling over', async () => {
+    answers = { published: { '2026-10-01': 4 }, themed: [], furthest: FAR };
+    for (let run = 0; run < 3; run += 1) {
+      const { code } = await preflight('2026-10-01', 1);
+      expect(code, `run ${run + 1}`).toBe(1);
+    }
+  });
+
   // Not a verdict. Whether these days were meant to be themed is the one thing
   // it cannot know, so it reports and does not judge -- an unthemed June must
   // not read as a broken deployment.

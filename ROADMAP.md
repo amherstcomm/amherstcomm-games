@@ -538,6 +538,25 @@ should use the GitHub contents API or bust the cache deliberately.
 safe to move into Postgres, since the contract tests describe the feed rather
 than the file.
 
+### ~~Leaderboards that show what they ranked on~~ — done, September 2026
+
+**Built**, and smaller than the proposal expected: `boards_for` had been
+returning the fastest solve as `detail` for Weave, both Word Squares and
+Cryptogram for a while, so nothing in the RPC had to change. What was missing
+was on the page — `BOARD_LABELS` rendered `''` for those four, and the
+leaderboard panel worked around it by naming the four games in a special case
+of its own and formatting the time there. So the same row read two different
+ways depending on which page you were on, and Home showed no `detail` for any
+game at all: two people on "1 solved" in a deliberate order looked like a tie.
+
+The formatting now lives with the labels, both surfaces ask them, and Home
+shows the detail too. `tests/unit/leaderboard.test.ts` asserts the four say a
+time and that nought says nothing — a row reading `best 0:00` would be a lie
+about a board somebody is leading.
+
+Still open from the proposal: Weave's hint count as a third level. That needs
+the ordering as well as the projection, and the argument for it stands.
+
 ### Leaderboards that show what they ranked on — proposed August 2026
 
 Home and the leaderboard panel both draw from `boards_for`, and for several
