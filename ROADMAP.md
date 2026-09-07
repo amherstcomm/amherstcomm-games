@@ -707,6 +707,24 @@ smaller form.
 way a visitor does — nothing answered, banner up. Every other test starts with
 it answered by the fixture, which is what hid this.
 
+### ~~Reporter addresses: a retention sweep~~ — done, September 2026
+
+**Built** as `public.sweep_reporter_emails()`, daily under pg_cron where the
+database has it and callable with the service key where it does not: the
+address goes a week after a report is closed without the outcome being sent,
+and ninety days after one is filed if nobody handles it at all. Clearing it
+also drops the row out of `unsent_outcomes()`, so the mailer's queue drains
+instead of carrying a backlog it can never send. `supabase/tests/retention.sql`
+asserts both ages in both directions — what is cleared, and what must be left
+alone, since a sweep that took the address off a report closed this morning
+would break the receipt somebody is waiting for.
+
+**Reversal:** the proposal below puts the sweep in the daily digest. That is
+wrong on this deployment. The digest runs on a hosted runner and this Postgres
+answers only on the internal network, so a sweep living there would be a
+retention rule that depended on which host ran the mailer — kept upstream and
+quietly broken here. It belongs in the database. The original proposal follows.
+
 ### Reporter addresses: a retention sweep — proposed August 2026
 
 An address left on a report is deleted when the outcome email is sent, which

@@ -311,6 +311,15 @@ export function PrivacyPolicy() {
         are saying it is not put in front of anyone, not used for anything else,
         and not kept.
       </P>
+      <P>
+        And if nobody ever gets back to you, it still goes. A report that was
+        closed without the outcome being sent loses the address after a week; a
+        report nobody has handled at all loses it after ninety days. That is the
+        case the sentence above used to leave out — a report that is answered
+        has its address deleted by the answering, and one that is forgotten
+        would otherwise have kept it for ever. You lose the reply you were
+        waiting for at that point, which is the honest cost of not keeping it.
+      </P>
 
       <H>Analytics</H>
       <P>

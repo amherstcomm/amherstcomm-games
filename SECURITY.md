@@ -103,7 +103,11 @@ These are deliberate, and most are written up in the app or the roadmap.
   answer to that is moderation tooling rather than a bigger number.
 - **A reporter's address reaches Resend** when the receipt or outcome is sent,
   because that is what sending email means. It is deleted from the report once
-  the outcome has gone.
+  the outcome has gone -- and, since September 2026, from a report whose
+  outcome never goes: a week after it is closed unsent, ninety days after it is
+  filed if nobody handles it. `public.sweep_reporter_emails()`, run daily by
+  pg_cron where there is one and callable with the service key where there is
+  not.
 - **Anything requiring an attacker to already have your unlocked device**, your
   browser profile on disk, or a debugger attached to the page.
 
