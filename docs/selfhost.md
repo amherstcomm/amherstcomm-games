@@ -175,11 +175,18 @@ empty for a deployment that would rather show an error than a puzzle from
 anywhere else: with no base, a database that cannot answer is an error on the
 page rather than a fallback.
 
-The same applies to the word bands. `VITE_WORDBANDS_CDN` was hard-coded to
-jsdelivr at *upstream's* tag; it is empty by default now, which means the bands
-bundled into the build — the same data at the right version by construction. On
-a VPN-only site that is also the faster answer: an unreachable CDN costs four
-seconds per band, six bands, while somebody waits to play.
+The same applies to the word bands, with one correction. `VITE_WORDBANDS_CDN`
+was hard-coded to jsdelivr at *upstream's* tag, so a band this deployment
+rebuilt and tagged would never have been the one served. It now defaults to
+**this** repository's tag, read from `src/wordbands/version.json` so the URL
+follows the words.
+
+That default was empty for a day, on the reasoning that a VPN-only site might
+not reach a public CDN. Wrong premise: the VPN restricts who can reach the
+site, not what the site can reach. Set it empty anyway if you would rather not
+depend on a CDN — the bundled bands are the same data at the right version by
+construction, and there is a four-second timeout either way, so a slow CDN
+costs a wait and never a failure.
 
 Publishing your own rows is still what makes the RPC answer first, and
 `ops/preflight.sh` says whether it does.
