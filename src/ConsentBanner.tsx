@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { HardDrive } from 'lucide-react';
 import { readLevel, setLevel, STORAGE_OPTIONS, type StorageLevel } from '@/siteStorage';
 
@@ -15,6 +15,36 @@ import { readLevel, setLevel, STORAGE_OPTIONS, type StorageLevel } from '@/siteS
 // easy" is meant to include how the choices look.
 export default function ConsentBanner() {
   const [askStorage, setAskStorage] = useState(() => readLevel() === null);
+  const card = useRef<HTMLDivElement>(null);
+
+  // Room made for it at the bottom of the page, for exactly as long as it is
+  // asking.
+  //
+  // This is here because the banner used to sit on top of the footer: every
+  // footer control -- Report a problem included -- was present, visible, and
+  // unclickable until somebody answered a question they had not been given a
+  // reason to answer. The report tests found it while a sibling test asserting
+  // the button was *visible* passed, which is what `toBeVisible` promises and
+  // is not the same as usable.
+  //
+  // Measured rather than a guessed constant: the card is two lines on a phone
+  // and one on a laptop, and a fixed number would be wrong on one of them.
+  useEffect(() => {
+    if (!askStorage) return;
+    const fit = () => {
+      const height = card.current?.getBoundingClientRect().height ?? 0;
+      document.body.style.paddingBottom = height ? `${Math.ceil(height) + 16}px` : '';
+    };
+    fit();
+    const watch = new ResizeObserver(fit);
+    if (card.current) watch.observe(card.current);
+    window.addEventListener('resize', fit);
+    return () => {
+      watch.disconnect();
+      window.removeEventListener('resize', fit);
+      document.body.style.paddingBottom = '';
+    };
+  }, [askStorage]);
 
   if (!askStorage) return null;
 
@@ -31,9 +61,15 @@ export default function ConsentBanner() {
     <div
       role="region"
       aria-label="Privacy choices"
-      className="fixed inset-x-0 bottom-0 z-[70] p-3 sm:p-4"
+      // The wrapper spans the width and catches nothing: it is margin around
+      // the card, and a transparent strip that swallows clicks is the same bug
+      // in a smaller form.
+      className="fixed inset-x-0 bottom-0 z-[70] p-3 sm:p-4 pointer-events-none"
     >
-      <div className="mx-auto max-w-3xl rounded-2xl bg-slate-900 border border-white/15 shadow-2xl p-4 sm:p-5 space-y-4">
+      <div
+        ref={card}
+        className="mx-auto max-w-3xl rounded-2xl bg-slate-900 border border-white/15 shadow-2xl p-4 sm:p-5 space-y-4 pointer-events-auto"
+      >
         {askStorage && (
           <div className="flex flex-wrap items-center justify-center sm:justify-between gap-x-5 gap-y-3">
             <p className="flex items-start gap-2.5 text-sm text-slate-300 max-w-lg">

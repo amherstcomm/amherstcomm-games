@@ -359,3 +359,26 @@ test('the legal pages route people to the form, and keep security off public cod
   expect(hrefs.filter((h) => /\/(issues|security\/advisories)/.test(h))).toEqual([]);
   await expect(terms.getByText(/security option under/i)).toBeVisible();
 });
+
+// The banner that asks what may be kept on this device sits at the bottom of
+// the page, and every other test here starts with it already answered (see
+// e2e/fixtures.ts). So this is the one that arrives the way a visitor does:
+// nothing answered, the banner up, and the footer still usable.
+//
+// It covered the footer for months. Report a problem was present, visible, and
+// unclickable until you answered a question you had been given no reason to
+// answer -- and the test that asserted the button was visible passed the whole
+// time, because that is what toBeVisible promises.
+test('the footer still works while the storage banner is asking', async ({ page }) => {
+  await page.addInitScript(() => {
+    // Unanswered, which is what the fixture normally spares every other test.
+    localStorage.removeItem('anagrimoire:storage:v2');
+  });
+  await page.goto('/');
+  await expect(page.getByRole('region', { name: 'Privacy choices' })).toBeVisible();
+
+  // Not a scroll-into-view and not a forced click: the ordinary one a visitor
+  // makes, which is what fails when something transparent is over the top.
+  await page.getByRole('button', { name: 'Report a problem' }).click({ timeout: 5_000 });
+  await expect(page.getByRole('dialog', { name: /What would you like to report/i })).toBeVisible();
+});
