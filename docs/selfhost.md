@@ -204,8 +204,9 @@ node scripts/publish-window.mjs
 window's start; it defaults to today.
 
 `SKIP_SOLVER_DATA=1` skips fetching Letter Boxed, Spelling Bee and Strands from
-nytimes.com. Those exist to autofill the solvers, which this deployment is
-dropping — and it removes a dependency on an external site being up.
+nytimes.com. They existed to autofill the solvers, which this deployment has
+now removed outright — so the flag is belt and braces, and the dependency on an
+external site being up is gone either way.
 
 **`PUZZLES_SEED_SALT` is worth keeping deliberately.** The generator is public
 and the date is its only other input, so without a salt every future board is

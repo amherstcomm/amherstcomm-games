@@ -6,7 +6,7 @@ import {
   useRef,
   useState,
 } from 'react';
-import { CornerDownLeft, Delete, Flag, Play, RefreshCw, Search, Shuffle, Timer } from 'lucide-react';
+import { CornerDownLeft, Delete, Flag, Play, RefreshCw, Shuffle, Timer } from 'lucide-react';
 import { solveDescramble } from '@/solvers';
 import {
   difficulty,
@@ -118,9 +118,8 @@ const ScrambleGame = forwardRef<
     /** the words this difficulty draws practice from */
     practiceWords: string[] | null;
     onLetterStates: (states: Record<string, LetterState>) => void;
-    onReveal?: (letters: string) => void;
   }
->(function ScrambleGame({ standardWords, commonWords, onLetterStates, onReveal, practiceWords }, ref) {
+>(function ScrambleGame({ standardWords, commonWords, onLetterStates, practiceWords }, ref) {
   const [store, setStore] = useState<ScrambleStore>(loadStore);
   const [themed, setThemed] = useState<string[]>([]);
   // What the day said this board takes: its own words alone, or both.
@@ -598,16 +597,6 @@ const ScrambleGame = forwardRef<
                   }
                 />
                 {/* nothing to reveal into when the solver is hidden */}
-                {onReveal && (
-                  <button
-                    onMouseDown={(e) => e.preventDefault()}
-                    onClick={() => onReveal(record.rack.join(''))}
-                    className="inline-flex items-center gap-1.5 px-4 h-10 rounded-lg text-sm font-semibold bg-amber-400/15 border border-amber-400/30 text-amber-200 hover:bg-amber-400/25 transition-colors"
-                  >
-                    <Search className="w-4 h-4" />
-                    Reveal all in solver
-                  </button>
-                )}
                 {!store.dailyMode && (
                   <button
                     onMouseDown={(e) => e.preventDefault()}

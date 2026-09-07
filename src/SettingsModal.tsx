@@ -193,7 +193,6 @@ export default function SettingsModal({
   lengthRange,
   practiceAllowed,
   highlightMatches,
-  helpAllowed,
   wordFilter,
   signedIn,
   onTheme,
@@ -205,7 +204,6 @@ export default function SettingsModal({
   onLengthRange,
   onPracticeAllowed,
   onHighlightMatches,
-  onHelpAllowed,
   onWordFilter,
   startPage,
   onStartPage,
@@ -222,7 +220,6 @@ export default function SettingsModal({
   lengthRange: LengthRange;
   practiceAllowed: boolean;
   highlightMatches: boolean;
-  helpAllowed: boolean;
   wordFilter: WordFilterLevel;
   signedIn: boolean;
   onTheme: (t: ThemeMode) => void;
@@ -234,7 +231,6 @@ export default function SettingsModal({
   onLengthRange: (r: LengthRange) => void;
   onPracticeAllowed: (v: boolean) => void;
   onHighlightMatches: (v: boolean) => void;
-  onHelpAllowed: (v: boolean) => void;
   onWordFilter: (w: WordFilterLevel) => void;
   startPage: StartPage;
   onStartPage: (s: StartPage) => void;
@@ -551,13 +547,10 @@ export default function SettingsModal({
               >
                 Practice
               </Pill>
-              <Pill on={helpAllowed} onClick={() => onHelpAllowed(!helpAllowed)} tone="emerald">
-                Help &amp; reveal
-              </Pill>
             </div>
             <p className="mt-2 text-xs text-slate-500">
-              Tap to hide a game, a tab, the practice boards, or the help and
-              reveal buttons. Nothing is deleted — statistics and streaks keep
+              Tap to hide a game, a tab, or the practice boards. Nothing is
+              deleted — statistics and streaks keep
               accruing, and unhiding brings everything back. One game and one
               tab have to stay.
             </p>
@@ -592,8 +585,8 @@ export default function SettingsModal({
               ))}
             </div>
             <p className="mt-2 text-xs text-slate-500">
-              Hides swearing and crude words from solver results and missed-word
-              lists. Display only: what scores never changes, so everyone on a
+              Hides swearing and crude words from the missed-word lists a
+              finished board shows. Display only: what scores never changes, so everyone on a
               board plays the same rules — and slurs are never shown or scored,
               whatever is chosen here.
             </p>

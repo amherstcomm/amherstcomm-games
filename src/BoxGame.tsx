@@ -6,7 +6,7 @@ import {
   useRef,
   useState,
 } from 'react';
-import { CornerDownLeft, Delete, Eye, LifeBuoy, RefreshCw, RotateCcw, Timer } from 'lucide-react';
+import { CornerDownLeft, Delete, RefreshCw, RotateCcw, Timer } from 'lucide-react';
 import { formatElapsed, useUpTimer } from '@/useUpTimer';
 import {
   difficulty,
@@ -203,9 +203,8 @@ const BoxGame = forwardRef<
     /** the words this difficulty draws practice from */
     practiceWords: string[] | null;
     onLetterStates: (states: Record<string, LetterState>) => void;
-    onReveal?: (sides: string[]) => void;
   }
->(function BoxGame({ standardWords, commonWords, onLetterStates, onReveal, practiceWords }, ref) {
+>(function BoxGame({ standardWords, commonWords, onLetterStates, practiceWords }, ref) {
   const [store, setStore] = useState<BoxStore>(loadStore);
   const [themed, setThemed] = useState<string[]>([]);
   // What the day said this board takes: its own words alone, or both.
@@ -719,43 +718,6 @@ const BoxGame = forwardRef<
             )}
             {/* Both of these end up in the solver, so they go when the solver
                 is hidden — a give-up that shows nothing isn't giving up. */}
-            {onReveal && (
-              <>
-            <button
-              onMouseDown={(e) => e.preventDefault()}
-              onClick={() => onReveal(record.sides)}
-              title="Peek at the solver — your board keeps going"
-              className="inline-flex items-center gap-1.5 px-4 h-10 rounded-lg text-sm font-semibold bg-white/5 border border-white/10 text-slate-300 hover:bg-white/10 hover:text-white transition-colors"
-            >
-              <LifeBuoy className="w-4 h-4" />
-              Help
-            </button>
-            {!done && (
-              <button
-                onMouseDown={(e) => e.preventDefault()}
-                onClick={() => {
-                  // persist synchronously — onReveal unmounts this component
-                  // before a state-driven save could run
-                  const next = store.dailyMode
-                    ? { ...store, daily: { ...record, revealed: true } }
-                    : { ...store, practice: { ...record, revealed: true } };
-                  try {
-                    siteStore.setItem(BOX_KEY, JSON.stringify(next));
-                  } catch {
-                    // best-effort persistence
-                  }
-                  setStore(next);
-                  onReveal(record.sides);
-                }}
-                title="Give up — ends this board unfinished and shows the solutions"
-                className="inline-flex items-center gap-1.5 px-4 h-10 rounded-lg text-sm font-semibold bg-white/5 border border-white/10 text-slate-300 hover:bg-white/10 hover:text-white transition-colors"
-              >
-                <Eye className="w-4 h-4" />
-                Reveal
-              </button>
-            )}
-              </>
-            )}
           </div>
 
           <div className="h-6 mt-3">

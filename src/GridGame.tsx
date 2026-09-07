@@ -7,7 +7,7 @@ import {
   useRef,
   useState,
 } from 'react';
-import { ChevronDown, CornerDownLeft, Delete, Flag, Play, RefreshCw, Search, Timer } from 'lucide-react';
+import { ChevronDown, CornerDownLeft, Delete, Flag, Play, RefreshCw, Timer } from 'lucide-react';
 import { findGridPath, gridNeighbors, solveGrid } from '@/solvers';
 import {
   difficulty,
@@ -145,9 +145,8 @@ const GridGame = forwardRef<
     /** display filter: false hides a word from the missed list, nothing else */
     displayWord?: (w: string) => boolean;
     onLetterStates: (states: Record<string, LetterState>) => void;
-    onReveal?: (cells: string[]) => void;
   }
->(function GridGame({ standardWords, displayWord, onLetterStates, onReveal }, ref) {
+>(function GridGame({ standardWords, displayWord, onLetterStates }, ref) {
   const [store, setStore] = useState<GridStore>(loadStore);
   const [themed, setThemed] = useState<string[]>([]);
   // What the day said this board takes: its own words alone, or both.
@@ -713,16 +712,6 @@ const GridGame = forwardRef<
                   }
                 />
                 {/* nothing to reveal into when the solver is hidden */}
-                {onReveal && (
-                  <button
-                    onMouseDown={(e) => e.preventDefault()}
-                    onClick={() => onReveal(record.cells)}
-                    className="inline-flex items-center gap-1.5 px-4 h-10 rounded-lg text-sm font-semibold bg-amber-400/15 border border-amber-400/30 text-amber-200 hover:bg-amber-400/25 transition-colors"
-                  >
-                    <Search className="w-4 h-4" />
-                    Reveal all in solver
-                  </button>
-                )}
                 {!store.dailyMode && (
                   <button
                     onMouseDown={(e) => e.preventDefault()}
