@@ -19,6 +19,7 @@ import ReportDialog from '@/ReportDialog';
 import {
   reportGeneral,
   reportPlayer,
+  reportPracticePuzzle,
   reportPuzzle,
   type GeneralKind,
   type ReportResult,
@@ -33,6 +34,14 @@ export type ReportContext = {
   gameLabel?: string;
   date?: string;
   level?: Difficulty;
+  /** the practice board on screen, when that is what is being played.
+   *
+   *  A daily is reported by naming it and the server fetches what it was. A
+   *  practice board was never published, so the only evidence there can be is
+   *  the board itself -- and a report made from it is marked as a claim rather
+   *  than a record. Before this, somebody looking at an offensive practice
+   *  board was told to go and find the daily instead. */
+  board?: unknown;
 };
 
 type Choice = 'site' | 'puzzle' | 'player' | 'privacy' | 'security' | 'other';
@@ -91,8 +100,12 @@ export default function ReportMenu({
       return reportPlayer(name, reason, email);
     }
     if (choice === 'puzzle') {
-      if (!game || !context.date) return { state: 'unknown' };
-      return reportPuzzle(game, context.date, level, reason, email);
+      if (!game) return { state: 'unknown' };
+      // A daily is named; a practice board is handed over. The date decides
+      // which, because a practice board has none -- see the bus.
+      if (context.date) return reportPuzzle(game, context.date, level, reason, email);
+      if (context.board) return reportPracticePuzzle(game, context.board, reason, email);
+      return { state: 'unknown' };
     }
     return reportGeneral(choice as GeneralKind, reason, window.location.pathname, email);
   };
@@ -113,7 +126,8 @@ export default function ReportMenu({
         <ChoiceDialog
           onPick={(c) => setChoice(c)}
           onClose={close}
-          canReportPuzzle={Boolean(context.date && context.game)}
+          canReportPuzzle={Boolean(context.game && (context.date || context.board))}
+          practice={Boolean(context.game && !context.date && context.board)}
           boardLabel={context.gameLabel}
         />
       )}
@@ -124,9 +138,16 @@ export default function ReportMenu({
           detail={
             choice === 'puzzle' && context.date
               ? `${context.gameLabel ?? game} · ${level} · ${context.date} — we read the board off the server.`
-              : choice === 'player'
-                ? undefined
-                : 'There’s nothing for us to look up here, so please say as much as you can.'
+              : choice === 'puzzle' && context.board
+                ? // Said rather than hidden: this board was dealt here and never
+                  // published, so what gets sent is what this browser is
+                  // showing. Somebody reporting it should know that is the
+                  // difference, not discover it from an answer that treats
+                  // their word as evidence.
+                  `${context.gameLabel ?? game} · practice — this board was dealt in your browser, so we send it as you have it.`
+                : choice === 'player'
+                  ? undefined
+                  : 'There’s nothing for us to look up here, so please say as much as you can.'
           }
           reasonRequired={choice !== 'puzzle' && choice !== 'player'}
           extra={
@@ -153,7 +174,10 @@ export default function ReportMenu({
                   className="mt-1 w-full rounded-lg bg-slate-950 border border-white/10 px-3 py-2 text-sm text-slate-200 focus:outline-none focus:ring-2 focus:ring-accent"
                 />
               </>
-            ) : choice === 'puzzle' ? (
+            ) : choice === 'puzzle' && context.date ? (
+              /* Only for a daily, which is three separate boards at three
+                 difficulties. A practice board is the one on screen and there
+                 is nothing to choose between. */
               <>
                 <label htmlFor="report-level" className="mt-3 block text-xs text-slate-500">
                   Which difficulty — they’re three separate boards
@@ -185,11 +209,15 @@ function ChoiceDialog({
   onPick,
   onClose,
   canReportPuzzle,
+  practice,
   boardLabel,
 }: {
   onPick: (c: Choice) => void;
   onClose: () => void;
   canReportPuzzle: boolean;
+  /** the board being offered is a practice one, so what gets sent is what this
+   *  browser is showing rather than what the server published */
+  practice: boolean;
   boardLabel?: string;
 }) {
   // The chooser is a dialog too, and it shipped without this — no Escape, no
@@ -231,10 +259,12 @@ function ChoiceDialog({
                 <span className="block text-sm font-semibold text-slate-200">{c.label}</span>
                 <span className="block text-xs text-slate-500">
                   {stranded
-                    ? 'Open the daily board you mean, then report it from there.'
-                    : c.id === 'puzzle' && boardLabel
-                      ? `Today’s ${boardLabel}.`
-                      : c.hint}
+                    ? 'Open the board you mean, then report it from there.'
+                    : c.id === 'puzzle' && practice
+                      ? `The practice ${boardLabel ?? 'board'} on screen. We send the board as your browser has it, since this one was never published.`
+                      : c.id === 'puzzle' && boardLabel
+                        ? `Today’s ${boardLabel}.`
+                        : c.hint}
                 </span>
               </button>
             );

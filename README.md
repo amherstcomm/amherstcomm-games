@@ -152,6 +152,13 @@ that never existed worth exactly as much as a real one. The free-text reason is
 the only client-supplied field stored, and it's optional — a report with no
 words still says somebody looked at this and thought it was wrong.
 
+A **practice board is the one exception**, because it is dealt in the page and
+never published: there is nothing to look up, so refusing the report meant
+telling somebody looking at an offensive board to go and find the daily
+instead. Reporting one sends the board, and the row is marked `claimed` rather
+than `verified` — the digest and the owner's queue both say which, because the
+two are indistinguishable once printed and only one of them is evidence.
+
 Filing one hands back a **ticket**, and `/report/<ticket>` answers for it: open
 or closed, and how it ended. Nothing else — not the board, not the name, not
 your own words back, and a wrong code reads the same as a real one. An email

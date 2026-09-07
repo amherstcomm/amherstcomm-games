@@ -155,7 +155,14 @@ const BridgeGame = forwardRef<BridgeGameHandle>(function BridgeGame(_props, ref)
   const solvedCount = record ? record.entries.filter((e) => e).length : 0;
   const done = !!record && (record.revealed || solvedCount === record.prompts.length);
 
-  useEffect(() => reportDaily('bridge', store.dailyMode, store.dailyDate), [store.dailyMode, store.dailyDate]);
+  // The practice board rides along so it can be reported: it was never
+  // published, so the server has nothing to look up and the board itself is
+  // the only evidence there can be. reportDaily drops it on a daily, which is
+  // reported by naming it instead.
+  useEffect(
+    () => reportDaily('bridge', store.dailyMode, store.dailyDate, store.practice),
+    [store.dailyMode, store.dailyDate, store.practice]
+  );
   useEffect(
     () => offerDailySwitch('bridge', (d) => setStore((prev) => ({ ...prev, dailyMode: d }))),
     []

@@ -2298,6 +2298,24 @@ alter table public.reports add column if not exists resolved_by uuid references 
 
 -- What the digest has already told the reporter, so a rerun doesn't tell them
 -- twice. Nullable rather than boolean: the timestamp is the audit trail.
+-- Whether the evidence in the row was read out of the database or handed over
+-- by the browser.
+--
+-- Everything else about reporting rests on the server being able to look the
+-- thing up: a puzzle report names a published board and the server fetches it,
+-- so nothing a client says is trusted. A practice board was never published,
+-- so there is nothing to look up -- it is the one case where the browser has
+-- to send what it saw, which is precisely the input the rest of this refuses.
+--
+-- The answer is not to refuse the report. A claimed report is still worth
+-- having: the usual cause is a single word, and a word is checkable on its own.
+-- The answer is to keep the two apart and say which is which, here and in the
+-- digest, so nobody reads a board somebody typed as a board this site dealt.
+alter table public.reports add column if not exists trust text not null default 'verified';
+alter table public.reports drop constraint if exists reports_trust_check;
+alter table public.reports add constraint reports_trust_check
+  check (trust in ('verified', 'claimed'));
+
 alter table public.reports add column if not exists receipt_sent_at timestamptz;
 alter table public.reports add column if not exists outcome_sent_at timestamptz;
 
@@ -2451,6 +2469,75 @@ $fn$;
 revoke all on function public.report_puzzle(text, date, text, text, text, text) from public;
 grant execute on function public.report_puzzle(text, date, text, text, text, text) to anon, authenticated;
 
+-- Report a practice board: the one report whose evidence the browser supplies.
+--
+-- A practice board is dealt in the page from the shared pool and never
+-- published, so `report_puzzle` above cannot be used -- there is no row to
+-- fetch and nothing to check the claim against. Refusing outright was the old
+-- behaviour, and it means somebody looking at an offensive practice board is
+-- told to go and find the daily instead.
+--
+-- So the board is taken as given and the row says so. Three limits keep that
+-- from being an open door:
+--
+--   the game must be one this site has, so the subject cannot be invented
+--   the board is capped at 8kB, which is many times the largest real one
+--   the subject carries a hash of the board, so the ordinary per-subject limit
+--     collapses repeats of the same board and still lets a different one
+--     through -- a per-game subject would silence the second board of the day
+create or replace function public.report_practice_puzzle(
+  p_game text,
+  p_board jsonb,
+  p_reason text default null,
+  p_email text default null
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $fn$
+declare
+  answer jsonb;
+begin
+  -- Read off the published feeds rather than kept as a list here: a game this
+  -- site does not have is a report about nothing, and a hand-maintained copy
+  -- of the game names would be the staler of the two.
+  if p_game is null or not exists (
+    select 1 from public.daily_puzzles d where d.game = p_game
+  ) then
+    return jsonb_build_object('ok', false, 'reason', 'no such game');
+  end if;
+
+  if p_board is null or jsonb_typeof(p_board) <> 'object' then
+    return jsonb_build_object('ok', false, 'reason', 'no board');
+  end if;
+
+  if char_length(p_board::text) > 8192 then
+    return jsonb_build_object('ok', false, 'reason', 'that board is too big to send');
+  end if;
+
+  answer := public.file_report(
+    'puzzle',
+    'practice:' || p_game || ':' || md5(p_board::text),
+    jsonb_build_object('game', p_game, 'practice', true, 'board', p_board),
+    p_reason,
+    p_email
+  );
+
+  -- Marked after the fact rather than through file_report, which four other
+  -- reports share: a fifth argument on it would be a default nobody reads, and
+  -- this is the only caller that is not verified.
+  if answer->>'ticket' is not null then
+    update public.reports set trust = 'claimed' where ticket = answer->>'ticket';
+  end if;
+
+  return answer;
+end;
+$fn$;
+
+revoke all on function public.report_practice_puzzle(text, jsonb, text, text) from public;
+grant execute on function public.report_practice_puzzle(text, jsonb, text, text) to anon, authenticated;
+
 -- Report a display name. The client sends the name it saw on a board; the
 -- server resolves it to a profile and records the name as *it* holds it, so a
 -- rename between seeing and reporting doesn't produce a report about a string
@@ -2597,6 +2684,9 @@ grant execute on function public.report_status(text) to anon, authenticated;
 -- job is partly to nag: a report nobody has touched in a week should read
 -- louder than one filed this morning, and the only way to say so is to keep
 -- sending it until somebody acts.
+-- Dropped first: `trust` was added to the returned row, and a changed return
+-- type is the one thing `create or replace` cannot do.
+drop function if exists public.open_reports();
 create or replace function public.open_reports()
 returns table (
   id uuid,
@@ -2609,7 +2699,11 @@ returns table (
   action_token uuid,
   created_at timestamptz,
   days_open int,
-  receipt_sent_at timestamptz
+  receipt_sent_at timestamptz,
+  -- 'claimed' means the board in `evidence` is what a browser said it saw,
+  -- which the digest has to show: acting on it is a judgement about a word,
+  -- never about a board this site can be shown to have dealt.
+  trust text
 )
 language sql
 stable
@@ -2619,7 +2713,7 @@ as $fn$
   select r.id, r.kind, r.ticket, r.subject, r.evidence, r.reason, r.reporter_email,
          r.action_token, r.created_at,
          greatest(0, (now()::date - r.created_at::date))::int as days_open,
-         r.receipt_sent_at
+         r.receipt_sent_at, r.trust
   from public.reports r
   where r.status = 'new'
   order by r.created_at
@@ -2887,6 +2981,9 @@ grant execute on function public.report_for_action(uuid, uuid) to authenticated;
 -- Not is_owner() as a guard that errors: an empty list is the right answer for
 -- everyone else, and it means the caller needs no special handling for the
 -- ordinary case of not being an owner.
+-- Dropped first: `trust` was added to the row, and a changed return type is
+-- the one thing `create or replace` cannot do.
+drop function if exists public.owner_reports();
 create or replace function public.owner_reports()
 returns table (
   id uuid,
@@ -2896,7 +2993,10 @@ returns table (
   reason text,
   action_token uuid,
   created_at timestamptz,
-  days_open int
+  days_open int,
+  -- Same reason the digest carries it: a claimed board and a verified one look
+  -- identical once they are on a page, and only one of them is evidence.
+  trust text
 )
 language sql
 stable
@@ -2904,7 +3004,7 @@ security definer
 set search_path = ''
 as $fn$
   select r.id, r.kind, r.ticket, r.evidence, r.reason, r.action_token, r.created_at,
-         greatest(0, (now()::date - r.created_at::date))::int
+         greatest(0, (now()::date - r.created_at::date))::int, r.trust
   from public.reports r
   where r.status = 'new' and public.is_owner()
   order by r.created_at

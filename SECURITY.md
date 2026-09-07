@@ -101,6 +101,13 @@ These are deliberate, and most are written up in the app or the roadmap.
   people who are otherwise anonymous. It bounds volume, not intent. Someone
   determined can file one report against each of a thousand names, and the
   answer to that is moderation tooling rather than a bigger number.
+- **A practice board in a report is what the browser said it was.** Rows are
+  marked `claimed` for exactly this, and every other report stays `verified`:
+  the board is read out of `daily_puzzles`, the name resolved to a profile.
+  A claimed report is a judgement about a word, never evidence that this site
+  dealt that board. `report_practice_puzzle` caps the board at 8kB, requires a
+  game this site publishes, and keys the rate limit on a hash of the board so
+  repeats of one board collapse and a different board still gets through.
 - **A reporter's address reaches Resend** when the receipt or outcome is sent,
   because that is what sending email means. It is deleted from the report once
   the outcome has gone -- and, since September 2026, from a report whose

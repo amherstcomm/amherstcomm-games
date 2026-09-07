@@ -212,7 +212,14 @@ const CryptogramGame = forwardRef<CryptogramGameHandle, object>(
     useEffect(() => {
       if (!practiceAllowed && !store.dailyMode) setStore((prev) => ({ ...prev, dailyMode: true }));
     }, [practiceAllowed, store.dailyMode]);
-    useEffect(() => reportDaily('cryptogram', store.dailyMode, store.dailyDate), [store.dailyMode, store.dailyDate]);
+    // The practice board rides along so it can be reported: it was never
+  // published, so the server has nothing to look up and the board itself is
+  // the only evidence there can be. reportDaily drops it on a daily, which is
+  // reported by naming it instead.
+  useEffect(
+    () => reportDaily('cryptogram', store.dailyMode, store.dailyDate, store.practice),
+    [store.dailyMode, store.dailyDate, store.practice]
+  );
     useEffect(
       () => offerDailySwitch('cryptogram', (d) => setStore((prev) => ({ ...prev, dailyMode: d }))),
       []

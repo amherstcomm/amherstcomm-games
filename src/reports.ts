@@ -70,6 +70,36 @@ export async function reportPuzzle(
   }
 }
 
+/** Report the practice board on screen.
+ *
+ *  The one report that sends what the browser saw rather than where it was.
+ *  A practice board is dealt in the page and never published, so there is
+ *  nothing for the server to look up and nothing to check the claim against --
+ *  the row it files is marked `claimed` for exactly that reason, and the digest
+ *  shows it as such. Worth having anyway: the usual complaint is a single word,
+ *  and a word is checkable on its own.
+ */
+export async function reportPracticePuzzle(
+  game: string,
+  board: unknown,
+  reason: string,
+  email?: string
+): Promise<ReportResult> {
+  if (!supabase) return { state: 'offline' };
+  try {
+    const { data, error } = await supabase.rpc('report_practice_puzzle', {
+      p_game: game,
+      p_board: board,
+      p_reason: reason.slice(0, REASON_MAX),
+      p_email: email?.trim() || null,
+    });
+    if (error) return { state: 'error' };
+    return readResult(data);
+  } catch {
+    return { state: 'error' };
+  }
+}
+
 /** Report a display name seen on a leaderboard.
  *
  *  An unknown name answers 'filed' like any other, because the server refuses
@@ -245,6 +275,10 @@ export type QueuedReport = {
   actionToken: string;
   filed: string;
   daysOpen: number;
+  /** 'claimed' means the board in `evidence` is what a browser said it saw --
+   *  a practice board, which was never published and so cannot be looked up.
+   *  Everything else here is what the server held. */
+  trust: string;
 };
 
 /** Am I an owner? Answers false for everyone else, including signed out —
@@ -275,6 +309,7 @@ export async function ownerReports(): Promise<QueuedReport[]> {
       evidence: (r.evidence ?? {}) as Record<string, unknown>,
       reason: (r.reason as string) ?? null,
       actionToken: String(r.action_token),
+      trust: r.trust === 'claimed' ? 'claimed' : 'verified',
       filed: String(r.created_at),
       daysOpen: Number(r.days_open) || 0,
     }));

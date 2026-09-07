@@ -132,7 +132,14 @@ const LadderGame = forwardRef<LadderGameHandle>(function LadderGame(_props, ref)
   const record = store.dailyMode ? store.daily[playedAt] : store.practice;
   const done = !!record && (record.solved || record.revealed);
 
-  useEffect(() => reportDaily('ladder', store.dailyMode, store.dailyDate), [store.dailyMode, store.dailyDate]);
+  // The practice board rides along so it can be reported: it was never
+  // published, so the server has nothing to look up and the board itself is
+  // the only evidence there can be. reportDaily drops it on a daily, which is
+  // reported by naming it instead.
+  useEffect(
+    () => reportDaily('ladder', store.dailyMode, store.dailyDate, store.practice),
+    [store.dailyMode, store.dailyDate, store.practice]
+  );
   useEffect(
     () => offerDailySwitch('ladder', (d) => setStore((prev) => ({ ...prev, dailyMode: d }))),
     []
