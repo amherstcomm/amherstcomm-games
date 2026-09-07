@@ -29,7 +29,7 @@ import BoxGame, { type BoxGameHandle } from '@/BoxGame';
 import ScrambleGame, { type ScrambleGameHandle } from '@/ScrambleGame';
 import GridGame, { type GridGameHandle } from '@/GridGame';
 import WeaveGame, { type WeaveGameHandle } from '@/WeaveGame';
-import { fetchDailyData } from '@/dailyData';
+import { FEED_BASE, fetchDailyData } from '@/dailyData';
 import { DICTIONARIES, getAcceptPool, getDictionary, getDifficultyPool, getDisplayFilter, getWordRank } from '@/dictionaries';
 import { solvePattern, solveDescramble, solveBee, solveBoxed, solveGrid, findGridPath } from '@/solvers';
 import ConsentBanner from '@/ConsentBanner';
@@ -398,7 +398,7 @@ function App() {
     setTodayStatus('loading');
     try {
       const r = await fetch(
-        'https://raw.githubusercontent.com/rptetzloff/anagrimoire/puzzle-data/data/strands.json',
+        `${FEED_BASE}/strands.json`,
         { cache: 'no-store' }
       );
       if (!r.ok) throw new Error(String(r.status));
@@ -1255,7 +1255,7 @@ function App() {
     setTodayStatus('loading');
     try {
       const r = await fetch(
-        'https://raw.githubusercontent.com/rptetzloff/anagrimoire/puzzle-data/data/spellingbee.json',
+        `${FEED_BASE}/spellingbee.json`,
         { cache: 'no-store' }
       );
       if (!r.ok) throw new Error(String(r.status));
@@ -1277,7 +1277,7 @@ function App() {
     setTodayStatus('loading');
     try {
       const r = await fetch(
-        'https://raw.githubusercontent.com/rptetzloff/anagrimoire/puzzle-data/data/letterboxed.json',
+        `${FEED_BASE}/letterboxed.json`,
         { cache: 'no-store' }
       );
       if (!r.ok) throw new Error(String(r.status));

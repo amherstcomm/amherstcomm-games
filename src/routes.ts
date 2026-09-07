@@ -74,7 +74,11 @@ const DEFAULT_ADMIN: AdminTab = 'site';
 // Share from dev and the link points at dev; www is folded into the apex so
 // shared text reads the way the site is canonically named.
 function siteOrigin(): string {
-  if (typeof window === 'undefined') return 'https://anagrimoire.com';
+  // No window means a test or a build step rather than a page, so the origin
+  // this deployment was built with is the only honest answer. It used to be
+  // the upstream project's domain, which would have put anagrimoire.com into
+  // a shared result from a site nobody reading it can reach.
+  if (typeof window === 'undefined') return import.meta.env.VITE_SITE_ORIGIN ?? '';
   const { protocol, host } = window.location;
   return `${protocol}//${host.replace(/^www\./, '')}`;
 }

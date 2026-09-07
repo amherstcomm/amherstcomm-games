@@ -40,15 +40,26 @@ type BandName = (typeof BAND_NAMES)[number];
 // lazy imports so a band is only ever loaded once, and only when needed
 const bundled = import.meta.glob('./wordbands/band-*.json');
 
+/** A public CDN to try before the bundle, or empty for the bundle alone.
+ *
+ *  It used to be jsdelivr pointed at the project this one was forked from, and
+ *  neither half of that survives a rebrand: the tag is upstream's, so a band
+ *  this deployment rebuilt would not be there, and an internal site behind a
+ *  VPN may not reach a public CDN at all -- which costs four seconds per band
+ *  before the bundle serves, six bands, on a page somebody is waiting to play.
+ *
+ *  The bundle is the same data at the right version by construction, so the
+ *  CDN was only ever a way to ship new words without a rebuild. A deployment
+ *  that wants that sets this to its own repository's CDN base; empty, which is
+ *  the default, means the bundle and no waiting. */
+const BAND_CDN = (import.meta.env.VITE_WORDBANDS_CDN ?? '').replace(/\/$/, '');
+
 async function loadBand(name: BandName): Promise<Band> {
-  if (import.meta.env.PROD) {
+  if (import.meta.env.PROD && BAND_CDN) {
     try {
       const ctl = new AbortController();
       const timer = setTimeout(() => ctl.abort(), 4000);
-      const r = await fetch(
-        `https://cdn.jsdelivr.net/gh/rptetzloff/anagrimoire@${WORDS_VERSION}/src/wordbands/${name}.json`,
-        { signal: ctl.signal }
-      );
+      const r = await fetch(`${BAND_CDN}/${name}.json`, { signal: ctl.signal });
       clearTimeout(timer);
       if (r.ok) {
         const band = (await r.json()) as Band;
