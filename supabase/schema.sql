@@ -2652,6 +2652,101 @@ $fn$;
 
 revoke all on function public.unsent_outcomes() from public, anon, authenticated;
 
+/*
+ * The address goes even when nobody ever answers the report.
+ *
+ * The form promises the address is deleted once the outcome is sent, and the
+ * digest keeps that promise for every report that gets closed. It was not a
+ * promise about the reports that do not: one nobody handles keeps the address
+ * indefinitely, and that is exactly the report most likely to be forgotten.
+ * The narrower the promise, the more carefully it has to be worded -- easier
+ * to make the broad one true.
+ *
+ * Two ages, because the two cases mean different things:
+ *
+ *   handled but never told, after 7 days   the mailer had a week of daily runs
+ *                                          to send it. If it has not, it is not
+ *                                          going to, and holding the address on
+ *                                          the chance is not a plan.
+ *   still open, after 90 days              nobody is coming. Ninety days rather
+ *                                          than thirty because a report about a
+ *                                          puzzle can sit through a quiet
+ *                                          season and still get answered.
+ *
+ * Clearing the address also takes the row out of unsent_outcomes(), which
+ * filters on it -- so the queue drains rather than carrying a permanent
+ * backlog of things it cannot send.
+ *
+ * The report itself is kept. What it says about a board or a name is the
+ * record; the address is the only part of it that is about a person, and it is
+ * the only part that has to go.
+ */
+create or replace function public.sweep_reporter_emails()
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $fn$
+declare
+  v_stale int;
+  v_open int;
+begin
+  update public.reports
+     set reporter_email = null
+   where reporter_email is not null
+     and status = 'handled'
+     and outcome_sent_at is null
+     and resolved_at < now() - interval '7 days';
+  get diagnostics v_stale = row_count;
+
+  update public.reports
+     set reporter_email = null
+   where reporter_email is not null
+     and status <> 'handled'
+     and created_at < now() - interval '90 days';
+  get diagnostics v_open = row_count;
+
+  return jsonb_build_object('closed_unsent', v_stale, 'still_open', v_open);
+end;
+$fn$;
+
+revoke all on function public.sweep_reporter_emails() from public, anon, authenticated;
+grant execute on function public.sweep_reporter_emails() to service_role;
+
+/*
+ * And a clock for it, where the server has one.
+ *
+ * In the database rather than in the digest workflow, which is where the
+ * roadmap put it. The digest runs on a hosted runner, and on a deployment
+ * whose Postgres answers only on the internal network that runner cannot
+ * reach it at all -- so a sweep living there would be a promise kept on one
+ * deployment and quietly broken on this one. A retention rule that depends on
+ * which host runs the mailer is not a retention rule.
+ *
+ * Daily at ten past three, which is nothing else's hour. Guarded and dynamic
+ * for the same reason the opening-hours job is: a database without pg_cron has
+ * to apply this file unchanged, and supabase/tests/run.sh is calibrated to six
+ * errors. Re-scheduling the same name replaces the job.
+ *
+ * Nothing depends on the job. Anyone holding the service key can call the
+ * function, and the ages are in the function rather than the schedule -- so a
+ * database that never runs it is behind rather than wrong, and one run catches
+ * up completely.
+ */
+do $do$
+begin
+  if exists (select 1 from pg_extension where extname = 'pg_cron') then
+    execute $cron$
+      select cron.schedule('reports-address-retention', '10 3 * * *',
+                           $job$select public.sweep_reporter_emails()$job$)
+    $cron$;
+    raise notice 'reporter addresses: pg_cron job scheduled daily';
+  else
+    raise notice 'reporter addresses: no pg_cron here, call sweep_reporter_emails() from the publish host';
+  end if;
+end;
+$do$;
+
 -- Acting on a report: the two-key lock.
 --
 -- The token proves the caller is holding the digest; `is_owner()` proves they

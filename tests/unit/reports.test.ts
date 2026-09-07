@@ -6,6 +6,8 @@
 // dialog, and produce reports that cannot be told apart from invented ones —
 // so the test asserts the shape of the outgoing call, which is the only place
 // the difference shows.
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const rpc = vi.fn();
@@ -160,5 +162,37 @@ describe('acting on one', () => {
     const { actOnReport } = await import('@/reports');
     rpc.mockResolvedValue({ data: { ok: false, reason: 'already handled' }, error: null });
     expect(await actOnReport('id', 'tok', 'dismiss', '', '')).toBe('already handled');
+  });
+});
+
+// What the site promises about the address, against what the database does.
+//
+// The promise moved -- an address is now swept off a report nobody answers --
+// and three places say so: the privacy page, the form somebody types it into,
+// and the security policy. Prose mostly cannot be checked mechanically, but the
+// *numbers* can, and a number is exactly the part that goes stale: change the
+// interval in schema.sql and the pages go on saying the old one, with nothing
+// failing.
+describe('the retention promise', () => {
+  const read = (path: string) => readFileSync(join(process.cwd(), path), 'utf8');
+  const schema = read('supabase/schema.sql');
+
+  it('is a rule the database actually holds', () => {
+    const sweep = schema.slice(schema.indexOf('function public.sweep_reporter_emails'));
+    expect(sweep).toContain("interval '7 days'");
+    expect(sweep).toContain("interval '90 days'");
+  });
+
+  // Ninety days is the one a reporter has to know, because it is the one that
+  // can take the answer away from them. The week is between the site and its
+  // own mailer.
+  it('and the pages say the number it holds', () => {
+    for (const page of ['src/LegalDocs.tsx', 'src/ReportDialog.tsx']) {
+      expect(read(page), `${page} does not say when the address goes`).toMatch(/ninety days/);
+    }
+  });
+
+  it('and the security policy says where it is done', () => {
+    expect(read('SECURITY.md')).toContain('sweep_reporter_emails');
   });
 });

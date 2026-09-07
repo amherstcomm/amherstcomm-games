@@ -200,7 +200,8 @@ export default function ReportDialog({
               Used only to send you a receipt and the outcome. It isn&apos;t shown with the
               report — not on the page where these get handled, and not in the daily summary,
               which says only that someone asked to be told — and it&apos;s deleted once the
-              outcome has been sent.
+              outcome has been sent, or after ninety days if nobody ever gets to this
+              report.
             </p>
 
             {(result?.state === 'error' || result?.state === 'offline') && (

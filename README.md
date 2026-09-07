@@ -156,7 +156,8 @@ Filing one hands back a **ticket**, and `/report/<ticket>` answers for it: open
 or closed, and how it ended. Nothing else — not the board, not the name, not
 your own words back, and a wrong code reads the same as a real one. An email
 address is optional on top, used only to send a receipt and the eventual
-outcome, and deleted with the report.
+outcome, and deleted with the report -- or swept off a report nobody answers,
+a week after it closes unsent and ninety days after it is filed.
 
 Reports are insert-only with no read-back, capped per subject and per day
 rather than per IP, and nothing about an anonymous reporter is stored beyond an
