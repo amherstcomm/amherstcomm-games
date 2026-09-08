@@ -10,7 +10,7 @@
 // So the fit is shown while somebody types, per board, with the reason when it
 // does not fit.
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Loader2 } from 'lucide-react';
+import Waiting from '@/Waiting';
 import {
   deleteWeaveTheme,
   readWeaveThemes,
@@ -154,7 +154,7 @@ export default function AdminWeaveThemes() {
         several across a month is a month that does not repeat itself.
       </p>
 
-      {themes === null && <Loader2 className="w-4 h-4 animate-spin text-slate-500" />}
+      {themes === null && <Waiting what="the Weave themes" onRetry={() => void pull()} className="my-4" />}
       {refused && <p className="text-sm text-rose-300">{refused}</p>}
 
       {themes !== null && !refused && (

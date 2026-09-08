@@ -9,8 +9,9 @@
 // It carries no reporter address. The digest does, because that is a private
 // inbox; a page is the surface most likely to be read over a shoulder, and you
 // do not need somebody's email to decide what to do about their report.
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Flag } from 'lucide-react';
+import Waiting from '@/Waiting';
 
 import { ownerReports, type QueuedReport } from '@/reports';
 
@@ -27,15 +28,16 @@ function summarise(r: QueuedReport): string {
 export default function ReportQueueView() {
   const [rows, setRows] = useState<QueuedReport[] | null>(null);
 
-  useEffect(() => {
-    let alive = true;
-    ownerReports().then((r) => alive && setRows(r));
-    return () => {
-      alive = false;
-    };
+  // A callback rather than an inline effect, so the failure state below has
+  // something to retry with: asking again is the whole of what somebody can do
+  // when the server did not answer.
+  const pull = useCallback(() => {
+    setRows(null);
+    void ownerReports().then(setRows);
   }, []);
+  useEffect(() => pull(), [pull]);
 
-  if (!rows) return <p className="text-sm text-slate-400">Loading…</p>;
+  if (!rows) return <Waiting what="the open reports" onRetry={pull} />;
 
   return (
     <div className="max-w-2xl mx-auto">

@@ -10,7 +10,7 @@
 // wondering later why a round kept drawing the same words, so the count comes
 // back from the server and is shown.
 import { useCallback, useEffect, useState } from 'react';
-import { Loader2 } from 'lucide-react';
+import Waiting from '@/Waiting';
 import {
   deleteWordList,
   readWordListWords,
@@ -96,7 +96,7 @@ export default function AdminWordLists() {
     await pull();
   }
 
-  if (lists === null) return <Loader2 className="w-4 h-4 animate-spin text-slate-500 m-8" />;
+  if (lists === null) return <Waiting what="the word lists" onRetry={() => void pull()} />;
 
   return (
     <section>

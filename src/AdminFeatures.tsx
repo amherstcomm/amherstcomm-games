@@ -10,7 +10,7 @@
 // one game off would be the form getting in the way. The window is for the one
 // thing an event actually wants: a game a week, appearing on its own.
 import { useCallback, useEffect, useState } from 'react';
-import { Loader2 } from 'lucide-react';
+import Waiting from '@/Waiting';
 import { ALL_SLUGS, ALL_VIEWS, SLUG_NAME, gameFeature } from '@/games';
 import { DIFFICULTIES } from '@/difficulty';
 import { refreshAvailability } from '@/availability';
@@ -184,7 +184,7 @@ export default function AdminFeatures() {
         sessions and nothing else.
       </p>
 
-      {set === null && <Loader2 className="w-4 h-4 animate-spin text-slate-500" />}
+      {set === null && <Waiting what="what this site is offering" onRetry={() => void pull()} className="my-4" />}
       {refused && <p className="text-sm text-rose-300">{explain(refused)}</p>}
       {set !== null && !refused && (
 

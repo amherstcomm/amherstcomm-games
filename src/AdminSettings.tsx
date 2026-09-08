@@ -8,7 +8,7 @@
 // validates properly disagree eventually, and the one people see is the wrong
 // one.
 import { useCallback, useEffect, useState } from 'react';
-import { Loader2 } from 'lucide-react';
+import Waiting from '@/Waiting';
 import { readSiteSettings, setSiteSetting, type SettingRow } from '@/settingsAdmin';
 import { refreshSettings } from '@/settings';
 import { ADMIN_TABS, ADMIN_TITLE, pathOf, type AdminTab } from '@/routes';
@@ -165,7 +165,7 @@ function SiteSettings() {
     void refreshSettings();
   }, [pull]);
 
-  if (rows === null) return <Loader2 className="w-4 h-4 animate-spin text-slate-500 m-8" />;
+  if (rows === null) return <Waiting what="the site settings" onRetry={() => void pull()} />;
   if (refused) return <p className="text-sm text-slate-400">{refused}</p>;
 
   return (
