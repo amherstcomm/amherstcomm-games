@@ -1236,7 +1236,18 @@ switch saved, the feed carried it, and the client dropped it on the way in — a
 control that worked and did nothing. `tests/unit/availability.test.ts` now reads
 the kinds out of the schema and puts each one through the real filter.
 
-All three were invisible to tests that wrote the key by hand on each side.
+A fourth, of the same kind and the largest: **nothing read `difficulty:` at
+all.** The admin portal has offered a switch per difficulty since this shipped;
+it saved, the feed carried it, and the picker above the board went on drawing
+all three — so pressing one dealt a board the deployment had switched off. The
+games and the views were filtered on the way in and the difficulties never
+were. Fixed September 2026: the picker draws what is offered, a player left on
+a difficulty since switched off is moved to one that exists, and one difficulty
+draws no picker at all, the same way a single tab draws no Play/Learn switch.
+The tabs that only *show* results — Home, Stats, the leaderboard — follow the
+same list.
+
+All four were invisible to tests that wrote the key by hand on each side.
 What catches them is `tests/unit/games.test.ts` asserting the two sides derive
 the same set, and a browser test that presses the switch on `/admin` and then
 looks at the menu. The list of

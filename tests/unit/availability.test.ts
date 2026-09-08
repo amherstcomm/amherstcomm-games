@@ -6,6 +6,7 @@
 // everything if somebody hid the lot. A preference can be overruled by the
 // interface; a deployment's decision cannot.
 import { readFileSync } from 'node:fs';
+import { DIFFICULTIES } from '@/difficulty';
 import { join } from 'node:path';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { __setAvailabilityForTest, isOffered, offered } from '@/availability';
@@ -80,5 +81,32 @@ describe('the kinds of thing that can be switched', () => {
     __setAvailabilityForTest(['sandwich:ham']);
     expect(isOffered('sandwich:ham' as never)).toBe(true);
     expect(allowed).toEqual(['difficulty', 'game', 'site', 'view']);
+  });
+});
+
+// The switch that saved and did nothing.
+//
+// `difficulty:*` has been storable since availability shipped, and nothing in
+// the app read it: the picker above the board drew all three whatever the
+// deployment had switched off, so pressing one dealt a board that was supposed
+// to be gone. This asserts the vocabulary end of it — the UI end is in
+// e2e/availability.spec.ts, because a control that renders is not a thing a
+// unit test can see.
+describe('difficulties are switchable like everything else', () => {
+  it('drops the ones that are switched off', () => {
+    expect(offered(['difficulty:extreme'], 'difficulty', DIFFICULTIES)).toEqual(['easy', 'hard']);
+  });
+
+  it('and leaves the rest alone', () => {
+    expect(offered(['game:hive'], 'difficulty', DIFFICULTIES)).toEqual(DIFFICULTIES);
+  });
+
+  // Every difficulty off is a deployment that means it. The caller decides what
+  // that looks like — a picker with nothing in it is not an answer — which is
+  // why this returns the empty list rather than falling back to all three.
+  it('and does not put them back when the answer is none', () => {
+    expect(
+      offered(['difficulty:easy', 'difficulty:hard', 'difficulty:extreme'], 'difficulty', DIFFICULTIES)
+    ).toEqual([]);
   });
 });

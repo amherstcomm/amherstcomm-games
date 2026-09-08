@@ -1,4 +1,5 @@
 import { DIFFICULTIES, DIFFICULTY_LABEL, type Difficulty } from '@/difficulty';
+import { offered, useUnavailable } from '@/availability';
 
 /** Difficulty tabs for the places that only *show* results.
  *
@@ -18,13 +19,19 @@ export default function DifficultyTabs({
   /** describes the tabs for anyone not seeing them */
   label: string;
 }) {
+  // Only what this deployment offers. A tab for a difficulty nobody can play
+  // shows an empty board and reads as a broken page rather than as a setting.
+  const shown = offered(useUnavailable(), 'difficulty', DIFFICULTIES);
+  // Nothing to switch between is not a switch.
+  if (shown.length < 2) return null;
+
   return (
     <div
       role="group"
       aria-label={label}
       className="inline-flex flex-wrap rounded-lg bg-white/5 border border-white/10 p-0.5 gap-0.5"
     >
-      {DIFFICULTIES.map((id) => (
+      {shown.map((id) => (
         <button
           key={id}
           onMouseDown={(e) => e.preventDefault()}
