@@ -686,7 +686,34 @@ function App() {
   //
   // Grid is here too now: it varies by board size, 4x4 then 5x5. Not shown
   // when someone has asked to be left with one puzzle.
-  const showDifficultySwitch = playActive && difficultyMode() === 'all';
+  // The difficulties this deployment is offering, which is not the same
+  // question as which one you are playing.
+  //
+  // The admin portal has had a switch per difficulty since availability went
+  // in, and nothing read it: the switch saved, the picker went on drawing all
+  // three, and pressing one dealt a board the deployment had turned off. The
+  // module's own comment names this failure -- "a switch that saves and does
+  // nothing" -- because site:sessions did it first.
+  const offeredDifficulties = useMemo(
+    () => offered(unavailable, 'difficulty', DIFFICULTIES),
+    [unavailable]
+  );
+
+  // Nothing to choose between is not a choice. One difficulty draws no picker
+  // at all, the same way the Play/Learn switch disappears at one tab -- and
+  // none offered is a deployment that has switched the lot off, where drawing
+  // an empty box would be the interface arguing with it.
+  const showDifficultySwitch =
+    playActive && difficultyMode() === 'all' && offeredDifficulties.length > 1;
+
+  // Somebody left on a difficulty that has since been switched off is moved to
+  // one that exists, rather than being left on a board nobody can deal. Same
+  // shape as the redirect that carries a hidden game's address back to a game
+  // this deployment has.
+  useEffect(() => {
+    if (offeredDifficulties.length === 0) return;
+    if (!offeredDifficulties.includes(level)) setDifficulty(offeredDifficulties[0]);
+  }, [offeredDifficulties, level]);
 
   // The date rides along so the report link can name the board a player is
   // actually looking at. Empty for practice, which is nobody's problem but the
@@ -1145,7 +1172,7 @@ function App() {
                 Difficulty
               </label>
               <div className="inline-flex flex-wrap justify-center max-w-full rounded-xl bg-white/5 border border-white/10 p-1 gap-1">
-                {DIFFICULTIES.map((id) => (
+                {offeredDifficulties.map((id) => (
                   <button
                     key={id}
                     onClick={() => setDifficulty(id)}

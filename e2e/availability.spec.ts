@@ -163,3 +163,41 @@ test('and are there when they are on', async ({ page }) => {
   await page.goto('/join');
   await expect(page.getByText(/Sessions are switched off/i)).toHaveCount(0);
 });
+
+// The switch that saved and did nothing.
+//
+// A difficulty could be turned off in the admin portal since availability went
+// in, and the picker above the board went on drawing all three -- so pressing
+// one dealt a board this deployment had switched off. Nothing in the app read
+// `difficulty:*` at all, which is the same way `site:sessions` first behaved
+// and the reason src/availability.ts warns about it in its own comment.
+test('a difficulty that is switched off is not offered above the board', async ({ page }) => {
+  await site(page, ['difficulty:extreme']);
+  await page.goto('/daily/guess');
+  const picker = page.getByRole('button', { name: 'Extreme', exact: true });
+  await expect(picker).toHaveCount(0);
+  // The other two are untouched: switching one off is not switching the
+  // control off.
+  await expect(page.getByRole('button', { name: 'Easy', exact: true }).first()).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Hard', exact: true }).first()).toBeVisible();
+});
+
+test('and one left on a difficulty since switched off is moved off it', async ({ page }) => {
+  await page.addInitScript(() => {
+    localStorage.setItem('anagrimoire:difficulty:v1', 'extreme');
+  });
+  await site(page, ['difficulty:extreme']);
+  await page.goto('/daily/guess');
+  // Whatever is pressed, it is not the one that is gone -- a board nobody can
+  // deal is worse than a board at another difficulty.
+  await expect(page.getByRole('button', { name: 'Extreme', exact: true })).toHaveCount(0);
+  await expect(page.locator('button[aria-pressed="true"]', { hasText: /Easy|Hard/ }).first()).toBeVisible();
+});
+
+// One difficulty is not a choice, so there is nothing to draw -- the same rule
+// the Play/Learn switch follows when a deployment offers one tab.
+test('and with only one left the picker goes entirely', async ({ page }) => {
+  await site(page, ['difficulty:hard', 'difficulty:extreme']);
+  await page.goto('/daily/guess');
+  await expect(page.getByText('Difficulty', { exact: true })).toHaveCount(0);
+});
