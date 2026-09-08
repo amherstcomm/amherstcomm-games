@@ -12,7 +12,7 @@
 // press, and the reason it refuses is about the whole database rather than
 // about the row being pressed.
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Loader2 } from 'lucide-react';
+import Waiting from '@/Waiting';
 import {
   LADDER,
   ROLE_LABEL,
@@ -123,7 +123,7 @@ export default function AdminPeople() {
     }
   }
 
-  if (people === null) return <Loader2 className="w-4 h-4 animate-spin text-slate-500 m-8" />;
+  if (people === null) return <Waiting what="the people" onRetry={() => void pull()} />;
   if (refused) return <p className="text-sm text-slate-400">{refused}</p>;
 
   // Somebody already listed above should not appear twice; the search is for

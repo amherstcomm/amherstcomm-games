@@ -14,7 +14,7 @@
 // offered and refused: its par is the shortest route through the words a player
 // may use, so narrowing them changes the answer instead of the difficulty.
 import { useCallback, useEffect, useState } from 'react';
-import { Loader2 } from 'lucide-react';
+import Waiting from '@/Waiting';
 import { ALL_SLUGS, SLUG_NAME, type Slug } from '@/games';
 import {
   deleteWordPolicy,
@@ -117,7 +117,7 @@ export default function AdminWordPolicies() {
         day has always done.
       </p>
 
-      {policies === null && <Loader2 className="w-4 h-4 animate-spin text-slate-500" />}
+      {policies === null && <Waiting what="the word rules" onRetry={() => void pull()} className="my-4" />}
       {refused && <p className="text-sm text-rose-300">{refused}</p>}
 
       {policies !== null && !refused && (

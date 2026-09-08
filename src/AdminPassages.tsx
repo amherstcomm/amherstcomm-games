@@ -14,7 +14,7 @@
 // discovering it from a nightly run that quietly used a curated quotation
 // instead is the worst.
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Loader2 } from 'lucide-react';
+import Waiting from '@/Waiting';
 import { deletePassage, readPassages, savePassage, type Passage } from '@/passages';
 import { fitNote, lettersIn, tiersFor } from '@/cryptogramFit';
 import ImportBox from '@/ImportBox';
@@ -144,7 +144,7 @@ export default function AdminPassages() {
         whose length band nothing here fits.
       </p>
 
-      {passages === null && <Loader2 className="w-4 h-4 animate-spin text-slate-500" />}
+      {passages === null && <Waiting what="the passages" onRetry={() => void pull()} className="my-4" />}
       {refused && <p className="text-sm text-rose-300">{refused}</p>}
 
       {passages !== null && !refused && (
