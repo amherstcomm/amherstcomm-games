@@ -6,6 +6,7 @@
 // would drift -- the window's loop body was the only copy until the second
 // publisher needed it.
 import { execFileSync } from 'node:child_process';
+import { themeFor } from './themedDaily.mjs';
 
 /** Today's date where the puzzles roll, which is Eastern. Not the machine's
  *  zone: a VM in UTC would call 8 p.m. Eastern "tomorrow" and treat the board
@@ -40,4 +41,30 @@ export function publishDate(date, dir, baseEnv = process.env) {
   const theming = said.split(/\r?\n/).filter((line) => line.startsWith('Theming '));
   execFileSync('node', ['scripts/publish-puzzles.mjs'], { env, stdio: 'inherit' });
   return theming;
+}
+
+/** Read a published day back and say whether the word list was used.
+ *
+ *  The whole reason to regenerate a day by hand is to get a theme onto it, and
+ *  the one check that proves it happened is the published word board carrying
+ *  the list's own words -- the check ops/preflight.sh makes across a range. Both
+ *  one-day publishers ask it here so they cannot report differently. */
+export async function checkPublished(date, env = process.env, fetchImpl = fetch) {
+  const key = env.SUPABASE_SERVICE_ROLE_KEY;
+  const theme = await themeFor(date, env);
+  const res = await fetchImpl(
+    `${env.SUPABASE_URL}/rest/v1/daily_puzzles?select=payload&env=eq.prod&game=eq.words&puzzle_date=eq.${date}`,
+    { headers: { apikey: key, Authorization: `Bearer ${key}` } }
+  );
+  const [row] = res.ok ? await res.json() : [];
+  if (!row) return { ok: false, message: 'could not be read back after publishing' };
+  if (theme && !row.payload?.themed) {
+    return { ok: false, message: `is covered by "${theme.name}" but was published unthemed` };
+  }
+  return {
+    ok: true,
+    message: theme
+      ? `published, themed from "${theme.name}"`
+      : 'published — no word list covers it, so it is an ordinary day',
+  };
 }

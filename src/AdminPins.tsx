@@ -19,6 +19,12 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Loader2 } from 'lucide-react';
 import { getDictionary } from '@/dictionaries';
+import {
+  describeRequest,
+  readPublishRequests,
+  requestPublish,
+  type PublishRequest,
+} from '@/publishRequests';
 import { useSquares } from '@/useCalculators';
 import { readCoverage, type CoverageDay } from '@/coverage';
 import {
@@ -277,6 +283,62 @@ export default function AdminPins() {
   // "the box on the 8th" usually means all three — so it is the default.
   const [tier, setTier] = useState<string>('');
 
+  // Republishing the chosen day. The page can only ask: the generator runs on
+  // the VM, whose minute timer claims the request, publishes the day through
+  // the same routine as the nightly window, and writes back how it went.
+  const [requests, setRequests] = useState<PublishRequest[]>([]);
+  const [confirmLive, setConfirmLive] = useState(false);
+  const [asking, setAsking] = useState(false);
+  const pullRequests = useCallback(async () => {
+    const res = await readPublishRequests();
+    if (res.ok) setRequests(res.requests);
+  }, []);
+  useEffect(() => void pullRequests(), [pullRequests]);
+
+  // Watched while anything is outstanding, so "waiting" turns into "done"
+  // without a reload -- and not otherwise, because a page left open all day
+  // should not ask the database every ten seconds for nothing.
+  const outstanding = requests.some((r) => r.state === 'waiting' || r.state === 'running');
+  useEffect(() => {
+    if (!outstanding) return;
+    const id = window.setInterval(() => void pullRequests(), 10_000);
+    return () => window.clearInterval(id);
+  }, [outstanding, pullRequests]);
+
+  // A confirmation belongs to the day it was asked about.
+  useEffect(() => setConfirmLive(false), [date]);
+
+  // Eastern, where the puzzles roll, not this browser's zone.
+  const easternToday = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York' }).format(
+    new Date()
+  );
+  const live = Boolean(date) && date <= easternToday;
+
+  async function republish(force: boolean) {
+    if (!date) return;
+    // Asked first, not refused: sometimes regenerating a live day is exactly
+    // what somebody means, and the server takes it with force. What must not
+    // happen is doing it by accident.
+    if (live && !force) {
+      setConfirmLive(true);
+      return;
+    }
+    setAsking(true);
+    const res = await requestPublish(date, force);
+    setAsking(false);
+    setConfirmLive(false);
+    if (!res.ok) {
+      setNote(res.reason ?? 'That did not work');
+      return;
+    }
+    setNote(
+      res.again
+        ? `${date} is already waiting to be published.`
+        : `Asked for ${date}. The publish host looks once a minute.`
+    );
+    await pullRequests();
+  }
+
   useEffect(() => {
     void getDictionary('common').then((words) => setRungs(new Set(words)));
   }, []);
@@ -391,6 +453,59 @@ export default function AdminPins() {
       </div>
 
       {note && <p className="text-xs text-slate-400 mb-3">{note}</p>}
+      {/* Regenerate the day from the settings as they stand now. Mostly the
+          nightly run makes this unnecessary -- it regenerates every day in the
+          fortnight ahead -- so this is for when tonight is too late. */}
+      {date && (
+        <div className="mb-4">
+          <button className={BUTTON} disabled={asking} onClick={() => void republish(false)}>
+            Republish this day
+          </button>
+          <p className="mt-1 text-xs text-slate-500">
+            Regenerates {date} from the settings as they stand now, instead of at
+            03:15 tonight.
+          </p>
+          {confirmLive && (
+            <div
+              role="alert"
+              className="mt-2 rounded-lg border border-amber-400/40 bg-amber-400/10 p-3 text-xs text-amber-200"
+            >
+              <p>
+                {date === easternToday ? 'Today' : date} has already started. Anybody
+                who has played it will find a different board under their saved
+                progress, and results already recorded were for the old one.
+              </p>
+              <button
+                className={BUTTON + ' mt-2'}
+                disabled={asking}
+                onClick={() => void republish(true)}
+              >
+                Republish anyway
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+
+      {requests.length > 0 && (
+        <ul className="mb-4 space-y-1 text-xs" aria-label="Republish requests">
+          {requests.slice(0, 5).map((r) => (
+            <li
+              key={r.id}
+              className={
+                r.state === 'failed'
+                  ? 'text-rose-300'
+                  : r.state === 'done'
+                    ? 'text-emerald-300'
+                    : 'text-slate-400'
+              }
+            >
+              {r.on_date} — {describeRequest(r)}
+            </li>
+          ))}
+        </ul>
+      )}
+
 
       {day && !day.theme && (day.weave ?? []).length === 0 && (
         <p className="text-sm text-amber-300">

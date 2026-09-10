@@ -9376,3 +9376,166 @@ $fn$;
 
 revoke all on function public.theme_coverage(date, date) from public, anon;
 grant execute on function public.theme_coverage(date, date) to authenticated;
+
+-- ---------------------------------------------------------------------------
+-- Publishing a day on request
+-- ---------------------------------------------------------------------------
+/*
+ * The admin portal's "Republish this day", which a page cannot do itself.
+ *
+ * The generator runs on the VM beside this database, because a hosted runner
+ * cannot reach it and a browser certainly cannot run it. So the page files a
+ * row here and the VM's minute timer (ops/drain-publish-requests.sh) claims it,
+ * publishes the day through the same routine as the nightly window, and writes
+ * back how it went. The page reads that back to say "waiting", "publishing
+ * now", or what happened.
+ *
+ * A day that has started is refused without `force`, here and in the command
+ * alike: people have played it, and regenerating it puts a different board
+ * under their saved progress. The rule is enforced where the request is made
+ * rather than only in the page, because the page is the part anybody can edit.
+ *
+ * RLS on and no policy, like every other table here: the functions below are
+ * the whole surface, and the VM reaches it with the service key.
+ */
+create table if not exists public.publish_requests (
+  id uuid primary key default gen_random_uuid(),
+  on_date date not null,
+  force boolean not null default false,
+  state text not null default 'waiting' check (state in ('waiting', 'running', 'done', 'failed')),
+  -- What the publish host said: the list it used, or why it could not.
+  note text check (note is null or char_length(note) <= 500),
+  requested_by uuid references auth.users (id) on delete set null,
+  requested_at timestamptz not null default now(),
+  started_at timestamptz,
+  finished_at timestamptz
+);
+
+create index if not exists publish_requests_waiting_idx
+  on public.publish_requests (requested_at) where state = 'waiting';
+
+alter table public.publish_requests enable row level security;
+revoke all on public.publish_requests from anon, authenticated;
+
+create or replace function public.request_publish(p_date date, p_force boolean default false)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $fn$
+declare
+  -- Eastern, where the puzzles roll: a request made at 9 p.m. in a UTC session
+  -- must not think tomorrow's board has already started.
+  v_today date := (now() at time zone 'America/New_York')::date;
+  v_id uuid;
+begin
+  if not public.can('games.setup') then
+    return jsonb_build_object('ok', false, 'reason', 'not allowed');
+  end if;
+  if p_date is null then
+    return jsonb_build_object('ok', false, 'reason', 'it needs a date');
+  end if;
+  if p_date <= v_today and not coalesce(p_force, false) then
+    return jsonb_build_object('ok', false, 'reason', 'already live');
+  end if;
+  if p_date > v_today + 366 then
+    return jsonb_build_object('ok', false, 'reason', 'more than a year out');
+  end if;
+
+  -- Asking twice while the first is still waiting is asking once. The answer
+  -- says so, so the page can say "already waiting" rather than pretending a
+  -- second publish is on its way.
+  select r.id into v_id
+  from public.publish_requests r
+  where r.on_date = p_date and r.state in ('waiting', 'running')
+  limit 1;
+  if v_id is not null then
+    return jsonb_build_object('ok', true, 'id', v_id, 'again', true);
+  end if;
+
+  insert into public.publish_requests (on_date, force, requested_by)
+  values (p_date, coalesce(p_force, false), (select auth.uid()))
+  returning id into v_id;
+  return jsonb_build_object('ok', true, 'id', v_id, 'again', false);
+end;
+$fn$;
+
+revoke all on function public.request_publish(date, boolean) from public, anon;
+grant execute on function public.request_publish(date, boolean) to authenticated;
+
+-- The most recent requests, for the page. Twenty is more than anybody reads and
+-- keeps a table that only ever grows from being sent whole.
+create or replace function public.publish_requests_sheet()
+returns jsonb
+language sql
+stable
+security definer
+set search_path = ''
+as $fn$
+  select case
+    when not public.can('games.setup')
+      then jsonb_build_object('ok', false, 'reason', 'not allowed')
+    else jsonb_build_object('ok', true, 'requests', coalesce((
+      select jsonb_agg(to_jsonb(x) order by x.requested_at desc)
+      from (
+        select r.id, r.on_date, r.force, r.state, r.note, r.requested_at, r.finished_at
+        from public.publish_requests r
+        order by r.requested_at desc
+        limit 20
+      ) x), '[]'::jsonb))
+  end
+$fn$;
+
+revoke all on function public.publish_requests_sheet() from public, anon;
+grant execute on function public.publish_requests_sheet() to authenticated;
+
+-- The publish host taking the oldest waiting request. `skip locked` so two
+-- hosts -- or a timer that fires while a slow run is still going -- never claim
+-- the same one; and a request left `running` for a quarter of an hour is taken
+-- again, because that is a host that died mid-publish, and leaving the row
+-- running for ever would leave the page saying "publishing now" for ever.
+create or replace function public.claim_publish_request()
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $fn$
+declare
+  v jsonb;
+begin
+  update public.publish_requests r
+     set state = 'running', started_at = now()
+   where r.id = (
+     select q.id
+     from public.publish_requests q
+     where q.state = 'waiting'
+        or (q.state = 'running' and q.started_at < now() - interval '15 minutes')
+     order by q.requested_at
+     for update skip locked
+     limit 1)
+  returning jsonb_build_object('id', r.id, 'on_date', r.on_date, 'force', r.force) into v;
+  return v;
+end;
+$fn$;
+
+revoke all on function public.claim_publish_request() from public, anon, authenticated;
+grant execute on function public.claim_publish_request() to service_role;
+
+-- And writing back how it went. Only a running request can finish: a second
+-- host finishing a row the first already closed is ignored rather than
+-- overwriting the first answer with its own.
+create or replace function public.finish_publish_request(p_id uuid, p_ok boolean, p_note text)
+returns void
+language sql
+security definer
+set search_path = ''
+as $fn$
+  update public.publish_requests
+     set state = case when p_ok then 'done' else 'failed' end,
+         note = left(p_note, 500),
+         finished_at = now()
+   where id = p_id and state = 'running'
+$fn$;
+
+revoke all on function public.finish_publish_request(uuid, boolean, text) from public, anon, authenticated;
+grant execute on function public.finish_publish_request(uuid, boolean, text) to service_role;

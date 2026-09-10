@@ -2119,6 +2119,37 @@ When it finishes it reads the day back and checks the word board carries the
 list's own words — the same check `ops/preflight.sh` makes — so "published"
 means published *themed* when a list covers the day, and says which list.
 
+### From the admin portal
+
+**Choosing a Day → Republish this day** does the same thing as
+`ops/publish-day.sh`, without a shell. The page cannot run the generator — it
+lives here, next to the database — so the button files a request and a second
+timer on this VM picks it up within a minute, publishes the day through the
+same routine as the nightly window, and writes back how it went. The page shows
+*waiting*, *publishing now*, then the answer: which list it used, or why it
+failed.
+
+Install it beside the puzzle timer:
+
+```sh
+sudo cp ops/amherstcomm-games-requests.* /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now amherstcomm-games-requests.timer
+journalctl -u amherstcomm-games-requests -f      # watch one go through
+```
+
+**Without this timer the button still files requests, and nothing publishes
+them** — the page will say *waiting* indefinitely. That is the one way this can
+look like it works and not; `systemctl list-timers | grep amherstcomm` shows
+both timers when it is installed.
+
+The same rule as the command: a day that has started asks first, and goes only
+when confirmed. The server enforces it too, since the page is the part anybody
+can edit, and the host checks once more before publishing — a request for
+tomorrow made at 11:59 p.m. is a request for today a minute later. A request a
+host abandons mid-publish is taken again after a quarter of an hour, so a
+reboot cannot leave the page saying *publishing now* for ever.
+
 ### Before a month that matters
 
 ```sh
