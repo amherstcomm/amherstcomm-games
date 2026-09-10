@@ -758,12 +758,16 @@ function App() {
 
   // Back and Forward reach both halves: the nav reducer, and the game state
   // that only App holds.
+  // Named once so the handler below depends on the function it calls rather
+  // than on the whole routing object, which is a new object every render --
+  // depending on that would re-subscribe the address bar each time.
+  const routingDispatch = routing.dispatch;
   useAddressBar(
     currentRoute,
     useCallback(
       (r: Route) => {
         if (r.kind === 'friend') stashInvite(r.code);
-        routing.dispatch({ type: 'apply', route: r });
+        routingDispatch({ type: 'apply', route: r });
         if (r.kind === 'game') {
           const m = modeOf(r.slug);
           setMode(m);
@@ -775,7 +779,7 @@ function App() {
           }
         }
       },
-      [routing.dispatch]
+      [routingDispatch]
     )
   );
 
@@ -801,7 +805,6 @@ function App() {
 
   useEffect(() => {
     if (!shownViews.includes(currentView)) goToView(shownViews[0]);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [shownViews, currentView, mode]);
 
   // persist tool, per-tool dictionary, and last inputs

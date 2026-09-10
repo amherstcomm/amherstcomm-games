@@ -2089,6 +2089,36 @@ than appends — `publish-puzzles.mjs` sends
 `Prefer: resolution=merge-duplicates` — so a catch-up run repairs rather than
 duplicates.
 
+### Regenerating one day now
+
+```sh
+ops/publish-day.sh 2026-10-08
+ops/publish-day.sh 2026-09-10 --force     a day that has already started
+```
+
+Usually unnecessary. The 03:15 run regenerates **every** day in the fortnight
+window from the settings as they stand that night, so a word list added or
+edited today reaches every future day by tomorrow morning without anybody
+running anything. This is for when tomorrow morning is too late — a list fixed
+at lunch for tomorrow's meeting, a pin changed an hour before a board goes out.
+Days more than a fortnight out need nothing: they pick up the settings on the
+night they enter the window.
+
+The board depends only on the date, the salt and the settings, so this
+publishes exactly what tonight's run would publish for that day. A day
+regenerated here and then again tonight comes out the same unless the settings
+moved in between — which is the point of running it.
+
+**Today and the past are refused without `--force`.** A day that has started is
+a day people have played; regenerating it puts a different board under
+anybody partway through, whose progress was saved against the old one, and
+changes what an already-recorded result was a result *of*. The refusal says so,
+and `--force` says so again before doing it.
+
+When it finishes it reads the day back and checks the word board carries the
+list's own words — the same check `ops/preflight.sh` makes — so "published"
+means published *themed* when a list covers the day, and says which list.
+
 ### Before a month that matters
 
 ```sh
