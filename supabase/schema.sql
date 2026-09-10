@@ -9539,3 +9539,416 @@ $fn$;
 
 revoke all on function public.finish_publish_request(uuid, boolean, text) from public, anon, authenticated;
 grant execute on function public.finish_publish_request(uuid, boolean, text) to service_role;
+
+-- ---------------------------------------------------------------------------
+-- Tournaments
+-- ---------------------------------------------------------------------------
+/*
+ * A tournament is a span of dates with its own difficulty, and rounds inside
+ * it. A round is a span of dates and a list of games, and for its whole span
+ * each of those games has one fixed board: generated once, from the round's
+ * first day, as a third version of that day beside the prod and dev dailies.
+ * Nothing here assumes a length -- a round may be a day or a month, and the
+ * tournament is whatever dates the admin gives it.
+ *
+ * Stored where the dailies are, under env 'round' and dated at the round's
+ * first day, because that is what result_is_plausible looks boards up by: a
+ * round result is checked against the round's board with no new verification
+ * code. Results go in daily_progress the same way, env 'round'.
+ *
+ * One difficulty per tournament, fixed by the admin: everybody plays the same
+ * board, so each game-round has one set of standings and prizes have one
+ * winner. A day belongs to at most one round across every tournament, because
+ * the round board is keyed by its first day and two rounds covering one day
+ * would each claim to be the round.
+ *
+ * RLS on and no policy, like every table here; the functions below are the
+ * whole surface.
+ */
+create table if not exists public.tournaments (
+  id uuid primary key default gen_random_uuid(),
+  name text not null check (char_length(btrim(name)) between 1 and 80),
+  difficulty text not null check (difficulty in ('easy', 'hard', 'extreme')),
+  starts_on date not null,
+  ends_on date not null,
+  created_by uuid references auth.users (id) on delete set null,
+  created_at timestamptz not null default now(),
+  check (ends_on >= starts_on)
+);
+
+create table if not exists public.tournament_rounds (
+  id uuid primary key default gen_random_uuid(),
+  tournament_id uuid not null references public.tournaments (id) on delete cascade,
+  starts_on date not null,
+  ends_on date not null,
+  -- Feed names (words, hive, box, ...) because that is what a published board
+  -- is keyed by. The standings map them to progress names through
+  -- public.games, the one table that holds both.
+  games text[] not null check (cardinality(games) between 1 and 20),
+  check (ends_on >= starts_on)
+);
+
+create index if not exists tournament_rounds_dates_idx
+  on public.tournament_rounds (starts_on, ends_on);
+
+alter table public.tournaments enable row level security;
+alter table public.tournament_rounds enable row level security;
+revoke all on public.tournaments from anon, authenticated;
+revoke all on public.tournament_rounds from anon, authenticated;
+
+-- A round's boards live beside the dailies. The constraint is the one Postgres
+-- named from the inline check on daily_puzzles.env; replaced rather than added
+-- to, so re-applying this file settles.
+alter table public.daily_puzzles drop constraint if exists daily_puzzles_env_check;
+alter table public.daily_puzzles add constraint daily_puzzles_env_check
+  check (env in ('prod', 'dev', 'shared', 'round'));
+
+-- The puzzle day, as daily_puzzle reckons it: Eastern, rolling at 3:15 a.m.
+-- One definition, because "has this round started" and "which board is live"
+-- must agree to the minute, or a round could be refused edits while nobody can
+-- play it yet.
+create or replace function public.puzzle_day()
+returns date
+language sql
+stable
+set search_path = ''
+as $fn$
+  select ((now() at time zone 'America/New_York') - interval '3 hours 15 minutes')::date
+$fn$;
+
+grant execute on function public.puzzle_day() to anon, authenticated, service_role;
+
+create or replace function public.save_tournament(
+  p_id uuid,
+  p_name text,
+  p_difficulty text,
+  p_starts date,
+  p_ends date
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $fn$
+declare
+  v_id uuid := p_id;
+  v_name text := btrim(coalesce(p_name, ''));
+begin
+  if not public.can('games.setup') then
+    return jsonb_build_object('ok', false, 'reason', 'not allowed');
+  end if;
+  if char_length(v_name) = 0 or char_length(v_name) > 80 then
+    return jsonb_build_object('ok', false, 'reason', 'it needs a name');
+  end if;
+  if p_difficulty is null or p_difficulty not in ('easy', 'hard', 'extreme') then
+    return jsonb_build_object('ok', false, 'reason', 'a difficulty is easy, hard or extreme');
+  end if;
+  if p_starts is null or p_ends is null or p_ends < p_starts then
+    return jsonb_build_object('ok', false, 'reason', 'it needs dates, ending on or after it starts');
+  end if;
+
+  if v_id is not null then
+    -- The dates may move, but not out from under a round that is set: a round
+    -- outside its tournament is a round nobody's standings would include.
+    if exists (
+      select 1 from public.tournament_rounds r
+      where r.tournament_id = v_id and (r.starts_on < p_starts or r.ends_on > p_ends)
+    ) then
+      return jsonb_build_object('ok', false, 'reason', 'a round would fall outside those dates');
+    end if;
+    -- And the difficulty is fixed once play has begun: every result so far was
+    -- on the old difficulty's board, and the standings would mix the two.
+    if exists (
+      select 1 from public.tournaments t
+      where t.id = v_id and t.difficulty <> p_difficulty
+    ) and exists (
+      select 1 from public.tournament_rounds r
+      where r.tournament_id = v_id and r.starts_on <= public.puzzle_day()
+    ) then
+      return jsonb_build_object('ok', false, 'reason', 'the difficulty cannot change once a round has started');
+    end if;
+    update public.tournaments
+       set name = v_name, difficulty = p_difficulty, starts_on = p_starts, ends_on = p_ends
+     where id = v_id;
+    if not found then
+      return jsonb_build_object('ok', false, 'reason', 'no such tournament');
+    end if;
+  else
+    insert into public.tournaments (name, difficulty, starts_on, ends_on, created_by)
+    values (v_name, p_difficulty, p_starts, p_ends, (select auth.uid()))
+    returning id into v_id;
+  end if;
+  return jsonb_build_object('ok', true, 'id', v_id);
+end;
+$fn$;
+
+revoke all on function public.save_tournament(uuid, text, text, date, date) from public, anon;
+grant execute on function public.save_tournament(uuid, text, text, date, date) to authenticated;
+
+create or replace function public.delete_tournament(p_id uuid)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $fn$
+begin
+  if not public.can('games.setup') then
+    return jsonb_build_object('ok', false, 'reason', 'not allowed');
+  end if;
+  -- Once anybody could have played it, it is a record rather than a plan. The
+  -- results would survive in daily_progress, but nothing would say which
+  -- tournament they belonged to.
+  if exists (
+    select 1 from public.tournament_rounds r
+    where r.tournament_id = p_id and r.starts_on <= public.puzzle_day()
+  ) then
+    return jsonb_build_object('ok', false, 'reason', 'it has started');
+  end if;
+  delete from public.tournaments where id = p_id;
+  return jsonb_build_object('ok', true);
+end;
+$fn$;
+
+revoke all on function public.delete_tournament(uuid) from public, anon;
+grant execute on function public.delete_tournament(uuid) to authenticated;
+
+create or replace function public.save_round(
+  p_id uuid,
+  p_tournament uuid,
+  p_starts date,
+  p_ends date,
+  p_games text[]
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $fn$
+declare
+  v_id uuid := p_id;
+  v_t record;
+  v_old record;
+  v_games text[];
+begin
+  if not public.can('games.setup') then
+    return jsonb_build_object('ok', false, 'reason', 'not allowed');
+  end if;
+  select * into v_t from public.tournaments where id = p_tournament;
+  if not found then
+    return jsonb_build_object('ok', false, 'reason', 'no such tournament');
+  end if;
+  if p_starts is null or p_ends is null or p_ends < p_starts then
+    return jsonb_build_object('ok', false, 'reason', 'it needs dates, ending on or after it starts');
+  end if;
+  if p_starts < v_t.starts_on or p_ends > v_t.ends_on then
+    return jsonb_build_object('ok', false, 'reason', 'a round has to fall inside its tournament');
+  end if;
+
+  -- Distinct and known. Read off public.games rather than a list kept here: a
+  -- game this site does not publish is a round board nobody could be dealt.
+  select array_agg(distinct g order by g) into v_games
+  from unnest(coalesce(p_games, '{}'::text[])) g;
+  if v_games is null or cardinality(v_games) = 0 then
+    return jsonb_build_object('ok', false, 'reason', 'a round needs at least one game');
+  end if;
+  if exists (select 1 from unnest(v_games) g where g not in (select feed from public.games)) then
+    return jsonb_build_object('ok', false, 'reason', 'that is not a game this site has');
+  end if;
+
+  if exists (
+    select 1 from public.tournament_rounds r
+    where r.id is distinct from v_id
+      and daterange(r.starts_on, r.ends_on, '[]') && daterange(p_starts, p_ends, '[]')
+  ) then
+    return jsonb_build_object('ok', false, 'reason', 'another round already covers some of those days');
+  end if;
+
+  if v_id is not null then
+    select * into v_old from public.tournament_rounds where id = v_id;
+    if not found then
+      return jsonb_build_object('ok', false, 'reason', 'no such round');
+    end if;
+    -- A round that has started is being played: its first day is what its
+    -- boards are keyed by and its games are what people have been dealt. Only
+    -- the end may move, and not into the past.
+    if v_old.starts_on <= public.puzzle_day() then
+      if p_starts <> v_old.starts_on or v_games <> v_old.games then
+        return jsonb_build_object('ok', false, 'reason', 'a round under way can only change its end date');
+      end if;
+      if p_ends < public.puzzle_day() then
+        return jsonb_build_object('ok', false, 'reason', 'a round under way cannot end in the past');
+      end if;
+    end if;
+    update public.tournament_rounds
+       set tournament_id = p_tournament, starts_on = p_starts, ends_on = p_ends, games = v_games
+     where id = v_id;
+  else
+    insert into public.tournament_rounds (tournament_id, starts_on, ends_on, games)
+    values (p_tournament, p_starts, p_ends, v_games)
+    returning id into v_id;
+  end if;
+  return jsonb_build_object('ok', true, 'id', v_id);
+end;
+$fn$;
+
+revoke all on function public.save_round(uuid, uuid, date, date, text[]) from public, anon;
+grant execute on function public.save_round(uuid, uuid, date, date, text[]) to authenticated;
+
+create or replace function public.delete_round(p_id uuid)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $fn$
+begin
+  if not public.can('games.setup') then
+    return jsonb_build_object('ok', false, 'reason', 'not allowed');
+  end if;
+  if exists (
+    select 1 from public.tournament_rounds r
+    where r.id = p_id and r.starts_on <= public.puzzle_day()
+  ) then
+    return jsonb_build_object('ok', false, 'reason', 'it has started');
+  end if;
+  delete from public.tournament_rounds where id = p_id;
+  return jsonb_build_object('ok', true);
+end;
+$fn$;
+
+revoke all on function public.delete_round(uuid) from public, anon;
+grant execute on function public.delete_round(uuid) to authenticated;
+
+-- Every tournament and its rounds, newest first, for the admin page.
+create or replace function public.tournaments_sheet()
+returns jsonb
+language sql
+stable
+security definer
+set search_path = ''
+as $fn$
+  select case
+    when not public.can('games.setup')
+      then jsonb_build_object('ok', false, 'reason', 'not allowed')
+    else jsonb_build_object('ok', true, 'tournaments', coalesce((
+      select jsonb_agg(jsonb_build_object(
+               'id', t.id, 'name', t.name, 'difficulty', t.difficulty,
+               'starts_on', t.starts_on, 'ends_on', t.ends_on,
+               'rounds', coalesce((
+                 select jsonb_agg(jsonb_build_object(
+                          'id', r.id, 'starts_on', r.starts_on, 'ends_on', r.ends_on,
+                          'games', to_jsonb(r.games),
+                          'started', r.starts_on <= public.puzzle_day())
+                        order by r.starts_on)
+                 from public.tournament_rounds r where r.tournament_id = t.id), '[]'::jsonb))
+             order by t.starts_on desc)
+      from public.tournaments t), '[]'::jsonb))
+  end
+$fn$;
+
+revoke all on function public.tournaments_sheet() from public, anon;
+grant execute on function public.tournaments_sheet() to authenticated;
+
+-- What the publish host generates: rounds whose first day falls in a window,
+-- with the difficulty that says which board the standings will read.
+create or replace function public.rounds_to_publish(p_from date, p_until date)
+returns jsonb
+language sql
+stable
+security definer
+set search_path = ''
+as $fn$
+  select coalesce(jsonb_agg(jsonb_build_object(
+           'id', r.id, 'starts_on', r.starts_on, 'ends_on', r.ends_on,
+           'games', to_jsonb(r.games), 'difficulty', t.difficulty)
+         order by r.starts_on), '[]'::jsonb)
+  from public.tournament_rounds r
+  join public.tournaments t on t.id = r.tournament_id
+  where r.starts_on between p_from and p_until
+$fn$;
+
+revoke all on function public.rounds_to_publish(date, date) from public, anon, authenticated;
+grant execute on function public.rounds_to_publish(date, date) to service_role;
+
+-- What is on, for anybody who can open the site: the round covering today, and
+-- where it sits in its tournament. Null when nothing is running, which is most
+-- of the year.
+create or replace function public.current_round()
+returns jsonb
+language sql
+stable
+security definer
+set search_path = ''
+as $fn$
+  select jsonb_build_object(
+           'tournament_id', t.id, 'tournament', t.name, 'difficulty', t.difficulty,
+           'tournament_starts_on', t.starts_on, 'tournament_ends_on', t.ends_on,
+           'round_id', r.id, 'starts_on', r.starts_on, 'ends_on', r.ends_on,
+           'games', to_jsonb(r.games),
+           'number', (select count(*) from public.tournament_rounds q
+                      where q.tournament_id = t.id and q.starts_on <= r.starts_on),
+           'of', (select count(*) from public.tournament_rounds q where q.tournament_id = t.id))
+  from public.tournament_rounds r
+  join public.tournaments t on t.id = r.tournament_id
+  where public.puzzle_day() between r.starts_on and r.ends_on
+  limit 1
+$fn$;
+
+revoke all on function public.current_round() from public;
+grant execute on function public.current_round() to anon, authenticated;
+
+-- A round's board for one game, only while that round is on and only for a
+-- game it includes. The same shape daily_puzzle returns, so a game plays it
+-- through the path it already has.
+create or replace function public.round_puzzle(p_game text)
+returns jsonb
+language sql
+stable
+security definer
+set search_path = ''
+as $fn$
+  select p.payload
+  from public.tournament_rounds r
+  join public.daily_puzzles p
+    on p.env = 'round' and p.game = p_game and p.puzzle_date = r.starts_on
+  where public.puzzle_day() between r.starts_on and r.ends_on
+    and p_game = any (r.games)
+  limit 1
+$fn$;
+
+revoke all on function public.round_puzzle(text) from public;
+grant execute on function public.round_puzzle(text) to anon, authenticated;
+
+/*
+ * First finish counts.
+ *
+ * Nothing stops a daily's finished result being overwritten: the client
+ * restores a finished board rather than dealing it again, and the server lets a
+ * player rewrite their own row. That is tolerable for dailies. It is not for a
+ * round with a prize on it and a board that stays the same for its whole span,
+ * where a second device or a crafted request could replace a poor first
+ * attempt with a rehearsed one.
+ *
+ * So once a round row is completed, its state, result and completion are what
+ * they were. Kept rather than refused: the client pushes after merging, and a
+ * refusal would read as a sync failure, while keeping the first answer is the
+ * rule itself, applied where nobody can edit it.
+ */
+create or replace function public.round_result_is_final()
+returns trigger
+language plpgsql
+set search_path = ''
+as $fn$
+begin
+  if old.env = 'round' and old.completed then
+    new.state := old.state;
+    new.result := old.result;
+    new.completed := true;
+  end if;
+  return new;
+end;
+$fn$;
+
+drop trigger if exists round_result_is_final on public.daily_progress;
+create trigger round_result_is_final
+  before update on public.daily_progress
+  for each row execute function public.round_result_is_final();
