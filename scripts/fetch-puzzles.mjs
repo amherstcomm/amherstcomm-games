@@ -593,7 +593,16 @@ const themeIn = (game) => {
 // the list, the box lost its answer — is passed over with a line in the log,
 // because a board that cannot be built is worse than one somebody did not
 // choose.
-const pins = await pinsFor(etDate);
+// A tournament round's boards: a third version of the round's first day,
+// written as round-daily-*.json beside the prod and dev dailies and published
+// under env 'round' by publishRound (scripts/publishDate.mjs).
+//
+// Pins are a choice about the day's *daily*, so a round run ignores them.
+// Applying one would make the round's board the same puzzle as the daily
+// everybody played that morning, and a round board that has already been seen
+// is not a round board.
+const ROUND = process.env.PUZZLES_ROUND === '1';
+const pins = ROUND ? {} : await pinsFor(etDate);
 const pinnedCount = Object.keys(pins).length;
 if (pinnedCount > 0) {
   console.log(`${pinnedCount} pinned ${pinnedCount === 1 ? 'game' : 'games'} for ${etDate}`);
@@ -620,9 +629,9 @@ if (weaveThemesToday.length > 0) {
 }
 if (theme) console.log(`Theming ${etDate} from "${theme.name}" (${theme.words.length} words)`);
 
-for (const variant of ['', 'dev']) {
+for (const variant of ROUND ? ['round'] : ['', 'dev']) {
   const salt = variant ? `-${variant}` : '';
-  const prefix = variant ? 'dev-' : '';
+  const prefix = variant ? `${variant}-` : '';
   const stamp = new Date().toISOString();
 
   // guess words: one per length 3-12. Each length is its own daily stream, so

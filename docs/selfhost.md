@@ -2150,6 +2150,37 @@ tomorrow made at 11:59 p.m. is a request for today a minute later. A request a
 host abandons mid-publish is taken again after a quarter of an hour, so a
 reboot cannot leave the page saying *publishing now* for ever.
 
+### Tournaments
+
+A tournament is a span of dates with one difficulty, fixed by the admin, and
+rounds inside it. A round is its own span of dates and a list of games, and for
+the whole span each of those games has **one board**: generated once, from the
+round's first day, as a third version of that day beside the prod and dev
+dailies. Nothing assumes a length — a round can be a day or most of a month.
+The only rule is that a day belongs to at most one round, across every
+tournament, because a round's board is keyed by its first day.
+
+The nightly window publishes each round the night before it starts, and
+regenerates it each night until then (the same board unless the settings moved).
+**A round under way is never regenerated** — its board has been played. A
+round set up on the morning it starts is published by the next run, or at once
+with `node scripts/publish-rounds.mjs` from the checkout (with the publish
+credentials in the environment).
+
+Round boards live in `daily_puzzles` under env `round`, dated at the round's
+first day, and round results in `daily_progress` the same way — which is what
+`result_is_plausible` looks boards up by, so a round result is checked against
+the round's board with no new verification code.
+
+**First finish counts, and the server holds it.** Nothing stops a daily's
+finished result being rewritten, which is tolerable for a daily and not for a
+round with a prize on it: once a round row is completed, a trigger keeps its
+first state and result whatever is written after. Kept rather than refused, so a
+second device merging in reads as a normal sync rather than an error.
+
+Pins apply to the daily only. Applied to the round too, they would make the
+round's board the same puzzle as the daily everybody played that morning.
+
 ### Before a month that matters
 
 ```sh
