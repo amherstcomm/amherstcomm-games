@@ -20,6 +20,7 @@ import AdminWeaveThemes from '@/AdminWeaveThemes';
 import AdminPassages from '@/AdminPassages';
 import AdminPins from '@/AdminPins';
 import ThemeCoverage from '@/ThemeCoverage';
+import AdminTournaments from '@/AdminTournaments';
 
 const FIELD =
   'w-full rounded-lg bg-white/5 border border-white/15 px-3 py-2 text-sm text-slate-200 ' +
@@ -211,6 +212,9 @@ const PANEL: Record<AdminTab, () => JSX.Element> = {
   // and several Weave themes with overlapping windows, and whether it is
   // covered is a question no single one of them can answer.
   coverage: ThemeCoverage,
+  // After the month's words, because a tournament is played on them: its
+  // rounds' boards are that day's settings, dealt once and kept.
+  tournaments: AdminTournaments,
   people: AdminPeople,
 };
 

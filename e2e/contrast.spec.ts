@@ -26,6 +26,10 @@ const ROUTES = [
   // palette and rendered an input at 1.05:1 in this very combination. It is
   // behind a capability, so the sweep would have skipped it and did.
   ['admin', '/admin/lists'],
+  // Tournaments bring their own states -- a chosen game chip on the accent, a
+  // round's "under way" in the accent on a tinted row -- that no other page
+  // draws, so they are swept here rather than assumed from their neighbours.
+  ['tournaments', '/admin/tournaments'],
 ] as const;
 
 for (const palette of PALETTES) {
@@ -50,7 +54,29 @@ for (const palette of PALETTES) {
             ? { ok: true, lists: [] }
             : url.includes('word_policies_sheet')
               ? { ok: true, policies: [] }
-              : { ok: true };
+              : url.includes('tournaments_sheet')
+                ? {
+                    ok: true,
+                    tournaments: [
+                      {
+                        id: 't1',
+                        name: 'Ownership Cup',
+                        difficulty: 'hard',
+                        starts_on: '2026-01-01',
+                        ends_on: '2027-12-31',
+                        rounds: [
+                          {
+                            id: 'r1',
+                            starts_on: '2026-01-01',
+                            ends_on: '2027-12-30',
+                            games: ['hive', 'box'],
+                            started: true,
+                          },
+                        ],
+                      },
+                    ],
+                  }
+                : { ok: true };
         return route.fulfill({
           status: 200,
           contentType: 'application/json',
@@ -72,6 +98,16 @@ for (const palette of PALETTES) {
         // field that was invisible is in it.
         if (name === 'admin') {
           await page.getByRole('button', { name: 'New list' }).click();
+        }
+        // A round form open with one game chosen, so the chip's selected state
+        // is on screen beside the "under way" label on the round above it.
+        if (name === 'tournaments') {
+          await page.getByRole('button', { name: 'Add a round' }).click();
+          await page
+            .getByRole('group', { name: 'Games in this round' })
+            .getByRole('button')
+            .first()
+            .click();
         }
 
         const results = await new AxeBuilder({ page }).withRules(['color-contrast']).analyze();
