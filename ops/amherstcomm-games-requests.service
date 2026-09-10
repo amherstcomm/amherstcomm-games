@@ -1,0 +1,27 @@
+# Publish the days somebody asked for from the admin portal.
+#
+# The button on Choosing a Day cannot run the generator -- it lives here, next
+# to the database -- so it files a request and this picks it up. Each run takes
+# the oldest waiting requests, publishes each through the same routine as the
+# nightly window, and writes back how it went for the page to show.
+#
+# Install alongside the puzzle timer (edit the paths and user as there):
+#   sudo cp ops/amherstcomm-games-requests.* /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now amherstcomm-games-requests.timer
+#
+# Watch it:
+#   journalctl -u amherstcomm-games-requests -f
+
+[Unit]
+Description=Publish days requested from the admin portal
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+User=rtetzloff
+WorkingDirectory=/home/rtetzloff/git/amherstcomm-games
+# Through bash for the reason the puzzle unit gives: the executable bit is set
+# in the index but this repository is authored where chmod records nothing.
+ExecStart=/bin/bash /home/rtetzloff/git/amherstcomm-games/ops/drain-publish-requests.sh

@@ -18,8 +18,7 @@
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { themeFor } from './themedDaily.mjs';
-import { easternToday, publishDate } from './publishDate.mjs';
+import { checkPublished, easternToday, publishDate } from './publishDate.mjs';
 
 const args = process.argv.slice(2);
 const force = args.includes('--force');
@@ -73,24 +72,10 @@ if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date) || Number.isNaN(Date.parse(`${dat
 
     // Said, not assumed: the whole reason this exists is to get a theme onto a
     // day, and the one check that proves it happened is the published board
-    // carrying the list's own words. The same check preflight makes.
-    const theme = await themeFor(date, process.env);
-    const res = await fetch(
-      `${SUPABASE_URL}/rest/v1/daily_puzzles?select=payload&env=eq.prod&game=eq.words&puzzle_date=eq.${date}`,
-      { headers: { apikey: KEY, Authorization: `Bearer ${KEY}` } }
-    );
-    const [row] = res.ok ? await res.json() : [];
-    if (!row) {
-      fail(`\nPublished, but ${date} could not be read back — check ops/preflight.sh.`);
-    } else if (theme && !row.payload?.themed) {
-      fail(
-        `\n${date} is covered by "${theme.name}" but published unthemed. ` +
-          'The generator did not use the list — run ops/preview-month.sh for that day to see why.'
-      );
-    } else {
-      console.log(
-        `\n${date} published${theme ? `, themed from "${theme.name}"` : ' — no word list covers it, so it is an ordinary day'}.`
-      );
-    }
+    // carrying the list's own words. The same check preflight makes, and the
+    // same function the admin portal's requests are checked with.
+    const check = await checkPublished(date, process.env);
+    if (check.ok) console.log(`\n${date} ${check.message}.`);
+    else fail(`\n${date} ${check.message}. Run ops/preview-month.sh for that day to see why.`);
   }
 }

@@ -1,0 +1,20 @@
+# Every minute: the page tells somebody their day is waiting, and a minute is
+# the longest that sentence should be true.
+#
+# Cheap when there is nothing to do -- one RPC that answers "nothing waiting"
+# and a container that exits -- and a oneshot service never overlaps itself, so
+# a publish that takes longer than a minute delays the next look rather than
+# starting a second one beside it.
+#
+# Not Persistent: a minute missed while the VM was off is not worth catching up
+# on at boot; the next minute will look anyway.
+
+[Unit]
+Description=Look for days requested from the admin portal
+
+[Timer]
+OnCalendar=*-*-* *:*:00
+AccuracySec=5s
+
+[Install]
+WantedBy=timers.target
