@@ -56,6 +56,7 @@ export const ADMIN_TABS = [
   'passages',
   'pins',
   'coverage',
+  'tournaments',
   'people',
 ] as const;
 export type AdminTab = (typeof ADMIN_TABS)[number];
@@ -178,6 +179,7 @@ export const ADMIN_TITLE: Record<AdminTab, string> = {
   passages: 'Cryptogram passages',
   pins: 'Choosing a day',
   coverage: 'Coverage',
+  tournaments: 'Tournaments',
   people: 'Who may do what',
 };
 

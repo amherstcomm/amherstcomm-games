@@ -2181,6 +2181,12 @@ second device merging in reads as a normal sync rather than an error.
 Pins apply to the daily only. Applied to the round too, they would make the
 round's board the same puzzle as the daily everybody played that morning.
 
+**Setting one up** is `/admin/tournaments`: a tournament with its name,
+difficulty and dates, then its rounds, each with its own dates and the games in
+it. The page offers what the database will take — a round under way shows only
+its end date, and a finished round offers nothing — and shows the database's
+own sentence when it refuses, so the rule and its wording live in one place.
+
 ### Before a month that matters
 
 ```sh
