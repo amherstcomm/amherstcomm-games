@@ -9,11 +9,17 @@ import {
 import { CornerDownLeft, Delete, RefreshCw, Shuffle, Timer } from 'lucide-react';
 import { formatElapsed, useUpTimer } from '@/useUpTimer';
 import {
-  difficulty,
   onDifficultyChange,
   resolveDifficulty,
   type Difficulty,
 } from '@/difficulty';
+import {
+  channelDifficulty,
+  channelEnv,
+  channelStoreKey,
+  useBoardChannel,
+  type BoardChannel,
+} from '@/boardChannel';
 import type { LetterState } from '@/GuessGame';
 import { fetchDailyData } from '@/dailyData';
 import DailyStats from '@/DailyStats';
@@ -100,15 +106,17 @@ function sanitizeRecord(r: unknown): HiveRecord | null {
 
 // An incoming /daily/ or /play/ link decides which board is waiting; without one
 // we keep whatever the player last had open.
-function loadStore(): HiveStore {
-  const store = readStore();
+function loadStore(channel: BoardChannel): HiveStore {
+  const store = readStore(channelStoreKey(HIVE_KEY, channel));
+  // A round is always its own board; the address bar is about the daily.
+  if (channel.kind !== 'daily') return { ...store, dailyMode: true };
   const forced = dailyIntent('bee');
   return forced === null ? store : { ...store, dailyMode: forced };
 }
 
-function readStore(): HiveStore {
+function readStore(key: string): HiveStore {
   try {
-    const raw = siteStore.getItem(HIVE_KEY);
+    const raw = siteStore.getItem(key);
     if (!raw) return DEFAULT_STORE;
     const p = JSON.parse(raw);
     return {
@@ -142,7 +150,8 @@ const HiveGame = forwardRef<
     onLetterStates: (states: Record<string, LetterState>) => void;
   }
 >(function HiveGame({ standardWords, commonWords, onLetterStates, practiceWords }, ref) {
-  const [store, setStore] = useState<HiveStore>(loadStore);
+  const channel = useBoardChannel();
+  const [store, setStore] = useState<HiveStore>(() => loadStore(channel));
   const [themed, setThemed] = useState<string[]>([]);
   // What the day said this board takes: its own words alone, or both.
   const [accept, setAccept] = useState<'both' | 'themed'>('both');
@@ -157,20 +166,20 @@ const HiveGame = forwardRef<
   // published, so the server has nothing to look up and the board itself is
   // the only evidence there can be. reportDaily drops it on a daily, which is
   // reported by naming it instead.
-  useEffect(
-    () => reportDaily('bee', store.dailyMode, store.dailyDate, store.practice),
-    [store.dailyMode, store.dailyDate, store.practice]
-  );
-  useEffect(
-    () => offerDailySwitch('bee', (d) => setStore((prev) => ({ ...prev, dailyMode: d }))),
-    []
-  );
+  useEffect(() => {
+    if (channel.kind !== 'daily') return;
+    reportDaily('bee', store.dailyMode, store.dailyDate, store.practice);
+  }, [store.dailyMode, store.dailyDate, store.practice, channel.kind]);
+  useEffect(() => {
+    if (channel.kind !== 'daily') return;
+    return offerDailySwitch('bee', (d) => setStore((prev) => ({ ...prev, dailyMode: d })));
+  }, [channel.kind]);
   const [current, setCurrent] = useState('');
   const [flash, setFlash] = useState<{ text: string; good: boolean } | null>(null);
   // The difficulty this board actually is. Usually the one asked for, but a
   // feed generated before difficulty existed only has the easy board, and a
   // result has to be recorded as what was played rather than what was wanted.
-  const [playedAt, setPlayedAt] = useState<Difficulty>(difficulty);
+  const [playedAt, setPlayedAt] = useState<Difficulty>(() => channelDifficulty(channel));
   // Changing difficulty means a different board, so the feed has to be read
   // again. A storage write re-renders nothing on its own.
   const [difficultyTick, setDifficultyTick] = useState(0);
@@ -192,19 +201,19 @@ const HiveGame = forwardRef<
 
   useEffect(() => {
     try {
-      siteStore.setItem(HIVE_KEY, JSON.stringify(store));
+      siteStore.setItem(channelStoreKey(HIVE_KEY, channel), JSON.stringify(store));
     } catch {
       // best-effort persistence
     }
-  }, [store]);
+  }, [store, channel]);
 
   // fetch today's generated hive once
   useEffect(() => {
     let alive = true;
-    fetchDailyData('bee')
+    fetchDailyData('bee', channel.kind)
       .then((raw) => {
         if (!alive) return;
-        const chosen = resolveDifficulty(raw, difficulty());
+        const chosen = resolveDifficulty(raw, channelDifficulty(channel));
         if (!chosen.board) throw new Error('bad payload');
         setPlayedAt(chosen.difficulty);
         // the date lives at the top level; the board's own fields come from
@@ -236,7 +245,7 @@ const HiveGame = forwardRef<
     return () => {
       alive = false;
     };
-  }, [difficultyTick]);
+  }, [difficultyTick, channel]);
 
   const commonSet = useMemo(() => (commonWords ? new Set(commonWords) : null), [commonWords]);
 
@@ -332,6 +341,7 @@ const HiveGame = forwardRef<
         }
       : null,
     active: store.dailyMode,
+    env: channelEnv(channel),
   });
 
   // thinking time: counts while the hive is visible and unfinished
@@ -393,14 +403,17 @@ const HiveGame = forwardRef<
     }
     const pangram = isPangram(word);
     const newScore = score + wordScore(word, pangram, themedSet);
-    recordHiveWord(
-      store.dailyMode,
-      pangram,
-      newScore,
-      maxScore > 0 && score < geniusAt && newScore >= geniusAt,
-      maxScore > 0 && newScore >= maxScore,
-      store.dailyMode ? store.dailyDate || null : null
-    );
+    // A round's result lives on the server; it is not part of the daily streaks.
+    if (channel.kind === 'daily') {
+      recordHiveWord(
+        store.dailyMode,
+        pangram,
+        newScore,
+        maxScore > 0 && score < geniusAt && newScore >= geniusAt,
+        maxScore > 0 && newScore >= maxScore,
+        store.dailyMode ? store.dailyDate || null : null
+      );
+    }
     updateRecord((r) => ({ ...r, found: [word, ...r.found] }));
     const points = wordScore(word, pangram, themedSet);
     showFlash(
@@ -459,18 +472,22 @@ const HiveGame = forwardRef<
 
   return (
     <div className="text-center">
-      <DailyToggle
-        daily={store.dailyMode}
-        onChange={(d) => {
-          setCurrent('');
-          setStore((prev) => ({ ...prev, dailyMode: d }));
-        }}
-      />
+      {/* A round has no practice board and no daily to switch to. */}
+      {channel.kind === 'daily' && (
+        <DailyToggle
+          daily={store.dailyMode}
+          onChange={(d) => {
+            setCurrent('');
+            setStore((prev) => ({ ...prev, dailyMode: d }));
+          }}
+        />
+      )}
 
       {loading && <p className="text-sm text-slate-400 py-8">Loading…</p>}
       {store.dailyMode && dailyError && !record && (
         <p className="text-sm text-danger py-8">
-          Couldn&apos;t fetch today&apos;s letters — try Practice instead.
+          Couldn&apos;t fetch today&apos;s letters
+          {channel.kind === 'daily' ? ' — try Practice instead.' : '.'}
         </p>
       )}
 

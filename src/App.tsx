@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState, useEffect, useRef } from 'react';
-import { X, BookOpen, Grid3x3, Shuffle, Hexagon, Keyboard, Delete, Info, Square, Gamepad2, CornerDownLeft, LayoutGrid, Puzzle, BarChart3, UserRound, Scale, Settings, Home, Table2, KeyRound } from 'lucide-react';
+import { X, BookOpen, Grid3x3, Shuffle, Hexagon, Keyboard, Delete, Info, Square, Gamepad2, CornerDownLeft, LayoutGrid, Puzzle, BarChart3, UserRound, Scale, Settings, Home, Table2, KeyRound, Trophy } from 'lucide-react';
 import LearnMode, { type LearnModeHandle } from '@/LearnMode';
 import type { Session } from '@supabase/supabase-js';
 import StatsModal from '@/StatsModal';
@@ -42,6 +42,9 @@ import ReportMenu from '@/ReportMenu';
 import { amOwner } from '@/reports';
 import TicketView from '@/TicketView';
 import ReportQueueView from '@/ReportQueueView';
+import TournamentView from '@/TournamentView';
+import { BoardChannelContext, DAILY_CHANNEL, type BoardChannel } from '@/boardChannel';
+import { readCurrentRound, type CurrentRound } from '@/rounds';
 import LiveSession from '@/LiveSession';
 import SessionEditor from '@/SessionEditor';
 import AdminSettings from '@/AdminSettings';
@@ -258,6 +261,7 @@ function App() {
     nav.page.kind === 'ticket' ||
     nav.page.kind === 'reportAction' ||
     nav.page.kind === 'reportQueue' ||
+    (nav.page.kind === 'tournament' && !nav.page.slug) ||
     nav.page.kind === 'live' ||
     nav.page.kind === 'sessions' ||
     nav.page.kind === 'admin' ||
@@ -686,6 +690,47 @@ function App() {
   //
   // Grid is here too now: it varies by board size, 4x4 then 5x5. Not shown
   // when someone has asked to be left with one puzzle.
+  // A tournament round, when one is on. Asked once, and again whenever the
+  // tournament's own page is opened, so a round that started while the tab sat
+  // open is found rather than missed. Undefined while asking, null when nothing
+  // is running -- which is most of the year.
+  const [round, setRound] = useState<CurrentRound | null | undefined>(undefined);
+  const tournamentPage = nav.page.kind === 'tournament' ? nav.page : null;
+  const onTournamentPage = tournamentPage !== null;
+  useEffect(() => {
+    let alive = true;
+    void readCurrentRound().then((res) => {
+      if (alive) setRound(res.ok ? res.round : null);
+    });
+    return () => {
+      alive = false;
+    };
+  }, [onTournamentPage]);
+
+  // /tournament/<game>: that game, on the round's board. The address names the
+  // game, so the game it names is the one on screen.
+  useEffect(() => {
+    if (!tournamentPage?.slug) return;
+    setMode(modeOf(tournamentPage.slug));
+    setLearnMode(false);
+  }, [tournamentPage?.slug]);
+
+  // On a tournament game's page, whatever the round can say about it: the
+  // round's channel when the round lists this game, and nothing otherwise --
+  // a game the round does not include is not played on the round's board, and
+  // is not quietly played as the daily under the round's address either.
+  const inRound = Boolean(tournamentPage?.slug);
+  const roundChannel = useMemo<Extract<BoardChannel, { kind: 'round' }> | null>(() => {
+    if (!tournamentPage?.slug || !round) return null;
+    if (!round.games.includes(FEED_NAME[modeOf(tournamentPage.slug)])) return null;
+    return {
+      kind: 'round',
+      difficulty: round.difficulty,
+      startsOn: round.starts_on,
+      roundId: round.round_id,
+    };
+  }, [tournamentPage?.slug, round]);
+
   // The difficulties this deployment is offering, which is not the same
   // question as which one you are playing.
   //
@@ -704,7 +749,7 @@ function App() {
   // none offered is a deployment that has switched the lot off, where drawing
   // an empty box would be the interface arguing with it.
   const showDifficultySwitch =
-    playActive && difficultyMode() === 'all' && offeredDifficulties.length > 1;
+    playActive && difficultyMode() === 'all' && offeredDifficulties.length > 1 && !inRound;
 
   // Somebody left on a difficulty that has since been switched off is moved to
   // one that exists, rather than being left on a board nobody can deal. Same
@@ -1053,6 +1098,7 @@ function App() {
           <>
           {reportPage?.kind === 'ticket' && <TicketView ticket={reportPage.ticket} />}
           {reportPage?.kind === 'reportQueue' && <ReportQueueView />}
+          {reportPage?.kind === 'tournament' && <TournamentView round={round} link={pageLink} />}
           {/* Switched off means refused at the address too, the same as a
               game. Hiding the link alone would leave a session playable to
               whoever had the QR code from last week, which is the opposite of
@@ -1088,6 +1134,17 @@ function App() {
           </>
         ) : (
           <>
+          {/* A round being on is worth a line on the front page: it is the one
+              thing here with a deadline. */}
+          {atHome && round && (
+            <RouteLink
+              {...pageLink({ kind: 'tournament', slug: null })}
+              className="mb-6 flex items-center gap-2 rounded-xl border border-accent/40 bg-accent/10 px-4 py-3 text-sm font-semibold text-white hover:bg-accent/20"
+            >
+              <Trophy className="w-4 h-4 text-accent shrink-0" aria-hidden="true" />
+              {round.tournament}: round {round.number} of {round.of} is on
+            </RouteLink>
+          )}
           {atHome && (
             <HomeView
               modes={shownModes}
@@ -1107,11 +1164,54 @@ function App() {
 
           {!atHome && (
           <>
+          {/* On a round board: which round, what it asks, and the way back to the
+              rest of it. Said above the board rather than in a corner, because
+              "one attempt, the first finish counts" is the thing somebody needs
+              to know before they touch it. */}
+          {inRound && round && roundChannel && (
+            <section className="mb-6 rounded-xl border border-accent/40 bg-accent/10 px-4 py-3 text-sm" aria-label="Tournament round">
+              <p className="font-semibold text-white flex items-center gap-2">
+                <Trophy className="w-4 h-4 text-accent shrink-0" aria-hidden="true" />
+                {round.tournament} · Round {round.number} of {round.of}
+              </p>
+              <p className="mt-1 text-slate-300">
+                {DIFFICULTY_LABEL[round.difficulty]} · until {round.ends_on}. One attempt: your
+                first finish is the one that counts.{' '}
+                <RouteLink
+                  {...pageLink({ kind: 'tournament', slug: null })}
+                  className="underline underline-offset-2 hover:text-white"
+                >
+                  All games in this round
+                </RouteLink>
+              </p>
+            </section>
+          )}
+          {inRound && round === undefined && (
+            <p className="text-sm text-slate-400 py-8 text-center">Loading the round…</p>
+          )}
+          {inRound && round !== undefined && !roundChannel && (
+            <p className="text-sm text-slate-400 py-8 text-center">
+              {round ? "That game isn't in this round." : 'No tournament round is on today.'}{' '}
+              <RouteLink
+                {...pageLink({ kind: 'tournament', slug: null })}
+                className="underline underline-offset-2 hover:text-white"
+              >
+                See the tournament
+              </RouteLink>
+            </p>
+          )}
+          {/* The games, in whichever channel this page is: the day's, or the
+              round's. Keyed by the channel so moving between the two remounts
+              the game rather than carrying one board's state into the other. */}
+          {(!inRound || roundChannel) && (
+          <BoardChannelContext.Provider value={roundChannel ?? DAILY_CHANNEL}>
+          <div key={roundChannel ? `round:${roundChannel.roundId}` : 'daily'}>
           {/* Only where there's a Learn tab to point at, and only until it's
               been answered either way. `currentView` keeps it off the Learn tab
               itself, where it would be telling someone about the page they're
               already reading. */}
           {!onboarded &&
+            !inRound &&
             // signed in, the account gets the deciding vote — wait for it rather
             // than flashing "new here?" at someone who answered on another device
             (!session || settingsPulled) &&
@@ -1131,7 +1231,7 @@ function App() {
               since a switch with one position is just clutter. Hiding Solve and
               Learn is how the site becomes a game site rather than a tool with
               games attached. */}
-          <section className={`mb-7 text-center ${shownViews.length > 1 ? '' : 'hidden'}`}>
+          <section className={`mb-7 text-center ${shownViews.length > 1 && !inRound ? '' : 'hidden'}`}>
             {/* wraps rather than overflowing: at 320px with the largest text
                 this row is wider than the viewport, and the page clips its
                 horizontal overflow, so Learn was cut off with no way to reach
@@ -1368,6 +1468,9 @@ function App() {
               solve view, which stopped being reachable when 'solve' came out of
               VIEWS -- and stayed in the bundle for a fortnight after. */}
           </>
+          )}
+          </div>
+          </BoardChannelContext.Provider>
           )}
           </>
           )}

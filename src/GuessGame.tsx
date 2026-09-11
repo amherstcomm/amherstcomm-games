@@ -9,11 +9,17 @@ import {
 import { RefreshCw, Timer, Trophy } from 'lucide-react';
 import { fetchDailyData } from '@/dailyData';
 import {
-  difficulty,
   onDifficultyChange,
   resolveDifficulty,
   type Difficulty,
 } from '@/difficulty';
+import {
+  channelDifficulty,
+  channelEnv,
+  channelStoreKey,
+  useBoardChannel,
+  type BoardChannel,
+} from '@/boardChannel';
 import DailyStats from '@/DailyStats';
 import MobileKeyInput from '@/MobileKeyInput';
 import ShareButton from '@/ShareButton';
@@ -56,15 +62,17 @@ const DEFAULT_STORE: PlayStore = {
 
 // An incoming /daily/ or /play/ link decides which board is waiting; without one
 // we keep whatever the player last had open.
-function loadStore(): PlayStore {
-  const store = readStore();
+function loadStore(channel: BoardChannel): PlayStore {
+  const store = readStore(channelStoreKey(PLAY_KEY, channel));
+  // A round is always its own board; the address bar is about the daily.
+  if (channel.kind !== 'daily') return { ...store, dailyMode: true };
   const forced = dailyIntent('pattern');
   return forced === null ? store : { ...store, dailyMode: forced };
 }
 
-function readStore(): PlayStore {
+function readStore(key: string): PlayStore {
   try {
-    const raw = siteStore.getItem(PLAY_KEY);
+    const raw = siteStore.getItem(key);
     if (!raw) return DEFAULT_STORE;
     const p = JSON.parse(raw);
     return {
@@ -118,7 +126,8 @@ const GuessGame = forwardRef<
     onLetterStates: (states: Record<string, LetterState>) => void;
   }
 >(function GuessGame({ length, commonWords, fullWords, onLetterStates, practiceWords }, ref) {
-  const [store, setStore] = useState<PlayStore>(loadStore);
+  const channel = useBoardChannel();
+  const [store, setStore] = useState<PlayStore>(() => loadStore(channel));
   const { practiceAllowed } = usePrefs();
   // pinned to the daily: someone who switched practice off shouldn't be left
   // looking at a practice board they can no longer leave
@@ -130,19 +139,19 @@ const GuessGame = forwardRef<
   // published, so the server has nothing to look up and the board itself is
   // the only evidence there can be. reportDaily drops it on a daily, which is
   // reported by naming it instead.
-  useEffect(
-    () => reportDaily('pattern', store.dailyMode, store.dailyDate, store.practice),
-    [store.dailyMode, store.dailyDate, store.practice]
-  );
-  useEffect(
-    () => offerDailySwitch('pattern', (d) => setStore((prev) => ({ ...prev, dailyMode: d }))),
-    []
-  );
+  useEffect(() => {
+    if (channel.kind !== 'daily') return;
+    reportDaily('pattern', store.dailyMode, store.dailyDate, store.practice);
+  }, [store.dailyMode, store.dailyDate, store.practice, channel.kind]);
+  useEffect(() => {
+    if (channel.kind !== 'daily') return;
+    return offerDailySwitch('pattern', (d) => setStore((prev) => ({ ...prev, dailyMode: d })));
+  }, [channel.kind]);
   const [dailyData, setDailyData] = useState<{ date: string; words: Record<string, string> } | null>(null);
   // The difficulty this board actually is. Usually the one asked for, but a
   // feed generated before difficulty existed only has the easy board, and a
   // result has to be recorded as what was played rather than what was wanted.
-  const [playedAt, setPlayedAt] = useState<Difficulty>(difficulty);
+  const [playedAt, setPlayedAt] = useState<Difficulty>(() => channelDifficulty(channel));
   // Changing difficulty means a different board, so the feed has to be read
   // again. A storage write re-renders nothing on its own.
   const [difficultyTick, setDifficultyTick] = useState(0);
@@ -167,19 +176,19 @@ const GuessGame = forwardRef<
 
   useEffect(() => {
     try {
-      siteStore.setItem(PLAY_KEY, JSON.stringify(store));
+      siteStore.setItem(channelStoreKey(PLAY_KEY, channel), JSON.stringify(store));
     } catch {
       // best-effort persistence
     }
-  }, [store]);
+  }, [store, channel]);
 
   // fetch today's daily words once
   useEffect(() => {
     let alive = true;
-    fetchDailyData('pattern')
+    fetchDailyData('pattern', channel.kind)
       .then((raw) => {
         if (!alive) return;
-        const chosen = resolveDifficulty(raw, difficulty());
+        const chosen = resolveDifficulty(raw, channelDifficulty(channel));
         if (!chosen.board) throw new Error('bad payload');
         setPlayedAt(chosen.difficulty);
         // the date lives at the top level; the board's own fields come from
@@ -210,7 +219,7 @@ const GuessGame = forwardRef<
     return () => {
       alive = false;
     };
-  }, [difficultyTick]);
+  }, [difficultyTick, channel]);
 
   const commonSet = useMemo(() => (commonWords ? new Set(commonWords) : null), [commonWords]);
 
@@ -331,6 +340,7 @@ const GuessGame = forwardRef<
         ? { won, guesses: guesses.length, timeMs: record?.elapsedMs ?? 0, length }
         : null,
     active: dailyMode,
+    env: channelEnv(channel),
   });
 
   // thinking time: counts while the board is visible and unfinished
@@ -418,14 +428,17 @@ const GuessGame = forwardRef<
     });
     setCurrent('');
     if (done) {
-      recordGuessFinish(
-        dailyMode,
-        didWin,
-        next.length,
-        record?.elapsedMs ?? 0,
-        dailyMode ? dailyData?.date ?? null : null,
-        length
-      );
+      // A round's result lives on the server; it is not part of the daily streaks.
+      if (channel.kind === 'daily') {
+        recordGuessFinish(
+          dailyMode,
+          didWin,
+          next.length,
+          record?.elapsedMs ?? 0,
+          dailyMode ? dailyData?.date ?? null : null,
+          length
+        );
+      }
       finishDaily(didWin);
     }
   }
@@ -498,12 +511,15 @@ const GuessGame = forwardRef<
 
   return (
     <div className="text-center">
-      <DailyToggle
-        daily={dailyMode}
-        onChange={(d) => {
-          setStore((prev) => ({ ...prev, dailyMode: d }));
-        }}
-      />
+      {/* A round has no practice board and no daily to switch to. */}
+      {channel.kind === 'daily' && (
+        <DailyToggle
+          daily={dailyMode}
+          onChange={(d) => {
+            setStore((prev) => ({ ...prev, dailyMode: d }));
+          }}
+        />
+      )}
 
       <div className="mb-4 flex items-center justify-center gap-4 text-xs text-slate-400">
         {record && (
@@ -512,7 +528,9 @@ const GuessGame = forwardRef<
             {formatElapsed(record.elapsedMs ?? 0)}
           </span>
         )}
-        {dailyMode && (
+        {/* The streak is the daily's. A round keeps its own counts under its
+            own key, but a "streak" of one board a week is not a streak. */}
+        {dailyMode && channel.kind === 'daily' && (
           <>
             <span className="inline-flex items-center gap-1.5">
               <Trophy className="w-3.5 h-3.5 text-accent" />
@@ -528,7 +546,8 @@ const GuessGame = forwardRef<
       {loading && <p className="text-sm text-slate-400 py-8">Loading…</p>}
       {dailyMode && dailyError && (
         <p className="text-sm text-danger py-8">
-          Couldn&apos;t fetch today&apos;s words — try Practice instead.
+          Couldn&apos;t fetch today&apos;s words
+          {channel.kind === 'daily' ? ' — try Practice instead.' : '.'}
         </p>
       )}
       {/* A length with no daily used to render an empty board and no
@@ -542,7 +561,7 @@ const GuessGame = forwardRef<
           {dailyLengths.length === 1
             ? `today's word is ${dailyLengths[0]} letters`
             : `today's run from ${dailyLengths[0]} to ${dailyLengths[dailyLengths.length - 1]}`}
-          . Practice works at every length.
+          .{channel.kind === 'daily' && ' Practice works at every length.'}
         </p>
       )}
 

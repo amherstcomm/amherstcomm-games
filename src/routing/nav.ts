@@ -38,6 +38,7 @@ export type Page =
   | { kind: 'ticket'; ticket: string }
   | { kind: 'reportAction'; id: string; token: string; action: string }
   | { kind: 'reportQueue' }
+  | { kind: 'tournament'; slug: Slug | null }
   | { kind: 'live'; session: string; host: boolean }
   | { kind: 'sessions'; session?: string }
   | { kind: 'admin'; tab: AdminTab }
@@ -137,6 +138,12 @@ export function navOf(route: Route, last: Tabs = DEFAULT_TABS): { nav: Nav; game
       return { nav: over({ kind: 'legal', doc: route.doc }, { ...last, legal: route.doc }), game: null };
     case 'sessions':
       return { nav: page({ kind: 'sessions', session: route.session }), game: null };
+    // A page either way. With a game named, App renders that game inside the
+    // round's channel; without one, the round's own page. Neither is a game
+    // route, because neither is the daily and the address bar should not say
+    // it is.
+    case 'tournament':
+      return { nav: page({ kind: 'tournament', slug: route.slug }), game: null };
     case 'admin':
       return {
         nav: { page: { kind: 'admin', tab: route.tab }, overlays: [], last: { ...last, admin: route.tab } },

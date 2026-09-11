@@ -8,7 +8,14 @@ import {
 } from 'react';
 import { Eye, RefreshCw, Timer } from 'lucide-react';
 import { fetchDailyData, fetchPool } from '@/dailyData';
-import { difficulty, isDifficulty, onDifficultyChange, type Difficulty } from '@/difficulty';
+import { isDifficulty, onDifficultyChange, type Difficulty } from '@/difficulty';
+import {
+  channelDifficulty,
+  channelEnv,
+  channelStoreKey,
+  useBoardChannel,
+  type BoardChannel,
+} from '@/boardChannel';
 import MobileKeyInput from '@/MobileKeyInput';
 import ShareButton from '@/ShareButton';
 import { GAME_NAME } from '@/games';
@@ -115,15 +122,17 @@ function sanitizeRecord(r: unknown): CryptogramRecord | null {
   };
 }
 
-function loadStore(): CryptogramStore {
-  const store = readStore();
+function loadStore(channel: BoardChannel): CryptogramStore {
+  const store = readStore(channelStoreKey(CRYPTOGRAM_KEY, channel));
+  // a round is always its board; the address's intent is about the daily
+  if (channel.kind !== 'daily') return { ...store, dailyMode: true };
   const forced = dailyIntent('cryptogram');
   return forced === null ? store : { ...store, dailyMode: forced };
 }
 
-function readStore(): CryptogramStore {
+function readStore(key: string): CryptogramStore {
   try {
-    const raw = siteStore.getItem(CRYPTOGRAM_KEY);
+    const raw = siteStore.getItem(key);
     if (!raw) return DEFAULT_STORE;
     const p = JSON.parse(raw);
     const daily: Partial<Record<Difficulty, CryptogramRecord>> = {};
@@ -195,17 +204,18 @@ function usedTokens(rec: CryptogramRecord): string[] {
 // is deduced from the shape of the words, and the answer ships with the board.
 const CryptogramGame = forwardRef<CryptogramGameHandle, object>(
   function CryptogramGame(_props, ref) {
-    const [store, setStore] = useState<CryptogramStore>(loadStore);
-    const [playedAt, setPlayedAt] = useState<Difficulty>(difficulty);
+    const channel = useBoardChannel();
+    const [store, setStore] = useState<CryptogramStore>(() => loadStore(channel));
+    const [playedAt, setPlayedAt] = useState<Difficulty>(() => channelDifficulty(channel));
     const [difficultyTick, setDifficultyTick] = useState(0);
-    const [level, setLevel] = useState<Difficulty>(difficulty);
+    const [level, setLevel] = useState<Difficulty>(() => channelDifficulty(channel));
     useEffect(
       () =>
         onDifficultyChange(() => {
-          setLevel(difficulty());
+          setLevel(channelDifficulty(channel));
           setDifficultyTick((n) => n + 1);
         }),
-      []
+      [channel]
     );
     const { practiceAllowed, highlightMatches } = usePrefs();
 
@@ -216,14 +226,14 @@ const CryptogramGame = forwardRef<CryptogramGameHandle, object>(
   // published, so the server has nothing to look up and the board itself is
   // the only evidence there can be. reportDaily drops it on a daily, which is
   // reported by naming it instead.
-  useEffect(
-    () => reportDaily('cryptogram', store.dailyMode, store.dailyDate, store.practice),
-    [store.dailyMode, store.dailyDate, store.practice]
-  );
-    useEffect(
-      () => offerDailySwitch('cryptogram', (d) => setStore((prev) => ({ ...prev, dailyMode: d }))),
-      []
-    );
+  useEffect(() => {
+    if (channel.kind !== 'daily') return;
+    reportDaily('cryptogram', store.dailyMode, store.dailyDate, store.practice);
+  }, [store.dailyMode, store.dailyDate, store.practice, channel.kind]);
+    useEffect(() => {
+      if (channel.kind !== 'daily') return;
+      return offerDailySwitch('cryptogram', (d) => setStore((prev) => ({ ...prev, dailyMode: d })));
+    }, [channel.kind]);
 
     /** which cipher letter the keyboard is aimed at */
     // The *position* the player is on, not just which mark. A mark repeats,
@@ -236,21 +246,21 @@ const CryptogramGame = forwardRef<CryptogramGameHandle, object>(
 
     useEffect(() => {
       try {
-        siteStore.setItem(CRYPTOGRAM_KEY, JSON.stringify(store));
+        siteStore.setItem(channelStoreKey(CRYPTOGRAM_KEY, channel), JSON.stringify(store));
       } catch {
         // best-effort persistence
       }
-    }, [store]);
+    }, [store, channel]);
 
     // today's passage
     useEffect(() => {
       let alive = true;
-      fetchDailyData('cryptogram')
+      fetchDailyData('cryptogram', channel.kind)
         .then((raw) => {
           if (!alive) return;
           const d = raw;
           if (typeof d?.date !== 'string') throw new Error('bad payload');
-          const want = difficulty();
+          const want = channelDifficulty(channel);
           const chosen = d.byDifficulty?.[want] as CryptogramRecord | undefined;
           const at: Difficulty = chosen ? want : 'easy';
           const board = chosen ?? d.byDifficulty?.easy;
@@ -271,10 +281,11 @@ const CryptogramGame = forwardRef<CryptogramGameHandle, object>(
       return () => {
         alive = false;
       };
-    }, [difficultyTick]);
+    }, [difficultyTick, channel]);
 
     // the practice pool, fetched once
     useEffect(() => {
+      if (channel.kind !== 'daily') return; // a round has no practice
       let alive = true;
       fetchPool('cryptogram')
         .then((d) => {
@@ -286,7 +297,7 @@ const CryptogramGame = forwardRef<CryptogramGameHandle, object>(
       return () => {
         alive = false;
       };
-    }, []);
+    }, [channel.kind]);
 
     const drawPractice = useCallback(
       (avoid?: string): CryptogramRecord | null => {
@@ -354,14 +365,17 @@ const CryptogramGame = forwardRef<CryptogramGameHandle, object>(
       if (!record) return;
       if (solved && !record.solved) {
         update((r) => ({ ...r, solved: true }));
-        recordCryptogramFinish(
-          store.dailyMode,
-          true,
-          record.elapsedMs ?? 0,
-          store.dailyMode ? store.dailyDate : null
-        );
+        // a round's result lives on the server, not in the daily streaks
+        if (channel.kind === 'daily') {
+          recordCryptogramFinish(
+            store.dailyMode,
+            true,
+            record.elapsedMs ?? 0,
+            store.dailyMode ? store.dailyDate : null
+          );
+        }
       }
-    }, [solved, record, store.dailyMode, store.dailyDate, update]);
+    }, [solved, record, store.dailyMode, store.dailyDate, update, channel.kind]);
 
     useDailySync({
       difficulty: playedAt,
@@ -379,6 +393,7 @@ const CryptogramGame = forwardRef<CryptogramGameHandle, object>(
         ? { solved: !record?.revealed, timeMs: record?.elapsedMs ?? 0 }
         : null,
       active: store.dailyMode,
+      env: channelEnv(channel),
     });
 
     useUpTimer(!!record && !done, (delta) =>
@@ -464,7 +479,7 @@ const CryptogramGame = forwardRef<CryptogramGameHandle, object>(
         if (isCipherToken(record, token)) mapping[token] = letters[at++];
       }
       update((r) => ({ ...r, mapping, revealed: true }));
-      if (!record.revealed && !record.solved) {
+      if (channel.kind === 'daily' && !record.revealed && !record.solved) {
         recordCryptogramFinish(
           store.dailyMode,
           false,
@@ -515,10 +530,12 @@ const CryptogramGame = forwardRef<CryptogramGameHandle, object>(
 
     return (
       <div className="text-center">
-        <DailyToggle
-          daily={store.dailyMode}
-          onChange={(d) => setStore((prev) => ({ ...prev, dailyMode: d }))}
-        />
+        {channel.kind === 'daily' && (
+          <DailyToggle
+            daily={store.dailyMode}
+            onChange={(d) => setStore((prev) => ({ ...prev, dailyMode: d }))}
+          />
+        )}
 
         {record && (
           <div className="mb-5 flex items-center justify-center">

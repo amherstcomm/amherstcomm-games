@@ -16,7 +16,8 @@ import DailyToggle from '@/DailyToggle';
 import { CornerDownLeft, Lightbulb, Ruler, Timer, Trophy } from 'lucide-react';
 import { fetchDailyData, fetchPool } from '@/dailyData';
 import { getDictionary } from '@/dictionaries';
-import { difficulty, onDifficultyChange, type Difficulty } from '@/difficulty';
+import { onDifficultyChange, type Difficulty } from '@/difficulty';
+import { channelDifficulty, channelEnv, channelStoreKey, useBoardChannel } from '@/boardChannel';
 import { store as siteStore } from '@/siteStorage';
 import { offerDailySwitch, reportDaily } from '@/dailyBus';
 import { dailyIntent } from '@/routing/entry';
@@ -100,9 +101,9 @@ function sanitizeRecord(r: unknown): BridgeRecord | null {
   };
 }
 
-function readStore(): BridgeStore {
+function readStore(key: string): BridgeStore {
   try {
-    const raw = siteStore.getItem(BRIDGE_KEY);
+    const raw = siteStore.getItem(key);
     if (!raw) return DEFAULT_STORE;
     const p = JSON.parse(raw) as Partial<BridgeStore>;
     const daily: Partial<Record<Difficulty, BridgeRecord>> = {};
@@ -136,12 +137,15 @@ const fromFeed = (b: Record<string, unknown> | undefined): BridgeRecord | null =
   });
 
 const BridgeGame = forwardRef<BridgeGameHandle>(function BridgeGame(_props, ref) {
+  const channel = useBoardChannel();
   const [store, setStore] = useState<BridgeStore>(() => {
-    const s = readStore();
+    const s = readStore(channelStoreKey(BRIDGE_KEY, channel));
+    // a round is always its board; the address's intent is about the daily
+    if (channel.kind !== 'daily') return { ...s, dailyMode: true };
     const forced = dailyIntent('bridge');
     return forced === null ? s : { ...s, dailyMode: forced };
   });
-  const [playedAt, setPlayedAt] = useState<Difficulty>(difficulty());
+  const [playedAt, setPlayedAt] = useState<Difficulty>(() => channelDifficulty(channel));
   const [dailyError, setDailyError] = useState(false);
   const [at, setAt] = useState(0);
   const [entry, setEntry] = useState('');
@@ -159,22 +163,22 @@ const BridgeGame = forwardRef<BridgeGameHandle>(function BridgeGame(_props, ref)
   // published, so the server has nothing to look up and the board itself is
   // the only evidence there can be. reportDaily drops it on a daily, which is
   // reported by naming it instead.
-  useEffect(
-    () => reportDaily('bridge', store.dailyMode, store.dailyDate, store.practice),
-    [store.dailyMode, store.dailyDate, store.practice]
-  );
-  useEffect(
-    () => offerDailySwitch('bridge', (d) => setStore((prev) => ({ ...prev, dailyMode: d }))),
-    []
-  );
+  useEffect(() => {
+    if (channel.kind !== 'daily') return;
+    reportDaily('bridge', store.dailyMode, store.dailyDate, store.practice);
+  }, [store.dailyMode, store.dailyDate, store.practice, channel.kind]);
+  useEffect(() => {
+    if (channel.kind !== 'daily') return;
+    return offerDailySwitch('bridge', (d) => setStore((prev) => ({ ...prev, dailyMode: d })));
+  }, [channel.kind]);
 
   useEffect(() => {
     try {
-      siteStore.setItem(BRIDGE_KEY, JSON.stringify(store));
+      siteStore.setItem(channelStoreKey(BRIDGE_KEY, channel), JSON.stringify(store));
     } catch {
       // best-effort persistence
     }
-  }, [store]);
+  }, [store, channel]);
 
   // The dictionary a typed word is checked against. Wider than the band the
   // harvest built from, deliberately: refusing to publish a word and refusing
@@ -192,16 +196,16 @@ const BridgeGame = forwardRef<BridgeGameHandle>(function BridgeGame(_props, ref)
     };
   }, []);
 
-  useEffect(() => onDifficultyChange(() => setPlayedAt(difficulty())), []);
+  useEffect(() => onDifficultyChange(() => setPlayedAt(channelDifficulty(channel))), [channel]);
 
   // today's board
   useEffect(() => {
     let alive = true;
-    fetchDailyData('bridge')
+    fetchDailyData('bridge', channel.kind)
       .then((raw) => {
         if (!alive) return;
         if (typeof raw?.date !== 'string') throw new Error('bad payload');
-        const want = difficulty();
+        const want = channelDifficulty(channel);
         const chosen = raw.byDifficulty?.[want] as Record<string, unknown> | undefined;
         const level: Difficulty = chosen ? want : 'easy';
         const fresh = fromFeed(chosen ?? (raw.byDifficulty?.easy as Record<string, unknown>));
@@ -225,15 +229,16 @@ const BridgeGame = forwardRef<BridgeGameHandle>(function BridgeGame(_props, ref)
     return () => {
       alive = false;
     };
-  }, [playedAt]);
+  }, [playedAt, channel]);
 
   // practice boards from the shared pool
   useEffect(() => {
+    if (channel.kind !== 'daily') return; // a round has no practice
     let alive = true;
     fetchPool('bridge')
       .then((raw) => {
         if (!alive) return;
-        const list = ((raw?.byDifficulty?.[difficulty()] ?? []) as Record<string, unknown>[])
+        const list = ((raw?.byDifficulty?.[channelDifficulty(channel)] ?? []) as Record<string, unknown>[])
           .map(fromFeed)
           .filter((b): b is BridgeRecord => !!b);
         setPool(list);
@@ -242,7 +247,7 @@ const BridgeGame = forwardRef<BridgeGameHandle>(function BridgeGame(_props, ref)
     return () => {
       alive = false;
     };
-  }, [playedAt]);
+  }, [playedAt, channel]);
 
   const update = useCallback(
     (fn: (r: BridgeRecord) => BridgeRecord) =>
@@ -273,6 +278,7 @@ const BridgeGame = forwardRef<BridgeGameHandle>(function BridgeGame(_props, ref)
       ? { solved: solvedCount, timeMs: record?.elapsedMs ?? 0, hints: record?.spent ?? 0 }
       : null,
     active: store.dailyMode,
+    env: channelEnv(channel),
   });
 
   useUpTimer(!!record && !done, (delta) =>
@@ -284,6 +290,8 @@ const BridgeGame = forwardRef<BridgeGameHandle>(function BridgeGame(_props, ref)
   useEffect(() => {
     if (!done || !record || recorded.current) return;
     recorded.current = true;
+    // a round's result lives on the server, not in the local stats
+    if (channel.kind !== 'daily') return;
     recordBridgeFinish({
       solved: solvedCount,
       of: record.prompts.length,
@@ -291,7 +299,7 @@ const BridgeGame = forwardRef<BridgeGameHandle>(function BridgeGame(_props, ref)
       timeMs: record.elapsedMs ?? 0,
       revealed: !!record.revealed,
     });
-  }, [done, record, solvedCount]);
+  }, [done, record, solvedCount, channel.kind]);
   useEffect(() => {
     recorded.current = false;
   }, [store.dailyDate, playedAt, store.dailyMode]);
@@ -391,16 +399,17 @@ const BridgeGame = forwardRef<BridgeGameHandle>(function BridgeGame(_props, ref)
   // Guarded on what we hold rather than on practice being null: newPractice
   // picks at random, so an unguarded effect deals a new bridge every render.
   useEffect(() => {
-    if (store.dailyMode || !pool?.length) return;
+    if (channel.kind !== 'daily' || store.dailyMode || !pool?.length) return;
     if (store.practice && store.practiceAt === playedAt) return;
     newPractice();
-  }, [store.dailyMode, store.practice, store.practiceAt, pool, playedAt, newPractice]);
+  }, [store.dailyMode, store.practice, store.practiceAt, pool, playedAt, newPractice, channel.kind]);
 
   // Bridge had no control for this at all — not a text link, not a pill. Its
   // practice mode was reachable only by a /play/bridge link, and that landed on
   // a loading line with no way back. Rendered in every branch below for the
   // same reason it is here at all.
-  const toggle = (
+  // A round has no practice board and no daily to switch to.
+  const toggle = channel.kind === 'daily' && (
     <DailyToggle
       daily={store.dailyMode}
       onChange={(d) => {
@@ -581,7 +590,7 @@ const BridgeGame = forwardRef<BridgeGameHandle>(function BridgeGame(_props, ref)
                 ],
               })}
             />
-            {!store.dailyMode && (
+            {channel.kind === 'daily' && !store.dailyMode && (
               <button
                 onClick={newPractice}
                 className="inline-flex items-center gap-1.5 px-4 h-10 rounded-lg text-sm font-semibold bg-white/5 border border-white/10 text-slate-300 hover:bg-white/10"

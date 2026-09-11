@@ -5,6 +5,7 @@
 // had already saved. `syncedKey` is what enforces that — pushes are ignored
 // until the key for this board has been marked as merged.
 
+import { DAILY_ENV } from '@/dailyData';
 import { useEffect, useRef, useState } from 'react';
 import type { Difficulty } from '@/difficulty';
 import {
@@ -33,6 +34,7 @@ export function useDailySync({
   setRecord,
   summary,
   active,
+  env = DAILY_ENV,
 }: {
   game: DailyGame;
   variant?: string;
@@ -45,6 +47,10 @@ export function useDailySync({
   /** the finished board's numbers, or null while it's still in play */
   summary: Rec | null;
   active: boolean;
+  /** 'round' for a tournament board. A round is played through this exact
+   *  path -- pulled, merged, pushed -- under its own env, which is what the
+   *  server's first-finish lock keys on. */
+  env?: string;
 }): boolean {
   // A board counts as done exactly when it has numbers to report. Keeping the
   // two in step matters: daily_stats averages over completed rows, so a row
@@ -116,7 +122,8 @@ export function useDailySync({
     };
   }, []);
 
-  const key = `${game}:${variant}:${difficulty}:${date}`;
+  // The env only when it is not the daily's, so a daily's key is what it was.
+  const key = `${game}:${variant}:${difficulty}:${date}${env === DAILY_ENV ? '' : `:${env}`}`;
 
   // The doorbell: a realtime event on one of this user's rows triggers the
   // same pull the poll would, and nothing else — the payload only says which
@@ -142,11 +149,11 @@ export function useDailySync({
     // exists to fix.
     const silent = seenKeys.current.has(key);
     if (!silent) setSyncing(true);
-    loadDaily(game, variant, difficulty, date)
+    loadDaily(game, variant, difficulty, date, env)
       .then((remote) => {
         if (!alive) return;
         if (remote?.state && Object.keys(remote.state).length) {
-          const merged = mergeFromServer(game, variant, difficulty, date, record, remote);
+          const merged = mergeFromServer(game, variant, difficulty, date, record, remote, env);
           if (merged) {
             setRecordRef.current(merged);
             if (sameProgress(game, merged, remote.state)) {
@@ -171,7 +178,7 @@ export function useDailySync({
     // `record` is deliberately absent: this runs once per board, and re-running
     // it on every keystroke would re-merge the remote board over local progress.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [game, variant, difficulty, date, active, key, authTick]);
+  }, [game, variant, difficulty, date, env, active, key, authTick]);
 
   // push, after the pull has landed
   useEffect(() => {
@@ -185,13 +192,23 @@ export function useDailySync({
     const stamp = JSON.stringify([progressOf(game, record), completed, summary]);
     if (stamp === lastPush.current) return;
     lastPush.current = stamp;
-    saveDaily(game, variant, difficulty, date, record, completed, summary, (merged: Rec) => {
-      // the write found progress we hadn't seen; adopt it and let the next
-      // push settle, rather than leaving the two copies disagreeing
-      lastPush.current = '';
-      setRecordRef.current(merged);
-    });
-  }, [game, variant, difficulty, date, active, key, record, completed, summary]);
+    saveDaily(
+      game,
+      variant,
+      difficulty,
+      date,
+      record,
+      completed,
+      summary,
+      (merged: Rec) => {
+        // the write found progress we hadn't seen; adopt it and let the next
+        // push settle, rather than leaving the two copies disagreeing
+        lastPush.current = '';
+        setRecordRef.current(merged);
+      },
+      env
+    );
+  }, [game, variant, difficulty, date, env, active, key, record, completed, summary]);
 
   return syncing;
 }

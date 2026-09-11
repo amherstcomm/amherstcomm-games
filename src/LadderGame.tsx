@@ -25,7 +25,8 @@ import DailyToggle from '@/DailyToggle';
 import { CornerDownLeft, Delete, RotateCcw, Timer, Trophy } from 'lucide-react';
 import { fetchDailyData, fetchPool } from '@/dailyData';
 import { getDictionary, getDisplayFilter } from '@/dictionaries';
-import { difficulty, onDifficultyChange, type Difficulty } from '@/difficulty';
+import { onDifficultyChange, type Difficulty } from '@/difficulty';
+import { channelDifficulty, channelEnv, channelStoreKey, useBoardChannel } from '@/boardChannel';
 import { store as siteStore } from '@/siteStorage';
 import { offerDailySwitch, reportDaily } from '@/dailyBus';
 import { dailyIntent } from '@/routing/entry';
@@ -91,9 +92,9 @@ function sanitizeRecord(r: unknown): LadderRecord | null {
   };
 }
 
-function readStore(): LadderStore {
+function readStore(key: string): LadderStore {
   try {
-    const raw = siteStore.getItem(LADDER_KEY);
+    const raw = siteStore.getItem(key);
     if (!raw) return DEFAULT_STORE;
     const p = JSON.parse(raw) as Partial<LadderStore>;
     const daily: Partial<Record<Difficulty, LadderRecord>> = {};
@@ -114,12 +115,15 @@ function readStore(): LadderStore {
 }
 
 const LadderGame = forwardRef<LadderGameHandle>(function LadderGame(_props, ref) {
+  const channel = useBoardChannel();
   const [store, setStore] = useState<LadderStore>(() => {
-    const s = readStore();
+    const s = readStore(channelStoreKey(LADDER_KEY, channel));
+    // a round is always its board; the address's intent is about the daily
+    if (channel.kind !== 'daily') return { ...s, dailyMode: true };
     const forced = dailyIntent('ladder');
     return forced === null ? s : { ...s, dailyMode: forced };
   });
-  const [playedAt, setPlayedAt] = useState<Difficulty>(difficulty());
+  const [playedAt, setPlayedAt] = useState<Difficulty>(() => channelDifficulty(channel));
   const [dailyError, setDailyError] = useState(false);
   const [entry, setEntry] = useState('');
   const [refusal, setRefusal] = useState('');
@@ -136,22 +140,22 @@ const LadderGame = forwardRef<LadderGameHandle>(function LadderGame(_props, ref)
   // published, so the server has nothing to look up and the board itself is
   // the only evidence there can be. reportDaily drops it on a daily, which is
   // reported by naming it instead.
-  useEffect(
-    () => reportDaily('ladder', store.dailyMode, store.dailyDate, store.practice),
-    [store.dailyMode, store.dailyDate, store.practice]
-  );
-  useEffect(
-    () => offerDailySwitch('ladder', (d) => setStore((prev) => ({ ...prev, dailyMode: d }))),
-    []
-  );
+  useEffect(() => {
+    if (channel.kind !== 'daily') return;
+    reportDaily('ladder', store.dailyMode, store.dailyDate, store.practice);
+  }, [store.dailyMode, store.dailyDate, store.practice, channel.kind]);
+  useEffect(() => {
+    if (channel.kind !== 'daily') return;
+    return offerDailySwitch('ladder', (d) => setStore((prev) => ({ ...prev, dailyMode: d })));
+  }, [channel.kind]);
 
   useEffect(() => {
     try {
-      siteStore.setItem(LADDER_KEY, JSON.stringify(store));
+      siteStore.setItem(channelStoreKey(LADDER_KEY, channel), JSON.stringify(store));
     } catch {
       // best-effort persistence
     }
-  }, [store]);
+  }, [store, channel]);
 
   // the rungs a player may step through: the common tier, minus whatever the
   // filter hides. Accepting a word someone typed is a different question from
@@ -168,16 +172,16 @@ const LadderGame = forwardRef<LadderGameHandle>(function LadderGame(_props, ref)
     };
   }, []);
 
-  useEffect(() => onDifficultyChange(() => setPlayedAt(difficulty())), []);
+  useEffect(() => onDifficultyChange(() => setPlayedAt(channelDifficulty(channel))), [channel]);
 
   // today's pair
   useEffect(() => {
     let alive = true;
-    fetchDailyData('ladder')
+    fetchDailyData('ladder', channel.kind)
       .then((raw) => {
         if (!alive) return;
         if (typeof raw?.date !== 'string') throw new Error('bad payload');
-        const want = difficulty();
+        const want = channelDifficulty(channel);
         const chosen = raw.byDifficulty?.[want] as LadderRecord | undefined;
         const at: Difficulty = chosen ? want : 'easy';
         const fresh = sanitizeRecord({ ...(chosen ?? raw.byDifficulty?.easy), chain: [] });
@@ -197,22 +201,23 @@ const LadderGame = forwardRef<LadderGameHandle>(function LadderGame(_props, ref)
     return () => {
       alive = false;
     };
-  }, [playedAt]);
+  }, [playedAt, channel]);
 
   // practice boards, drawn from the shared pool
   useEffect(() => {
+    if (channel.kind !== 'daily') return; // a round has no practice
     let alive = true;
     fetchPool('ladder')
       .then((raw) => {
         if (!alive) return;
-        const list = (raw?.byDifficulty?.[difficulty()] ?? []) as LadderRecord[];
+        const list = (raw?.byDifficulty?.[channelDifficulty(channel)] ?? []) as LadderRecord[];
         setPool(list.map((b) => sanitizeRecord({ ...b, chain: [] })).filter(Boolean) as LadderRecord[]);
       })
       .catch(() => {});
     return () => {
       alive = false;
     };
-  }, [playedAt]);
+  }, [playedAt, channel]);
 
   const update = useCallback(
     (fn: (r: LadderRecord) => LadderRecord) =>
@@ -241,6 +246,7 @@ const LadderGame = forwardRef<LadderGameHandle>(function LadderGame(_props, ref)
       }),
     summary: done ? { solved: !record?.revealed, timeMs: record?.elapsedMs ?? 0 } : null,
     active: store.dailyMode,
+    env: channelEnv(channel),
   });
 
   useUpTimer(!!record && !done, (delta) =>
@@ -337,10 +343,10 @@ const LadderGame = forwardRef<LadderGameHandle>(function LadderGame(_props, ref)
   // without a stop condition deals a new ladder on every render forever.
   // Squares shipped exactly that bug, which is why its guard has a comment too.
   useEffect(() => {
-    if (store.dailyMode || !pool?.length) return;
+    if (channel.kind !== 'daily' || store.dailyMode || !pool?.length) return;
     if (store.practice && store.practiceAt === playedAt) return;
     newPractice();
-  }, [store.dailyMode, store.practice, store.practiceAt, pool, playedAt, newPractice]);
+  }, [store.dailyMode, store.practice, store.practiceAt, pool, playedAt, newPractice, channel.kind]);
 
   const steps = record?.chain.length ?? 0;
   const solved = !!record?.solved;
@@ -351,6 +357,8 @@ const LadderGame = forwardRef<LadderGameHandle>(function LadderGame(_props, ref)
   useEffect(() => {
     if (!record || !done || counted.current) return;
     counted.current = true;
+    // a round's result lives on the server, not in the daily streaks
+    if (channel.kind !== 'daily') return;
     recordLadderFinish(
       store.dailyMode,
       !record.revealed,
@@ -359,7 +367,7 @@ const LadderGame = forwardRef<LadderGameHandle>(function LadderGame(_props, ref)
       record.elapsedMs ?? 0,
       store.dailyMode ? store.dailyDate : null
     );
-  }, [record, done, store.dailyMode, store.dailyDate]);
+  }, [record, done, store.dailyMode, store.dailyDate, channel.kind]);
   useEffect(() => {
     counted.current = false;
   }, [record?.from, record?.to, store.dailyMode]);
@@ -368,7 +376,8 @@ const LadderGame = forwardRef<LadderGameHandle>(function LadderGame(_props, ref)
   // A control that disappears while the board is loading is a control you
   // cannot use to leave a board that never loads, which is exactly how
   // practice was stuck.
-  const toggle = (
+  // A round has no practice board and no daily to switch to.
+  const toggle = channel.kind === 'daily' && (
     <DailyToggle
       daily={store.dailyMode}
       onChange={(d) => {
@@ -545,7 +554,7 @@ const LadderGame = forwardRef<LadderGameHandle>(function LadderGame(_props, ref)
         </div>
       )}
 
-      {!store.dailyMode && (
+      {channel.kind === 'daily' && !store.dailyMode && (
         <div className="mt-4 text-center">
           <button
             onClick={newPractice}

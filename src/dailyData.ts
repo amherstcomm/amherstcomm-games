@@ -88,7 +88,35 @@ async function viaFile(url: string): Promise<unknown> {
 /* eslint-disable @typescript-eslint/no-explicit-any --
    drop-in for fetch().json(), whose result is any; the games validate. */
 
-export async function fetchDailyData(mode: Mode): Promise<any> {
+/** A tournament round's board for this game, or null when no round covering
+ *  today lists it. No file fallback: a round board is never in the file feed,
+ *  and a fallback would deal a daily under the round's name. */
+async function viaRoundRpc(game: string): Promise<unknown> {
+  if (!supabase) return null;
+  try {
+    const call = supabase
+      .rpc('round_puzzle', { p_game: game })
+      .then(({ data, error }) => (error ? null : data));
+    const timeout = new Promise<null>((resolve) => setTimeout(() => resolve(null), RPC_TIMEOUT_MS));
+    const payload = await Promise.race([call, timeout]);
+    return payload && typeof payload === 'object' && 'date' in payload ? payload : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Which board to fetch: the day's, or a tournament round's. A string rather
+ *  than the channel type so this module need not import React context. */
+export type FeedChannel = 'daily' | 'round';
+
+export async function fetchDailyData(mode: Mode, channel: FeedChannel = 'daily'): Promise<any> {
+  if (channel === 'round') {
+    const round = await viaRoundRpc(FEED_NAME[mode]);
+    // Thrown, as a daily with nothing behind it is: every game already says
+    // "could not be loaded" for a failed fetch, which is the honest answer.
+    if (!round) throw new Error('no round board for this game today');
+    return round;
+  }
   const db = await viaRpc(FEED_NAME[mode], DAILY_ENV);
   if (db) return db;
   // No base is a deployment saying "the database or nothing". Thrown rather
