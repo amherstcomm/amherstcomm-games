@@ -1205,11 +1205,23 @@ drop function if exists public.leaderboard(int, text);
 -- runs with its callers' rights, and its callers are the two definer wrappers
 -- below — and not executable by web roles, which would otherwise get to pass
 -- any user list they liked.
-create or replace function public.boards_for(
-  p_days int,
+/*
+ * Every leaderboard, over a range of dates rather than a window ending today.
+ *
+ * This is boards_for's body as it was, with the window made explicit and the
+ * row cap a parameter: the ranking per game is the same query either way, and a
+ * tournament round's standings are that ranking over one day -- the round's
+ * first, which its board and results are keyed by -- under env 'round', for
+ * every player rather than the top ten. One ranking with two callers, rather
+ * than a copy for tournaments that would drift from the boards people see.
+ */
+create or replace function public.boards_between(
+  p_from date,
+  p_until date,
   p_env text,
   p_difficulty text,
-  p_users uuid[]
+  p_users uuid[],
+  p_limit int default 10
 )
 returns jsonb
 language plpgsql
@@ -1219,7 +1231,6 @@ as $$
 declare
   out_json jsonb := '{}'::jsonb;
   part jsonb;
-  since date := ((now() at time zone 'America/New_York')::date) - (greatest(coalesce(p_days, 1), 1) - 1);
 begin
   -- guess: days won, then the cleanest win
   select coalesce(jsonb_agg(jsonb_build_object('name', name, 'value', value, 'detail', detail) order by rk), '[]'::jsonb)
@@ -1233,7 +1244,7 @@ begin
              sum((dp.result->>'timeMs')::numeric) as tiebreak
       from public.daily_progress dp
       join public.profiles p on p.id = dp.user_id
-      where dp.game = 'guess' and dp.completed and dp.env = p_env and dp.difficulty = p_difficulty and dp.puzzle_date >= since
+      where dp.game = 'guess' and dp.completed and dp.env = p_env and dp.difficulty = p_difficulty and dp.puzzle_date between p_from and p_until
         and (p_users is null or dp.user_id = any(p_users))
         and p.display_name is not null
         and public.result_is_plausible('guess', dp.state, dp.result, dp.difficulty, dp.variant, dp.puzzle_date, dp.env)
@@ -1241,7 +1252,7 @@ begin
       having count(*) filter (where (dp.result->>'won')::boolean) > 0
     ) a
     order by rk
-    limit 10
+    limit p_limit
   ) s;
   out_json := jsonb_set(out_json, '{guess}', part);
 
@@ -1265,13 +1276,13 @@ begin
              row_number() over (order by sum((dp.result->>'score')::numeric) desc, count(*) desc) as rk
       from public.daily_progress dp
       join public.profiles p on p.id = dp.user_id
-      where dp.game = g.game and dp.completed and dp.env = p_env and dp.difficulty = p_difficulty and dp.puzzle_date >= since
+      where dp.game = g.game and dp.completed and dp.env = p_env and dp.difficulty = p_difficulty and dp.puzzle_date between p_from and p_until
         and (p_users is null or dp.user_id = any(p_users))
         and p.display_name is not null
         and public.result_is_plausible(g.game, dp.state, dp.result, dp.difficulty, dp.variant, dp.puzzle_date, dp.env)
       group by p.display_name
       order by value desc, detail desc
-      limit 10
+      limit p_limit
     ) t on true
     group by g.game
   ) boards;
@@ -1286,14 +1297,14 @@ begin
       select p.display_name as name, count(*) as value, min((dp.result->>'words')::int) as detail
       from public.daily_progress dp
       join public.profiles p on p.id = dp.user_id
-      where dp.game = 'box' and dp.completed and dp.env = p_env and dp.difficulty = p_difficulty and dp.puzzle_date >= since
+      where dp.game = 'box' and dp.completed and dp.env = p_env and dp.difficulty = p_difficulty and dp.puzzle_date between p_from and p_until
         and (p_users is null or dp.user_id = any(p_users))
         and p.display_name is not null
         and public.result_is_plausible('box', dp.state, dp.result, dp.difficulty, dp.variant, dp.puzzle_date, dp.env)
       group by p.display_name
     ) a
     order by rk
-    limit 10
+    limit p_limit
   ) s;
   out_json := jsonb_set(out_json, '{box}', part);
 
@@ -1310,7 +1321,7 @@ begin
              ) as detail
       from public.daily_progress dp
       join public.profiles p on p.id = dp.user_id
-      where dp.game = 'weave' and dp.completed and dp.env = p_env and dp.difficulty = p_difficulty and dp.puzzle_date >= since
+      where dp.game = 'weave' and dp.completed and dp.env = p_env and dp.difficulty = p_difficulty and dp.puzzle_date between p_from and p_until
         and (p_users is null or dp.user_id = any(p_users))
         and p.display_name is not null
         and public.result_is_plausible('weave', dp.state, dp.result, dp.difficulty, dp.variant, dp.puzzle_date, dp.env)
@@ -1318,7 +1329,7 @@ begin
       having count(*) filter (where (dp.result->>'solved')::boolean) > 0
     ) a
     order by rk
-    limit 10
+    limit p_limit
   ) s;
   out_json := jsonb_set(out_json, '{weave}', part);
 
@@ -1336,7 +1347,7 @@ begin
              ) as detail
       from public.daily_progress dp
       join public.profiles p on p.id = dp.user_id
-      where dp.game = 'cryptogram' and dp.completed and dp.env = p_env and dp.difficulty = p_difficulty and dp.puzzle_date >= since
+      where dp.game = 'cryptogram' and dp.completed and dp.env = p_env and dp.difficulty = p_difficulty and dp.puzzle_date between p_from and p_until
         and (p_users is null or dp.user_id = any(p_users))
         and p.display_name is not null
         and public.result_is_plausible('cryptogram', dp.state, dp.result, dp.difficulty, dp.variant, dp.puzzle_date, dp.env)
@@ -1344,7 +1355,7 @@ begin
       having count(*) filter (where (dp.result->>'solved')::boolean) > 0
     ) a
     order by rk
-    limit 10
+    limit p_limit
   ) s;
   out_json := jsonb_set(out_json, '{cryptogram}', part);
 
@@ -1367,7 +1378,7 @@ begin
              ) as detail
       from public.daily_progress dp
       join public.profiles p on p.id = dp.user_id
-      where dp.game = 'ladder' and dp.completed and dp.env = p_env and dp.difficulty = p_difficulty and dp.puzzle_date >= since
+      where dp.game = 'ladder' and dp.completed and dp.env = p_env and dp.difficulty = p_difficulty and dp.puzzle_date between p_from and p_until
         and (p_users is null or dp.user_id = any(p_users))
         and p.display_name is not null
         and public.result_is_plausible('ladder', dp.state, dp.result, dp.difficulty, dp.variant, dp.puzzle_date, dp.env)
@@ -1375,7 +1386,7 @@ begin
       having count(*) filter (where (dp.result->>'solved')::boolean) > 0
     ) a
     order by rk
-    limit 10
+    limit p_limit
   ) s;
   out_json := jsonb_set(out_json, '{ladder}', part);
 
@@ -1398,7 +1409,7 @@ begin
              sum(least(coalesce((dp.result->>'solved')::int, 0), 5)) as detail
       from public.daily_progress dp
       join public.profiles p on p.id = dp.user_id
-      where dp.game = 'bridge' and dp.completed and dp.env = p_env and dp.difficulty = p_difficulty and dp.puzzle_date >= since
+      where dp.game = 'bridge' and dp.completed and dp.env = p_env and dp.difficulty = p_difficulty and dp.puzzle_date between p_from and p_until
         and (p_users is null or dp.user_id = any(p_users))
         and p.display_name is not null
         and public.result_is_plausible('bridge', dp.state, dp.result, dp.difficulty, dp.variant, dp.puzzle_date, dp.env)
@@ -1406,7 +1417,7 @@ begin
       having sum(coalesce((dp.result->>'solved')::int, 0)) > 0
     ) a
     order by rk
-    limit 10
+    limit p_limit
   ) s;
   out_json := jsonb_set(out_json, '{bridge}', part);
 
@@ -1438,13 +1449,13 @@ begin
       from public.daily_progress dp
       join public.profiles p on p.id = dp.user_id
       where dp.game = 'squares' and dp.variant = v.variant and dp.completed
-        and dp.env = p_env and dp.difficulty = p_difficulty and dp.puzzle_date >= since
+        and dp.env = p_env and dp.difficulty = p_difficulty and dp.puzzle_date between p_from and p_until
         and (p_users is null or dp.user_id = any(p_users))
         and p.display_name is not null
         and public.result_is_plausible('squares', dp.state, dp.result, dp.difficulty, dp.variant, dp.puzzle_date, dp.env)
       group by p.display_name
       having count(*) filter (where (dp.result->>'solved')::boolean) > 0
-      limit 10
+      limit p_limit
     ) t on true
     group by v.variant
   ) b;
@@ -1452,6 +1463,27 @@ begin
 
   return out_json;
 end;
+$$;
+
+revoke execute on function public.boards_between(date, date, text, text, uuid[], int) from public, anon, authenticated;
+
+-- The site's leaderboards: the last p_days, ending today Eastern, top ten.
+-- Unchanged in what it answers; it asks boards_between now.
+create or replace function public.boards_for(
+  p_days int,
+  p_env text,
+  p_difficulty text,
+  p_users uuid[]
+)
+returns jsonb
+language sql
+set search_path = ''
+stable
+as $$
+  select public.boards_between(
+    ((now() at time zone 'America/New_York')::date) - (greatest(coalesce(p_days, 1), 1) - 1),
+    (now() at time zone 'America/New_York')::date,
+    p_env, p_difficulty, p_users, 10)
 $$;
 
 revoke execute on function public.boards_for(int, text, text, uuid[]) from public, anon, authenticated;
@@ -9952,3 +9984,102 @@ drop trigger if exists round_result_is_final on public.daily_progress;
 create trigger round_result_is_final
   before update on public.daily_progress
   for each row execute function public.round_result_is_final();
+
+-- ---------------------------------------------------------------------------
+-- Tournament standings
+-- ---------------------------------------------------------------------------
+/*
+ * Two tables from one call: each started round's leaderboard per game, and the
+ * tournament's overall table.
+ *
+ * A round's boards are boards_between over its first day under env 'round' at
+ * the tournament's difficulty -- the site's own ranking per game, so a round
+ * is ranked exactly the way the everyday boards rank that game -- kept to the
+ * games the round lists, and for every player rather than the top ten, because
+ * placement points need everybody's place.
+ *
+ * The overall table awards placement points per game-round, 1st 10 down to
+ * 10th 1, so games whose scores are not comparable -- Hive points against Weave
+ * times -- can still be added together. Ties on points are broken by
+ * game-rounds won, then by name, so the order is stable. Exact ties within one
+ * game-round are broken by that board's own tiebreak (the clock, usually),
+ * which is what the board itself shows.
+ *
+ * Only rounds that have started count: a round nobody could have played has no
+ * standings, and listing it would be a table of blanks.
+ */
+create or replace function public.tournament_standings(p_tournament uuid)
+returns jsonb
+language plpgsql
+stable
+security definer
+set search_path = ''
+as $fn$
+declare
+  t record;
+  r record;
+  n int := 0;
+  keys text[];
+  boards jsonb;
+  rounds jsonb := '[]'::jsonb;
+  tbl jsonb;
+begin
+  select * into t from public.tournaments where id = p_tournament;
+  if not found then
+    return jsonb_build_object('ok', false, 'reason', 'no such tournament');
+  end if;
+
+  for r in
+    select * from public.tournament_rounds
+    where tournament_id = t.id
+    order by starts_on
+  loop
+    n := n + 1;
+    continue when r.starts_on > public.puzzle_day();
+
+    -- The boards keyed as the site's leaderboards key them: by progress name,
+    -- with squares split by size -- 4x4 for easy, 5x5 for hard and extreme.
+    select array_agg(case
+             when g.progress = 'squares'
+               then 'squares' || case when t.difficulty = 'easy' then '4' else '5' end
+             else g.progress
+           end)
+      into keys
+    from public.games g
+    where g.feed = any (r.games);
+
+    select coalesce(jsonb_object_agg(e.key, e.value), '{}'::jsonb)
+      into boards
+    from jsonb_each(public.boards_between(r.starts_on, r.starts_on, 'round', t.difficulty, null, 500)) e
+    where e.key = any (keys);
+
+    rounds := rounds || jsonb_build_array(jsonb_build_object(
+      'id', r.id, 'number', n, 'starts_on', r.starts_on, 'ends_on', r.ends_on,
+      'boards', boards));
+  end loop;
+
+  select coalesce(jsonb_agg(jsonb_build_object(
+           'name', s.name, 'points', s.points, 'wins', s.wins, 'placed', s.placed)
+         order by s.points desc, s.wins desc, s.name), '[]'::jsonb)
+    into tbl
+  from (
+    select x.row->>'name' as name,
+           sum(greatest(0, 11 - x.ord))::int as points,
+           count(*) filter (where x.ord = 1)::int as wins,
+           count(*)::int as placed
+    from jsonb_array_elements(rounds) rd,
+         jsonb_each(rd->'boards') b,
+         jsonb_array_elements(b.value) with ordinality as x(row, ord)
+    group by x.row->>'name'
+  ) s;
+
+  return jsonb_build_object(
+    'ok', true,
+    'tournament', jsonb_build_object('id', t.id, 'name', t.name, 'difficulty', t.difficulty),
+    'table', tbl,
+    'rounds', rounds);
+end;
+$fn$;
+
+revoke all on function public.tournament_standings(uuid) from public;
+grant execute on function public.tournament_standings(uuid) to anon, authenticated;

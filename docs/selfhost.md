@@ -2181,6 +2181,18 @@ second device merging in reads as a normal sync rather than an error.
 Pins apply to the daily only. Applied to the round too, they would make the
 round's board the same puzzle as the daily everybody played that morning.
 
+**Standings** are on `/tournament`, from `tournament_standings`. Each started
+round has a leaderboard per game, ranked exactly the way the site's everyday
+board ranks that game — the ranking was lifted out of `boards_for` into
+`boards_between`, a range of dates instead of a window ending today, so the two
+cannot drift — over the round's first day under env `round`, at the
+tournament's difficulty, for every player rather than the top ten. The
+tournament table awards **placement points** per game-round, 10 for first down
+to 1 for tenth, so games whose scores are not comparable (Hive points, Weave
+times) can be added together; level on points, more outright wins goes first,
+then name. Exact ties inside one game-round fall to that board's own tiebreak,
+usually the clock, which is what the board itself shows.
+
 **Setting one up** is `/admin/tournaments`: a tournament with its name,
 difficulty and dates, then its rounds, each with its own dates and the games in
 it. The page offers what the database will take — a round under way shows only
