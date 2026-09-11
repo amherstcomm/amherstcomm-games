@@ -10,11 +10,17 @@ import {
 import { Eye, Lightbulb, RefreshCw, Timer } from 'lucide-react';
 import { gridNeighbors } from '@/solvers';
 import {
-  difficulty,
   onDifficultyChange,
   resolveDifficulty,
   type Difficulty,
 } from '@/difficulty';
+import {
+  channelDifficulty,
+  channelEnv,
+  channelStoreKey,
+  useBoardChannel,
+  type BoardChannel,
+} from '@/boardChannel';
 import { fetchDailyData, fetchPool } from '@/dailyData';
 import DailyStats from '@/DailyStats';
 import ShareButton from '@/ShareButton';
@@ -114,15 +120,17 @@ function sanitizeRecord(r: unknown): WeaveRecord | null {
 
 // An incoming /daily/ or /play/ link decides which board is waiting; without one
 // we keep whatever the player last had open.
-function loadStore(): WeaveStore {
-  const store = readStore();
+function loadStore(channel: BoardChannel): WeaveStore {
+  const store = readStore(channelStoreKey(WEAVE_KEY, channel));
+  // a round has only its own board; the address bar speaks for the daily
+  if (channel.kind !== 'daily') return { ...store, dailyMode: true };
   const forced = dailyIntent('weave');
   return forced === null ? store : { ...store, dailyMode: forced };
 }
 
-function readStore(): WeaveStore {
+function readStore(key: string): WeaveStore {
   try {
-    const raw = siteStore.getItem(WEAVE_KEY);
+    const raw = siteStore.getItem(key);
     if (!raw) return DEFAULT_STORE;
     const p = JSON.parse(raw);
     return {
@@ -176,7 +184,8 @@ const WeaveGame = forwardRef<
   WeaveGameHandle,
   { standardWords: string[] | null; navKeys: NavKeys }
 >(function WeaveGame({ standardWords, navKeys }, ref) {
-  const [store, setStore] = useState<WeaveStore>(loadStore);
+  const channel = useBoardChannel();
+  const [store, setStore] = useState<WeaveStore>(() => loadStore(channel));
   const { practiceAllowed } = usePrefs();
   // pinned to the daily: someone who switched practice off shouldn't be left
   // looking at a practice board they can no longer leave
@@ -188,34 +197,34 @@ const WeaveGame = forwardRef<
   // published, so the server has nothing to look up and the board itself is
   // the only evidence there can be. reportDaily drops it on a daily, which is
   // reported by naming it instead.
-  useEffect(
-    () => reportDaily('weave', store.dailyMode, store.dailyDate, store.practice),
-    [store.dailyMode, store.dailyDate, store.practice]
-  );
-  useEffect(
-    () => offerDailySwitch('weave', (d) => setStore((prev) => ({ ...prev, dailyMode: d }))),
-    []
-  );
+  useEffect(() => {
+    if (channel.kind !== 'daily') return;
+    reportDaily('weave', store.dailyMode, store.dailyDate, store.practice);
+  }, [store.dailyMode, store.dailyDate, store.practice, channel.kind]);
+  useEffect(() => {
+    if (channel.kind !== 'daily') return;
+    return offerDailySwitch('weave', (d) => setStore((prev) => ({ ...prev, dailyMode: d })));
+  }, [channel.kind]);
   const [pool, setPool] = useState<Record<string, PuzzlePayload[]> | null>(null);
   // The difficulty this board actually is. Usually the one asked for, but a
   // feed generated before difficulty existed only has the easy board, and a
   // result has to be recorded as what was played rather than what was wanted.
-  const [playedAt, setPlayedAt] = useState<Difficulty>(difficulty);
+  const [playedAt, setPlayedAt] = useState<Difficulty>(() => channelDifficulty(channel));
   // Changing difficulty means a different board, so the feed has to be read
   // again. A storage write re-renders nothing on its own.
   const [difficultyTick, setDifficultyTick] = useState(0);
   // the setting itself — practice has no daily fetch to learn it from
-  const [level, setLevel] = useState<Difficulty>(difficulty);
+  const [level, setLevel] = useState<Difficulty>(() => channelDifficulty(channel));
   useEffect(
     () =>
       onDifficultyChange(() => {
-        setLevel(difficulty());
+        setLevel(channelDifficulty(channel));
         setDifficultyTick((n) => n + 1);
         // practice is redrawn rather than kept: it's a different difficulty's
         // board now, and practice isn't recorded
         setStore((prev) => ({ ...prev, practice: null }));
       }),
-    []
+    [channel]
   );
   const [dailyError, setDailyError] = useState(false);
   const [flash, setFlash] = useState<{ text: string; good: boolean } | null>(null);
@@ -224,19 +233,19 @@ const WeaveGame = forwardRef<
 
   useEffect(() => {
     try {
-      siteStore.setItem(WEAVE_KEY, JSON.stringify(store));
+      siteStore.setItem(channelStoreKey(WEAVE_KEY, channel), JSON.stringify(store));
     } catch {
       // best-effort persistence
     }
-  }, [store]);
+  }, [store, channel]);
 
   // fetch today's puzzle once
   useEffect(() => {
     let alive = true;
-    fetchDailyData('weave')
+    fetchDailyData('weave', channel.kind)
       .then((raw) => {
         if (!alive) return;
-        const chosen = resolveDifficulty(raw, difficulty());
+        const chosen = resolveDifficulty(raw, channelDifficulty(channel));
         if (!chosen.board) throw new Error('bad payload');
         setPlayedAt(chosen.difficulty);
         // the date lives at the top level; the board's own fields come from
@@ -259,7 +268,7 @@ const WeaveGame = forwardRef<
     return () => {
       alive = false;
     };
-  }, [difficultyTick]);
+  }, [difficultyTick, channel]);
 
   // fetch the practice pool once
   useEffect(() => {
@@ -347,6 +356,7 @@ const WeaveGame = forwardRef<
         }
       : null,
     active: store.dailyMode,
+    env: channelEnv(channel),
   });
 
   // after completion, draw every word's path as a line overlay
@@ -446,7 +456,8 @@ const WeaveGame = forwardRef<
     const isSpan = word === answers.spangram.w && sameCells(path, answers.spangram.path);
     const isTheme = answers.words.some((x) => x.w === word && sameCells(path, x.path));
     if (isSpan || isTheme) {
-      if (record.found.length + 1 >= answers.words.length + 1) {
+      // a round's result lives on the server, not in the daily streaks
+      if (channel.kind === 'daily' && record.found.length + 1 >= answers.words.length + 1) {
         recordWeaveSolve(
           store.dailyMode,
           record.elapsedMs ?? 0,
@@ -612,11 +623,13 @@ const WeaveGame = forwardRef<
 
   function reveal() {
     if (!record || complete) return;
-    recordWeaveReveal(
-      store.dailyMode,
-      record.hintsUsed,
-      store.dailyMode ? store.dailyDate || null : null
-    );
+    if (channel.kind === 'daily') {
+      recordWeaveReveal(
+        store.dailyMode,
+        record.hintsUsed,
+        store.dailyMode ? store.dailyDate || null : null
+      );
+    }
     updateRecord((r) => ({ ...r, revealed: true, hintTarget: null }));
   }
 
@@ -635,12 +648,14 @@ const WeaveGame = forwardRef<
 
   return (
     <div className="text-center">
-      <DailyToggle
-        daily={store.dailyMode}
-        onChange={(d) => {
-          setStore((prev) => ({ ...prev, dailyMode: d }));
-        }}
-      />
+      {channel.kind === 'daily' && (
+        <DailyToggle
+          daily={store.dailyMode}
+          onChange={(d) => {
+            setStore((prev) => ({ ...prev, dailyMode: d }));
+          }}
+        />
+      )}
 
       {/* No practice size picker. Practice is the daily generated on the fly
           and not recorded, so its shape comes from the difficulty like the
@@ -649,7 +664,8 @@ const WeaveGame = forwardRef<
       {loading && <p className="text-sm text-slate-400 py-8">Loading…</p>}
       {store.dailyMode && dailyError && !record && (
         <p className="text-sm text-danger py-8">
-          Couldn&apos;t fetch today&apos;s puzzle — try Practice instead.
+          Couldn&apos;t fetch today&apos;s puzzle
+          {channel.kind === 'daily' ? ' — try Practice instead.' : '.'}
         </p>
       )}
 

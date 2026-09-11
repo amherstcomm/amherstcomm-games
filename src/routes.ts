@@ -15,7 +15,7 @@
 // survive a refresh, they can be typed, and they mean the same thing tomorrow.
 
 import { SITE_NAME } from '@/brand';
-import { ALL_VIEWS, MODE_SLUG, modeOf, SLUG_MODE, SLUG_NAME } from '@/games';
+import { ALL_SLUGS, ALL_VIEWS, MODE_SLUG, modeOf, SLUG_MODE, SLUG_NAME } from '@/games';
 import type { Slug, View } from '@/games';
 
 // Re-exported so the ~50 modules that import these from here don't all have to
@@ -110,6 +110,11 @@ export type Route =
   // the owner's queue. A real address rather than a panel, because it is a
   // page you leave open and come back to.
   | { kind: 'reportQueue' }
+  // A tournament: the round that is on, and one of its games when a slug is
+  // given. A page of its own rather than a mode inside each game, because a
+  // round board is a different board -- kept, synced and recorded apart from
+  // the daily -- and the address should say which one somebody is looking at.
+  | { kind: 'tournament'; slug: Slug | null }
   // A live session. Two addresses for the same room: the one everybody opens,
   // and the presenter's, which shows the answer and the controls. Separate
   // addresses rather than a mode on one page, because the presenter's screen
@@ -154,6 +159,8 @@ export function pathOf(route: Route): string {
       return `/report/act/${route.id}/${route.token}${route.action ? `/${route.action}` : ''}`;
     case 'reportQueue':
       return '/reports';
+    case 'tournament':
+      return route.slug ? `/tournament/${route.slug}` : '/tournament';
     case 'live':
       return route.host ? `/live/${route.session}/host` : `/live/${route.session}`;
     case 'sessions':
@@ -218,6 +225,8 @@ export function titleOf(route: Route): string {
       return `Handle a report${suffix}`;
     case 'reportQueue':
       return `Open reports${suffix}`;
+    case 'tournament':
+      return route.slug ? `${SLUG_NAME[route.slug]} · Tournament${suffix}` : `Tournament${suffix}`;
     case 'live':
       // The presenter's title says so, because this address goes on a
       // projector and the tab is the last thing anyone checks before it does.
@@ -280,6 +289,15 @@ export function parsePath(pathname: string): Route | null {
   // A ticket. Hex from the minting side too, so lowercasing is safe. A bare
   // /report is the lookup form with nothing typed into it yet.
   if (first === 'reports') return { kind: 'reportQueue' };
+
+  // /tournament and /tournament/<game>. A slug this site does not have is the
+  // round's own page rather than nothing: the address was nearly right.
+  if (first === 'tournament') {
+    return {
+      kind: 'tournament',
+      slug: second && ALL_SLUGS.includes(second as Slug) ? (second as Slug) : null,
+    };
+  }
 
   if (first === 'live') {
     // A bare /live is somebody guessing at the address for "the thing that is

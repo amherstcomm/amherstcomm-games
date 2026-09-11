@@ -10,11 +10,17 @@ import {
 import { ChevronDown, CornerDownLeft, Delete, Flag, Play, RefreshCw, Timer } from 'lucide-react';
 import { findGridPath, gridNeighbors, solveGrid } from '@/solvers';
 import {
-  difficulty,
   onDifficultyChange,
   resolveDifficulty,
   type Difficulty,
 } from '@/difficulty';
+import {
+  channelDifficulty,
+  channelEnv,
+  channelStoreKey,
+  useBoardChannel,
+  type BoardChannel,
+} from '@/boardChannel';
 import type { LetterState } from '@/GuessGame';
 import { fetchDailyData } from '@/dailyData';
 import DailyStats from '@/DailyStats';
@@ -103,15 +109,17 @@ function sanitizeRecord(r: unknown): GridRecord | null {
 
 // An incoming /daily/ or /play/ link decides which board is waiting; without one
 // we keep whatever the player last had open.
-function loadStore(): GridStore {
-  const store = readStore();
+function loadStore(channel: BoardChannel): GridStore {
+  const store = readStore(channelStoreKey(GRID_KEY, channel));
+  // A round is always its own board; the address bar is about the daily.
+  if (channel.kind !== 'daily') return { ...store, dailyMode: true };
   const forced = dailyIntent('grid');
   return forced === null ? store : { ...store, dailyMode: forced };
 }
 
-function readStore(): GridStore {
+function readStore(key: string): GridStore {
   try {
-    const raw = siteStore.getItem(GRID_KEY);
+    const raw = siteStore.getItem(key);
     if (!raw) return DEFAULT_STORE;
     const p = JSON.parse(raw);
     return {
@@ -147,11 +155,12 @@ const GridGame = forwardRef<
     onLetterStates: (states: Record<string, LetterState>) => void;
   }
 >(function GridGame({ standardWords, displayWord, onLetterStates }, ref) {
-  const [store, setStore] = useState<GridStore>(loadStore);
+  const channel = useBoardChannel();
+  const [store, setStore] = useState<GridStore>(() => loadStore(channel));
   const [themed, setThemed] = useState<string[]>([]);
   // What the day said this board takes: its own words alone, or both.
   const [accept, setAccept] = useState<'both' | 'themed'>('both');
-  const [playedAt, setPlayedAt] = useState<Difficulty>(difficulty);
+  const [playedAt, setPlayedAt] = useState<Difficulty>(() => channelDifficulty(channel));
   const [difficultyTick, setDifficultyTick] = useState(0);
   useEffect(
     () =>
@@ -173,14 +182,14 @@ const GridGame = forwardRef<
   // published, so the server has nothing to look up and the board itself is
   // the only evidence there can be. reportDaily drops it on a daily, which is
   // reported by naming it instead.
-  useEffect(
-    () => reportDaily('grid', store.dailyMode, store.dailyDate, store.practice),
-    [store.dailyMode, store.dailyDate, store.practice]
-  );
-  useEffect(
-    () => offerDailySwitch('grid', (d) => setStore((prev) => ({ ...prev, dailyMode: d }))),
-    []
-  );
+  useEffect(() => {
+    if (channel.kind !== 'daily') return;
+    reportDaily('grid', store.dailyMode, store.dailyDate, store.practice);
+  }, [store.dailyMode, store.dailyDate, store.practice, channel.kind]);
+  useEffect(() => {
+    if (channel.kind !== 'daily') return;
+    return offerDailySwitch('grid', (d) => setStore((prev) => ({ ...prev, dailyMode: d })));
+  }, [channel.kind]);
   const [current, setCurrent] = useState('');
   const [flash, setFlash] = useState<{ text: string; good: boolean } | null>(null);
   const [dailyError, setDailyError] = useState(false);
@@ -219,19 +228,19 @@ const GridGame = forwardRef<
 
   useEffect(() => {
     try {
-      siteStore.setItem(GRID_KEY, JSON.stringify(store));
+      siteStore.setItem(channelStoreKey(GRID_KEY, channel), JSON.stringify(store));
     } catch {
       // best-effort persistence
     }
-  }, [store]);
+  }, [store, channel]);
 
   // fetch today's grid once
   useEffect(() => {
     let alive = true;
-    fetchDailyData('grid')
+    fetchDailyData('grid', channel.kind)
       .then((raw) => {
         if (!alive) return;
-        const chosen = resolveDifficulty(raw, difficulty());
+        const chosen = resolveDifficulty(raw, channelDifficulty(channel));
         if (!chosen.board) throw new Error('bad payload');
         setPlayedAt(chosen.difficulty);
         const d = { ...raw, ...chosen.board };
@@ -256,9 +265,9 @@ const GridGame = forwardRef<
     return () => {
       alive = false;
     };
-  }, [difficultyTick]);
+  }, [difficultyTick, channel]);
 
-  function rollPracticeGrid(size = GRID_SHAPE[difficulty()]): GridRecord {
+  function rollPracticeGrid(size = GRID_SHAPE[channelDifficulty(channel)]): GridRecord {
     const cells = diceFor(size)
       .map((d) => d[Math.floor(Math.random() * 6)])
       .sort(() => Math.random() - 0.5);
@@ -269,6 +278,10 @@ const GridGame = forwardRef<
   useEffect(() => {
     if (store.dailyMode || store.practice) return;
     setStore((prev) => (prev.practice ? prev : { ...prev, practice: rollPracticeGrid() }));
+    // rollPracticeGrid reads only the channel, which cannot change while this
+    // board is mounted -- the provider remounts it instead -- and this only
+    // runs for practice, which a round never shows.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [store.dailyMode, store.practice]);
 
   const record = store.dailyMode ? store.daily : store.practice;
@@ -286,13 +299,16 @@ const GridGame = forwardRef<
   useEffect(() => {
     if (running && remaining === 0) {
       setCurrent('');
-      recordSprint(
-        store.dailyMode,
-        'grid',
-        score,
-        record?.found.length ?? 0,
-        store.dailyMode ? store.dailyDate || null : null
-      );
+      // A round's result lives on the server; it is not part of the daily streaks.
+      if (channel.kind === 'daily') {
+        recordSprint(
+          store.dailyMode,
+          'grid',
+          score,
+          record?.found.length ?? 0,
+          store.dailyMode ? store.dailyDate || null : null
+        );
+      }
       updateRecord((r) => ({ ...r, finished: true }));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -334,6 +350,7 @@ const GridGame = forwardRef<
     setRecord: (merged) => setStore((prev) => ({ ...prev, daily: merged as GridRecord })),
     summary: record?.finished ? { score, words: record.found.length } : null,
     active: store.dailyMode,
+    env: channelEnv(channel),
   });
 
   // dim letters not on the grid once the game has started (not before — that
@@ -533,13 +550,16 @@ const GridGame = forwardRef<
 
   return (
     <div className="text-center">
-      <DailyToggle
-        daily={store.dailyMode}
-        onChange={(d) => {
-          setCurrent('');
-          setStore((prev) => ({ ...prev, dailyMode: d }));
-        }}
-      />
+      {/* A round has no practice board and no daily to switch to. */}
+      {channel.kind === 'daily' && (
+        <DailyToggle
+          daily={store.dailyMode}
+          onChange={(d) => {
+            setCurrent('');
+            setStore((prev) => ({ ...prev, dailyMode: d }));
+          }}
+        />
+      )}
 
       {/* practice grid size */}
       {/* No size buttons. Practice is the daily generated on the fly, so its
@@ -548,7 +568,8 @@ const GridGame = forwardRef<
       {loading && <p className="text-sm text-slate-400 py-8">Loading…</p>}
       {store.dailyMode && dailyError && !record && (
         <p className="text-sm text-danger py-8">
-          Couldn&apos;t fetch today&apos;s grid — try Practice instead.
+          Couldn&apos;t fetch today&apos;s grid
+          {channel.kind === 'daily' ? ' — try Practice instead.' : '.'}
         </p>
       )}
 

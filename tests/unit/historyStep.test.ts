@@ -157,6 +157,9 @@ describe('the overlay table', () => {
     const kinds: Route['kind'][] = [
       'home', 'game', 'panel', 'stats', 'settings',
       'account', 'legal', 'friend', 'ticket', 'reportAction', 'reportQueue',
+      // a tournament is a page too, with or without a game on it: a round
+      // board is not the daily, so Back leaves it rather than uncovering one
+      'tournament',
       // a live session is a page you stay on, not something over a board
       'live',
       // and so is building one — Back from the editor should leave it, not

@@ -2,11 +2,17 @@ import { forwardRef, Fragment, useCallback, useEffect, useImperativeHandle, useM
 import { Eye, RefreshCw, Timer } from 'lucide-react';
 import { fetchDailyData, fetchPool } from '@/dailyData';
 import {
-  difficulty,
   isDifficulty,
   onDifficultyChange,
   type Difficulty,
 } from '@/difficulty';
+import {
+  channelDifficulty,
+  channelEnv,
+  channelStoreKey,
+  useBoardChannel,
+  type BoardChannel,
+} from '@/boardChannel';
 import MobileKeyInput from '@/MobileKeyInput';
 import ShareButton from '@/ShareButton';
 import { GAME_NAME } from '@/games';
@@ -94,15 +100,17 @@ function sanitizeRecord(r: unknown): SquareRecord | null {
 
 // An incoming /daily/ or /play/ link decides which board is waiting; without one
 // we keep whatever the player last had open.
-function loadStore(): SquaresStore {
-  const store = readStore();
+function loadStore(channel: BoardChannel): SquaresStore {
+  const store = readStore(channelStoreKey(SQUARES_KEY, channel));
+  // a round has only its own board; the address bar speaks for the daily
+  if (channel.kind !== 'daily') return { ...store, dailyMode: true };
   const forced = dailyIntent('squares');
   return forced === null ? store : { ...store, dailyMode: forced };
 }
 
-function readStore(): SquaresStore {
+function readStore(key: string): SquaresStore {
   try {
-    const raw = siteStore.getItem(SQUARES_KEY);
+    const raw = siteStore.getItem(key);
     if (!raw) return DEFAULT_STORE;
     const p = JSON.parse(raw);
     // Boards were keyed by size before difficulty existed. 4x4 was easy and
@@ -177,22 +185,23 @@ const SquaresGame = forwardRef<
     onReveal?: (rows: string[]) => void;
   }
 >(function SquaresGame({ standardWords }, ref) {
-  const [store, setStore] = useState<SquaresStore>(loadStore);
+  const channel = useBoardChannel();
+  const [store, setStore] = useState<SquaresStore>(() => loadStore(channel));
   // The difficulty this board actually is — the one asked for, unless the feed
   // predates difficulty and only the easy board exists.
-  const [playedAt, setPlayedAt] = useState<Difficulty>(difficulty);
+  const [playedAt, setPlayedAt] = useState<Difficulty>(() => channelDifficulty(channel));
   const [difficultyTick, setDifficultyTick] = useState(0);
   // The setting itself. `playedAt` is the difficulty of the *daily* board and
   // is only set when that fetch resolves — practice has no daily to wait for,
   // so keying it off playedAt left it on whatever the daily last resolved to.
-  const [level, setLevel] = useState<Difficulty>(difficulty);
+  const [level, setLevel] = useState<Difficulty>(() => channelDifficulty(channel));
   useEffect(
     () =>
       onDifficultyChange(() => {
-        setLevel(difficulty());
+        setLevel(channelDifficulty(channel));
         setDifficultyTick((n) => n + 1);
       }),
-    []
+    [channel]
   );
   const { practiceAllowed } = usePrefs();
   const palette = usePalette();
@@ -206,14 +215,14 @@ const SquaresGame = forwardRef<
   // published, so the server has nothing to look up and the board itself is
   // the only evidence there can be. reportDaily drops it on a daily, which is
   // reported by naming it instead.
-  useEffect(
-    () => reportDaily('squares', store.dailyMode, store.dailyDate, store.practice),
-    [store.dailyMode, store.dailyDate, store.practice]
-  );
-  useEffect(
-    () => offerDailySwitch('squares', (d) => setStore((prev) => ({ ...prev, dailyMode: d }))),
-    []
-  );
+  useEffect(() => {
+    if (channel.kind !== 'daily') return;
+    reportDaily('squares', store.dailyMode, store.dailyDate, store.practice);
+  }, [store.dailyMode, store.dailyDate, store.practice, channel.kind]);
+  useEffect(() => {
+    if (channel.kind !== 'daily') return;
+    return offerDailySwitch('squares', (d) => setStore((prev) => ({ ...prev, dailyMode: d })));
+  }, [channel.kind]);
 
   // Not 0: if the top-left is a given letter, typing does nothing and the
   // board looks broken until you happen to click an empty cell.
@@ -223,21 +232,21 @@ const SquaresGame = forwardRef<
 
   useEffect(() => {
     try {
-      siteStore.setItem(SQUARES_KEY, JSON.stringify(store));
+      siteStore.setItem(channelStoreKey(SQUARES_KEY, channel), JSON.stringify(store));
     } catch {
       // best-effort persistence
     }
-  }, [store]);
+  }, [store, channel]);
 
   // today's boards
   useEffect(() => {
     let alive = true;
-    fetchDailyData('squares')
+    fetchDailyData('squares', channel.kind)
       .then((raw) => {
         if (!alive) return;
         const d = raw;
         if (typeof d?.date !== 'string') throw new Error('bad payload');
-        const want = difficulty();
+        const want = channelDifficulty(channel);
         // `boards`, keyed by size, was the shape before difficulty existed and
         // the generator no longer writes it. byDifficulty is all there is.
         const chosen = d.byDifficulty?.[want] as SquareRecord | undefined;
@@ -261,7 +270,7 @@ const SquaresGame = forwardRef<
     return () => {
       alive = false;
     };
-  }, [difficultyTick]);
+  }, [difficultyTick, channel]);
 
   // the practice pool, fetched once
   useEffect(() => {
@@ -364,15 +373,18 @@ const SquaresGame = forwardRef<
     // reload of a finished board doesn't count it again.
     if (solved && !record.solved) {
       update((r) => ({ ...r, solved: true }));
-      recordSquaresFinish(
-        store.dailyMode,
-        true,
-        n,
-        record.elapsedMs ?? 0,
-        store.dailyMode ? store.dailyDate : null
-      );
+      // a round's result lives on the server, not in the daily streaks
+      if (channel.kind === 'daily') {
+        recordSquaresFinish(
+          store.dailyMode,
+          true,
+          n,
+          record.elapsedMs ?? 0,
+          store.dailyMode ? store.dailyDate : null
+        );
+      }
     }
-  }, [solved, record, n, store.dailyMode, store.dailyDate, update]);
+  }, [solved, record, n, store.dailyMode, store.dailyDate, update, channel.kind]);
 
   useDailySync({
     difficulty: playedAt,
@@ -393,6 +405,7 @@ const SquaresGame = forwardRef<
       ? { solved: !record?.revealed, size: n, timeMs: record?.elapsedMs ?? 0 }
       : null,
     active: store.dailyMode,
+    env: channelEnv(channel),
   });
 
   // the record accumulates its own time, so a board picked up tomorrow carries
@@ -478,7 +491,7 @@ const SquaresGame = forwardRef<
         entries: answer.join('').split(''),
         revealed: true,
       }));
-      if (!record.revealed && !record.solved) {
+      if (channel.kind === 'daily' && !record.revealed && !record.solved) {
         recordSquaresFinish(
           store.dailyMode,
           false,
@@ -507,10 +520,12 @@ const SquaresGame = forwardRef<
 
   return (
     <div className="text-center">
-      <DailyToggle
-        daily={store.dailyMode}
-        onChange={(d) => setStore((prev) => ({ ...prev, dailyMode: d }))}
-      />
+      {channel.kind === 'daily' && (
+        <DailyToggle
+          daily={store.dailyMode}
+          onChange={(d) => setStore((prev) => ({ ...prev, dailyMode: d }))}
+        />
+      )}
 
       {/* Hidden everywhere. Practice is the daily generated on the fly and not
           recorded, so its size comes from the difficulty just as the daily's
