@@ -201,3 +201,25 @@ test('and with only one left the picker goes entirely', async ({ page }) => {
   await page.goto('/daily/guess');
   await expect(page.getByText('Difficulty', { exact: true })).toHaveCount(0);
 });
+
+// The dailies, switched off for a tournament month.
+//
+// Nothing is deleted and no result is lost: the games open on practice, the
+// round is what counts, and the rung that would offer a daily is gone rather
+// than greyed -- the rule this file's other switches follow.
+test('with the dailies switched off a game opens on practice', async ({ page }) => {
+  await site(page, ['site:dailies']);
+  await page.goto('/daily/hive');
+  await expect(page.getByRole('button', { name: /^Daily$/ })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: /^Practice$/ })).toHaveCount(0);
+  // And a board is there to play: the hive renders its own controls whichever
+  // board it dealt, so this says "a hive arrived" without asking which.
+  await expect(page.getByRole('button', { name: 'Shuffle letters' })).toBeVisible({ timeout: 20000 });
+});
+
+test('and with them on the choice is there as usual', async ({ page }) => {
+  await site(page, []);
+  await page.goto('/daily/hive');
+  await expect(page.getByRole('button', { name: /^Daily$/ })).toBeVisible();
+  await expect(page.getByRole('button', { name: /^Practice$/ })).toBeVisible();
+});

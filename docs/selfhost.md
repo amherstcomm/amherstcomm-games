@@ -2181,6 +2181,14 @@ second device merging in reads as a normal sync rather than an error.
 Pins apply to the daily only. Applied to the round too, they would make the
 round's board the same puzzle as the daily everybody played that morning.
 
+**The dailies can be switched off** while a tournament runs — `/admin/games` →
+*The rest of the site* → *Daily puzzles*. The round is then the thing, and a
+daily beside it is a second puzzle competing for the ten minutes anybody has.
+Switched off, every game opens on practice, `/daily/<game>` lands on practice
+too, and the daily/practice rung disappears rather than greying out. Nothing is
+deleted: results already recorded stay, the boards keep their history, and
+switching the dailies back on returns them exactly as they were.
+
 **Standings** are on `/tournament`, from `tournament_standings`. Each started
 round has a leaderboard per game, ranked exactly the way the site's everyday
 board ranks that game — the ranking was lifted out of `boards_for` into
