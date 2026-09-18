@@ -16,8 +16,10 @@
 // Hidden rather than disabled when practice is switched off in Settings: the
 // choice is not merely unavailable, it does not exist, and a greyed pill
 // invites you to work out why.
+import { useEffect, useRef } from 'react';
 import { CalendarDays, RefreshCw } from 'lucide-react';
 import { usePrefs } from '@/prefs';
+import { useUnavailable } from '@/availability';
 
 export default function DailyToggle({
   daily,
@@ -27,6 +29,27 @@ export default function DailyToggle({
   onChange: (daily: boolean) => void;
 }) {
   const { practiceAllowed } = usePrefs();
+  // A deployment can switch the dailies off -- for a tournament month where the
+  // round is the thing, and a daily beside it is a second puzzle competing with
+  // it for the ten minutes anybody has. Then there is no choice to make here,
+  // so this rung goes the way it goes when practice is off: hidden, not greyed.
+  const dailiesOn = !useUnavailable().includes('site:dailies');
+
+  // Games pass a fresh arrow each render; a ref keeps this from re-running on
+  // identity alone while still calling the current one.
+  const onChangeRef = useRef(onChange);
+  onChangeRef.current = onChange;
+  useEffect(() => {
+    // Somebody left on a daily that is no longer offered is moved to practice,
+    // the same way a hidden game's address carries you to one that exists.
+    // Unless practice is off as well, in which case moving them would leave
+    // them with no board at all.
+    if (!dailiesOn && daily && practiceAllowed) onChangeRef.current(false);
+  }, [dailiesOn, daily, practiceAllowed]);
+
+  // Nothing to choose between: the deployment offers one board, and a switch
+  // with one position is clutter -- the rule the view switch follows too.
+  if (!dailiesOn && practiceAllowed) return null;
 
   return (
     // Centred by this wrapper rather than by the caller. The rungs above sit in

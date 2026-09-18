@@ -618,6 +618,10 @@ function App() {
   // Sessions are not a game, so they are switched by their own key. A
   // deployment may want the quiz and nothing else, or the games and no quiz.
   const sessionsOn = !unavailable.includes('site:sessions');
+  // The dailies can be switched off for a tournament month. Nothing is deleted
+  // and nothing recorded is lost; the games simply open on practice, and the
+  // round is what counts.
+  const dailiesOn = !unavailable.includes('site:dailies');
   /** The games still on offer, by mode — the switches are named by slug. */
   const offeredModes = (off: string[]) =>
     ALL_MODES.filter((m) => !off.includes(gameFeature(MODE_SLUG[m])));
@@ -820,11 +824,11 @@ function App() {
             setLearnMode(true);
           } else {
             setLearnMode(false);
-            if (r.view === 'play') requestDaily(m, r.daily);
+            if (r.view === 'play') requestDaily(m, dailiesOn && r.daily);
           }
         }
       },
-      [routingDispatch]
+      [routingDispatch, dailiesOn]
     )
   );
 
@@ -1154,7 +1158,7 @@ function App() {
                 // not goToView: that reads `mode`, which is still the game
                 // we're leaving until this render commits
                 setLearnMode(false);
-                requestDaily(m, true);
+                requestDaily(m, dailiesOn);
               }}
               onBoards={() => {
                 openOverlay({ kind: 'stats', tab: 'boards' });

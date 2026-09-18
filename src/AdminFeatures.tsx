@@ -61,7 +61,14 @@ function everything(): { heading: string; rows: Row[] }[] {
       // and nothing else — every game off and sessions alone is a real thing to
       // run during an event — or the games and no quiz.
       heading: 'The rest of the site',
-      rows: [{ feature: 'site:sessions', label: 'Sessions and joining' }],
+      rows: [
+        { feature: 'site:sessions', label: 'Sessions and joining' },
+        // For a tournament month: the round is the thing, and a daily beside it
+        // competes for the ten minutes anybody has. Switched off, every game
+        // opens on practice and the tournament's boards are the ones that
+        // count. Results already recorded are untouched.
+        { feature: 'site:dailies', label: 'Daily puzzles' },
+      ],
     },
   ];
 }
