@@ -2,11 +2,15 @@
 // games write, so it works signed out. The account copy would only tell us
 // about devices, and the question is about today.
 //
-// Three states, and the middle one is doing honest work: some games have no
-// finish line. Hive is over when you say it is, and Weave's completion needs
-// the puzzle rather than the save file, so both report "started" until they're
+// Three states, and the middle one is doing honest work: Hive has no finish
+// line -- it is over when you say it is -- so it reports "started" until it is
 // given up on. Better a status that admits what it knows than one that calls a
 // half-finished hive done.
+//
+// Weave does have one, and it used to be read as Hive was, on the belief that
+// its completion needed the puzzle rather than the save file. It does not: the
+// save file carries the answers, encoded, so a solved Weave can be counted here
+// like any other game.
 
 import type { Mode } from '@/storage';
 import { store as siteStore } from '@/siteStorage';
@@ -86,6 +90,26 @@ function openState(s: Store | null): DailyState {
   return arr(r.found).length ? 'started' : 'none';
 }
 
+// Solved when every theme word and the spangram are found -- the same count
+// WeaveGame calls complete. The answers are in the record, base64 JSON, so this
+// needs nothing the save file does not already hold. An answer key that will
+// not decode reads as not-yet-solved rather than as done: a status that cannot
+// see the finish line must not claim it was crossed.
+function weaveState(s: Store | null): DailyState {
+  const r = rec(s);
+  if (!r) return 'none';
+  if (r.revealed === true) return 'done';
+  const found = arr(r.found);
+  if (!found.length) return 'none';
+  try {
+    const answers = JSON.parse(atob(String(r.answersB64 ?? ''))) as { words?: unknown };
+    if (Array.isArray(answers.words) && found.length >= answers.words.length + 1) return 'done';
+  } catch {
+    // an unreadable key is not a finished board
+  }
+  return 'started';
+}
+
 // Squares keeps one record per size, so today counts as touched if either
 // board has been. `solved` is written by the game itself — this module holds
 // no dictionary and couldn't judge a finished square on its own.
@@ -154,7 +178,7 @@ const READERS: Record<Mode, { key: string; state: (s: Store | null) => DailyStat
   boxed: { key: 'anagrimoire:box:v1', state: boxState },
   descramble: { key: 'anagrimoire:scramble:v1', state: sprintState },
   grid: { key: 'anagrimoire:grid:v1', state: sprintState },
-  weave: { key: 'anagrimoire:weave:v1', state: openState },
+  weave: { key: 'anagrimoire:weave:v1', state: weaveState },
 };
 
 export function dailyStatus(mode: Mode): DailyState {
