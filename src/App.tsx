@@ -7,7 +7,7 @@ import AccountModal from '@/AccountModal';
 import { stashInvite } from '@/friends';
 import { OskContext } from '@/MobileKeyInput';
 import { KeySinkContext, type KeySink } from '@/keySink';
-import { isOffered, offered, useUnavailable } from '@/availability';
+import { isOffered, offered, useAvailabilityAnswered, useUnavailable } from '@/availability';
 import SettingsModal from '@/SettingsModal';
 import KeyboardHelp from '@/KeyboardHelp';
 import { PALETTES, PaletteContext, resolveTheme, TEXT_SCALES, THEME_MODES, useTheme, type Palette, type TextScale, type ThemeMode } from '@/theme';
@@ -44,7 +44,12 @@ import TicketView from '@/TicketView';
 import ReportQueueView from '@/ReportQueueView';
 import TournamentView from '@/TournamentView';
 import { BoardChannelContext, DAILY_CHANNEL, type BoardChannel } from '@/boardChannel';
-import { readCurrentRound, type CurrentRound } from '@/rounds';
+import {
+  readCurrentRound,
+  readCurrentTournament,
+  type CurrentRound,
+  type CurrentTournament,
+} from '@/rounds';
 import LiveSession from '@/LiveSession';
 import SessionEditor from '@/SessionEditor';
 import AdminSettings from '@/AdminSettings';
@@ -622,6 +627,15 @@ function App() {
   // and nothing recorded is lost; the games simply open on practice, and the
   // round is what counts.
   const dailiesOn = !unavailable.includes('site:dailies');
+  // A tournament that locks the site: from its first day to its last, the
+  // tournament is the only thing on offer. Said as two absences rather than
+  // every game switched off, because the round is played in those games --
+  // switching off game:hive would take the round's Hive with it.
+  const lockedToTournament = unavailable.includes('site:outside-tournament');
+  // ...and, unless the tournament keeps them open, every session that is not
+  // the round's own trivia.
+  const otherSessionsOff = unavailable.includes('site:other-sessions');
+  const availabilityAnswered = useAvailabilityAnswered();
   /** The games still on offer, by mode — the switches are named by slug. */
   const offeredModes = (off: string[]) =>
     ALL_MODES.filter((m) => !off.includes(gameFeature(MODE_SLUG[m])));
@@ -699,6 +713,9 @@ function App() {
   // open is found rather than missed. Undefined while asking, null when nothing
   // is running -- which is most of the year.
   const [round, setRound] = useState<CurrentRound | null | undefined>(undefined);
+  // The tournament covering today, round or no round: between rounds of a
+  // locked tournament it is all there is to show.
+  const [tournament, setTournament] = useState<CurrentTournament | null>(null);
   const tournamentPage = nav.page.kind === 'tournament' ? nav.page : null;
   const onTournamentPage = tournamentPage !== null;
   useEffect(() => {
@@ -706,10 +723,13 @@ function App() {
     void readCurrentRound().then((res) => {
       if (alive) setRound(res.ok ? res.round : null);
     });
+    void readCurrentTournament().then((t) => {
+      if (alive) setTournament(t);
+    });
     return () => {
       alive = false;
     };
-  }, [onTournamentPage]);
+  }, [onTournamentPage, lockedToTournament]);
 
   // /tournament/<game>: that game, on the round's board. The address names the
   // game, so the game it names is the one on screen.
@@ -724,6 +744,18 @@ function App() {
   // a game the round does not include is not played on the round's board, and
   // is not quietly played as the daily under the round's address either.
   const inRound = Boolean(tournamentPage?.slug);
+  // Locked: the front page and every ordinary game page show the tournament
+  // instead. The round's own games, at /tournament/<game>, are the tournament.
+  const lockedHere = lockedToTournament && !reportPage && !inRound;
+  // A session may be joined when sessions are not locked, or when it is the
+  // round's own trivia.
+  const roundSessions = new Set((round?.trivia ?? []).map((v) => v.session_id));
+  const sessionOpen = (id: string) => !otherSessionsOff || roundSessions.has(id);
+  // Whether a session page may draw yet: the server has said what is locked,
+  // and if sessions are locked, the round has said which are its own. Drawing
+  // on the cache alone let a locked session mount and ask for its question
+  // before the lock arrived.
+  const sessionKnown = availabilityAnswered && (!otherSessionsOff || round !== undefined);
   const roundChannel = useMemo<Extract<BoardChannel, { kind: 'round' }> | null>(() => {
     if (!tournamentPage?.slug || !round) return null;
     if (!round.games.includes(FEED_NAME[modeOf(tournamentPage.slug)])) return null;
@@ -947,7 +979,7 @@ function App() {
           here before the page was widened; widening it made the full row
           appear, which is my doing rather than something to leave. The footer
           still has Home, so the way back out has not gone. */}
-      {shownModes.length > 1 && !forTheRoom && (
+      {shownModes.length > 1 && !forTheRoom && !lockedToTournament && (
       <nav
         aria-label="Game modes"
         className="sticky top-0 z-40 bg-slate-950/80 backdrop-blur border-b border-white/10"
@@ -1098,12 +1130,27 @@ function App() {
             chrome of a word game. One conditional rather than a dozen,
             because a dozen is a list somebody will add the thirteenth to.
             The header and footer stay: they are the way back out. */}
-        {reportPage ? (
+        {reportPage || lockedHere ? (
           <>
+          {lockedHere && (
+            <TournamentView
+              round={round}
+              tournament={tournament}
+              locked
+              link={pageLink}
+              sessionsOn={sessionsOn}
+            />
+          )}
           {reportPage?.kind === 'ticket' && <TicketView ticket={reportPage.ticket} />}
           {reportPage?.kind === 'reportQueue' && <ReportQueueView />}
           {reportPage?.kind === 'tournament' && (
-            <TournamentView round={round} link={pageLink} sessionsOn={sessionsOn} />
+            <TournamentView
+              round={round}
+              tournament={tournament}
+              locked={lockedToTournament}
+              link={pageLink}
+              sessionsOn={sessionsOn}
+            />
           )}
           {/* Switched off means refused at the address too, the same as a
               game. Hiding the link alone would leave a session playable to
@@ -1119,16 +1166,36 @@ function App() {
               </p>
             )}
 
-          {sessionsOn && reportPage?.kind === 'live' && (
-            <LiveSession session={reportPage.session} host={reportPage.host} />
-          )}
+          {/* A tournament holding the site holds its sessions too, unless it
+              keeps them open: the round's own trivia is joinable, anything
+              else is refused at its address, the same as a switched-off game.
+              Nothing is said until the round has been asked, so the round's
+              own session does not flash a refusal on the way in. */}
+          {sessionsOn &&
+            sessionKnown &&
+            (reportPage?.kind === 'live' || reportPage?.kind === 'scores') &&
+            !sessionOpen(reportPage.session) && (
+              <p className="max-w-2xl mx-auto px-4 py-10 text-sm text-slate-400">
+                {tournament?.name ?? 'The tournament'} is the only thing running just now,
+                so this session can&apos;t be joined until it ends.
+              </p>
+            )}
+          {sessionsOn &&
+            reportPage?.kind === 'live' &&
+            sessionKnown &&
+            sessionOpen(reportPage.session) && (
+              <LiveSession session={reportPage.session} host={reportPage.host} />
+            )}
           {sessionsOn && reportPage?.kind === 'sessions' && <SessionEditor session={reportPage.session} />}
           {reportPage?.kind === 'admin' && <AdminSettings
               tab={reportPage.tab}
               tabLink={(tab) => pageLink({ kind: 'admin', tab })}
             />}
           {sessionsOn && reportPage?.kind === 'join' && <JoinSession code={reportPage.code} />}
-          {sessionsOn && reportPage?.kind === 'scores' && <Scoreboard session={reportPage.session} />}
+          {sessionsOn &&
+            reportPage?.kind === 'scores' &&
+            sessionKnown &&
+            sessionOpen(reportPage.session) && <Scoreboard session={reportPage.session} />}
           {reportPage?.kind === 'reportAction' && (
             <ReportActionView
               id={reportPage.id}

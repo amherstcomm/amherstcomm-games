@@ -10902,8 +10902,13 @@ grant insert (id, settings) on public.profiles to authenticated;
 grant update (settings) on public.profiles to authenticated;
 
 -- Everybody already here, named from the provider. Safe on every apply: an
--- account already carrying its provider name is left as it is.
-select public.apply_identity_name(u.id) from auth.users u;
+-- account already carrying its provider name is left as it is. In a DO block
+-- so applying the file prints nothing for it -- as a bare select, the SQL
+-- editor showed one empty row per account, which read like a result to decode.
+do $$
+begin
+  perform public.apply_identity_name(u.id) from auth.users u;
+end $$;
 
 
 -- ---------------------------------------------------------------------------
@@ -10966,3 +10971,201 @@ $fn$;
 
 revoke all on function public.my_competing() from public, anon;
 grant execute on function public.my_competing() to authenticated;
+
+
+-- ---------------------------------------------------------------------------
+-- A tournament that is the whole site
+-- ---------------------------------------------------------------------------
+--
+-- A tournament can say that, from its first day to its last, it is the only
+-- thing on offer: no dailies, no practice, no other games -- the tournament's
+-- page and its rounds' games, and nothing else. Between rounds that means the
+-- standings and the date the next round starts.
+--
+-- Said through availability, the site's one way of saying what is not on
+-- offer, as two more absences:
+--
+--   site:outside-tournament  everything but the tournament is unavailable
+--   site:other-sessions      sessions not attached to the round are too
+--
+-- The second is left out when the tournament keeps other sessions open, so an
+-- all-hands or a meeting poll can still run in the middle of it.
+--
+-- Two absences rather than switching every game off one by one, because the
+-- games are what a round is played in: switching off game:hive would take the
+-- round's Hive with it. The app reads these two and keeps /tournament/<game>.
+--
+-- What availability has always been: the deployment deciding what it offers,
+-- not a lock on data. The feeds and RPCs behind a switched-off page still
+-- answer, as they do for any switched-off game.
+
+alter table public.tournaments add column if not exists locks_site boolean not null default false;
+alter table public.tournaments add column if not exists sessions_open boolean not null default false;
+
+-- save_tournament, with the two switches. Replaced rather than added to: a
+-- defaulted parameter makes a second signature, and a caller still reaching
+-- the old one would save a tournament and quietly unlock it.
+drop function if exists public.save_tournament(uuid, text, text, date, date);
+
+create or replace function public.save_tournament(
+  p_id uuid,
+  p_name text,
+  p_difficulty text,
+  p_starts date,
+  p_ends date,
+  p_locks_site boolean default false,
+  p_sessions_open boolean default false
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $fn$
+declare
+  v_id uuid := p_id;
+  v_name text := btrim(coalesce(p_name, ''));
+begin
+  if not public.can('games.setup') then
+    return jsonb_build_object('ok', false, 'reason', 'not allowed');
+  end if;
+  if char_length(v_name) = 0 or char_length(v_name) > 80 then
+    return jsonb_build_object('ok', false, 'reason', 'it needs a name');
+  end if;
+  if p_difficulty is null or p_difficulty not in ('easy', 'hard', 'extreme') then
+    return jsonb_build_object('ok', false, 'reason', 'a difficulty is easy, hard or extreme');
+  end if;
+  if p_starts is null or p_ends is null or p_ends < p_starts then
+    return jsonb_build_object('ok', false, 'reason', 'it needs dates, ending on or after it starts');
+  end if;
+
+  if v_id is not null then
+    if exists (
+      select 1 from public.tournament_rounds r
+      where r.tournament_id = v_id and (r.starts_on < p_starts or r.ends_on > p_ends)
+    ) then
+      return jsonb_build_object('ok', false, 'reason', 'a round would fall outside those dates');
+    end if;
+    if exists (
+      select 1 from public.tournaments t
+      where t.id = v_id and t.difficulty <> p_difficulty
+    ) and exists (
+      select 1 from public.tournament_rounds r
+      where r.tournament_id = v_id and r.starts_on <= public.puzzle_day()
+    ) then
+      return jsonb_build_object('ok', false, 'reason', 'the difficulty cannot change once a round has started');
+    end if;
+    -- The switches may move at any time, running or not: locking the site is
+    -- something an admin may decide on the second day, and unlocking it is the
+    -- way out if it was a mistake.
+    update public.tournaments
+       set name = v_name, difficulty = p_difficulty, starts_on = p_starts, ends_on = p_ends,
+           locks_site = coalesce(p_locks_site, false),
+           sessions_open = coalesce(p_sessions_open, false)
+     where id = v_id;
+    if not found then
+      return jsonb_build_object('ok', false, 'reason', 'no such tournament');
+    end if;
+  else
+    insert into public.tournaments (name, difficulty, starts_on, ends_on, created_by, locks_site, sessions_open)
+    values (v_name, p_difficulty, p_starts, p_ends, (select auth.uid()),
+            coalesce(p_locks_site, false), coalesce(p_sessions_open, false))
+    returning id into v_id;
+  end if;
+  return jsonb_build_object('ok', true, 'id', v_id);
+end;
+$fn$;
+
+revoke all on function public.save_tournament(uuid, text, text, date, date, boolean, boolean) from public, anon;
+grant execute on function public.save_tournament(uuid, text, text, date, date, boolean, boolean) to authenticated;
+
+-- The sheet carries the switches.
+create or replace function public.tournaments_sheet()
+returns jsonb
+language sql
+stable
+security definer
+set search_path = ''
+as $fn$
+  select case
+    when not public.can('games.setup')
+      then jsonb_build_object('ok', false, 'reason', 'not allowed')
+    else jsonb_build_object('ok', true, 'tournaments', coalesce((
+      select jsonb_agg(jsonb_build_object(
+               'id', t.id, 'name', t.name, 'difficulty', t.difficulty,
+               'starts_on', t.starts_on, 'ends_on', t.ends_on,
+               'locks_site', t.locks_site, 'sessions_open', t.sessions_open,
+               'rounds', coalesce((
+                 select jsonb_agg(jsonb_build_object(
+                          'id', r.id, 'starts_on', r.starts_on, 'ends_on', r.ends_on,
+                          'games', to_jsonb(r.games),
+                          'trivia', public.round_trivia(r.id),
+                          'started', r.starts_on <= public.puzzle_day())
+                        order by r.starts_on)
+                 from public.tournament_rounds r where r.tournament_id = t.id), '[]'::jsonb))
+             order by t.starts_on desc)
+      from public.tournaments t), '[]'::jsonb))
+  end
+$fn$;
+
+revoke all on function public.tournaments_sheet() from public, anon;
+grant execute on function public.tournaments_sheet() to authenticated;
+
+-- The tournament covering today, round or no round: what the tournament page
+-- shows between rounds -- its name, its standings, and when it resumes. A
+-- locking one first when two overlap, because that is the one running the site.
+create or replace function public.current_tournament()
+returns jsonb
+language sql
+stable
+security definer
+set search_path = ''
+as $fn$
+  select jsonb_build_object(
+           'id', t.id, 'name', t.name, 'difficulty', t.difficulty,
+           'starts_on', t.starts_on, 'ends_on', t.ends_on,
+           'locks_site', t.locks_site,
+           'next_round_starts_on', (
+             select min(r.starts_on) from public.tournament_rounds r
+             where r.tournament_id = t.id and r.starts_on > public.puzzle_day()))
+  from public.tournaments t
+  where public.puzzle_day() between t.starts_on and t.ends_on
+  order by t.locks_site desc, t.starts_on
+  limit 1
+$fn$;
+
+revoke all on function public.current_tournament() from public;
+grant execute on function public.current_tournament() to anon, authenticated;
+
+-- What is not on offer, now with the tournament's own absences. Redefined here
+-- rather than where it was first written because it asks puzzle_day(), which
+-- is defined with the tournaments.
+create or replace function public.read_availability()
+returns jsonb
+language sql
+stable
+security definer
+set search_path = ''
+as $fn$
+  select coalesce(jsonb_agg(x.feature order by x.feature), '[]'::jsonb)
+  from (
+    select f.feature
+    from public.feature_windows f
+    where not f.enabled
+       or (f.starts_at is not null and now() < f.starts_at)
+       or (f.ends_at is not null and now() >= f.ends_at)
+    union
+    select 'site:outside-tournament'
+    where exists (
+      select 1 from public.tournaments t
+      where t.locks_site and public.puzzle_day() between t.starts_on and t.ends_on)
+    union
+    select 'site:other-sessions'
+    where exists (
+      select 1 from public.tournaments t
+      where t.locks_site and not t.sessions_open
+        and public.puzzle_day() between t.starts_on and t.ends_on)
+  ) x
+$fn$;
+
+revoke all on function public.read_availability() from public;
+grant execute on function public.read_availability() to anon, authenticated;

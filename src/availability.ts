@@ -73,12 +73,36 @@ function publish(next: string[]): void {
   for (const l of listeners) l();
 }
 
+/** Whether the server has answered this page load. The cache paints the
+ *  page, and for most of it a moment on yesterday's answer is harmless; for a
+ *  session it is not -- the screen would mount, ask for the question and show
+ *  it before a tournament's lock arrived to take it down. Answered on an error
+ *  too, so a server that cannot be reached leaves the cache in charge rather
+ *  than a page waiting for ever. */
+let answered = !supabase;
+
+function markAnswered(): void {
+  if (answered) return;
+  answered = true;
+  for (const l of listeners) l();
+}
+
 export async function refreshAvailability(): Promise<void> {
   if (!supabase) return;
-  const { data, error } = await supabase.rpc('read_availability');
-  if (error || !data) return;
+  let data: unknown = null;
+  let error: unknown = null;
+  try {
+    ({ data, error } = await supabase.rpc('read_availability'));
+  } catch (e) {
+    error = e;
+  }
+  if (error || !data) {
+    markAnswered();
+    return;
+  }
   const next = clean(data);
   publish(next);
+  markAnswered();
   try {
     store.setItem(CACHE_KEY, JSON.stringify(next));
   } catch {
@@ -103,6 +127,15 @@ export function useUnavailable(): string[] {
     subscribe,
     () => snapshot,
     () => snapshot
+  );
+}
+
+/** True once this page load has heard from the server, or had nobody to ask. */
+export function useAvailabilityAnswered(): boolean {
+  return useSyncExternalStore(
+    subscribe,
+    () => answered,
+    () => answered
   );
 }
 

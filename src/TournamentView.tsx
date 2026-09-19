@@ -17,7 +17,7 @@ import { formatElapsed } from '@/useUpTimer';
 import { DIFFICULTY_LABEL } from '@/difficulty';
 import { MODE_SLUG, GAME_NAME, type Mode } from '@/games';
 import { roundGameName } from '@/tournaments';
-import type { CurrentRound } from '@/rounds';
+import type { CurrentRound, CurrentTournament } from '@/rounds';
 import { FEED_NAME } from '@/games';
 import type { Route } from '@/routes';
 
@@ -185,11 +185,17 @@ function Standings({ tournamentId, currentRound }: { tournamentId: string; curre
 
 export default function TournamentView({
   round,
+  tournament = null,
+  locked = false,
   link,
   sessionsOn = true,
 }: {
   /** undefined while it is being asked, null when nothing is on */
   round: CurrentRound | null | undefined;
+  /** the tournament covering today, round or no round */
+  tournament?: CurrentTournament | null;
+  /** the tournament is the only thing on offer until it ends */
+  locked?: boolean;
   /** the two kinds of address this page links to: its games and its trivia */
   link: (
     route: Extract<Route, { kind: 'tournament' } | { kind: 'live' }>
@@ -200,6 +206,30 @@ export default function TournamentView({
 }) {
   if (round === undefined) {
     return <p className="max-w-2xl mx-auto px-4 py-10 text-sm text-slate-400">Loading…</p>;
+  }
+  // Between rounds of a tournament that is still running: its standings, and
+  // when it picks up again. For a tournament holding the site this is the
+  // whole site, so it has to say more than "nothing is on".
+  if (round === null && tournament) {
+    return (
+      <section className="max-w-2xl mx-auto px-4 py-6" aria-label="Between rounds">
+        <h2 className="text-xl font-bold text-white flex items-center gap-2">
+          <Trophy className="w-5 h-5 text-accent shrink-0" aria-hidden="true" />
+          {tournament.name}
+        </h2>
+        <p className="mt-2 text-sm text-slate-300">
+          {tournament.next_round_starts_on
+            ? `No round is on today. The next one starts ${tournament.next_round_starts_on}.`
+            : `No round is on today, and none is left to start. It ends ${tournament.ends_on}.`}
+        </p>
+        {locked && (
+          <p className="mt-1 text-sm text-slate-400">
+            Until {tournament.ends_on}, the tournament is the only thing on the site.
+          </p>
+        )}
+        <Standings tournamentId={tournament.id} currentRound="" />
+      </section>
+    );
   }
   if (round === null) {
     return (
@@ -225,6 +255,11 @@ export default function TournamentView({
         Round {round.number} of {round.of} · {span(round.starts_on, round.ends_on)} ·{' '}
         {DIFFICULTY_LABEL[round.difficulty]}
       </p>
+      {locked && (
+        <p className="mt-2 text-sm text-slate-400">
+          Until {round.tournament_ends_on}, the tournament is the only thing on the site.
+        </p>
+      )}
       <p className="mt-2 text-sm text-slate-400">
         Each game has one board for the whole round. You get one attempt at it,
         and your first finish is the one that counts — so take your time
