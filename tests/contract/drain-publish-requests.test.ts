@@ -31,6 +31,7 @@ const plus = (date: string, n: number) =>
 type Row = { puzzle_date: string; env: string; game: string; payload: Record<string, unknown> };
 type Job = { id: string; on_date: string; force: boolean };
 
+let oldSchema = false;
 let server: Server;
 let base: string;
 let queue: Job[] = [];
@@ -50,7 +51,11 @@ beforeAll(async () => {
       const rpc = url.match(/\/rest\/v1\/rpc\/(\w+)/)?.[1];
       if (rpc === 'claim_publish_request') return send(queue.shift() ?? null);
       if (rpc === 'finish_publish_request') {
-        finished.push(JSON.parse(body));
+        const args = JSON.parse(body);
+        // A database whose schema predates 'skipped' has no four-argument
+        // form, and PostgREST answers a call it cannot match with a 404.
+        if (oldSchema && 'p_skipped' in args) return send({ message: 'no such function' }, 404);
+        finished.push(args);
         // What PostgREST answers for a function returning void: nothing.
         res.writeHead(204);
         return res.end();
@@ -132,13 +137,31 @@ describe('the publish host draining requests', () => {
     await drain();
     expect(posted).toEqual([]);
     expect(finished).toHaveLength(1);
-    expect(finished[0].p_ok).toBe(false);
-    expect(finished[0].p_note).toMatch(/started before it could be published/);
+    // Skipped, not failed: the rule did what it is for.
+    expect(finished[0]).toMatchObject({ p_id: 'r2', p_ok: false, p_skipped: true });
+    expect(finished[0].p_note).toMatch(/had started by the time the publish host got to it/);
+    expect(finished[0].p_note).toMatch(/Ask again to replace it/);
   });
 
   // The request is closed whatever happens -- including a generator that
   // cannot run -- because an open request is a page saying "publishing now"
   // for ever.
+  // The drain can reach the VM before the schema does. Then the skip is recorded
+  // the old way -- as failed -- rather than the request being left running,
+  // which would be a page saying "publishing now" for ever.
+  it('still closes a skipped request against a database without the skip state', async () => {
+    oldSchema = true;
+    try {
+      queue = [{ id: 'r4', on_date: easternToday(), force: false }];
+      const { code, out } = await drain();
+      expect(code, out).toBe(0);
+      expect(finished).toHaveLength(1);
+      expect(finished[0]).toEqual({ p_id: 'r4', p_ok: false, p_note: expect.any(String) });
+    } finally {
+      oldSchema = false;
+    }
+  });
+
   it('and closes the request when the generator fails', async () => {
     queue = [{ id: 'r3', on_date: plus(easternToday(), 21), force: false }];
     await drain({ PUZZLES_THEME: 'not json' });

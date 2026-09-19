@@ -497,7 +497,9 @@ export default function AdminPins() {
                   ? 'text-rose-300'
                   : r.state === 'done'
                     ? 'text-emerald-300'
-                    : 'text-slate-400'
+                    : r.state === 'skipped'
+                      ? 'text-amber-200'
+                      : 'text-slate-400'
               }
             >
               {r.on_date} — {describeRequest(r)}

@@ -8,7 +8,9 @@
 // page's half: file one, and read what has become of them.
 import { supabase } from '@/supabase';
 
-export type PublishState = 'waiting' | 'running' | 'done' | 'failed';
+/** skipped: its day went live before the host got to it, and the host left
+ *  a board people were playing alone. Not a failure -- the rule working. */
+export type PublishState = 'waiting' | 'running' | 'done' | 'failed' | 'skipped';
 
 export type PublishRequest = {
   id: string;
@@ -60,5 +62,7 @@ export function describeRequest(r: PublishRequest): string {
       return r.note ?? 'published';
     case 'failed':
       return `failed — ${r.note ?? 'no reason given'}`;
+    case 'skipped':
+      return `left as it was — ${r.note ?? 'its day had already started'}`;
   }
 }
