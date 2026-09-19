@@ -4,9 +4,9 @@
 -- off every board -- so an employee who never opened the account menu played a
 -- whole tournament and never appeared in it. Accounts are named on arrival now.
 -- What has to hold: the name comes from the provider when it sent one and from
--- the email when it did not, it is cleaned to the rules a chosen name follows,
--- two people cannot end up with one name, and a name the person chose or
--- cleared is never overwritten.
+-- the email when it did not, it is cleaned to the rules the boards hold names
+-- to, two people cannot end up with one name, and nobody can set, change or
+-- clear their own -- not through the function, and not through the table.
 \set ON_ERROR_STOP on
 
 create or replace function pg_temp.check(label text, got boolean) returns void
@@ -72,42 +72,61 @@ select pg_temp.check('a blocked name falls through to the email',
   pg_temp.name_of('a1000000-0000-0000-0000-000000000007') = 'Dana Lee');
 
 -- ---------------------------------------------------------------------------
--- The person stays in charge of it
+-- The provider's name, always
 -- ---------------------------------------------------------------------------
 update auth.users set raw_user_meta_data = '{"full_name": "Jane Doe-Ray"}'
  where id = 'a1000000-0000-0000-0000-000000000001';
-select pg_temp.check('an untouched name follows the provider when it changes',
+select pg_temp.check('a name changed at the provider changes here at the next sign-in',
   pg_temp.name_of('a1000000-0000-0000-0000-000000000001') = 'Jane Doe-Ray');
 
 set session "test.uid" = 'a1000000-0000-0000-0000-000000000002';
-select public.set_display_name('Bobby');
-update auth.users set raw_user_meta_data = '{"given_name": "Robert", "family_name": "Smith"}'
+select pg_temp.check('a player cannot choose their own name',
+  public.set_display_name('Bobby') = 'from sign-in'
+  and pg_temp.name_of('a1000000-0000-0000-0000-000000000002') = 'Bob Smith');
+select pg_temp.check('nor clear it to leave the boards',
+  public.set_display_name('') = 'from sign-in'
+  and pg_temp.name_of('a1000000-0000-0000-0000-000000000002') = 'Bob Smith');
+
+-- The back door: the update policy that lets a browser save its settings used
+-- to let it write its own display_name too, straight through the API.
+set role authenticated;
+do $$
+begin
+  update public.profiles set display_name = 'Sneaky'
+   where id = 'a1000000-0000-0000-0000-000000000002';
+  raise exception 'wrote it';
+exception
+  when insufficient_privilege then null;
+end $$;
+reset role;
+select pg_temp.check('nor write it straight to the table',
+  pg_temp.name_of('a1000000-0000-0000-0000-000000000002') = 'Bob Smith');
+
+set role authenticated;
+update public.profiles set settings = '{"theme": "dark"}'
  where id = 'a1000000-0000-0000-0000-000000000002';
-select pg_temp.check('a name the person chose is kept when the provider changes',
-  pg_temp.name_of('a1000000-0000-0000-0000-000000000002') = 'Bobby');
+reset role;
+select pg_temp.check('while the settings a browser saves still save',
+  (select settings->>'theme' from public.profiles
+   where id = 'a1000000-0000-0000-0000-000000000002') = 'dark');
 
-set session "test.uid" = 'a1000000-0000-0000-0000-000000000003';
-select public.set_display_name('');
-update auth.users set raw_user_meta_data = '{"full_name": "Carol Jones"}'
- where id = 'a1000000-0000-0000-0000-000000000003';
-select pg_temp.check('and a name they cleared to leave the boards stays cleared',
-  pg_temp.name_of('a1000000-0000-0000-0000-000000000003') is null);
-
--- Somebody who chose a name before any of this existed has no auto_name, and
--- is left alone by the backfill the same way.
-insert into auth.users (id, email) values ('a1000000-0000-0000-0000-000000000008', 'old@amherstcomm.net');
-update public.profiles set display_name = 'Old Timer', auto_name = null
+-- A name somebody chose before this existed gives way to the provider's when
+-- the schema is applied.
+insert into auth.users (id, email) values ('a1000000-0000-0000-0000-000000000008', 'old.timer@amherstcomm.net');
+update public.profiles set display_name = 'Whatever I Liked'
  where id = 'a1000000-0000-0000-0000-000000000008';
-select public.apply_identity_name('a1000000-0000-0000-0000-000000000008');
-select pg_temp.check('a name chosen before this existed is kept',
+select public.apply_identity_name(u.id) from auth.users u;
+select pg_temp.check('a name chosen before this existed is replaced by the provider''s',
   pg_temp.name_of('a1000000-0000-0000-0000-000000000008') = 'Old Timer');
 
 -- ---------------------------------------------------------------------------
 -- Who may
 -- ---------------------------------------------------------------------------
-select pg_temp.check('no browser may name an account this way',
+select pg_temp.check('no browser may name an account',
   not has_function_privilege('authenticated', 'public.apply_identity_name(uuid)', 'execute')
   and not has_function_privilege('anon', 'public.apply_identity_name(uuid)', 'execute')
-  and not has_function_privilege('authenticated', 'public.identity_name_for(uuid)', 'execute'));
+  and not has_function_privilege('authenticated', 'public.identity_name_for(uuid)', 'execute')
+  and not has_column_privilege('authenticated', 'public.profiles', 'display_name', 'update')
+  and not has_column_privilege('authenticated', 'public.profiles', 'display_name', 'insert'));
 
 \echo '--- identity name checks passed ---'

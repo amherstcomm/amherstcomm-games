@@ -190,28 +190,8 @@ export const BOARD_LABELS: Record<
 // Display names
 // ---------------------------------------------------------------------------
 
-export type NameResult = 'ok' | 'length' | 'characters' | 'blocked' | 'taken' | 'error';
-
-export const NAME_MESSAGES: Record<Exclude<NameResult, 'ok'>, string> = {
-  length: 'Between 2 and 24 characters.',
-  characters: 'Letters and numbers, with spaces, hyphens or underscores inside.',
-  blocked: "That one's not available.",
-  taken: 'Someone already has that name.',
-  error: "Couldn't save that just now.",
-};
-
-export async function setDisplayName(name: string): Promise<NameResult> {
-  if (!supabase) return 'error';
-  try {
-    const { data, error } = await supabase.rpc('set_display_name', { p_name: name });
-    if (error) return 'error';
-    const known: NameResult[] = ['ok', 'length', 'characters', 'blocked', 'taken'];
-    const r = String(data) as NameResult;
-    return known.includes(r) ? r : 'error';
-  } catch {
-    return 'error';
-  }
-}
+// Read only. The name is the one company sign-in gives the account, set by
+// the database at every sign-in; there is nothing here to write it with.
 
 export async function fetchDisplayName(): Promise<string | null> {
   if (!supabase) return null;

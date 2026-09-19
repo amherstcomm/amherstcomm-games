@@ -280,8 +280,12 @@ request made directly against the API. Disable its email provider as well.
 
 ### Display names come from sign-in
 
-An account is named for its owner when it first signs in, so an employee is on
-the leaderboards and tournament standings without visiting the account menu.
+Every account's display name is its owner's name from company sign-in, so an
+employee is on the leaderboards and tournament standings because they played.
+Nobody picks, changes or clears their own: the account menu shows the name
+read-only, `set_display_name` changes nothing, and a browser can no longer write
+the column directly (it keeps write access to its own `settings` and nothing
+else on `profiles`).
 The name is taken from what the identity provider sent, first that yields one:
 `full_name`, `name` or `custom_claims.name`; then `given_name` + `family_name`
 (or `first_name` + `last_name`); then the email's local part, so
@@ -290,10 +294,10 @@ chosen name follows — accents folded, other punctuation dropped, a name over 2
 characters shortened to first name and last initial — and a duplicate gets a
 number.
 
-Anyone can change it or clear it in the account menu, and once they have, it is
-theirs: a later sign-in never overwrites a name somebody chose or cleared.
-Until then it follows the provider, so a name changed in Zitadel changes here at
-the next sign-in.
+It is set again at every sign-in, so a name corrected in Zitadel is corrected
+here the next time that person signs in. Applying the schema renames every
+existing account from what its provider last sent, including any name somebody
+chose before this.
 
 **For a real name rather than the email's, map it.** SAML only carries what the
 provider's `attribute_mapping` in GoTrue asks for. When registering Zitadel with

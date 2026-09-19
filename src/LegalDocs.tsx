@@ -262,20 +262,17 @@ export function PrivacyPolicy() {
 
       <H>Display names and leaderboards</H>
       <P>
-        You can set a display name on your account. It is the{' '}
+        Your account&apos;s display name comes from company sign-in: it is your name
+        as the company directory has it, set each time you sign in, and it can&apos;t
+        be changed here. It is the{' '}
         <strong className="text-slate-300">only thing about you any other player can
-        ever see</strong>, and setting one is entirely optional — accounts have no name
-        until you give them one, and without one you don&apos;t appear on the
-        leaderboards at all.
+        ever see</strong>.
       </P>
       <P>
-        Set one and your name appears on the daily leaderboards alongside your scores
-        for those puzzles: how many you solved, points, times. That is the whole of
-        it. The boards are built by a database function that can return names and
-        numbers and nothing else — not your email, not anything you typed, and no way
-        for a reader to get from a name back to the account it belongs to. Because the
-        name is the public part, pick one you are happy to be seen under rather than
-        one that identifies you.
+        Your name appears on the daily leaderboards and tournament standings alongside
+        your scores for those puzzles: how many you solved, points, times. That is the
+        whole of it. The boards are built by a database function that can return names
+        and numbers and nothing else — not your email, and not anything you typed.
       </P>
       <P>
         Clearing the name removes you from the boards immediately and permanently.
@@ -499,10 +496,9 @@ export function Terms() {
 
       <H>Display names</H>
       <P>
-        Optional, and the only part of your account other people see. Pick something
-        you&apos;d be comfortable having on a public list. Don&apos;t impersonate
-        anyone, and don&apos;t use a name intended to harass or abuse — those we will
-        clear without warning, and repeat attempts will cost the account.
+        Your display name is your name from company sign-in, and the only part of
+        your account other people see. It isn&apos;t chosen here and can&apos;t be
+        changed here; a correction to it belongs in the company directory.
       </P>
 
       <H>Fair use of the site</H>

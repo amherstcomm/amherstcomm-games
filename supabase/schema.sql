@@ -10550,16 +10550,17 @@ revoke all on function public.finish_publish_request(uuid, boolean, text, boolea
 grant execute on function public.finish_publish_request(uuid, boolean, text, boolean) to service_role;
 
 
+
 -- ---------------------------------------------------------------------------
 -- Names from the identity provider
 -- ---------------------------------------------------------------------------
 --
--- A display name used to be opt-in: null by default, and null keeps you off
--- every board. That was right for the public site this came from, where it
--- protects strangers. Here everybody signs in through the company's identity
--- provider, and opt-in meant an employee could play a whole tournament and
--- never appear in it, with nothing on screen saying why. So an account is now
--- named for its owner when it arrives, from what the identity provider sent.
+-- A display name used to be the player's to choose, and null by default -- which
+-- kept you off every board. That was right for the public site this came from.
+-- Here everybody signs in through the company's identity provider, and the name
+-- on the boards is the name the company has for you: set from the provider at
+-- every sign-in, not chosen, not changeable, and not clearable. An employee is
+-- on the standings because they played, not because they found a menu.
 --
 -- Where the name comes from, first that yields one:
 --   1. the provider's full name -- full_name, name, or custom_claims.name
@@ -10569,21 +10570,12 @@ grant execute on function public.finish_publish_request(uuid, boolean, text, boo
 -- For SAML, (1) and (2) are whatever the provider's attribute_mapping in GoTrue
 -- maps; with no mapping only (3) exists. See docs/selfhost.md.
 --
--- Cleaned to the rules set_display_name enforces rather than exempted from
--- them: accents folded, anything else outside letters, digits, spaces, hyphens
--- and underscores dropped, a name too long for 24 characters shortened to its
--- first name and last initial. A taken name gets a number; a blocked one falls
--- through to the next source.
---
--- The person stays in charge of it. profiles.auto_name remembers the name this
--- gave them. While their display name is still that one it follows the
--- provider -- a name changed in Zitadel changes here at the next sign-in. Once
--- they pick their own, or clear it to leave the boards, it is theirs and this
--- never touches it again.
+-- Cleaned to the rules the boards have always held names to: accents folded,
+-- anything outside letters, digits, spaces, hyphens and underscores dropped, a
+-- name too long for 24 characters shortened to first name and last initial. A
+-- taken name gets a number; a blocked one falls through to the next source.
 
-alter table public.profiles add column if not exists auto_name text;
-
--- A name, cleaned to what set_display_name would accept, or null.
+-- A name, cleaned to the rules the boards hold names to, or null.
 create or replace function public.clean_identity_name(p_name text)
 returns text
 language plpgsql
@@ -10614,8 +10606,8 @@ begin
 end;
 $fn$;
 
--- The name this account should be given, free and allowed, or null. p_user's
--- own current name does not count as taken, so asking twice answers the same.
+-- The name this account should have, free and allowed, or null. p_user's own
+-- current name does not count as taken, so asking twice answers the same.
 create or replace function public.identity_name_for(p_user uuid)
 returns text
 language plpgsql
@@ -10666,7 +10658,7 @@ $fn$;
 
 revoke all on function public.identity_name_for(uuid) from public, anon, authenticated;
 
--- Name one account, if it is still the provider's to name.
+-- Give one account the name the provider says it has.
 create or replace function public.apply_identity_name(p_user uuid)
 returns void
 language plpgsql
@@ -10674,25 +10666,19 @@ security definer
 set search_path = ''
 as $fn$
 declare
-  p record;
   wanted text;
 begin
   insert into public.profiles (id) values (p_user) on conflict (id) do nothing;
-  select display_name, auto_name into p from public.profiles where id = p_user;
-  -- Theirs: a name they chose, or a name this gave and they cleared.
-  if p.display_name is distinct from p.auto_name then
-    return;
-  end if;
-  -- Cleared with nothing auto-given: auto_name null and display_name null are
-  -- "never named", which is the case to act on. Cleared after being named
-  -- leaves display_name null and auto_name set, caught above.
   wanted := public.identity_name_for(p_user);
-  if wanted is null or wanted is not distinct from p.display_name then
+  -- Nothing usable -- no name, no email -- keeps what is there rather than
+  -- blanking a name that was fine.
+  if wanted is null then
     return;
   end if;
-  update public.profiles set display_name = wanted, auto_name = wanted where id = p_user;
+  update public.profiles set display_name = wanted
+   where id = p_user and display_name is distinct from wanted;
 exception
-  -- Two sign-ins racing for one name: leave this one unnamed rather than fail
+  -- Two sign-ins racing for one name: leave this one as it was rather than fail
   -- the sign-in. The next sign-in names it.
   when unique_violation then null;
 end;
@@ -10735,10 +10721,30 @@ create trigger on_auth_user_metadata
   after update of raw_user_meta_data, email on auth.users
   for each row execute function public.handle_user_metadata();
 
--- Everybody already here and never named. Safe to re-run on every apply: an
--- account named once has auto_name set, and one whose owner picked or cleared
--- a name is left alone by apply_identity_name.
-select public.apply_identity_name(u.id)
-from auth.users u
-join public.profiles p on p.id = u.id
-where p.display_name is null and p.auto_name is null;
+-- Nobody sets their own. set_display_name stays, so an old page still open in
+-- somebody's browser gets an answer rather than an error, but it changes
+-- nothing: the name is the provider's.
+create or replace function public.set_display_name(p_name text)
+returns text
+language sql
+security definer
+set search_path = ''
+as $fn$
+  select case when (select auth.uid()) is null then 'not signed in' else 'from sign-in' end
+$fn$;
+
+revoke execute on function public.set_display_name(text) from public, anon;
+grant execute on function public.set_display_name(text) to authenticated;
+
+-- And not by the back door. The "update own profile" policy exists so a
+-- browser can save its settings, and with the table-wide grant Supabase gives
+-- it, that policy also let a browser write its own display_name straight
+-- through the API -- past set_display_name, past the blocklist, and now past
+-- the provider. Narrowed to the columns a browser has any business writing.
+revoke insert, update on public.profiles from anon, authenticated;
+grant insert (id, settings) on public.profiles to authenticated;
+grant update (settings) on public.profiles to authenticated;
+
+-- Everybody already here, named from the provider. Safe on every apply: an
+-- account already carrying its provider name is left as it is.
+select public.apply_identity_name(u.id) from auth.users u;
