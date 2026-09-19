@@ -50,7 +50,17 @@ function roundState(r: Round): string | null {
   return r.ends_on < easternToday() ? 'finished' : 'under way';
 }
 
-type TournamentForm = { id: string | null; name: string; difficulty: Difficulty; from: string; until: string };
+type TournamentForm = {
+  id: string | null;
+  name: string;
+  difficulty: Difficulty;
+  from: string;
+  until: string;
+  /** the tournament is the whole site from its first day to its last */
+  locksSite: boolean;
+  /** while locked, sessions outside its rounds stay joinable */
+  sessionsOpen: boolean;
+};
 type RoundForm = {
   id: string | null;
   tournament: string;
@@ -202,6 +212,12 @@ export default function AdminTournaments() {
                     <p className="text-xs text-slate-400">
                       {DIFFICULTY_LABEL[t.difficulty]} · {span(t.starts_on, t.ends_on)}
                     </p>
+                    {t.locks_site && (
+                      <p className="text-xs text-accent">
+                        The whole site while it runs
+                        {t.sessions_open ? ' · other sessions stay open' : ''}
+                      </p>
+                    )}
                   </div>
                   <div className="flex gap-2">
                     <button
@@ -213,6 +229,8 @@ export default function AdminTournaments() {
                           difficulty: t.difficulty,
                           from: t.starts_on,
                           until: t.ends_on,
+                          locksSite: t.locks_site ?? false,
+                          sessionsOpen: t.sessions_open ?? false,
                         })
                       }
                     >
@@ -463,7 +481,17 @@ export default function AdminTournaments() {
           {tForm === null ? (
             <button
               className={BUTTON}
-              onClick={() => setTForm({ id: null, name: '', difficulty: 'hard', from: '', until: '' })}
+              onClick={() =>
+                setTForm({
+                  id: null,
+                  name: '',
+                  difficulty: 'hard',
+                  from: '',
+                  until: '',
+                  locksSite: false,
+                  sessionsOpen: false,
+                })
+              }
             >
               New tournament
             </button>
@@ -519,6 +547,40 @@ export default function AdminTournaments() {
                   />
                 </label>
               </div>
+              <label className="flex items-start gap-2 text-sm text-slate-200">
+                <input
+                  type="checkbox"
+                  className="mt-1"
+                  checked={tForm.locksSite}
+                  onChange={(e) => setTForm({ ...tForm, locksSite: e.target.checked })}
+                />
+                <span>
+                  <span className="font-semibold">Only the tournament is available while it runs</span>
+                  <span className="block text-xs text-slate-400 mt-0.5">
+                    From its first day to its last: no dailies, no practice, no other
+                    games — the tournament page and its rounds&apos; games. Between rounds
+                    people see the standings and when the next round starts. Can be
+                    switched off at any time.
+                  </span>
+                </span>
+              </label>
+              {tForm.locksSite && (
+                <label className="flex items-start gap-2 text-sm text-slate-200 ml-6">
+                  <input
+                    type="checkbox"
+                    className="mt-1"
+                    checked={tForm.sessionsOpen}
+                    onChange={(e) => setTForm({ ...tForm, sessionsOpen: e.target.checked })}
+                  />
+                  <span>
+                    <span className="font-semibold">Keep other sessions open</span>
+                    <span className="block text-xs text-slate-400 mt-0.5">
+                      Off, only the trivia attached to the current round can be joined.
+                      On, any session can still run — an all-hands, a meeting poll.
+                    </span>
+                  </span>
+                </label>
+              )}
               <div className="flex gap-2">
                 <button
                   className={BUTTON}

@@ -90,8 +90,8 @@ test('a tournament is created with its own dates and difficulty', async ({ page 
   await page.getByRole('button', { name: 'New tournament' }).click();
   await page.getByLabel('Tournament name').fill('Ownership Cup');
   await page.getByLabel('Tournament difficulty').selectOption('extreme');
-  await page.getByLabel('Starts').fill('2026-10-01');
-  await page.getByLabel('Ends').fill('2026-10-24');
+  await page.getByLabel('Starts', { exact: true }).fill('2026-10-01');
+  await page.getByLabel('Ends', { exact: true }).fill('2026-10-24');
   await page.getByRole('button', { name: 'Save tournament' }).click();
 
   await expect.poll(() => sent.length).toBe(1);
@@ -277,4 +277,22 @@ test('a finished round still takes its trivia, and nothing else', async ({ page 
     p_games: ['hive'],
     p_sessions: [{ id: 's1', weight: 1 }],
   });
+});
+
+// The lock is a switch per tournament, and the sessions switch only means
+// something while the site is locked -- so it is only offered then.
+test('a tournament can lock the site to itself, and say whether other sessions stay open', async ({ page }) => {
+  const sent = await portal(page, []);
+  await page.getByRole('button', { name: 'New tournament' }).click();
+  await page.getByLabel('Tournament name').fill('Ownership Cup');
+  await page.getByLabel('Starts', { exact: true }).fill('2026-10-01');
+  await page.getByLabel('Ends', { exact: true }).fill('2026-10-31');
+
+  await expect(page.getByLabel(/Keep other sessions open/)).toHaveCount(0);
+  await page.getByLabel(/Only the tournament is available while it runs/).check();
+  await expect(page.getByLabel(/Keep other sessions open/)).not.toBeChecked();
+  await page.getByRole('button', { name: 'Save tournament' }).click();
+
+  await expect.poll(() => sent.length).toBe(1);
+  expect(sent[0].args).toMatchObject({ p_locks_site: true, p_sessions_open: false });
 });

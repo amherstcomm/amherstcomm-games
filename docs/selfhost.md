@@ -2269,6 +2269,32 @@ added together; level on points, more outright wins goes first,
 then name. Exact ties inside one game-round fall to that board's own tiebreak,
 usually the clock, which is what the board itself shows.
 
+#### A tournament that is the whole site
+
+A tournament has a switch, **Only the tournament is available while it runs**.
+From its first day to its last — not only during rounds — the front page and
+every ordinary game address show the tournament instead, and the game menu is
+gone. No dailies, no practice, no other games. The round's own games still play
+at `/tournament/<game>`. Between rounds the page shows the standings and the
+date the next round starts.
+
+A second switch, shown only when the first is on, is **Keep other sessions
+open**. Off, the only sessions that can be joined are the ones attached to the
+current round; any other is refused at its address. On, any session still runs —
+an all-hands or a meeting poll in the middle of the month.
+
+Both can be changed at any time, including while the tournament is running, so
+unlocking is the way out if it was a mistake.
+
+It works through availability, the site's one way of saying what is not on
+offer: while a locking tournament covers today, `read_availability()` adds
+`site:outside-tournament`, and `site:other-sessions` unless other sessions are
+kept open. Two absences rather than every game switched off one by one, because
+the round is played in those games. Like every availability switch it decides
+what the site offers, not what the database will answer — the feeds and RPCs
+behind a locked page still respond. The admin portal and the account menu are
+never locked.
+
 #### Trivia in a round
 
 A round can count **sessions** as well as boards, and both session modes work

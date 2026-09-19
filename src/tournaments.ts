@@ -42,6 +42,10 @@ export type Tournament = {
   difficulty: Difficulty;
   starts_on: string;
   ends_on: string;
+  /** from its first day to its last, the tournament is the only thing on offer */
+  locks_site: boolean;
+  /** while it locks the site, sessions outside its rounds stay joinable */
+  sessions_open: boolean;
   rounds: Round[];
 };
 
@@ -78,6 +82,8 @@ export async function saveTournament(t: {
   difficulty: Difficulty;
   from: string;
   until: string;
+  locksSite: boolean;
+  sessionsOpen: boolean;
 }): Promise<{ ok: boolean; reason?: string; id?: string }> {
   if (!supabase) return fail('not connected');
   const { data, error } = await supabase.rpc('save_tournament', {
@@ -86,6 +92,8 @@ export async function saveTournament(t: {
     p_difficulty: t.difficulty,
     p_starts: t.from || null,
     p_ends: t.until || null,
+    p_locks_site: t.locksSite,
+    p_sessions_open: t.locksSite && t.sessionsOpen,
   });
   if (error) return fail(error.message);
   return (data as { ok: boolean; reason?: string; id?: string }) ?? fail('no answer');

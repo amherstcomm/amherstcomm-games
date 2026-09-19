@@ -32,3 +32,24 @@ export async function readCurrentRound(): Promise<{ ok: boolean; round: CurrentR
   if (error) return { ok: false, round: null };
   return { ok: true, round: (data as CurrentRound | null) ?? null };
 }
+
+/** The tournament covering today, whether or not a round is on: what the
+ *  tournament page shows between rounds. Null when there is none. */
+export type CurrentTournament = {
+  id: string;
+  name: string;
+  difficulty: Difficulty;
+  starts_on: string;
+  ends_on: string;
+  /** it is the only thing on offer until it ends */
+  locks_site: boolean;
+  /** null when no round is left to start */
+  next_round_starts_on: string | null;
+};
+
+export async function readCurrentTournament(): Promise<CurrentTournament | null> {
+  if (!supabase) return null;
+  const { data, error } = await supabase.rpc('current_tournament');
+  if (error) return null;
+  return (data as CurrentTournament | null) ?? null;
+}
