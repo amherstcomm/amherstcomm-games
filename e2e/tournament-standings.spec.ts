@@ -22,6 +22,10 @@ const ROUND = {
   starts_on: START,
   ends_on: plus(START, 6),
   games: ['weave', 'hive'],
+  trivia: [
+    { session_id: 's2', title: 'ESOP Basics', mode: 'open', state: 'live', weight: 2 },
+    { session_id: 's3', title: 'Next Week', mode: 'live', state: 'draft', weight: 1 },
+  ],
   number: 2,
   of: 3,
 };
@@ -41,6 +45,7 @@ const STANDINGS = {
       starts_on: plus(START, -14),
       ends_on: plus(START, -8),
       boards: { hive: [{ name: 'Bea', value: 88, detail: 1 }] },
+      trivia: [],
     },
     {
       id: 'r2',
@@ -53,6 +58,18 @@ const STANDINGS = {
           { name: 'Cy', value: 1, detail: 140000 },
         ],
       },
+      trivia: [
+        {
+          session_id: 's2',
+          title: 'ESOP Basics',
+          mode: 'open',
+          weight: 2,
+          standings: [
+            { place: 1, name: 'Bea', points: 7, seconds: 41 },
+            { place: 2, name: 'Ada', points: 5, seconds: 60 },
+          ],
+        },
+      ],
     },
   ],
 };
@@ -82,7 +99,9 @@ test("this round's boards read the way the site's leaderboards do", async ({ pag
   await page.goto('/tournament');
   const round = page.getByRole('region', { name: "This round's standings" });
   await expect(round).toContainText('best 1:35');
-  await expect(round.getByRole('listitem').first()).toContainText('Ada');
+  await expect(round.getByRole('list', { name: /Weave/ }).getByRole('listitem').first()).toContainText(
+    'Ada'
+  );
 });
 
 test('and earlier rounds are there, folded away', async ({ page }) => {
@@ -92,4 +111,51 @@ test('and earlier rounds are there, folded away', async ({ page }) => {
   await expect(earlier).toBeVisible();
   await earlier.locator('summary').click();
   await expect(earlier).toContainText('Bea');
+});
+
+
+// ---------------------------------------------------------------------------
+// Trivia
+// ---------------------------------------------------------------------------
+
+// An open session is trivia on your own time, so it is offered the same way a
+// game in the round is: something to go and do now.
+test("the round's open trivia is offered beside its games", async ({ page }) => {
+  await tournament(page);
+  await page.goto('/tournament');
+  const list = page.getByRole('list', { name: 'In this round' });
+  const open = list.getByRole('listitem').filter({ hasText: 'ESOP Basics' });
+  await expect(open).toContainText('Open now — play it on your own time');
+  await expect(open.getByRole('link')).toHaveAttribute('href', '/live/s2');
+});
+
+// A session that has not been opened yet is listed but not a door. Linking it
+// would take somebody to a session that refuses them, which reads as broken
+// rather than as "not yet".
+test('a session that has not opened is shown without a way in', async ({ page }) => {
+  await tournament(page);
+  await page.goto('/tournament');
+  const list = page.getByRole('list', { name: 'In this round' });
+  const soon = list.getByRole('listitem').filter({ hasText: 'Next Week' });
+  await expect(soon).toContainText('Not open yet');
+  await expect(soon.getByRole('link')).toHaveCount(0);
+});
+
+test("a round's trivia is ranked beside its boards, and says what it was worth", async ({ page }) => {
+  await tournament(page);
+  await page.goto('/tournament');
+  const round = page.getByRole('region', { name: "This round's standings" });
+  await expect(round).toContainText('worth 2×');
+  const board = round.getByRole('list', { name: 'ESOP Basics standings' });
+  await expect(board.getByRole('listitem')).toHaveText([/Bea.*7 pts/, /Ada.*5 pts/]);
+});
+
+// The table's own explanation has to admit the multiplier exists, or a round
+// where the trivia was worth double is arithmetic nobody can check.
+test('the table says placement points can be multiplied', async ({ page }) => {
+  await tournament(page);
+  await page.goto('/tournament');
+  await expect(page.getByRole('region', { name: 'Tournament table' })).toContainText(
+    'times what that round said the game was worth'
+  );
 });

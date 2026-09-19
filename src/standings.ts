@@ -12,6 +12,25 @@ import type { BoardGame } from '@/leaderboard';
 
 export type StandingRow = { name: string; value: number; detail: number | null };
 
+/** One person's finish in a session, as session_ranking ranked it. `place` is
+ *  a rank rather than a row number, so a tie shares a place and the placement
+ *  points that go with it. */
+export type TriviaRow = {
+  place: number;
+  name: string;
+  points: number;
+  seconds: number | null;
+};
+
+export type TriviaStandings = {
+  session_id: string;
+  title: string;
+  mode: 'live' | 'open';
+  /** the multiplier this round put on the session's placement points */
+  weight: number;
+  standings: TriviaRow[];
+};
+
 export type RoundStandings = {
   id: string;
   number: number;
@@ -19,6 +38,8 @@ export type RoundStandings = {
   ends_on: string;
   /** keyed like the site's leaderboards: guess, hive, box, squares5, ... */
   boards: Partial<Record<BoardGame, StandingRow[]>>;
+  /** the round's trivia, ranked and weighted */
+  trivia: TriviaStandings[];
 };
 
 export type TableRow = {

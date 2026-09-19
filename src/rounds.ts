@@ -6,6 +6,7 @@
 // boards and results are keyed by.
 import { supabase } from '@/supabase';
 import type { Difficulty } from '@/difficulty';
+import type { RoundTrivia } from '@/tournaments';
 
 export type CurrentRound = {
   tournament_id: string;
@@ -18,6 +19,8 @@ export type CurrentRound = {
   ends_on: string;
   /** feed names: words, hive, box, ... */
   games: string[];
+  /** the sessions counting in this round, live and open alike */
+  trivia: RoundTrivia[];
   /** this round's place in its tournament, counted from 1 */
   number: number;
   of: number;

@@ -5,10 +5,15 @@
 // and the first finish counts. This page is the way in, and says plainly when
 // nothing is running, which is most of the year.
 import { useEffect, useState } from 'react';
-import { Trophy } from 'lucide-react';
+import { Trophy, MessagesSquare } from 'lucide-react';
 import RouteLink from '@/RouteLink';
 import { BOARD_LABELS, type BoardGame } from '@/leaderboard';
-import { readTournamentStandings, type RoundStandings, type TournamentStandings } from '@/standings';
+import {
+  readTournamentStandings,
+  type RoundStandings,
+  type TournamentStandings,
+} from '@/standings';
+import { formatElapsed } from '@/useUpTimer';
 import { DIFFICULTY_LABEL } from '@/difficulty';
 import { MODE_SLUG, GAME_NAME, type Mode } from '@/games';
 import { roundGameName } from '@/tournaments';
@@ -25,12 +30,52 @@ function modeOfFeed(feed: string): Mode | null {
 const span = (from: string, until: string) =>
   from === until ? `on ${from}` : `${from} to ${until}`;
 
-/** One round's leaderboards, one per game, labelled and worded the way the
- *  site's own boards are -- the same labels, so a round's Weave says "best
- *  1:35" exactly as the everyday board would. */
+/** One card of standings. The trivia's card is shaped like a game's on purpose:
+ *  a round's trivia is one more thing you placed in, and reading it as a
+ *  different kind of object would make the tournament table harder to follow,
+ *  not easier. What differs is the value -- points and the time that broke the
+ *  tie -- and the multiplier, which is said out loud because it is the one
+ *  thing about a round that the points alone will not explain. */
+function TriviaBoard({ trivia }: { trivia: RoundStandings['trivia'][number] }) {
+  return (
+    <div className="rounded-xl bg-white/5 border border-white/10 p-3">
+      <p className="text-sm font-semibold text-white mb-1.5 flex items-baseline gap-2">
+        <span className="min-w-0 truncate">{trivia.title}</span>
+        {trivia.weight !== 1 && (
+          <span className="text-xs font-normal text-accent shrink-0">
+            worth {trivia.weight}×
+          </span>
+        )}
+      </p>
+      {trivia.standings.length === 0 ? (
+        <p className="text-xs text-slate-400">Nobody has answered yet.</p>
+      ) : (
+        <ol className="space-y-1 text-sm" aria-label={`${trivia.title} standings`}>
+          {trivia.standings.slice(0, 10).map((r) => (
+            <li key={r.name} className="flex items-baseline gap-2 text-slate-300">
+              <span className="w-5 shrink-0 text-xs text-slate-500 tabular-nums">{r.place}</span>
+              <span className="flex-1 min-w-0 truncate">{r.name}</span>
+              <span className="tabular-nums shrink-0">{r.points} pts</span>
+              {r.seconds !== null && (
+                <span className="text-xs text-slate-500 tabular-nums shrink-0">
+                  {formatElapsed(Math.round(r.seconds * 1000))}
+                </span>
+              )}
+            </li>
+          ))}
+        </ol>
+      )}
+    </div>
+  );
+}
+
+/** One round's leaderboards, one per game and one per session, labelled and
+ *  worded the way the site's own boards are -- the same labels, so a round's
+ *  Weave says "best 1:35" exactly as the everyday board would. */
 function RoundBoards({ round }: { round: RoundStandings }) {
   const games = Object.entries(round.boards) as [BoardGame, RoundStandings['boards'][BoardGame]][];
-  if (games.length === 0) {
+  const trivia = round.trivia ?? [];
+  if (games.length === 0 && trivia.length === 0) {
     return <p className="text-xs text-slate-400">Nobody has finished a board in this round yet.</p>;
   }
   return (
@@ -62,6 +107,9 @@ function RoundBoards({ round }: { round: RoundStandings }) {
           </div>
         );
       })}
+      {trivia.map((v) => (
+        <TriviaBoard key={v.session_id} trivia={v} />
+      ))}
     </div>
   );
 }
@@ -93,7 +141,8 @@ function Standings({ tournamentId, currentRound }: { tournamentId: string; curre
         <h3 className="text-base font-bold text-white">Tournament table</h3>
         <p className="text-xs text-slate-400 mb-2">
           Points for placing in each game of each round: 10 for first down to 1
-          for tenth. Level on points, more wins goes first.
+          for tenth, times what that round said the game was worth. Level on
+          points, more wins goes first.
         </p>
         {standings.table.length === 0 ? (
           <p className="text-sm text-slate-400">No finishes yet.</p>
@@ -137,11 +186,17 @@ function Standings({ tournamentId, currentRound }: { tournamentId: string; curre
 export default function TournamentView({
   round,
   link,
+  sessionsOn = true,
 }: {
   /** undefined while it is being asked, null when nothing is on */
   round: CurrentRound | null | undefined;
-  /** the one kind of address this page links to: its own games */
-  link: (route: Extract<Route, { kind: 'tournament' }>) => { to: string; onGo: () => void };
+  /** the two kinds of address this page links to: its games and its trivia */
+  link: (
+    route: Extract<Route, { kind: 'tournament' } | { kind: 'live' }>
+  ) => { to: string; onGo: () => void };
+  /** sessions switched off site-wide: the trivia is listed but not openable,
+   *  the same refusal the address itself gives */
+  sessionsOn?: boolean;
 }) {
   if (round === undefined) {
     return <p className="max-w-2xl mx-auto px-4 py-10 text-sm text-slate-400">Loading…</p>;
@@ -176,7 +231,49 @@ export default function TournamentView({
         before you start.
       </p>
 
-      <ul className="mt-5 grid gap-2 sm:grid-cols-2" aria-label="Games in this round">
+      <ul className="mt-5 grid gap-2 sm:grid-cols-2" aria-label="In this round">
+        {(round.trivia ?? []).map((v) => {
+          const open = v.state === 'live' && sessionsOn;
+          const card =
+            'block rounded-xl bg-white/5 border border-white/10 p-4 ' +
+            (open ? 'hover:bg-white/10 hover:border-white/20 transition-colors' : 'opacity-60');
+          const note = !sessionsOn
+            ? 'Sessions are off just now'
+            : v.state === 'closed'
+              ? 'Finished — the standings below are final'
+              : v.state === 'draft'
+                ? 'Not open yet'
+                : v.mode === 'open'
+                  ? 'Open now — play it on your own time'
+                  : 'Live now';
+          const inside = (
+            <>
+              <span className="text-sm font-semibold text-white flex items-center gap-2">
+                <MessagesSquare className="w-4 h-4 text-accent shrink-0" aria-hidden="true" />
+                <span className="min-w-0 truncate">{v.title}</span>
+              </span>
+              <span className="block mt-0.5 text-xs text-slate-400">
+                {note}
+                {v.weight !== 1 && ` · worth ${v.weight}×`}
+              </span>
+            </>
+          );
+          if (!open) {
+            return (
+              <li key={v.session_id}>
+                <div className={card}>{inside}</div>
+              </li>
+            );
+          }
+          const { to, onGo } = link({ kind: 'live', session: v.session_id, host: false });
+          return (
+            <li key={v.session_id}>
+              <RouteLink to={to} onGo={onGo} className={card}>
+                {inside}
+              </RouteLink>
+            </li>
+          );
+        })}
         {round.games.map((feed) => {
           const mode = modeOfFeed(feed);
           if (!mode) return null;

@@ -1102,7 +1102,9 @@ function App() {
           <>
           {reportPage?.kind === 'ticket' && <TicketView ticket={reportPage.ticket} />}
           {reportPage?.kind === 'reportQueue' && <ReportQueueView />}
-          {reportPage?.kind === 'tournament' && <TournamentView round={round} link={pageLink} />}
+          {reportPage?.kind === 'tournament' && (
+            <TournamentView round={round} link={pageLink} sessionsOn={sessionsOn} />
+          )}
           {/* Switched off means refused at the address too, the same as a
               game. Hiding the link alone would leave a session playable to
               whoever had the QR code from last week, which is the opposite of

@@ -64,7 +64,7 @@ test('the round page lists its games, and a game opens on the round board', asyn
   await expect(page.getByRole('heading', { name: /Ownership Cup/ })).toBeVisible();
   await expect(page.getByText(/Round 2 of 4/)).toBeVisible();
 
-  await page.getByRole('list', { name: 'Games in this round' }).getByRole('link', { name: /Hive/ }).click();
+  await page.getByRole('list', { name: 'In this round' }).getByRole('link', { name: /Hive/ }).click();
   await expect(page).toHaveURL(/\/tournament\/hive$/);
 
   // The round's board, not the day's: the letters the round was dealt.

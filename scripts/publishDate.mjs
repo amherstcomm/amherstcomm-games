@@ -140,6 +140,9 @@ export async function publishRounds(from, until, dir, baseEnv = process.env, fet
   const said = [];
   for (const round of rounds) {
     if (round.starts_on < today) continue;
+    // A round may be trivia and nothing else. There is no board to generate,
+    // and running the generator to publish an empty list is a slow no-op.
+    if ((round.games ?? []).length === 0) continue;
     if (round.starts_on === today) {
       const key = baseEnv.SUPABASE_SERVICE_ROLE_KEY;
       const res = await fetchImpl(
