@@ -2153,12 +2153,15 @@ reboot cannot leave the page saying *publishing now* for ever.
 ### Tournaments
 
 A tournament is a span of dates with one difficulty, fixed by the admin, and
-rounds inside it. A round is its own span of dates and a list of games, and for
-the whole span each of those games has **one board**: generated once, from the
+rounds inside it. A round is its own span of dates, a list of games and a list
+of trivia sessions, and for the whole span each of those games has **one
+board**: generated once, from the
 round's first day, as a third version of that day beside the prod and dev
 dailies. Nothing assumes a length — a round can be a day or most of a month.
 The only rule is that a day belongs to at most one round, across every
-tournament, because a round's board is keyed by its first day.
+tournament, because a round's board is keyed by its first day. A round may hold
+games, trivia, or both — a week whose event is the quiz night is a round with no
+games at all, and the nightly window skips it because there is no board to make.
 
 The nightly window publishes each round the night before it starts, and
 regenerates it each night until then (the same board unless the settings moved).
@@ -2196,16 +2199,52 @@ board ranks that game — the ranking was lifted out of `boards_for` into
 cannot drift — over the round's first day under env `round`, at the
 tournament's difficulty, for every player rather than the top ten. The
 tournament table awards **placement points** per game-round, 10 for first down
-to 1 for tenth, so games whose scores are not comparable (Hive points, Weave
-times) can be added together; level on points, more outright wins goes first,
+to 1 for tenth times whatever the round said that game was worth, so games whose
+scores are not comparable (Hive points, Weave times, trivia answers) can be
+added together; level on points, more outright wins goes first,
 then name. Exact ties inside one game-round fall to that board's own tiebreak,
 usually the clock, which is what the board itself shows.
 
+#### Trivia in a round
+
+A round can count **sessions** as well as boards, and both session modes work
+with nothing new to play in:
+
+- a **live** session is the round's trivia night, run from the front the way any
+  session is;
+- an **open** session is trivia on your own time inside the round, which is what
+  an open session already is — its own clock per person, scored when answered
+  rather than when revealed.
+
+Attach them at `/admin/tournaments` → *Trivia in this round*. Each carries a
+**weight**: at 1× a win in the trivia is the same ten points as a win on any
+board, and a round whose quiz night is the event rather than one more thing in
+it wants 2 or 3. The cap is 10, so a typo cannot decide a tournament. A session
+counts in at most one round.
+
+The ranking is the session's own — `session_ranking`, lifted out of
+`session_leaderboard` so the tournament ranks a session exactly as its host's
+screen does, ties included. A tied place shares the placement points that go
+with it.
+
+**Attaching a session publishes its standings.** The tournament page is readable
+by anyone who can open the site, so the names and points from an attached
+session are too; `share_results` does not gate this, because a session scoring a
+public tournament table cannot also be private about who scored. Attaching is
+the decision, which is why only an admin can do it.
+
+Unlike a round's games, a round's trivia is **not** frozen once the round
+starts — adding Thursday's session to the week that is already running is the
+ordinary case, and a session usually has to have been run before there is
+anything to attach. Only the games and the first day are fixed, because those
+are what the board people are playing was made from.
+
 **Setting one up** is `/admin/tournaments`: a tournament with its name,
-difficulty and dates, then its rounds, each with its own dates and the games in
-it. The page offers what the database will take — a round under way shows only
-its end date, and a finished round offers nothing — and shows the database's
-own sentence when it refuses, so the rule and its wording live in one place.
+difficulty and dates, then its rounds, each with its own dates, the games in it
+and the trivia it counts. The page offers what the database will take — a round
+under way shows only its end date and its trivia, and a finished round offers
+its trivia alone — and shows the database's own sentence when it refuses, so the
+rule and its wording live in one place.
 
 ### Before a month that matters
 

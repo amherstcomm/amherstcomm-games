@@ -10083,3 +10083,429 @@ $fn$;
 
 revoke all on function public.tournament_standings(uuid) from public;
 grant execute on function public.tournament_standings(uuid) to anon, authenticated;
+
+
+-- ---------------------------------------------------------------------------
+-- Trivia in a tournament round
+-- ---------------------------------------------------------------------------
+--
+-- A round already holds puzzle games. This lets it hold sessions too, and both
+-- session modes work without anything new to play in: a 'live' session is the
+-- round's trivia night, run from the front the way any session is, and an
+-- 'open' one is trivia on your own time inside the round, which is already how
+-- an open session behaves -- its own clock per person (item_served), scored on
+-- answer rather than on reveal (item_counts). Nothing here builds a second
+-- place to play; it makes what a session already produces count.
+--
+-- **Attaching a session to a round publishes its standings.** The tournament
+-- page is readable by anyone who can open the site, so names and points from an
+-- attached session are too -- share_results does not gate this, because a
+-- session that scores a public tournament table cannot also be private about
+-- who scored. Attaching is the decision; that is why it is an admin action.
+
+create table if not exists public.tournament_round_sessions (
+  round_id uuid not null references public.tournament_rounds (id) on delete cascade,
+  session_id uuid not null references public.sessions (id) on delete cascade,
+  -- What a placement here is worth against a placement on a puzzle board. 1 is
+  -- parity: first place in the trivia is the same ten points as first place in
+  -- Hive. A trivia night that is the week's event rather than one of its five
+  -- boards wants 2 or 3. Capped so a typo cannot decide a tournament.
+  weight numeric not null default 1 check (weight > 0 and weight <= 10),
+  primary key (round_id, session_id)
+);
+
+-- A session counts in at most one round. Counting it twice would pay its
+-- winner two sets of placement points for one night's play.
+create unique index if not exists tournament_round_sessions_session_idx
+  on public.tournament_round_sessions (session_id);
+
+alter table public.tournament_round_sessions enable row level security;
+revoke all on public.tournament_round_sessions from public, anon, authenticated;
+
+-- A round may now be trivia only. The lower bound was 1 when a round was
+-- boards and nothing else.
+alter table public.tournament_rounds drop constraint if exists tournament_rounds_games_check;
+alter table public.tournament_rounds add constraint tournament_rounds_games_check
+  check (cardinality(games) between 0 and 20);
+
+-- One session's ranking, lifted out of session_leaderboard unchanged so the
+-- tournament ranks a session exactly as its host's own screen does. Internal:
+-- session_leaderboard keeps the host gate, and tournament_standings applies the
+-- round's own rule about who may see it.
+create or replace function public.session_ranking(p_session uuid)
+returns table (place bigint, name text, points numeric, seconds numeric)
+language sql
+stable
+set search_path = ''
+as $fn$
+  select rank() over (order by t.points desc, coalesce(t.seconds, 1e9) asc) as place,
+         coalesce(p.display_name, 'Someone') as name,
+         t.points,
+         t.seconds
+  from (
+    select ip.user_id,
+           trim_scale(round(sum(ip.points), 2)) as points,
+           sum(ip.seconds) filter (where ip.points > 0) as seconds
+    from public.items i
+    cross join lateral public.item_points(i.id) ip
+    where i.session_id = p_session and public.item_counts(i.id)
+    group by ip.user_id
+  ) t
+  left join public.profiles p on p.id = t.user_id
+$fn$;
+
+revoke all on function public.session_ranking(uuid) from public, anon, authenticated;
+
+-- Asks session_ranking now. The same answer, from one ranking rather than two
+-- copies that could drift apart.
+create or replace function public.session_leaderboard(p_session uuid)
+returns jsonb
+language sql
+stable
+security definer
+set search_path = ''
+as $fn$
+  select case
+    when not public.can('winners.view')
+      then jsonb_build_object('ok', false, 'reason', 'not allowed')
+    when not public.hosts_session(p_session)
+      then jsonb_build_object('ok', false, 'reason', 'not allowed')
+    else jsonb_build_object(
+      'ok', true,
+      'scored', (select count(*) from public.items i
+                 where i.session_id = p_session and public.item_counts(i.id)),
+      'standings', coalesce((
+        select jsonb_agg(row_to_json(s)::jsonb order by s.place, s.name)
+        from public.session_ranking(p_session) s), '[]'::jsonb))
+  end
+$fn$;
+
+revoke all on function public.session_leaderboard(uuid) from public, anon;
+grant execute on function public.session_leaderboard(uuid) to authenticated;
+
+-- The trivia attached to one round, as the admin page and the tournament page
+-- both want it.
+create or replace function public.round_trivia(p_round uuid)
+returns jsonb
+language sql
+stable
+set search_path = ''
+as $fn$
+  select coalesce(jsonb_agg(jsonb_build_object(
+           'session_id', s.id, 'title', s.title, 'mode', s.mode,
+           'state', public.scheduled_state(s), 'weight', trim_scale(rs.weight))
+         order by s.title), '[]'::jsonb)
+  from public.tournament_round_sessions rs
+  join public.sessions s on s.id = rs.session_id
+  where rs.round_id = p_round
+$fn$;
+
+revoke all on function public.round_trivia(uuid) from public, anon, authenticated;
+
+-- save_round, now with the round's trivia. Replaced rather than added to: a
+-- defaulted parameter makes a second signature, and a caller still reaching the
+-- old one would silently drop every session off the round it was saving.
+drop function if exists public.save_round(uuid, uuid, date, date, text[]);
+
+create or replace function public.save_round(
+  p_id uuid,
+  p_tournament uuid,
+  p_starts date,
+  p_ends date,
+  p_games text[],
+  -- [{"id": "<session uuid>", "weight": 2}, ...]; absent is no trivia.
+  p_sessions jsonb default '[]'::jsonb
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $fn$
+declare
+  v_id uuid := p_id;
+  v_t record;
+  v_old record;
+  v_games text[];
+  v_sessions jsonb := coalesce(p_sessions, '[]'::jsonb);
+  v_taken uuid;
+begin
+  if not public.can('games.setup') then
+    return jsonb_build_object('ok', false, 'reason', 'not allowed');
+  end if;
+  select * into v_t from public.tournaments where id = p_tournament;
+  if not found then
+    return jsonb_build_object('ok', false, 'reason', 'no such tournament');
+  end if;
+  if p_starts is null or p_ends is null or p_ends < p_starts then
+    return jsonb_build_object('ok', false, 'reason', 'it needs dates, ending on or after it starts');
+  end if;
+  if p_starts < v_t.starts_on or p_ends > v_t.ends_on then
+    return jsonb_build_object('ok', false, 'reason', 'a round has to fall inside its tournament');
+  end if;
+
+  -- Distinct and known. Read off public.games rather than a list kept here: a
+  -- game this site does not publish is a round board nobody could be dealt.
+  select array_agg(distinct g order by g) into v_games
+  from unnest(coalesce(p_games, '{}'::text[])) g;
+  v_games := coalesce(v_games, '{}'::text[]);
+  if exists (select 1 from unnest(v_games) g where g not in (select feed from public.games)) then
+    return jsonb_build_object('ok', false, 'reason', 'that is not a game this site has');
+  end if;
+
+  if jsonb_typeof(v_sessions) <> 'array' then
+    return jsonb_build_object('ok', false, 'reason', 'the trivia has to be a list');
+  end if;
+  if cardinality(v_games) = 0 and jsonb_array_length(v_sessions) = 0 then
+    return jsonb_build_object('ok', false, 'reason', 'a round needs at least one game or one session');
+  end if;
+  if exists (
+    select 1 from jsonb_array_elements(v_sessions) e
+    where not exists (select 1 from public.sessions s where s.id = (e->>'id')::uuid)
+  ) then
+    return jsonb_build_object('ok', false, 'reason', 'that is not a session this site has');
+  end if;
+  if exists (
+    select 1 from jsonb_array_elements(v_sessions) e
+    where coalesce((e->>'weight')::numeric, 1) <= 0
+       or coalesce((e->>'weight')::numeric, 1) > 10
+  ) then
+    return jsonb_build_object('ok', false, 'reason', 'a weight has to be more than zero and at most ten');
+  end if;
+
+  if exists (
+    select 1 from public.tournament_rounds r
+    where r.id is distinct from v_id
+      and daterange(r.starts_on, r.ends_on, '[]') && daterange(p_starts, p_ends, '[]')
+  ) then
+    return jsonb_build_object('ok', false, 'reason', 'another round already covers some of those days');
+  end if;
+
+  if v_id is not null then
+    select * into v_old from public.tournament_rounds where id = v_id;
+    if not found then
+      return jsonb_build_object('ok', false, 'reason', 'no such round');
+    end if;
+    -- A round that has started is being played: its first day is what its
+    -- boards are keyed by and its games are what people have been dealt. Only
+    -- the end may move, and not into the past.
+    --
+    -- The trivia is deliberately not frozen with the games. A board is
+    -- generated the night before and played from the first day; a session is an
+    -- event somewhere inside the round, and "add Thursday's trivia night to the
+    -- round that is already running" is the ordinary case, not an edge one.
+    if v_old.starts_on <= public.puzzle_day() then
+      if p_starts <> v_old.starts_on or v_games <> v_old.games then
+        return jsonb_build_object('ok', false, 'reason', 'a round under way can only change its end date');
+      end if;
+      -- Only *moving* the end into the past is refused. A round that has
+      -- already finished has an end date in the past by definition, and a save
+      -- that leaves it alone is how its trivia gets attached -- which is the
+      -- ordinary order of things, since a session has to have been run before
+      -- there is anything to attach.
+      if p_ends <> v_old.ends_on and p_ends < public.puzzle_day() then
+        return jsonb_build_object('ok', false, 'reason', 'a round under way cannot end in the past');
+      end if;
+    end if;
+    update public.tournament_rounds
+       set tournament_id = p_tournament, starts_on = p_starts, ends_on = p_ends, games = v_games
+     where id = v_id;
+  else
+    insert into public.tournament_rounds (tournament_id, starts_on, ends_on, games)
+    values (p_tournament, p_starts, p_ends, v_games)
+    returning id into v_id;
+  end if;
+
+  -- Said plainly rather than left to the unique index, so the admin is told
+  -- which session and which round instead of reading a constraint name.
+  select rs.session_id into v_taken
+  from public.tournament_round_sessions rs
+  join jsonb_array_elements(v_sessions) e on (e->>'id')::uuid = rs.session_id
+  where rs.round_id <> v_id
+  limit 1;
+  if v_taken is not null then
+    return jsonb_build_object('ok', false, 'reason',
+      (select 'the session "' || s.title || '" already counts in another round'
+       from public.sessions s where s.id = v_taken));
+  end if;
+
+  delete from public.tournament_round_sessions rs
+  where rs.round_id = v_id
+    and not exists (select 1 from jsonb_array_elements(v_sessions) e
+                    where (e->>'id')::uuid = rs.session_id);
+  insert into public.tournament_round_sessions (round_id, session_id, weight)
+  select v_id, (e->>'id')::uuid, coalesce((e->>'weight')::numeric, 1)
+  from jsonb_array_elements(v_sessions) e
+  on conflict (round_id, session_id) do update set weight = excluded.weight;
+
+  return jsonb_build_object('ok', true, 'id', v_id);
+end;
+$fn$;
+
+revoke all on function public.save_round(uuid, uuid, date, date, text[], jsonb) from public, anon;
+grant execute on function public.save_round(uuid, uuid, date, date, text[], jsonb) to authenticated;
+
+-- Both sheets carry the round's trivia now.
+create or replace function public.tournaments_sheet()
+returns jsonb
+language sql
+stable
+security definer
+set search_path = ''
+as $fn$
+  select case
+    when not public.can('games.setup')
+      then jsonb_build_object('ok', false, 'reason', 'not allowed')
+    else jsonb_build_object('ok', true, 'tournaments', coalesce((
+      select jsonb_agg(jsonb_build_object(
+               'id', t.id, 'name', t.name, 'difficulty', t.difficulty,
+               'starts_on', t.starts_on, 'ends_on', t.ends_on,
+               'rounds', coalesce((
+                 select jsonb_agg(jsonb_build_object(
+                          'id', r.id, 'starts_on', r.starts_on, 'ends_on', r.ends_on,
+                          'games', to_jsonb(r.games),
+                          'trivia', public.round_trivia(r.id),
+                          'started', r.starts_on <= public.puzzle_day())
+                        order by r.starts_on)
+                 from public.tournament_rounds r where r.tournament_id = t.id), '[]'::jsonb))
+             order by t.starts_on desc)
+      from public.tournaments t), '[]'::jsonb))
+  end
+$fn$;
+
+revoke all on function public.tournaments_sheet() from public, anon;
+grant execute on function public.tournaments_sheet() to authenticated;
+
+create or replace function public.current_round()
+returns jsonb
+language sql
+stable
+security definer
+set search_path = ''
+as $fn$
+  select jsonb_build_object(
+           'tournament_id', t.id, 'tournament', t.name, 'difficulty', t.difficulty,
+           'tournament_starts_on', t.starts_on, 'tournament_ends_on', t.ends_on,
+           'round_id', r.id, 'starts_on', r.starts_on, 'ends_on', r.ends_on,
+           'games', to_jsonb(r.games),
+           'trivia', public.round_trivia(r.id),
+           'number', (select count(*) from public.tournament_rounds q
+                      where q.tournament_id = t.id and q.starts_on <= r.starts_on),
+           'of', (select count(*) from public.tournament_rounds q where q.tournament_id = t.id))
+  from public.tournament_rounds r
+  join public.tournaments t on t.id = r.tournament_id
+  where public.puzzle_day() between r.starts_on and r.ends_on
+  limit 1
+$fn$;
+
+revoke all on function public.current_round() from public;
+grant execute on function public.current_round() to anon, authenticated;
+
+/*
+ * The standings, counting the rounds' trivia beside their boards.
+ *
+ * A board's placement comes from its position in the ranking; a session's comes
+ * from the place session_ranking gives it, which is a rank() and so shares
+ * ties the way a tied session does. Points are the same ten-down-to-one either
+ * way, multiplied by what the round said that session was worth -- so trivia at
+ * weight 1 is one more board, and at weight 3 it is the week's event.
+ */
+create or replace function public.tournament_standings(p_tournament uuid)
+returns jsonb
+language plpgsql
+stable
+security definer
+set search_path = ''
+as $fn$
+declare
+  t record;
+  r record;
+  n int := 0;
+  keys text[];
+  boards jsonb;
+  trivia jsonb;
+  rounds jsonb := '[]'::jsonb;
+  tbl jsonb;
+begin
+  select * into t from public.tournaments where id = p_tournament;
+  if not found then
+    return jsonb_build_object('ok', false, 'reason', 'no such tournament');
+  end if;
+
+  for r in
+    select * from public.tournament_rounds
+    where tournament_id = t.id
+    order by starts_on
+  loop
+    n := n + 1;
+    continue when r.starts_on > public.puzzle_day();
+
+    -- The boards keyed as the site's leaderboards key them: by progress name,
+    -- with squares split by size -- 4x4 for easy, 5x5 for hard and extreme.
+    select array_agg(case
+             when g.progress = 'squares'
+               then 'squares' || case when t.difficulty = 'easy' then '4' else '5' end
+             else g.progress
+           end)
+      into keys
+    from public.games g
+    where g.feed = any (r.games);
+
+    select coalesce(jsonb_object_agg(e.key, e.value), '{}'::jsonb)
+      into boards
+    from jsonb_each(public.boards_between(r.starts_on, r.starts_on, 'round', t.difficulty, null, 500)) e
+    where e.key = any (coalesce(keys, '{}'::text[]));
+
+    select coalesce(jsonb_agg(jsonb_build_object(
+             'session_id', s.id, 'title', s.title, 'mode', s.mode,
+             'weight', trim_scale(rs.weight),
+             'standings', coalesce((
+               select jsonb_agg(row_to_json(k)::jsonb order by k.place, k.name)
+               from public.session_ranking(s.id) k), '[]'::jsonb))
+           order by s.title), '[]'::jsonb)
+      into trivia
+    from public.tournament_round_sessions rs
+    join public.sessions s on s.id = rs.session_id
+    where rs.round_id = r.id;
+
+    rounds := rounds || jsonb_build_array(jsonb_build_object(
+      'id', r.id, 'number', n, 'starts_on', r.starts_on, 'ends_on', r.ends_on,
+      'boards', boards, 'trivia', trivia));
+  end loop;
+
+  select coalesce(jsonb_agg(jsonb_build_object(
+           'name', s.name, 'points', s.points, 'wins', s.wins, 'placed', s.placed)
+         order by s.points desc, s.wins desc, s.name), '[]'::jsonb)
+    into tbl
+  from (
+    select pl.name,
+           trim_scale(round(sum(pl.pts), 2)) as points,
+           count(*) filter (where pl.place = 1)::int as wins,
+           count(*)::int as placed
+    from (
+      select x.row->>'name' as name,
+             greatest(0, 11 - x.ord)::numeric as pts,
+             x.ord::int as place
+      from jsonb_array_elements(rounds) rd,
+           jsonb_each(rd->'boards') b,
+           jsonb_array_elements(b.value) with ordinality as x(row, ord)
+      union all
+      select e->>'name',
+             greatest(0, 11 - (e->>'place')::int) * (tv->>'weight')::numeric,
+             (e->>'place')::int
+      from jsonb_array_elements(rounds) rd,
+           jsonb_array_elements(rd->'trivia') tv,
+           jsonb_array_elements(tv->'standings') e
+    ) pl
+    group by pl.name
+  ) s;
+
+  return jsonb_build_object(
+    'ok', true,
+    'tournament', jsonb_build_object('id', t.id, 'name', t.name, 'difficulty', t.difficulty),
+    'table', tbl,
+    'rounds', rounds);
+end;
+$fn$;
+
+revoke all on function public.tournament_standings(uuid) from public;
+grant execute on function public.tournament_standings(uuid) to anon, authenticated;

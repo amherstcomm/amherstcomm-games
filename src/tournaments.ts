@@ -1,8 +1,9 @@
 // Tournaments and their rounds, from the browser's side.
 //
 // A tournament is a span of dates with one difficulty; a round is its own span
-// inside it with a list of games, and each of those games has one fixed board
-// for the whole round. The rules that matter -- rounds inside their tournament,
+// inside it with a list of games and a list of trivia sessions. Each of those
+// games has one fixed board for the whole round; each session is scored the way
+// its host's own screen scores it, times whatever the round said it was worth. The rules that matter -- rounds inside their tournament,
 // no two rounds on one day, nothing changed under a round that is being played
 // -- live in the database, where a page cannot talk its way past them. This
 // module only carries the answers, which the server writes as sentences a
@@ -11,12 +12,26 @@ import { supabase } from '@/supabase';
 import { ALL_MODES, FEED_NAME, GAME_NAME } from '@/games';
 import type { Difficulty } from '@/difficulty';
 
+/** A session counting in a round. Both session modes work: a live one is the
+ *  round's trivia night, an open one is trivia played on your own time inside
+ *  the round -- which is what an open session already is. */
+export type RoundTrivia = {
+  session_id: string;
+  title: string;
+  mode: 'live' | 'open';
+  state: 'draft' | 'live' | 'closed';
+  /** what a placement here is worth against a placement on a board; 1 is parity */
+  weight: number;
+};
+
 export type Round = {
   id: string;
   starts_on: string;
   ends_on: string;
   /** feed names -- words, hive, box -- which is what a round board is keyed by */
   games: string[];
+  /** the sessions counting in this round */
+  trivia: RoundTrivia[];
   /** its first puzzle day has come: only the end date may change now */
   started: boolean;
 };
@@ -89,6 +104,8 @@ export async function saveRound(r: {
   from: string;
   until: string;
   games: string[];
+  /** the sessions counting in this round, with what each is worth */
+  sessions?: { id: string; weight: number }[];
 }): Promise<{ ok: boolean; reason?: string; id?: string }> {
   if (!supabase) return fail('not connected');
   const { data, error } = await supabase.rpc('save_round', {
@@ -97,6 +114,7 @@ export async function saveRound(r: {
     p_starts: r.from || null,
     p_ends: r.until || null,
     p_games: r.games,
+    p_sessions: r.sessions ?? [],
   });
   if (error) return fail(error.message);
   return (data as { ok: boolean; reason?: string; id?: string }) ?? fail('no answer');

@@ -107,6 +107,19 @@ describe('publishing tournament rounds', () => {
     expect(out).toContain(`Round ${start} to ${plus(start, 9)}: 2 boards (hive, box)`);
   });
 
+  // A round can be trivia and nothing else. There is no board to generate, and
+  // running the generator to publish an empty list would cost a minute a night
+  // for nothing -- so the publisher has to skip it rather than discover at the
+  // end that it made no rows.
+  it('skips a round that has no games', async () => {
+    const start = plus(easternToday(), 4);
+    rounds = [{ id: 'r3', starts_on: start, ends_on: plus(start, 6), games: [], difficulty: 'hard' }];
+    const { code, out } = await publishRounds(easternToday(), plus(easternToday(), 13));
+    expect(code, out).toBe(0);
+    expect(posted).toEqual([]);
+    expect(out).not.toContain(`Round ${start}`);
+  });
+
   // A round is a third version of its first day, not that day's daily: were
   // they the same, everybody would have played the round's hive that morning.
   it("and the round board is not that day's daily", async () => {

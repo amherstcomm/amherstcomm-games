@@ -115,3 +115,100 @@ select pg_temp.check('while the ranking itself is not callable from a browser',
   and not has_function_privilege('authenticated', 'public.boards_between(date, date, text, text, uuid[], integer)', 'execute'));
 
 \echo '--- standings checks passed ---'
+
+-- ---------------------------------------------------------------------------
+-- Trivia in a round
+-- ---------------------------------------------------------------------------
+-- A session attached to round one, worth double. Built by hand rather than
+-- through the session functions: what is under test is the ranking becoming
+-- placement points, not how a session gets run.
+insert into public.sessions (id, title, host, state, mode)
+values ('f5555555-5555-5555-5555-555555555555', 'Round One Trivia',
+        'f1111111-1111-1111-1111-111111111111', 'closed', 'live')
+on conflict (id) do nothing;
+
+insert into public.items (id, session_id, position, kind, prompt, state, opened_at) values
+  ('f6666666-6666-6666-6666-666666666666', 'f5555555-5555-5555-5555-555555555555',
+   1, 'choice', 'Who owns this company?', 'revealed', now() - interval '5 minutes'),
+  ('f7777777-7777-7777-7777-777777777777', 'f5555555-5555-5555-5555-555555555555',
+   2, 'choice', 'What year did the ESOP start?', 'revealed', now() - interval '4 minutes')
+on conflict (id) do nothing;
+
+insert into public.item_answers (item_id, answer) values
+  ('f6666666-6666-6666-6666-666666666666', '{"correct": ["us"]}'::jsonb),
+  ('f7777777-7777-7777-7777-777777777777', '{"correct": ["1998"]}'::jsonb)
+on conflict (item_id) do update set answer = excluded.answer;
+
+-- Bea both, quickly. Cy one. Ada neither.
+insert into public.responses (item_id, user_id, value, submitted_at) values
+  ('f6666666-6666-6666-6666-666666666666', 'f3333333-3333-3333-3333-333333333333',
+   '"us"'::jsonb, now() - interval '4 minutes 50 seconds'),
+  ('f7777777-7777-7777-7777-777777777777', 'f3333333-3333-3333-3333-333333333333',
+   '"1998"'::jsonb, now() - interval '3 minutes 50 seconds'),
+  ('f6666666-6666-6666-6666-666666666666', 'f4444444-4444-4444-4444-444444444444',
+   '"us"'::jsonb, now() - interval '4 minutes 40 seconds'),
+  ('f7777777-7777-7777-7777-777777777777', 'f4444444-4444-4444-4444-444444444444',
+   '"2011"'::jsonb, now() - interval '3 minutes 40 seconds'),
+  ('f6666666-6666-6666-6666-666666666666', 'f2222222-2222-2222-2222-222222222222',
+   '"them"'::jsonb, now() - interval '4 minutes 30 seconds')
+on conflict do nothing;
+
+select pg_temp.check('a session ranks its players before any tournament sees it',
+  (select array(select k.name from public.session_ranking('f5555555-5555-5555-5555-555555555555') k
+                order by k.place, k.name)) = array['Bea S', 'Cy S', 'Ada S']);
+
+-- Attached through save_round, on a round that is already under way: trivia may
+-- be added to a running round even though its games and dates may not.
+create temp table r1 as
+  select id from public.tournament_rounds
+  where tournament_id = (select id from st) order by starts_on limit 1;
+
+select pg_temp.check('trivia may be added to a round under way',
+  (public.save_round((select id from r1), (select id from st), pg_temp.d(-50), pg_temp.d(-45),
+                     array['squares'],
+                     '[{"id": "f5555555-5555-5555-5555-555555555555", "weight": 2}]'::jsonb)
+   ->>'ok') = 'true');
+select pg_temp.check('while its games still may not',
+  (public.save_round((select id from r1), (select id from st), pg_temp.d(-50), pg_temp.d(-45),
+                     array['hive'],
+                     '[{"id": "f5555555-5555-5555-5555-555555555555", "weight": 2}]'::jsonb)
+   ->>'reason') = 'a round under way can only change its end date');
+
+select pg_temp.check('a weight past the cap is refused',
+  (public.save_round(null, (select id from st), pg_temp.d(40), pg_temp.d(45), array['squares'],
+                     '[{"id": "f5555555-5555-5555-5555-555555555555", "weight": 50}]'::jsonb)
+   ->>'reason') = 'a weight has to be more than zero and at most ten');
+select pg_temp.check('and a session cannot count in two rounds',
+  (public.save_round(null, (select id from st), pg_temp.d(40), pg_temp.d(45), array['squares'],
+                     '[{"id": "f5555555-5555-5555-5555-555555555555"}]'::jsonb)
+   ->>'reason') = 'the session "Round One Trivia" already counts in another round');
+
+-- A round may now be trivia and nothing else; before this it needed a game.
+select pg_temp.check('a round of trivia alone is refused only for having nothing at all',
+  (public.save_round(null, (select id from st), pg_temp.d(40), pg_temp.d(45),
+                     '{}'::text[], '[]'::jsonb)
+   ->>'reason') = 'a round needs at least one game or one session');
+
+create temp table got2 as select public.tournament_standings((select id from st)) j;
+
+select pg_temp.check('the round lists its trivia beside its boards',
+  (select j->'rounds'->0->'trivia'->0->>'title' from got2) = 'Round One Trivia'
+  and (select (j->'rounds'->0->'trivia'->0->>'weight')::numeric from got2) = 2);
+select pg_temp.check('with the session ranked inside it',
+  (select array(select x->>'name' from jsonb_array_elements(j->'rounds'->0->'trivia'->0->'standings') x)
+   from got2) = array['Bea S', 'Cy S', 'Ada S']);
+
+-- Boards alone gave Ada 19, Cy 17, Bea 10. The trivia at weight 2 adds 20, 18
+-- and 16 for first, second and third -- so Ada and Cy finish level on 35 and
+-- the tiebreak is wins, where Ada has one and Cy none.
+select pg_temp.check('the trivia counts towards the table at its weight',
+  (select array(select x->>'name' || ' ' || (x->>'points') from jsonb_array_elements(j->'table') x)
+   from got2) = array['Ada S 35', 'Cy S 35', 'Bea S 30']);
+select pg_temp.check('and a trivia win is a win',
+  (select (x->>'wins')::int from got2, jsonb_array_elements(j->'table') x where x->>'name' = 'Bea S') = 2);
+
+select pg_temp.check('the ranking a session is scored by stays out of the browser',
+  not has_function_privilege('anon', 'public.session_ranking(uuid)', 'execute')
+  and not has_function_privilege('authenticated', 'public.session_ranking(uuid)', 'execute'));
+
+\echo '--- trivia-in-a-round checks passed ---'

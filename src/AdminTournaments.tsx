@@ -1,9 +1,15 @@
 // Setting up a tournament and its rounds.
 //
 // A tournament is a span of dates with one difficulty. A round is its own span
-// inside it and a list of games, and each of those games has one board for the
-// whole round -- the nightly run publishes it the night before the round starts.
-// Nothing here assumes a length: a round can be a day or most of the tournament.
+// inside it, a list of games and a list of trivia sessions. Each game has one
+// board for the whole round -- the nightly run publishes it the night before
+// the round starts. Nothing here assumes a length: a round can be a day or most
+// of the tournament.
+//
+// Trivia is whichever sessions the round counts, at whatever each is worth. A
+// live session is the round's trivia night; an open one is trivia played on
+// your own time inside the round. Both are ordinary sessions, built and run
+// from the sessions screen -- this only says which of them a round scores.
 //
 // The rules live in the database and come back as sentences, so the page
 // shows them rather than restating them: a round has to fall inside its
@@ -11,6 +17,7 @@
 // only move its end date, because its board is being played.
 import { useCallback, useEffect, useState } from 'react';
 import Waiting from '@/Waiting';
+import { readSessions, type SessionSummary } from '@/authoring';
 import { DIFFICULTIES, DIFFICULTY_LABEL, type Difficulty } from '@/difficulty';
 import {
   deleteRound,
@@ -50,12 +57,23 @@ type RoundForm = {
   from: string;
   until: string;
   games: string[];
+  /** the sessions this round counts, and what each is worth */
+  sessions: { id: string; weight: number }[];
   /** a round being played: only its end date may change */
   started: boolean;
+  /** a round that is over: its trivia may still be attached, nothing else */
+  finished: boolean;
 };
+
+/** A session's mode and state, for the picker. "Open · closed" is a session
+ *  people played on their own time and can no longer add to; its scores stand,
+ *  which is exactly what a round wants to count. */
+const sessionNote = (s: SessionSummary) =>
+  `${s.mode === 'open' ? 'On your own time' : 'Live'} · ${s.state} · ${s.items} question${s.items === 1 ? '' : 's'}`;
 
 export default function AdminTournaments() {
   const [tournaments, setTournaments] = useState<Tournament[] | null>(null);
+  const [sessions, setSessions] = useState<SessionSummary[]>([]);
   const [refused, setRefused] = useState('');
   const [note, setNote] = useState('');
   const [busy, setBusy] = useState(false);
@@ -73,6 +91,17 @@ export default function AdminTournaments() {
     setTournaments(res.tournaments);
   }, []);
   useEffect(() => void pull(), [pull]);
+  // Separate from the tournaments, and allowed to come back empty: a site with
+  // no sessions yet still sets rounds up, it just has no trivia to offer.
+  useEffect(() => {
+    let alive = true;
+    void readSessions().then((rows) => {
+      if (alive) setSessions(rows);
+    });
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   async function submitTournament() {
     if (!tForm) return;
@@ -124,15 +153,36 @@ export default function AdminTournaments() {
     setRForm({ ...rForm, games });
   }
 
+  function toggleSession(id: string) {
+    if (!rForm) return;
+    const on = rForm.sessions.some((x) => x.id === id);
+    setRForm({
+      ...rForm,
+      sessions: on
+        ? rForm.sessions.filter((x) => x.id !== id)
+        : [...rForm.sessions, { id, weight: 1 }],
+    });
+  }
+
+  function setWeight(id: string, weight: number) {
+    if (!rForm) return;
+    setRForm({
+      ...rForm,
+      sessions: rForm.sessions.map((x) => (x.id === id ? { ...x, weight } : x)),
+    });
+  }
+
   return (
     <section>
       <h2 className="text-lg font-bold text-white mb-1">Tournaments</h2>
       <p className="text-sm text-slate-400 mb-4">
         A tournament is a run of dates played at one difficulty, made of rounds.
-        Each round has its own dates and games, and every game in it keeps the
-        same board for the whole round — one attempt each, and the first finish
-        is the one that counts. The nightly run publishes a round the night
-        before it starts.
+        Each round has its own dates, its games and its trivia. Every game in a
+        round keeps the same board for the whole round — one attempt each, and
+        the first finish is the one that counts. The nightly run publishes a
+        round the night before it starts. Trivia is a session the round counts:
+        a live one run from the front, or an open one played on your own time
+        inside the round.
       </p>
 
       {note && <p className="text-sm text-slate-300 mb-3" role="status">{note}</p>}
@@ -187,28 +237,43 @@ export default function AdminTournaments() {
                             Round {i + 1} · {span(r.starts_on, r.ends_on)}
                             {state && <span className="ml-2 text-accent">{state}</span>}
                           </p>
-                          <p className="text-slate-400">{r.games.map(roundGameName).join(', ')}</p>
+                          <p className="text-slate-400">
+                            {r.games.map(roundGameName).join(', ') || 'No games'}
+                          </p>
+                          {(r.trivia ?? []).length > 0 && (
+                            <p className="text-slate-400">
+                              Trivia:{' '}
+                              {(r.trivia ?? [])
+                                .map((v) => (v.weight === 1 ? v.title : `${v.title} (×${v.weight})`))
+                                .join(', ')}
+                            </p>
+                          )}
                         </div>
                         <div className="flex gap-2">
-                          {/* A finished round is a record: nothing about it
-                              can change, so it offers nothing. */}
-                          {state !== 'finished' && (
-                            <button
-                              className={BUTTON}
-                              onClick={() =>
-                                setRForm({
-                                  id: r.id,
-                                  tournament: t.id,
-                                  from: r.starts_on,
-                                  until: r.ends_on,
-                                  games: r.games,
-                                  started: r.started,
-                                })
-                              }
-                            >
-                              Edit round
-                            </button>
-                          )}
+                          {/* A finished round's dates and games are a record and
+                              cannot move. Its trivia still can: a session is
+                              usually run before anyone attaches it, and often
+                              after the week it belonged to is over. */}
+                          <button
+                            className={BUTTON}
+                            onClick={() =>
+                              setRForm({
+                                id: r.id,
+                                tournament: t.id,
+                                from: r.starts_on,
+                                until: r.ends_on,
+                                games: r.games,
+                                sessions: (r.trivia ?? []).map((v) => ({
+                                  id: v.session_id,
+                                  weight: v.weight,
+                                })),
+                                started: r.started,
+                                finished: state === 'finished',
+                              })
+                            }
+                          >
+                            {state === 'finished' ? 'Edit trivia' : 'Edit round'}
+                          </button>
                           {!r.started && (
                             <button className={BUTTON} onClick={() => void removeRound(r)}>
                               Delete round
@@ -222,12 +287,23 @@ export default function AdminTournaments() {
 
                 {rForm?.tournament === t.id ? (
                   <div className="mt-3 rounded-lg border border-white/15 p-3 space-y-3" data-round-form>
-                    {rForm.started && (
+                    {rForm.finished ? (
                       <p className="text-xs text-amber-200">
-                        This round is under way, so only its end date can change —
-                        its board is being played, and a new first day or a
-                        different set of games would change it under people.
+                        This round is over. Its dates and its boards are a record
+                        now, but its trivia is not: a session is usually run
+                        before anybody attaches it, so this is where a quiz night
+                        gets counted after the fact.
                       </p>
+                    ) : (
+                      rForm.started && (
+                        <p className="text-xs text-amber-200">
+                          This round is under way, so its first day and its games
+                          are fixed — the board is being played, and changing
+                          either would change it under people. Its end date and
+                          its trivia can still move: a session is an event inside
+                          the round, not the board everyone started on.
+                        </p>
+                      )
                     )}
                     <div className="flex flex-wrap gap-3">
                       <label className="flex flex-col gap-1 text-xs text-slate-400">
@@ -250,11 +326,12 @@ export default function AdminTournaments() {
                           value={rForm.until}
                           min={rForm.from || t.starts_on}
                           max={t.ends_on}
+                          disabled={rForm.finished}
                           onChange={(e) => setRForm({ ...rForm, until: e.target.value })}
                         />
                       </label>
                     </div>
-                    {!rForm.started && (
+                    {!rForm.started && !rForm.finished && (
                       <fieldset>
                         <legend className="text-xs text-slate-400 mb-1">Games in this round</legend>
                         <div className="flex flex-wrap gap-1.5" role="group" aria-label="Games in this round">
@@ -279,10 +356,78 @@ export default function AdminTournaments() {
                         </div>
                       </fieldset>
                     )}
+                    <fieldset>
+                      <legend className="text-xs text-slate-400 mb-1">
+                        Trivia in this round
+                      </legend>
+                      {sessions.length === 0 ? (
+                        <p className="text-xs text-slate-400">
+                          No sessions yet. Build one on the Sessions screen and it
+                          can count here.
+                        </p>
+                      ) : (
+                        <ul
+                          className="space-y-1 max-h-56 overflow-y-auto"
+                          aria-label="Trivia in this round"
+                        >
+                          {sessions.map((v) => {
+                            const picked = rForm.sessions.find((x) => x.id === v.id);
+                            return (
+                              <li
+                                key={v.id}
+                                className="flex flex-wrap items-center gap-2 rounded-lg bg-white/5 px-2.5 py-1.5"
+                              >
+                                <label className="flex items-center gap-2 min-w-0 flex-1 text-xs">
+                                  <input
+                                    type="checkbox"
+                                    checked={picked !== undefined}
+                                    onChange={() => toggleSession(v.id)}
+                                  />
+                                  <span className="min-w-0">
+                                    <span className="block truncate font-semibold text-slate-200">
+                                      {v.title}
+                                    </span>
+                                    <span className="block text-slate-400">{sessionNote(v)}</span>
+                                  </span>
+                                </label>
+                                {picked !== undefined && (
+                                  <label className="flex items-center gap-1.5 text-xs text-slate-400">
+                                    Worth
+                                    <input
+                                      type="number"
+                                      className={FIELD + ' w-20 py-1'}
+                                      aria-label={`What ${v.title} is worth`}
+                                      min={0.5}
+                                      max={10}
+                                      step={0.5}
+                                      value={picked.weight}
+                                      onChange={(e) =>
+                                        setWeight(v.id, Number(e.target.value))
+                                      }
+                                    />
+                                    ×
+                                  </label>
+                                )}
+                              </li>
+                            );
+                          })}
+                        </ul>
+                      )}
+                      <p className="text-xs text-slate-400 mt-1">
+                        At 1× a win in the trivia is the same ten points as a win
+                        on any board. Raise it for a session that is the round's
+                        event rather than one more thing in it.
+                      </p>
+                    </fieldset>
                     <div className="flex gap-2">
                       <button
                         className={BUTTON}
-                        disabled={busy || !rForm.from || !rForm.until || rForm.games.length === 0}
+                        disabled={
+                          busy ||
+                          !rForm.from ||
+                          !rForm.until ||
+                          (rForm.games.length === 0 && rForm.sessions.length === 0)
+                        }
                         onClick={() => void submitRound()}
                       >
                         Save round
@@ -302,7 +447,9 @@ export default function AdminTournaments() {
                         from: '',
                         until: '',
                         games: [],
+                        sessions: [],
                         started: false,
+                        finished: false,
                       })
                     }
                   >
