@@ -382,14 +382,38 @@ const baseKey = (
   env: string = DAILY_ENV
 ) => `${game}:${variant}:${difficulty}:${date}${env === DAILY_ENV ? '' : `:${env}`}`;
 
+/** How long a base is kept, by the board it belongs to. A daily is played on
+ *  its day and is done a week later. A tournament round is keyed by its *first*
+ *  day and played for however long the round runs -- weeks, possibly -- and
+ *  pruning its base mid-round would leave the device baseless on a board still
+ *  being played, where every difference reads as a conflict. Rounds are a few a
+ *  year, so a long hold costs nothing. */
+const KEEP_DAILY_DAYS = 8;
+const KEEP_ROUND_DAYS = 90;
+
+/** The keys to let go of. The date is the fourth field of a base key --
+ *  game:variant:difficulty:date, then :env for anything that is not the daily.
+ *  This read the third, the difficulty, which is never less than a date, so
+ *  nothing was ever pruned and the store grew for the life of the browser. */
+export function staleBaseKeys(keys: Iterable<string>, now = Date.now()): string[] {
+  const day = 24 * 60 * 60 * 1000;
+  const dailyCutoff = new Date(now - KEEP_DAILY_DAYS * day).toISOString().slice(0, 10);
+  const roundCutoff = new Date(now - KEEP_ROUND_DAYS * day).toISOString().slice(0, 10);
+  const stale: string[] = [];
+  for (const key of keys) {
+    const parts = key.split(':');
+    const date = parts[3] ?? '';
+    // Not a key this code writes: leave it rather than guess.
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) continue;
+    const cutoff = parts.length > 4 ? roundCutoff : dailyCutoff;
+    if (date < cutoff) stale.push(key);
+  }
+  return stale;
+}
+
 function saveBases(): void {
   try {
-    // yesterday's puzzles are never coming back; don't grow this forever
-    const cutoff = new Date(Date.now() - 8 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
-    for (const key of syncBase.keys()) {
-      const date = key.split(':')[2] ?? '';
-      if (date && date < cutoff) syncBase.delete(key);
-    }
+    for (const key of staleBaseKeys(syncBase.keys())) syncBase.delete(key);
     siteStore.setItem(BASE_STORE, JSON.stringify([...syncBase]));
   } catch {
     // storage full or unavailable — the base holds for this page view
