@@ -10548,3 +10548,197 @@ $fn$;
 
 revoke all on function public.finish_publish_request(uuid, boolean, text, boolean) from public, anon, authenticated;
 grant execute on function public.finish_publish_request(uuid, boolean, text, boolean) to service_role;
+
+
+-- ---------------------------------------------------------------------------
+-- Names from the identity provider
+-- ---------------------------------------------------------------------------
+--
+-- A display name used to be opt-in: null by default, and null keeps you off
+-- every board. That was right for the public site this came from, where it
+-- protects strangers. Here everybody signs in through the company's identity
+-- provider, and opt-in meant an employee could play a whole tournament and
+-- never appear in it, with nothing on screen saying why. So an account is now
+-- named for its owner when it arrives, from what the identity provider sent.
+--
+-- Where the name comes from, first that yields one:
+--   1. the provider's full name -- full_name, name, or custom_claims.name
+--   2. given and family names -- given_name/family_name, first_name/last_name
+--   3. the email's local part, dots and underscores as spaces: ray.tetzloff
+--      becomes "Ray Tetzloff"
+-- For SAML, (1) and (2) are whatever the provider's attribute_mapping in GoTrue
+-- maps; with no mapping only (3) exists. See docs/selfhost.md.
+--
+-- Cleaned to the rules set_display_name enforces rather than exempted from
+-- them: accents folded, anything else outside letters, digits, spaces, hyphens
+-- and underscores dropped, a name too long for 24 characters shortened to its
+-- first name and last initial. A taken name gets a number; a blocked one falls
+-- through to the next source.
+--
+-- The person stays in charge of it. profiles.auto_name remembers the name this
+-- gave them. While their display name is still that one it follows the
+-- provider -- a name changed in Zitadel changes here at the next sign-in. Once
+-- they pick their own, or clear it to leave the boards, it is theirs and this
+-- never touches it again.
+
+alter table public.profiles add column if not exists auto_name text;
+
+-- A name, cleaned to what set_display_name would accept, or null.
+create or replace function public.clean_identity_name(p_name text)
+returns text
+language plpgsql
+immutable
+set search_path = ''
+as $fn$
+declare
+  n text := coalesce(p_name, '');
+  words text[];
+begin
+  n := translate(n,
+    'ÀÁÂÃÄÅàáâãäåÇçÈÉÊËèéêëÌÍÎÏìíîïÑñÒÓÔÕÖØòóôõöøÙÚÛÜùúûüÝýÿ',
+    'AAAAAAaaaaaaCcEEEEeeeeIIIIiiiiNnOOOOOOooooooUUUUuuuuYyy');
+  n := regexp_replace(n, '[^A-Za-z0-9 _-]', '', 'g');
+  n := regexp_replace(n, '\s+', ' ', 'g');
+  n := regexp_replace(n, '^[^A-Za-z0-9]+|[^A-Za-z0-9]+$', '', 'g');
+  if char_length(n) > 24 then
+    words := string_to_array(n, ' ');
+    if cardinality(words) > 1 then
+      n := words[1] || ' ' || left(words[cardinality(words)], 1);
+    end if;
+    n := regexp_replace(left(n, 24), '[^A-Za-z0-9]+$', '', 'g');
+  end if;
+  if char_length(n) < 2 then
+    return null;
+  end if;
+  return n;
+end;
+$fn$;
+
+-- The name this account should be given, free and allowed, or null. p_user's
+-- own current name does not count as taken, so asking twice answers the same.
+create or replace function public.identity_name_for(p_user uuid)
+returns text
+language plpgsql
+stable
+security definer
+set search_path = ''
+as $fn$
+declare
+  u record;
+  m jsonb;
+  candidate text;
+  base text;
+  attempt text;
+  n int;
+begin
+  select email, coalesce(raw_user_meta_data, '{}'::jsonb) as meta
+    into u from auth.users where id = p_user;
+  if not found then
+    return null;
+  end if;
+  m := u.meta;
+
+  foreach candidate in array array[
+    m->>'full_name',
+    m->>'name',
+    m->'custom_claims'->>'name',
+    nullif(concat_ws(' ', m->>'given_name', m->>'family_name'), ''),
+    nullif(concat_ws(' ', m->>'first_name', m->>'last_name'), ''),
+    initcap(translate(split_part(coalesce(u.email, ''), '@', 1), '._', '  '))
+  ] loop
+    base := public.clean_identity_name(candidate);
+    continue when base is null or public.name_is_blocked(base);
+    -- Room for " 99" inside the 24.
+    for n in 1..99 loop
+      attempt := case when n = 1 then base
+                      else regexp_replace(left(base, 21), '[^A-Za-z0-9]+$', '', 'g') || ' ' || n end;
+      if not exists (
+        select 1 from public.profiles p
+        where lower(p.display_name) = lower(attempt) and p.id <> p_user
+      ) then
+        return attempt;
+      end if;
+    end loop;
+  end loop;
+  return null;
+end;
+$fn$;
+
+revoke all on function public.identity_name_for(uuid) from public, anon, authenticated;
+
+-- Name one account, if it is still the provider's to name.
+create or replace function public.apply_identity_name(p_user uuid)
+returns void
+language plpgsql
+security definer
+set search_path = ''
+as $fn$
+declare
+  p record;
+  wanted text;
+begin
+  insert into public.profiles (id) values (p_user) on conflict (id) do nothing;
+  select display_name, auto_name into p from public.profiles where id = p_user;
+  -- Theirs: a name they chose, or a name this gave and they cleared.
+  if p.display_name is distinct from p.auto_name then
+    return;
+  end if;
+  -- Cleared with nothing auto-given: auto_name null and display_name null are
+  -- "never named", which is the case to act on. Cleared after being named
+  -- leaves display_name null and auto_name set, caught above.
+  wanted := public.identity_name_for(p_user);
+  if wanted is null or wanted is not distinct from p.display_name then
+    return;
+  end if;
+  update public.profiles set display_name = wanted, auto_name = wanted where id = p_user;
+exception
+  -- Two sign-ins racing for one name: leave this one unnamed rather than fail
+  -- the sign-in. The next sign-in names it.
+  when unique_violation then null;
+end;
+$fn$;
+
+revoke all on function public.apply_identity_name(uuid) from public, anon, authenticated;
+
+-- On arrival, as before, and now named.
+create or replace function public.handle_new_user()
+returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $$
+begin
+  insert into public.profiles (id) values (new.id)
+  on conflict (id) do nothing;
+  perform public.apply_identity_name(new.id);
+  return new;
+end;
+$$;
+
+-- And again whenever the provider sends something new: GoTrue refreshes the
+-- user's metadata at each SSO sign-in, which is how a name changed in Zitadel,
+-- or a mapping added after people had already signed in, reaches the boards.
+create or replace function public.handle_user_metadata()
+returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $$
+begin
+  perform public.apply_identity_name(new.id);
+  return new;
+end;
+$$;
+
+drop trigger if exists on_auth_user_metadata on auth.users;
+create trigger on_auth_user_metadata
+  after update of raw_user_meta_data, email on auth.users
+  for each row execute function public.handle_user_metadata();
+
+-- Everybody already here and never named. Safe to re-run on every apply: an
+-- account named once has auto_name set, and one whose owner picked or cleared
+-- a name is left alone by apply_identity_name.
+select public.apply_identity_name(u.id)
+from auth.users u
+join public.profiles p on p.id = u.id
+where p.display_name is null and p.auto_name is null;

@@ -278,6 +278,43 @@ request made directly against the API. Disable its email provider as well.
   `window.location.origin`. `GOTRUE_SITE_URL` and the additional-redirect list
   have to allow it too, or the hop back after a successful sign-in is refused.
 
+### Display names come from sign-in
+
+An account is named for its owner when it first signs in, so an employee is on
+the leaderboards and tournament standings without visiting the account menu.
+The name is taken from what the identity provider sent, first that yields one:
+`full_name`, `name` or `custom_claims.name`; then `given_name` + `family_name`
+(or `first_name` + `last_name`); then the email's local part, so
+`ray.tetzloff@…` becomes *Ray Tetzloff*. It is cleaned to the same rules a
+chosen name follows — accents folded, other punctuation dropped, a name over 24
+characters shortened to first name and last initial — and a duplicate gets a
+number.
+
+Anyone can change it or clear it in the account menu, and once they have, it is
+theirs: a later sign-in never overwrites a name somebody chose or cleared.
+Until then it follows the provider, so a name changed in Zitadel changes here at
+the next sign-in.
+
+**For a real name rather than the email's, map it.** SAML only carries what the
+provider's `attribute_mapping` in GoTrue asks for. When registering Zitadel with
+`POST /auth/v1/admin/sso/providers` (or updating it with `PUT` on the provider's
+id), include a mapping onto `name` from whichever attribute Zitadel's assertion
+carries the full name in:
+
+```json
+"attribute_mapping": { "keys": { "name": { "name": "FullName" } } }
+```
+
+Check what an account actually received before and after, in Supabase Studio's
+SQL editor:
+
+```sql
+select email, raw_user_meta_data from auth.users order by last_sign_in_at desc nulls last limit 5;
+```
+
+With no mapping everyone is named from their email, which still puts them on
+the boards.
+
 ### What this does not do yet
 
 Sign-in still isn't *required*. The app renders fine with no session, so an

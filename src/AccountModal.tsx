@@ -355,7 +355,7 @@ export default function AccountModal({
                     : 'Cleared. You no longer appear on the leaderboards.'
                   : nameState !== 'idle' && nameState !== 'saving'
                     ? NAME_MESSAGES[nameState]
-                    : 'The only thing other players can see. Setting one puts you on the leaderboards; clearing it takes you off. Everything else about your account stays private.'}
+                    : 'The only thing other players can see. It starts as your name from company sign-in; change it to anything you like, or clear it to leave the leaderboards. Everything else about your account stays private.'}
               </p>
             </div>
 
