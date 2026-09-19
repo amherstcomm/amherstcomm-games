@@ -55,9 +55,10 @@ select pg_temp.check('a round outside its tournament is refused',
 select pg_temp.check('and one that overlaps another round',
   (public.save_round(null, (select id from t), pg_temp.d(3), pg_temp.d(6), array['hive'])->>'reason')
     = 'another round already covers some of those days');
-select pg_temp.check('and one with no games',
+-- No games is fine now if the round has trivia; no games and no trivia is not.
+select pg_temp.check('and one with neither games nor trivia',
   (public.save_round(null, (select id from t), pg_temp.d(10), pg_temp.d(12), array[]::text[])->>'reason')
-    = 'a round needs at least one game');
+    = 'a round needs at least one game or one session');
 select pg_temp.check('and one naming a game this site does not have',
   (public.save_round(null, (select id from t), pg_temp.d(10), pg_temp.d(12), array['chess'])->>'reason')
     = 'that is not a game this site has');
