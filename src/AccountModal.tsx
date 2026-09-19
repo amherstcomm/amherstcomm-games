@@ -5,7 +5,7 @@ import { supabase } from '@/supabase';
 import { SSO_LABEL, SSO_ONLY } from '@/sso';
 import { useSetting } from '@/settings';
 import { beginSso, releaseAutoAttempt } from '@/signIn';
-import { clearMyStats, deleteAccount } from '@/account';
+import { clearMyStats, deleteAccount, readCompeting, setCompeting } from '@/account';
 import { fetchDisplayName } from '@/leaderboard';
 import {
   acceptInvite,
@@ -72,6 +72,42 @@ export default function AccountModal({
   // it has to be unique across accounts — that's a database constraint, not a
   // preference.
   const [name, setName] = useState<string | null>(null);
+
+  // Sitting out. Null until asked; the confirm step is shown only on the way
+  // out, because that is the direction that forfeits.
+  const [competing, setCompetingState] = useState<boolean | null>(null);
+  const [confirmOut, setConfirmOut] = useState(false);
+  const [competeBusy, setCompeteBusy] = useState(false);
+  const [competeMsg, setCompeteMsg] = useState('');
+
+  useEffect(() => {
+    if (!session) return;
+    let alive = true;
+    void readCompeting().then((c) => {
+      if (alive) setCompetingState(c);
+    });
+    return () => {
+      alive = false;
+    };
+  }, [session]);
+
+  async function switchCompeting(on: boolean) {
+    if (competeBusy) return;
+    setCompeteBusy(true);
+    const ok = await setCompeting(on);
+    setCompeteBusy(false);
+    setConfirmOut(false);
+    if (!ok) {
+      setCompeteMsg('Couldn’t change that just now — try again in a moment.');
+      return;
+    }
+    setCompetingState(on);
+    setCompeteMsg(
+      on
+        ? 'You’re back in. What you play from now on counts.'
+        : 'You’re sitting out. Nothing you have played, or play from now on, counts anywhere.'
+    );
+  }
 
   useEffect(() => {
     if (!session) return;
@@ -311,6 +347,79 @@ export default function AccountModal({
                   : 'Company sign-in names your account. If this stays empty, sign out and back in.'}
               </p>
             </div>
+
+            {competing !== null && (
+              <div className={`mb-6 ${tab === 'personal' ? '' : 'hidden'}`} data-competing>
+                <p className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">
+                  Leaderboards and standings
+                </p>
+                {competing ? (
+                  confirmOut ? (
+                    <div className="rounded-xl bg-white/5 border border-white/10 p-4">
+                      <p className="text-sm text-slate-300 mb-2">Sit out of everything?</p>
+                      <p className="text-xs text-slate-400 mb-3">
+                        Every result you have recorded — every puzzle, every tournament
+                        round, every trivia answer — stops counting,{' '}
+                        <strong className="text-slate-300">for good</strong>. Stepping back
+                        in later only counts what you play after that; nothing from before
+                        comes back. You can still play everything.
+                      </p>
+                      <div className="flex flex-wrap gap-2">
+                        <button
+                          onClick={() => void switchCompeting(false)}
+                          disabled={competeBusy}
+                          className="inline-flex items-center px-4 h-10 rounded-lg text-sm font-semibold bg-white/5 border border-rose-500/40 text-rose-300 hover:bg-rose-400/10 transition-colors disabled:opacity-50"
+                        >
+                          {competeBusy ? 'Sitting out…' : 'Sit out and forfeit my results'}
+                        </button>
+                        <button
+                          onClick={() => setConfirmOut(false)}
+                          className="inline-flex items-center px-4 h-10 rounded-lg text-sm font-semibold bg-white/5 border border-white/10 text-slate-300 hover:bg-white/10 transition-colors"
+                        >
+                          Stay in
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      <p className="text-sm text-slate-300">
+                        You count on the leaderboards, tournament standings, puzzle stats
+                        and trivia rankings.
+                      </p>
+                      <button
+                        onClick={() => {
+                          setCompeteMsg('');
+                          setConfirmOut(true);
+                        }}
+                        className="mt-2 inline-flex items-center px-4 h-10 rounded-lg text-sm font-semibold bg-white/5 border border-white/10 text-slate-300 hover:bg-white/10 hover:text-white transition-colors"
+                      >
+                        Sit out…
+                      </button>
+                    </>
+                  )
+                ) : (
+                  <>
+                    <p className="text-sm text-slate-300">
+                      You’re sitting out: nothing you play counts on any leaderboard,
+                      standing, stat or trivia ranking. Stepping back in counts what you
+                      play from then on.
+                    </p>
+                    <button
+                      onClick={() => void switchCompeting(true)}
+                      disabled={competeBusy}
+                      className="mt-2 inline-flex items-center px-4 h-10 rounded-lg text-sm font-semibold bg-emerald-400 text-ink hover:bg-emerald-300 transition-colors disabled:opacity-50"
+                    >
+                      {competeBusy ? 'Stepping back in…' : 'Step back in'}
+                    </button>
+                  </>
+                )}
+                {competeMsg && (
+                  <p className="mt-2 text-xs text-slate-400" role="status">
+                    {competeMsg}
+                  </p>
+                )}
+              </div>
+            )}
 
             <div className={`mb-6 ${tab === 'friends' ? '' : 'hidden'}`}>
               <h3 className="flex items-center gap-1.5 text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">

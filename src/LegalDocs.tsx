@@ -275,6 +275,13 @@ export function PrivacyPolicy() {
         and numbers and nothing else — not your email, and not anything you typed.
       </P>
       <P>
+        You can sit out from the Account panel. Sitting out takes you off every
+        leaderboard, tournament standing, shared puzzle stat and trivia ranking, and
+        permanently forfeits the results you had recorded until then, so that sitting
+        out can&apos;t be used to hide a lead. Stepping back in counts only what you
+        play afterwards.
+      </P>
+      <P>
         Clearing the name removes you from the boards immediately and permanently.
         Your own statistics carry on exactly as before; they just stop being public.
       </P>

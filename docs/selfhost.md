@@ -319,6 +319,29 @@ select email, raw_user_meta_data from auth.users order by last_sign_in_at desc n
 With no mapping everyone is named from their email, which still puts them on
 the boards.
 
+### Sitting out
+
+The one choice a player does have: the account menu can take them out of every
+leaderboard, tournament standing, shared puzzle stat and trivia ranking. They
+can still play everything; none of it counts.
+
+**Sitting out forfeits rather than hides**, so it can't be used to hide a lead —
+post a winning result, sit out so nobody sees the number to beat, step back in
+at the end on top. The key of every result the player has (game, board, day,
+and every trivia question they answered) goes into `forfeited_boards` /
+`forfeited_answers`, and so does anything they record while out. A result
+counts only while its player is in and its key has never been forfeited, so
+stepping back in counts only boards and questions played afterwards.
+
+Keys rather than timestamps because a row can be deleted and written again:
+*Clear my statistics* deletes a player's rows, and another device still holding
+the old result would push it straight back. It returns with the same key, which
+is still forfeited. Browsers can't read or write the forfeit tables, can't set
+`profiles.competing` directly, and nothing deletes a forfeit except deleting the
+account. The filter lives in `boards_between` (every leaderboard, friends board
+and tournament board), `daily_stats`, and `item_points` (every session ranking,
+question winner, score sheet and tournament trivia).
+
 ### What this does not do yet
 
 Sign-in still isn't *required*. The app renders fine with no session, so an
