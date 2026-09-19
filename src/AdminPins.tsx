@@ -41,6 +41,7 @@ import {
   type Pin,
   type Pinnable,
 } from '@/pins';
+import { NoAnswer, noAnswerToRead, noAnswerToWrite, withinWait } from '@/giveUp';
 
 const FIELD =
   'w-full rounded-lg bg-white/5 border border-white/15 px-3 py-2 text-sm text-slate-200 ' +
@@ -324,7 +325,23 @@ export default function AdminPins() {
       return;
     }
     setAsking(true);
-    const res = await requestPublish(date, force);
+    let res: Awaited<ReturnType<typeof requestPublish>>;
+    try {
+      res = await withinWait(requestPublish(date, force));
+    } catch (error) {
+      setAsking(false);
+      setConfirmLive(false);
+      setNote(
+        error instanceof NoAnswer
+          ? noAnswerToWrite(
+              `${date} was asked for`,
+              'The list below shows it if it was; asking again is safe, and says so if it is already waiting.'
+            )
+          : 'That did not work'
+      );
+      void pullRequests();
+      return;
+    }
     setAsking(false);
     setConfirmLive(false);
     if (!res.ok) {
@@ -349,7 +366,16 @@ export default function AdminPins() {
     setNote('');
     // One day, both ends the same: the shortlists are per day, and a month of
     // them at once is a page nobody reads.
-    const [coverage, pinned] = await Promise.all([readCoverage(date, date), readPins(date, date)]);
+    let coverage: Awaited<ReturnType<typeof readCoverage>>;
+    let pinned: Awaited<ReturnType<typeof readPins>>;
+    try {
+      [coverage, pinned] = await withinWait(Promise.all([readCoverage(date, date), readPins(date, date)]));
+    } catch (error) {
+      setBusy(false);
+      setDay(null);
+      setNote(error instanceof NoAnswer ? noAnswerToRead('the day') : 'That did not work');
+      return;
+    }
     setBusy(false);
     if (!coverage.ok) {
       setNote(coverage.reason ?? 'That did not work');
@@ -391,7 +417,18 @@ export default function AdminPins() {
 
   async function pin(game: string, choice: Record<string, unknown>) {
     setBusy(true);
-    const res = await pinPuzzle({ date, game, difficulty: tier || null, choice });
+    let res: Awaited<ReturnType<typeof pinPuzzle>>;
+    try {
+      res = await withinWait(pinPuzzle({ date, game, difficulty: tier || null, choice }));
+    } catch (error) {
+      setBusy(false);
+      setNote(
+        error instanceof NoAnswer
+          ? noAnswerToWrite('the pin was saved', 'Press Look to see what is pinned before pinning again.')
+          : 'That did not work'
+      );
+      return;
+    }
     setBusy(false);
     if (!res.ok) {
       setNote(res.reason ?? 'That did not work');

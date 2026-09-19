@@ -23,6 +23,7 @@ import {
 } from '@/coverage';
 import { readWordLists } from '@/wordLists';
 import { readWeaveThemes } from '@/weaveThemes';
+import { NoAnswer, noAnswerToRead, withinWait } from '@/giveUp';
 
 const FIELD =
   'w-full rounded-lg bg-white/5 border border-white/15 px-3 py-2 text-sm text-slate-200 ' +
@@ -76,7 +77,15 @@ export default function ThemeCoverage() {
   const check = useCallback(async () => {
     setBusy(true);
     setNote('');
-    const res = await readCoverage(from, until);
+    let res: Awaited<ReturnType<typeof readCoverage>>;
+    try {
+      res = await withinWait(readCoverage(from, until));
+    } catch (error) {
+      setBusy(false);
+      setResult(null);
+      setNote(error instanceof NoAnswer ? noAnswerToRead('the coverage') : 'That did not work');
+      return;
+    }
     setBusy(false);
     if (!res.ok) {
       setResult(null);

@@ -53,3 +53,73 @@ test('and trying again goes back to waiting rather than staying failed', async (
   // that did nothing.
   await expect(page.getByText('Could not load the word lists.')).toHaveCount(0);
 });
+
+// ---------------------------------------------------------------------------
+// Buttons
+// ---------------------------------------------------------------------------
+// A button that awaits its request inside a click handler never renders a
+// Waiting, so a held request left it spinning for ever -- Check on Coverage,
+// Look on Choosing a Day. It gets the same wait now, and comes back.
+
+/** Hold one RPC open; answer the rest the way an empty site would. */
+async function holding(page: import('@playwright/test').Page, held: string) {
+  await page.route('**/rest/v1/rpc/**', async (route) => {
+    const url = route.request().url();
+    if (url.includes(`/rpc/${held}`)) {
+      await new Promise(() => {});
+      return;
+    }
+    const body = url.includes('publish_requests_sheet')
+      ? { ok: true, requests: [] }
+      : url.includes('theme_coverage')
+        ? { ok: true, days: [] }
+        : url.includes('pins_sheet')
+          ? { ok: true, pins: [] }
+          : url.includes('read_site_settings')
+            ? {}
+            : [];
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });
+  });
+}
+
+const day = () => new Date(Date.now() + 20 * 86_400_000).toISOString().slice(0, 10);
+
+test('Check on Coverage comes back with a sentence when the server does not answer', async ({ page }) => {
+  await holding(page, 'theme_coverage');
+  await page.goto('/admin/coverage');
+  await page.getByLabel('Coverage from').fill(day());
+  await page.getByLabel('Coverage until').fill(day());
+  await page.getByRole('button', { name: 'Check' }).click();
+
+  await expect(page.getByText(/Could not load the coverage: the server did not answer/)).toBeVisible({
+    timeout: 20_000,
+  });
+  // And the button is a button again, not a spinner.
+  await expect(page.getByRole('button', { name: 'Check' })).toBeEnabled();
+});
+
+test('Look on Choosing a Day comes back too', async ({ page }) => {
+  await holding(page, 'pins_sheet');
+  await page.goto('/admin/pins');
+  await page.getByLabel('Pin date').fill(day());
+  await page.getByRole('button', { name: 'Look' }).click();
+
+  await expect(page.getByText(/Could not load the day: the server did not answer/)).toBeVisible({
+    timeout: 20_000,
+  });
+  await expect(page.getByRole('button', { name: 'Look' })).toBeEnabled();
+});
+
+// A write is different: it may have landed. So the sentence does not say
+// "nothing has been changed" -- it says how to find out.
+test('a republish that gets no answer says it cannot tell, and how to find out', async ({ page }) => {
+  await holding(page, 'request_publish');
+  await page.goto('/admin/pins');
+  await page.getByLabel('Pin date').fill(day());
+  await page.getByRole('button', { name: 'Republish this day' }).click();
+
+  const said = page.getByText(/this cannot tell whether .* was asked for/);
+  await expect(said).toBeVisible({ timeout: 20_000 });
+  await expect(said).toContainText('asking again is safe');
+  await expect(said).not.toContainText('nothing has been changed');
+});
