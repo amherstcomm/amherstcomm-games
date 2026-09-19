@@ -10902,8 +10902,13 @@ grant insert (id, settings) on public.profiles to authenticated;
 grant update (settings) on public.profiles to authenticated;
 
 -- Everybody already here, named from the provider. Safe on every apply: an
--- account already carrying its provider name is left as it is.
-select public.apply_identity_name(u.id) from auth.users u;
+-- account already carrying its provider name is left as it is. In a DO block
+-- so applying the file prints nothing for it -- as a bare select, the SQL
+-- editor showed one empty row per account, which read like a result to decode.
+do $$
+begin
+  perform public.apply_identity_name(u.id) from auth.users u;
+end $$;
 
 
 -- ---------------------------------------------------------------------------
