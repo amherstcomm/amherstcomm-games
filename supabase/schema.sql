@@ -10509,3 +10509,42 @@ $fn$;
 
 revoke all on function public.tournament_standings(uuid) from public;
 grant execute on function public.tournament_standings(uuid) to anon, authenticated;
+
+-- ---------------------------------------------------------------------------
+-- A request left alone is not a failure
+-- ---------------------------------------------------------------------------
+-- A request filed for tomorrow and drained after midnight finds its day already
+-- live, and the host leaves it alone rather than replace a board people are
+-- playing. That was recorded as 'failed', and the page said so in red, which
+-- reads as something broken when the rule did exactly what it is for. It is
+-- 'skipped' now: a state of its own, so the page can say what happened and
+-- what to do instead.
+alter table public.publish_requests drop constraint if exists publish_requests_state_check;
+alter table public.publish_requests add constraint publish_requests_state_check
+  check (state in ('waiting', 'running', 'done', 'failed', 'skipped'));
+
+-- Replaced rather than overloaded, for the reason save_round was: two
+-- signatures would leave a caller of the old one silently on the old
+-- behaviour. The three-argument call still works -- p_skipped defaults false.
+drop function if exists public.finish_publish_request(uuid, boolean, text);
+
+create or replace function public.finish_publish_request(
+  p_id uuid,
+  p_ok boolean,
+  p_note text,
+  p_skipped boolean default false
+)
+returns void
+language sql
+security definer
+set search_path = ''
+as $fn$
+  update public.publish_requests
+     set state = case when p_ok then 'done' when p_skipped then 'skipped' else 'failed' end,
+         note = left(p_note, 500),
+         finished_at = now()
+   where id = p_id and state = 'running'
+$fn$;
+
+revoke all on function public.finish_publish_request(uuid, boolean, text, boolean) from public, anon, authenticated;
+grant execute on function public.finish_publish_request(uuid, boolean, text, boolean) to service_role;

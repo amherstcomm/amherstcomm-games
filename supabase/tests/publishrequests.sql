@@ -84,6 +84,15 @@ select public.finish_publish_request(
 select pg_temp.check('and a finished request cannot be finished again',
   (select state from public.publish_requests where on_date = pg_temp.today() + 10) = 'done');
 
+-- A day left alone is recorded as that, not as a failure.
+select public.request_publish(pg_temp.today() + 30);
+select public.claim_publish_request();
+select public.finish_publish_request(
+  (select id from public.publish_requests where on_date = pg_temp.today() + 30),
+  false, 'the day had started', true);
+select pg_temp.check('a request left alone is skipped, not failed',
+  (select state from public.publish_requests where on_date = pg_temp.today() + 30) = 'skipped');
+
 -- A host that died mid-publish: the row says running, and nobody will ever
 -- finish it. After a quarter of an hour it is claimable again, or the page
 -- would say "publishing now" for ever.
@@ -107,11 +116,11 @@ select pg_temp.check('no web role may claim or finish a request',
   not has_function_privilege('authenticated', 'public.claim_publish_request()', 'execute')
   and not has_function_privilege('anon', 'public.claim_publish_request()', 'execute')
   and not has_function_privilege('authenticated',
-        'public.finish_publish_request(uuid, boolean, text)', 'execute'));
+        'public.finish_publish_request(uuid, boolean, text, boolean)', 'execute'));
 select pg_temp.check('while the publish host may',
   has_function_privilege('service_role', 'public.claim_publish_request()', 'execute')
   and has_function_privilege('service_role',
-        'public.finish_publish_request(uuid, boolean, text)', 'execute'));
+        'public.finish_publish_request(uuid, boolean, text, boolean)', 'execute'));
 select pg_temp.check('and anon may not ask at all',
   not has_function_privilege('anon', 'public.request_publish(date, boolean)', 'execute'));
 

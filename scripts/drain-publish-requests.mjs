@@ -51,13 +51,17 @@ if (!SUPABASE_URL || !KEY || !process.env.PUZZLES_SEED_SALT) {
     const { id, on_date: date, force } = job;
 
     let ok = false;
+    let skipped = false;
     let note;
     // Checked again here, not only when it was filed: a request for tomorrow
     // made at 11:59 p.m. is a request for today by the time a minute has
     // passed, and the rule is about the board being live, not about when
     // somebody pressed the button.
     if (date <= easternToday() && !force) {
-      note = 'the day started before it could be published, so it was left as it was';
+      skipped = true;
+      note =
+        'the day had started by the time the publish host got to it, so its board was left ' +
+        'as it was. Ask again to replace it -- the page will check first.';
     } else {
       const dir = mkdtempSync(join(tmpdir(), 'anagrimoire-request-'));
       try {
@@ -75,7 +79,19 @@ if (!SUPABASE_URL || !KEY || !process.env.PUZZLES_SEED_SALT) {
       }
     }
 
-    await rpc('finish_publish_request', { p_id: id, p_ok: ok, p_note: note });
-    console.log(`${date}: ${ok ? '' : 'FAILED — '}${note}`);
+    if (skipped) {
+      // Tried with the skip flag first. A database whose schema predates it
+      // answers 404 for a four-argument call, and a request must be closed
+      // whatever happens -- so the old call is the fallback, which records it
+      // the old way rather than leaving it running.
+      try {
+        await rpc('finish_publish_request', { p_id: id, p_ok: false, p_note: note, p_skipped: true });
+      } catch {
+        await rpc('finish_publish_request', { p_id: id, p_ok: false, p_note: note });
+      }
+    } else {
+      await rpc('finish_publish_request', { p_id: id, p_ok: ok, p_note: note });
+    }
+    console.log(`${date}: ${ok ? '' : skipped ? 'skipped — ' : 'FAILED — '}${note}`);
   }
 }
