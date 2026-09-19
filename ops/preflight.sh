@@ -19,6 +19,10 @@
 # Exit 0 when every check passed, 1 when any failed. Lines marked `note` are
 # facts rather than verdicts: whether a word list *should* cover these days is
 # the one thing this cannot know.
+#
+# The publish timers are checked first, on this machine rather than in the
+# container, which has no systemd to ask: a month set up perfectly is still a
+# month nobody publishes if the timer is not there. See ops/check-timers.sh.
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
@@ -38,12 +42,24 @@ set +a
 : "${SUPABASE_URL:?set it in ops/publish.env}"
 : "${SUPABASE_SERVICE_ROLE_KEY:?set it in ops/publish.env}"
 
+timers=0
+bash ops/check-timers.sh || timers=$?
+echo
+
 # The salt is not needed here -- nothing is generated -- so it is not required.
 # --network host because SUPABASE_URL is almost certainly a localhost port on
 # this box, which means nothing inside a container otherwise.
-exec docker run --rm --network host \
+#
+# Not exec'd any more: the timers' answer has to outlive it.
+pipeline=0
+docker run --rm --network host \
   -v "$PWD:/w" -w /w \
   -e SUPABASE_URL \
   -e SUPABASE_SERVICE_ROLE_KEY \
   node:22-alpine \
-  sh -c "[ -d node_modules ] || npm ci --ignore-scripts --no-audit --no-fund; node scripts/preflight.mjs $*"
+  sh -c "[ -d node_modules ] || npm ci --ignore-scripts --no-audit --no-fund; node scripts/preflight.mjs $*"   || pipeline=$?
+
+# Either failing fails the preflight.
+if [ "$timers" -ne 0 ] || [ "$pipeline" -ne 0 ]; then
+  exit 1
+fi

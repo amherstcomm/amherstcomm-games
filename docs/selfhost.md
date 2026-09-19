@@ -2343,7 +2343,16 @@ ops/preflight.sh                          # today and the fortnight ahead
 ops/preflight.sh --from 2026-10-01 --days 31
 ```
 
-Read-only, so it is safe at any hour and safe to repeat. It walks the chain end
+Read-only, so it is safe at any hour and safe to repeat. It starts on the host
+itself, with `ops/check-timers.sh` (runnable on its own too): both publish
+timers are installed, enabled and running, each service's last run succeeded,
+and the installed unit files match the ones in `ops/` (a mismatch is a note — a
+stale copy runs the old command). A missing timer fails with the exact commands
+to install it. That check exists because the requests timer went uninstalled
+for a week and every *Republish this day* sat on "waiting" with nothing saying
+why.
+
+Then it walks the chain end
 to end rather than checking one link: the database answers, the functions the
 generator calls all exist, `pin_puzzle` is the current one, every day in the
 range has all its games published, the window still runs ahead of today, every
