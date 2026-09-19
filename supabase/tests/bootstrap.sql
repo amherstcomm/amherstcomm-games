@@ -26,7 +26,9 @@ alter default privileges in schema public
 create schema if not exists auth;
 create table if not exists auth.users (
   id uuid primary key default gen_random_uuid(),
-  email text
+  email text,
+  -- What GoTrue keeps from the identity provider; display names are made from it.
+  raw_user_meta_data jsonb
 );
 -- Whoever the current GUC says. The real one reads the JWT; this reads a
 -- setting, so a test can be somebody.

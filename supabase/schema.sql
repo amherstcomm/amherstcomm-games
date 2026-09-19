@@ -526,6 +526,95 @@ create policy "update own progress"
   using ((select auth.uid()) = user_id)
   with check ((select auth.uid()) = user_id);
 
+-- ---------------------------------------------------------------------------
+-- Sitting out
+-- ---------------------------------------------------------------------------
+--
+-- A player may take themselves out of the leaderboards, the tournament
+-- standings, the shared puzzle stats and every trivia ranking. Out is out: the
+-- point is that nobody can use it to hide a lead -- post a winning result, sit
+-- out so nobody can see the number to beat, and step back in at the end on top.
+--
+-- So it is not a filter on who is currently out. Sitting out *forfeits*: the
+-- key of every result the player has -- game, board, day -- goes into a table
+-- of forfeits, and so does the key of anything they record while out. A result
+-- counts only while its player is in and its key has never been forfeited.
+-- Stepping back in counts what they play from then on and nothing before.
+--
+-- Keys rather than timestamps, because a result can be deleted and written
+-- again: clear_my_stats deletes a player's rows, and another device still
+-- holding the old result would push it straight back with a fresh timestamp.
+-- It comes back with the same key, which is still forfeited. Browsers can
+-- neither read nor write the forfeits, and nothing here ever deletes one; they
+-- go when the account does.
+
+alter table public.profiles add column if not exists competing boolean not null default true;
+
+create table if not exists public.forfeited_boards (
+  user_id uuid not null references auth.users (id) on delete cascade,
+  game text not null,
+  variant text not null,
+  difficulty text not null,
+  puzzle_date date not null,
+  env text not null,
+  forfeited_at timestamptz not null default now(),
+  primary key (user_id, game, variant, difficulty, puzzle_date, env)
+);
+alter table public.forfeited_boards enable row level security;
+revoke all on public.forfeited_boards from public, anon, authenticated;
+
+-- Whether a result goes on a board or into a shared stat.
+create or replace function public.result_counts(
+  p_user uuid,
+  p_game text,
+  p_variant text,
+  p_difficulty text,
+  p_date date,
+  p_env text
+)
+returns boolean
+language sql
+stable
+set search_path = ''
+as $fn$
+  select coalesce((select p.competing from public.profiles p where p.id = p_user), true)
+     and not exists (
+       select 1 from public.forfeited_boards f
+       where f.user_id = p_user and f.game = p_game and f.variant = p_variant
+         and f.difficulty = p_difficulty and f.puzzle_date = p_date and f.env = p_env)
+$fn$;
+
+revoke all on function public.result_counts(uuid, text, text, text, date, text) from public, anon, authenticated;
+
+-- Anything written while out is forfeited as it lands, including a row a
+-- browser creates for the first time while its player is sitting out.
+create or replace function public.forfeit_while_out()
+returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $fn$
+declare
+  in_play boolean;
+begin
+  -- FOR SHARE, so this waits on a set_competing that is mid-switch rather than
+  -- reading the old answer: without it a row landing during the switch could
+  -- be missed by both this trigger and the switch's own copy.
+  select p.competing into in_play from public.profiles p where p.id = new.user_id for share;
+  if in_play is false then
+    insert into public.forfeited_boards (user_id, game, variant, difficulty, puzzle_date, env)
+    values (new.user_id, new.game, new.variant, new.difficulty, new.puzzle_date, new.env)
+    on conflict do nothing;
+  end if;
+  return new;
+end;
+$fn$;
+
+drop trigger if exists forfeit_while_out on public.daily_progress;
+create trigger forfeit_while_out
+  after insert or update on public.daily_progress
+  for each row execute function public.forfeit_while_out();
+
 -- Realtime. The client subscribes to its own rows and treats each event as a
 -- doorbell — the payload is never merged, it just triggers the same
 -- authenticated read the poll performs, so there is one set of merge rules.
@@ -620,7 +709,8 @@ begin
       'avgGuesses', round(avg((dp.result->>'guesses')::numeric) filter (where (dp.result->>'won')::boolean), 1)
     ) into out_json
     from public.daily_progress dp
-    where game = 'guess' and completed and puzzle_date = p_date and env = p_env and difficulty = p_difficulty;
+    where game = 'guess' and completed and puzzle_date = p_date and env = p_env and difficulty = p_difficulty
+      and public.result_counts(dp.user_id, dp.game, dp.variant, dp.difficulty, dp.puzzle_date, dp.env);
 
   elsif p_game = 'hive' then
     select jsonb_build_object(
@@ -630,7 +720,8 @@ begin
       'queenBee', count(*) filter (where (dp.result->>'queenBee')::boolean)
     ) into out_json
     from public.daily_progress dp
-    where game = 'hive' and completed and puzzle_date = p_date and env = p_env and difficulty = p_difficulty;
+    where game = 'hive' and completed and puzzle_date = p_date and env = p_env and difficulty = p_difficulty
+      and public.result_counts(dp.user_id, dp.game, dp.variant, dp.difficulty, dp.puzzle_date, dp.env);
 
   elsif p_game in ('scramble', 'grid') then
     select jsonb_build_object(
@@ -639,7 +730,8 @@ begin
       'topScore', max((dp.result->>'score')::numeric)
     ) into out_json
     from public.daily_progress dp
-    where game = p_game and completed and puzzle_date = p_date and env = p_env and difficulty = p_difficulty;
+    where game = p_game and completed and puzzle_date = p_date and env = p_env and difficulty = p_difficulty
+      and public.result_counts(dp.user_id, dp.game, dp.variant, dp.difficulty, dp.puzzle_date, dp.env);
 
   elsif p_game = 'box' then
     select jsonb_build_object(
@@ -648,7 +740,8 @@ begin
       'fewestWords', min((dp.result->>'words')::int)
     ) into out_json
     from public.daily_progress dp
-    where game = 'box' and completed and puzzle_date = p_date and env = p_env and difficulty = p_difficulty;
+    where game = 'box' and completed and puzzle_date = p_date and env = p_env and difficulty = p_difficulty
+      and public.result_counts(dp.user_id, dp.game, dp.variant, dp.difficulty, dp.puzzle_date, dp.env);
 
   elsif p_game = 'weave' then
     select jsonb_build_object(
@@ -658,7 +751,8 @@ begin
       'avgHints', round(avg((dp.result->>'hints')::numeric), 1)
     ) into out_json
     from public.daily_progress dp
-    where game = 'weave' and completed and puzzle_date = p_date and env = p_env and difficulty = p_difficulty;
+    where game = 'weave' and completed and puzzle_date = p_date and env = p_env and difficulty = p_difficulty
+      and public.result_counts(dp.user_id, dp.game, dp.variant, dp.difficulty, dp.puzzle_date, dp.env);
 
   else
     return null;
@@ -1247,6 +1341,7 @@ begin
       where dp.game = 'guess' and dp.completed and dp.env = p_env and dp.difficulty = p_difficulty and dp.puzzle_date between p_from and p_until
         and (p_users is null or dp.user_id = any(p_users))
         and p.display_name is not null
+        and public.result_counts(dp.user_id, dp.game, dp.variant, dp.difficulty, dp.puzzle_date, dp.env)
         and public.result_is_plausible('guess', dp.state, dp.result, dp.difficulty, dp.variant, dp.puzzle_date, dp.env)
       group by p.display_name
       having count(*) filter (where (dp.result->>'won')::boolean) > 0
@@ -1279,6 +1374,7 @@ begin
       where dp.game = g.game and dp.completed and dp.env = p_env and dp.difficulty = p_difficulty and dp.puzzle_date between p_from and p_until
         and (p_users is null or dp.user_id = any(p_users))
         and p.display_name is not null
+        and public.result_counts(dp.user_id, dp.game, dp.variant, dp.difficulty, dp.puzzle_date, dp.env)
         and public.result_is_plausible(g.game, dp.state, dp.result, dp.difficulty, dp.variant, dp.puzzle_date, dp.env)
       group by p.display_name
       order by value desc, detail desc
@@ -1300,6 +1396,7 @@ begin
       where dp.game = 'box' and dp.completed and dp.env = p_env and dp.difficulty = p_difficulty and dp.puzzle_date between p_from and p_until
         and (p_users is null or dp.user_id = any(p_users))
         and p.display_name is not null
+        and public.result_counts(dp.user_id, dp.game, dp.variant, dp.difficulty, dp.puzzle_date, dp.env)
         and public.result_is_plausible('box', dp.state, dp.result, dp.difficulty, dp.variant, dp.puzzle_date, dp.env)
       group by p.display_name
     ) a
@@ -1324,6 +1421,7 @@ begin
       where dp.game = 'weave' and dp.completed and dp.env = p_env and dp.difficulty = p_difficulty and dp.puzzle_date between p_from and p_until
         and (p_users is null or dp.user_id = any(p_users))
         and p.display_name is not null
+        and public.result_counts(dp.user_id, dp.game, dp.variant, dp.difficulty, dp.puzzle_date, dp.env)
         and public.result_is_plausible('weave', dp.state, dp.result, dp.difficulty, dp.variant, dp.puzzle_date, dp.env)
       group by p.display_name
       having count(*) filter (where (dp.result->>'solved')::boolean) > 0
@@ -1350,6 +1448,7 @@ begin
       where dp.game = 'cryptogram' and dp.completed and dp.env = p_env and dp.difficulty = p_difficulty and dp.puzzle_date between p_from and p_until
         and (p_users is null or dp.user_id = any(p_users))
         and p.display_name is not null
+        and public.result_counts(dp.user_id, dp.game, dp.variant, dp.difficulty, dp.puzzle_date, dp.env)
         and public.result_is_plausible('cryptogram', dp.state, dp.result, dp.difficulty, dp.variant, dp.puzzle_date, dp.env)
       group by p.display_name
       having count(*) filter (where (dp.result->>'solved')::boolean) > 0
@@ -1381,6 +1480,7 @@ begin
       where dp.game = 'ladder' and dp.completed and dp.env = p_env and dp.difficulty = p_difficulty and dp.puzzle_date between p_from and p_until
         and (p_users is null or dp.user_id = any(p_users))
         and p.display_name is not null
+        and public.result_counts(dp.user_id, dp.game, dp.variant, dp.difficulty, dp.puzzle_date, dp.env)
         and public.result_is_plausible('ladder', dp.state, dp.result, dp.difficulty, dp.variant, dp.puzzle_date, dp.env)
       group by p.display_name
       having count(*) filter (where (dp.result->>'solved')::boolean) > 0
@@ -1412,6 +1512,7 @@ begin
       where dp.game = 'bridge' and dp.completed and dp.env = p_env and dp.difficulty = p_difficulty and dp.puzzle_date between p_from and p_until
         and (p_users is null or dp.user_id = any(p_users))
         and p.display_name is not null
+        and public.result_counts(dp.user_id, dp.game, dp.variant, dp.difficulty, dp.puzzle_date, dp.env)
         and public.result_is_plausible('bridge', dp.state, dp.result, dp.difficulty, dp.variant, dp.puzzle_date, dp.env)
       group by p.display_name
       having sum(coalesce((dp.result->>'solved')::int, 0)) > 0
@@ -1452,6 +1553,7 @@ begin
         and dp.env = p_env and dp.difficulty = p_difficulty and dp.puzzle_date between p_from and p_until
         and (p_users is null or dp.user_id = any(p_users))
         and p.display_name is not null
+        and public.result_counts(dp.user_id, dp.game, dp.variant, dp.difficulty, dp.puzzle_date, dp.env)
         and public.result_is_plausible('squares', dp.state, dp.result, dp.difficulty, dp.variant, dp.puzzle_date, dp.env)
       group by p.display_name
       having count(*) filter (where (dp.result->>'solved')::boolean) > 0
@@ -3160,6 +3262,59 @@ create table if not exists public.responses (
 );
 alter table public.responses enable row level security;
 revoke all on public.responses from public, anon, authenticated;
+
+-- Sitting out covers trivia too: an answer given before sitting out, or while
+-- out, scores nothing in any ranking, winner or tournament. Keyed by question,
+-- for the reason boards are keyed by board. See "Sitting out" above.
+create table if not exists public.forfeited_answers (
+  user_id uuid not null references auth.users (id) on delete cascade,
+  item_id uuid not null references public.items (id) on delete cascade,
+  forfeited_at timestamptz not null default now(),
+  primary key (user_id, item_id)
+);
+alter table public.forfeited_answers enable row level security;
+revoke all on public.forfeited_answers from public, anon, authenticated;
+
+create or replace function public.answer_counts(p_user uuid, p_item uuid)
+returns boolean
+language sql
+stable
+set search_path = ''
+as $fn$
+  select coalesce((select p.competing from public.profiles p where p.id = p_user), true)
+     and not exists (
+       select 1 from public.forfeited_answers f
+       where f.user_id = p_user and f.item_id = p_item)
+$fn$;
+
+revoke all on function public.answer_counts(uuid, uuid) from public, anon, authenticated;
+
+create or replace function public.forfeit_answer_while_out()
+returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $fn$
+declare
+  in_play boolean;
+begin
+  -- FOR SHARE, so this waits on a set_competing that is mid-switch rather than
+  -- reading the old answer: without it a row landing during the switch could
+  -- be missed by both this trigger and the switch's own copy.
+  select p.competing into in_play from public.profiles p where p.id = new.user_id for share;
+  if in_play is false then
+    insert into public.forfeited_answers (user_id, item_id)
+    values (new.user_id, new.item_id)
+    on conflict do nothing;
+  end if;
+  return new;
+end;
+$fn$;
+
+drop trigger if exists forfeit_answer_while_out on public.responses;
+create trigger forfeit_answer_while_out
+  after insert or update on public.responses
+  for each row execute function public.forfeit_answer_while_out();
 
 create index if not exists items_session_idx on public.items (session_id, position);
 create index if not exists responses_item_idx on public.responses (item_id);
@@ -6369,6 +6524,7 @@ as $fn$
            public.answer_seconds(public.started_at(p_item, r.user_id), r.submitted_at) as seconds
     from public.responses r
     where r.item_id = p_item
+      and public.answer_counts(r.user_id, p_item)
   ),
   gaps as (
     select s.user_id,
@@ -10548,3 +10704,265 @@ $fn$;
 
 revoke all on function public.finish_publish_request(uuid, boolean, text, boolean) from public, anon, authenticated;
 grant execute on function public.finish_publish_request(uuid, boolean, text, boolean) to service_role;
+
+
+
+-- ---------------------------------------------------------------------------
+-- Names from the identity provider
+-- ---------------------------------------------------------------------------
+--
+-- A display name used to be the player's to choose, and null by default -- which
+-- kept you off every board. That was right for the public site this came from.
+-- Here everybody signs in through the company's identity provider, and the name
+-- on the boards is the name the company has for you: set from the provider at
+-- every sign-in, not chosen, not changeable, and not clearable. An employee is
+-- on the standings because they played, not because they found a menu.
+--
+-- Where the name comes from, first that yields one:
+--   1. the provider's full name -- full_name, name, or custom_claims.name
+--   2. given and family names -- given_name/family_name, first_name/last_name
+--   3. the email's local part, dots and underscores as spaces: ray.tetzloff
+--      becomes "Ray Tetzloff"
+-- For SAML, (1) and (2) are whatever the provider's attribute_mapping in GoTrue
+-- maps; with no mapping only (3) exists. See docs/selfhost.md.
+--
+-- Cleaned to the rules the boards have always held names to: accents folded,
+-- anything outside letters, digits, spaces, hyphens and underscores dropped, a
+-- name too long for 24 characters shortened to first name and last initial. A
+-- taken name gets a number; a blocked one falls through to the next source.
+
+-- A name, cleaned to the rules the boards hold names to, or null.
+create or replace function public.clean_identity_name(p_name text)
+returns text
+language plpgsql
+immutable
+set search_path = ''
+as $fn$
+declare
+  n text := coalesce(p_name, '');
+  words text[];
+begin
+  n := translate(n,
+    'ÀÁÂÃÄÅàáâãäåÇçÈÉÊËèéêëÌÍÎÏìíîïÑñÒÓÔÕÖØòóôõöøÙÚÛÜùúûüÝýÿ',
+    'AAAAAAaaaaaaCcEEEEeeeeIIIIiiiiNnOOOOOOooooooUUUUuuuuYyy');
+  n := regexp_replace(n, '[^A-Za-z0-9 _-]', '', 'g');
+  n := regexp_replace(n, '\s+', ' ', 'g');
+  n := regexp_replace(n, '^[^A-Za-z0-9]+|[^A-Za-z0-9]+$', '', 'g');
+  if char_length(n) > 24 then
+    words := string_to_array(n, ' ');
+    if cardinality(words) > 1 then
+      n := words[1] || ' ' || left(words[cardinality(words)], 1);
+    end if;
+    n := regexp_replace(left(n, 24), '[^A-Za-z0-9]+$', '', 'g');
+  end if;
+  if char_length(n) < 2 then
+    return null;
+  end if;
+  return n;
+end;
+$fn$;
+
+-- The name this account should have, free and allowed, or null. p_user's own
+-- current name does not count as taken, so asking twice answers the same.
+create or replace function public.identity_name_for(p_user uuid)
+returns text
+language plpgsql
+stable
+security definer
+set search_path = ''
+as $fn$
+declare
+  u record;
+  m jsonb;
+  candidate text;
+  base text;
+  attempt text;
+  n int;
+begin
+  select email, coalesce(raw_user_meta_data, '{}'::jsonb) as meta
+    into u from auth.users where id = p_user;
+  if not found then
+    return null;
+  end if;
+  m := u.meta;
+
+  foreach candidate in array array[
+    m->>'full_name',
+    m->>'name',
+    m->'custom_claims'->>'name',
+    nullif(concat_ws(' ', m->>'given_name', m->>'family_name'), ''),
+    nullif(concat_ws(' ', m->>'first_name', m->>'last_name'), ''),
+    initcap(translate(split_part(coalesce(u.email, ''), '@', 1), '._', '  '))
+  ] loop
+    base := public.clean_identity_name(candidate);
+    continue when base is null or public.name_is_blocked(base);
+    -- Room for " 99" inside the 24.
+    for n in 1..99 loop
+      attempt := case when n = 1 then base
+                      else regexp_replace(left(base, 21), '[^A-Za-z0-9]+$', '', 'g') || ' ' || n end;
+      if not exists (
+        select 1 from public.profiles p
+        where lower(p.display_name) = lower(attempt) and p.id <> p_user
+      ) then
+        return attempt;
+      end if;
+    end loop;
+  end loop;
+  return null;
+end;
+$fn$;
+
+revoke all on function public.identity_name_for(uuid) from public, anon, authenticated;
+
+-- Give one account the name the provider says it has.
+create or replace function public.apply_identity_name(p_user uuid)
+returns void
+language plpgsql
+security definer
+set search_path = ''
+as $fn$
+declare
+  wanted text;
+begin
+  insert into public.profiles (id) values (p_user) on conflict (id) do nothing;
+  wanted := public.identity_name_for(p_user);
+  -- Nothing usable -- no name, no email -- keeps what is there rather than
+  -- blanking a name that was fine.
+  if wanted is null then
+    return;
+  end if;
+  update public.profiles set display_name = wanted
+   where id = p_user and display_name is distinct from wanted;
+exception
+  -- Two sign-ins racing for one name: leave this one as it was rather than fail
+  -- the sign-in. The next sign-in names it.
+  when unique_violation then null;
+end;
+$fn$;
+
+revoke all on function public.apply_identity_name(uuid) from public, anon, authenticated;
+
+-- On arrival, as before, and now named.
+create or replace function public.handle_new_user()
+returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $$
+begin
+  insert into public.profiles (id) values (new.id)
+  on conflict (id) do nothing;
+  perform public.apply_identity_name(new.id);
+  return new;
+end;
+$$;
+
+-- And again whenever the provider sends something new: GoTrue refreshes the
+-- user's metadata at each SSO sign-in, which is how a name changed in Zitadel,
+-- or a mapping added after people had already signed in, reaches the boards.
+create or replace function public.handle_user_metadata()
+returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $$
+begin
+  perform public.apply_identity_name(new.id);
+  return new;
+end;
+$$;
+
+drop trigger if exists on_auth_user_metadata on auth.users;
+create trigger on_auth_user_metadata
+  after update of raw_user_meta_data, email on auth.users
+  for each row execute function public.handle_user_metadata();
+
+-- Nobody sets their own. set_display_name stays, so an old page still open in
+-- somebody's browser gets an answer rather than an error, but it changes
+-- nothing: the name is the provider's.
+create or replace function public.set_display_name(p_name text)
+returns text
+language sql
+security definer
+set search_path = ''
+as $fn$
+  select case when (select auth.uid()) is null then 'not signed in' else 'from sign-in' end
+$fn$;
+
+revoke execute on function public.set_display_name(text) from public, anon;
+grant execute on function public.set_display_name(text) to authenticated;
+
+-- And not by the back door. The "update own profile" policy exists so a
+-- browser can save its settings, and with the table-wide grant Supabase gives
+-- it, that policy also let a browser write its own display_name straight
+-- through the API -- past set_display_name, past the blocklist, and now past
+-- the provider. Narrowed to the columns a browser has any business writing.
+revoke insert, update on public.profiles from anon, authenticated;
+grant insert (id, settings) on public.profiles to authenticated;
+grant update (settings) on public.profiles to authenticated;
+
+-- Everybody already here, named from the provider. Safe on every apply: an
+-- account already carrying its provider name is left as it is.
+select public.apply_identity_name(u.id) from auth.users u;
+
+
+-- ---------------------------------------------------------------------------
+-- The switch for sitting out
+-- ---------------------------------------------------------------------------
+-- Out forfeits everything recorded so far, puzzles and trivia alike; in counts
+-- what is played from then on. See "Sitting out" near daily_progress for why it
+-- forfeits rather than hides.
+create or replace function public.set_competing(p_on boolean)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $fn$
+declare
+  uid uuid := (select auth.uid());
+begin
+  if uid is null then
+    return jsonb_build_object('ok', false, 'reason', 'not signed in');
+  end if;
+  if p_on is null then
+    return jsonb_build_object('ok', false, 'reason', 'in or out');
+  end if;
+  insert into public.profiles (id) values (uid) on conflict (id) do nothing;
+
+  if not p_on then
+    -- Profile first, forfeits second: a row synced in between would otherwise
+    -- slip through both -- written while still in, missed by the copy below.
+    -- In this order the trigger catches it.
+    update public.profiles set competing = false where id = uid;
+    insert into public.forfeited_boards (user_id, game, variant, difficulty, puzzle_date, env)
+    select dp.user_id, dp.game, dp.variant, dp.difficulty, dp.puzzle_date, dp.env
+    from public.daily_progress dp
+    where dp.user_id = uid
+    on conflict do nothing;
+    insert into public.forfeited_answers (user_id, item_id)
+    select r.user_id, r.item_id from public.responses r where r.user_id = uid
+    on conflict do nothing;
+  else
+    update public.profiles set competing = true where id = uid;
+  end if;
+  return jsonb_build_object('ok', true, 'competing', p_on);
+end;
+$fn$;
+
+revoke all on function public.set_competing(boolean) from public, anon;
+grant execute on function public.set_competing(boolean) to authenticated;
+
+-- Where the caller stands, for the account menu. Their own row is readable
+-- already; this is here so the page need not know the column exists.
+create or replace function public.my_competing()
+returns boolean
+language sql
+stable
+security definer
+set search_path = ''
+as $fn$
+  select coalesce((select p.competing from public.profiles p where p.id = (select auth.uid())), true)
+$fn$;
+
+revoke all on function public.my_competing() from public, anon;
+grant execute on function public.my_competing() to authenticated;

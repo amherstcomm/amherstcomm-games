@@ -73,3 +73,28 @@ export async function deleteAccount(wipeLocal: boolean): Promise<boolean> {
     return false;
   }
 }
+
+/** Whether this account counts on the leaderboards, tournament standings,
+ *  shared stats and trivia rankings. Null when it cannot be asked. */
+export async function readCompeting(): Promise<boolean | null> {
+  if (!supabase) return null;
+  try {
+    const { data, error } = await supabase.rpc('my_competing');
+    return error ? null : data !== false;
+  } catch {
+    return null;
+  }
+}
+
+/** Sit out, or step back in. Sitting out forfeits every result recorded so
+ *  far, for good -- see "Sitting out" in schema.sql for why it cannot simply
+ *  hide them. */
+export async function setCompeting(on: boolean): Promise<boolean> {
+  if (!supabase) return false;
+  try {
+    const { data, error } = await supabase.rpc('set_competing', { p_on: on });
+    return !error && (data as { ok?: boolean } | null)?.ok === true;
+  } catch {
+    return false;
+  }
+}
