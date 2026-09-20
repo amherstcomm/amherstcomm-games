@@ -1199,3 +1199,43 @@ test('the reveal marks each pair and says what a wrong one should have been', as
   await expect(page.locator('[data-match-lines] line.stroke-emerald-400')).toHaveCount(1);
   await expect(page.locator('[data-match-lines] line.stroke-rose-400')).toHaveCount(1);
 });
+
+// Six lines crossing one gap, all in one colour, can only be read by following
+// them with a finger. Each pair wears its own, at both ends.
+test('each pair is drawn in its own colour, at both ends', async ({ page }) => {
+  await matching(page);
+  await page.getByRole('button', { name: /^1998/ }).click();
+  await page.getByRole('button', { name: 'ESOP formed', exact: true }).click();
+  await page.getByRole('button', { name: /^2011/ }).click();
+  await page.getByRole('button', { name: 'Fiber launch', exact: true }).click();
+
+  const lines = page.locator('[data-match-lines] line');
+  await expect(lines).toHaveCount(2);
+  // Two pairs, two different colours -- not two of the same.
+  const classes = await lines.evaluateAll((els) => els.map((el) => el.getAttribute('class') ?? ''));
+  expect(new Set(classes).size).toBe(2);
+
+  // And the words at both ends carry the pair's colour, so the line can be
+  // read from either side rather than only by following it.
+  // Scoped by column: a matched left-hand item now says "→ ESOP formed", so
+  // the name alone matches both ends -- which is the point, but not a locator.
+  const theseOnes = page.getByRole('list', { name: 'Match these' });
+  const thoseOnes = page.getByRole('list', { name: 'With one of these' });
+  await expect(theseOnes.getByRole('button', { name: /^1998/ })).toHaveClass(/border-sky-400/);
+  await expect(thoseOnes.getByRole('button', { name: /ESOP formed/ })).toHaveClass(/border-sky-400/);
+  await expect(theseOnes.getByRole('button', { name: /^2011/ })).toHaveClass(/border-amber-400/);
+});
+
+// The presenter has no pairs of their own, so there was nothing to draw lines
+// from and the reveal showed a bare list on the screen the room is looking at.
+test('the presenter’s reveal draws the right answer as lines', async ({ page }) => {
+  await matching(page, {
+    state: 'revealed',
+    mine: null,
+    answer: { pairs: { '1998': 'ESOP formed', '2011': 'Fiber launch' } },
+  });
+  const lines = page.locator('[data-match-lines] line');
+  await expect(lines).toHaveCount(2);
+  // Every one of them is the answer, so every one of them is right.
+  await expect(page.locator('[data-match-lines] line.stroke-emerald-400')).toHaveCount(2);
+});

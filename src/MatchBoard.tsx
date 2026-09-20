@@ -18,7 +18,33 @@
 // used to be.
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 
-type Line = { from: { x: number; y: number }; to: { x: number; y: number }; state: 'set' | 'right' | 'wrong' };
+type Line = {
+  from: { x: number; y: number };
+  to: { x: number; y: number };
+  state: 'set' | 'right' | 'wrong';
+  /** which of PAIR_COLOURS this pair is drawn in, while it is being made */
+  colour: number;
+};
+
+/** A colour per pair, so six lines crossing a gap can be told apart.
+ *
+ *  All one colour was the first version and is unreadable at six pairs: the
+ *  lines cross, and with nothing to distinguish them the only way to find
+ *  where one ends is to follow it with a finger. Both ends of a pair carry the
+ *  same colour, so a line can be read from either side.
+ *
+ *  Six, cycling. More than six pairs on one question is more than a room can
+ *  hold anyway, and a seventh repeating a colour is better than a seventh that
+ *  nobody can see -- these are the tiers that clear the contrast floor on every
+ *  palette, which is what the sweep in e2e/contrast.spec.ts holds. */
+const PAIR_COLOURS = [
+  { line: 'stroke-sky-400', edge: 'border-sky-400', text: 'text-sky-200' },
+  { line: 'stroke-amber-400', edge: 'border-amber-400', text: 'text-amber-200' },
+  { line: 'stroke-violet-400', edge: 'border-violet-400', text: 'text-violet-200' },
+  { line: 'stroke-emerald-400', edge: 'border-emerald-400', text: 'text-emerald-200' },
+  { line: 'stroke-rose-400', edge: 'border-rose-400', text: 'text-rose-200' },
+  { line: 'stroke-teal-400', edge: 'border-teal-400', text: 'text-teal-200' },
+];
 
 export default function MatchBoard({
   left,
@@ -48,6 +74,13 @@ export default function MatchBoard({
     else cells.current.delete(key);
   }, []);
 
+  /** Which colour a pair is drawn in: the left-hand item's own place in the
+   *  list, so it stays the same colour however the others are rearranged. */
+  const colourOf = useCallback(
+    (l: string) => Math.max(0, left.indexOf(l)) % PAIR_COLOURS.length,
+    [left]
+  );
+
   /** Where each pair's two ends are, in the board's own coordinates. */
   const measure = useCallback(() => {
     const box = board.current?.getBoundingClientRect();
@@ -67,10 +100,10 @@ export default function MatchBoard({
       const to = at(`R${r}`, 'right');
       if (!from || !to) continue;
       const state = answer ? (answer[l] === r ? 'right' : 'wrong') : 'set';
-      drawn.push({ from, to, state });
+      drawn.push({ from, to, state, colour: colourOf(l) });
     }
     setLines(drawn);
-  }, [pairs, answer]);
+  }, [pairs, answer, colourOf]);
 
   useLayoutEffect(measure, [measure]);
   useEffect(() => {
@@ -118,7 +151,7 @@ export default function MatchBoard({
 
   return (
     <div>
-      <div ref={board} className="relative grid grid-cols-2 gap-8">
+      <div ref={board} className="relative grid grid-cols-2 gap-12 sm:gap-20">
         {/* Under the buttons, and ignoring the pointer: the lines say what is
             matched, they are not how it is matched. */}
         <svg
@@ -134,13 +167,14 @@ export default function MatchBoard({
               y1={line.from.y}
               x2={line.to.x}
               y2={line.to.y}
-              strokeWidth={2}
+              strokeWidth={2.5}
+              strokeLinecap="round"
               className={
                 line.state === 'right'
                   ? 'stroke-emerald-400'
                   : line.state === 'wrong'
                     ? 'stroke-rose-400'
-                    : 'stroke-accent'
+                    : PAIR_COLOURS[line.colour].line
               }
             />
           ))}
@@ -167,7 +201,7 @@ export default function MatchBoard({
                       : picked === l
                         ? 'border-accent bg-accent/15 text-white'
                         : to
-                          ? 'border-accent/50 bg-white/5 text-slate-200'
+                          ? `${PAIR_COLOURS[colourOf(l)].edge} bg-white/5 text-slate-200`
                           : 'border-white/15 bg-white/5 text-slate-200 hover:bg-white/10'
                   }`}
                 >
@@ -175,7 +209,9 @@ export default function MatchBoard({
                   {/* The pairing in words as well as in a line: a line is not
                       readable by a screen reader, and is invisible to anyone
                       who cannot see the colour it is drawn in. */}
-                  {to && <span className="block text-xs text-slate-400">→ {to}</span>}
+                  {to && (
+                    <span className={`block text-xs ${PAIR_COLOURS[colourOf(l)].text}`}>→ {to}</span>
+                  )}
                   {answer && !got && (
                     <span className="block text-xs text-slate-400">should be {should}</span>
                   )}
@@ -199,13 +235,15 @@ export default function MatchBoard({
                     picked
                       ? 'border-accent/60 bg-white/5 text-slate-200 hover:bg-white/10'
                       : by.length > 0
-                        ? 'border-accent/40 bg-white/5 text-slate-200'
+                        ? `${PAIR_COLOURS[colourOf(by[0])].edge} bg-white/5 text-slate-200`
                         : 'border-white/15 bg-white/5 text-slate-300'
                   }`}
                 >
                   {r}
                   {by.length > 0 && (
-                    <span className="block text-xs text-slate-400">← {by.join(', ')}</span>
+                    <span className={`block text-xs ${PAIR_COLOURS[colourOf(by[0])].text}`}>
+                      ← {by.join(', ')}
+                    </span>
                   )}
                 </button>
               </li>
