@@ -11,6 +11,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { ArrowDown, ArrowUp, Loader2, Plus, Radio, Trash2 } from 'lucide-react';
 import ImportFromSheet from '@/ImportFromSheet';
+import ImportQuiz from '@/ImportQuiz';
 import { readChoice, readMatch, readOptions, saySo, TEMPLATES } from '@/tableImport';
 import {
   AUTHORABLE,
@@ -1208,6 +1209,19 @@ function SessionEditorFor({ session }: { session: string }) {
             </span>
           </button>
         )}
+        <ImportQuiz
+          onAdd={async (item) =>
+            saveItem({
+              session,
+              kind: item.kind,
+              prompt: item.prompt,
+              payload: item.payload,
+              answer: item.answer,
+            })
+          }
+          onFinished={() => void pull()}
+        />
+
         {missing > 0 && (
           <p className="text-xs text-slate-500 mt-3">
             {missing} other {missing === 1 ? 'kind of question exists' : 'kinds of question exist'}{' '}

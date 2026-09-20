@@ -685,3 +685,75 @@ test('and the choice template brings its own answer marked', async ({ page }) =>
   ]);
   expect(download.suggestedFilename()).toBe('multiple-choice-template.csv');
 });
+
+// ---------------------------------------------------------------------------
+// A whole quiz from a workbook
+// ---------------------------------------------------------------------------
+// The round trip end to end: the template this page hands out, handed straight
+// back to it, and every question it read saved in order. Nothing here mocks the
+// workbook -- it is the real file, written and read by src/xlsx.ts.
+
+/** The editor, with save_item answering and every call recorded. */
+async function editorSaving(page: import('@playwright/test').Page) {
+  const saved: Record<string, unknown>[] = [];
+  await page.route('**/rest/v1/rpc/**', (route) => {
+    const url = route.request().url();
+    if (url.includes('save_item')) {
+      saved.push(JSON.parse(route.request().postData() ?? '{}'));
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ ok: true, id: `i${saved.length}` }),
+      });
+    }
+    return route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(url.includes('session_sheet') ? SHEET : []),
+    });
+  });
+  await page.goto(`/sessions/${SESSION}`);
+  await expect(page.getByRole('heading', { name: 'Test 3' })).toBeVisible();
+  return saved;
+}
+
+test('a whole quiz goes in from the workbook this page hands out', async ({ page }) => {
+  const saved = await editorSaving(page);
+  await page.getByRole('button', { name: 'Import a whole quiz from a workbook' }).click();
+
+  const [download] = await Promise.all([
+    page.waitForEvent('download'),
+    page.getByRole('button', { name: 'Download the quiz template' }).click(),
+  ]);
+  expect(download.suggestedFilename()).toBe('quiz-template.xlsx');
+
+  // Straight back in, as a real file off the disk.
+  await page.getByLabel('Choose a workbook').setInputFiles(await download.path());
+  await expect(page.getByText('Read 6 questions.')).toBeVisible();
+  // What is about to be added, before anything is.
+  await expect(page.getByText('1. Who owns this company?')).toBeVisible();
+
+  await page.getByRole('button', { name: /Add 6 questions to this session/ }).click();
+  await expect(page.getByText('Added 6 questions.')).toBeVisible();
+
+  // In the order the sheet listed them, and with each kind's own answer.
+  expect(saved.map((s) => s.p_kind)).toEqual(['choice', 'match', 'rank', 'survey', 'number', 'open']);
+  expect(saved[0].p_prompt).toBe('Who owns this company?');
+  expect(saved[0].p_answer).toEqual({ correct: ['We do'] });
+  expect(saved[1].p_payload).toMatchObject({ left: ['1998', '2011', '2024'] });
+  expect(saved[4].p_answer).toEqual({ value: 1350 });
+  // A survey has no right answer and must not be sent one.
+  expect(saved[3].p_answer).toBeNull();
+});
+
+// A file that is not a workbook at all is the commonest wrong click.
+test('and something that is not a workbook is refused in words', async ({ page }) => {
+  await editorSaving(page);
+  await page.getByRole('button', { name: 'Import a whole quiz from a workbook' }).click();
+  await page.getByLabel('Choose a workbook').setInputFiles({
+    name: 'notes.txt',
+    mimeType: 'text/plain',
+    buffer: Buffer.from('just some notes'),
+  });
+  await expect(page.getByText('that is not a spreadsheet')).toBeVisible();
+});
