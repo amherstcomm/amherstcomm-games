@@ -11,7 +11,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { ArrowDown, ArrowUp, Loader2, Plus, Radio, Trash2 } from 'lucide-react';
 import ImportFromSheet from '@/ImportFromSheet';
-import { readChoice, readMatch, readOptions, saySo } from '@/tableImport';
+import { readChoice, readMatch, readOptions, saySo, TEMPLATES } from '@/tableImport';
 import {
   AUTHORABLE,
   GAME_PLAYABLE,
@@ -349,11 +349,7 @@ function ItemForm({
                   ? 'One row per option, in the correct order.'
                   : 'One row per option, in the order to show them.'
             }
-            example={
-              kind === 'choice'
-                ? 'We do\tyes\nThe bank\nA founder'
-                : 'ESOP formed\nFiber launch\nGigabit'
-            }
+            template={kind === 'choice' ? TEMPLATES.choice : TEMPLATES.options}
             onText={(text, headed) => {
               if (kind === 'choice') {
                 const { value, used, problems } = readChoice(text, headed);
@@ -453,7 +449,7 @@ function ItemForm({
           <ImportFromSheet
             what="the pairs"
             columns="One row per pair: what is being matched, then what it matches."
-            example={'1998\tESOP formed\n2011\tFiber launch\n2024\tGigabit'}
+            template={TEMPLATES.match}
             onText={(text, headed) => {
               const { value, used, problems } = readMatch(text, headed);
               setLeftText(value.left.join('\n'));

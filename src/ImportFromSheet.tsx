@@ -9,12 +9,27 @@
 // block of cells copied out of Excel or Sheets is a paste, tab separated, with
 // no file involved. They meet at the same reader -- see src/tableImport.ts.
 import { useId, useRef, useState } from 'react';
-import { Upload } from 'lucide-react';
+import { Download, Upload } from 'lucide-react';
+import { asExample, toCsv, type Template } from '@/tableImport';
+
+/** Hand the template over as a file. A blob rather than a data: URL, which
+ *  Safari refuses to download from a link, and revoked on the next turn of the
+ *  loop so the page does not hold the file open for its lifetime. */
+function download(template: Template): void {
+  const url = URL.createObjectURL(new Blob([toCsv(template.rows)], { type: 'text/csv' }));
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = template.file;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 0);
+}
 
 export default function ImportFromSheet({
   what,
   columns,
-  example,
+  template,
   onText,
 }: {
   /** what is being filled, for the summary: "the pairs" */
@@ -22,8 +37,9 @@ export default function ImportFromSheet({
   /** what the columns are, said before the file picker rather than after the
    *  import goes wrong */
   columns: string;
-  /** a couple of rows, shown as they would look in the sheet */
-  example: string;
+  /** the sheet to start from: shown on screen and offered as a file, so the
+   *  two cannot disagree */
+  template: Template;
   /** hand the text to the reader; it answers with what to say */
   onText: (text: string, skipFirst: boolean) => string;
 }) {
@@ -69,8 +85,16 @@ export default function ImportFromSheet({
             The first row is a heading
           </label>
           <pre className="overflow-x-auto rounded bg-black/30 p-2 text-xs text-slate-400">
-            {example}
+            {asExample(template.rows)}
           </pre>
+          <button
+            type="button"
+            onClick={() => download(template)}
+            className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-300 hover:text-white"
+          >
+            <Download className="w-3.5 h-3.5 text-accent" aria-hidden="true" />
+            Download this as a spreadsheet
+          </button>
 
           <div className="flex flex-wrap items-center gap-2">
             <input

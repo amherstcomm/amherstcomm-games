@@ -14,6 +14,8 @@ import {
   readOptions,
   saysYes,
   saySo,
+  TEMPLATES,
+  toCsv,
   withoutHeadings,
 } from '@/tableImport';
 
@@ -198,5 +200,61 @@ describe('what counts as a yes', () => {
 
   it('and nothing else', () => {
     for (const no of ['', 'no', '0', '-', 'maybe']) expect(saysYes(no)).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The templates
+// ---------------------------------------------------------------------------
+// A template handed out as correct and then refused by the reader is worse
+// than none, so each is read back through the reader it is for.
+describe('the sheet to start from', () => {
+  it('a matching template reads back as its pairs', () => {
+    const { value, used, problems } = readMatch(toCsv(TEMPLATES.match.rows), true);
+    expect(problems).toEqual([]);
+    expect(used).toBe(3);
+    expect(value.left).toEqual(['1998', '2011', '2024']);
+    expect(value.pairs['2024']).toBe('Gigabit everywhere');
+  });
+
+  it('a choice template reads back with its answer marked', () => {
+    const { value, used, problems } = readChoice(toCsv(TEMPLATES.choice.rows), true);
+    expect(problems).toEqual([]);
+    expect(used).toBe(3);
+    expect(value.correct).toEqual(['We do']);
+  });
+
+  it('an options template reads back in order', () => {
+    const { value, problems } = readOptions(toCsv(TEMPLATES.options.rows), true);
+    expect(problems).toEqual([]);
+    expect(value).toEqual(['ESOP formed', 'Fiber launch', 'Gigabit everywhere']);
+  });
+
+  // Each carries a heading row, which is what the tick on the page is for.
+  it('and each one leads with a heading row', () => {
+    for (const t of Object.values(TEMPLATES)) {
+      expect(t.rows.length).toBeGreaterThan(1);
+      expect(t.file).toMatch(/\.csv$/);
+    }
+    expect(TEMPLATES.match.rows[0]).toEqual(['Item', 'Matches']);
+  });
+});
+
+describe('writing a sheet back out', () => {
+  it('quotes a cell holding a comma, and nothing that does not need it', () => {
+    expect(toCsv([['plain', 'with, comma']])).toBe('plain,"with, comma"\r\n');
+  });
+
+  it('doubles a quote inside a cell, the way a spreadsheet reads it back', () => {
+    expect(toCsv([['She said "yes"']])).toBe('"She said ""yes"""\r\n');
+  });
+
+  // What is written must be what the reader reads: the round trip is the
+  // claim, not the punctuation.
+  it('and whatever it writes, the reader reads', () => {
+    const rows = [['Item', 'Matches'], ['a, with comma', 'b "quoted"'], ['c', 'd']];
+    const { value, used } = readMatch(toCsv(rows), true);
+    expect(used).toBe(2);
+    expect(value.pairs['a, with comma']).toBe('b "quoted"');
   });
 });

@@ -650,3 +650,38 @@ test('a multiple choice question takes its options and which are correct', async
   await expect(page.getByRole('checkbox', { name: 'We do' })).toBeChecked();
   await expect(page.getByRole('checkbox', { name: 'The bank' })).not.toBeChecked();
 });
+
+// A template handed out as correct and then refused by the reader is worse
+// than none, so this downloads the real file and imports the real bytes.
+test('the matching template downloads, and is a sheet this page accepts', async ({ page }) => {
+  await newQuestion(page, 'Matching');
+  await page.getByRole('button', { name: /Import the pairs/ }).click();
+
+  const [download] = await Promise.all([
+    page.waitForEvent('download'),
+    page.getByRole('button', { name: 'Download this as a spreadsheet' }).click(),
+  ]);
+  expect(download.suggestedFilename()).toBe('matching-template.csv');
+
+  const csv = await (await import('node:fs/promises')).readFile(await download.path(), 'utf8');
+  expect(csv.split('\r\n')[0]).toBe('Item,Matches');
+
+  // The round trip: what it handed out, pasted straight back in.
+  await page.getByLabel('Paste the pairs').fill(csv);
+  await page.getByRole('checkbox', { name: 'The first row is a heading' }).check();
+  await page.getByRole('button', { name: 'Import', exact: true }).click();
+
+  await expect(page.getByText('Read 3 pairs.')).toBeVisible();
+  await expect(page.getByLabel('These, one per line')).toHaveValue('1998\n2011\n2024');
+});
+
+test('and the choice template brings its own answer marked', async ({ page }) => {
+  await newQuestion(page, 'Multiple choice');
+  await page.getByRole('button', { name: /Import the options/ }).click();
+
+  const [download] = await Promise.all([
+    page.waitForEvent('download'),
+    page.getByRole('button', { name: 'Download this as a spreadsheet' }).click(),
+  ]);
+  expect(download.suggestedFilename()).toBe('multiple-choice-template.csv');
+});

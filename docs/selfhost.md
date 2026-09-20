@@ -472,6 +472,14 @@ the boxes already there — not an import of a whole quiz.
 - **Survey and ranking**: one column, in the order to list them, which for a
   ranking is the correct order.
 
+**Each one offers a template**, *Download this as a spreadsheet*: the columns
+demonstrated rather than described, with a heading row and three example rows,
+named for the kind it belongs to (`matching-template.csv`). The same rows are
+shown on screen and written to the file, and `tests/unit/tableImport.test.ts`
+reads each template back through its own reader — a template handed out as
+correct and then refused on import would be worse than none. The browser test
+downloads the real file and pastes it straight back in.
+
 A `.csv` saved out of Excel and a block of cells copied straight out of it both
 work: a copied block arrives tab separated with no file involved, so the reader
 takes commas, tabs or semicolons, and understands quoted cells. Tick **the
