@@ -591,3 +591,62 @@ test('a word game drawn from a list can actually be added', async ({ page }) => 
 
   await expect.poll(() => sent.at(-1)?.p_answer).toEqual({ list: 'l1', length: 4 });
 });
+
+// ---------------------------------------------------------------------------
+// Filling a question's options from a spreadsheet
+// ---------------------------------------------------------------------------
+// A matching question is the one worth importing: twenty cells of left, right
+// and which goes with which, which somebody already has in a sheet. The paste
+// box is the path a block copied out of Excel takes -- tab separated, no file.
+
+/** The kind is a row of buttons named the way the editor names them, not a
+ *  select -- so this takes the label a person would press. */
+async function newQuestion(page: import('@playwright/test').Page, kind: string) {
+  await editor(page);
+  await page.getByRole('button', { name: 'Add a question' }).click();
+  await page.getByRole('button', { name: kind, exact: true }).click();
+}
+
+test('a matching question takes its pairs from pasted cells', async ({ page }) => {
+  await newQuestion(page, 'Matching');
+  await page.getByRole('button', { name: /Import the pairs/ }).click();
+  await page
+    .getByLabel('Paste the pairs')
+    .fill('Year\tEvent\n1998\tESOP formed\n2011\tFiber launch\n2024\tGigabit');
+  // Headed the way a real sheet is — "Year" over "Event", which no rule can
+  // tell from data — so the tick is what drops it.
+  await page.getByRole('checkbox', { name: 'The first row is a heading' }).check();
+  await page.getByRole('button', { name: 'Import', exact: true }).click();
+
+  // The heading row is not a pair, and it says how many it read.
+  await expect(page.getByText('Read 3 pairs.')).toBeVisible();
+  await expect(page.getByLabel('These, one per line')).toHaveValue('1998\n2011\n2024');
+  await expect(page.getByLabel('Pair with one of these')).toHaveValue(
+    'ESOP formed\nFiber launch\nGigabit'
+  );
+  // And the pairings themselves, which are the part nobody wants to retype.
+  await expect(page.getByRole('combobox').filter({ hasText: 'ESOP formed' }).first()).toBeVisible();
+});
+
+// An import that reports only what worked has lost the rest silently.
+test('and says which row it could not use', async ({ page }) => {
+  await newQuestion(page, 'Matching');
+  await page.getByRole('button', { name: /Import the pairs/ }).click();
+  await page.getByLabel('Paste the pairs').fill('1998,ESOP formed\n2011,\n2024,Gigabit');
+  await page.getByRole('button', { name: 'Import', exact: true }).click();
+
+  await expect(page.getByText(/Read 2 pairs\. Line 2 needs both/)).toBeVisible();
+});
+
+test('a multiple choice question takes its options and which are correct', async ({ page }) => {
+  await newQuestion(page, 'Multiple choice');
+  await page.getByRole('button', { name: /Import the options/ }).click();
+  await page.getByLabel('Paste the options').fill('We do,yes\nThe bank,\nA founder,no');
+  await page.getByRole('button', { name: 'Import', exact: true }).click();
+
+  await expect(page.getByText('Read 3 options.')).toBeVisible();
+  await expect(page.getByLabel('Options, one per line')).toHaveValue('We do\nThe bank\nA founder');
+  // Marked correct by the sheet, and only that one.
+  await expect(page.getByRole('checkbox', { name: 'We do' })).toBeChecked();
+  await expect(page.getByRole('checkbox', { name: 'The bank' })).not.toBeChecked();
+});

@@ -10,6 +10,8 @@
 // about what a session looks like.
 import { useCallback, useEffect, useState } from 'react';
 import { ArrowDown, ArrowUp, Loader2, Plus, Radio, Trash2 } from 'lucide-react';
+import ImportFromSheet from '@/ImportFromSheet';
+import { readChoice, readMatch, readOptions, saySo } from '@/tableImport';
 import {
   AUTHORABLE,
   GAME_PLAYABLE,
@@ -335,6 +337,38 @@ function ItemForm({
             />
           </label>
 
+          {/* Choice takes a second column saying which are right; a survey and
+              a ranking are one column, and for a ranking the order of the rows
+              is the answer. */}
+          <ImportFromSheet
+            what={kind === 'choice' ? 'the options' : kind === 'rank' ? 'the order' : 'the options'}
+            columns={
+              kind === 'choice'
+                ? 'One row per option, and a second column marking the correct ones — yes, x or true.'
+                : kind === 'rank'
+                  ? 'One row per option, in the correct order.'
+                  : 'One row per option, in the order to show them.'
+            }
+            example={
+              kind === 'choice'
+                ? 'We do\tyes\nThe bank\nA founder'
+                : 'ESOP formed\nFiber launch\nGigabit'
+            }
+            onText={(text, headed) => {
+              if (kind === 'choice') {
+                const { value, used, problems } = readChoice(text, headed);
+                setOptionText(value.options.join('\n'));
+                // Only what the sheet marked: an import that kept a tick from
+                // the options it replaced would mark the wrong answer right.
+                setCorrect(value.correct);
+                return saySo(used, problems, 'option');
+              }
+              const { value, used, problems } = readOptions(text, headed);
+              setOptionText(value.join('\n'));
+              return saySo(used, problems, 'option');
+            }}
+          />
+
           {kind === 'choice' && (
             <>
               <label className="flex items-center gap-2 text-xs text-slate-400">
@@ -416,6 +450,18 @@ function ItemForm({
               />
             </label>
           </div>
+          <ImportFromSheet
+            what="the pairs"
+            columns="One row per pair: what is being matched, then what it matches."
+            example={'1998\tESOP formed\n2011\tFiber launch\n2024\tGigabit'}
+            onText={(text, headed) => {
+              const { value, used, problems } = readMatch(text, headed);
+              setLeftText(value.left.join('\n'));
+              setRightText(value.right.join('\n'));
+              setPairs(value.pairs);
+              return saySo(used, problems, 'pair');
+            }}
+          />
           <fieldset>
             <legend className="text-xs uppercase tracking-wider text-slate-500">
               The right pairings

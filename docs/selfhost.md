@@ -457,6 +457,32 @@ Four addresses, and the difference between two of them matters:
 | `/live/<id>` | everybody | what the room answers on |
 | `/live/<id>/host` | the presenter | the same screen plus the controls, the count, and the answer |
 
+**A question's options can come out of a spreadsheet.** Matching, multiple
+choice, survey and ranking each carry an *Import … from a spreadsheet* control
+in the question form, folded away until asked for. One question at a time, into
+the boxes already there — not an import of a whole quiz.
+
+- **Matching**: one row per pair, what is being matched then what it matches.
+  Both lists and every pairing come from those two columns, which is the part
+  nobody wants to retype. Two things may share an answer; the room is offered
+  it once.
+- **Multiple choice**: one row per option, and a second column marking the
+  correct ones — `yes`, `x`, `true` or `1`. A sheet of options alone imports
+  with nothing marked.
+- **Survey and ranking**: one column, in the order to list them, which for a
+  ranking is the correct order.
+
+A `.csv` saved out of Excel and a block of cells copied straight out of it both
+work: a copied block arrives tab separated with no file involved, so the reader
+takes commas, tabs or semicolons, and understands quoted cells. Tick **the
+first row is a heading** when the sheet has one — guessing catches `Option` or
+`Left`, and cannot safely tell `Year` over `Event` from data, so it asks.
+
+**It always says what it read**, and names the first row it could not use with
+its line number: *"Read 2 pairs. Line 2 needs both a thing to match and what it
+matches."* An import that reported only its successes would lose the rest
+silently, which is the rule the theme and word-list imports already follow.
+
 **Every session gets a four-character code**, shown on the editor and on the
 presenter screen. It is four characters from an alphabet with no `0`, `O`, `1`,
 `I` or `L` — the characters that turn a code somebody read correctly into a code
