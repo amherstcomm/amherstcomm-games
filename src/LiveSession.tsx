@@ -856,7 +856,12 @@ export default function LiveSession({ session, host }: { session: string; host: 
   // Stable, so WordGame's effects do not re-run on every render of this one.
   const [board, setBoard] = useState<Leaderboard | null>(null);
   const [mine, setMine] = useState<{ points?: number; scored?: number } | null>(null);
-  const [first, setFirst] = useState<{ name?: string | null; seconds?: number | null } | null>(
+  const [first, setFirst] = useState<{
+    name?: string | null;
+    seconds?: number | null;
+    /** nobody had full marks: who came closest, and how close */
+    best?: { name: string; points: number; of: number } | null;
+  } | null>(
     null
   );
   const itemId = useRef<string | undefined>(undefined);
@@ -1348,11 +1353,15 @@ export default function LiveSession({ session, host }: { session: string; host: 
           {host && item.state === 'revealed' && first && (
             <p className="mt-5 text-sm text-slate-300 inline-flex items-center gap-1.5">
               <Trophy className="w-4 h-4 text-accent" aria-hidden="true" />
+              {/* "Nobody got that one" over a ten-pair question somebody got
+                  eight of is a lie by omission, and it was what this said. */}
               {first.name
                 ? `First correct: ${first.name}${
                     first.seconds != null ? ` — ${first.seconds}s` : ''
                   }`
-                : 'Nobody got that one.'}
+                : first.best
+                  ? `Nobody had it all. Closest: ${first.best.name} — ${first.best.points} of ${first.best.of}.`
+                  : 'Nobody got that one.'}
             </p>
           )}
 

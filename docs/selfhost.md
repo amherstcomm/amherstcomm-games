@@ -950,6 +950,39 @@ amherst light.
 The authoring form still pairs with dropdowns. That is a form, filled in once by
 one person, and the complaint was about the room.
 
+### What a question is worth
+
+Every question used to be worth one, and a wrong answer cost nothing — so a
+ten-pair matching question paid the same as a two-option true-or-false. A
+question now carries its own **Points**, and two switches: take the points off
+for a **wrong answer**, and for **no answer at all**. Both off by default,
+because a quiz that deducts without being asked to is one that surprises a room.
+
+**Partial credit multiplies.** Matching, ranking and a multiple choice with
+several right answers are scored in fractions: four pairs of six on a
+six-pointer is four points.
+
+**Deductions never apply to a question marked in parts.** "Wrong" is not a state
+those questions have — everything between nothing and everything is a score —
+and deducting on anything short of perfect would cost a nine-of-ten answer the
+same as a blank one. The editor does not offer the switch there rather than
+offering one that quietly does nothing, and `part_marked()` decides the same
+thing in the database, which is where it is enforced.
+
+No answer at all is a different thing, and that switch applies to every kind.
+Who counts as having skipped: anybody who answered something else in the same
+session — there is no register of who was in the room, and that is the nearest
+honest thing. Somebody who never answered anything is not in the scores at all.
+
+The workbook import carries all three: **Points**, **Wrong**, **Skipped** on the
+questions tab, the last two taking `yes`. A sheet with no Points column reads as
+one point a question, which is what every question was before this existed.
+
+**The presenter's line says who came closest.** *"Nobody got that one"* over a
+ten-pair question somebody got eight of is a lie by omission, and it was what
+the screen said; a question nobody had full marks on now names the best answer
+and what it scored.
+
 ### Questions for the host
 
 A session can carry a Q&A running **alongside** everything else. Not an item —

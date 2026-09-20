@@ -176,6 +176,10 @@ function ItemForm({
     // narrowing it back would mean this signature naming every kind.
     payload: Record<string, unknown>;
     answer: Record<string, unknown> | null;
+    /** what the question pays, and what it costs */
+    points: number;
+    penaltyWrong: boolean;
+    penaltySkip: boolean;
   }) => void;
   onCancel?: () => void;
   busy: boolean;
@@ -203,6 +207,11 @@ function ItemForm({
   const [pairs, setPairs] = useState<Record<string, string>>(
     ((item?.answer as MatchAnswer | null)?.pairs ?? {}) as Record<string, string>
   );
+  // What the question is worth, and what getting it wrong costs. One and off,
+  // which is what every question was before this existed.
+  const [points, setPoints] = useState<string>((item?.points ?? 1).toString());
+  const [penaltyWrong, setPenaltyWrong] = useState(item?.penalty_wrong === true);
+  const [penaltySkip, setPenaltySkip] = useState(item?.penalty_skip === true);
   const existingNumber = item?.payload as NumberPayload | undefined;
   const [unit, setUnit] = useState(existingNumber?.unit ?? '');
   const [asCloud, setAsCloud] = useState(
@@ -241,6 +250,17 @@ function ItemForm({
   const [value, setValue] = useState(
     (item?.answer as NumberAnswer | null)?.value?.toString() ?? ''
   );
+
+  const worth = Number(points);
+  const worthOk = Number.isFinite(worth) && worth > 0 && worth <= 100;
+  // A question marked in parts is scored in fractions, so "wrong" is not a
+  // state it has and the deduction never applies to it -- said here as well as
+  // enforced in the database, because a switch that silently does nothing is
+  // worse than one that is not offered.
+  const partMarked =
+    kind === 'match' ||
+    kind === 'rank' ||
+    (kind === 'choice' && correct.filter((c) => parseOptions(optionText).includes(c)).length > 1);
 
   const options = parseOptions(optionText);
   // Only options that still exist can be correct — deleting an option's line
@@ -707,6 +727,56 @@ function ItemForm({
         </p>
       )}
 
+      <label className="block">
+        <span className="block text-xs uppercase tracking-wider text-slate-500">
+          Points
+        </span>
+        <input
+          value={points}
+          aria-label="Points"
+          onChange={(e) => setPoints(e.target.value.replace(/[^0-9.]/g, '').slice(0, 5))}
+          inputMode="decimal"
+          className={FIELD + ' max-w-32'}
+        />
+      </label>
+      {!worthOk && (
+        <p className="text-sm text-slate-400">
+          More than nothing, and at most a hundred.
+        </p>
+      )}
+
+      <fieldset className="space-y-1">
+        <legend className="text-xs uppercase tracking-wider text-slate-500">
+          Deductions
+        </legend>
+        {/* A question marked in parts is scored in fractions -- four pairs of
+            six is two thirds of the points -- so "wrong" is not a state it has,
+            and the switch is not offered rather than offered and ignored. */}
+        {partMarked ? (
+          <p className="text-xs text-slate-400">
+            This one is marked in parts, so a part-right answer earns part of the
+            points and nothing is deducted for getting it wrong.
+          </p>
+        ) : (
+          <label className="flex items-center gap-2 text-sm text-slate-300">
+            <input
+              type="checkbox"
+              checked={penaltyWrong}
+              onChange={(e) => setPenaltyWrong(e.target.checked)}
+            />
+            Take the points off for a wrong answer
+          </label>
+        )}
+        <label className="flex items-center gap-2 text-sm text-slate-300">
+          <input
+            type="checkbox"
+            checked={penaltySkip}
+            onChange={(e) => setPenaltySkip(e.target.checked)}
+          />
+          Take the points off for no answer at all
+        </label>
+      </fieldset>
+
       <div className="flex items-center gap-2">
         <button
           className={PRIMARY}
@@ -714,6 +784,9 @@ function ItemForm({
           onClick={() =>
             onSave({
               kind,
+              points: worthOk ? worth : 1,
+              penaltyWrong: partMarked ? false : penaltyWrong,
+              penaltySkip,
               prompt: prompt.trim(),
               payload: {
                 ...payloadFor(kind, {
@@ -1235,6 +1308,9 @@ function SessionEditorFor({ session }: { session: string }) {
               prompt: item.prompt,
               payload: item.payload,
               answer: item.answer,
+              points: item.points,
+              penaltyWrong: item.penaltyWrong,
+              penaltySkip: item.penaltySkip,
             })
           }
           onFinished={() => void pull()}
