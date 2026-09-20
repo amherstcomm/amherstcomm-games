@@ -527,6 +527,60 @@ create policy "update own progress"
   with check ((select auth.uid()) = user_id);
 
 -- ---------------------------------------------------------------------------
+-- Hints a round's board issues, rather than a browser's word for them
+-- ---------------------------------------------------------------------------
+--
+-- Weave's leaderboard breaks a tie on the fewest hints, and until now the hint
+-- count arrived in the result the browser wrote -- so a page could report none
+-- on a board where it took three, and win a round by saying so. There is no
+-- client-side fix: whatever key a page would sign or encrypt the number with
+-- ships in the bundle and belongs to the player. The only number that cannot
+-- be edited by the person it scores is one the browser never holds.
+--
+-- So on a round board, taking a hint is a request. The server picks the next
+-- unfound word off the round's own answers, records that one was taken, and
+-- returns it. The board then counts hints from this table and ignores what the
+-- result says.
+--
+-- The daily is deliberately unchanged: hints there stay local, because the
+-- daily has to work offline and signed out, and nothing is ranked on it that a
+-- round does not rank better.
+--
+-- What this does NOT do, said plainly: it does not enforce what a hint costs.
+-- The bank of three banked words is checked in the page, against a dictionary
+-- the server does not hold, so a page can still ask for a hint it has not
+-- earned. What it cannot do any more is take one and say it didn't. The cap
+-- below is the blunt end of that: nobody gets more hints than the board has
+-- words to give.
+
+create table if not exists public.round_hints (
+  user_id uuid not null references auth.users (id) on delete cascade,
+  game text not null,
+  puzzle_date date not null,
+  taken int not null default 0,
+  -- which words were given, so asking twice repeats rather than charging twice
+  targets text[] not null default '{}',
+  updated_at timestamptz not null default now(),
+  primary key (user_id, game, puzzle_date)
+);
+alter table public.round_hints enable row level security;
+revoke all on public.round_hints from public, anon, authenticated;
+
+-- What the boards count. Null where nothing was taken, so a caller can tell
+-- "no hints" from "not a round board".
+create or replace function public.round_hints_taken(p_user uuid, p_game text, p_date date)
+returns int
+language sql
+stable
+set search_path = ''
+as $fn$
+  select h.taken from public.round_hints h
+  where h.user_id = p_user and h.game = p_game and h.puzzle_date = p_date
+$fn$;
+
+revoke all on function public.round_hints_taken(uuid, text, date) from public, anon, authenticated;
+
+-- ---------------------------------------------------------------------------
 -- Sitting out
 -- ---------------------------------------------------------------------------
 --
@@ -1427,7 +1481,14 @@ begin
              min((dp.result->>'timeMs')::numeric) filter (
                where (dp.result->>'solved')::boolean and (dp.result->>'timeMs')::numeric > 0
              ) as detail,
-             coalesce(sum(coalesce((dp.result->>'hints')::numeric, 0)) filter (
+             -- The server's count on a round board, the browser's on a daily.
+             -- A round is what this ranks for, and a number the page writes is
+             -- a number the page can lower; see "Hints a round's board issues".
+             coalesce(sum(case
+               when dp.env = 'round'
+                 then coalesce(public.round_hints_taken(dp.user_id, dp.game, dp.puzzle_date), 0)::numeric
+               else coalesce((dp.result->>'hints')::numeric, 0)
+             end) filter (
                where (dp.result->>'solved')::boolean
              ), 0) as hints
       from public.daily_progress dp
@@ -11183,3 +11244,134 @@ $fn$;
 
 revoke all on function public.read_availability() from public;
 grant execute on function public.read_availability() to anon, authenticated;
+
+/*
+ * Give this player the next hint on the round's board, and count it.
+ *
+ * Returns {ok, target, taken} -- the word to light up, and how many they have
+ * now had. Refuses anything that is not a round on today, in a game the round
+ * lists, for somebody signed in.
+ *
+ * The same word twice is one hint: a page that asks again for a hint it is
+ * already showing (a reload, a second tab) gets the word back without being
+ * charged, because what is being counted is help received, not requests made.
+ */
+create or replace function public.take_round_hint(p_game text)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $fn$
+declare
+  uid uuid := (select auth.uid());
+  r record;
+  board jsonb;
+  answers jsonb;
+  v_found text[];
+  row_hints public.round_hints;
+  target text;
+  words text[];
+begin
+  if uid is null then
+    return jsonb_build_object('ok', false, 'reason', 'not signed in');
+  end if;
+
+  select tr.*, t.difficulty into r
+  from public.tournament_rounds tr
+  join public.tournaments t on t.id = tr.tournament_id
+  where public.puzzle_day() between tr.starts_on and tr.ends_on
+  limit 1;
+  if not found then
+    return jsonb_build_object('ok', false, 'reason', 'no round is on');
+  end if;
+  if not (p_game = any (r.games)) then
+    return jsonb_build_object('ok', false, 'reason', 'that game is not in this round');
+  end if;
+
+  select dp.payload into board
+  from public.daily_puzzles dp
+  where dp.game = p_game and dp.env = 'round' and dp.puzzle_date = r.starts_on;
+  if board is null then
+    return jsonb_build_object('ok', false, 'reason', 'the round has no board for that game');
+  end if;
+
+  begin
+    answers := convert_from(
+      decode(board->'byDifficulty'->r.difficulty->>'answers', 'base64'), 'UTF8')::jsonb;
+  exception when others then
+    answers := null;
+  end;
+  if answers is null or jsonb_typeof(answers->'words') <> 'array' then
+    return jsonb_build_object('ok', false, 'reason', 'that game has no hints');
+  end if;
+
+  select coalesce(array(select jsonb_array_elements_text(p.state->'found')), '{}')
+    into v_found
+  from public.daily_progress p
+  where p.user_id = uid and p.game = p_game and p.difficulty = r.difficulty
+    and p.puzzle_date = r.starts_on and p.env = 'round';
+  v_found := coalesce(v_found, '{}');
+
+  select * into row_hints from public.round_hints h
+  where h.user_id = uid and h.game = p_game and h.puzzle_date = r.starts_on;
+
+  -- One already given and still unfound is the same hint, not another.
+  select w into target
+  from unnest(coalesce(row_hints.targets, '{}'::text[])) w
+  where not (w = any (v_found))
+  limit 1;
+
+  if target is null then
+    select array(select jsonb_array_elements(answers->'words') ->> 'w') into words;
+    words := words || (answers #>> '{spangram,w}');
+    select w into target
+    from unnest(words) w
+    where not (w = any (v_found)) and not (w = any (coalesce(row_hints.targets, '{}'::text[])))
+    limit 1;
+    if target is null then
+      return jsonb_build_object('ok', false, 'reason', 'there is nothing left to hint');
+    end if;
+    -- Nobody gets more hints than the board has words to give.
+    if coalesce(row_hints.taken, 0) >= cardinality(words) then
+      return jsonb_build_object('ok', false, 'reason', 'no hints left on this board');
+    end if;
+    insert into public.round_hints (user_id, game, puzzle_date, taken, targets)
+    values (uid, p_game, r.starts_on, 1, array[target])
+    on conflict (user_id, game, puzzle_date) do update
+      set taken = public.round_hints.taken + 1,
+          targets = public.round_hints.targets || excluded.targets,
+          updated_at = now();
+  end if;
+
+  return jsonb_build_object(
+    'ok', true,
+    'target', target,
+    'taken', (select h.taken from public.round_hints h
+              where h.user_id = uid and h.game = p_game and h.puzzle_date = r.starts_on));
+end;
+$fn$;
+
+revoke all on function public.take_round_hint(text) from public, anon;
+grant execute on function public.take_round_hint(text) to authenticated;
+
+-- What this player has been given on the round board they are playing, so a
+-- reload lights the same word again and shows the same count.
+create or replace function public.my_round_hints(p_game text)
+returns jsonb
+language sql
+stable
+security definer
+set search_path = ''
+as $fn$
+  select coalesce((
+    select jsonb_build_object('taken', h.taken, 'targets', to_jsonb(h.targets))
+    from public.round_hints h
+    join public.tournament_rounds r
+      on r.starts_on = h.puzzle_date
+     and public.puzzle_day() between r.starts_on and r.ends_on
+    where h.user_id = (select auth.uid()) and h.game = p_game
+  ), jsonb_build_object('taken', 0, 'targets', '[]'::jsonb))
+$fn$;
+
+revoke all on function public.my_round_hints(text) from public, anon;
+grant execute on function public.my_round_hints(text) to authenticated;
