@@ -472,6 +472,14 @@ the boxes already there — not an import of a whole quiz.
 - **Survey and ranking**: one column, in the order to list them, which for a
   ranking is the correct order.
 
+**Each one offers a template**, *Download this as a spreadsheet*: the columns
+demonstrated rather than described, with a heading row and three example rows,
+named for the kind it belongs to (`matching-template.csv`). The same rows are
+shown on screen and written to the file, and `tests/unit/tableImport.test.ts`
+reads each template back through its own reader — a template handed out as
+correct and then refused on import would be worse than none. The browser test
+downloads the real file and pastes it straight back in.
+
 A `.csv` saved out of Excel and a block of cells copied straight out of it both
 work: a copied block arrives tab separated with no file involved, so the reader
 takes commas, tabs or semicolons, and understands quoted cells. Tick **the
@@ -482,6 +490,38 @@ first row is a heading** when the sheet has one — guessing catches `Option` or
 its line number: *"Read 2 pairs. Line 2 needs both a thing to match and what it
 matches."* An import that reported only its successes would lose the rest
 silently, which is the rule the theme and word-list imports already follow.
+
+**A whole quiz can come from one workbook.** *Import a whole quiz from a
+workbook*, on the session's own page, takes an `.xlsx`:
+
+- **The first tab is the questions**, one per row: *Ref*, *Kind*, *Question*,
+  *Seconds*, *Answer*. Kind is the name the site uses on screen — Multiple
+  choice, Matching, Survey, Ranking, Closest guess, Open question. Seconds may
+  be blank, which is no clock. Answer holds the number for a closest guess and
+  is empty otherwise.
+- **A question carrying a list names a tab in its Ref column**, and that tab
+  holds exactly the columns the single-question imports take. So "what a
+  matching sheet looks like" is written down once, and one reader is behind
+  both.
+
+*Download the quiz template* gives a workbook of that shape with one question of
+every kind already in it. It is read back through the same reader in the tests,
+and the browser test downloads the real file and feeds it straight back in.
+
+**Nothing is saved until the whole book has been read.** The page says what it
+found — *"Read 6 questions."* — lists them in order, and only then offers to add
+them. A book with problems reports the first with its row, and the questions
+that did read can still go in. If the server refuses one partway, it stops there
+and says how many went in and which one it stopped on, rather than carrying on
+and leaving the session in an order nobody chose.
+
+**No dependency was added for this.** An `.xlsx` is a zip of XML, and
+`src/xlsx.ts` reads and writes the parts a quiz needs — the browser's own
+`DecompressionStream` does the inflating, and what we write is stored
+uncompressed. `xlsx` on npm carries open advisories whose fixes are not in the
+registry, and `exceljs` is a megabyte for what amounts to rows of text. The
+limits are stated there: no formulas, formatting, dates or numbers-as-numbers —
+every cell is read as the text the sheet shows.
 
 **Every session gets a four-character code**, shown on the editor and on the
 presenter screen. It is four characters from an alphabet with no `0`, `O`, `1`,

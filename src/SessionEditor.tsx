@@ -11,7 +11,8 @@
 import { useCallback, useEffect, useState } from 'react';
 import { ArrowDown, ArrowUp, Loader2, Plus, Radio, Trash2 } from 'lucide-react';
 import ImportFromSheet from '@/ImportFromSheet';
-import { readChoice, readMatch, readOptions, saySo } from '@/tableImport';
+import ImportQuiz from '@/ImportQuiz';
+import { readChoice, readMatch, readOptions, saySo, TEMPLATES } from '@/tableImport';
 import {
   AUTHORABLE,
   GAME_PLAYABLE,
@@ -349,11 +350,7 @@ function ItemForm({
                   ? 'One row per option, in the correct order.'
                   : 'One row per option, in the order to show them.'
             }
-            example={
-              kind === 'choice'
-                ? 'We do\tyes\nThe bank\nA founder'
-                : 'ESOP formed\nFiber launch\nGigabit'
-            }
+            template={kind === 'choice' ? TEMPLATES.choice : TEMPLATES.options}
             onText={(text, headed) => {
               if (kind === 'choice') {
                 const { value, used, problems } = readChoice(text, headed);
@@ -453,7 +450,7 @@ function ItemForm({
           <ImportFromSheet
             what="the pairs"
             columns="One row per pair: what is being matched, then what it matches."
-            example={'1998\tESOP formed\n2011\tFiber launch\n2024\tGigabit'}
+            template={TEMPLATES.match}
             onText={(text, headed) => {
               const { value, used, problems } = readMatch(text, headed);
               setLeftText(value.left.join('\n'));
@@ -1212,6 +1209,19 @@ function SessionEditorFor({ session }: { session: string }) {
             </span>
           </button>
         )}
+        <ImportQuiz
+          onAdd={async (item) =>
+            saveItem({
+              session,
+              kind: item.kind,
+              prompt: item.prompt,
+              payload: item.payload,
+              answer: item.answer,
+            })
+          }
+          onFinished={() => void pull()}
+        />
+
         {missing > 0 && (
           <p className="text-xs text-slate-500 mt-3">
             {missing} other {missing === 1 ? 'kind of question exists' : 'kinds of question exist'}{' '}

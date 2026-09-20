@@ -222,3 +222,57 @@ export function saySo(used: number, problems: Problem[], noun: string): string {
     (rest > 0 ? `, and ${rest} other row${rest === 1 ? '' : 's'} could not be used.` : '.')
   );
 }
+
+// ---------------------------------------------------------------------------
+// Templates
+// ---------------------------------------------------------------------------
+//
+// A sheet to start from, so the columns are demonstrated rather than described.
+// One definition per kind, and the same rows are shown on screen and written to
+// the file -- a template that drifts from what the reader accepts is worse than
+// none, because it is handed out as correct. tests/unit/tableImport.test.ts
+// reads each one back through its own reader and checks what comes out.
+//
+// Each carries its heading row, which is what the "first row is a heading" tick
+// is for. The example rows are real sentences from this company rather than
+// foo/bar: somebody looking at the file has to see what belongs in the cells.
+
+export type Template = { file: string; rows: string[][] };
+
+export const TEMPLATES: Record<'match' | 'choice' | 'options', Template> = {
+  match: {
+    file: 'matching-template.csv',
+    rows: [
+      ['Item', 'Matches'],
+      ['1998', 'ESOP formed'],
+      ['2011', 'Fiber launch'],
+      ['2024', 'Gigabit everywhere'],
+    ],
+  },
+  choice: {
+    file: 'multiple-choice-template.csv',
+    rows: [
+      ['Option', 'Correct'],
+      ['We do', 'yes'],
+      ['The bank', ''],
+      ['A founder', ''],
+    ],
+  },
+  options: {
+    file: 'options-template.csv',
+    rows: [['Option'], ['ESOP formed'], ['Fiber launch'], ['Gigabit everywhere']],
+  },
+};
+
+/** Rows as a spreadsheet would read them back. Quoted where a cell holds the
+ *  delimiter, a quote or a newline -- the three that would otherwise turn one
+ *  cell into two, or one row into two. */
+export function toCsv(rows: string[][]): string {
+  const cell = (c: string) => (/[",\n\r]/.test(c) ? `"${c.replace(/"/g, '""')}"` : c);
+  // A trailing newline: some spreadsheets drop the last row without one.
+  return rows.map((row) => row.map(cell).join(',')).join('\r\n') + '\r\n';
+}
+
+/** The same rows as they look in a sheet, for showing on screen. Tabs, because
+ *  that is what a copied block looks like and the columns line up. */
+export const asExample = (rows: string[][]) => rows.map((row) => row.join('\t')).join('\n');

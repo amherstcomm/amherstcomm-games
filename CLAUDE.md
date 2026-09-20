@@ -136,9 +136,15 @@ holds WCAG AA, because a pair that passes in one can fail in another.
 
 ## Dependencies default to none
 
-A new runtime dependency needs a reason in the PR. vitest stays on 3.x; after
+A new runtime dependency needs a reason in the PR. After
 any install, `npm ci --dry-run` has to come back clean before committing the
 lockfile.
+
+~~vitest stays on 3.x~~ **Overturned 2026-09-20.** The @vitest/mocker path
+traversal (GHSA-82fw-gwwq-j7x9) is fixed in 4.1.11 and in no 3.x release, so
+the pin meant keeping an open advisory for a reason that had expired. Upgraded
+in #112; this line went on saying 3.x for a day, which is the drift the docs
+rule two sections up exists to catch.
 
 ## Commits and branches
 
