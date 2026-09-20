@@ -238,10 +238,16 @@ function Match({
 
   return (
     <div className="space-y-2">
+      {/* On the presenter's screen the host has no pairs of their own, so
+          there was nothing for the lines to be drawn from and the reveal
+          showed a bare list. After the reveal the right answer is what the
+          room is looking at, so that is what is drawn -- every line correct,
+          because every line *is* the answer. A player still sees their own
+          pairs marked against it. */}
       <MatchBoard
         left={left}
         right={right}
-        pairs={pairs}
+        pairs={answer && Object.keys(pairs).length === 0 ? (answer.pairs ?? {}) : pairs}
         onChange={setPairs}
         locked={locked || sending}
         answer={answer?.pairs ?? null}

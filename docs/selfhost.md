@@ -916,11 +916,27 @@ touch and a third for anyone not using a pointer, while click-then-click is one
 path for all of them — these are buttons, so Tab and Enter work with nothing
 added. Touching a matched item again takes the match off, which is the undo.
 
+**A colour per pair, at both ends.** All one colour is unreadable at six pairs:
+the lines cross, and the only way to find where one ends is to follow it with a
+finger. Each pair takes its own from a set of six, carried by the line and by
+both words, so a pairing can be read from either side. Six because more than
+that on one question is more than a room can hold; a seventh repeats a colour.
+
 **The lines are decoration over an answer that reads without them.** Each item
 says what it is matched with in words, because a line is invisible to a screen
 reader and to anyone who cannot pick out the colour it is drawn in. After the
 reveal the pairs are marked right or wrong and a wrong one says what it should
 have been, which is what the old rows did.
+
+**The presenter's reveal draws the answer itself.** The host has no pairs of
+their own, so there was nothing for the lines to come from and the reveal showed
+a bare list on the screen the room is looking at. After the reveal it draws the
+right answer, every line correct, because every line *is* the answer.
+
+`e2e/contrast.spec.ts` now sweeps a matching question across every palette and
+theme. Those six tiers are on nothing else on the site, so nothing else would
+have checked them — and whether they are readable on the light theme is a
+question to measure rather than to assume.
 
 The authoring form still pairs with dropdowns. That is a form, filled in once by
 one person, and the complaint was about the room.

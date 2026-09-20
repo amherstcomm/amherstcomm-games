@@ -30,6 +30,11 @@ const ROUTES = [
   // round's "under way" in the accent on a tinted row -- that no other page
   // draws, so they are swept here rather than assumed from their neighbours.
   ['tournaments', '/admin/tournaments'],
+  // A matching question, which draws a colour per pair at both ends of a line.
+  // Those tiers are on nothing else, so nothing else would sweep them -- and
+  // the answer to "is text-sky-200 readable on the light theme" is measured
+  // here or not at all.
+  ['matching', '/live/5f7c2a10-3b4d-4e8f-9a12-6c0d1e2f3a4b'],
 ] as const;
 
 for (const palette of PALETTES) {
@@ -76,7 +81,27 @@ for (const palette of PALETTES) {
                       },
                     ],
                   }
-                : { ok: true };
+                : url.includes('current_item')
+                  ? {
+                      state: 'open',
+                      id: 'q1',
+                      position: 1,
+                      opened_at: new Date().toISOString(),
+                      seconds: null,
+                      now: new Date().toISOString(),
+                      mine: { '1998': 'ESOP formed', '2011': 'Fiber launch' },
+                      answer: null,
+                      yours: false,
+                      kind: 'match',
+                      prompt: 'Match the year to the event',
+                      payload: {
+                        left: ['1998', '2011', '2024'],
+                        right: ['ESOP formed', 'Fiber launch', 'Gigabit'],
+                      },
+                    }
+                  : url.includes('my_standing')
+                    ? { ok: true, points: 0, scored: 0 }
+                    : { ok: true };
         return route.fulfill({
           status: 200,
           contentType: 'application/json',
@@ -108,6 +133,12 @@ for (const palette of PALETTES) {
             .getByRole('button')
             .first()
             .click();
+        }
+
+        // Two pairs are already made by `mine`; a third is made here so a
+        // colour is on screen mid-pairing as well as settled.
+        if (name === 'matching') {
+          await page.getByRole('button', { name: /^2024/ }).click();
         }
 
         const results = await new AxeBuilder({ page }).withRules(['color-contrast']).analyze();
