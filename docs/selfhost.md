@@ -2267,7 +2267,11 @@ to 1 for tenth times whatever the round said that game was worth, so games whose
 scores are not comparable (Hive points, Weave times, trivia answers) can be
 added together; level on points, more outright wins goes first,
 then name. Exact ties inside one game-round fall to that board's own tiebreak,
-usually the clock, which is what the board itself shows.
+usually the clock, which is what the board itself shows. Weave has a third
+level under the clock — the fewest hints, totalled over the boards counted —
+because a round is one board, so every solver has one solve and two people
+within a second of each other is ordinary. It is shown on the row, like the
+clock, and trusted the same way: the browser reports it.
 
 #### A tournament that is the whole site
 

@@ -54,8 +54,8 @@ const STANDINGS = {
       ends_on: plus(START, 6),
       boards: {
         weave: [
-          { name: 'Ada', value: 1, detail: 95000 },
-          { name: 'Cy', value: 1, detail: 140000 },
+          { name: 'Ada', value: 1, detail: 95000, hints: 0 },
+          { name: 'Cy', value: 1, detail: 140000, hints: 2 },
         ],
       },
       trivia: [
@@ -99,6 +99,9 @@ test("this round's boards read the way the site's leaderboards do", async ({ pag
   await page.goto('/tournament');
   const round = page.getByRole('region', { name: "This round's standings" });
   await expect(round).toContainText('best 1:35');
+  // The third level is on the row too, because the board ranks on it.
+  await expect(round).toContainText('no hints');
+  await expect(round).toContainText('2 hints');
   await expect(round.getByRole('list', { name: /Weave/ }).getByRole('listitem').first()).toContainText(
     'Ada'
   );

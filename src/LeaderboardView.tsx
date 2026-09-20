@@ -64,7 +64,7 @@ function Board({
   onReport: (name: string) => void;
 }) {
   if (!rows.length) return null;
-  const { label, value, detail } = BOARD_LABELS[game];
+  const { label, value, detail, extra } = BOARD_LABELS[game];
   const Icon = ICONS[game];
   return (
     // Focusable on purpose, though nothing here is clickable: inside a dialog
@@ -109,6 +109,13 @@ function Board({
               {r.detail !== null && detail(r.detail) !== '' && (
                 <span className="text-xs text-slate-500 tabular-nums shrink-0 hidden sm:inline">
                   {detail(r.detail)}
+                </span>
+              )}
+              {/* The level below the clock, where a game has one: Weave's
+                  hints break a tie the two numbers above cannot. */}
+              {extra && (
+                <span className="text-xs text-slate-500 tabular-nums shrink-0 hidden sm:inline">
+                  {extra(r)}
                 </span>
               )}
               {/* Not on your own row — reporting yourself is the one case

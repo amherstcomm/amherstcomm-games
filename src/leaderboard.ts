@@ -27,7 +27,14 @@ export type BoardGame =
   | 'ladder'
   | 'bridge';
 
-export type BoardRow = { name: string; value: number; detail: number | null };
+export type BoardRow = {
+  name: string;
+  value: number;
+  detail: number | null;
+  /** Weave's third level: the hints taken over the boards counted here. Only
+   *  Weave ranks on it, so only Weave sends it. */
+  hints?: number | null;
+};
 export type Boards = Record<BoardGame, BoardRow[]>;
 
 /** how many days back the board looks, today included */
@@ -122,11 +129,19 @@ export async function fetchBoards(
   }
 }
 
-// What the two numbers mean, per game. The function ranks on `value` and
-// breaks ties on `detail`, so this is only ever labelling.
+// What the numbers mean, per game. The function ranks on `value` and breaks
+// ties on `detail` -- and, for Weave, on `extra` after that. So this is only
+// ever labelling, but every level it ranks on has to appear here: a board that
+// hides what ordered it reads as a board in no order at all.
 export const BOARD_LABELS: Record<
   BoardGame,
-  { label: string; value: (n: number) => string; detail: (n: number) => string }
+  {
+    label: string;
+    value: (n: number) => string;
+    detail: (n: number) => string;
+    /** the third level, where there is one. Absent draws nothing. */
+    extra?: (row: BoardRow) => string;
+  }
 > = {
   guess: {
     label: nameOfProgress('guess'),
@@ -151,10 +166,16 @@ export const BOARD_LABELS: Record<
   // hidden ranking is misinformation, and on a board with a prize attached it
   // is the kind that gets argued about. boards_for has been ranking on the
   // fastest solve all along; only the projection was thrown away here.
+  // Weave has a third level: two people who solved the same round within a
+  // second of each other are separated by how much help they took.
   weave: {
     label: nameOfProgress('weave'),
     value: (n) => `${n} solved`,
     detail: (n) => (n > 0 ? `best ${formatElapsed(n)}` : ''),
+    extra: (row) => {
+      const n = row.hints ?? 0;
+      return n > 0 ? `${n} hint${n === 1 ? '' : 's'}` : 'no hints';
+    },
   },
   squares4: {
     label: `${nameOfProgress('squares')} (4×4)`,
