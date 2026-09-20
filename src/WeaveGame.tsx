@@ -36,6 +36,7 @@ import { recordWeaveReveal, recordWeaveSolve } from '@/stats';
 import type { NavKeys } from '@/storage';
 import { formatElapsed, useUpTimer } from '@/useUpTimer';
 import { store as siteStore } from '@/siteStorage';
+import { readRoundHints, takeRoundHint } from '@/roundHints';
 
 export type WeaveGameHandle = { pressKey: (k: string) => void };
 
@@ -269,6 +270,28 @@ const WeaveGame = forwardRef<
       alive = false;
     };
   }, [difficultyTick, channel]);
+
+  // A round's hints are the server's, so a reloaded page -- or a second device
+  // -- shows the count that was actually given rather than starting at zero,
+  // and lights the word that was given rather than guessing at one.
+  useEffect(() => {
+    if (channel.kind !== 'round' || !store.daily) return;
+    let alive = true;
+    void readRoundHints('weave').then(({ taken, targets }) => {
+      if (!alive) return;
+      updateRecord((r) => {
+        const target = targets.find((w) => !r.found.includes(w)) ?? null;
+        if (r.hintsUsed === taken && r.hintTarget === target) return r;
+        return { ...r, hintsUsed: taken, hintTarget: target };
+      });
+    });
+    return () => {
+      alive = false;
+    };
+    // updateRecord is stable for the life of the board; the board is what this
+    // depends on.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [channel.kind, store.dailyDate, !!store.daily]);
 
   // fetch the practice pool once
   useEffect(() => {
@@ -612,8 +635,20 @@ const WeaveGame = forwardRef<
   const canHint =
     !!record && !!answers && !complete && !record.hintTarget && hintBank >= HINT_COST;
 
-  function useHint() {
+  // On the daily the page works the hint out and counts it. On a round board
+  // it asks: the count is what Weave's board breaks a tie on, and a number the
+  // page writes is a number the page can lower. See src/roundHints.ts.
+  async function takeHint() {
     if (!canHint || !answers || !record) return;
+    if (channel.kind === 'round') {
+      const res = await takeRoundHint('weave');
+      if (!res.ok) {
+        showFlash(res.reason === 'there is nothing left to hint' ? 'Nothing left to hint' : 'No hint just now');
+        return;
+      }
+      updateRecord((r) => ({ ...r, hintsUsed: res.taken, hintTarget: res.target }));
+      return;
+    }
     const target =
       answers.words.find((x) => !record.found.includes(x.w))?.w ??
       (!record.found.includes(answers.spangram.w) ? answers.spangram.w : null);
@@ -779,7 +814,7 @@ const WeaveGame = forwardRef<
           <div className="mt-4 flex flex-wrap items-center justify-center gap-2.5">
             <button
               onMouseDown={(e) => e.preventDefault()}
-              onClick={useHint}
+              onClick={() => void takeHint()}
               disabled={!canHint}
               title={`Find ${HINT_COST} non-theme words to earn a hint`}
               className="inline-flex items-center gap-1.5 px-4 h-10 rounded-lg text-sm font-semibold bg-white/5 border border-white/10 text-slate-300 hover:bg-white/10 hover:text-white transition-colors disabled:opacity-40"

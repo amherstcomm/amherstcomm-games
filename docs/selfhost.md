@@ -2271,7 +2271,26 @@ usually the clock, which is what the board itself shows. Weave has a third
 level under the clock — the fewest hints, totalled over the boards counted —
 because a round is one board, so every solver has one solve and two people
 within a second of each other is ordinary. It is shown on the row, like the
-clock, and trusted the same way: the browser reports it.
+clock.
+
+**On a round board the hint count is the server's.** ~~trusted the same way:
+the browser reports it~~ — which was true until it decided ties, and then a
+page could take three hints and report none. Encrypting or signing it in the
+page would not help: whatever key does that ships in the bundle and belongs to
+the player. So taking a hint on a round board is a request — `take_round_hint`
+picks the next unfound word off the round's own answers, records it in
+`round_hints`, and returns it — and the board counts from that table, ignoring
+what the result says. Asking again for a word already given and still unfound
+returns it free, so a reload or a second tab is not a second hint.
+
+The daily is unchanged: its hints stay local, because the daily has to work
+offline and signed out.
+
+**What this does not do:** it does not check that a hint was *earned*. The cost
+— three banked words — is the page's own arithmetic against a dictionary the
+server does not hold, so a page can still ask for a hint it has not worked for.
+What it can no longer do is take one and say it didn't. The only cap is that
+nobody gets more hints than the board has words.
 
 #### A tournament that is the whole site
 
