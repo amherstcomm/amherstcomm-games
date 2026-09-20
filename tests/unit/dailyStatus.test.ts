@@ -3,15 +3,18 @@
 // Weave was read as Hive is -- done only when revealed -- so a Weave solved
 // the honest way sat at "started" for ever. These pin the finish line it has.
 import { beforeEach, describe, expect, it } from 'vitest';
-import { dailyStatus } from '@/dailyStatus';
+import { dailyStatus, todayEt } from '@/dailyStatus';
 import { store } from '@/siteStorage';
 
 const KEY = 'anagrimoire:weave:v1';
 const answers = (words: string[], spangram = 'OWNERSHIP') =>
   btoa(JSON.stringify({ spangram: { w: spangram, path: [] }, words: words.map((w) => ({ w, path: [] })) }));
 
+// Today's, from the module's own reckoning: status answers for today's board
+// and nothing else, so a date written into the test is a test that passes on
+// the day it is written and is red the next morning. This one was.
 function weave(daily: Record<string, unknown>) {
-  store.setItem(KEY, JSON.stringify({ dailyMode: true, dailyDate: '2026-09-19', daily }));
+  store.setItem(KEY, JSON.stringify({ dailyMode: true, dailyDate: todayEt(), daily }));
 }
 
 describe('Weave daily status', () => {
