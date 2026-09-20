@@ -918,9 +918,16 @@ added. Touching a matched item again takes the match off, which is the undo.
 
 **A colour per pair, at both ends.** All one colour is unreadable at six pairs:
 the lines cross, and the only way to find where one ends is to follow it with a
-finger. Each pair takes its own from a set of six, carried by the line and by
-both words, so a pairing can be read from either side. Six because more than
-that on one question is more than a room can hold; a seventh repeats a colour.
+finger. Each pair takes its own from the site's five themed hues, carried by the
+line and by both words, so a pairing can be read from either side. The sixth
+pair onwards repeats a hue **dashed** — a dash rather than a sixth colour
+because two of the four palettes are for colour blindness, where another hue is
+another thing that might collapse into its neighbour.
+
+~~a set of six~~ The sixth was teal, which is not one of this site's colours:
+every hue here resolves through a CSS variable that flips between themes, and
+teal has none, so Tailwind's own fixed teal came through and was invisible on
+the light theme. Reported from a screenshot of amherst light.
 
 **The lines are decoration over an answer that reads without them.** Each item
 says what it is matched with in words, because a line is invisible to a screen
@@ -933,10 +940,12 @@ their own, so there was nothing for the lines to come from and the reveal showed
 a bare list on the screen the room is looking at. After the reveal it draws the
 right answer, every line correct, because every line *is* the answer.
 
-`e2e/contrast.spec.ts` now sweeps a matching question across every palette and
-theme. Those six tiers are on nothing else on the site, so nothing else would
-have checked them — and whether they are readable on the light theme is a
-question to measure rather than to assume.
+`e2e/contrast.spec.ts` sweeps a matching question across every palette and
+theme, with six pairs on screen so every hue is drawn. It **measures** the pair
+labels rather than leaving them to axe: axe answers "incomplete" for text over a
+gradient and cannot resolve the page ground, which is how the teal above passed
+a green sweep. The check fails at under 4.5:1; the teal measured about 1.6 on
+amherst light.
 
 The authoring form still pairs with dropdowns. That is a form, filled in once by
 one person, and the complaint was about the room.

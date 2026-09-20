@@ -89,14 +89,24 @@ for (const palette of PALETTES) {
                       opened_at: new Date().toISOString(),
                       seconds: null,
                       now: new Date().toISOString(),
-                      mine: { '1998': 'ESOP formed', '2011': 'Fiber launch' },
+                      // Six pairs, so every hue is on screen at once -- a
+                      // question with three would never reach the later ones,
+                      // which is where the colour with no theme behind it was.
+                      mine: {
+                        One: 'Alpha',
+                        Two: 'Beta',
+                        Three: 'Gamma',
+                        Four: 'Delta',
+                        Five: 'Epsilon',
+                        Six: 'Zeta',
+                      },
                       answer: null,
                       yours: false,
                       kind: 'match',
                       prompt: 'Match the year to the event',
                       payload: {
-                        left: ['1998', '2011', '2024'],
-                        right: ['ESOP formed', 'Fiber launch', 'Gigabit'],
+                        left: ['One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven'],
+                        right: ['Alpha', 'Beta', 'Gamma', 'Delta', 'Epsilon', 'Zeta', 'Eta'],
                       },
                     }
                   : url.includes('my_standing')
@@ -138,7 +148,52 @@ for (const palette of PALETTES) {
         // Two pairs are already made by `mine`; a third is made here so a
         // colour is on screen mid-pairing as well as settled.
         if (name === 'matching') {
-          await page.getByRole('button', { name: /^2024/ }).click();
+          await page.getByRole('button', { name: /^Seven/ }).click();
+        }
+
+        // Measured here rather than left to axe, which answers "incomplete"
+        // for text over a gradient and cannot resolve the page ground at all --
+        // so a colour with no theme variable behind it came through as
+        // Tailwind's own fixed hue, was invisible on the light theme, and this
+        // sweep went green. Found on a screenshot, not by a test, which is the
+        // reason this block exists.
+        if (name === 'matching') {
+          const worst = await page.evaluate(() => {
+            const lum = (rgb: number[]) => {
+              const [r, g, b] = rgb.map((v) => {
+                const c = v / 255;
+                return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+              });
+              return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+            };
+            const parse = (colour: string) =>
+              (colour.match(/[\d.]+/g) ?? []).slice(0, 3).map(Number);
+            /** The first background this element actually sits on. */
+            const groundOf = (el: Element): number[] => {
+              let at: Element | null = el;
+              while (at) {
+                const bg = getComputedStyle(at).backgroundColor;
+                const rgb = parse(bg);
+                const alpha = Number((bg.match(/[\d.]+/g) ?? [])[3] ?? 1);
+                if (rgb.length === 3 && alpha > 0.9) return rgb;
+                at = at.parentElement;
+              }
+              return [255, 255, 255];
+            };
+            let worstSeen = 21;
+            for (const el of document.querySelectorAll('[data-pair-label]')) {
+              const colour = parse(getComputedStyle(el).color);
+              const ground = groundOf(el);
+              const a = lum(colour) + 0.05;
+              const b = lum(ground) + 0.05;
+              const ratio = a > b ? a / b : b / a;
+              worstSeen = Math.min(worstSeen, ratio);
+            }
+            return worstSeen;
+          });
+          // AA for text this size. The teal that started this measured about
+          // 1.6 against the light theme's ground.
+          expect(worst, `${palette} on ${theme}: faintest pair label`).toBeGreaterThan(4.5);
         }
 
         const results = await new AxeBuilder({ page }).withRules(['color-contrast']).analyze();
