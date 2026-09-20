@@ -1405,17 +1405,31 @@ begin
   ) s;
   out_json := jsonb_set(out_json, '{box}', part);
 
-  -- weave: days solved, then the fastest
-  select coalesce(jsonb_agg(jsonb_build_object('name', name, 'value', value, 'detail', detail) order by rk), '[]'::jsonb)
+  -- weave: days solved, then the fastest, then the fewest hints.
+  --
+  -- The third level because the first two tie: a round is one board, so every
+  -- solver has one solve, and two people within a second of each other is an
+  -- ordinary Thursday. Hints are the thing that separates them and the thing
+  -- the game already counts -- and they are shown on the row, because a
+  -- ranking the board does not show reads as no ranking at all.
+  --
+  -- Totalled over the solved boards, not taken from the fastest one, so it
+  -- answers "how much help did this take" over the window rather than on one
+  -- lucky day. Client-reported, like the clock beside it.
+  select coalesce(jsonb_agg(jsonb_build_object(
+           'name', name, 'value', value, 'detail', detail, 'hints', hints) order by rk), '[]'::jsonb)
     into part
   from (
-    select *, row_number() over (order by value desc, detail asc) as rk
+    select *, row_number() over (order by value desc, detail asc, hints asc) as rk
     from (
       select p.display_name as name,
              count(*) filter (where (dp.result->>'solved')::boolean) as value,
              min((dp.result->>'timeMs')::numeric) filter (
                where (dp.result->>'solved')::boolean and (dp.result->>'timeMs')::numeric > 0
-             ) as detail
+             ) as detail,
+             coalesce(sum(coalesce((dp.result->>'hints')::numeric, 0)) filter (
+               where (dp.result->>'solved')::boolean
+             ), 0) as hints
       from public.daily_progress dp
       join public.profiles p on p.id = dp.user_id
       where dp.game = 'weave' and dp.completed and dp.env = p_env and dp.difficulty = p_difficulty and dp.puzzle_date between p_from and p_until

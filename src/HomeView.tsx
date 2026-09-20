@@ -242,6 +242,11 @@ export default function HomeView({
                               {label.detail(r.detail ?? 0)}
                             </span>
                           )}
+                          {label.extra && (
+                            <span className="text-xs text-slate-500 tabular-nums shrink-0 hidden sm:inline">
+                              {label.extra(r)}
+                            </span>
+                          )}
                         </li>
                       );
                     })}

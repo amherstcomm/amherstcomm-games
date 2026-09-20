@@ -10,7 +10,13 @@ import { supabase } from '@/supabase';
 import type { Difficulty } from '@/difficulty';
 import type { BoardGame } from '@/leaderboard';
 
-export type StandingRow = { name: string; value: number; detail: number | null };
+export type StandingRow = {
+  name: string;
+  value: number;
+  detail: number | null;
+  /** Weave's third level, the hints taken. Only Weave sends it. */
+  hints?: number | null;
+};
 
 /** One person's finish in a session, as session_ranking ranked it. `place` is
  *  a rank rather than a row number, so a tie shares a place and the placement

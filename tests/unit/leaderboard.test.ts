@@ -91,3 +91,28 @@ describe('the number under the number', () => {
     expect(BOARD_LABELS.ladder.detail(2)).toContain('par');
   });
 });
+
+// Weave's third level. It ranks on hints after solves and the clock, so the
+// row has to show them: a board that hides what ordered it reads as a board in
+// no order at all, which is the failure the clock column was added to fix.
+describe("Weave's hints", () => {
+  const label = BOARD_LABELS.weave;
+
+  it('are shown on the row, counted', () => {
+    expect(label.extra?.({ name: 'Ada', value: 1, detail: 95_000, hints: 3 })).toBe('3 hints');
+    expect(label.extra?.({ name: 'Ada', value: 1, detail: 95_000, hints: 1 })).toBe('1 hint');
+  });
+
+  it('and say so plainly when there were none', () => {
+    expect(label.extra?.({ name: 'Ada', value: 1, detail: 95_000, hints: 0 })).toBe('no hints');
+    // A row from before hints were recorded reads the same rather than blank.
+    expect(label.extra?.({ name: 'Ada', value: 1, detail: 95_000 })).toBe('no hints');
+  });
+
+  it('and no other board grows a third level by accident', () => {
+    const withExtra = Object.entries(BOARD_LABELS)
+      .filter(([, l]) => l.extra)
+      .map(([game]) => game);
+    expect(withExtra).toEqual(['weave']);
+  });
+});
