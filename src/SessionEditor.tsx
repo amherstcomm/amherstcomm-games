@@ -1056,6 +1056,24 @@ function SessionEditorFor({ session }: { session: string }) {
         Let everyone see the results afterwards
       </label>
 
+      {/* Offered here as well as when the session is made, because it is a
+          thing people change their mind about once the room is in front of
+          them -- and until now it could only be set at creation, which meant
+          living with it or starting the session again. set_session_options
+          has always taken it; nothing drew the switch. */}
+      <label className="flex items-center gap-2 text-xs text-slate-400 mb-6 -mt-4">
+        <input
+          type="checkbox"
+          checked={meta.qa}
+          onChange={(e) => {
+            // Read before the await, for the reason above.
+            const on = e.target.checked;
+            void run(() => setSessionOptions(session, { qa: on }));
+          }}
+        />
+        Let the room ask questions of its own
+      </label>
+
       {/* Only for a session that runs without anybody at the front. A live one
           has a presenter, and the presenter is the schedule — a clock that
           opened or shut it underneath them would take the one thing they are

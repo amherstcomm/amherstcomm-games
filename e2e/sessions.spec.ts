@@ -35,6 +35,9 @@ const SHEET = {
     late_join: 'strict',
     current_item: null,
     code: 'K4TP',
+    mode: 'live',
+    qa: true,
+    shared: false,
   },
   kinds: [
     { kind: 'choice', description: 'x', scored: true },
@@ -756,4 +759,46 @@ test('and something that is not a workbook is refused in words', async ({ page }
     buffer: Buffer.from('just some notes'),
   });
   await expect(page.getByText('that is not a spreadsheet')).toBeVisible();
+});
+
+// ---------------------------------------------------------------------------
+// Questions from the room, after the session exists
+// ---------------------------------------------------------------------------
+// It was offered when the session was made and nowhere afterwards, so turning
+// it off meant starting the session again. The server has always taken the
+// change; nothing drew the switch.
+test('the room’s own questions can be switched off after the session exists', async ({ page }) => {
+  const sent: Record<string, unknown>[] = [];
+  // Stateful, because the switch is a controlled input: a server that keeps
+  // answering "still on" is a switch that snaps back, which is what it should
+  // do and not what is being tested here.
+  const sheet = { ...SHEET, session: { ...SHEET.session, qa: true } };
+  await page.route('**/rest/v1/rpc/**', (route) => {
+    const url = route.request().url();
+    if (url.includes('set_session_options')) {
+      const args = JSON.parse(route.request().postData() ?? '{}');
+      sent.push(args);
+      if (typeof args.p_qa === 'boolean') sheet.session.qa = args.p_qa;
+      return route.fulfill({ status: 200, contentType: 'application/json', body: '{"ok":true}' });
+    }
+    return route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(url.includes('session_sheet') ? sheet : []),
+    });
+  });
+  await page.goto(`/sessions/${SESSION}`);
+
+  const asks = page.getByRole('checkbox', { name: 'Let the room ask questions of its own' });
+  await expect(asks).toBeChecked();
+  // click, not uncheck: this is a controlled input, so it goes back to what the
+  // session says until the server has answered -- which is the point of it, and
+  // makes uncheck's "did not change state" a false alarm.
+  await asks.click();
+
+  await expect.poll(() => sent.length).toBe(1);
+  // Only this one: the other option is left as it was rather than resent.
+  expect(sent[0]).toMatchObject({ p_qa: false, p_share_results: null });
+  // And it stays off once the session is read back.
+  await expect(asks).not.toBeChecked();
 });

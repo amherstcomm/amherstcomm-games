@@ -904,12 +904,40 @@ is still the only route to one.
 When it is on and the session is over, the player's screen carries **See how it
 went** where it would otherwise only say the session is not running.
 
+### Matching, answered by pointing
+
+A matching question is answered by touching the thing on the left and then what
+it matches, with a line drawn between the two. It was a dropdown per row, which
+reads as a form, hides the pairing inside a closed list, and shows a room
+nothing.
+
+Click rather than drag, deliberately: a drag needs a second implementation for
+touch and a third for anyone not using a pointer, while click-then-click is one
+path for all of them — these are buttons, so Tab and Enter work with nothing
+added. Touching a matched item again takes the match off, which is the undo.
+
+**The lines are decoration over an answer that reads without them.** Each item
+says what it is matched with in words, because a line is invisible to a screen
+reader and to anyone who cannot pick out the colour it is drawn in. After the
+reveal the pairs are marked right or wrong and a wrong one says what it should
+have been, which is what the old rows did.
+
+The authoring form still pairs with dropdowns. That is a form, filled in once by
+one person, and the complaint was about the room.
+
 ### Questions for the host
 
 A session can carry a Q&A running **alongside** everything else. Not an item —
 the `open` kind is a question the presenter asks and the room answers in its
 turn; this is the other direction and has no turn. Anybody asks anything while
 the session runs, and the host works through them in the gaps.
+
+**On or off, at any time.** The checkbox is on the session's own page —
+*Let the room ask questions of its own* — beside the one that shares results
+afterwards. It was offered when the session was made and nowhere afterwards,
+so turning it off once the room was in front of you meant making the session
+again; the server has always taken the change (`set_session_options`), and
+nothing drew the switch.
 
 **Votes decide the order.** Forty questions in arrival order is a list nobody
 can act on, and a host picking by eye is a host picking their favourites. Most

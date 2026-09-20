@@ -293,7 +293,9 @@ const ANSWER: Record<string, (p: import('@playwright/test').Page) => Promise<voi
     await p.getByRole('button', { name: 'Send answer' }).click();
   },
   match: async (p) => {
-    await p.getByRole('combobox').selectOption('Analyst');
+    // Point at the thing, then at what it matches.
+    await p.getByRole('button', { name: 'Ada', exact: true }).click();
+    await p.getByRole('button', { name: 'Analyst', exact: true }).click();
     await p.getByRole('button', { name: 'Send answer' }).click();
   },
   number: async (p) => {
@@ -483,7 +485,7 @@ test('the host arriving at the player address is not offered a way in', async ({
   await page.goto(`/live/${SESSION}`);
   await expect(page.getByText('Match them up')).toBeVisible();
 
-  await expect(page.getByRole('combobox').first()).toBeDisabled();
+  await expect(page.getByRole('button', { name: 'Ada', exact: true })).toBeDisabled();
   await expect(page.getByRole('button', { name: 'Send answer' })).toHaveCount(0);
   await expect(page.getByText(/you are not scored on it/i)).toBeVisible();
 });
@@ -515,8 +517,9 @@ test('and everybody else at that address still gets a working question', async (
     })
   );
   await page.goto(`/live/${SESSION}`);
-  await expect(page.getByRole('combobox').first()).toBeEnabled();
-  await page.getByRole('combobox').first().selectOption('Analyst');
+  await expect(page.getByRole('button', { name: 'Ada', exact: true })).toBeEnabled();
+  await page.getByRole('button', { name: 'Ada', exact: true }).click();
+  await page.getByRole('button', { name: 'Analyst', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Send answer' })).toBeEnabled();
   await expect(page.getByText(/you are not scored on it/i)).toHaveCount(0);
 });
@@ -578,14 +581,14 @@ test('a timed question that runs out is not a dead end', async ({ page }) => {
     });
   });
   await page.goto(`/live/${SESSION}`);
-  await expect(page.getByRole('combobox').first()).toBeEnabled();
+  await expect(page.getByRole('button', { name: 'Ada', exact: true })).toBeEnabled();
 
   // the clock runs out
   await expect(page.getByText(/Time is up/i)).toBeVisible({ timeout: 6000 });
 
   // nothing is offered that the server would refuse
   await expect(page.getByRole('button', { name: 'Send answer' })).toHaveCount(0);
-  await expect(page.getByRole('combobox').first()).toBeDisabled();
+  await expect(page.getByRole('button', { name: 'Ada', exact: true })).toBeDisabled();
 
   // and there is a way past it
   const on = page.getByRole('button', { name: 'Move on' });
@@ -1092,4 +1095,107 @@ test('a fast drag lands where it was dragged', async ({ page }) => {
   await page.mouse.up();
 
   expect(await shown(page)).toEqual(['b', 'c', 'a']);
+});
+
+// ---------------------------------------------------------------------------
+// Matching, by pointing rather than by dropdown
+// ---------------------------------------------------------------------------
+// It was a <select> per row, which reads as a form and hides the pairing inside
+// a closed list. Now: touch the thing, touch what it matches, and a line is
+// drawn between them.
+
+const PAIRS = {
+  kind: 'match',
+  prompt: 'Match the year to the event',
+  payload: {
+    left: ['1998', '2011'],
+    right: ['ESOP formed', 'Fiber launch'],
+  },
+};
+
+async function matching(
+  page: import('@playwright/test').Page,
+  { state = 'open', mine = null as unknown, answer = null as unknown } = {}
+) {
+  const sent: unknown[] = [];
+  await page.route('**/rest/v1/rpc/**', (route) => {
+    const url = route.request().url();
+    if (url.includes('answer_item')) {
+      sent.push(JSON.parse(route.request().postData() ?? '{}').p_value);
+      return route.fulfill({ status: 200, contentType: 'application/json', body: '{"ok":true}' });
+    }
+    return route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(
+        url.includes('current_item')
+          ? {
+              state,
+              id: 'q1',
+              position: 1,
+              opened_at: new Date().toISOString(),
+              seconds: null,
+              now: new Date().toISOString(),
+              mine,
+              answer,
+              yours: false,
+              ...PAIRS,
+            }
+          : url.includes('my_standing')
+            ? { ok: true, points: 0, scored: 0 }
+            : {}
+      ),
+    });
+  });
+  await page.goto(`/live/${SESSION}`);
+  await expect(page.getByText('Match the year to the event')).toBeVisible();
+  return sent;
+}
+
+test('a pair is made by pointing at both halves, and drawn as a line', async ({ page }) => {
+  const sent = await matching(page);
+  // Nothing on the right is pressable until something on the left is picked:
+  // a pairing needs both halves and the screen says which comes first.
+  await expect(page.getByRole('button', { name: 'ESOP formed', exact: true })).toBeDisabled();
+
+  await page.getByRole('button', { name: /^1998/ }).click();
+  await expect(page.getByText('Now choose what "1998" matches.')).toBeVisible();
+  await page.getByRole('button', { name: 'ESOP formed', exact: true }).click();
+
+  // Said in words as well as drawn, because a line is not readable.
+  await expect(page.getByRole('button', { name: /1998.*ESOP formed/s })).toBeVisible();
+  await expect(page.locator('[data-match-lines] line')).toHaveCount(1);
+
+  await page.getByRole('button', { name: /^2011/ }).click();
+  await page.getByRole('button', { name: 'Fiber launch', exact: true }).click();
+  await expect(page.locator('[data-match-lines] line')).toHaveCount(2);
+
+  await page.getByRole('button', { name: 'Send answer' }).click();
+  await expect.poll(() => sent.length).toBe(1);
+  expect(sent[0]).toEqual({ '1998': 'ESOP formed', '2011': 'Fiber launch' });
+});
+
+// Undoing needs no second control: the thing you matched, touched again.
+test('and touching a matched item again takes the match off', async ({ page }) => {
+  await matching(page);
+  await page.getByRole('button', { name: /^1998/ }).click();
+  await page.getByRole('button', { name: 'ESOP formed', exact: true }).click();
+  await expect(page.locator('[data-match-lines] line')).toHaveCount(1);
+
+  await page.getByRole('button', { name: /1998.*ESOP formed/s }).click();
+  await expect(page.locator('[data-match-lines] line')).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Send answer' })).toBeDisabled();
+});
+
+// After the reveal the board says which pairs were right and what the wrong
+// one should have been -- the same thing the old rows said, kept.
+test('the reveal marks each pair and says what a wrong one should have been', async ({ page }) => {
+  await matching(page, {
+    state: 'revealed',
+    mine: { '1998': 'Fiber launch', '2011': 'Fiber launch' },
+    answer: { pairs: { '1998': 'ESOP formed', '2011': 'Fiber launch' } },
+  });
+  await expect(page.getByRole('button', { name: /1998.*should be ESOP formed/s })).toBeVisible();
+  await expect(page.locator('[data-match-lines] line.stroke-emerald-400')).toHaveCount(1);
+  await expect(page.locator('[data-match-lines] line.stroke-rose-400')).toHaveCount(1);
 });
