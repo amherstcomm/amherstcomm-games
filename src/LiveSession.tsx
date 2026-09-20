@@ -11,6 +11,7 @@
 // unrevealed item comes back with `answer` null, and that is enforced two
 // layers down in a table with no grant.
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import MatchBoard from '@/MatchBoard';
 import {
   ArrowDown,
   ArrowUp,
@@ -237,37 +238,14 @@ function Match({
 
   return (
     <div className="space-y-2">
-      {left.map((l) => {
-        const chosen = pairs[l] ?? '';
-        const should = answer?.pairs?.[l];
-        const got = should != null && chosen === should;
-        return (
-          <div key={l} className="flex items-center gap-2">
-            <span className="text-sm text-slate-200 w-1/3 truncate">{l}</span>
-            <select
-              value={chosen}
-              disabled={locked || sending}
-              onChange={(e) => setPairs({ ...pairs, [l]: e.target.value })}
-              aria-label={l}
-              className={`flex-1 px-3 py-2 rounded-lg bg-white/5 border text-white text-sm focus:outline-none focus:border-accent disabled:opacity-70 ${
-                answer ? (got ? 'border-emerald-400' : 'border-rose-400') : 'border-white/15'
-              }`}
-            >
-              <option value="">…</option>
-              {right.map((r) => (
-                <option key={r} value={r}>
-                  {r}
-                </option>
-              ))}
-            </select>
-            {/* After the reveal a wrong row says what it should have been,
-                rather than only that it was wrong. */}
-            {answer && !got && (
-              <span className="text-xs text-slate-400 w-1/4 truncate">{should}</span>
-            )}
-          </div>
-        );
-      })}
+      <MatchBoard
+        left={left}
+        right={right}
+        pairs={pairs}
+        onChange={setPairs}
+        locked={locked || sending}
+        answer={answer?.pairs ?? null}
+      />
       {!locked && (
         <>
           <button
