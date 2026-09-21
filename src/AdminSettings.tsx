@@ -21,6 +21,7 @@ import AdminPassages from '@/AdminPassages';
 import AdminPins from '@/AdminPins';
 import ThemeCoverage from '@/ThemeCoverage';
 import AdminTournaments from '@/AdminTournaments';
+import AdminContests from '@/AdminContests';
 
 const FIELD =
   'w-full rounded-lg bg-white/5 border border-white/15 px-3 py-2 text-sm text-slate-200 ' +
@@ -215,6 +216,10 @@ const PANEL: Record<AdminTab, () => JSX.Element> = {
   // After the month's words, because a tournament is played on them: its
   // rounds' boards are that day's settings, dealt once and kept.
   tournaments: AdminTournaments,
+  // Beside the tournaments because it is the other thing that runs for days
+  // and pays a round, and nowhere near the sessions because it is not one: a
+  // contest is judged on a photograph rather than answered.
+  contests: AdminContests,
   people: AdminPeople,
 };
 

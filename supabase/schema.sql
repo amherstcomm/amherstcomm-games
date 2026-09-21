@@ -11733,3 +11733,526 @@ $fn$;
 
 revoke all on function public.session_sheet(uuid) from public, anon;
 grant execute on function public.session_sheet(uuid) to authenticated;
+
+
+-- ---------------------------------------------------------------------------
+-- Contests
+-- ---------------------------------------------------------------------------
+--
+-- Somebody carves a pumpkin, photographs it, writes a line about it, and the
+-- company votes. That is not a question with an answer, so it is not a session
+-- item: a session question opens, is answered, and closes inside a minute,
+-- while a contest runs over days in two phases -- entries, then voting -- and
+-- the thing being judged is a photograph rather than a fact.
+--
+-- So it is its own thing, with its own dates, and a tournament round can count
+-- it the way a round counts a trivia session. This half is the contest and its
+-- entries; the voting and the scoring are the half after it.
+--
+-- Four things an organiser decides, because the same machinery runs a staff
+-- pumpkin contest and a blind judging of anonymous submissions:
+--
+--   who enters      the people themselves, or an admin entering on their behalf
+--   entrants shown  whose pumpkin it is, or just "Entry 4"
+--   voters shown    whether who voted for what is visible afterwards
+--   picks           how many each voter ranks, when the voting half lands
+--
+-- Photographs go to storage rather than into a row: a phone photo is megabytes
+-- and a dozen of them through an RPC would be a page that never loads. The row
+-- holds the path.
+
+create table if not exists public.contests (
+  id uuid primary key default gen_random_uuid(),
+  name text not null check (char_length(btrim(name)) between 1 and 80),
+  -- what the contest is, in the organiser's words
+  blurb text check (blurb is null or char_length(blurb) <= 1000),
+  entries_open_on date not null,
+  entries_close_on date not null,
+  votes_open_on date not null,
+  votes_close_on date not null,
+  -- 'players' is everybody entering their own; 'admins' is somebody entering
+  -- on their behalf, which is how a contest runs when the photographs arrive
+  -- by email.
+  who_enters text not null default 'players' check (who_enters in ('players', 'admins')),
+  -- Whose entry it is, on screen. Off is a blind judging.
+  entrants_shown boolean not null default true,
+  -- Whether who voted for what can be seen once it is over. Off by default:
+  -- a secret ballot is the ordinary expectation and the safer default at work.
+  voters_shown boolean not null default false,
+  -- How many each voter ranks. Three is the shape the voting half uses.
+  picks int not null default 3 check (picks between 1 and 5),
+  prize text check (prize is null or char_length(prize) <= 200),
+  created_by uuid references auth.users (id) on delete set null,
+  created_at timestamptz not null default now(),
+  check (entries_close_on >= entries_open_on),
+  check (votes_close_on >= votes_open_on),
+  -- Voting starts once entering has finished. Judging a field that is still
+  -- growing gives the early entries every vote cast before the rest arrived.
+  check (votes_open_on >= entries_close_on)
+);
+
+alter table public.contests enable row level security;
+revoke all on public.contests from anon, authenticated;
+
+create table if not exists public.contest_entries (
+  id uuid primary key default gen_random_uuid(),
+  contest_id uuid not null references public.contests (id) on delete cascade,
+  -- Whose entry it is. Null when nobody is being credited -- an admin entering
+  -- something that arrived without a name.
+  entrant uuid references auth.users (id) on delete set null,
+  -- Who put the row in, which is not the same person when an admin enters on
+  -- somebody's behalf.
+  entered_by uuid references auth.users (id) on delete set null,
+  title text not null check (char_length(btrim(title)) between 1 and 80),
+  blurb text check (blurb is null or char_length(blurb) <= 1000),
+  -- Where the photograph is in the bucket. Null until one is uploaded, which
+  -- is a legal state: the writing can be saved before the picture is.
+  image_path text check (image_path is null or char_length(image_path) <= 400),
+  created_at timestamptz not null default now()
+);
+
+create index if not exists contest_entries_contest_idx
+  on public.contest_entries (contest_id, created_at);
+
+alter table public.contest_entries enable row level security;
+revoke all on public.contest_entries from anon, authenticated;
+
+-- Which of a contest's four dates today falls in.
+--
+--   soon     before entering opens
+--   entries  entering is open
+--   judging  entering has closed, voting has not opened
+--   voting   voting is open
+--   over     voting has closed
+--
+-- The puzzle day rather than the calendar day, so a contest and a round agree
+-- about when a day starts -- see puzzle_day().
+create or replace function public.contest_phase(c public.contests)
+returns text
+language sql
+stable
+set search_path = ''
+as $fn$
+  select case
+    when public.puzzle_day() < c.entries_open_on then 'soon'
+    when public.puzzle_day() <= c.entries_close_on then 'entries'
+    when public.puzzle_day() < c.votes_open_on then 'judging'
+    when public.puzzle_day() <= c.votes_close_on then 'voting'
+    else 'over'
+  end
+$fn$;
+
+grant execute on function public.contest_phase(public.contests) to anon, authenticated;
+
+-- Whether this person may put an entry in right now.
+create or replace function public.may_enter_contest(p_contest uuid)
+returns boolean
+language sql
+stable
+security definer
+set search_path = ''
+as $fn$
+  select exists (
+    select 1 from public.contests c
+    where c.id = p_contest
+      and (select auth.uid()) is not null
+      and public.contest_phase(c) = 'entries'
+      and (c.who_enters = 'players' or public.can('games.setup'))
+  )
+$fn$;
+
+revoke all on function public.may_enter_contest(uuid) from public, anon;
+grant execute on function public.may_enter_contest(uuid) to authenticated;
+
+/*
+ * A contest, as anybody who can open the site sees it.
+ *
+ * The entries, with the names on them only when the contest says so -- a blind
+ * judging answers "Entry 3" to everybody, including the admin page, because a
+ * name that is hidden on one screen and printed on another is not hidden.
+ *
+ * The photograph is a path rather than a URL: the bucket is private, and the
+ * browser asks for a signed link for the ones it is about to draw. What this
+ * returns is safe to be read by anyone who can open the site, which is what
+ * makes the whole thing readable behind the VPN without a second permission
+ * system.
+ */
+create or replace function public.contest_view(p_contest uuid)
+returns jsonb
+language sql
+stable
+security definer
+set search_path = ''
+as $fn$
+  select case
+    when not exists (select 1 from public.contests c where c.id = p_contest)
+      then jsonb_build_object('ok', false, 'reason', 'no such contest')
+    else (
+      select jsonb_build_object(
+        'ok', true,
+        'contest', jsonb_build_object(
+          'id', c.id, 'name', c.name, 'blurb', c.blurb,
+          'entries_open_on', c.entries_open_on, 'entries_close_on', c.entries_close_on,
+          'votes_open_on', c.votes_open_on, 'votes_close_on', c.votes_close_on,
+          'who_enters', c.who_enters, 'entrants_shown', c.entrants_shown,
+          'voters_shown', c.voters_shown, 'picks', c.picks, 'prize', c.prize,
+          'phase', public.contest_phase(c),
+          'may_enter', public.may_enter_contest(c.id)),
+        'entries', coalesce((
+          select jsonb_agg(jsonb_build_object(
+                   'id', e.id,
+                   'title', e.title,
+                   'blurb', e.blurb,
+                   'image_path', e.image_path,
+                   -- Named only where the contest names entrants. Null is
+                   -- "somebody", and the page numbers them.
+                   'entrant', case when c.entrants_shown
+                                   then (select p.display_name from public.profiles p
+                                         where p.id = e.entrant)
+                              end,
+                   -- Their own entry, so the page can offer to change it
+                   -- without knowing who anybody else is.
+                   'mine', e.entrant = (select auth.uid())
+                        or e.entered_by = (select auth.uid()))
+                 order by e.created_at)
+          from public.contest_entries e where e.contest_id = c.id), '[]'::jsonb))
+      from public.contests c where c.id = p_contest)
+  end
+$fn$;
+
+revoke all on function public.contest_view(uuid) from public;
+grant execute on function public.contest_view(uuid) to anon, authenticated;
+
+-- The contests worth showing a player: anything that has opened for entries
+-- and not finished voting, soonest first.
+create or replace function public.contests_on()
+returns jsonb
+language sql
+stable
+security definer
+set search_path = ''
+as $fn$
+  select coalesce(jsonb_agg(jsonb_build_object(
+           'id', c.id, 'name', c.name, 'phase', public.contest_phase(c),
+           'entries_close_on', c.entries_close_on,
+           'votes_open_on', c.votes_open_on, 'votes_close_on', c.votes_close_on,
+           'entries', (select count(*) from public.contest_entries e where e.contest_id = c.id))
+         order by c.entries_open_on), '[]'::jsonb)
+  from public.contests c
+  where public.contest_phase(c) in ('entries', 'judging', 'voting')
+$fn$;
+
+revoke all on function public.contests_on() from public;
+grant execute on function public.contests_on() to anon, authenticated;
+
+/*
+ * Putting an entry in.
+ *
+ * One each while the contest is the players' own to enter -- a contest where
+ * somebody can file six pumpkins is not a contest. An admin entering on
+ * everybody's behalf is the other mode and has no such limit, because the six
+ * they are entering belong to six different people.
+ *
+ * Saving again replaces the entry rather than adding another, so the writing
+ * can be fixed and the photograph swapped until entering closes.
+ */
+create or replace function public.save_contest_entry(
+  p_contest uuid,
+  p_entry uuid,
+  p_title text,
+  p_blurb text,
+  p_image_path text default null,
+  -- Whose it is. Ignored unless an admin is entering on somebody's behalf;
+  -- a player's entry is always their own.
+  p_entrant uuid default null
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $fn$
+declare
+  uid uuid := (select auth.uid());
+  c public.contests;
+  admin boolean := public.can('games.setup');
+  owner uuid;
+  target uuid := p_entry;
+begin
+  if uid is null then
+    return jsonb_build_object('ok', false, 'reason', 'not signed in');
+  end if;
+  select * into c from public.contests where id = p_contest;
+  if not found then
+    return jsonb_build_object('ok', false, 'reason', 'no such contest');
+  end if;
+  if public.contest_phase(c) <> 'entries' and not admin then
+    return jsonb_build_object('ok', false, 'reason',
+      case public.contest_phase(c)
+        when 'soon' then 'this one has not opened for entries yet'
+        else 'entries have closed for this one'
+      end);
+  end if;
+  if c.who_enters = 'admins' and not admin then
+    return jsonb_build_object('ok', false, 'reason', 'an organiser enters this one on your behalf');
+  end if;
+  if coalesce(btrim(p_title), '') = '' then
+    return jsonb_build_object('ok', false, 'reason', 'it needs a title');
+  end if;
+
+  -- An admin may say whose it is; anybody else is entering their own.
+  owner := case when admin and c.who_enters = 'admins' then p_entrant else uid end;
+
+  if target is not null then
+    if not exists (
+      select 1 from public.contest_entries e
+      where e.id = target and e.contest_id = p_contest
+        and (admin or e.entrant = uid or e.entered_by = uid)
+    ) then
+      return jsonb_build_object('ok', false, 'reason', 'that is not yours to change');
+    end if;
+    update public.contest_entries
+       set title = left(btrim(p_title), 80),
+           blurb = nullif(btrim(coalesce(p_blurb, '')), ''),
+           image_path = coalesce(nullif(btrim(coalesce(p_image_path, '')), ''), image_path),
+           entrant = coalesce(owner, entrant)
+     where id = target;
+    return jsonb_build_object('ok', true, 'id', target);
+  end if;
+
+  -- One each, where they are entering their own.
+  if c.who_enters = 'players' and exists (
+    select 1 from public.contest_entries e
+    where e.contest_id = p_contest and e.entrant = uid
+  ) then
+    return jsonb_build_object('ok', false, 'reason', 'you already have an entry in this one');
+  end if;
+
+  insert into public.contest_entries (contest_id, entrant, entered_by, title, blurb, image_path)
+  values (p_contest, owner, uid, left(btrim(p_title), 80),
+          nullif(btrim(coalesce(p_blurb, '')), ''),
+          nullif(btrim(coalesce(p_image_path, '')), ''))
+  returning id into target;
+  return jsonb_build_object('ok', true, 'id', target);
+end;
+$fn$;
+
+revoke all on function public.save_contest_entry(uuid, uuid, text, text, text, uuid) from public, anon;
+grant execute on function public.save_contest_entry(uuid, uuid, text, text, text, uuid) to authenticated;
+
+-- Taking one out: your own while entering is open, or an organiser's at any
+-- time -- somebody has to be able to remove a photograph that should not be up.
+create or replace function public.delete_contest_entry(p_entry uuid)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $fn$
+declare
+  uid uuid := (select auth.uid());
+  e public.contest_entries;
+  c public.contests;
+begin
+  select * into e from public.contest_entries where id = p_entry;
+  if not found then
+    return jsonb_build_object('ok', true);
+  end if;
+  select * into c from public.contests where id = e.contest_id;
+  if public.can('games.setup') then
+    delete from public.contest_entries where id = p_entry;
+    return jsonb_build_object('ok', true);
+  end if;
+  if uid is null or (e.entrant is distinct from uid and e.entered_by is distinct from uid) then
+    return jsonb_build_object('ok', false, 'reason', 'that is not yours to remove');
+  end if;
+  if public.contest_phase(c) <> 'entries' then
+    return jsonb_build_object('ok', false, 'reason', 'entries have closed for this one');
+  end if;
+  delete from public.contest_entries where id = p_entry;
+  return jsonb_build_object('ok', true);
+end;
+$fn$;
+
+revoke all on function public.delete_contest_entry(uuid) from public, anon;
+grant execute on function public.delete_contest_entry(uuid) to authenticated;
+
+-- ---------------------------------------------------------------------------
+-- Setting one up
+-- ---------------------------------------------------------------------------
+create or replace function public.save_contest(
+  p_id uuid,
+  p_name text,
+  p_blurb text,
+  p_entries_open date,
+  p_entries_close date,
+  p_votes_open date,
+  p_votes_close date,
+  p_who_enters text default 'players',
+  p_entrants_shown boolean default true,
+  p_voters_shown boolean default false,
+  p_picks int default 3,
+  p_prize text default null
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $fn$
+declare
+  v_id uuid := p_id;
+  v_name text := btrim(coalesce(p_name, ''));
+begin
+  if not public.can('games.setup') then
+    return jsonb_build_object('ok', false, 'reason', 'not allowed');
+  end if;
+  if char_length(v_name) = 0 or char_length(v_name) > 80 then
+    return jsonb_build_object('ok', false, 'reason', 'it needs a name');
+  end if;
+  if p_entries_open is null or p_entries_close is null
+     or p_votes_open is null or p_votes_close is null then
+    return jsonb_build_object('ok', false, 'reason', 'it needs all four dates');
+  end if;
+  if p_entries_close < p_entries_open or p_votes_close < p_votes_open then
+    return jsonb_build_object('ok', false, 'reason', 'each part has to end on or after it starts');
+  end if;
+  if p_votes_open < p_entries_close then
+    return jsonb_build_object('ok', false, 'reason',
+      'voting starts once entering has finished, or the early entries collect every vote');
+  end if;
+  if coalesce(p_who_enters, 'players') not in ('players', 'admins') then
+    return jsonb_build_object('ok', false, 'reason', 'either the players enter or an organiser does');
+  end if;
+  if coalesce(p_picks, 3) < 1 or coalesce(p_picks, 3) > 5 then
+    return jsonb_build_object('ok', false, 'reason', 'a voter ranks between one and five');
+  end if;
+
+  if v_id is not null then
+    update public.contests
+       set name = v_name,
+           blurb = nullif(btrim(coalesce(p_blurb, '')), ''),
+           entries_open_on = p_entries_open, entries_close_on = p_entries_close,
+           votes_open_on = p_votes_open, votes_close_on = p_votes_close,
+           who_enters = coalesce(p_who_enters, 'players'),
+           entrants_shown = coalesce(p_entrants_shown, true),
+           voters_shown = coalesce(p_voters_shown, false),
+           picks = coalesce(p_picks, 3),
+           prize = nullif(btrim(coalesce(p_prize, '')), '')
+     where id = v_id;
+    if not found then
+      return jsonb_build_object('ok', false, 'reason', 'no such contest');
+    end if;
+  else
+    insert into public.contests (name, blurb, entries_open_on, entries_close_on,
+                                 votes_open_on, votes_close_on, who_enters,
+                                 entrants_shown, voters_shown, picks, prize, created_by)
+    values (v_name, nullif(btrim(coalesce(p_blurb, '')), ''),
+            p_entries_open, p_entries_close, p_votes_open, p_votes_close,
+            coalesce(p_who_enters, 'players'), coalesce(p_entrants_shown, true),
+            coalesce(p_voters_shown, false), coalesce(p_picks, 3),
+            nullif(btrim(coalesce(p_prize, '')), ''), (select auth.uid()))
+    returning id into v_id;
+  end if;
+  return jsonb_build_object('ok', true, 'id', v_id);
+end;
+$fn$;
+
+revoke all on function public.save_contest(uuid, text, text, date, date, date, date, text, boolean, boolean, int, text) from public, anon;
+grant execute on function public.save_contest(uuid, text, text, date, date, date, date, text, boolean, boolean, int, text) to authenticated;
+
+create or replace function public.delete_contest(p_id uuid)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $fn$
+begin
+  if not public.can('games.setup') then
+    return jsonb_build_object('ok', false, 'reason', 'not allowed');
+  end if;
+  delete from public.contests where id = p_id;
+  return jsonb_build_object('ok', true);
+end;
+$fn$;
+
+revoke all on function public.delete_contest(uuid) from public, anon;
+grant execute on function public.delete_contest(uuid) to authenticated;
+
+-- Every contest, for the admin page.
+create or replace function public.contests_sheet()
+returns jsonb
+language sql
+stable
+security definer
+set search_path = ''
+as $fn$
+  select case
+    when not public.can('games.setup')
+      then jsonb_build_object('ok', false, 'reason', 'not allowed')
+    else jsonb_build_object('ok', true, 'contests', coalesce((
+      select jsonb_agg(jsonb_build_object(
+               'id', c.id, 'name', c.name, 'blurb', c.blurb,
+               'entries_open_on', c.entries_open_on, 'entries_close_on', c.entries_close_on,
+               'votes_open_on', c.votes_open_on, 'votes_close_on', c.votes_close_on,
+               'who_enters', c.who_enters, 'entrants_shown', c.entrants_shown,
+               'voters_shown', c.voters_shown, 'picks', c.picks, 'prize', c.prize,
+               'phase', public.contest_phase(c),
+               'entries', (select count(*) from public.contest_entries e where e.contest_id = c.id))
+             order by c.entries_open_on desc)
+      from public.contests c), '[]'::jsonb))
+  end
+$fn$;
+
+revoke all on function public.contests_sheet() from public, anon;
+grant execute on function public.contests_sheet() to authenticated;
+
+-- ---------------------------------------------------------------------------
+-- Where the photographs live
+-- ---------------------------------------------------------------------------
+--
+-- A private bucket, with the browser asking for a signed link for the entries
+-- it is about to draw. Private rather than public because these are pictures
+-- of people's kitchens and desks taken on their own phones, and a public
+-- bucket is a URL that works for anybody who ever sees it.
+--
+-- Guarded, because this file is applied to a bare Postgres by
+-- supabase/tests/run.sh, which has no storage schema and should not need one:
+-- what is under test there is the contest, not the object store.
+do $$
+begin
+  if to_regnamespace('storage') is null then
+    raise notice 'no storage schema here; skipping the contest bucket';
+    return;
+  end if;
+
+  insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+  values ('contest-entries', 'contest-entries', false, 10485760,
+          array['image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif'])
+  on conflict (id) do update
+    set public = false,
+        file_size_limit = 10485760,
+        allowed_mime_types = excluded.allowed_mime_types;
+
+  -- Anybody signed in may put a photograph in their own folder, and read what
+  -- is in the bucket: a contest is looked at by everybody who can open the
+  -- site, which is everybody behind the VPN and the sign-in.
+  execute $p$drop policy if exists "contest photos are readable" on storage.objects$p$;
+  execute $p$create policy "contest photos are readable" on storage.objects
+    for select to authenticated using (bucket_id = 'contest-entries')$p$;
+
+  execute $p$drop policy if exists "a photo goes in your own folder" on storage.objects$p$;
+  execute $p$create policy "a photo goes in your own folder" on storage.objects
+    for insert to authenticated
+    with check (bucket_id = 'contest-entries'
+                and (storage.foldername(name))[1] = (select auth.uid())::text)$p$;
+
+  execute $p$drop policy if exists "and stays yours to replace" on storage.objects$p$;
+  execute $p$create policy "and stays yours to replace" on storage.objects
+    for update to authenticated
+    using (bucket_id = 'contest-entries'
+           and (storage.foldername(name))[1] = (select auth.uid())::text)$p$;
+
+  execute $p$drop policy if exists "and yours to take down" on storage.objects$p$;
+  execute $p$create policy "and yours to take down" on storage.objects
+    for delete to authenticated
+    using (bucket_id = 'contest-entries'
+           and (storage.foldername(name))[1] = (select auth.uid())::text)$p$;
+end $$;

@@ -14,7 +14,7 @@ import { PALETTES, PaletteContext, resolveTheme, TEXT_SCALES, THEME_MODES, useTh
 import { PrefsContext } from '@/prefs';
 import OnboardingCard from '@/OnboardingCard';
 import { useModalA11y } from '@/useModalA11y';
-import { Combine, Flag as FlagIcon, Radio, SlidersHorizontal } from 'lucide-react';
+import { Camera, Combine, Flag as FlagIcon, Radio, SlidersHorizontal } from 'lucide-react';
 import BridgeGame, { type BridgeGameHandle } from '@/BridgeGame';
 import GameMenu from '@/GameMenu';
 import LadderIcon from '@/LadderIcon';
@@ -34,6 +34,8 @@ import ConsentBanner from '@/ConsentBanner';
 import { PrivacyPolicy, Terms } from '@/LegalDocs';
 import { onDailyReport, requestDaily } from '@/dailyBus';
 import { entryGame, entryRoute } from '@/routing/entry';
+import ContestView from '@/ContestView';
+import { readContestsOn } from '@/contests';
 import {
   gameFeature, FEED_NAME, GAME_NAME } from '@/games';
 import { useAddressBar, useNav } from '@/routing/useRouting';
@@ -269,6 +271,7 @@ function App() {
     (nav.page.kind === 'tournament' && !nav.page.slug) ||
     nav.page.kind === 'live' ||
     nav.page.kind === 'sessions' ||
+    nav.page.kind === 'contest' ||
     nav.page.kind === 'admin' ||
     nav.page.kind === 'join' ||
     nav.page.kind === 'scores'
@@ -314,6 +317,10 @@ function App() {
   // JoinSession; this refetches when the tab is focused, which is when somebody
   // has just been told it is starting.
   const [liveNow, setLiveNow] = useState(0);
+  // And whether a contest is taking entries or being voted on, for the same
+  // reason and on the same terms: it is a deadline, and the link has to be
+  // believed on the few days a year it is there.
+  const [contestsNow, setContestsNow] = useState(0);
   const [learnMode, setLearnMode] = useState(entryGame()?.view === 'learn');
   const [theme, setTheme] = useState<ThemeMode>(initial.theme);
   const [palette, setPalette] = useState<Palette>(initial.palette);
@@ -345,6 +352,7 @@ function App() {
       setCanSetUp(false);
       setCanAdmin(false);
       setLiveNow(0);
+      setContestsNow(0);
       return;
     }
     let alive = true;
@@ -356,6 +364,7 @@ function App() {
     });
     const count = () => readLiveSessions().then((live) => alive && setLiveNow(live.length));
     void count();
+    void readContestsOn().then((on) => alive && setContestsNow(on.length));
     window.addEventListener('focus', count);
     return () => {
       alive = false;
@@ -1187,6 +1196,12 @@ function App() {
               <LiveSession session={reportPage.session} host={reportPage.host} />
             )}
           {sessionsOn && reportPage?.kind === 'sessions' && <SessionEditor session={reportPage.session} />}
+          {/* Not gated on sessions being on: a contest is not a session, and
+              switching the quiz off in the middle of October should not take
+              the pumpkins down with it. */}
+          {reportPage?.kind === 'contest' && (
+            <ContestView contest={reportPage.contest} link={pageLink} />
+          )}
           {reportPage?.kind === 'admin' && <AdminSettings
               tab={reportPage.tab}
               tabLink={(tab) => pageLink({ kind: 'admin', tab })}
@@ -1592,6 +1607,19 @@ function App() {
               >
                 <Radio className="w-3.5 h-3.5" aria-hidden="true" />
                 {liveNow === 1 ? 'Join the session' : `Join a session (${liveNow})`}
+              </RouteLink>
+            )}
+            {/* A contest is not a session, so it is not gated on sessions
+                being on -- and it is here rather than only on the front page
+                because entering one means leaving to find a photo and coming
+                back from wherever you landed. */}
+            {contestsNow > 0 && (
+              <RouteLink
+                {...pageLink({ kind: 'contest', contest: null })}
+                className="inline-flex items-center gap-1.5 text-accent hover:brightness-110 transition"
+              >
+                <Camera className="w-3.5 h-3.5" aria-hidden="true" />
+                {contestsNow === 1 ? 'The contest' : `Contests (${contestsNow})`}
               </RouteLink>
             )}
             {canSetUp && sessionsOn && (

@@ -57,6 +57,7 @@ export const ADMIN_TABS = [
   'pins',
   'coverage',
   'tournaments',
+  'contests',
   'people',
 ] as const;
 export type AdminTab = (typeof ADMIN_TABS)[number];
@@ -115,6 +116,11 @@ export type Route =
   // round board is a different board -- kept, synced and recorded apart from
   // the daily -- and the address should say which one somebody is looking at.
   | { kind: 'tournament'; slug: Slug | null }
+  // A contest: the list of what is running, or one of them. Its own address
+  // rather than a panel, because entering one means picking a photo off a
+  // phone and coming back to it, and because a contest is the sort of thing
+  // somebody sends round in an email.
+  | { kind: 'contest'; contest: string | null }
   // A live session. Two addresses for the same room: the one everybody opens,
   // and the presenter's, which shows the answer and the controls. Separate
   // addresses rather than a mode on one page, because the presenter's screen
@@ -161,6 +167,8 @@ export function pathOf(route: Route): string {
       return '/reports';
     case 'tournament':
       return route.slug ? `/tournament/${route.slug}` : '/tournament';
+    case 'contest':
+      return route.contest ? `/contest/${route.contest}` : '/contest';
     case 'live':
       return route.host ? `/live/${route.session}/host` : `/live/${route.session}`;
     case 'sessions':
@@ -187,6 +195,7 @@ export const ADMIN_TITLE: Record<AdminTab, string> = {
   pins: 'Choosing a day',
   coverage: 'Coverage',
   tournaments: 'Tournaments',
+  contests: 'Contests',
   people: 'Who may do what',
 };
 
@@ -227,6 +236,8 @@ export function titleOf(route: Route): string {
       return `Open reports${suffix}`;
     case 'tournament':
       return route.slug ? `${SLUG_NAME[route.slug]} · Tournament${suffix}` : `Tournament${suffix}`;
+    case 'contest':
+      return `Contest${suffix}`;
     case 'live':
       // The presenter's title says so, because this address goes on a
       // projector and the tab is the last thing anyone checks before it does.
@@ -298,6 +309,10 @@ export function parsePath(pathname: string): Route | null {
       slug: second && ALL_SLUGS.includes(second as Slug) ? (second as Slug) : null,
     };
   }
+
+  // /contest and /contest/<id>. A bare /contest is the list, which is what an
+  // address somebody half-remembers should land on.
+  if (first === 'contest') return { kind: 'contest', contest: second || null };
 
   if (first === 'live') {
     // A bare /live is somebody guessing at the address for "the thing that is
