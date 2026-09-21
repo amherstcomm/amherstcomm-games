@@ -50,6 +50,10 @@ const EVERY_ROUTE: Route[] = [
   { kind: 'join' },
   { kind: 'join', code: 'K4TP' },
   { kind: 'scores', session: '5f7c2a10-3b4d-4e8f-9a12-6c0d1e2f3a4b' },
+  // A contest, bare and named. Bare is the list rather than nothing, which is
+  // where an address somebody half-remembers should land.
+  { kind: 'contest', contest: null },
+  { kind: 'contest', contest: '7a1c9e30-5b2d-4f81-a3c6-0d9e8f7a6b54' },
   ...PANELS.map((panel) => ({ kind: 'panel', panel }) as const),
   ...DOCS.map((doc) => ({ kind: 'legal', doc }) as const),
   ...STATS_TABS.map((tab) => ({ kind: 'stats', tab }) as const),

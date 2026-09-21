@@ -35,6 +35,11 @@ const ROUTES = [
   // the answer to "is text-sky-200 readable on the light theme" is measured
   // here or not at all.
   ['matching', '/live/5f7c2a10-3b4d-4e8f-9a12-6c0d1e2f3a4b'],
+  // A contest: a gallery of entries over a form, with the prize in the amber
+  // it shares with nothing else on a page swept here. It is also the newest
+  // page, which is the one most likely to have reached for a tier no theme
+  // moves.
+  ['contest', '/contest/c1'],
 ] as const;
 
 for (const palette of PALETTES) {
@@ -111,7 +116,48 @@ for (const palette of PALETTES) {
                     }
                   : url.includes('my_standing')
                     ? { ok: true, points: 0, scored: 0 }
-                    : { ok: true };
+                    : url.includes('contest_view')
+                      ? {
+                          ok: true,
+                          contest: {
+                            id: 'c1',
+                            name: 'Pumpkin carving',
+                            blurb: 'Carve one, photograph it, tell us about it.',
+                            entries_open_on: '2026-01-01',
+                            entries_close_on: '2027-12-30',
+                            votes_open_on: '2027-12-31',
+                            votes_close_on: '2027-12-31',
+                            who_enters: 'players',
+                            entrants_shown: true,
+                            voters_shown: false,
+                            picks: 3,
+                            prize: 'A day off',
+                            phase: 'entries',
+                            // so the form and its controls are on screen too:
+                            // a page swept without its inputs is the admin
+                            // route's mistake repeated
+                            may_enter: true,
+                          },
+                          entries: [
+                            {
+                              id: 'e1',
+                              title: 'Jack the Ripper',
+                              blurb: 'A butter knife at eleven at night.',
+                              image_path: null,
+                              entrant: 'Ada Lovelace',
+                              mine: false,
+                            },
+                            {
+                              id: 'e2',
+                              title: 'Gourdon',
+                              blurb: null,
+                              image_path: null,
+                              entrant: 'Bea Smith',
+                              mine: false,
+                            },
+                          ],
+                        }
+                      : { ok: true };
         return route.fulfill({
           status: 200,
           contentType: 'application/json',

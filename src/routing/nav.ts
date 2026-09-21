@@ -39,6 +39,7 @@ export type Page =
   | { kind: 'reportAction'; id: string; token: string; action: string }
   | { kind: 'reportQueue' }
   | { kind: 'tournament'; slug: Slug | null }
+  | { kind: 'contest'; contest: string | null }
   | { kind: 'live'; session: string; host: boolean }
   | { kind: 'sessions'; session?: string }
   | { kind: 'admin'; tab: AdminTab }
@@ -144,6 +145,8 @@ export function navOf(route: Route, last: Tabs = DEFAULT_TABS): { nav: Nav; game
     // it is.
     case 'tournament':
       return { nav: page({ kind: 'tournament', slug: route.slug }), game: null };
+    case 'contest':
+      return { nav: page({ kind: 'contest', contest: route.contest }), game: null };
     case 'admin':
       return {
         nav: { page: { kind: 'admin', tab: route.tab }, overlays: [], last: { ...last, admin: route.tab } },

@@ -49,7 +49,8 @@ Measured against what this app actually calls:
 | gateway (Envoy or Kong) | **yes** | `supabase-js` expects one URL fronting the rest |
 | `studio`, `meta` | optional | admin UI |
 | `supavisor` (pooler) | probably not | only if something connects by connection string — check whether Studio/meta route through it in your release |
-| `storage-api`, `imgproxy` | **no** | zero Storage use; imgproxy follows storage out |
+| `storage-api` | **yes, since contests** | contest entries carry a photograph; see below |
+| `imgproxy` | optional | only if you want storage-api to serve resized images — nothing here asks it to |
 | `functions` (edge-runtime) | **no** | zero Edge Functions — every server-side operation is a Postgres `security definer` function |
 
 **GoTrue is not optional here.** Not because of the `auth.users` foreign keys —
@@ -66,6 +67,41 @@ provider GoTrue federates to — rather than as a token handed in beside it. If
 that turns out not to be possible, the fallback is not "mint JWTs instead", it
 is touching those 15 call sites. Worth establishing before committing to a
 plan.
+
+### Storage, and the one bucket
+
+Contests are the only thing here that stores a file. An entry is a photograph
+with a few words under it, so `storage-api` has to be running -- this was a
+"no" in the table above until contests were built, and a deployment that
+trimmed it will show entries that never get a picture.
+
+Check it before an October that has a contest in it:
+
+```sh
+curl -s -o /dev/null -w '%{http_code}\n' "$SUPABASE_URL/storage/v1/version"
+```
+
+200 means it is there. A 404 through the gateway means the service is not
+routed; connection refused means it is not running.
+
+`schema.sql` creates the bucket and its policies, guarded: on a database with
+no `storage` schema -- which is what `supabase/tests/run.sh` runs against, a
+bare Postgres -- the block says so and skips, because what is under test there
+is the contest and not the object store. So applying the schema to a real
+Supabase is what creates the bucket, and applying it to one without
+`storage-api` silently gives you a site whose photographs have nowhere to go.
+
+The bucket is **private**, capped at 10MB an object, and takes JPEG, PNG,
+WebP and HEIC -- HEIC because that is what an iPhone photographs in without
+being asked. Private matters: these are pictures taken on people's own phones,
+and a public bucket is a URL that keeps working for anybody who is ever sent
+it. The page exchanges each path for a signed link that expires, in one round
+trip for the whole gallery.
+
+The policies say: anybody signed in may read the bucket, and may write only
+into a folder named for their own user id. So the whole company can see the
+entries -- which is the point of a contest -- and nobody can overwrite somebody
+else's pumpkin with their own.
 
 ### Don't carve up the compose file
 
