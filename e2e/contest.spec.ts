@@ -140,3 +140,81 @@ test('the list is the way in when the address has no contest on it', async ({ pa
   await expect(page).toHaveURL(/\/contest\/c1$/);
   await expect(page.getByRole('heading', { name: 'Pumpkin carving' })).toBeVisible();
 });
+
+test('photos are drawn from signed storage links', async ({ page }) => {
+  // An entry that has a photograph, which is the state every entry reaches
+  // once somebody has uploaded one. What is asserted is where the <img> gets
+  // its src: a signed link from storage, asked for in one round trip for the
+  // whole page. It used to be possible for the form to draw a `blob:` handle
+  // on the file in this tab instead -- a second source of truth that showed
+  // something whether or not the upload had worked.
+  // The signing call is a POST to the bucket; the signed links it hands back
+  // are GETs with the object path on the end. Matching both with one glob
+  // counted three image fetches as three signings.
+  let calls = 0;
+  await page.route('**/storage/v1/object/sign/contest-entries', async (route) => {
+    calls += 1;
+    const paths = (JSON.parse(route.request().postData() ?? '{}').paths ?? []) as string[];
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(
+        paths.map((path) => ({
+          path,
+          signedURL: `/object/sign/contest-entries/${path}?token=t`,
+          error: null,
+        }))
+      ),
+    });
+  });
+
+  // A real one-pixel PNG behind each signed link, so a visible <img> means an
+  // image that decoded rather than an element that exists.
+  const PNG = Buffer.from(
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
+    'base64'
+  );
+  await page.route('**/storage/v1/object/sign/contest-entries/**', (route) =>
+    route.fulfill({ status: 200, contentType: 'image/png', body: PNG })
+  );
+
+  await stub(page, CONTEST, [
+    { ...ENTRIES[0], image_path: 'me/one.jpg', mine: true },
+    { ...ENTRIES[1], image_path: 'them/two.jpg', mine: false },
+  ]);
+  await page.goto('/contest/c1');
+
+  // Both entries' photographs, signed together rather than one call each.
+  await expect(page.getByRole('img', { name: 'Jack the Ripper' })).toHaveAttribute(
+    'src',
+    /\/storage\/v1\/object\/sign\/contest-entries\/me\/one\.jpg/
+  );
+  await expect(page.getByRole('img', { name: 'Gourdon' })).toHaveAttribute(
+    'src',
+    /\/storage\/v1\/object\/sign\/contest-entries\/them\/two\.jpg/
+  );
+  // One round trip for the gallery, not one per entry: with thirty pumpkins
+  // on the page that difference is the page.
+  expect(calls).toBe(1);
+
+  // And the form shows the one that is theirs, from the same signed link --
+  // never from a local handle.
+  const own = page.getByRole('img', { name: 'Your entry' });
+  await expect(own).toBeVisible();
+  await expect(own).toHaveAttribute('src', /^https:\/\//);
+});
+
+test('an entry whose photo cannot be signed keeps its tile', async ({ page }) => {
+  // One missing photograph costs its own tile and nothing else. The gallery is
+  // the page, so a single broken path must not empty it.
+  await page.route('**/storage/v1/object/sign/contest-entries', (route) =>
+    route.fulfill({ status: 400, contentType: 'application/json', body: '{"error":"nope"}' })
+  );
+  await stub(page, CONTEST, [{ ...ENTRIES[0], image_path: 'me/gone.jpg', mine: false }]);
+  await page.goto('/contest/c1');
+
+  const tile = page.getByRole('listitem').filter({ hasText: 'Jack the Ripper' });
+  await expect(tile).toBeVisible();
+  await expect(tile.getByText('No photo yet')).toBeVisible();
+  await expect(page.getByRole('img', { name: 'Jack the Ripper' })).toHaveCount(0);
+});

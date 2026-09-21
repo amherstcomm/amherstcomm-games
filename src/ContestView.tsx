@@ -235,16 +235,20 @@ function EntryForm({
   const [title, setTitle] = useState(mine?.title ?? '');
   const [blurb, setBlurb] = useState(mine?.blurb ?? '');
   const [path, setPath] = useState<string | null>(mine?.image_path ?? null);
-  // What to draw while the uploaded photo is still only on this machine: the
-  // file itself, so the person sees what they picked without a round trip.
-  const [preview, setPreview] = useState<string | null>(null);
+  // The photo just uploaded, as a signed link -- not as the local file.
+  //
+  // The file is already in the bucket by the time there is anything to draw,
+  // so drawing it from the browser's copy was a second source of truth with a
+  // lifetime to manage: an object URL is a live handle, and it had to be
+  // revoked on every replacement and again on unmount or it pinned the file in
+  // memory for the life of the tab. Asking storage for a link costs one round
+  // trip and means the person sees exactly what everybody else will see --
+  // including whether the upload actually worked, which the local copy could
+  // never tell them.
+  const [shot, setShot] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [said, setSaid] = useState<string | null>(null);
   const file = useRef<HTMLInputElement>(null);
-
-  // The preview is an object URL, which is a live handle rather than a string:
-  // left alone it keeps the file in memory for the life of the tab.
-  useEffect(() => () => { if (preview) URL.revokeObjectURL(preview); }, [preview]);
 
   async function pick(f: File | undefined) {
     if (!f) return;
@@ -256,11 +260,12 @@ function EntryForm({
       setSaid(got.reason ?? 'that photo would not go up');
       return;
     }
-    setPreview((old) => {
-      if (old) URL.revokeObjectURL(old);
-      return URL.createObjectURL(f);
-    });
     setPath(got.path ?? null);
+    // Drawn back from the bucket. A link that does not come back leaves the
+    // tile empty rather than failing the upload -- the photo is stored either
+    // way, and the entry will show it on the next load.
+    const signed = got.path ? (await photoLinks([got.path]))[got.path] : undefined;
+    setShot(signed ?? null);
     setSaid('Photo ready — save the entry to keep it.');
   }
 
@@ -294,10 +299,11 @@ function EntryForm({
     setTitle('');
     setBlurb('');
     setPath(null);
+    setShot(null);
     await onSaved();
   }
 
-  const shown = drawable(preview ?? link);
+  const shown = drawable(shot ?? link);
 
   return (
     <section className="mt-6 rounded-xl border border-white/15 bg-white/5 p-4">
