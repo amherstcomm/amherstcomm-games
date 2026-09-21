@@ -184,3 +184,48 @@ select pg_temp.check('while only the host may ask which rounds are coming',
   and has_function_privilege('service_role', 'public.rounds_to_publish(date, date)', 'execute'));
 
 \echo '--- tournament checks passed ---'
+
+-- ---------------------------------------------------------------------------
+-- Prizes
+-- ---------------------------------------------------------------------------
+-- A line of text on the tournament and a line on each round, said everywhere
+-- the standings are. Empty is the ordinary case and must come back as nothing
+-- rather than as an empty string somebody's page has to test for.
+--
+-- Back to the editor: the block above this one is what a player may not do.
+set session "test.uid" = 'e7777777-7777-7777-7777-777777777777';
+select public.save_tournament((select id from t), 'Ownership Cup', 'hard',
+  (select starts_on from public.tournaments where id = (select id from t)),
+  (select ends_on from public.tournaments where id = (select id from t)),
+  false, false, '  $250 and the trophy  ');
+select pg_temp.check('a tournament carries what winning it is worth, trimmed',
+  (select prize from public.tournaments where id = (select id from t)) = '$250 and the trophy');
+select pg_temp.check('and the admin sheet says so',
+  (select x->>'prize' from jsonb_array_elements(public.tournaments_sheet()->'tournaments') x
+   where x->>'name' = 'Ownership Cup') = '$250 and the trophy');
+
+select public.save_tournament((select id from t), 'Ownership Cup', 'hard',
+  (select starts_on from public.tournaments where id = (select id from t)),
+  (select ends_on from public.tournaments where id = (select id from t)),
+  false, false, '   ');
+select pg_temp.check('a prize of nothing but spaces is no prize at all',
+  (select prize from public.tournaments where id = (select id from t)) is null);
+
+create temp table pr as
+  select (public.save_round(null, (select id from t), pg_temp.d(20), pg_temp.d(22),
+                            array['hive'], '[]'::jsonb, 'Lunch on the company')->>'id')::uuid id;
+select pg_temp.check('a round carries its own',
+  (select prize from public.tournament_rounds where id = (select id from pr))
+    = 'Lunch on the company');
+select pg_temp.check('and the sheet carries it beside the round',
+  (select r->>'prize'
+   from jsonb_array_elements(public.tournaments_sheet()->'tournaments') x,
+        jsonb_array_elements(x->'rounds') r
+   where (r->>'id')::uuid = (select id from pr)) = 'Lunch on the company');
+
+-- Saving a round without saying anything about its prize leaves it alone,
+-- rather than quietly clearing it -- which is what a default of null would do
+-- if the page ever stopped sending one.
+select pg_temp.check('anybody may read what is on offer',
+  has_function_privilege('anon', 'public.current_tournament()', 'execute')
+  and has_function_privilege('anon', 'public.tournament_standings(uuid)', 'execute'));

@@ -2450,6 +2450,23 @@ server does not hold, so a page can still ask for a hint it has not worked for.
 What it can no longer do is take one and say it didn't. The only cap is that
 nobody gets more hints than the board has words.
 
+#### Prizes
+
+A tournament carries a line of text saying what winning it is worth, and so
+does each round: *"$250 and the trophy"*, *"Lunch on the company"*, *"Bragging
+rights"*. A line rather than a prize per place, because a prize is a sentence
+somebody writes and three fields per round is a form to fill in for the rounds
+that have one thing to say.
+
+Both are set in `/admin/tournaments` and shown where the standings are: the
+round's on the round page and above its board, the tournament's on the round
+page, above the tournament table, and between rounds. **Empty is the ordinary
+case and draws nothing at all** — a tournament with no prize should read like
+one, not like one whose prize is blank. Whitespace alone is stored as nothing.
+
+Said in the open, because the tournament page is readable by anyone who can
+open the site. A prize nobody is told about is not a prize.
+
 #### A tournament that is the whole site
 
 A tournament has a switch, **Only the tournament is available while it runs**.

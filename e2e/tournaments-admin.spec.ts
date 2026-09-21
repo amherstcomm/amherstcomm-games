@@ -14,6 +14,7 @@ type Round = {
   ends_on: string;
   games: string[];
   trivia?: Trivia[];
+  prize?: string | null;
   started: boolean;
 };
 type Tournament = {
@@ -22,6 +23,7 @@ type Tournament = {
   difficulty: string;
   starts_on: string;
   ends_on: string;
+  prize?: string | null;
   rounds: Round[];
 };
 
@@ -51,6 +53,9 @@ async function portal(
         difficulty: args.p_difficulty,
         starts_on: args.p_starts,
         ends_on: args.p_ends,
+        // Kept, because the list draws it: a stub that drops what it was sent
+        // tests the page against a server that does not exist.
+        prize: args.p_prize ?? null,
         rounds: [],
       });
       return reply({ ok: true, id: `t${tournaments.length}` });
@@ -64,6 +69,7 @@ async function portal(
         starts_on: args.p_starts,
         ends_on: args.p_ends,
         games: args.p_games,
+        prize: args.p_prize ?? null,
         trivia: ((args.p_sessions ?? []) as { id: string; weight: number }[]).map((x) => ({
           session_id: x.id,
           title: sessions.find((v) => v.id === x.id)?.title ?? x.id,
@@ -295,4 +301,47 @@ test('a tournament can lock the site to itself, and say whether other sessions s
 
   await expect.poll(() => sent.length).toBe(1);
   expect(sent[0].args).toMatchObject({ p_locks_site: true, p_sessions_open: false });
+});
+
+// A prize is a sentence somebody writes, on the tournament and on each round.
+test('a tournament and a round each say what is on offer', async ({ page }) => {
+  const sent = await portal(page, []);
+  await page.getByRole('button', { name: 'New tournament' }).click();
+  await page.getByLabel('Tournament name').fill('Ownership Cup');
+  await page.getByLabel('Starts', { exact: true }).fill('2026-10-01');
+  await page.getByLabel('Ends', { exact: true }).fill('2026-10-31');
+  await page.getByLabel('Tournament prize').fill('$250 and the trophy');
+  await page.getByRole('button', { name: 'Save tournament' }).click();
+
+  await expect.poll(() => sent.length).toBe(1);
+  expect(sent[0].args).toMatchObject({ p_prize: '$250 and the trophy' });
+  await expect(page.locator('[data-tournament="Ownership Cup"]')).toContainText(
+    'Prize: $250 and the trophy'
+  );
+
+  await page.getByRole('button', { name: 'Add a round' }).click();
+  await page.getByLabel('Round starts').fill('2026-10-01');
+  await page.getByLabel('Round ends').fill('2026-10-07');
+  await page.getByRole('group', { name: 'Games in this round' }).getByRole('button').first().click();
+  await page.getByLabel('Prize for this round').fill('Lunch on the company');
+  await page.getByRole('button', { name: 'Save round' }).click();
+
+  await expect.poll(() => sent.length).toBe(2);
+  expect(sent[1].args).toMatchObject({ p_prize: 'Lunch on the company' });
+});
+
+// Nothing said is nothing shown: a tournament with no prize should read like
+// one, not like one whose prize is blank.
+test('and a tournament with no prize says nothing about one', async ({ page }) => {
+  await portal(page, [
+    {
+      id: 't1',
+      name: 'Quiet Cup',
+      difficulty: 'hard',
+      starts_on: '2026-10-01',
+      ends_on: '2026-10-24',
+      rounds: [],
+    },
+  ]);
+  await expect(page.locator('[data-tournament="Quiet Cup"]')).not.toContainText('Prize');
 });

@@ -46,6 +46,8 @@ export type RoundStandings = {
   boards: Partial<Record<BoardGame, StandingRow[]>>;
   /** the round's trivia, ranked and weighted */
   trivia: TriviaStandings[];
+  /** what winning the round was worth */
+  prize?: string | null;
 };
 
 export type TableRow = {
@@ -59,7 +61,7 @@ export type TableRow = {
 };
 
 export type TournamentStandings = {
-  tournament: { id: string; name: string; difficulty: Difficulty };
+  tournament: { id: string; name: string; difficulty: Difficulty; prize?: string | null };
   table: TableRow[];
   rounds: RoundStandings[];
 };

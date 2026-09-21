@@ -9904,6 +9904,30 @@ create table if not exists public.tournament_rounds (
 create index if not exists tournament_rounds_dates_idx
   on public.tournament_rounds (starts_on, ends_on);
 
+
+-- ---------------------------------------------------------------------------
+-- Prizes
+-- ---------------------------------------------------------------------------
+--
+-- What is actually on offer, said where the standings are. A line of text on a
+-- tournament and a line on each round, because a prize is a sentence somebody
+-- writes -- "lunch on the company", "$100 and the trophy", "bragging rights" --
+-- and any shape more structured than that is a form to fill in for the three
+-- rounds out of four that have one thing to say.
+--
+-- Empty is the ordinary case and draws nothing at all. A tournament with no
+-- prize should look like a tournament with no prize, not like one whose prize
+-- is blank.
+--
+-- Said in the open: the tournament page is readable by anyone who can open the
+-- site, and so is this. A prize nobody is told about is not a prize.
+
+alter table public.tournaments add column if not exists prize text
+  check (prize is null or char_length(prize) <= 200);
+alter table public.tournament_rounds add column if not exists prize text
+  check (prize is null or char_length(prize) <= 200);
+
+
 alter table public.tournaments enable row level security;
 alter table public.tournament_rounds enable row level security;
 revoke all on public.tournaments from anon, authenticated;
@@ -10356,7 +10380,8 @@ begin
 
   return jsonb_build_object(
     'ok', true,
-    'tournament', jsonb_build_object('id', t.id, 'name', t.name, 'difficulty', t.difficulty),
+    'tournament', jsonb_build_object('id', t.id, 'name', t.name, 'difficulty', t.difficulty,
+                                     'prize', t.prize),
     'table', tbl,
     'rounds', rounds);
 end;
@@ -10487,6 +10512,8 @@ revoke all on function public.round_trivia(uuid) from public, anon, authenticate
 -- defaulted parameter makes a second signature, and a caller still reaching the
 -- old one would silently drop every session off the round it was saving.
 drop function if exists public.save_round(uuid, uuid, date, date, text[]);
+-- ...and the six-argument one, now that a round can say what it is for.
+drop function if exists public.save_round(uuid, uuid, date, date, text[], jsonb);
 
 create or replace function public.save_round(
   p_id uuid,
@@ -10495,7 +10522,8 @@ create or replace function public.save_round(
   p_ends date,
   p_games text[],
   -- [{"id": "<session uuid>", "weight": 2}, ...]; absent is no trivia.
-  p_sessions jsonb default '[]'::jsonb
+  p_sessions jsonb default '[]'::jsonb,
+  p_prize text default null
 )
 returns jsonb
 language plpgsql
@@ -10588,11 +10616,13 @@ begin
       end if;
     end if;
     update public.tournament_rounds
-       set tournament_id = p_tournament, starts_on = p_starts, ends_on = p_ends, games = v_games
+       set tournament_id = p_tournament, starts_on = p_starts, ends_on = p_ends, games = v_games,
+           prize = nullif(btrim(coalesce(p_prize, '')), '')
      where id = v_id;
   else
-    insert into public.tournament_rounds (tournament_id, starts_on, ends_on, games)
-    values (p_tournament, p_starts, p_ends, v_games)
+    insert into public.tournament_rounds (tournament_id, starts_on, ends_on, games, prize)
+    values (p_tournament, p_starts, p_ends, v_games,
+            nullif(btrim(coalesce(p_prize, '')), ''))
     returning id into v_id;
   end if;
 
@@ -10622,8 +10652,8 @@ begin
 end;
 $fn$;
 
-revoke all on function public.save_round(uuid, uuid, date, date, text[], jsonb) from public, anon;
-grant execute on function public.save_round(uuid, uuid, date, date, text[], jsonb) to authenticated;
+revoke all on function public.save_round(uuid, uuid, date, date, text[], jsonb, text) from public, anon;
+grant execute on function public.save_round(uuid, uuid, date, date, text[], jsonb, text) to authenticated;
 
 -- Both sheets carry the round's trivia now.
 create or replace function public.tournaments_sheet()
@@ -10645,6 +10675,7 @@ as $fn$
                           'id', r.id, 'starts_on', r.starts_on, 'ends_on', r.ends_on,
                           'games', to_jsonb(r.games),
                           'trivia', public.round_trivia(r.id),
+                          'prize', r.prize,
                           'started', r.starts_on <= public.puzzle_day())
                         order by r.starts_on)
                  from public.tournament_rounds r where r.tournament_id = t.id), '[]'::jsonb))
@@ -10666,9 +10697,11 @@ as $fn$
   select jsonb_build_object(
            'tournament_id', t.id, 'tournament', t.name, 'difficulty', t.difficulty,
            'tournament_starts_on', t.starts_on, 'tournament_ends_on', t.ends_on,
+           'tournament_prize', t.prize,
            'round_id', r.id, 'starts_on', r.starts_on, 'ends_on', r.ends_on,
            'games', to_jsonb(r.games),
            'trivia', public.round_trivia(r.id),
+           'prize', r.prize,
            'number', (select count(*) from public.tournament_rounds q
                       where q.tournament_id = t.id and q.starts_on <= r.starts_on),
            'of', (select count(*) from public.tournament_rounds q where q.tournament_id = t.id))
@@ -10750,6 +10783,7 @@ begin
 
     rounds := rounds || jsonb_build_array(jsonb_build_object(
       'id', r.id, 'number', n, 'starts_on', r.starts_on, 'ends_on', r.ends_on,
+      'prize', r.prize,
       'boards', boards, 'trivia', trivia));
   end loop;
 
@@ -10782,7 +10816,8 @@ begin
 
   return jsonb_build_object(
     'ok', true,
-    'tournament', jsonb_build_object('id', t.id, 'name', t.name, 'difficulty', t.difficulty),
+    'tournament', jsonb_build_object('id', t.id, 'name', t.name, 'difficulty', t.difficulty,
+                                     'prize', t.prize),
     'table', tbl,
     'rounds', rounds);
 end;
@@ -11131,6 +11166,8 @@ alter table public.tournaments add column if not exists sessions_open boolean no
 -- defaulted parameter makes a second signature, and a caller still reaching
 -- the old one would save a tournament and quietly unlock it.
 drop function if exists public.save_tournament(uuid, text, text, date, date);
+-- ...and the seven-argument one it became, now that a prize goes with it.
+drop function if exists public.save_tournament(uuid, text, text, date, date, boolean, boolean);
 
 create or replace function public.save_tournament(
   p_id uuid,
@@ -11139,7 +11176,8 @@ create or replace function public.save_tournament(
   p_starts date,
   p_ends date,
   p_locks_site boolean default false,
-  p_sessions_open boolean default false
+  p_sessions_open boolean default false,
+  p_prize text default null
 )
 returns jsonb
 language plpgsql
@@ -11185,23 +11223,26 @@ begin
     update public.tournaments
        set name = v_name, difficulty = p_difficulty, starts_on = p_starts, ends_on = p_ends,
            locks_site = coalesce(p_locks_site, false),
-           sessions_open = coalesce(p_sessions_open, false)
+           sessions_open = coalesce(p_sessions_open, false),
+           prize = nullif(btrim(coalesce(p_prize, '')), '')
      where id = v_id;
     if not found then
       return jsonb_build_object('ok', false, 'reason', 'no such tournament');
     end if;
   else
-    insert into public.tournaments (name, difficulty, starts_on, ends_on, created_by, locks_site, sessions_open)
+    insert into public.tournaments (name, difficulty, starts_on, ends_on, created_by,
+                                    locks_site, sessions_open, prize)
     values (v_name, p_difficulty, p_starts, p_ends, (select auth.uid()),
-            coalesce(p_locks_site, false), coalesce(p_sessions_open, false))
+            coalesce(p_locks_site, false), coalesce(p_sessions_open, false),
+            nullif(btrim(coalesce(p_prize, '')), ''))
     returning id into v_id;
   end if;
   return jsonb_build_object('ok', true, 'id', v_id);
 end;
 $fn$;
 
-revoke all on function public.save_tournament(uuid, text, text, date, date, boolean, boolean) from public, anon;
-grant execute on function public.save_tournament(uuid, text, text, date, date, boolean, boolean) to authenticated;
+revoke all on function public.save_tournament(uuid, text, text, date, date, boolean, boolean, text) from public, anon;
+grant execute on function public.save_tournament(uuid, text, text, date, date, boolean, boolean, text) to authenticated;
 
 -- The sheet carries the switches.
 create or replace function public.tournaments_sheet()
@@ -11219,11 +11260,13 @@ as $fn$
                'id', t.id, 'name', t.name, 'difficulty', t.difficulty,
                'starts_on', t.starts_on, 'ends_on', t.ends_on,
                'locks_site', t.locks_site, 'sessions_open', t.sessions_open,
+               'prize', t.prize,
                'rounds', coalesce((
                  select jsonb_agg(jsonb_build_object(
                           'id', r.id, 'starts_on', r.starts_on, 'ends_on', r.ends_on,
                           'games', to_jsonb(r.games),
                           'trivia', public.round_trivia(r.id),
+                          'prize', r.prize,
                           'started', r.starts_on <= public.puzzle_day())
                         order by r.starts_on)
                  from public.tournament_rounds r where r.tournament_id = t.id), '[]'::jsonb))
@@ -11248,7 +11291,7 @@ as $fn$
   select jsonb_build_object(
            'id', t.id, 'name', t.name, 'difficulty', t.difficulty,
            'starts_on', t.starts_on, 'ends_on', t.ends_on,
-           'locks_site', t.locks_site,
+           'locks_site', t.locks_site, 'prize', t.prize,
            'next_round_starts_on', (
              select min(r.starts_on) from public.tournament_rounds r
              where r.tournament_id = t.id and r.starts_on > public.puzzle_day()))
