@@ -28,11 +28,13 @@ const ROUND = {
   ],
   number: 2,
   of: 3,
+  prize: 'Lunch on the company',
+  tournament_prize: '$250 and the trophy',
 };
 
 const STANDINGS = {
   ok: true,
-  tournament: { id: 't1', name: 'Ownership Cup', difficulty: 'hard' },
+  tournament: { id: 't1', name: 'Ownership Cup', difficulty: 'hard', prize: '$250 and the trophy' },
   table: [
     { name: 'Ada', points: 19, wins: 1, placed: 2 },
     { name: 'Cy', points: 17, wins: 0, placed: 2 },
@@ -52,6 +54,7 @@ const STANDINGS = {
       number: 2,
       starts_on: START,
       ends_on: plus(START, 6),
+      prize: 'Lunch on the company',
       boards: {
         weave: [
           { name: 'Ada', value: 1, detail: 95000, hints: 0 },
@@ -161,4 +164,46 @@ test('the table says placement points can be multiplied', async ({ page }) => {
   await expect(page.getByRole('region', { name: 'Tournament table' })).toContainText(
     'times what that round said the game was worth'
   );
+});
+
+// ---------------------------------------------------------------------------
+// Prizes
+// ---------------------------------------------------------------------------
+// A prize nobody is told about is not a prize, so it is said where the
+// standings are rather than only in the admin page that set it.
+test('the round page says what this round and the tournament are worth', async ({ page }) => {
+  await tournament(page);
+  await page.goto('/tournament');
+  const round = page.getByRole('region', { name: 'This round' });
+  await expect(round).toContainText('This round: Lunch on the company');
+  await expect(round).toContainText('Overall prize: $250 and the trophy');
+});
+
+test('and the tournament table says what winning it is worth', async ({ page }) => {
+  await tournament(page);
+  await page.goto('/tournament');
+  await expect(page.getByRole('region', { name: 'Tournament table' })).toContainText(
+    'Overall prize: $250 and the trophy'
+  );
+});
+
+// Nothing said is nothing shown.
+test('a tournament with no prize says nothing about one', async ({ page }) => {
+  await page.route('**/rest/v1/rpc/**', (route) => {
+    const fn = route.request().url().match(/\/rpc\/(\w+)/)?.[1] ?? '';
+    const reply = (body: unknown) =>
+      route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });
+    if (fn === 'current_round') return reply({ ...ROUND, prize: null, tournament_prize: null });
+    if (fn === 'tournament_standings') {
+      return reply({
+        ...STANDINGS,
+        tournament: { id: 't1', name: 'Ownership Cup', difficulty: 'hard', prize: null },
+        rounds: STANDINGS.rounds.map((r) => ({ ...r, prize: null })),
+      });
+    }
+    return route.fallback();
+  });
+  await page.goto('/tournament');
+  await expect(page.getByRole('heading', { name: /Ownership Cup/ })).toBeVisible();
+  await expect(page.getByText(/prize/i)).toHaveCount(0);
 });

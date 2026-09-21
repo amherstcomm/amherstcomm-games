@@ -32,6 +32,8 @@ export type Round = {
   games: string[];
   /** the sessions counting in this round */
   trivia: RoundTrivia[];
+  /** what is on offer for winning it, in whatever words the admin used */
+  prize?: string | null;
   /** its first puzzle day has come: only the end date may change now */
   started: boolean;
 };
@@ -46,6 +48,8 @@ export type Tournament = {
   locks_site: boolean;
   /** while it locks the site, sessions outside its rounds stay joinable */
   sessions_open: boolean;
+  /** what is on offer overall */
+  prize?: string | null;
   rounds: Round[];
 };
 
@@ -84,6 +88,7 @@ export async function saveTournament(t: {
   until: string;
   locksSite: boolean;
   sessionsOpen: boolean;
+  prize: string;
 }): Promise<{ ok: boolean; reason?: string; id?: string }> {
   if (!supabase) return fail('not connected');
   const { data, error } = await supabase.rpc('save_tournament', {
@@ -94,6 +99,7 @@ export async function saveTournament(t: {
     p_ends: t.until || null,
     p_locks_site: t.locksSite,
     p_sessions_open: t.locksSite && t.sessionsOpen,
+    p_prize: t.prize.trim() || null,
   });
   if (error) return fail(error.message);
   return (data as { ok: boolean; reason?: string; id?: string }) ?? fail('no answer');
@@ -114,6 +120,8 @@ export async function saveRound(r: {
   games: string[];
   /** the sessions counting in this round, with what each is worth */
   sessions?: { id: string; weight: number }[];
+  /** what is on offer for winning the round */
+  prize?: string;
 }): Promise<{ ok: boolean; reason?: string; id?: string }> {
   if (!supabase) return fail('not connected');
   const { data, error } = await supabase.rpc('save_round', {
@@ -123,6 +131,7 @@ export async function saveRound(r: {
     p_ends: r.until || null,
     p_games: r.games,
     p_sessions: r.sessions ?? [],
+    p_prize: (r.prize ?? '').trim() || null,
   });
   if (error) return fail(error.message);
   return (data as { ok: boolean; reason?: string; id?: string }) ?? fail('no answer');

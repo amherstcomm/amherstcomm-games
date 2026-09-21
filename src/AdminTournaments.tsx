@@ -60,6 +60,8 @@ type TournamentForm = {
   locksSite: boolean;
   /** while locked, sessions outside its rounds stay joinable */
   sessionsOpen: boolean;
+  /** what winning it is worth, in whatever words suit */
+  prize: string;
 };
 type RoundForm = {
   id: string | null;
@@ -69,6 +71,8 @@ type RoundForm = {
   games: string[];
   /** the sessions this round counts, and what each is worth */
   sessions: { id: string; weight: number }[];
+  /** what winning the round is worth */
+  prize: string;
   /** a round being played: only its end date may change */
   started: boolean;
   /** a round that is over: its trivia may still be attached, nothing else */
@@ -212,6 +216,7 @@ export default function AdminTournaments() {
                     <p className="text-xs text-slate-400">
                       {DIFFICULTY_LABEL[t.difficulty]} · {span(t.starts_on, t.ends_on)}
                     </p>
+                    {t.prize && <p className="text-xs text-accent">Prize: {t.prize}</p>}
                     {t.locks_site && (
                       <p className="text-xs text-accent">
                         The whole site while it runs
@@ -231,6 +236,7 @@ export default function AdminTournaments() {
                           until: t.ends_on,
                           locksSite: t.locks_site ?? false,
                           sessionsOpen: t.sessions_open ?? false,
+                          prize: t.prize ?? '',
                         })
                       }
                     >
@@ -258,6 +264,9 @@ export default function AdminTournaments() {
                           <p className="text-slate-400">
                             {r.games.map(roundGameName).join(', ') || 'No games'}
                           </p>
+                          {r.prize && (
+                            <p className="text-accent">Prize: {r.prize}</p>
+                          )}
                           {(r.trivia ?? []).length > 0 && (
                             <p className="text-slate-400">
                               Trivia:{' '}
@@ -285,6 +294,7 @@ export default function AdminTournaments() {
                                   id: v.session_id,
                                   weight: v.weight,
                                 })),
+                                prize: r.prize ?? '',
                                 started: r.started,
                                 finished: state === 'finished',
                               })
@@ -374,6 +384,19 @@ export default function AdminTournaments() {
                         </div>
                       </fieldset>
                     )}
+                    <label className="block">
+                      <span className="text-xs text-slate-400">
+                        Prize for this round — left empty, nothing is said
+                      </span>
+                      <input
+                        className={FIELD + ' mt-1'}
+                        aria-label="Prize for this round"
+                        value={rForm.prize}
+                        maxLength={200}
+                        placeholder="Lunch on the company"
+                        onChange={(e) => setRForm({ ...rForm, prize: e.target.value })}
+                      />
+                    </label>
                     <fieldset>
                       <legend className="text-xs text-slate-400 mb-1">
                         Trivia in this round
@@ -466,6 +489,7 @@ export default function AdminTournaments() {
                         until: '',
                         games: [],
                         sessions: [],
+                        prize: '',
                         started: false,
                         finished: false,
                       })
@@ -490,6 +514,7 @@ export default function AdminTournaments() {
                   until: '',
                   locksSite: false,
                   sessionsOpen: false,
+                  prize: '',
                 })
               }
             >
@@ -547,6 +572,21 @@ export default function AdminTournaments() {
                   />
                 </label>
               </div>
+              <label className="block">
+                <span className="text-sm font-semibold text-slate-200">Prize</span>
+                <span className="block text-xs text-slate-400 mt-0.5 mb-1">
+                  What winning the whole thing is worth. Shown on the tournament page
+                  and above the standings; left empty, nothing is said.
+                </span>
+                <input
+                  className={FIELD}
+                  aria-label="Tournament prize"
+                  value={tForm.prize}
+                  maxLength={200}
+                  placeholder="$250 and the trophy"
+                  onChange={(e) => setTForm({ ...tForm, prize: e.target.value })}
+                />
+              </label>
               <label className="flex items-start gap-2 text-sm text-slate-200">
                 <input
                   type="checkbox"

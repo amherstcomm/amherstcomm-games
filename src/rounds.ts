@@ -21,6 +21,10 @@ export type CurrentRound = {
   games: string[];
   /** the sessions counting in this round, live and open alike */
   trivia: RoundTrivia[];
+  /** what winning the round is worth, in words, or nothing */
+  prize?: string | null;
+  /** and what winning the whole tournament is worth */
+  tournament_prize?: string | null;
   /** this round's place in its tournament, counted from 1 */
   number: number;
   of: number;
@@ -43,6 +47,8 @@ export type CurrentTournament = {
   ends_on: string;
   /** it is the only thing on offer until it ends */
   locks_site: boolean;
+  /** what winning it is worth, in words, or nothing */
+  prize?: string | null;
   /** null when no round is left to start */
   next_round_starts_on: string | null;
 };

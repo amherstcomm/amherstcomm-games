@@ -5,7 +5,7 @@
 // and the first finish counts. This page is the way in, and says plainly when
 // nothing is running, which is most of the year.
 import { useEffect, useState } from 'react';
-import { Trophy, MessagesSquare } from 'lucide-react';
+import { Trophy, MessagesSquare, Gift } from 'lucide-react';
 import RouteLink from '@/RouteLink';
 import { BOARD_LABELS, type BoardGame } from '@/leaderboard';
 import {
@@ -29,6 +29,22 @@ function modeOfFeed(feed: string): Mode | null {
 
 const span = (from: string, until: string) =>
   from === until ? `on ${from}` : `${from} to ${until}`;
+
+/** What is on offer, where there is anything. Nothing at all when there is
+ *  not: a tournament with no prize should read like one, not like one whose
+ *  prize is blank. */
+function Prize({ what, for: whose }: { what?: string | null; for: string }) {
+  if (!what) return null;
+  return (
+    <p className="mt-2 inline-flex items-start gap-1.5 rounded-lg border border-accent/40 bg-accent/10 px-3 py-2 text-sm text-white">
+      <Gift className="w-4 h-4 text-accent shrink-0 mt-0.5" aria-hidden="true" />
+      <span>
+        <span className="text-slate-300">{whose}: </span>
+        {what}
+      </span>
+    </p>
+  );
+}
 
 /** One card of standings. The trivia's card is shaped like a game's on purpose:
  *  a round's trivia is one more thing you placed in, and reading it as a
@@ -144,6 +160,7 @@ function Standings({ tournamentId, currentRound }: { tournamentId: string; curre
     <div className="mt-8 space-y-6">
       <section aria-label="Tournament table">
         <h3 className="text-base font-bold text-white">Tournament table</h3>
+        <Prize what={standings.tournament.prize} for="Overall prize" />
         <p className="text-xs text-slate-400 mb-2">
           Points for placing in each game of each round: 10 for first down to 1
           for tenth, times what that round said the game was worth. Level on
@@ -170,6 +187,7 @@ function Standings({ tournamentId, currentRound }: { tournamentId: string; curre
       {current && (
         <section aria-label="This round's standings">
           <h3 className="text-base font-bold text-white mb-2">This round</h3>
+          <Prize what={current.prize} for="This round" />
           <RoundBoards round={current} />
         </section>
       )}
@@ -180,6 +198,7 @@ function Standings({ tournamentId, currentRound }: { tournamentId: string; curre
             Round {r.number} · {span(r.starts_on, r.ends_on)}
           </summary>
           <div className="mt-3">
+            <Prize what={r.prize} for="Prize" />
             <RoundBoards round={r} />
           </div>
         </details>
@@ -232,6 +251,7 @@ export default function TournamentView({
             Until {tournament.ends_on}, the tournament is the only thing on the site.
           </p>
         )}
+        <Prize what={tournament.prize} for="Overall prize" />
         <Standings tournamentId={tournament.id} currentRound="" />
       </section>
     );
@@ -265,6 +285,8 @@ export default function TournamentView({
           Until {round.tournament_ends_on}, the tournament is the only thing on the site.
         </p>
       )}
+      <Prize what={round.prize} for="This round" />
+      <Prize what={round.tournament_prize} for="Overall prize" />
       <p className="mt-2 text-sm text-slate-400">
         Each game has one board for the whole round. You get one attempt at it,
         and your first finish is the one that counts — so take your time
