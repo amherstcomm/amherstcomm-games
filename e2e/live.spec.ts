@@ -1236,6 +1236,24 @@ test('the presenter’s reveal draws the right answer as lines', async ({ page }
   });
   const lines = page.locator('[data-match-lines] line');
   await expect(lines).toHaveCount(2);
-  // Every one of them is the answer, so every one of them is right.
-  await expect(page.locator('[data-match-lines] line.stroke-emerald-400')).toHaveCount(2);
+
+  // In the pairs' own colours, not all one green. Marking every line correct
+  // paints a ten-pair answer in one colour, which is the tangle the colours
+  // were added to end -- and an answer display is for tracing what goes with
+  // what, not for marking an attempt that cannot be wrong.
+  const classes = await lines.evaluateAll((els) => els.map((el) => el.getAttribute('class') ?? ''));
+  expect(new Set(classes).size).toBe(2);
+  await expect(page.locator('[data-match-lines] line.stroke-emerald-400')).toHaveCount(0);
+});
+
+// A player's own reveal is the other case, and keeps its marking.
+test('while a player’s own reveal is still marked right and wrong', async ({ page }) => {
+  await matching(page, {
+    state: 'revealed',
+    mine: { '1998': 'Fiber launch', '2011': 'Fiber launch' },
+    answer: { pairs: { '1998': 'ESOP formed', '2011': 'Fiber launch' } },
+  });
+  await expect(page.locator('[data-match-lines] line.stroke-emerald-400')).toHaveCount(1);
+  await expect(page.locator('[data-match-lines] line.stroke-rose-400')).toHaveCount(1);
+  await expect(page.getByRole('button', { name: /1998.*should be ESOP formed/s })).toBeVisible();
 });
