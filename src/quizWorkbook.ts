@@ -17,6 +17,12 @@ export type QuizItem = {
   prompt: string;
   payload: Record<string, unknown>;
   answer: Record<string, unknown> | null;
+  /** what the question pays; one unless the sheet says otherwise */
+  points: number;
+  /** take the points off for a wrong answer, and for no answer at all. The
+   *  first is ignored by the server on a question marked in parts. */
+  penaltyWrong: boolean;
+  penaltySkip: boolean;
   /** for the report and the preview, not for the server */
   ref: string;
 };
@@ -43,7 +49,23 @@ const KINDS: Record<string, string> = {
 /** Which kinds want a tab of their own, and what that tab holds. */
 const NEEDS_TAB = new Set(['choice', 'match', 'survey', 'rank']);
 
-const HEADINGS = ['ref', 'tab', 'kind', 'question', 'prompt', 'seconds', 'answer'];
+const HEADINGS = [
+  'ref',
+  'tab',
+  'kind',
+  'question',
+  'prompt',
+  'seconds',
+  'answer',
+  'points',
+  'wrong',
+  'skipped',
+];
+
+/** What a spreadsheet puts in a yes/no column. The same words the option
+ *  sheets take, read by the same rule. */
+const YES = new Set(['yes', 'y', 'true', 't', '1', 'x', '✓', '✔']);
+const saysYes = (cell: string) => YES.has(cell.trim().toLowerCase());
 
 /** A column index by any of its names, or -1. */
 function columnFor(head: string[], ...names: string[]): number {
@@ -76,6 +98,9 @@ export function readQuiz(sheets: Sheets): ReadQuiz {
     prompt: headed ? columnFor(head, 'question', 'prompt') : 2,
     seconds: headed ? columnFor(head, 'seconds') : 3,
     answer: headed ? columnFor(head, 'answer') : 4,
+    points: headed ? columnFor(head, 'points') : 5,
+    wrong: headed ? columnFor(head, 'wrong', 'deduct wrong', 'minus wrong') : 6,
+    skipped: headed ? columnFor(head, 'skipped', 'deduct skipped', 'minus skipped') : 7,
   };
   // Without headings the columns are the template's own order, which is the
   // only assumption available and is said in the template's heading row.
@@ -109,6 +134,20 @@ export function readQuiz(sheets: Sheets): ReadQuiz {
     const timed = Number.isFinite(seconds) && seconds > 0 ? { seconds } : {};
     const answerSaid = cell(row, at.answer).trim();
 
+    // A question with no Points column, or a blank one, is worth one -- which
+    // is what every question was before the column existed.
+    const said = cell(row, at.points).trim();
+    const worth = said === '' ? 1 : Number(said.replace(/[, ]/g, ''));
+    if (!Number.isFinite(worth) || worth <= 0 || worth > 100) {
+      problems.push({ line, reason: `is worth "${said}", which is not points between 0 and 100` });
+      return;
+    }
+    const scoring = {
+      points: worth,
+      penaltyWrong: saysYes(cell(row, at.wrong)),
+      penaltySkip: saysYes(cell(row, at.skipped)),
+    };
+
     if (!NEEDS_TAB.has(kind)) {
       if (kind === 'number') {
         const value = Number(answerSaid.replace(/[, ]/g, ''));
@@ -116,10 +155,10 @@ export function readQuiz(sheets: Sheets): ReadQuiz {
           problems.push({ line, reason: 'is a closest guess with no number in its answer column' });
           return;
         }
-        items.push({ ref: ref || prompt, kind, prompt, payload: { ...timed }, answer: { value } });
+        items.push({ ref: ref || prompt, kind, prompt, payload: { ...timed }, answer: { value }, ...scoring });
         return;
       }
-      items.push({ ref: ref || prompt, kind, prompt, payload: { ...timed }, answer: null });
+      items.push({ ref: ref || prompt, kind, prompt, payload: { ...timed }, answer: null, ...scoring });
       return;
     }
 
@@ -152,6 +191,7 @@ export function readQuiz(sheets: Sheets): ReadQuiz {
         prompt,
         payload: { left: value.left, right: value.right, ...timed },
         answer: { pairs: value.pairs },
+        ...scoring,
       });
       return;
     }
@@ -173,6 +213,7 @@ export function readQuiz(sheets: Sheets): ReadQuiz {
         prompt,
         payload: { options: value.options, multi: value.correct.length > 1, ...timed },
         answer: { correct: value.correct },
+        ...scoring,
       });
       return;
     }
@@ -190,6 +231,7 @@ export function readQuiz(sheets: Sheets): ReadQuiz {
       payload: { options: value, ...timed },
       // A ranking's answer is the order they were listed in; a survey has none.
       answer: kind === 'rank' ? { order: value } : null,
+      ...scoring,
     });
   });
 
@@ -226,13 +268,13 @@ export const QUIZ_TEMPLATE: { file: string; sheets: Sheets } = {
   file: 'quiz-template.xlsx',
   sheets: {
     Questions: [
-      ['Ref', 'Kind', 'Question', 'Seconds', 'Answer'],
-      ['Q1', 'Multiple choice', 'Who owns this company?', '20', ''],
-      ['Q2', 'Matching', 'Match the year to what happened', '45', ''],
-      ['Q3', 'Ranking', 'Put these in the order they happened', '30', ''],
-      ['Q4', 'Survey', 'Which of these matters most to you?', '15', ''],
-      ['Q5', 'Closest guess', 'How many miles of fiber do we run?', '20', '1350'],
-      ['Q6', 'Open question', 'What should we do more of next year?', '', ''],
+      ['Ref', 'Kind', 'Question', 'Seconds', 'Answer', 'Points', 'Wrong', 'Skipped'],
+      ['Q1', 'Multiple choice', 'Who owns this company?', '20', '', '2', '', ''],
+      ['Q2', 'Matching', 'Match the year to what happened', '45', '', '5', '', ''],
+      ['Q3', 'Ranking', 'Put these in the order they happened', '30', '', '3', '', ''],
+      ['Q4', 'Survey', 'Which of these matters most to you?', '15', '', '1', '', ''],
+      ['Q5', 'Closest guess', 'How many miles of fiber do we run?', '20', '1350', '2', 'yes', ''],
+      ['Q6', 'Open question', 'What should we do more of next year?', '', '', '1', '', ''],
     ],
     Q1: [
       ['Option', 'Correct'],

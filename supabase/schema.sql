@@ -5788,13 +5788,51 @@ $fn$;
 revoke all on function public.draw_word(uuid, int) from public, anon, authenticated;
 
 
+-- ---------------------------------------------------------------------------
+-- What a question is worth, and what getting it wrong costs
+-- ---------------------------------------------------------------------------
+--
+-- Every question was worth one, and a wrong answer cost nothing. A ten-pair
+-- matching question and a two-option true-or-false paid the same, which is not
+-- what either of them is worth to the person who set them.
+--
+-- So: points per question, and two switches per question -- take the points off
+-- for a wrong answer, take them off for no answer at all. Both off by default,
+-- because a quiz that deducts without being asked to is a quiz that surprises a
+-- room.
+--
+-- **Deductions never apply to a part-marked question.** Matching, ranking, and
+-- a multiple choice with more than one right answer are scored in fractions:
+-- four pairs of six is two thirds of the points. "Wrong" is not a state those
+-- questions have -- everything between nothing and everything is a score -- and
+-- deducting on anything short of perfect would cost a nine-of-ten answer the
+-- same as a blank one. They keep their partial credit and take no deduction.
+-- Where an answer is plainly right or wrong -- one correct option, a closest
+-- guess, a word game -- the switch bites.
+--
+-- No answer at all is a different thing, and that switch applies to every kind:
+-- not playing is not a partial answer.
+
+alter table public.items add column if not exists points numeric not null default 1
+  check (points > 0 and points <= 100);
+alter table public.items add column if not exists penalty_wrong boolean not null default false;
+alter table public.items add column if not exists penalty_skip boolean not null default false;
+
+
+-- The five-argument form goes, so nothing can save a question through it and
+-- quietly reset what that question was worth.
+drop function if exists public.save_item(uuid, uuid, text, text, jsonb, jsonb);
+
 create or replace function public.save_item(
   p_session uuid,
   p_item uuid,
   p_kind text,
   p_prompt text,
   p_payload jsonb default '{}'::jsonb,
-  p_answer jsonb default null
+  p_answer jsonb default null,
+  p_points numeric default 1,
+  p_penalty_wrong boolean default false,
+  p_penalty_skip boolean default false
 )
 returns jsonb
 language plpgsql
@@ -5816,6 +5854,11 @@ begin
   end if;
   if coalesce(btrim(p_prompt), '') = '' then
     return jsonb_build_object('ok', false, 'reason', 'a question needs to say something');
+  end if;
+
+  if coalesce(p_points, 1) <= 0 or coalesce(p_points, 1) > 100 then
+    return jsonb_build_object('ok', false, 'reason',
+      'a question is worth more than nothing and at most a hundred points');
   end if;
 
   body := coalesce(p_payload, '{}'::jsonb);
@@ -5869,15 +5912,22 @@ begin
     update public.items
       set kind = p_kind,
           prompt = left(btrim(p_prompt), 500),
-          payload = body
+          payload = body,
+          points = coalesce(p_points, 1),
+          penalty_wrong = coalesce(p_penalty_wrong, false),
+          penalty_skip = coalesce(p_penalty_skip, false)
     where id = p_item;
     target := p_item;
   else
-    insert into public.items (session_id, position, kind, prompt, payload)
+    insert into public.items (session_id, position, kind, prompt, payload,
+                              points, penalty_wrong, penalty_skip)
     values (p_session,
             coalesce((select max(i.position) + 1 from public.items i
                       where i.session_id = p_session), 1),
-            p_kind, left(btrim(p_prompt), 500), body)
+            p_kind, left(btrim(p_prompt), 500), body,
+            coalesce(p_points, 1),
+            coalesce(p_penalty_wrong, false),
+            coalesce(p_penalty_skip, false))
     returning id into target;
   end if;
 
@@ -5892,8 +5942,8 @@ begin
 end;
 $fn$;
 
-revoke all on function public.save_item(uuid, uuid, text, text, jsonb, jsonb) from public, anon;
-grant execute on function public.save_item(uuid, uuid, text, text, jsonb, jsonb) to authenticated;
+revoke all on function public.save_item(uuid, uuid, text, text, jsonb, jsonb, numeric, boolean, boolean) from public, anon;
+grant execute on function public.save_item(uuid, uuid, text, text, jsonb, jsonb, numeric, boolean, boolean) to authenticated;
 
 -- ---------------------------------------------------------------------------
 -- The whole scoreboard
@@ -11375,3 +11425,202 @@ $fn$;
 
 revoke all on function public.my_round_hints(text) from public, anon;
 grant execute on function public.my_round_hints(text) to authenticated;
+
+-- Whether this question is scored in fractions, which is what decides whether a
+-- wrong-answer deduction can apply to it at all.
+create or replace function public.part_marked(p_item uuid)
+returns boolean
+language sql
+stable
+set search_path = ''
+as $fn$
+  select case i.kind
+    when 'match' then true
+    when 'rank' then true
+    -- One right option is right or wrong; several is a score out of several.
+    when 'choice' then coalesce(jsonb_array_length(a.answer -> 'correct'), 1) > 1
+    else false
+  end
+  from public.items i
+  left join public.item_answers a on a.item_id = i.id
+  where i.id = p_item
+$fn$;
+
+revoke all on function public.part_marked(uuid) from public, anon, authenticated;
+
+/*
+ * What each player scored on one question, in the question's own points.
+ *
+ * The fraction each kind earns is unchanged -- see the note above answer_score
+ * -- and is multiplied by what the question is worth. Then the two deductions:
+ *
+ *   wrong    nothing earned, on a question that is not part-marked -> -points
+ *   skipped  no answer at all, on any kind                         -> -points
+ *
+ * Who counts as having skipped: anybody who answered something else in the same
+ * session. There is no register of who was in the room, and the nearest honest
+ * thing is "played this session and not this question". Somebody who never
+ * answered anything at all is not in the session's scores, here or anywhere.
+ */
+create or replace function public.item_points(p_item uuid)
+returns table (user_id uuid, points numeric, seconds numeric)
+language sql
+stable
+set search_path = ''
+as $fn$
+  with it as (
+    select i.id, i.kind, i.session_id, i.opened_at, i.points as worth,
+           i.penalty_wrong, i.penalty_skip, a.answer
+    from public.items i
+    left join public.item_answers a on a.item_id = i.id
+    where i.id = p_item
+  ),
+  said as (
+    select r.user_id,
+           r.value,
+           public.answer_seconds(public.started_at(p_item, r.user_id), r.submitted_at) as seconds
+    from public.responses r
+    where r.item_id = p_item
+      and public.answer_counts(r.user_id, p_item)
+  ),
+  gaps as (
+    select s.user_id,
+           abs(public.as_number(s.value)
+               - public.as_number((select answer -> 'value' from it))) as gap
+    from said s
+    where (select kind from it) = 'number'
+  ),
+  earned as (
+    select
+      s.user_id,
+      case (select kind from it)
+        when 'choice' then public.answer_score((select answer from it), s.value)
+        when 'match'  then public.match_score((select answer from it), s.value)
+        when 'rank'   then public.rank_score((select answer from it), s.value)
+        when 'game' then
+          case when coalesce((s.value ->> 'solved')::boolean, false) then 1 else 0 end
+        when 'number' then (
+          select case
+            when g.gap is not null and g.gap = (select min(gap) from gaps) then 1
+            else 0
+          end
+          from gaps g where g.user_id = s.user_id
+        )
+        else 0
+      end as share,
+      s.seconds
+    from said s
+  ),
+  -- Everybody who played this session and not this question.
+  skipped as (
+    select distinct r.user_id
+    from public.responses r
+    join public.items i on i.id = r.item_id
+    where i.session_id = (select session_id from it)
+      and r.user_id not in (select user_id from said)
+      and public.answer_counts(r.user_id, p_item)
+  )
+  select e.user_id,
+         case
+           when e.share > 0 then e.share * (select worth from it)
+           when (select penalty_wrong from it) and not public.part_marked(p_item)
+             then -(select worth from it)
+           else 0
+         end as points,
+         e.seconds
+  from earned e
+  union all
+  select k.user_id, -(select worth from it), null::numeric
+  from skipped k
+  where (select penalty_skip from it)
+$fn$;
+
+revoke all on function public.item_points(uuid) from public, anon, authenticated;
+
+-- Full marks is the question's own points now, not 1. And when nobody had them,
+-- the best partial answer is worth saying: "nobody got that one" over a ten-pair
+-- question that somebody got eight of is a lie by omission.
+create or replace function public.item_winner(p_item uuid)
+returns jsonb
+language sql
+stable
+security definer
+set search_path = ''
+as $fn$
+  select case
+    when not public.hosts_session((select session_id from public.items where id = p_item))
+      then jsonb_build_object('ok', false, 'reason', 'not allowed')
+    when not exists (select 1 from public.items where id = p_item and state = 'revealed')
+      then jsonb_build_object('ok', false, 'reason', 'not revealed yet')
+    else coalesce((
+      select jsonb_build_object(
+        'ok', true,
+        'name', coalesce(p.display_name, 'Someone'),
+        'seconds', ip.seconds,
+        'correct', (select count(*) from public.item_points(p_item) w
+                    where w.points >= (select i.points from public.items i where i.id = p_item)))
+      from public.item_points(p_item) ip
+      left join public.profiles p on p.id = ip.user_id
+      where ip.points >= (select i.points from public.items i where i.id = p_item)
+      order by ip.seconds nulls last
+      limit 1),
+      -- Nobody with full marks: the best there was, if it was worth anything.
+      coalesce((
+        select jsonb_build_object(
+          'ok', true, 'name', null, 'correct', 0,
+          'best', jsonb_build_object(
+            'name', coalesce(p.display_name, 'Someone'),
+            'points', trim_scale(round(ip.points, 2)),
+            'of', trim_scale((select i.points from public.items i where i.id = p_item))))
+        from public.item_points(p_item) ip
+        left join public.profiles p on p.id = ip.user_id
+        where ip.points > 0
+        order by ip.points desc, ip.seconds nulls last
+        limit 1),
+        jsonb_build_object('ok', true, 'name', null, 'correct', 0)))
+  end
+$fn$;
+
+revoke all on function public.item_winner(uuid) from public, anon;
+grant execute on function public.item_winner(uuid) to authenticated;
+
+-- What the editor is told about a question, now including what it is worth.
+create or replace function public.session_sheet(p_session uuid)
+returns jsonb
+language sql
+stable
+security definer
+set search_path = ''
+as $fn$
+  select case
+    when not public.hosts_session(p_session)
+      then jsonb_build_object('ok', false, 'reason', 'not allowed')
+    else jsonb_build_object(
+      'ok', true,
+      'session', (select jsonb_build_object(
+         'id', s.id, 'title', s.title, 'state', public.scheduled_state(s),
+         'late_join', s.late_join, 'current_item', s.current_item,
+         'code', s.code, 'mode', s.mode, 'qa', s.qa,
+         'shared', s.share_results, 'opens_at', s.opens_at, 'closes_at', s.closes_at)
+       from public.sessions s where s.id = p_session),
+      'kinds', (select jsonb_agg(jsonb_build_object(
+                  'kind', k.kind, 'description', k.description, 'scored', k.scored)
+                order by k.kind)
+                from public.item_kinds k),
+      'items', coalesce(
+        (select jsonb_agg(jsonb_build_object(
+           'id', i.id, 'position', i.position, 'kind', i.kind, 'prompt', i.prompt,
+           'payload', i.payload, 'state', i.state,
+           'points', trim_scale(i.points),
+           'penalty_wrong', i.penalty_wrong,
+           'penalty_skip', i.penalty_skip,
+           'answer', (select a.answer from public.item_answers a where a.item_id = i.id),
+           'responses', (select count(*) from public.responses r where r.item_id = i.id)
+         ) order by i.position)
+         from public.items i where i.session_id = p_session),
+        '[]'::jsonb))
+  end
+$fn$;
+
+revoke all on function public.session_sheet(uuid) from public, anon;
+grant execute on function public.session_sheet(uuid) to authenticated;

@@ -103,9 +103,11 @@ export default function ImportQuiz({
         <div className="mt-3 space-y-2">
           <p className="text-xs text-slate-400">
             First tab the questions — <em>Ref</em>, <em>Kind</em>, <em>Question</em>,{' '}
-            <em>Seconds</em>, <em>Answer</em> — and a tab of its own, named in{' '}
-            <em>Ref</em>, for each matching, multiple choice, survey or ranking question.
-            The template is that shape, filled in.
+            <em>Seconds</em>, <em>Answer</em>, <em>Points</em>, <em>Wrong</em>,{' '}
+            <em>Skipped</em> — and a tab of its own, named in <em>Ref</em>, for each
+            matching, multiple choice, survey or ranking question. The last two take
+            yes to deduct the points for a wrong answer and for no answer. The
+            template is that shape, filled in.
           </p>
           <button type="button" onClick={download} className={BUTTON}>
             <Download className="w-3.5 h-3.5 text-accent" aria-hidden="true" />

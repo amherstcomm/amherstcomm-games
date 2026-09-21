@@ -802,3 +802,50 @@ test('the room’s own questions can be switched off after the session exists', 
   // And it stays off once the session is read back.
   await expect(asks).not.toBeChecked();
 });
+
+// ---------------------------------------------------------------------------
+// What a question is worth
+// ---------------------------------------------------------------------------
+test('a question carries its points and its deductions', async ({ page }) => {
+  const sent: Record<string, unknown>[] = [];
+  await page.route('**/rest/v1/rpc/**', (route) => {
+    const url = route.request().url();
+    if (url.includes('save_item')) {
+      sent.push(JSON.parse(route.request().postData() ?? '{}'));
+      return route.fulfill({ status: 200, contentType: 'application/json', body: '{"ok":true,"id":"i1"}' });
+    }
+    return route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(url.includes('session_sheet') ? SHEET : []),
+    });
+  });
+  await page.goto(`/sessions/${SESSION}`);
+  await page.getByRole('button', { name: 'Add a question' }).click();
+  await page.getByRole('button', { name: 'Closest guess', exact: true }).click();
+  await page.getByRole('textbox', { name: 'Question' }).fill('How many miles of fiber?');
+  await page.getByRole('textbox', { name: 'Points' }).fill('5');
+  await page.getByRole('checkbox', { name: 'Take the points off for a wrong answer' }).check();
+  await page.getByRole('textbox', { name: 'The actual value' }).fill('1350');
+  await page.getByRole('button', { name: 'Add question' }).click();
+
+  await expect.poll(() => sent.length).toBe(1);
+  expect(sent[0]).toMatchObject({ p_points: 5, p_penalty_wrong: true, p_penalty_skip: false });
+});
+
+// A question marked in parts is scored in fractions, so "wrong" is not a state
+// it has -- and the switch is not offered rather than offered and ignored.
+test('and a matching question is not offered a wrong-answer deduction', async ({ page }) => {
+  await editor(page);
+  await page.getByRole('button', { name: 'Add a question' }).click();
+  await page.getByRole('button', { name: 'Matching', exact: true }).click();
+
+  await expect(
+    page.getByRole('checkbox', { name: 'Take the points off for a wrong answer' })
+  ).toHaveCount(0);
+  await expect(page.getByText(/marked in parts, so a part-right answer earns part/)).toBeVisible();
+  // Not answering at all is still a thing it can deduct for.
+  await expect(
+    page.getByRole('checkbox', { name: 'Take the points off for no answer at all' })
+  ).toBeVisible();
+});

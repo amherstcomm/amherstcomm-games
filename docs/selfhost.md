@@ -918,9 +918,16 @@ added. Touching a matched item again takes the match off, which is the undo.
 
 **A colour per pair, at both ends.** All one colour is unreadable at six pairs:
 the lines cross, and the only way to find where one ends is to follow it with a
-finger. Each pair takes its own from a set of six, carried by the line and by
-both words, so a pairing can be read from either side. Six because more than
-that on one question is more than a room can hold; a seventh repeats a colour.
+finger. Each pair takes its own from the site's five themed hues, carried by the
+line and by both words, so a pairing can be read from either side. The sixth
+pair onwards repeats a hue **dashed** — a dash rather than a sixth colour
+because two of the four palettes are for colour blindness, where another hue is
+another thing that might collapse into its neighbour.
+
+~~a set of six~~ The sixth was teal, which is not one of this site's colours:
+every hue here resolves through a CSS variable that flips between themes, and
+teal has none, so Tailwind's own fixed teal came through and was invisible on
+the light theme. Reported from a screenshot of amherst light.
 
 **The lines are decoration over an answer that reads without them.** Each item
 says what it is matched with in words, because a line is invisible to a screen
@@ -933,13 +940,48 @@ their own, so there was nothing for the lines to come from and the reveal showed
 a bare list on the screen the room is looking at. After the reveal it draws the
 right answer, every line correct, because every line *is* the answer.
 
-`e2e/contrast.spec.ts` now sweeps a matching question across every palette and
-theme. Those six tiers are on nothing else on the site, so nothing else would
-have checked them — and whether they are readable on the light theme is a
-question to measure rather than to assume.
+`e2e/contrast.spec.ts` sweeps a matching question across every palette and
+theme, with six pairs on screen so every hue is drawn. It **measures** the pair
+labels rather than leaving them to axe: axe answers "incomplete" for text over a
+gradient and cannot resolve the page ground, which is how the teal above passed
+a green sweep. The check fails at under 4.5:1; the teal measured about 1.6 on
+amherst light.
 
 The authoring form still pairs with dropdowns. That is a form, filled in once by
 one person, and the complaint was about the room.
+
+### What a question is worth
+
+Every question used to be worth one, and a wrong answer cost nothing — so a
+ten-pair matching question paid the same as a two-option true-or-false. A
+question now carries its own **Points**, and two switches: take the points off
+for a **wrong answer**, and for **no answer at all**. Both off by default,
+because a quiz that deducts without being asked to is one that surprises a room.
+
+**Partial credit multiplies.** Matching, ranking and a multiple choice with
+several right answers are scored in fractions: four pairs of six on a
+six-pointer is four points.
+
+**Deductions never apply to a question marked in parts.** "Wrong" is not a state
+those questions have — everything between nothing and everything is a score —
+and deducting on anything short of perfect would cost a nine-of-ten answer the
+same as a blank one. The editor does not offer the switch there rather than
+offering one that quietly does nothing, and `part_marked()` decides the same
+thing in the database, which is where it is enforced.
+
+No answer at all is a different thing, and that switch applies to every kind.
+Who counts as having skipped: anybody who answered something else in the same
+session — there is no register of who was in the room, and that is the nearest
+honest thing. Somebody who never answered anything is not in the scores at all.
+
+The workbook import carries all three: **Points**, **Wrong**, **Skipped** on the
+questions tab, the last two taking `yes`. A sheet with no Points column reads as
+one point a question, which is what every question was before this existed.
+
+**The presenter's line says who came closest.** *"Nobody got that one"* over a
+ten-pair question somebody got eight of is a lie by omission, and it was what
+the screen said; a question nobody had full marks on now names the best answer
+and what it scored.
 
 ### Questions for the host
 

@@ -148,3 +148,49 @@ describe('what it says afterwards', () => {
     expect(said).toBe('Read 0 questions. Row 3 has no question, and 1 other problem.');
   });
 });
+
+// ---------------------------------------------------------------------------
+// What a question is worth
+// ---------------------------------------------------------------------------
+describe('points in the workbook', () => {
+  const questions = (rows: string[][]) => ({
+    Questions: [
+      ['Ref', 'Kind', 'Question', 'Seconds', 'Answer', 'Points', 'Wrong', 'Skipped'],
+      ...rows,
+    ],
+  });
+
+  it('the template carries what each question pays', async () => {
+    const { items } = readQuiz(await readWorkbook(quizTemplateBytes()));
+    expect(items.map((i) => i.points)).toEqual([2, 5, 3, 1, 2, 1]);
+    // The closest guess is the one the template deducts on, and it is not
+    // part-marked, so the switch means something there.
+    expect(items.find((i) => i.kind === 'number')!.penaltyWrong).toBe(true);
+    expect(items.find((i) => i.kind === 'choice')!.penaltyWrong).toBe(false);
+  });
+
+  it('a blank Points column is one point, as it always was', () => {
+    const { items, problems } = readQuiz(questions([['', 'Open question', 'Anything?', '', '', '', '', '']]));
+    expect(problems).toEqual([]);
+    expect(items[0].points).toBe(1);
+  });
+
+  it('and a sheet with no Points column at all still reads', () => {
+    const { items, problems } = readQuiz({
+      Questions: [['Ref', 'Kind', 'Question'], ['', 'Open question', 'Anything?']],
+    });
+    expect(problems).toEqual([]);
+    expect(items[0]).toMatchObject({ points: 1, penaltyWrong: false, penaltySkip: false });
+  });
+
+  it('takes yes in either deduction column', () => {
+    const { items } = readQuiz(questions([['', 'Open question', 'Anything?', '', '', '4', 'yes', 'x']]));
+    expect(items[0]).toMatchObject({ points: 4, penaltyWrong: true, penaltySkip: true });
+  });
+
+  it('and says which row is worth something that is not points', () => {
+    const { items, problems } = readQuiz(questions([['', 'Open question', 'Anything?', '', '', 'lots', '', '']]));
+    expect(items).toEqual([]);
+    expect(problems[0].reason).toMatch(/which is not points between 0 and 100/);
+  });
+});

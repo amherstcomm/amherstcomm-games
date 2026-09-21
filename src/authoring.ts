@@ -21,6 +21,14 @@ export type SheetItem = {
   payload: Record<string, unknown>;
   state: 'pending' | 'open' | 'locked' | 'revealed';
   answer: unknown;
+  /** what the question pays for a right answer, and a part of it for a part
+   *  right. One unless somebody said otherwise. */
+  points?: number;
+  /** take the points off for a wrong answer. Never applies to a question
+   *  marked in parts -- see part_marked in schema.sql. */
+  penalty_wrong?: boolean;
+  /** take the points off for no answer at all, whatever the kind */
+  penalty_skip?: boolean;
   /** how many people have answered — the reason an item can be deleted but not
    *  edited once it has been shown */
   responses: number;
@@ -168,6 +176,9 @@ export async function saveItem(args: {
   prompt: string;
   payload: Record<string, unknown>;
   answer: unknown;
+  points?: number;
+  penaltyWrong?: boolean;
+  penaltySkip?: boolean;
 }): Promise<{ ok: boolean; id?: string; reason?: string }> {
   if (!supabase) return fail('not connected');
   const { data, error } = await supabase.rpc('save_item', {
@@ -177,6 +188,9 @@ export async function saveItem(args: {
     p_prompt: args.prompt,
     p_payload: args.payload,
     p_answer: args.answer ?? null,
+    p_points: args.points ?? 1,
+    p_penalty_wrong: args.penaltyWrong ?? false,
+    p_penalty_skip: args.penaltySkip ?? false,
   });
   if (error) return fail(error.message);
   return (data as { ok: boolean; id?: string; reason?: string }) ?? fail('no answer');
