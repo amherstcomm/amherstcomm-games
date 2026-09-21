@@ -11,6 +11,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import Waiting from '@/Waiting';
 import {
   deleteEntry,
+  drawable,
   photoLinks,
   PHASE_WORD,
   readContest,
@@ -179,9 +180,9 @@ function OneContest({ id }: { id: string }) {
         <ul className="mt-3 grid gap-4 sm:grid-cols-2">
           {entries.map((e, i) => (
             <li key={e.id} className="rounded-xl border border-white/15 bg-white/5 overflow-hidden">
-              {e.image_path && links[e.image_path] ? (
+              {e.image_path && drawable(links[e.image_path]) ? (
                 <img
-                  src={links[e.image_path]}
+                  src={drawable(links[e.image_path])}
                   alt={e.title}
                   loading="lazy"
                   className="w-full aspect-[4/3] object-cover bg-white/5"
@@ -296,7 +297,7 @@ function EntryForm({
     await onSaved();
   }
 
-  const shown = preview ?? link;
+  const shown = drawable(preview ?? link);
 
   return (
     <section className="mt-6 rounded-xl border border-white/15 bg-white/5 p-4">

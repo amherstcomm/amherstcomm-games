@@ -11977,6 +11977,8 @@ declare
   admin boolean := public.can('games.setup');
   owner uuid;
   target uuid := p_entry;
+  v_path text := nullif(btrim(coalesce(p_image_path, '')), '');
+  v_was text;
 begin
   if uid is null then
     return jsonb_build_object('ok', false, 'reason', 'not signed in');
@@ -12010,10 +12012,30 @@ begin
     ) then
       return jsonb_build_object('ok', false, 'reason', 'that is not yours to change');
     end if;
+    select image_path into v_was from public.contest_entries where id = target;
+  end if;
+
+  -- A photograph has to be one this caller just uploaded.
+  --
+  -- The bucket lets anybody signed in read it, because a contest is looked at
+  -- by the whole company, and the storage policy only governs writing: you may
+  -- put a file in a folder named for your own id and nowhere else. Nothing
+  -- until here governed the *pointer*. So an entry could name a path out of
+  -- somebody else's folder and show their photograph as its own -- no upload
+  -- needed, no policy broken, just a string sent to this function by hand.
+  --
+  -- Unchanged is always allowed, or an organiser editing the words on somebody
+  -- else's entry would be refused for the photo already on it.
+  if v_path is not null and v_path is distinct from v_was
+     and split_part(v_path, '/', 1) <> uid::text then
+    return jsonb_build_object('ok', false, 'reason', 'that photo is not one you uploaded');
+  end if;
+
+  if target is not null then
     update public.contest_entries
        set title = left(btrim(p_title), 80),
            blurb = nullif(btrim(coalesce(p_blurb, '')), ''),
-           image_path = coalesce(nullif(btrim(coalesce(p_image_path, '')), ''), image_path),
+           image_path = coalesce(v_path, image_path),
            entrant = coalesce(owner, entrant)
      where id = target;
     return jsonb_build_object('ok', true, 'id', target);
@@ -12029,8 +12051,7 @@ begin
 
   insert into public.contest_entries (contest_id, entrant, entered_by, title, blurb, image_path)
   values (p_contest, owner, uid, left(btrim(p_title), 80),
-          nullif(btrim(coalesce(p_blurb, '')), ''),
-          nullif(btrim(coalesce(p_image_path, '')), ''))
+          nullif(btrim(coalesce(p_blurb, '')), ''), v_path)
   returning id into target;
   return jsonb_build_object('ok', true, 'id', target);
 end;

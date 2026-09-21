@@ -114,6 +114,22 @@ select pg_temp.check('and a save with no photo keeps the one already there',
   (select image_path from public.contest_entries where id = (select id from e1))
     = 'd2222222-2222-2222-2222-222222222222/a.jpg');
 
+-- A path has to be one this caller uploaded. The bucket is readable by
+-- everybody signed in and the storage policy only governs writing, so without
+-- this an entry could name a path out of somebody else's folder and show their
+-- photograph as its own -- no upload, no policy broken, just a string sent to
+-- the function by hand.
+select pg_temp.check('a photo from another folder is refused',
+  (public.save_contest_entry((select id from pk), (select id from e1), 'Jack the Ripper', null,
+                             'd3333333-3333-3333-3333-333333333333/stolen.jpg')->>'reason')
+    = 'that photo is not one you uploaded');
+select pg_temp.check('and the entry keeps the photo it had',
+  (select image_path from public.contest_entries where id = (select id from e1))
+    = 'd2222222-2222-2222-2222-222222222222/a.jpg');
+select pg_temp.check('a path in no folder at all is refused too',
+  (public.save_contest_entry((select id from pk), (select id from e1), 'Jack the Ripper', null,
+                             'loose.jpg')->>'reason') = 'that photo is not one you uploaded');
+
 set session "test.uid" = 'd3333333-3333-3333-3333-333333333333';
 select pg_temp.check('somebody else cannot change it',
   (public.save_contest_entry((select id from pk), (select id from e1), 'Mine now', null)->>'reason')
@@ -194,6 +210,15 @@ select pg_temp.check('a contest past its entry window is closed to entries',
 set session "test.uid" = 'd1111111-1111-1111-1111-111111111111';
 select pg_temp.check('an organiser can still enter one after the window',
   (public.save_contest_entry((select id from shut), null, 'Arrived by email', null)->>'ok') = 'true');
+
+-- The unchanged-path branch, which is why the rule compares against what is
+-- already stored rather than refusing every foreign path outright: an
+-- organiser fixing the spelling on somebody else's entry sends back the photo
+-- that entry already has, out of a folder that is not theirs.
+set session "test.uid" = 'd1111111-1111-1111-1111-111111111111';
+select pg_temp.check('an organiser can edit an entry without re-uploading its photo',
+  (public.save_contest_entry((select id from pk), (select id from e1), 'Jack the Ripper II', null,
+                             'd2222222-2222-2222-2222-222222222222/a.jpg')->>'ok') = 'true');
 
 -- ---------------------------------------------------------------------------
 -- The organiser entering on everybody's behalf

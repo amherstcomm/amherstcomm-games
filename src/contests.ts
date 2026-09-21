@@ -111,6 +111,25 @@ export async function photoLinks(paths: string[]): Promise<Record<string, string
   return links;
 }
 
+/**
+ * A link this app is willing to draw.
+ *
+ * Two things reach an <img> here and only two: a `blob:` URL the browser
+ * minted for a file just picked, and an `https:` link storage signed. Saying
+ * that out loud costs three lines and makes it an invariant rather than a
+ * thing that happens to be true of today's call sites -- `image_path` is
+ * written by the client, so the string that ends up inside a signed link is
+ * user data that has been to the database and back.
+ *
+ * It is also what a scanner reading this file can see, which is worth
+ * something on its own: the alternative is dismissing the same finding by
+ * hand every time somebody adds a second place that draws an entry.
+ */
+export function drawable(url: string | null | undefined): string | undefined {
+  if (!url) return undefined;
+  return /^(blob:|https:)/i.test(url) ? url : undefined;
+}
+
 /** What a phone will hand us, and what the bucket accepts. HEIC is here
  *  because that is what an iPhone photographs in by default. */
 const KINDS = ['image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif'];
