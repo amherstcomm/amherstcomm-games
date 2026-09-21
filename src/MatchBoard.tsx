@@ -64,6 +64,7 @@ export default function MatchBoard({
   onChange,
   locked = false,
   answer = null,
+  asAnswer = false,
 }: {
   left: string[];
   right: string[];
@@ -73,6 +74,14 @@ export default function MatchBoard({
   locked?: boolean;
   /** after the reveal: what the pairs should have been */
   answer?: Record<string, string> | null;
+  /** these pairs *are* the answer, rather than somebody's attempt at it.
+   *
+   *  The presenter's screen, where marking every line "correct" paints them
+   *  all one green -- which on a ten-pair answer is the unreadable tangle the
+   *  colours were added to end. An answer display is for tracing what goes
+   *  with what, so it keeps the colour per pair; right and wrong only mean
+   *  something against somebody's own attempt. */
+  asAnswer?: boolean;
 }) {
   const [picked, setPicked] = useState<string | null>(null);
   const [lines, setLines] = useState<Line[]>([]);
@@ -107,11 +116,11 @@ export default function MatchBoard({
       const from = at(`L${l}`, 'left');
       const to = at(`R${r}`, 'right');
       if (!from || !to) continue;
-      const state = answer ? (answer[l] === r ? 'right' : 'wrong') : 'set';
+      const state = asAnswer ? 'set' : answer ? (answer[l] === r ? 'right' : 'wrong') : 'set';
       drawn.push({ from, to, state, colour: colourOf(l) });
     }
     setLines(drawn);
-  }, [pairs, answer, colourOf]);
+  }, [pairs, answer, asAnswer, colourOf]);
 
   useLayoutEffect(measure, [measure]);
   useEffect(() => {
@@ -203,7 +212,7 @@ export default function MatchBoard({
                   aria-pressed={picked === l}
                   onClick={() => pick('left', l)}
                   className={`${cell} ${
-                    answer
+                    answer && !asAnswer
                       ? got
                         ? 'border-emerald-400 text-emerald-100'
                         : 'border-rose-400 text-rose-100'
@@ -226,7 +235,7 @@ export default function MatchBoard({
                       → {to}
                     </span>
                   )}
-                  {answer && !got && (
+                  {answer && !asAnswer && !got && (
                     <span className="block text-xs text-slate-400">should be {should}</span>
                   )}
                 </button>

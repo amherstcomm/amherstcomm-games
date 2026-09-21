@@ -235,6 +235,9 @@ function Match({
   const locked = readOnly || item.state !== 'open';
   const answer =
     item.state === 'revealed' ? (item.answer as { pairs?: Record<string, string> } | null) : null;
+  // The presenter's screen after the reveal: no pairs of their own, so what is
+  // drawn is the answer itself rather than an attempt at it.
+  const showingAnswer = Boolean(answer) && Object.keys(pairs).length === 0;
 
   return (
     <div className="space-y-2">
@@ -247,10 +250,11 @@ function Match({
       <MatchBoard
         left={left}
         right={right}
-        pairs={answer && Object.keys(pairs).length === 0 ? (answer.pairs ?? {}) : pairs}
+        pairs={showingAnswer ? (answer?.pairs ?? {}) : pairs}
         onChange={setPairs}
         locked={locked || sending}
         answer={answer?.pairs ?? null}
+        asAnswer={showingAnswer}
       />
       {!locked && (
         <>

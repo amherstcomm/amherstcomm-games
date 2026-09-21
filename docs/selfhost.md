@@ -935,10 +935,16 @@ reader and to anyone who cannot pick out the colour it is drawn in. After the
 reveal the pairs are marked right or wrong and a wrong one says what it should
 have been, which is what the old rows did.
 
-**The presenter's reveal draws the answer itself.** The host has no pairs of
-their own, so there was nothing for the lines to come from and the reveal showed
-a bare list on the screen the room is looking at. After the reveal it draws the
-right answer, every line correct, because every line *is* the answer.
+**The presenter's reveal draws the answer itself**, in the pairs' own colours.
+The host has no pairs of their own, so there was nothing for the lines to come
+from and the reveal showed a bare list on the screen the room is looking at.
+
+~~every line correct, because every line *is* the answer~~ Corrected: marking
+them all correct painted them all one green, which on a ten-pair answer is the
+same tangle the colours were added to end. An answer display is for tracing
+what goes with what. Right and wrong still mark a **player's own** reveal, where
+they mean something — their pairs against the answer, with a wrong one saying
+what it should have been.
 
 `e2e/contrast.spec.ts` sweeps a matching question across every palette and
 theme, with six pairs on screen so every hue is drawn. It **measures** the pair
