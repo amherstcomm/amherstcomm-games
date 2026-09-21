@@ -99,9 +99,18 @@ function RoundBoards({ round }: { round: RoundStandings }) {
       {games.map(([game, rows]) => {
         const label = BOARD_LABELS[game];
         if (!label) return null;
+        const worth = round.weights?.[game];
         return (
           <div key={game} className="rounded-xl bg-white/5 border border-white/10 p-3">
-            <p className="text-sm font-semibold text-white mb-1.5">{label.label}</p>
+            <p className="text-sm font-semibold text-white mb-1.5 flex items-baseline gap-2">
+              <span className="min-w-0 truncate">{label.label}</span>
+              {/* Said where the points are, the same way a round's trivia says
+                  it: a board paying triple and looking like the others is a
+                  table nobody can check. */}
+              {worth !== undefined && worth !== 1 && (
+                <span className="text-xs font-normal text-accent shrink-0">worth {worth}×</span>
+              )}
+            </p>
             {(rows ?? []).length === 0 ? (
               <p className="text-xs text-slate-400">No finishes yet.</p>
             ) : (
@@ -350,6 +359,11 @@ export default function TournamentView({
                 <span className="text-sm font-semibold text-white">
                   {GAME_NAME[mode]?.full ?? roundGameName(feed)}
                 </span>
+                {round.game_weights?.[feed] !== undefined && round.game_weights[feed] !== 1 && (
+                  <span className="block mt-0.5 text-xs text-accent">
+                    worth {round.game_weights[feed]}×
+                  </span>
+                )}
               </RouteLink>
             </li>
           );
