@@ -2493,6 +2493,25 @@ what the site offers, not what the database will answer — the feeds and RPCs
 behind a locked page still respond. The admin portal and the account menu are
 never locked.
 
+#### What a round's games are worth
+
+A round's trivia has carried a weight since it was built and its games had
+none, so every board paid the same ten-down-to-one however hard it was. Each
+game in a round now carries its own multiplier, set beside the game in
+`/admin/tournaments` → *Games in this round*.
+
+**1× is parity and the default**: ten points for first down to one for tenth,
+which is what every board paid before a round could say otherwise. Raise it for
+the game the round is really about. The cap is 10, the same as the trivia's.
+
+It is said where the points are — *worth 3×* beside the board in the standings
+— and again on the game before it is played, because a board paying triple that
+looks like the others is a table nobody can check.
+
+Taking a game out of a round takes its weight with it, in the page and in the
+database: `save_round` refuses a weight for a game the round does not have,
+since a stale one would sit there paying nothing and explaining nothing.
+
 #### Trivia in a round
 
 A round can count **sessions** as well as boards, and both session modes work

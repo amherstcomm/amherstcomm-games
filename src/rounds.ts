@@ -19,6 +19,8 @@ export type CurrentRound = {
   ends_on: string;
   /** feed names: words, hive, box, ... */
   games: string[];
+  /** what each game is worth against the others; missing is 1 */
+  game_weights?: Record<string, number>;
   /** the sessions counting in this round, live and open alike */
   trivia: RoundTrivia[];
   /** what winning the round is worth, in words, or nothing */

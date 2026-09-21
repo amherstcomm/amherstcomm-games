@@ -30,6 +30,8 @@ export type Round = {
   ends_on: string;
   /** feed names -- words, hive, box -- which is what a round board is keyed by */
   games: string[];
+  /** what each game is worth against the others, by feed name; missing is 1 */
+  game_weights?: Record<string, number>;
   /** the sessions counting in this round */
   trivia: RoundTrivia[];
   /** what is on offer for winning it, in whatever words the admin used */
@@ -122,6 +124,8 @@ export async function saveRound(r: {
   sessions?: { id: string; weight: number }[];
   /** what is on offer for winning the round */
   prize?: string;
+  /** what each game is worth, by feed name; a game left out is worth 1 */
+  gameWeights?: Record<string, number>;
 }): Promise<{ ok: boolean; reason?: string; id?: string }> {
   if (!supabase) return fail('not connected');
   const { data, error } = await supabase.rpc('save_round', {
@@ -132,6 +136,11 @@ export async function saveRound(r: {
     p_games: r.games,
     p_sessions: r.sessions ?? [],
     p_prize: (r.prize ?? '').trim() || null,
+    // Only the ones that are not 1: the server refuses a weight for a game the
+    // round does not have, and a 1 says nothing a missing key does not.
+    p_game_weights: Object.fromEntries(
+      Object.entries(r.gameWeights ?? {}).filter(([game, w]) => r.games.includes(game) && w !== 1)
+    ),
   });
   if (error) return fail(error.message);
   return (data as { ok: boolean; reason?: string; id?: string }) ?? fail('no answer');

@@ -22,6 +22,7 @@ const ROUND = {
   starts_on: START,
   ends_on: plus(START, 6),
   games: ['weave', 'hive'],
+  game_weights: { weave: 3 },
   trivia: [
     { session_id: 's2', title: 'ESOP Basics', mode: 'open', state: 'live', weight: 2 },
     { session_id: 's3', title: 'Next Week', mode: 'live', state: 'draft', weight: 1 },
@@ -55,6 +56,7 @@ const STANDINGS = {
       starts_on: START,
       ends_on: plus(START, 6),
       prize: 'Lunch on the company',
+      weights: { weave: 3, hive: 1 },
       boards: {
         weave: [
           { name: 'Ada', value: 1, detail: 95000, hints: 0 },
@@ -206,4 +208,38 @@ test('a tournament with no prize says nothing about one', async ({ page }) => {
   await page.goto('/tournament');
   await expect(page.getByRole('heading', { name: /Ownership Cup/ })).toBeVisible();
   await expect(page.getByText(/prize/i)).toHaveCount(0);
+});
+
+// ---------------------------------------------------------------------------
+// What a board is worth
+// ---------------------------------------------------------------------------
+// A board paying triple and looking like the others is a table nobody can
+// check, so it is said where the points are and again on the way in.
+test('a weighted board says so on its standings', async ({ page }) => {
+  await tournament(page);
+  await page.goto('/tournament');
+  const round = page.getByRole('region', { name: "This round's standings" });
+  await expect(round).toContainText('worth 3×');
+});
+
+test('and again on the game before it is played', async ({ page }) => {
+  await tournament(page);
+  await page.goto('/tournament');
+  const weave = page
+    .getByRole('list', { name: 'In this round' })
+    .getByRole('listitem')
+    .filter({ hasText: 'Weave' });
+  await expect(weave).toContainText('worth 3×');
+});
+
+// Parity is the ordinary case and says nothing: every board paid the same
+// before a round could say otherwise.
+test('a board at parity says nothing about what it is worth', async ({ page }) => {
+  await tournament(page);
+  await page.goto('/tournament');
+  const hive = page
+    .getByRole('list', { name: 'In this round' })
+    .getByRole('listitem')
+    .filter({ hasText: 'Hive' });
+  await expect(hive).not.toContainText('worth');
 });

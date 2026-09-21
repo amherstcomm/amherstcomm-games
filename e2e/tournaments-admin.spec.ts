@@ -15,6 +15,7 @@ type Round = {
   games: string[];
   trivia?: Trivia[];
   prize?: string | null;
+  game_weights?: Record<string, number>;
   started: boolean;
 };
 type Tournament = {
@@ -70,6 +71,7 @@ async function portal(
         ends_on: args.p_ends,
         games: args.p_games,
         prize: args.p_prize ?? null,
+        game_weights: args.p_game_weights ?? {},
         trivia: ((args.p_sessions ?? []) as { id: string; weight: number }[]).map((x) => ({
           session_id: x.id,
           title: sessions.find((v) => v.id === x.id)?.title ?? x.id,
@@ -344,4 +346,48 @@ test('and a tournament with no prize says nothing about one', async ({ page }) =
     },
   ]);
   await expect(page.locator('[data-tournament="Quiet Cup"]')).not.toContainText('Prize');
+});
+
+// A round's trivia has carried a weight since it was built and its games have
+// not, so every board paid the same however hard it was.
+test('a round says what each of its games is worth', async ({ page }) => {
+  const sent = await portal(page, [
+    { id: 't1', name: 'Ownership Cup', difficulty: 'hard', starts_on: '2026-10-01', ends_on: '2026-10-24', rounds: [] },
+  ]);
+  await page.getByRole('button', { name: 'Add a round' }).click();
+  await page.getByLabel('Round starts').fill('2026-10-01');
+  await page.getByLabel('Round ends').fill('2026-10-07');
+  const games = page.getByRole('group', { name: 'Games in this round' });
+  await games.getByRole('button', { name: /Hive/ }).click();
+  await games.getByRole('button', { name: /Weave/ }).click();
+
+  // Every chosen game gets a box, starting at parity.
+  await expect(page.getByRole('spinbutton', { name: 'What Hive is worth' })).toHaveValue('1');
+  await page.getByRole('spinbutton', { name: 'What Weave is worth' }).fill('3');
+  await page.getByRole('button', { name: 'Save round' }).click();
+
+  await expect.poll(() => sent.length).toBe(1);
+  // Only what is not parity: a 1 says nothing a missing key does not.
+  expect(sent[0].args.p_game_weights).toEqual({ weave: 3 });
+  await expect(page.locator('[data-tournament="Ownership Cup"]')).toContainText('Weave (×3)');
+});
+
+// A weight for a game that is no longer in the round is one the server refuses
+// with a reason about a game nobody can see on screen.
+test('and taking a game out takes its weight with it', async ({ page }) => {
+  const sent = await portal(page, [
+    { id: 't1', name: 'Ownership Cup', difficulty: 'hard', starts_on: '2026-10-01', ends_on: '2026-10-24', rounds: [] },
+  ]);
+  await page.getByRole('button', { name: 'Add a round' }).click();
+  await page.getByLabel('Round starts').fill('2026-10-01');
+  await page.getByLabel('Round ends').fill('2026-10-07');
+  const games = page.getByRole('group', { name: 'Games in this round' });
+  await games.getByRole('button', { name: /Weave/ }).click();
+  await page.getByRole('spinbutton', { name: 'What Weave is worth' }).fill('4');
+  await games.getByRole('button', { name: /Weave/ }).click();
+  await games.getByRole('button', { name: /Hive/ }).click();
+  await page.getByRole('button', { name: 'Save round' }).click();
+
+  await expect.poll(() => sent.length).toBe(1);
+  expect(sent[0].args.p_game_weights).toEqual({});
 });

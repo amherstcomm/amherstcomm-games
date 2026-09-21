@@ -212,3 +212,71 @@ select pg_temp.check('the ranking a session is scored by stays out of the browse
   and not has_function_privilege('authenticated', 'public.session_ranking(uuid)', 'execute'));
 
 \echo '--- trivia-in-a-round checks passed ---'
+
+-- ---------------------------------------------------------------------------
+-- What a round's games are worth
+-- ---------------------------------------------------------------------------
+-- A round's trivia has carried a weight since it was built and its games have
+-- not, so every board paid the same however hard it was. What has to hold: a
+-- weight multiplies the placement points for that board and nothing else, an
+-- unlisted game is still worth one, and a weight cannot be set for a game the
+-- round does not have.
+set session "test.uid" = 'f1111111-1111-1111-1111-111111111111';
+
+create temp table wt as
+  select (public.save_tournament(null, 'Weighted Cup', 'hard', pg_temp.d(-30), pg_temp.d(-10))
+          ->>'id')::uuid id;
+create temp table wr as
+  select (public.save_round(null, (select id from wt), pg_temp.d(-25), pg_temp.d(-20),
+                            array['squares', 'hive'], '[]'::jsonb, null,
+                            '{"squares": 3}'::jsonb)->>'id')::uuid id;
+
+select pg_temp.check('a round remembers what its games are worth',
+  (select game_weights->>'squares' from public.tournament_rounds where id = (select id from wr)) = '3');
+select pg_temp.check('and the admin sheet carries them',
+  (select r->'game_weights'->>'squares'
+   from jsonb_array_elements(public.tournaments_sheet()->'tournaments') x,
+        jsonb_array_elements(x->'rounds') r
+   where (r->>'id')::uuid = (select id from wr)) = '3');
+
+-- Ada first on squares, Bea second; Bea first on hive. At level weights that
+-- is Ada 10 and Bea 9 + 10 = 19. With squares at 3 it is Ada 30, Bea 27 + 10.
+select pg_temp.solve('f2222222-2222-2222-2222-222222222222', 'round', pg_temp.d(-25), 30000);
+select pg_temp.solve('f3333333-3333-3333-3333-333333333333', 'round', pg_temp.d(-25), 60000);
+
+create temp table wgot as select public.tournament_standings((select id from wt)) j;
+select pg_temp.check('a weighted board pays its placing times its weight',
+  (select (x->>'points')::numeric from wgot, jsonb_array_elements(j->'table') x
+   where x->>'name' = 'Ada S') = 30
+  and (select (x->>'points')::numeric from wgot, jsonb_array_elements(j->'table') x
+   where x->>'name' = 'Bea S') = 27);
+select pg_temp.check('and the standings say what each board was worth',
+  (select j->'rounds'->0->'weights'->>'squares5' from wgot) = '3'
+  and (select j->'rounds'->0->'weights'->>'hive' from wgot) = '1');
+
+-- Unlisted is one, which is what every board paid before a round could say
+-- otherwise: the same boards, saved with no weights at all.
+select public.save_round((select id from wr), (select id from wt), pg_temp.d(-25), pg_temp.d(-20),
+                         array['squares', 'hive'], '[]'::jsonb, null, '{}'::jsonb);
+create temp table wlevel as select public.tournament_standings((select id from wt)) j;
+select pg_temp.check('with no weights at all a board pays what it always did',
+  (select (x->>'points')::numeric from wlevel, jsonb_array_elements(j->'table') x
+   where x->>'name' = 'Ada S') = 10);
+
+select pg_temp.check('a weight for a game the round does not have is refused',
+  (public.save_round((select id from wr), (select id from wt), pg_temp.d(-25), pg_temp.d(-20),
+                     array['squares'], '[]'::jsonb, null, '{"weave": 2}'::jsonb)->>'reason')
+    = 'a game was given a weight without being in the round');
+select pg_temp.check('and a weight past the cap, or under nothing, is refused too',
+  (public.save_round((select id from wr), (select id from wt), pg_temp.d(-25), pg_temp.d(-20),
+                     array['squares'], '[]'::jsonb, null, '{"squares": 50}'::jsonb)->>'reason')
+    = 'a weight has to be more than zero and at most ten'
+  and (public.save_round((select id from wr), (select id from wt), pg_temp.d(-25), pg_temp.d(-20),
+                     array['squares'], '[]'::jsonb, null, '{"squares": 0}'::jsonb)->>'reason')
+    = 'a weight has to be more than zero and at most ten');
+
+-- Leave nothing behind: a round covering these days would collide with the
+-- rounds every later file sets up.
+delete from public.tournaments where id = (select id from wt);
+
+\echo '--- weighted-games checks passed ---'

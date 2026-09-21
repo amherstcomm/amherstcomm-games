@@ -9927,6 +9927,20 @@ alter table public.tournaments add column if not exists prize text
 alter table public.tournament_rounds add column if not exists prize text
   check (prize is null or char_length(prize) <= 200);
 
+-- What each game in the round is worth against the others.
+--
+-- A round's trivia has had a weight since it was built, and its games have
+-- not: every board paid the same ten-down-to-one however hard it was, so a
+-- week whose Weave is the event and whose Hive is a warm-up could say so about
+-- its quiz night and not about its boards. Keyed by feed name -- the same
+-- names the games array holds -- with anything unlisted worth 1.
+--
+-- A jsonb map rather than a table, because it is the games array's shadow:
+-- they are written together, read together, and a row per game would be a
+-- second place for "which games are in this round" to disagree from.
+alter table public.tournament_rounds add column if not exists game_weights jsonb not null
+  default '{}'::jsonb;
+
 
 alter table public.tournaments enable row level security;
 alter table public.tournament_rounds enable row level security;
@@ -10514,6 +10528,8 @@ revoke all on function public.round_trivia(uuid) from public, anon, authenticate
 drop function if exists public.save_round(uuid, uuid, date, date, text[]);
 -- ...and the six-argument one, now that a round can say what it is for.
 drop function if exists public.save_round(uuid, uuid, date, date, text[], jsonb);
+-- ...and the seven-argument one, now that its games carry weights too.
+drop function if exists public.save_round(uuid, uuid, date, date, text[], jsonb, text);
 
 create or replace function public.save_round(
   p_id uuid,
@@ -10523,7 +10539,9 @@ create or replace function public.save_round(
   p_games text[],
   -- [{"id": "<session uuid>", "weight": 2}, ...]; absent is no trivia.
   p_sessions jsonb default '[]'::jsonb,
-  p_prize text default null
+  p_prize text default null,
+  -- {"weave": 3, "hive": 1}; a game left out is worth 1.
+  p_game_weights jsonb default '{}'::jsonb
 )
 returns jsonb
 language plpgsql
@@ -10536,6 +10554,7 @@ declare
   v_old record;
   v_games text[];
   v_sessions jsonb := coalesce(p_sessions, '[]'::jsonb);
+  v_weights jsonb;
   v_taken uuid;
 begin
   if not public.can('games.setup') then
@@ -10563,6 +10582,28 @@ begin
 
   if jsonb_typeof(v_sessions) <> 'array' then
     return jsonb_build_object('ok', false, 'reason', 'the trivia has to be a list');
+  end if;
+
+  v_weights := coalesce(p_game_weights, '{}'::jsonb);
+  if jsonb_typeof(v_weights) <> 'object' then
+    return jsonb_build_object('ok', false, 'reason', 'what the games are worth has to be a list of games');
+  end if;
+  -- Only games this round actually has, so a weight cannot outlive the game it
+  -- was set for -- a stale key would sit there paying nothing and explaining
+  -- nothing the next time somebody read the row.
+  if exists (
+    select 1 from jsonb_object_keys(v_weights) k where not (k = any (v_games))
+  ) then
+    return jsonb_build_object('ok', false, 'reason',
+      'a game was given a weight without being in the round');
+  end if;
+  if exists (
+    select 1 from jsonb_each_text(v_weights) e
+    where e.value !~ '^[0-9]+(\.[0-9]+)?$'
+       or e.value::numeric <= 0 or e.value::numeric > 10
+  ) then
+    return jsonb_build_object('ok', false, 'reason',
+      'a weight has to be more than zero and at most ten');
   end if;
   if cardinality(v_games) = 0 and jsonb_array_length(v_sessions) = 0 then
     return jsonb_build_object('ok', false, 'reason', 'a round needs at least one game or one session');
@@ -10617,12 +10658,15 @@ begin
     end if;
     update public.tournament_rounds
        set tournament_id = p_tournament, starts_on = p_starts, ends_on = p_ends, games = v_games,
-           prize = nullif(btrim(coalesce(p_prize, '')), '')
+           prize = nullif(btrim(coalesce(p_prize, '')), ''),
+           game_weights = v_weights
      where id = v_id;
   else
-    insert into public.tournament_rounds (tournament_id, starts_on, ends_on, games, prize)
+    insert into public.tournament_rounds (tournament_id, starts_on, ends_on, games, prize,
+                                          game_weights)
     values (p_tournament, p_starts, p_ends, v_games,
-            nullif(btrim(coalesce(p_prize, '')), ''))
+            nullif(btrim(coalesce(p_prize, '')), ''),
+            v_weights)
     returning id into v_id;
   end if;
 
@@ -10652,8 +10696,8 @@ begin
 end;
 $fn$;
 
-revoke all on function public.save_round(uuid, uuid, date, date, text[], jsonb, text) from public, anon;
-grant execute on function public.save_round(uuid, uuid, date, date, text[], jsonb, text) to authenticated;
+revoke all on function public.save_round(uuid, uuid, date, date, text[], jsonb, text, jsonb) from public, anon;
+grant execute on function public.save_round(uuid, uuid, date, date, text[], jsonb, text, jsonb) to authenticated;
 
 -- Both sheets carry the round's trivia now.
 create or replace function public.tournaments_sheet()
@@ -10674,6 +10718,7 @@ as $fn$
                  select jsonb_agg(jsonb_build_object(
                           'id', r.id, 'starts_on', r.starts_on, 'ends_on', r.ends_on,
                           'games', to_jsonb(r.games),
+                          'game_weights', r.game_weights,
                           'trivia', public.round_trivia(r.id),
                           'prize', r.prize,
                           'started', r.starts_on <= public.puzzle_day())
@@ -10700,6 +10745,7 @@ as $fn$
            'tournament_prize', t.prize,
            'round_id', r.id, 'starts_on', r.starts_on, 'ends_on', r.ends_on,
            'games', to_jsonb(r.games),
+           'game_weights', r.game_weights,
            'trivia', public.round_trivia(r.id),
            'prize', r.prize,
            'number', (select count(*) from public.tournament_rounds q
@@ -10736,6 +10782,7 @@ declare
   n int := 0;
   keys text[];
   boards jsonb;
+  weights jsonb;
   trivia jsonb;
   rounds jsonb := '[]'::jsonb;
   tbl jsonb;
@@ -10764,6 +10811,20 @@ begin
     from public.games g
     where g.feed = any (r.games);
 
+    -- The same mapping again, carrying what each board is worth: the weights
+    -- are keyed by feed name and the boards by progress name, and this is the
+    -- one place that knows both.
+    select coalesce(jsonb_object_agg(
+             case
+               when g.progress = 'squares'
+                 then 'squares' || case when t.difficulty = 'easy' then '4' else '5' end
+               else g.progress
+             end,
+             coalesce((r.game_weights ->> g.feed)::numeric, 1)), '{}'::jsonb)
+      into weights
+    from public.games g
+    where g.feed = any (r.games);
+
     select coalesce(jsonb_object_agg(e.key, e.value), '{}'::jsonb)
       into boards
     from jsonb_each(public.boards_between(r.starts_on, r.starts_on, 'round', t.difficulty, null, 500)) e
@@ -10784,7 +10845,7 @@ begin
     rounds := rounds || jsonb_build_array(jsonb_build_object(
       'id', r.id, 'number', n, 'starts_on', r.starts_on, 'ends_on', r.ends_on,
       'prize', r.prize,
-      'boards', boards, 'trivia', trivia));
+      'boards', boards, 'weights', weights, 'trivia', trivia));
   end loop;
 
   select coalesce(jsonb_agg(jsonb_build_object(
@@ -10797,8 +10858,12 @@ begin
            count(*) filter (where pl.place = 1)::int as wins,
            count(*)::int as placed
     from (
+      -- Ten down to one for placing, times what the round said that board was
+      -- worth. Unlisted is 1, which is what every board paid before a round
+      -- could say otherwise.
       select x.row->>'name' as name,
-             greatest(0, 11 - x.ord)::numeric as pts,
+             greatest(0, 11 - x.ord)::numeric
+               * coalesce((rd->'weights'->>b.key)::numeric, 1) as pts,
              x.ord::int as place
       from jsonb_array_elements(rounds) rd,
            jsonb_each(rd->'boards') b,
@@ -11265,6 +11330,7 @@ as $fn$
                  select jsonb_agg(jsonb_build_object(
                           'id', r.id, 'starts_on', r.starts_on, 'ends_on', r.ends_on,
                           'games', to_jsonb(r.games),
+                          'game_weights', r.game_weights,
                           'trivia', public.round_trivia(r.id),
                           'prize', r.prize,
                           'started', r.starts_on <= public.puzzle_day())

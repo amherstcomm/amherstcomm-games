@@ -73,6 +73,8 @@ type RoundForm = {
   sessions: { id: string; weight: number }[];
   /** what winning the round is worth */
   prize: string;
+  /** what each game is worth against the others, by feed name */
+  gameWeights: Record<string, number>;
   /** a round being played: only its end date may change */
   started: boolean;
   /** a round that is over: its trivia may still be attached, nothing else */
@@ -161,10 +163,18 @@ export default function AdminTournaments() {
 
   function toggleGame(feed: string) {
     if (!rForm) return;
-    const games = rForm.games.includes(feed)
-      ? rForm.games.filter((g) => g !== feed)
-      : [...rForm.games, feed];
-    setRForm({ ...rForm, games });
+    const off = rForm.games.includes(feed);
+    const games = off ? rForm.games.filter((g) => g !== feed) : [...rForm.games, feed];
+    // A weight for a game that is no longer in the round is one the server
+    // refuses, with a reason about a game nobody can see on screen.
+    const gameWeights = { ...rForm.gameWeights };
+    if (off) delete gameWeights[feed];
+    setRForm({ ...rForm, games, gameWeights });
+  }
+
+  function setGameWeight(feed: string, weight: number) {
+    if (!rForm) return;
+    setRForm({ ...rForm, gameWeights: { ...rForm.gameWeights, [feed]: weight } });
   }
 
   function toggleSession(id: string) {
@@ -262,7 +272,14 @@ export default function AdminTournaments() {
                             {state && <span className="ml-2 text-accent">{state}</span>}
                           </p>
                           <p className="text-slate-400">
-                            {r.games.map(roundGameName).join(', ') || 'No games'}
+                            {r.games
+                              .map((feed) => {
+                                const w = r.game_weights?.[feed];
+                                return w && w !== 1
+                                  ? `${roundGameName(feed)} (×${w})`
+                                  : roundGameName(feed);
+                              })
+                              .join(', ') || 'No games'}
                           </p>
                           {r.prize && (
                             <p className="text-accent">Prize: {r.prize}</p>
@@ -295,6 +312,7 @@ export default function AdminTournaments() {
                                   weight: v.weight,
                                 })),
                                 prize: r.prize ?? '',
+                                gameWeights: r.game_weights ?? {},
                                 started: r.started,
                                 finished: state === 'finished',
                               })
@@ -382,6 +400,40 @@ export default function AdminTournaments() {
                             );
                           })}
                         </div>
+                        {/* What each chosen game is worth, the same way the
+                            round's trivia has always carried a weight: 1 is
+                            parity, and the boards are otherwise all equal
+                            however hard they are. */}
+                        {rForm.games.length > 0 && (
+                          <ul
+                            className="mt-2 flex flex-wrap gap-3"
+                            aria-label="What each game is worth"
+                          >
+                            {ROUND_GAMES.filter((g) => rForm.games.includes(g.feed)).map((g) => (
+                              <li key={g.feed}>
+                                <label className="flex items-center gap-1.5 text-xs text-slate-400">
+                                  {g.name}
+                                  <input
+                                    type="number"
+                                    className={FIELD + ' w-20 py-1'}
+                                    aria-label={`What ${g.name} is worth`}
+                                    min={0.5}
+                                    max={10}
+                                    step={0.5}
+                                    value={rForm.gameWeights[g.feed] ?? 1}
+                                    onChange={(e) => setGameWeight(g.feed, Number(e.target.value))}
+                                  />
+                                  ×
+                                </label>
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                        <p className="text-xs text-slate-400 mt-1">
+                          At 1× every board pays the same for placing — ten points for
+                          first down to one for tenth. Raise it for the game the round
+                          is really about.
+                        </p>
                       </fieldset>
                     )}
                     <label className="block">
@@ -490,6 +542,7 @@ export default function AdminTournaments() {
                         games: [],
                         sessions: [],
                         prize: '',
+                        gameWeights: {},
                         started: false,
                         finished: false,
                       })

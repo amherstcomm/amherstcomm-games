@@ -46,6 +46,8 @@ export type RoundStandings = {
   boards: Partial<Record<BoardGame, StandingRow[]>>;
   /** the round's trivia, ranked and weighted */
   trivia: TriviaStandings[];
+  /** what each board was worth, keyed the way the boards are */
+  weights?: Record<string, number>;
   /** what winning the round was worth */
   prize?: string | null;
 };
