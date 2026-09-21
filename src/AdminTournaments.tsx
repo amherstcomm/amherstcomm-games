@@ -19,6 +19,7 @@ import { useCallback, useEffect, useState } from 'react';
 import Waiting from '@/Waiting';
 import { readSessions, type SessionSummary } from '@/authoring';
 import { DIFFICULTIES, DIFFICULTY_LABEL, type Difficulty } from '@/difficulty';
+import { PHASE_WORD, readContests, type ContestRow } from '@/contests';
 import {
   deleteRound,
   deleteTournament,
@@ -71,6 +72,8 @@ type RoundForm = {
   games: string[];
   /** the sessions this round counts, and what each is worth */
   sessions: { id: string; weight: number }[];
+  /** and the contests, on the same terms */
+  contests: { id: string; weight: number }[];
   /** what winning the round is worth */
   prize: string;
   /** what each game is worth against the others, by feed name */
@@ -90,6 +93,7 @@ const sessionNote = (s: SessionSummary) =>
 export default function AdminTournaments() {
   const [tournaments, setTournaments] = useState<Tournament[] | null>(null);
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
+  const [contests, setContests] = useState<ContestRow[]>([]);
   const [refused, setRefused] = useState('');
   const [note, setNote] = useState('');
   const [busy, setBusy] = useState(false);
@@ -111,6 +115,9 @@ export default function AdminTournaments() {
   // no sessions yet still sets rounds up, it just has no trivia to offer.
   useEffect(() => {
     let alive = true;
+    void readContests().then((got) => {
+      if (alive) setContests(got.contests ?? []);
+    });
     void readSessions().then((rows) => {
       if (alive) setSessions(rows);
     });
@@ -185,6 +192,25 @@ export default function AdminTournaments() {
       sessions: on
         ? rForm.sessions.filter((x) => x.id !== id)
         : [...rForm.sessions, { id, weight: 1 }],
+    });
+  }
+
+  function toggleContest(id: string) {
+    if (!rForm) return;
+    const on = rForm.contests.some((x) => x.id === id);
+    setRForm({
+      ...rForm,
+      contests: on
+        ? rForm.contests.filter((x) => x.id !== id)
+        : [...rForm.contests, { id, weight: 1 }],
+    });
+  }
+
+  function setContestWeight(id: string, weight: number) {
+    if (!rForm) return;
+    setRForm({
+      ...rForm,
+      contests: rForm.contests.map((x) => (x.id === id ? { ...x, weight } : x)),
     });
   }
 
@@ -310,6 +336,10 @@ export default function AdminTournaments() {
                                 sessions: (r.trivia ?? []).map((v) => ({
                                   id: v.session_id,
                                   weight: v.weight,
+                                })),
+                                contests: (r.contests ?? []).map((c) => ({
+                                  id: c.contest_id,
+                                  weight: c.weight,
                                 })),
                                 prize: r.prize ?? '',
                                 gameWeights: r.game_weights ?? {},
@@ -512,6 +542,76 @@ export default function AdminTournaments() {
                         event rather than one more thing in it.
                       </p>
                     </fieldset>
+                    <fieldset>
+                      <legend className="text-xs text-slate-400 mb-1">
+                        Contests in this round
+                      </legend>
+                      {contests.length === 0 ? (
+                        <p className="text-xs text-slate-400">
+                          No contests yet. Set one up on the Contests screen and it
+                          can count here.
+                        </p>
+                      ) : (
+                        <ul
+                          className="space-y-1 max-h-56 overflow-y-auto"
+                          aria-label="Contests in this round"
+                        >
+                          {contests.map((c) => {
+                            const picked = rForm.contests.find((x) => x.id === c.id);
+                            return (
+                              <li
+                                key={c.id}
+                                className="flex flex-wrap items-center gap-2 rounded-lg bg-white/5 px-2.5 py-1.5"
+                              >
+                                <label className="flex items-center gap-2 min-w-0 flex-1 text-xs">
+                                  <input
+                                    type="checkbox"
+                                    checked={picked !== undefined}
+                                    onChange={() => toggleContest(c.id)}
+                                  />
+                                  <span className="min-w-0">
+                                    <span className="block truncate font-semibold text-slate-200">
+                                      {c.name}
+                                    </span>
+                                    {/* The phase, because a contest pays nothing
+                                        until its voting has closed -- a weight
+                                        showing against one still being voted on
+                                        is not being applied yet. */}
+                                    <span className="block text-slate-400">
+                                      {PHASE_WORD[c.phase]} · {c.entries}{' '}
+                                      {c.entries === 1 ? 'entry' : 'entries'}
+                                    </span>
+                                  </span>
+                                </label>
+                                {picked !== undefined && (
+                                  <label className="flex items-center gap-1.5 text-xs text-slate-400">
+                                    Worth
+                                    <input
+                                      type="number"
+                                      className={FIELD + ' w-20 py-1'}
+                                      aria-label={`What ${c.name} is worth`}
+                                      min={0.5}
+                                      max={10}
+                                      step={0.5}
+                                      value={picked.weight}
+                                      onChange={(e) =>
+                                        setContestWeight(c.id, Number(e.target.value))
+                                      }
+                                    />
+                                    ×
+                                  </label>
+                                )}
+                              </li>
+                            );
+                          })}
+                        </ul>
+                      )}
+                      <p className="text-xs text-slate-400 mt-1">
+                        A contest pays its placings the way a board does — ten for
+                        first down to one for tenth — but only once its voting has
+                        closed, so the standings do not move while people vote.
+                      </p>
+                    </fieldset>
                     <div className="flex gap-2">
                       <button
                         className={BUTTON}
@@ -519,7 +619,9 @@ export default function AdminTournaments() {
                           busy ||
                           !rForm.from ||
                           !rForm.until ||
-                          (rForm.games.length === 0 && rForm.sessions.length === 0)
+                          (rForm.games.length === 0 &&
+                            rForm.sessions.length === 0 &&
+                            rForm.contests.length === 0)
                         }
                         onClick={() => void submitRound()}
                       >
@@ -541,6 +643,7 @@ export default function AdminTournaments() {
                         until: '',
                         games: [],
                         sessions: [],
+                        contests: [],
                         prize: '',
                         gameWeights: {},
                         started: false,

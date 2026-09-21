@@ -38,17 +38,29 @@ const ENTRIES = [
   { id: 'e2', title: 'Gourdon', blurb: null, image_path: null, entrant: 'Bea Smith', mine: false },
 ];
 
+/** A contest in its voting window, which is a different four dates. */
+const VOTING = {
+  ...CONTEST,
+  phase: 'voting',
+  may_enter: false,
+  may_vote: true,
+  entries_close_on: plus(TODAY, -2),
+  votes_open_on: plus(TODAY, -1),
+  votes_close_on: plus(TODAY, 2),
+};
+
 /** The contest RPCs, answered from whatever this test wants them to say. */
 async function stub(
   page: import('@playwright/test').Page,
   contest: Record<string, unknown>,
-  entries = ENTRIES
+  entries = ENTRIES,
+  myVotes: string[] = []
 ) {
   await page.route('https://stub.supabase.co/rest/v1/rpc/contest_view', (route) =>
     route.fulfill({
       status: 200,
       contentType: 'application/json',
-      body: JSON.stringify({ ok: true, contest, entries }),
+      body: JSON.stringify({ ok: true, contest, entries, my_votes: myVotes }),
     })
   );
   await page.route('https://stub.supabase.co/rest/v1/rpc/contests_on', (route) =>
@@ -217,4 +229,210 @@ test('an entry whose photo cannot be signed keeps its tile', async ({ page }) =>
   await expect(tile).toBeVisible();
   await expect(tile.getByText('No photo yet')).toBeVisible();
   await expect(page.getByRole('img', { name: 'Jack the Ripper' })).toHaveCount(0);
+});
+
+// ---------------------------------------------------------------------------
+// Voting
+// ---------------------------------------------------------------------------
+
+test('the ballot offers everything but your own', async ({ page }) => {
+  await stub(page, VOTING, [
+    { ...ENTRIES[0], mine: true },
+    { ...ENTRIES[1], mine: false },
+  ]);
+  await page.route('**/rest/v1/rpc/contest_results', (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ ok: false, reason: 'the results are in when voting closes' }),
+    })
+  );
+  await page.goto('/contest/c1');
+
+  const rank = page.getByRole('list', { name: 'The entries you can rank' });
+  await expect(rank.getByRole('button', { name: 'Gourdon' })).toBeVisible();
+  // Your own is not on the ballot at all rather than on it and refused: the
+  // server turns it away either way, and offering it is offering a mistake.
+  await expect(rank.getByRole('button', { name: 'Jack the Ripper' })).toHaveCount(0);
+  // And nothing about how the room has voted so far is on the page.
+  await expect(page.getByText(/How it stands|Result/)).toHaveCount(0);
+});
+
+test('picks are numbered in the order they are tapped, and untap', async ({ page }) => {
+  await stub(page, VOTING, [
+    { id: 'e1', title: 'Alpha', blurb: null, image_path: null, entrant: 'Ada', mine: false },
+    { id: 'e2', title: 'Beta', blurb: null, image_path: null, entrant: 'Bea', mine: false },
+    { id: 'e3', title: 'Gamma', blurb: null, image_path: null, entrant: 'Cal', mine: false },
+  ]);
+  await page.goto('/contest/c1');
+
+  const rank = page.getByRole('list', { name: 'The entries you can rank' });
+  await rank.getByRole('button', { name: 'Beta' }).click();
+  await rank.getByRole('button', { name: 'Gamma' }).click();
+  await expect(rank.getByRole('button', { name: '1st Beta' })).toBeVisible();
+  await expect(rank.getByRole('button', { name: '2nd Gamma' })).toBeVisible();
+
+  // Tapping a pick again takes it out and closes the gap behind it, so the
+  // remaining pick is promoted rather than left as somebody's second choice
+  // with no first.
+  await rank.getByRole('button', { name: '1st Beta' }).click();
+  await expect(rank.getByRole('button', { name: '1st Gamma' })).toBeVisible();
+  await expect(page.getByRole('button', { name: /Beta/ })).toHaveAttribute(
+    'aria-pressed',
+    'false'
+  );
+});
+
+test('a ballot is only sent when it is cast', async ({ page }) => {
+  const sent: string[][] = [];
+  await stub(page, VOTING, [
+    { id: 'e1', title: 'Alpha', blurb: null, image_path: null, entrant: 'Ada', mine: false },
+    { id: 'e2', title: 'Beta', blurb: null, image_path: null, entrant: 'Bea', mine: false },
+  ]);
+  await page.route('**/rest/v1/rpc/cast_contest_votes', (route) => {
+    sent.push(JSON.parse(route.request().postData() ?? '{}').p_entries ?? []);
+    return route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ ok: true, counted: 2 }),
+    });
+  });
+  await page.goto('/contest/c1');
+
+  const rank = page.getByRole('list', { name: 'The entries you can rank' });
+  await rank.getByRole('button', { name: 'Beta' }).click();
+  await rank.getByRole('button', { name: 'Alpha' }).click();
+  // Nothing has gone yet: a ballot that saved on every tap would make each
+  // half-finished ordering on the way to the real one somebody's vote.
+  expect(sent).toEqual([]);
+
+  await page.getByRole('button', { name: 'Cast my ballot' }).click();
+  await expect(page.getByText('Your ballot is in.')).toBeVisible();
+  expect(sent).toEqual([['e2', 'e1']]);
+});
+
+test('too many picks is refused before it is sent', async ({ page }) => {
+  await stub(page, { ...VOTING, picks: 2 }, [
+    { id: 'e1', title: 'Alpha', blurb: null, image_path: null, entrant: 'Ada', mine: false },
+    { id: 'e2', title: 'Beta', blurb: null, image_path: null, entrant: 'Bea', mine: false },
+    { id: 'e3', title: 'Gamma', blurb: null, image_path: null, entrant: 'Cal', mine: false },
+  ]);
+  await page.goto('/contest/c1');
+
+  const rank = page.getByRole('list', { name: 'The entries you can rank' });
+  await rank.getByRole('button', { name: 'Alpha' }).click();
+  await rank.getByRole('button', { name: 'Beta' }).click();
+  await rank.getByRole('button', { name: 'Gamma' }).click();
+
+  await expect(page.getByText('This one ranks 2. Take one out to add another.')).toBeVisible();
+  await expect(rank.getByRole('button', { name: /Gamma/ })).toHaveAttribute(
+    'aria-pressed',
+    'false'
+  );
+});
+
+test('a ballot already cast comes back on the page', async ({ page }) => {
+  await stub(
+    page,
+    VOTING,
+    [
+      { id: 'e1', title: 'Alpha', blurb: null, image_path: null, entrant: 'Ada', mine: false },
+      { id: 'e2', title: 'Beta', blurb: null, image_path: null, entrant: 'Bea', mine: false },
+    ],
+    ['e2', 'e1']
+  );
+  await page.goto('/contest/c1');
+
+  const rank = page.getByRole('list', { name: 'The entries you can rank' });
+  await expect(rank.getByRole('button', { name: '1st Beta' })).toBeVisible();
+  await expect(rank.getByRole('button', { name: '2nd Alpha' })).toBeVisible();
+  // The ordering is also said in words: the chips stay in entry order so they
+  // do not move under a thumb, which leaves the ranking hard to read off them.
+  await expect(page.getByText('Your picks: 1st Beta, 2nd Alpha')).toBeVisible();
+  // And the gallery says so too, so the three parts of the page agree.
+  await expect(page.getByText('your 1st pick')).toBeVisible();
+});
+
+test('the result is shown once voting has closed', async ({ page }) => {
+  await stub(page, {
+    ...VOTING,
+    phase: 'over',
+    may_vote: false,
+    votes_close_on: plus(TODAY, -1),
+  });
+  await page.route('**/rest/v1/rpc/contest_results', (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        ok: true,
+        final: true,
+        voters: 12,
+        table: [
+          { place: 1, entry_id: 'e2', title: 'Gourdon', points: 9, firsts: 3, entrant: 'Bea Smith' },
+          { place: 2, entry_id: 'e1', title: 'Jack the Ripper', points: 4, firsts: 0, entrant: 'Ada Lovelace' },
+        ],
+        ballots: null,
+      }),
+    })
+  );
+  await page.goto('/contest/c1');
+
+  await expect(page.getByRole('heading', { name: 'Result' })).toBeVisible();
+  await expect(page.getByText('12 people have voted.')).toBeVisible();
+  await expect(page.getByText('9 points')).toBeVisible();
+  await expect(page.getByText('3 firsts')).toBeVisible();
+  // A secret ballot says nothing about who voted for what.
+  await expect(page.getByText('Who voted for what')).toHaveCount(0);
+  // And there is no way to vote any more.
+  await expect(page.getByRole('button', { name: 'Cast my ballot' })).toHaveCount(0);
+});
+
+test('an organiser looking early is told it is not the result', async ({ page }) => {
+  await stub(page, { ...VOTING, may_vote: false });
+  await page.route('**/rest/v1/rpc/contest_results', (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        ok: true,
+        final: false,
+        voters: 4,
+        table: [
+          { place: 1, entry_id: 'e2', title: 'Gourdon', points: 6, firsts: 2, entrant: 'Bea Smith' },
+        ],
+        ballots: null,
+      }),
+    })
+  );
+  await page.goto('/contest/c1');
+
+  await expect(page.getByRole('heading', { name: 'How it stands' })).toBeVisible();
+  await expect(page.getByText(/this is not the result yet/)).toBeVisible();
+});
+
+test('an open ballot says who voted for what', async ({ page }) => {
+  await stub(page, { ...VOTING, phase: 'over', may_vote: false, voters_shown: true });
+  await page.route('**/rest/v1/rpc/contest_results', (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        ok: true,
+        final: true,
+        voters: 2,
+        table: [
+          { place: 1, entry_id: 'e2', title: 'Gourdon', points: 5, firsts: 1, entrant: 'Bea Smith' },
+        ],
+        ballots: [
+          { voter: 'Ada Lovelace', picks: ['Gourdon', 'Jack the Ripper'] },
+          { voter: 'Cal Turner', picks: ['Gourdon'] },
+        ],
+      }),
+    })
+  );
+  await page.goto('/contest/c1');
+
+  await expect(page.getByText('Who voted for what')).toBeVisible();
+  await expect(page.getByText('Ada Lovelace: Gourdon, Jack the Ripper')).toBeVisible();
 });

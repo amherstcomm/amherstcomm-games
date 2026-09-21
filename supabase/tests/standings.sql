@@ -183,11 +183,12 @@ select pg_temp.check('and a session cannot count in two rounds',
                      '[{"id": "f5555555-5555-5555-5555-555555555555"}]'::jsonb)
    ->>'reason') = 'the session "Round One Trivia" already counts in another round');
 
--- A round may now be trivia and nothing else; before this it needed a game.
+-- A round may be trivia and nothing else, or a contest and nothing else;
+-- before either it needed a game. What is refused is the empty round.
 select pg_temp.check('a round of trivia alone is refused only for having nothing at all',
   (public.save_round(null, (select id from st), pg_temp.d(40), pg_temp.d(45),
                      '{}'::text[], '[]'::jsonb)
-   ->>'reason') = 'a round needs at least one game or one session');
+   ->>'reason') = 'a round needs at least one game, one session or one contest');
 
 create temp table got2 as select public.tournament_standings((select id from st)) j;
 

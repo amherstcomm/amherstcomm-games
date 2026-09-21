@@ -24,6 +24,17 @@ export type RoundTrivia = {
   weight: number;
 };
 
+/** A contest a round counts. Its phase is here because a contest pays nothing
+ *  until its voting has closed, and the admin list should say so rather than
+ *  showing a weight that is not being applied yet. */
+export type RoundContestRow = {
+  contest_id: string;
+  name: string;
+  phase: string;
+  votes_close_on: string;
+  weight: number;
+};
+
 export type Round = {
   id: string;
   starts_on: string;
@@ -32,6 +43,8 @@ export type Round = {
   games: string[];
   /** what each game is worth against the others, by feed name; missing is 1 */
   game_weights?: Record<string, number>;
+  /** the contests this round counts, and what each is worth */
+  contests?: RoundContestRow[];
   /** the sessions counting in this round */
   trivia: RoundTrivia[];
   /** what is on offer for winning it, in whatever words the admin used */
@@ -126,6 +139,8 @@ export async function saveRound(r: {
   prize?: string;
   /** what each game is worth, by feed name; a game left out is worth 1 */
   gameWeights?: Record<string, number>;
+  /** the contests this round counts, and what each is worth */
+  contests?: { id: string; weight: number }[];
 }): Promise<{ ok: boolean; reason?: string; id?: string }> {
   if (!supabase) return fail('not connected');
   const { data, error } = await supabase.rpc('save_round', {
@@ -141,6 +156,7 @@ export async function saveRound(r: {
     p_game_weights: Object.fromEntries(
       Object.entries(r.gameWeights ?? {}).filter(([game, w]) => r.games.includes(game) && w !== 1)
     ),
+    p_contests: (r.contests ?? []).map((c) => ({ id: c.id, weight: c.weight })),
   });
   if (error) return fail(error.message);
   return (data as { ok: boolean; reason?: string; id?: string }) ?? fail('no answer');

@@ -8,6 +8,15 @@ import { supabase } from '@/supabase';
 import type { Difficulty } from '@/difficulty';
 import type { RoundTrivia } from '@/tournaments';
 
+/** A contest a round counts, and what it is worth against the boards. */
+export type RoundContest = {
+  contest_id: string;
+  name: string;
+  phase: string;
+  votes_close_on: string;
+  weight: number;
+};
+
 export type CurrentRound = {
   tournament_id: string;
   tournament: string;
@@ -23,6 +32,8 @@ export type CurrentRound = {
   game_weights?: Record<string, number>;
   /** the sessions counting in this round, live and open alike */
   trivia: RoundTrivia[];
+  /** the contests counting in this round */
+  contests: RoundContest[];
   /** what winning the round is worth, in words, or nothing */
   prize?: string | null;
   /** and what winning the whole tournament is worth */

@@ -12277,3 +12277,841 @@ begin
     using (bucket_id = 'contest-entries'
            and (storage.foldername(name))[1] = (select auth.uid())::text)$p$;
 end $$;
+
+
+-- ---------------------------------------------------------------------------
+-- Voting on a contest
+-- ---------------------------------------------------------------------------
+--
+-- Everybody ranks a few favourites rather than picking one. A single pick on a
+-- field of thirty pumpkins is decided by whoever's friends turned up; a ranked
+-- few finds the entry most people liked, which is the question a contest is
+-- actually asking.
+--
+-- A place is worth `picks + 1 - place`, so with the usual three that is 3, 2
+-- and 1. Nothing here stores those numbers: the ballot stores the ordering and
+-- the tally derives the points, so changing what a contest ranks does not
+-- leave old ballots meaning something else.
+--
+-- One ballot per person, replaced when they change their mind. The primary key
+-- is (contest, voter, place), so a voter cannot hold two firsts; the unique on
+-- (contest, voter, entry) is the other half of it -- the same entry cannot be
+-- both their first and their third.
+
+create table if not exists public.contest_votes (
+  contest_id uuid not null references public.contests (id) on delete cascade,
+  voter uuid not null references auth.users (id) on delete cascade,
+  entry_id uuid not null references public.contest_entries (id) on delete cascade,
+  place int not null check (place between 1 and 5),
+  cast_at timestamptz not null default now(),
+  primary key (contest_id, voter, place),
+  unique (contest_id, voter, entry_id)
+);
+
+create index if not exists contest_votes_entry_idx
+  on public.contest_votes (entry_id);
+
+alter table public.contest_votes enable row level security;
+revoke all on public.contest_votes from anon, authenticated;
+
+-- Whether this person may vote right now: signed in, voting is open, and
+-- there is something to vote for that is not their own.
+create or replace function public.may_vote_contest(p_contest uuid)
+returns boolean
+language sql
+stable
+security definer
+set search_path = ''
+as $fn$
+  select exists (
+    select 1 from public.contests c
+    where c.id = p_contest
+      and (select auth.uid()) is not null
+      and public.contest_phase(c) = 'voting'
+      and exists (
+        select 1 from public.contest_entries e
+        where e.contest_id = c.id
+          and e.entrant is distinct from (select auth.uid()))
+  )
+$fn$;
+
+revoke all on function public.may_vote_contest(uuid) from public, anon;
+grant execute on function public.may_vote_contest(uuid) to authenticated;
+
+/*
+ * Casting a ballot: the entries in order, best first.
+ *
+ * Fewer than the contest allows is fine -- somebody who liked two of them
+ * should not be made to invent a third -- but more is refused rather than
+ * quietly truncated, because a ballot that does not mean what it said is worse
+ * than one that was rejected.
+ *
+ * Voting for your own is refused. It is the one rule people expect without
+ * being told, and the alternative is a contest decided by whoever remembered
+ * they were allowed to.
+ *
+ * Replaces whatever was there. Changing your mind is ordinary while voting is
+ * open, and a ballot is small enough that rewriting it wholesale is simpler
+ * than working out which places moved.
+ */
+create or replace function public.cast_contest_votes(p_contest uuid, p_entries uuid[])
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $fn$
+declare
+  uid uuid := (select auth.uid());
+  c public.contests;
+  picked uuid[] := coalesce(p_entries, '{}'::uuid[]);
+  n int := cardinality(picked);
+  own int;
+  foreign_entries int;
+begin
+  if uid is null then
+    return jsonb_build_object('ok', false, 'reason', 'not signed in');
+  end if;
+  select * into c from public.contests where id = p_contest;
+  if not found then
+    return jsonb_build_object('ok', false, 'reason', 'no such contest');
+  end if;
+  if public.contest_phase(c) <> 'voting' then
+    return jsonb_build_object('ok', false, 'reason',
+      case public.contest_phase(c)
+        when 'over' then 'voting has closed for this one'
+        else 'voting has not opened for this one yet'
+      end);
+  end if;
+
+  -- An empty ballot is how somebody takes theirs back, which is a thing to
+  -- allow rather than an error: they may have voted and thought better of it.
+  if n = 0 then
+    delete from public.contest_votes where contest_id = p_contest and voter = uid;
+    return jsonb_build_object('ok', true, 'counted', 0);
+  end if;
+
+  if n > c.picks then
+    return jsonb_build_object('ok', false, 'reason',
+      'this one ranks ' || c.picks || ', and that is ' || n);
+  end if;
+  if n <> (select count(distinct x) from unnest(picked) x) then
+    return jsonb_build_object('ok', false, 'reason', 'the same entry cannot be two of your picks');
+  end if;
+
+  select count(*) into foreign_entries
+  from unnest(picked) x
+  where not exists (
+    select 1 from public.contest_entries e where e.id = x and e.contest_id = p_contest);
+  if foreign_entries > 0 then
+    return jsonb_build_object('ok', false, 'reason', 'one of those is not in this contest');
+  end if;
+
+  select count(*) into own
+  from public.contest_entries e
+  where e.id = any (picked) and e.entrant = uid;
+  if own > 0 then
+    return jsonb_build_object('ok', false, 'reason', 'you cannot vote for your own');
+  end if;
+
+  delete from public.contest_votes where contest_id = p_contest and voter = uid;
+  insert into public.contest_votes (contest_id, voter, entry_id, place)
+  select p_contest, uid, x.entry, x.ord::int
+  from unnest(picked) with ordinality as x(entry, ord);
+
+  return jsonb_build_object('ok', true, 'counted', n);
+end;
+$fn$;
+
+revoke all on function public.cast_contest_votes(uuid, uuid[]) from public, anon;
+grant execute on function public.cast_contest_votes(uuid, uuid[]) to authenticated;
+
+-- What this person ranked, best first. Their own ballot is theirs to see
+-- whatever the contest says about showing voters.
+create or replace function public.my_contest_votes(p_contest uuid)
+returns jsonb
+language sql
+stable
+security definer
+set search_path = ''
+as $fn$
+  select coalesce(jsonb_agg(v.entry_id order by v.place), '[]'::jsonb)
+  from public.contest_votes v
+  where v.contest_id = p_contest and v.voter = (select auth.uid())
+$fn$;
+
+revoke all on function public.my_contest_votes(uuid) from public, anon;
+grant execute on function public.my_contest_votes(uuid) to authenticated;
+
+/*
+ * The tally. Points, firsts and where each entry came.
+ *
+ * An entry belonging to somebody who has sat out is left off entirely, the
+ * same way their board results leave the leaderboards: sitting out means
+ * sitting out, and an entry that cannot win should not occupy a place above
+ * one that can. Their votes still count -- voting is not competing, and a
+ * person who has stepped back from the scoreboard has not given up a say in
+ * who wins the pumpkin.
+ *
+ * Ties break on firsts, then on title: two entries on nine points are not the
+ * same result if one of them was somebody's favourite and the other was
+ * everybody's third.
+ *
+ * Internal. It answers during voting as well as after, which is exactly what
+ * must not reach a player -- contest_ranking and contest_results are the two
+ * doors, and they decide who may look and when.
+ */
+create or replace function public.contest_tally(p_contest uuid)
+returns table (place bigint, entry_id uuid, name text, title text, points numeric, firsts int)
+language sql
+stable
+set search_path = ''
+as $fn$
+  select rank() over (order by t.points desc, t.firsts desc, t.title) as place,
+         t.entry_id,
+         coalesce(p.display_name, 'Someone') as name,
+         t.title,
+         t.points,
+         t.firsts
+  from (
+    select e.id as entry_id, e.entrant, e.title,
+           coalesce(sum(c.picks + 1 - v.place), 0)::numeric as points,
+           coalesce(count(*) filter (where v.place = 1), 0)::int as firsts
+    from public.contest_entries e
+    join public.contests c on c.id = e.contest_id
+    left join public.contest_votes v on v.entry_id = e.id
+    where e.contest_id = p_contest
+      and coalesce((select pr.competing from public.profiles pr where pr.id = e.entrant), true)
+    group by e.id, e.entrant, e.title, c.picks
+  ) t
+  left join public.profiles p on p.id = t.entrant
+$fn$;
+
+revoke all on function public.contest_tally(uuid) from public, anon, authenticated;
+
+/*
+ * The contest as a tournament round scores it: a placing per person.
+ *
+ * Empty until voting has closed. A contest pays when it is decided, and a
+ * standing that moved every time somebody voted would have the tournament
+ * changing under the people in it for a week -- the boards and the trivia both
+ * settle before they pay, and this is the same promise.
+ *
+ * An entry nobody is credited for -- an organiser entered it and said whose it
+ * was not -- scores for nobody. There is no one to pay.
+ */
+create or replace function public.contest_ranking(p_contest uuid)
+returns table (place bigint, name text, points numeric)
+language sql
+stable
+set search_path = ''
+as $fn$
+  select t.place, t.name, t.points
+  from public.contest_tally(p_contest) t
+  join public.contest_entries e on e.id = t.entry_id
+  where e.entrant is not null
+    and (select public.contest_phase(c) from public.contests c where c.id = p_contest) = 'over'
+$fn$;
+
+revoke all on function public.contest_ranking(uuid) from public, anon, authenticated;
+
+/*
+ * The result, for a page.
+ *
+ * Nothing until voting has closed, for everybody except an organiser -- who
+ * has to be able to write the announcement before announcing it. A running
+ * total on screen during voting is not a scoreboard, it is a suggestion, and
+ * the last people to vote would be voting on a different question from the
+ * first.
+ *
+ * Who voted for what comes back only where the contest was set up to show it,
+ * and only once it is over. Off is the default and the ordinary expectation:
+ * these are colleagues ranking each other's work.
+ */
+create or replace function public.contest_results(p_contest uuid)
+returns jsonb
+language plpgsql
+stable
+security definer
+set search_path = ''
+as $fn$
+declare
+  c public.contests;
+  admin boolean := public.can('games.setup');
+  phase text;
+begin
+  select * into c from public.contests where id = p_contest;
+  if not found then
+    return jsonb_build_object('ok', false, 'reason', 'no such contest');
+  end if;
+  phase := public.contest_phase(c);
+  if phase <> 'over' and not admin then
+    return jsonb_build_object('ok', false, 'reason',
+      case phase
+        when 'voting' then 'the results are in when voting closes'
+        else 'nobody has voted on this one yet'
+      end);
+  end if;
+
+  return jsonb_build_object(
+    'ok', true,
+    -- An organiser looking early is told so, so a number read off this screen
+    -- is never mistaken for the final one.
+    'final', phase = 'over',
+    'prize', c.prize,
+    'voters', (select count(distinct v.voter) from public.contest_votes v
+               where v.contest_id = p_contest),
+    'table', coalesce((
+      select jsonb_agg(jsonb_build_object(
+               'place', t.place, 'entry_id', t.entry_id, 'title', t.title,
+               'points', t.points, 'firsts', t.firsts,
+               'entrant', case when c.entrants_shown then t.name end)
+             order by t.place, t.title)
+      from public.contest_tally(p_contest) t), '[]'::jsonb),
+    'ballots', case when c.voters_shown and phase = 'over' then coalesce((
+      select jsonb_agg(b order by b->>'voter')
+      from (
+        select jsonb_build_object(
+                 'voter', coalesce(p.display_name, 'Someone'),
+                 'picks', (select jsonb_agg(e.title order by v2.place)
+                           from public.contest_votes v2
+                           join public.contest_entries e on e.id = v2.entry_id
+                           where v2.contest_id = p_contest and v2.voter = v.voter)) as b
+        from (select distinct voter from public.contest_votes where contest_id = p_contest) v
+        left join public.profiles p on p.id = v.voter
+      ) z), '[]'::jsonb) end);
+end;
+$fn$;
+
+revoke all on function public.contest_results(uuid) from public;
+grant execute on function public.contest_results(uuid) to anon, authenticated;
+
+-- ---------------------------------------------------------------------------
+-- A contest inside a tournament round
+-- ---------------------------------------------------------------------------
+--
+-- The same shape as tournament_round_sessions, and for the same reason: a
+-- round counts some things, each at what the round says it is worth. A contest
+-- belongs to one round -- counting the same pumpkins twice in one tournament
+-- would pay the winner twice for one pumpkin.
+create table if not exists public.tournament_round_contests (
+  round_id uuid not null references public.tournament_rounds (id) on delete cascade,
+  contest_id uuid not null references public.contests (id) on delete cascade,
+  weight numeric not null default 1 check (weight > 0 and weight <= 10),
+  primary key (round_id, contest_id)
+);
+
+create unique index if not exists tournament_round_contests_contest_idx
+  on public.tournament_round_contests (contest_id);
+
+alter table public.tournament_round_contests enable row level security;
+revoke all on public.tournament_round_contests from anon, authenticated;
+
+-- The contests attached to one round, for the admin page and the tournament
+-- page alike.
+create or replace function public.round_contests(p_round uuid)
+returns jsonb
+language sql
+stable
+set search_path = ''
+as $fn$
+  select coalesce(jsonb_agg(jsonb_build_object(
+           'contest_id', c.id, 'name', c.name,
+           'phase', public.contest_phase(c),
+           'votes_close_on', c.votes_close_on,
+           'weight', trim_scale(rc.weight))
+         order by c.name), '[]'::jsonb)
+  from public.tournament_round_contests rc
+  join public.contests c on c.id = rc.contest_id
+  where rc.round_id = p_round
+$fn$;
+
+revoke all on function public.round_contests(uuid) from public;
+grant execute on function public.round_contests(uuid) to anon, authenticated;
+
+-- ---------------------------------------------------------------------------
+-- The contest page, once there is something to vote on
+-- ---------------------------------------------------------------------------
+-- As before, plus the caller's own ballot and whether they may cast one. No
+-- vote counts: what the room has voted so far is exactly what must not be on
+-- the screen while voting is open, or the last people to vote are answering a
+-- different question from the first.
+create or replace function public.contest_view(p_contest uuid)
+returns jsonb
+language sql
+stable
+security definer
+set search_path = ''
+as $fn$
+  select case
+    when not exists (select 1 from public.contests c where c.id = p_contest)
+      then jsonb_build_object('ok', false, 'reason', 'no such contest')
+    else (
+      select jsonb_build_object(
+        'ok', true,
+        'contest', jsonb_build_object(
+          'id', c.id, 'name', c.name, 'blurb', c.blurb,
+          'entries_open_on', c.entries_open_on, 'entries_close_on', c.entries_close_on,
+          'votes_open_on', c.votes_open_on, 'votes_close_on', c.votes_close_on,
+          'who_enters', c.who_enters, 'entrants_shown', c.entrants_shown,
+          'voters_shown', c.voters_shown, 'picks', c.picks, 'prize', c.prize,
+          'phase', public.contest_phase(c),
+          'may_enter', public.may_enter_contest(c.id),
+          'may_vote', public.may_vote_contest(c.id)),
+        'my_votes', public.my_contest_votes(c.id),
+        'entries', coalesce((
+          select jsonb_agg(jsonb_build_object(
+                   'id', e.id,
+                   'title', e.title,
+                   'blurb', e.blurb,
+                   'image_path', e.image_path,
+                   'entrant', case when c.entrants_shown
+                                   then (select p.display_name from public.profiles p
+                                         where p.id = e.entrant)
+                              end,
+                   'mine', e.entrant = (select auth.uid())
+                        or e.entered_by = (select auth.uid()))
+                 order by e.created_at)
+          from public.contest_entries e where e.contest_id = c.id), '[]'::jsonb))
+      from public.contests c where c.id = p_contest)
+  end
+$fn$;
+
+revoke all on function public.contest_view(uuid) from public;
+grant execute on function public.contest_view(uuid) to anon, authenticated;
+
+-- The round, now carrying its contests as well as its trivia.
+create or replace function public.current_round()
+returns jsonb
+language sql
+stable
+security definer
+set search_path = ''
+as $fn$
+  select jsonb_build_object(
+           'tournament_id', t.id, 'tournament', t.name, 'difficulty', t.difficulty,
+           'tournament_starts_on', t.starts_on, 'tournament_ends_on', t.ends_on,
+           'tournament_prize', t.prize,
+           'round_id', r.id, 'starts_on', r.starts_on, 'ends_on', r.ends_on,
+           'games', to_jsonb(r.games),
+           'game_weights', r.game_weights,
+           'trivia', public.round_trivia(r.id),
+           'contests', public.round_contests(r.id),
+           'prize', r.prize,
+           'number', (select count(*) from public.tournament_rounds q
+                      where q.tournament_id = t.id and q.starts_on <= r.starts_on),
+           'of', (select count(*) from public.tournament_rounds q where q.tournament_id = t.id))
+  from public.tournament_rounds r
+  join public.tournaments t on t.id = r.tournament_id
+  where public.puzzle_day() between r.starts_on and r.ends_on
+  limit 1
+$fn$;
+
+revoke all on function public.current_round() from public;
+grant execute on function public.current_round() to anon, authenticated;
+
+
+-- ---------------------------------------------------------------------------
+-- A round can count contests too
+-- ---------------------------------------------------------------------------
+-- Dropped rather than replaced: `create or replace` cannot add a parameter --
+-- it writes a second function beside the first, and then which of the two a
+-- call reaches depends on how many arguments it happened to pass. One
+-- save_round, with one more list of things a round counts.
+drop function if exists public.save_round(uuid, uuid, date, date, text[], jsonb, text, jsonb);
+
+create or replace function public.save_round(
+  p_id uuid,
+  p_tournament uuid,
+  p_starts date,
+  p_ends date,
+  p_games text[],
+  -- [{"id": "<session uuid>", "weight": 2}, ...]; absent is no trivia.
+  p_sessions jsonb default '[]'::jsonb,
+  p_prize text default null,
+  -- {"weave": 3, "hive": 1}; a game left out is worth 1.
+  p_game_weights jsonb default '{}'::jsonb,
+  -- [{"id": "<contest uuid>", "weight": 2}, ...]; absent is no contests.
+  p_contests jsonb default '[]'::jsonb
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $fn$
+declare
+  v_id uuid := p_id;
+  v_t record;
+  v_old record;
+  v_games text[];
+  v_sessions jsonb := coalesce(p_sessions, '[]'::jsonb);
+  v_contests jsonb := coalesce(p_contests, '[]'::jsonb);
+  v_weights jsonb;
+  v_taken uuid;
+begin
+  if not public.can('games.setup') then
+    return jsonb_build_object('ok', false, 'reason', 'not allowed');
+  end if;
+  select * into v_t from public.tournaments where id = p_tournament;
+  if not found then
+    return jsonb_build_object('ok', false, 'reason', 'no such tournament');
+  end if;
+  if p_starts is null or p_ends is null or p_ends < p_starts then
+    return jsonb_build_object('ok', false, 'reason', 'it needs dates, ending on or after it starts');
+  end if;
+  if p_starts < v_t.starts_on or p_ends > v_t.ends_on then
+    return jsonb_build_object('ok', false, 'reason', 'a round has to fall inside its tournament');
+  end if;
+
+  -- Distinct and known. Read off public.games rather than a list kept here: a
+  -- game this site does not publish is a round board nobody could be dealt.
+  select array_agg(distinct g order by g) into v_games
+  from unnest(coalesce(p_games, '{}'::text[])) g;
+  v_games := coalesce(v_games, '{}'::text[]);
+  if exists (select 1 from unnest(v_games) g where g not in (select feed from public.games)) then
+    return jsonb_build_object('ok', false, 'reason', 'that is not a game this site has');
+  end if;
+
+  if jsonb_typeof(v_sessions) <> 'array' then
+    return jsonb_build_object('ok', false, 'reason', 'the trivia has to be a list');
+  end if;
+
+  v_weights := coalesce(p_game_weights, '{}'::jsonb);
+  if jsonb_typeof(v_weights) <> 'object' then
+    return jsonb_build_object('ok', false, 'reason', 'what the games are worth has to be a list of games');
+  end if;
+  -- Only games this round actually has, so a weight cannot outlive the game it
+  -- was set for -- a stale key would sit there paying nothing and explaining
+  -- nothing the next time somebody read the row.
+  if exists (
+    select 1 from jsonb_object_keys(v_weights) k where not (k = any (v_games))
+  ) then
+    return jsonb_build_object('ok', false, 'reason',
+      'a game was given a weight without being in the round');
+  end if;
+  if exists (
+    select 1 from jsonb_each_text(v_weights) e
+    where e.value !~ '^[0-9]+(\.[0-9]+)?$'
+       or e.value::numeric <= 0 or e.value::numeric > 10
+  ) then
+    return jsonb_build_object('ok', false, 'reason',
+      'a weight has to be more than zero and at most ten');
+  end if;
+  if jsonb_typeof(v_contests) <> 'array' then
+    return jsonb_build_object('ok', false, 'reason', 'the contests have to be a list');
+  end if;
+  -- A contest counts for a round the same way a session does, so it satisfies
+  -- this the same way: a round of nothing but a pumpkin competition is a real
+  -- thing to want in October.
+  if cardinality(v_games) = 0 and jsonb_array_length(v_sessions) = 0
+     and jsonb_array_length(v_contests) = 0 then
+    return jsonb_build_object('ok', false, 'reason',
+      'a round needs at least one game, one session or one contest');
+  end if;
+  if exists (
+    select 1 from jsonb_array_elements(v_contests) e
+    where not exists (select 1 from public.contests c where c.id = (e->>'id')::uuid)
+  ) then
+    return jsonb_build_object('ok', false, 'reason', 'that is not a contest this site has');
+  end if;
+  if exists (
+    select 1 from jsonb_array_elements(v_contests) e
+    where coalesce((e->>'weight')::numeric, 1) <= 0
+       or coalesce((e->>'weight')::numeric, 1) > 10
+  ) then
+    return jsonb_build_object('ok', false, 'reason', 'a weight has to be more than zero and at most ten');
+  end if;
+  if exists (
+    select 1 from jsonb_array_elements(v_sessions) e
+    where not exists (select 1 from public.sessions s where s.id = (e->>'id')::uuid)
+  ) then
+    return jsonb_build_object('ok', false, 'reason', 'that is not a session this site has');
+  end if;
+  if exists (
+    select 1 from jsonb_array_elements(v_sessions) e
+    where coalesce((e->>'weight')::numeric, 1) <= 0
+       or coalesce((e->>'weight')::numeric, 1) > 10
+  ) then
+    return jsonb_build_object('ok', false, 'reason', 'a weight has to be more than zero and at most ten');
+  end if;
+
+  if exists (
+    select 1 from public.tournament_rounds r
+    where r.id is distinct from v_id
+      and daterange(r.starts_on, r.ends_on, '[]') && daterange(p_starts, p_ends, '[]')
+  ) then
+    return jsonb_build_object('ok', false, 'reason', 'another round already covers some of those days');
+  end if;
+
+  if v_id is not null then
+    select * into v_old from public.tournament_rounds where id = v_id;
+    if not found then
+      return jsonb_build_object('ok', false, 'reason', 'no such round');
+    end if;
+    -- A round that has started is being played: its first day is what its
+    -- boards are keyed by and its games are what people have been dealt. Only
+    -- the end may move, and not into the past.
+    --
+    -- The trivia is deliberately not frozen with the games. A board is
+    -- generated the night before and played from the first day; a session is an
+    -- event somewhere inside the round, and "add Thursday's trivia night to the
+    -- round that is already running" is the ordinary case, not an edge one.
+    if v_old.starts_on <= public.puzzle_day() then
+      if p_starts <> v_old.starts_on or v_games <> v_old.games then
+        return jsonb_build_object('ok', false, 'reason', 'a round under way can only change its end date');
+      end if;
+      -- Only *moving* the end into the past is refused. A round that has
+      -- already finished has an end date in the past by definition, and a save
+      -- that leaves it alone is how its trivia gets attached -- which is the
+      -- ordinary order of things, since a session has to have been run before
+      -- there is anything to attach.
+      if p_ends <> v_old.ends_on and p_ends < public.puzzle_day() then
+        return jsonb_build_object('ok', false, 'reason', 'a round under way cannot end in the past');
+      end if;
+    end if;
+    update public.tournament_rounds
+       set tournament_id = p_tournament, starts_on = p_starts, ends_on = p_ends, games = v_games,
+           prize = nullif(btrim(coalesce(p_prize, '')), ''),
+           game_weights = v_weights
+     where id = v_id;
+  else
+    insert into public.tournament_rounds (tournament_id, starts_on, ends_on, games, prize,
+                                          game_weights)
+    values (p_tournament, p_starts, p_ends, v_games,
+            nullif(btrim(coalesce(p_prize, '')), ''),
+            v_weights)
+    returning id into v_id;
+  end if;
+
+  -- Said plainly rather than left to the unique index, so the admin is told
+  -- which session and which round instead of reading a constraint name.
+  select rs.session_id into v_taken
+  from public.tournament_round_sessions rs
+  join jsonb_array_elements(v_sessions) e on (e->>'id')::uuid = rs.session_id
+  where rs.round_id <> v_id
+  limit 1;
+  if v_taken is not null then
+    return jsonb_build_object('ok', false, 'reason',
+      (select 'the session "' || s.title || '" already counts in another round'
+       from public.sessions s where s.id = v_taken));
+  end if;
+
+  delete from public.tournament_round_sessions rs
+  where rs.round_id = v_id
+    and not exists (select 1 from jsonb_array_elements(v_sessions) e
+                    where (e->>'id')::uuid = rs.session_id);
+  insert into public.tournament_round_sessions (round_id, session_id, weight)
+  select v_id, (e->>'id')::uuid, coalesce((e->>'weight')::numeric, 1)
+  from jsonb_array_elements(v_sessions) e
+  on conflict (round_id, session_id) do update set weight = excluded.weight;
+
+  -- And the same for contests, said plainly for the same reason the sessions
+  -- get it said plainly: counting one pumpkin in two rounds would pay its
+  -- winner twice for one pumpkin, and a constraint name explains nothing.
+  select rc.contest_id into v_taken
+  from public.tournament_round_contests rc
+  join jsonb_array_elements(v_contests) e on (e->>'id')::uuid = rc.contest_id
+  where rc.round_id <> v_id
+  limit 1;
+  if v_taken is not null then
+    return jsonb_build_object('ok', false, 'reason',
+      (select 'the contest "' || c.name || '" already counts in another round'
+       from public.contests c where c.id = v_taken));
+  end if;
+
+  delete from public.tournament_round_contests rc
+  where rc.round_id = v_id
+    and not exists (select 1 from jsonb_array_elements(v_contests) e
+                    where (e->>'id')::uuid = rc.contest_id);
+  insert into public.tournament_round_contests (round_id, contest_id, weight)
+  select v_id, (e->>'id')::uuid, coalesce((e->>'weight')::numeric, 1)
+  from jsonb_array_elements(v_contests) e
+  on conflict (round_id, contest_id) do update set weight = excluded.weight;
+
+  return jsonb_build_object('ok', true, 'id', v_id);
+end;
+$fn$;
+
+revoke all on function public.save_round(uuid, uuid, date, date, text[], jsonb, text, jsonb, jsonb) from public, anon;
+grant execute on function public.save_round(uuid, uuid, date, date, text[], jsonb, text, jsonb, jsonb) to authenticated;
+
+create or replace function public.tournament_standings(p_tournament uuid)
+returns jsonb
+language plpgsql
+stable
+security definer
+set search_path = ''
+as $fn$
+declare
+  t record;
+  r record;
+  n int := 0;
+  keys text[];
+  boards jsonb;
+  weights jsonb;
+  trivia jsonb;
+  contests jsonb;
+  rounds jsonb := '[]'::jsonb;
+  tbl jsonb;
+begin
+  select * into t from public.tournaments where id = p_tournament;
+  if not found then
+    return jsonb_build_object('ok', false, 'reason', 'no such tournament');
+  end if;
+
+  for r in
+    select * from public.tournament_rounds
+    where tournament_id = t.id
+    order by starts_on
+  loop
+    n := n + 1;
+    continue when r.starts_on > public.puzzle_day();
+
+    -- The boards keyed as the site's leaderboards key them: by progress name,
+    -- with squares split by size -- 4x4 for easy, 5x5 for hard and extreme.
+    select array_agg(case
+             when g.progress = 'squares'
+               then 'squares' || case when t.difficulty = 'easy' then '4' else '5' end
+             else g.progress
+           end)
+      into keys
+    from public.games g
+    where g.feed = any (r.games);
+
+    -- The same mapping again, carrying what each board is worth: the weights
+    -- are keyed by feed name and the boards by progress name, and this is the
+    -- one place that knows both.
+    select coalesce(jsonb_object_agg(
+             case
+               when g.progress = 'squares'
+                 then 'squares' || case when t.difficulty = 'easy' then '4' else '5' end
+               else g.progress
+             end,
+             coalesce((r.game_weights ->> g.feed)::numeric, 1)), '{}'::jsonb)
+      into weights
+    from public.games g
+    where g.feed = any (r.games);
+
+    select coalesce(jsonb_object_agg(e.key, e.value), '{}'::jsonb)
+      into boards
+    from jsonb_each(public.boards_between(r.starts_on, r.starts_on, 'round', t.difficulty, null, 500)) e
+    where e.key = any (coalesce(keys, '{}'::text[]));
+
+    select coalesce(jsonb_agg(jsonb_build_object(
+             'session_id', s.id, 'title', s.title, 'mode', s.mode,
+             'weight', trim_scale(rs.weight),
+             'standings', coalesce((
+               select jsonb_agg(row_to_json(k)::jsonb order by k.place, k.name)
+               from public.session_ranking(s.id) k), '[]'::jsonb))
+           order by s.title), '[]'::jsonb)
+      into trivia
+    from public.tournament_round_sessions rs
+    join public.sessions s on s.id = rs.session_id
+    where rs.round_id = r.id;
+
+    select coalesce(jsonb_agg(jsonb_build_object(
+             'contest_id', c.id, 'name', c.name,
+             'phase', public.contest_phase(c),
+             'weight', trim_scale(rc.weight),
+             'standings', coalesce((
+               select jsonb_agg(row_to_json(k)::jsonb order by k.place, k.name)
+               from public.contest_ranking(c.id) k), '[]'::jsonb))
+           order by c.name), '[]'::jsonb)
+      into contests
+    from public.tournament_round_contests rc
+    join public.contests c on c.id = rc.contest_id
+    where rc.round_id = r.id;
+
+    rounds := rounds || jsonb_build_array(jsonb_build_object(
+      'id', r.id, 'number', n, 'starts_on', r.starts_on, 'ends_on', r.ends_on,
+      'prize', r.prize,
+      'boards', boards, 'weights', weights, 'trivia', trivia,
+      'contests', contests));
+  end loop;
+
+  select coalesce(jsonb_agg(jsonb_build_object(
+           'name', s.name, 'points', s.points, 'wins', s.wins, 'placed', s.placed)
+         order by s.points desc, s.wins desc, s.name), '[]'::jsonb)
+    into tbl
+  from (
+    select pl.name,
+           trim_scale(round(sum(pl.pts), 2)) as points,
+           count(*) filter (where pl.place = 1)::int as wins,
+           count(*)::int as placed
+    from (
+      -- Ten down to one for placing, times what the round said that board was
+      -- worth. Unlisted is 1, which is what every board paid before a round
+      -- could say otherwise.
+      select x.row->>'name' as name,
+             greatest(0, 11 - x.ord)::numeric
+               * coalesce((rd->'weights'->>b.key)::numeric, 1) as pts,
+             x.ord::int as place
+      from jsonb_array_elements(rounds) rd,
+           jsonb_each(rd->'boards') b,
+           jsonb_array_elements(b.value) with ordinality as x(row, ord)
+      union all
+      select e->>'name',
+             greatest(0, 11 - (e->>'place')::int) * (tv->>'weight')::numeric,
+             (e->>'place')::int
+      from jsonb_array_elements(rounds) rd,
+           jsonb_array_elements(rd->'trivia') tv,
+           jsonb_array_elements(tv->'standings') e
+      union all
+      -- A contest pays the same way, and pays nothing until its voting has
+      -- closed: contest_ranking is empty before that, so a tournament does not
+      -- shift under the people in it every time somebody votes.
+      select e->>'name',
+             greatest(0, 11 - (e->>'place')::int) * (ct->>'weight')::numeric,
+             (e->>'place')::int
+      from jsonb_array_elements(rounds) rd,
+           jsonb_array_elements(rd->'contests') ct,
+           jsonb_array_elements(ct->'standings') e
+    ) pl
+    group by pl.name
+  ) s;
+
+  return jsonb_build_object(
+    'ok', true,
+    'tournament', jsonb_build_object('id', t.id, 'name', t.name, 'difficulty', t.difficulty,
+                                     'prize', t.prize),
+    'table', tbl,
+    'rounds', rounds);
+end;
+$fn$;
+
+create or replace function public.tournaments_sheet()
+returns jsonb
+language sql
+stable
+security definer
+set search_path = ''
+as $fn$
+  select case
+    when not public.can('games.setup')
+      then jsonb_build_object('ok', false, 'reason', 'not allowed')
+    else jsonb_build_object('ok', true, 'tournaments', coalesce((
+      select jsonb_agg(jsonb_build_object(
+               'id', t.id, 'name', t.name, 'difficulty', t.difficulty,
+               'starts_on', t.starts_on, 'ends_on', t.ends_on,
+               'locks_site', t.locks_site, 'sessions_open', t.sessions_open,
+               'prize', t.prize,
+               'rounds', coalesce((
+                 select jsonb_agg(jsonb_build_object(
+                          'id', r.id, 'starts_on', r.starts_on, 'ends_on', r.ends_on,
+                          'games', to_jsonb(r.games),
+                          'game_weights', r.game_weights,
+                          'trivia', public.round_trivia(r.id),
+                          'contests', public.round_contests(r.id),
+                          'prize', r.prize,
+                          'started', r.starts_on <= public.puzzle_day())
+                        order by r.starts_on)
+                 from public.tournament_rounds r where r.tournament_id = t.id), '[]'::jsonb))
+             order by t.starts_on desc)
+      from public.tournaments t), '[]'::jsonb))
+  end
+$fn$;
+
+revoke all on function public.tournament_standings(uuid) from public;
+grant execute on function public.tournament_standings(uuid) to anon, authenticated;
+
+revoke all on function public.tournaments_sheet() from public, anon;
+grant execute on function public.tournaments_sheet() to authenticated;

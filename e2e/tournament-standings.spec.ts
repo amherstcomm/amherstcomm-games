@@ -176,7 +176,10 @@ test('the table says placement points can be multiplied', async ({ page }) => {
 test('the round page says what this round and the tournament are worth', async ({ page }) => {
   await tournament(page);
   await page.goto('/tournament');
-  const round = page.getByRole('region', { name: 'This round' });
+  // Exact, because getByRole matches a name by substring: "This round" also
+  // matches the "This round's standings" section below it, and which of the
+  // two the assertion saw came down to which had mounted first.
+  const round = page.getByRole('region', { name: 'This round', exact: true });
   await expect(round).toContainText('This round: Lunch on the company');
   await expect(round).toContainText('Overall prize: $250 and the trophy');
 });

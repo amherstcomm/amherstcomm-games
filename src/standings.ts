@@ -37,6 +37,17 @@ export type TriviaStandings = {
   standings: TriviaRow[];
 };
 
+/** A contest a round counted. Its standings are empty until voting has
+ *  closed -- a contest pays when it is decided, not while it is being voted
+ *  on -- so the phase is here to say which of those two an empty list is. */
+export type ContestStandings = {
+  contest_id: string;
+  name: string;
+  phase: string;
+  weight: number;
+  standings: { place: number; name: string; points: number }[];
+};
+
 export type RoundStandings = {
   id: string;
   number: number;
@@ -46,6 +57,8 @@ export type RoundStandings = {
   boards: Partial<Record<BoardGame, StandingRow[]>>;
   /** the round's trivia, ranked and weighted */
   trivia: TriviaStandings[];
+  /** and its contests, on the same terms */
+  contests: ContestStandings[];
   /** what each board was worth, keyed the way the boards are */
   weights?: Record<string, number>;
   /** what winning the round was worth */
