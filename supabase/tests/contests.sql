@@ -260,6 +260,40 @@ select pg_temp.check('nor change the one entered for them',
     = 'an organiser enters this one on your behalf');
 
 -- ---------------------------------------------------------------------------
+-- Finding somebody to enter for, and seeing whose is whose
+-- ---------------------------------------------------------------------------
+set session "test.uid" = 'd1111111-1111-1111-1111-111111111111';
+select pg_temp.check('an organiser can search for somebody to enter for',
+  (select count(*) from jsonb_array_elements(public.find_entrants('carver')->'people')) = 2);
+select pg_temp.check('and a one-letter search is not a directory dump',
+  public.find_entrants('c')->'people' = '[]'::jsonb);
+select pg_temp.check('and the organiser sheet names every entrant',
+  (select x->>'entrant_name'
+   from jsonb_array_elements(public.contest_entries_sheet((select id from onbehalf))->'entries') x
+   where x->>'title' = 'Sponge') = 'Carver One');
+
+-- Blind to the room, named to the person who typed them in: an organiser who
+-- entered every row already knows whose is whose, and four rows called
+-- "Entry 2" would be unmanageable rather than secret.
+select public.save_contest((select id from onbehalf), 'Bake off', null,
+                           pg_temp.d(-1), pg_temp.d(2), pg_temp.d(3), pg_temp.d(6),
+                           'admins', false, false, 3, null);
+select pg_temp.check('a blind contest still names entrants on the organiser sheet',
+  (select count(*) from jsonb_array_elements(
+     public.contest_entries_sheet((select id from onbehalf))->'entries') x
+   where x->>'entrant_name' is not null) = 2);
+select pg_temp.check('while the page everybody reads still names nobody',
+  (select count(*) from jsonb_array_elements(
+     public.contest_view((select id from onbehalf))->'entries') x
+   where x->>'entrant' is not null) = 0);
+
+set session "test.uid" = 'd2222222-2222-2222-2222-222222222222';
+select pg_temp.check('a player cannot search for entrants',
+  (public.find_entrants('carver')->>'reason') = 'not allowed');
+select pg_temp.check('nor read the organiser sheet of entries',
+  (public.contest_entries_sheet((select id from onbehalf))->>'reason') = 'not allowed');
+
+-- ---------------------------------------------------------------------------
 -- The lists
 -- ---------------------------------------------------------------------------
 select pg_temp.check('the running list leaves out the one that has not opened',

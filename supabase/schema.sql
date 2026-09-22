@@ -13115,3 +13115,102 @@ grant execute on function public.tournament_standings(uuid) to anon, authenticat
 
 revoke all on function public.tournaments_sheet() from public, anon;
 grant execute on function public.tournaments_sheet() to authenticated;
+
+
+-- ---------------------------------------------------------------------------
+-- Entering on somebody's behalf
+-- ---------------------------------------------------------------------------
+--
+-- Two things an organiser running a contest in 'admins' mode needs, and which
+-- nothing here gave them: a way to say whose entry this is, and a way to see
+-- which entry is whose afterwards.
+--
+-- Finding the person is a search rather than a list, for the reason
+-- find_people is: the whole staff directory on a page is a different thing
+-- from "who am I entering this for", and the question is always about one
+-- person the organiser already has in mind.
+--
+-- It is held to games.setup rather than users.manage, because running a
+-- pumpkin competition should not require the right to grant roles -- which is
+-- what reusing find_people would have meant. The address comes back with the
+-- name because two people called Bea Smith are otherwise indistinguishable,
+-- and an entry credited to the wrong colleague is worse than an organiser
+-- seeing an internal email address they could have looked up anyway.
+create or replace function public.find_entrants(p_query text)
+returns jsonb
+language sql
+stable
+security definer
+set search_path = ''
+as $fn$
+  select case
+    when not public.can('games.setup')
+      then jsonb_build_object('ok', false, 'reason', 'not allowed')
+    when length(btrim(coalesce(p_query, ''))) < 2
+      then jsonb_build_object('ok', true, 'people', '[]'::jsonb)
+    else jsonb_build_object('ok', true, 'people', coalesce(
+      (select jsonb_agg(x order by x->>'name', x->>'email')
+       from (
+         select jsonb_build_object(
+                  'user', u.id,
+                  'email', u.email,
+                  'name', p.display_name) as x
+         from auth.users u
+         left join public.profiles p on p.id = u.id
+         where u.email ilike '%' || btrim(p_query) || '%'
+            or p.display_name ilike '%' || btrim(p_query) || '%'
+         limit 10
+       ) found),
+      '[]'::jsonb))
+  end
+$fn$;
+
+revoke all on function public.find_entrants(text) from public, anon;
+grant execute on function public.find_entrants(text) to authenticated;
+
+/*
+ * The entries, for the organiser managing them.
+ *
+ * Named, always -- including in a blind contest, where contest_view names
+ * nobody to anybody.
+ *
+ * That is not a hole in the blindness. Blindness is there so the room votes on
+ * the pumpkin rather than on whose pumpkin it is; the organiser who typed
+ * every entry in already knows whose is whose, and withholding it from them
+ * would not restore a secret, it would only make the entries unmanageable --
+ * four rows called "Entry 2" that nobody can correct, re-credit or take down.
+ *
+ * So: the player's view stays blind, and the one person who cannot be kept in
+ * the dark gets a view that admits it. What this must never become is the page
+ * a voter reads.
+ */
+create or replace function public.contest_entries_sheet(p_contest uuid)
+returns jsonb
+language sql
+stable
+security definer
+set search_path = ''
+as $fn$
+  select case
+    when not public.can('games.setup')
+      then jsonb_build_object('ok', false, 'reason', 'not allowed')
+    when not exists (select 1 from public.contests c where c.id = p_contest)
+      then jsonb_build_object('ok', false, 'reason', 'no such contest')
+    else jsonb_build_object('ok', true, 'entries', coalesce((
+      select jsonb_agg(jsonb_build_object(
+               'id', e.id,
+               'title', e.title,
+               'blurb', e.blurb,
+               'image_path', e.image_path,
+               'entrant', e.entrant,
+               'entrant_name', p.display_name,
+               'entered_by_me', e.entered_by = (select auth.uid()))
+             order by e.created_at)
+      from public.contest_entries e
+      left join public.profiles p on p.id = e.entrant
+      where e.contest_id = p_contest), '[]'::jsonb))
+  end
+$fn$;
+
+revoke all on function public.contest_entries_sheet(uuid) from public, anon;
+grant execute on function public.contest_entries_sheet(uuid) to authenticated;

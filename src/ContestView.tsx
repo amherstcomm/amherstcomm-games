@@ -13,7 +13,9 @@ import {
   castVotes,
   deleteEntry,
   drawable,
+  findEntrants,
   photoLinks,
+  readEntrySheet,
   readResults,
   PHASE_WORD,
   readContest,
@@ -24,6 +26,8 @@ import {
   type ContestEntry,
   type ContestOn,
   type ContestResults,
+  type Entrant,
+  type EntrySheetRow,
 } from '@/contests';
 import RouteLink from '@/RouteLink';
 
@@ -177,8 +181,21 @@ function OneContest({ id }: { id: string }) {
         </p>
       )}
 
-      {contest.may_enter && (
-        <EntryForm contest={contest} mine={mine} link={links[mine?.image_path ?? '']} onSaved={load} />
+      {/* Two different jobs behind the same permission. In 'players' mode
+          this is one person's own entry; in 'admins' mode the organiser is
+          entering on everybody's behalf, which is a list rather than a form --
+          the first cut offered them one form and so let them enter exactly
+          once, for nobody. */}
+      {contest.may_enter && contest.who_enters === 'players' && (
+        <EntryForm
+          contest={contest}
+          entry={mine}
+          link={links[mine?.image_path ?? '']}
+          onSaved={load}
+        />
+      )}
+      {contest.may_enter && contest.who_enters === 'admins' && (
+        <ManageEntries contest={contest} links={links} onSaved={load} />
       )}
       {contest.may_vote && (
         <Ballot
@@ -224,7 +241,9 @@ function OneContest({ id }: { id: string }) {
                     loud when there is nothing else to call it. */}
                 <p className="text-xs text-slate-400">
                   {contest.entrants_shown ? (e.entrant ?? 'Entered by an organiser') : `Entry ${i + 1}`}
-                  {e.mine && <span className="text-accent"> · yours</span>}
+                  {contest.who_enters === 'players' && e.mine && (
+                    <span className="text-accent"> · yours</span>
+                  )}
                   {ballot.includes(e.id) && (
                     <span className="text-accent"> · your {ordinal(ballot.indexOf(e.id) + 1)} pick</span>
                   )}
@@ -441,6 +460,217 @@ function Results({ contest, results }: { contest: Contest; results: ContestResul
 }
 
 /**
+ * Entering on everybody's behalf.
+ *
+ * The whole field in one list, each row named, with the organiser's own
+ * read -- which names entrants even where the contest is blind, because they
+ * typed them in and four rows called "Entry 2" would be unmanageable rather
+ * than secret.
+ */
+function ManageEntries({
+  contest,
+  links,
+  onSaved,
+}: {
+  contest: Contest;
+  links: Record<string, string>;
+  onSaved: () => Promise<void>;
+}) {
+  const [rows, setRows] = useState<EntrySheetRow[] | null>(null);
+  const [editing, setEditing] = useState<EntrySheetRow | null>(null);
+  const [adding, setAdding] = useState(false);
+  const [said, setSaid] = useState<string | null>(null);
+
+  const pull = useCallback(async () => {
+    const got = await readEntrySheet(contest.id);
+    setRows(got.entries ?? []);
+    if (!got.ok) setSaid(got.reason ?? 'those would not load');
+  }, [contest.id]);
+
+  useEffect(() => {
+    void pull();
+  }, [pull]);
+
+  async function done() {
+    setEditing(null);
+    setAdding(false);
+    await pull();
+    await onSaved();
+  }
+
+  async function remove(row: EntrySheetRow) {
+    const sure = window.confirm(`Take "${row.title}" out of this contest?`);
+    if (!sure) return;
+    const got = await deleteEntry(row.id);
+    if (!got.ok) {
+      setSaid(got.reason ?? 'that would not come out');
+      return;
+    }
+    await done();
+  }
+
+  return (
+    <section
+      // Named, so it is a landmark: a section carrying a heading is still
+      // anonymous to anything navigating by region.
+      className="mt-6 rounded-xl border border-white/15 bg-white/5 p-4"
+      aria-label="Entries you are putting in"
+    >
+      <h2 className="text-sm font-semibold text-slate-200">Entries you are putting in</h2>
+      <p className="text-xs text-slate-400 mt-1">
+        You are entering this one on everyone&apos;s behalf. Say whose each entry is, so it
+        counts for them{contest.entrants_shown ? '' : ' — the page itself still shows no names'}.
+      </p>
+
+      {rows === null ? (
+        <Waiting what="the entries" className="my-4" />
+      ) : (
+        <ul className="mt-3 space-y-1">
+          {rows.map((r) => (
+            <li
+              key={r.id}
+              className="flex flex-wrap items-center gap-2 rounded-lg bg-white/5 px-2.5 py-1.5"
+            >
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-sm font-semibold text-slate-200">
+                  {r.title}
+                </span>
+                <span className="block text-xs text-slate-400">
+                  {r.entrant_name ?? 'Nobody is credited for this one'}
+                  {!r.image_path && ' · no photo'}
+                </span>
+              </span>
+              <button type="button" className={BUTTON} onClick={() => setEditing(r)}>
+                Edit
+              </button>
+              <button type="button" className={BUTTON} onClick={() => void remove(r)}>
+                Remove
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {!adding && !editing && (
+        <button type="button" className={BUTTON + ' mt-3'} onClick={() => setAdding(true)}>
+          Add an entry
+        </button>
+      )}
+      {(adding || editing) && (
+        <EntryForm
+          contest={contest}
+          entry={
+            editing
+              ? {
+                  id: editing.id,
+                  title: editing.title,
+                  blurb: editing.blurb,
+                  image_path: editing.image_path,
+                  entrant: editing.entrant_name,
+                  mine: true,
+                }
+              : null
+          }
+          forWhom={
+            editing && editing.entrant
+              ? { user: editing.entrant, email: '', name: editing.entrant_name }
+              : null
+          }
+          link={editing?.image_path ? links[editing.image_path] : undefined}
+          onSaved={done}
+          onCancel={() => {
+            setEditing(null);
+            setAdding(false);
+          }}
+        />
+      )}
+      {said && (
+        <p className="text-xs text-rose-300 mt-2" role="status">
+          {said}
+        </p>
+      )}
+    </section>
+  );
+}
+
+/**
+ * Who this entry is for.
+ *
+ * A search, because the alternative is a dropdown of everybody who has ever
+ * signed in, sorted by nothing anybody remembers. Two characters is the floor
+ * the server keeps, so typing one letter asks nothing.
+ */
+function WhoFor({
+  chosen,
+  onChoose,
+}: {
+  chosen: Entrant | null;
+  onChoose: (who: Entrant | null) => void;
+}) {
+  const [query, setQuery] = useState('');
+  const [found, setFound] = useState<Entrant[]>([]);
+
+  async function look(q: string) {
+    setQuery(q);
+    setFound(await findEntrants(q));
+  }
+
+  if (chosen) {
+    return (
+      <p className="text-xs text-slate-400">
+        For <span className="text-slate-200 font-semibold">{chosen.name ?? chosen.email}</span>{' '}
+        <button
+          type="button"
+          className="text-accent hover:brightness-110 underline"
+          onClick={() => {
+            onChoose(null);
+            setQuery('');
+            setFound([]);
+          }}
+        >
+          change
+        </button>
+      </p>
+    );
+  }
+
+  return (
+    <div>
+      <label className="block text-xs text-slate-400">
+        Whose entry is this?
+        <input
+          className={FIELD + ' mt-1'}
+          value={query}
+          placeholder="Name or email"
+          onChange={(e) => void look(e.target.value)}
+        />
+      </label>
+      {found.length > 0 && (
+        <ul className="mt-1 space-y-0.5" aria-label="People you can enter for">
+          {found.map((who) => (
+            <li key={who.user}>
+              <button
+                type="button"
+                className="w-full text-left rounded-lg px-2 py-1 text-xs text-slate-300 hover:bg-white/10"
+                onClick={() => onChoose(who)}
+              >
+                <span className="font-semibold text-slate-200">{who.name ?? 'No name yet'}</span>{' '}
+                <span className="text-slate-400">{who.email}</span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+      {query.trim().length >= 2 && found.length === 0 && (
+        <p className="text-xs text-slate-400 mt-1">
+          Nobody matches that. Somebody who has never signed in will not be here yet.
+        </p>
+      )}
+    </div>
+  );
+}
+
+/**
  * Putting yours in, or changing it.
  *
  * One form whether or not there is already an entry, because "change mine" and
@@ -452,17 +682,27 @@ function Results({ contest, results }: { contest: Contest; results: ContestResul
  */
 function EntryForm({
   contest,
-  mine,
+  entry,
+  forWhom = null,
   link,
   onSaved,
+  onCancel,
 }: {
   contest: Contest;
-  mine: ContestEntry | null;
+  /** the entry being changed, or null for a new one */
+  entry: ContestEntry | null;
+  /** who it is for, where an organiser is entering on somebody's behalf */
+  forWhom?: Entrant | null;
   link?: string;
   onSaved: () => Promise<void>;
+  /** only where there is something to go back to: the organiser's list */
+  onCancel?: () => void;
 }) {
+  const mine = entry;
+  const onBehalf = contest.who_enters === 'admins';
   const [title, setTitle] = useState(mine?.title ?? '');
   const [blurb, setBlurb] = useState(mine?.blurb ?? '');
+  const [who, setWho] = useState<Entrant | null>(forWhom);
   const [path, setPath] = useState<string | null>(mine?.image_path ?? null);
   // The photo just uploaded, as a signed link -- not as the local file.
   //
@@ -499,6 +739,13 @@ function EntryForm({
   }
 
   async function save() {
+    // An entry credited to nobody scores for nobody, so this is a refusal
+    // rather than a shrug -- the organiser entering on people's behalf is
+    // doing it so that it counts for them.
+    if (onBehalf && !who) {
+      setSaid('Say whose entry this is first.');
+      return;
+    }
     setBusy('Saving…');
     const got = await saveEntry({
       contest: contest.id,
@@ -506,6 +753,7 @@ function EntryForm({
       title,
       blurb,
       imagePath: path,
+      entrant: who?.user ?? null,
     });
     setBusy(null);
     if (!got.ok) {
@@ -513,6 +761,11 @@ function EntryForm({
       return;
     }
     setSaid('Saved.');
+    setTitle('');
+    setBlurb('');
+    setPath(null);
+    setShot(null);
+    setWho(null);
     await onSaved();
   }
 
@@ -536,7 +789,9 @@ function EntryForm({
 
   return (
     <section className="mt-6 rounded-xl border border-white/15 bg-white/5 p-4">
-      <h2 className="text-sm font-semibold text-slate-200">{mine ? 'Your entry' : 'Enter'}</h2>
+      <h2 className="text-sm font-semibold text-slate-200">
+        {onBehalf ? (mine ? 'Change this entry' : 'A new entry') : mine ? 'Your entry' : 'Enter'}
+      </h2>
       <div className="mt-3 grid gap-3 sm:grid-cols-[12rem_1fr]">
         <div>
           {shown ? (
@@ -559,6 +814,7 @@ function EntryForm({
           </button>
         </div>
         <div className="space-y-2">
+          {onBehalf && <WhoFor chosen={who} onChoose={setWho} />}
           <label className="block text-xs text-slate-400">
             What it is called
             <input
@@ -584,9 +840,14 @@ function EntryForm({
             <button type="button" className={BUTTON} disabled={!!busy || !title.trim()} onClick={() => void save()}>
               {mine ? 'Save changes' : 'Enter'}
             </button>
-            {mine && (
+            {mine && !onCancel && (
               <button type="button" className={BUTTON} disabled={!!busy} onClick={() => void remove()}>
                 Take it out
+              </button>
+            )}
+            {onCancel && (
+              <button type="button" className={BUTTON} disabled={!!busy} onClick={onCancel}>
+                Cancel
               </button>
             )}
           </div>

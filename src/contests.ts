@@ -268,7 +268,43 @@ export async function deleteEntry(id: string): Promise<{ ok: boolean; reason?: s
 
 // --- setting one up -------------------------------------------------------
 
-export type ContestRow = Omit<Contest, 'may_enter'> & { entries: number };
+/** Somebody an organiser can credit an entry to. */
+export type Entrant = { user: string; email: string; name: string | null };
+
+/** A search rather than a list: the whole staff directory on a page is a
+ *  different thing from "who am I entering this for". Under two characters
+ *  the server answers with nothing, so this does too rather than asking. */
+export async function findEntrants(query: string): Promise<Entrant[]> {
+  if (!supabase || query.trim().length < 2) return [];
+  const { data, error } = await supabase.rpc('find_entrants', { p_query: query.trim() });
+  if (error) return [];
+  return ((data as { ok: boolean; people?: Entrant[] }).people ?? []).filter((x) => !!x.user);
+}
+
+/** An entry as the organiser managing it sees it: named, always -- including
+ *  in a blind contest, where the page everybody reads names nobody. They typed
+ *  these in; withholding the names would not restore a secret, it would leave
+ *  four rows called "Entry 2" that nobody can correct or take down. */
+export type EntrySheetRow = {
+  id: string;
+  title: string;
+  blurb: string | null;
+  image_path: string | null;
+  entrant: string | null;
+  entrant_name: string | null;
+  entered_by_me: boolean;
+};
+
+export async function readEntrySheet(
+  contest: string
+): Promise<{ ok: boolean; reason?: string; entries?: EntrySheetRow[] }> {
+  if (!supabase) return { ok: false, reason: 'not connected' };
+  const { data, error } = await supabase.rpc('contest_entries_sheet', { p_contest: contest });
+  if (error) return { ok: false, reason: error.message };
+  return data as { ok: boolean; reason?: string; entries?: EntrySheetRow[] };
+}
+
+export type ContestRow = Omit<Contest, 'may_enter' | 'may_vote'> & { entries: number };
 
 export async function readContests(): Promise<{ ok: boolean; reason?: string; contests?: ContestRow[] }> {
   if (!supabase) return { ok: false, reason: 'not connected' };
