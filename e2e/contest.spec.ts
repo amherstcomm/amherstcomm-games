@@ -436,3 +436,134 @@ test('an open ballot says who voted for what', async ({ page }) => {
   await expect(page.getByText('Who voted for what')).toBeVisible();
   await expect(page.getByText('Ada Lovelace: Gourdon, Jack the Ripper')).toBeVisible();
 });
+
+// ---------------------------------------------------------------------------
+// An organiser entering on everybody's behalf
+// ---------------------------------------------------------------------------
+// The mode that shipped broken: the page offered one form, so an organiser
+// could enter exactly once, and for nobody -- there was no way to say whose an
+// entry was and no way to add a second.
+
+const ON_BEHALF = { ...CONTEST, who_enters: 'admins', may_enter: true };
+
+/** The organiser's own read of the entries, which names them even where the
+ *  contest is blind, and the person search behind the form. */
+async function stubOrganiser(
+  page: import('@playwright/test').Page,
+  rows: Record<string, unknown>[]
+) {
+  await page.route('**/rest/v1/rpc/contest_entries_sheet', (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ ok: true, entries: rows }),
+    })
+  );
+  await page.route('**/rest/v1/rpc/find_entrants', (route) => {
+    const q = (JSON.parse(route.request().postData() ?? '{}').p_query ?? '') as string;
+    const people = [
+      { user: 'u-bea', email: 'bea.smith@example.net', name: 'Bea Smith' },
+      { user: 'u-cal', email: 'cal.turner@example.net', name: 'Cal Turner' },
+    ].filter((x) => x.name.toLowerCase().includes(q.toLowerCase()));
+    return route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ ok: true, people }),
+    });
+  });
+}
+
+test('an organiser can enter for somebody else, and for more than one', async ({ page }) => {
+  const saved: Record<string, unknown>[] = [];
+  await stub(page, ON_BEHALF, []);
+  await stubOrganiser(page, [
+    {
+      id: 'x1',
+      title: 'Sponge',
+      blurb: null,
+      image_path: null,
+      entrant: 'u-cal',
+      entrant_name: 'Cal Turner',
+      entered_by_me: true,
+    },
+  ]);
+  await page.route('**/rest/v1/rpc/save_contest_entry', (route) => {
+    saved.push(JSON.parse(route.request().postData() ?? '{}'));
+    return route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ ok: true, id: 'x2' }),
+    });
+  });
+  await page.goto('/contest/c1');
+
+  // What is already in, named -- which is the half that makes the list
+  // manageable at all.
+  await expect(page.getByText('Sponge')).toBeVisible();
+  await expect(page.getByText('Cal Turner')).toBeVisible();
+
+  // A second entry, for a different person.
+  await page.getByRole('button', { name: 'Add an entry' }).click();
+  await page.getByRole('textbox', { name: 'Whose entry is this?' }).fill('Bea');
+  await page.getByRole('button', { name: /Bea Smith/ }).click();
+  await expect(page.getByText('For Bea Smith')).toBeVisible();
+
+  await page.getByRole('textbox', { name: 'What it is called' }).fill('Tart');
+  await page.getByRole('button', { name: 'Enter' }).click();
+
+  expect(saved).toHaveLength(1);
+  expect(saved[0].p_title).toBe('Tart');
+  // The whole point: it is credited to them, not to the organiser.
+  expect(saved[0].p_entrant).toBe('u-bea');
+  expect(saved[0].p_entry).toBeNull();
+});
+
+test('an entry credited to nobody is refused before it is sent', async ({ page }) => {
+  const saved: unknown[] = [];
+  await stub(page, ON_BEHALF, []);
+  await stubOrganiser(page, []);
+  await page.route('**/rest/v1/rpc/save_contest_entry', (route) => {
+    saved.push(1);
+    return route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ ok: true, id: 'x9' }),
+    });
+  });
+  await page.goto('/contest/c1');
+
+  await page.getByRole('button', { name: 'Add an entry' }).click();
+  await page.getByRole('textbox', { name: 'What it is called' }).fill('Nobody in particular');
+  await page.getByRole('button', { name: 'Enter' }).click();
+
+  await expect(page.getByText('Say whose entry this is first.')).toBeVisible();
+  // An entry credited to nobody scores for nobody, so it never goes.
+  expect(saved).toHaveLength(0);
+});
+
+test('a blind contest still names entrants to the organiser managing them', async ({ page }) => {
+  await stub(
+    page,
+    { ...ON_BEHALF, entrants_shown: false },
+    [{ ...ENTRIES[0], entrant: null, mine: true }]
+  );
+  await stubOrganiser(page, [
+    {
+      id: 'x1',
+      title: 'Jack the Ripper',
+      blurb: null,
+      image_path: null,
+      entrant: 'u-cal',
+      entrant_name: 'Cal Turner',
+      entered_by_me: true,
+    },
+  ]);
+  await page.goto('/contest/c1');
+
+  // Named in the organiser's list: they typed it in, and a row called
+  // "Entry 1" would be unmanageable rather than secret.
+  const managing = page.getByRole('region', { name: 'Entries you are putting in' });
+  await expect(managing.getByText('Cal Turner')).toBeVisible();
+  // And still numbered, not named, in the gallery everybody reads.
+  await expect(page.getByText('Entry 1')).toBeVisible();
+});
