@@ -36,6 +36,8 @@ export type Contest = {
   phase: ContestPhase;
   /** whether this person may put something in right now */
   may_enter: boolean;
+  /** whether they may cast a ballot right now */
+  may_vote: boolean;
 };
 
 export type ContestEntry = {
@@ -79,13 +81,72 @@ export async function readContestsOn(): Promise<ContestOn[]> {
   return (data as ContestOn[]) ?? [];
 }
 
-export async function readContest(
-  id: string
-): Promise<{ ok: boolean; reason?: string; contest?: Contest; entries?: ContestEntry[] }> {
+export type ContestPage = {
+  ok: boolean;
+  reason?: string;
+  contest?: Contest;
+  entries?: ContestEntry[];
+  /** this person's own ballot, best first; entry ids */
+  my_votes?: string[];
+};
+
+export async function readContest(id: string): Promise<ContestPage> {
   if (!supabase) return { ok: false, reason: 'not connected' };
   const { data, error } = await supabase.rpc('contest_view', { p_contest: id });
   if (error) return { ok: false, reason: error.message };
-  return data as { ok: boolean; reason?: string; contest?: Contest; entries?: ContestEntry[] };
+  return data as ContestPage;
+}
+
+/**
+ * Casting a ballot: the entries in order, best first.
+ *
+ * Fewer than the contest ranks is fine; more is refused rather than truncated,
+ * because a ballot that does not mean what it said is worse than one that was
+ * turned away. An empty list takes your ballot back.
+ */
+export async function castVotes(
+  contest: string,
+  entries: string[]
+): Promise<{ ok: boolean; reason?: string; counted?: number }> {
+  if (!supabase) return { ok: false, reason: 'not connected' };
+  const { data, error } = await supabase.rpc('cast_contest_votes', {
+    p_contest: contest,
+    p_entries: entries,
+  });
+  if (error) return { ok: false, reason: error.message };
+  return data as { ok: boolean; reason?: string; counted?: number };
+}
+
+export type ContestResult = {
+  place: number;
+  entry_id: string;
+  title: string;
+  points: number;
+  /** how many voters made it their first pick, which is how ties break */
+  firsts: number;
+  /** null where the contest does not name entrants */
+  entrant: string | null;
+};
+
+export type ContestResults = {
+  ok: boolean;
+  reason?: string;
+  /** false when an organiser is looking before voting has closed */
+  final?: boolean;
+  prize?: string | null;
+  voters?: number;
+  table?: ContestResult[];
+  /** only where the contest was set up to show who voted for what */
+  ballots?: { voter: string; picks: string[] }[] | null;
+};
+
+/** The result. Nothing until voting has closed, unless you are an organiser
+ *  writing the announcement -- the server decides, and says which it gave. */
+export async function readResults(contest: string): Promise<ContestResults> {
+  if (!supabase) return { ok: false, reason: 'not connected' };
+  const { data, error } = await supabase.rpc('contest_results', { p_contest: contest });
+  if (error) return { ok: false, reason: error.message };
+  return data as ContestResults;
 }
 
 /**

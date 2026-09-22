@@ -137,6 +137,12 @@ for (const palette of PALETTES) {
                             // a page swept without its inputs is the admin
                             // route's mistake repeated
                             may_enter: true,
+                            // and the ballot beside it. The two cannot both be
+                            // true of a real contest -- entering closes before
+                            // voting opens -- but this is a sweep for colour,
+                            // and a ranked pick draws an accent chip that
+                            // nothing else on these routes draws.
+                            may_vote: true,
                           },
                           entries: [
                             {
@@ -157,7 +163,32 @@ for (const palette of PALETTES) {
                             },
                           ],
                         }
-                      : { ok: true };
+                      : url.includes('contest_results')
+                        ? {
+                            ok: true,
+                            final: true,
+                            voters: 6,
+                            table: [
+                              {
+                                place: 1,
+                                entry_id: 'e2',
+                                title: 'Gourdon',
+                                points: 9,
+                                firsts: 3,
+                                entrant: 'Bea Smith',
+                              },
+                              {
+                                place: 2,
+                                entry_id: 'e1',
+                                title: 'Jack the Ripper',
+                                points: 4,
+                                firsts: 0,
+                                entrant: 'Ada Lovelace',
+                              },
+                            ],
+                            ballots: [{ voter: 'Ada Lovelace', picks: ['Gourdon'] }],
+                          }
+                        : { ok: true };
         return route.fulfill({
           status: 200,
           contentType: 'application/json',

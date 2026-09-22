@@ -10,9 +10,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import Waiting from '@/Waiting';
 import {
+  castVotes,
   deleteEntry,
   drawable,
   photoLinks,
+  readResults,
   PHASE_WORD,
   readContest,
   readContestsOn,
@@ -21,6 +23,7 @@ import {
   type Contest,
   type ContestEntry,
   type ContestOn,
+  type ContestResults,
 } from '@/contests';
 import RouteLink from '@/RouteLink';
 
@@ -118,6 +121,11 @@ function OneContest({ id }: { id: string }) {
   const [entries, setEntries] = useState<ContestEntry[] | null>(null);
   const [links, setLinks] = useState<Record<string, string>>({});
   const [problem, setProblem] = useState<string | null>(null);
+  // The ballot being built, best first. Entry ids, because that is what the
+  // server takes and what an ordering has to be keyed by -- a list of titles
+  // would break the moment two people called theirs the same thing.
+  const [ballot, setBallot] = useState<string[]>([]);
+  const [results, setResults] = useState<ContestResults | null>(null);
 
   const load = useCallback(async () => {
     const got = await readContest(id);
@@ -128,8 +136,15 @@ function OneContest({ id }: { id: string }) {
     setProblem(null);
     setContest(got.contest);
     setEntries(got.entries ?? []);
+    setBallot(got.my_votes ?? []);
     const paths = (got.entries ?? []).map((e) => e.image_path).filter((p): p is string => !!p);
     setLinks(await photoLinks(paths));
+
+    // The result is a separate ask because the server decides who may see it
+    // and when -- nothing while voting is open, except for an organiser
+    // writing the announcement, who is told it is not final.
+    const phase = got.contest?.phase;
+    setResults(phase === 'voting' || phase === 'over' ? await readResults(id) : null);
   }, [id]);
 
   useEffect(() => {
@@ -165,6 +180,16 @@ function OneContest({ id }: { id: string }) {
       {contest.may_enter && (
         <EntryForm contest={contest} mine={mine} link={links[mine?.image_path ?? '']} onSaved={load} />
       )}
+      {contest.may_vote && (
+        <Ballot
+          contest={contest}
+          entries={entries}
+          ballot={ballot}
+          setBallot={setBallot}
+          onCast={load}
+        />
+      )}
+      {results?.ok && <Results contest={contest} results={results} />}
       {!contest.may_enter && contest.phase === 'entries' && contest.who_enters === 'admins' && (
         <p className="text-sm text-slate-400 mt-4">
           An organiser is entering these on everyone&apos;s behalf — send them your photo.
@@ -200,6 +225,9 @@ function OneContest({ id }: { id: string }) {
                 <p className="text-xs text-slate-400">
                   {contest.entrants_shown ? (e.entrant ?? 'Entered by an organiser') : `Entry ${i + 1}`}
                   {e.mine && <span className="text-accent"> · yours</span>}
+                  {ballot.includes(e.id) && (
+                    <span className="text-accent"> · your {ordinal(ballot.indexOf(e.id) + 1)} pick</span>
+                  )}
                 </p>
                 {e.blurb && <p className="text-sm text-slate-300 mt-1 whitespace-pre-line">{e.blurb}</p>}
               </div>
@@ -208,6 +236,207 @@ function OneContest({ id }: { id: string }) {
         </ul>
       )}
     </div>
+  );
+}
+
+/** 1st, 2nd, 3rd. Only ever needed up to fifth, which is what a contest may
+ *  rank at most, so the table is the whole answer rather than the easy half of
+ *  a rule with exceptions at 11, 12 and 13. */
+const ORDINALS = ['1st', '2nd', '3rd', '4th', '5th'];
+const ordinal = (n: number) => ORDINALS[n - 1] ?? `${n}th`;
+
+/**
+ * The ballot: rank a few favourites.
+ *
+ * Clicking an entry adds it to the end of your picks; clicking it again takes
+ * it out and closes the gap. That is the whole interaction -- no drag, no
+ * dropdown per place. A contest is voted on once, on a phone, by people who
+ * are not going to read instructions, and "tap them in the order you like
+ * them" is the only rule that survives that.
+ *
+ * Nothing is sent until they say so. A ballot that saved on every tap would
+ * mean the half-finished orderings on the way to the real one were each, for a
+ * moment, somebody's vote.
+ */
+function Ballot({
+  contest,
+  entries,
+  ballot,
+  setBallot,
+  onCast,
+}: {
+  contest: Contest;
+  entries: ContestEntry[];
+  ballot: string[];
+  setBallot: (b: string[]) => void;
+  onCast: () => Promise<void>;
+}) {
+  const [busy, setBusy] = useState(false);
+  const [said, setSaid] = useState<string | null>(null);
+
+  // Your own is not on the ballot at all, rather than on it and refused: the
+  // server turns it away either way, and offering it is offering a mistake.
+  const choices = entries.filter((e) => !e.mine);
+
+  function toggle(entry: string) {
+    setSaid(null);
+    if (ballot.includes(entry)) {
+      setBallot(ballot.filter((x) => x !== entry));
+      return;
+    }
+    if (ballot.length >= contest.picks) {
+      setSaid(`This one ranks ${contest.picks}. Take one out to add another.`);
+      return;
+    }
+    setBallot([...ballot, entry]);
+  }
+
+  async function send(picks: string[]) {
+    setBusy(true);
+    const got = await castVotes(contest.id, picks);
+    setBusy(false);
+    if (!got.ok) {
+      setSaid(got.reason ?? 'that ballot would not go through');
+      return;
+    }
+    setSaid(picks.length === 0 ? 'Your ballot has been taken back.' : 'Your ballot is in.');
+    await onCast();
+  }
+
+  return (
+    <section className="mt-6 rounded-xl border border-white/15 bg-white/5 p-4">
+      <h2 className="text-sm font-semibold text-slate-200">Vote</h2>
+      <p className="text-xs text-slate-400 mt-1">
+        Tap up to {contest.picks} in the order you like them. Your first pick is worth{' '}
+        {contest.picks}, your last worth 1. You can change your mind until voting closes.
+      </p>
+      {choices.length === 0 ? (
+        <p className="text-sm text-slate-400 mt-3">
+          There is nothing here to vote for but your own.
+        </p>
+      ) : (
+        <ul className="mt-3 flex flex-wrap gap-1.5" aria-label="The entries you can rank">
+          {choices.map((e) => {
+            const at = ballot.indexOf(e.id);
+            return (
+              <li key={e.id}>
+                <button
+                  type="button"
+                  aria-pressed={at >= 0}
+                  onClick={() => toggle(e.id)}
+                  className={`px-2.5 h-8 rounded-lg text-xs font-semibold border transition-colors ${
+                    at >= 0
+                      ? 'bg-accent/20 border-accent text-slate-200'
+                      : 'bg-white/5 border-white/15 text-slate-300 hover:bg-white/10'
+                  }`}
+                >
+                  {/* The space is markup, not styling: without it the button
+                      reads as "1stBeta" to anything that flattens the
+                      element to text, a screen reader included. */}
+                  {at >= 0 && <span className="text-accent">{ordinal(at + 1)}</span>}
+                  {at >= 0 && ' '}
+                  {e.title}
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+      {/* The chips stay in entry order -- a list that reordered itself under
+          a thumb mid-vote would be unusable -- so the ordering is said here
+          instead, which is the thing being decided. */}
+      {ballot.length > 0 && (
+        <p className="text-xs text-slate-400 mt-2">
+          Your picks:{' '}
+          {ballot
+            .map((id, i) => `${ordinal(i + 1)} ${entries.find((e) => e.id === id)?.title ?? ''}`)
+            .join(', ')}
+        </p>
+      )}
+      <div className="flex items-center gap-2 mt-3">
+        <button
+          type="button"
+          className={BUTTON}
+          disabled={busy || ballot.length === 0}
+          onClick={() => void send(ballot)}
+        >
+          Cast my ballot
+        </button>
+        <button
+          type="button"
+          className={BUTTON}
+          disabled={busy}
+          onClick={() => {
+            setBallot([]);
+            void send([]);
+          }}
+        >
+          Take mine back
+        </button>
+      </div>
+      {said && (
+        <p className="text-xs text-slate-400 mt-2" role="status">
+          {said}
+        </p>
+      )}
+    </section>
+  );
+}
+
+/**
+ * The result.
+ *
+ * Whether this is the final word is the server's to say, and it says so --
+ * an organiser reading it during voting is looking at a running total, and a
+ * number read off this screen must never be mistaken for the one that gets
+ * announced.
+ */
+function Results({ contest, results }: { contest: Contest; results: ContestResults }) {
+  const table = results.table ?? [];
+  return (
+    <section className="mt-6 rounded-xl border border-white/15 bg-white/5 p-4">
+      <h2 className="text-sm font-semibold text-slate-200">
+        {results.final ? 'Result' : 'How it stands'}
+      </h2>
+      <p className="text-xs text-slate-400 mt-1">
+        {results.voters ?? 0} {results.voters === 1 ? 'person has' : 'people have'} voted
+        {results.final ? '.' : ' so far — voting is still open, so this is not the result yet.'}
+      </p>
+      {table.length === 0 ? (
+        <p className="text-sm text-slate-400 mt-3">Nobody has voted on this one.</p>
+      ) : (
+        <ol className="mt-3 space-y-1">
+          {table.map((r) => (
+            <li key={r.entry_id} className="flex items-baseline gap-2 text-sm">
+              <span className="text-slate-400 tabular-nums w-8 shrink-0">{ordinal(r.place)}</span>
+              <span className="font-semibold text-slate-200">{r.title}</span>
+              {contest.entrants_shown && r.entrant && (
+                <span className="text-xs text-slate-400">{r.entrant}</span>
+              )}
+              <span className="ml-auto text-xs text-slate-400 tabular-nums">
+                {r.points} {r.points === 1 ? 'point' : 'points'}
+                {r.firsts > 0 && ` · ${r.firsts} first`}
+                {r.firsts > 1 && 's'}
+              </span>
+            </li>
+          ))}
+        </ol>
+      )}
+      {/* Only where the contest was set up to show it, which the server
+          enforces -- this draws what came back rather than deciding. */}
+      {results.ballots && results.ballots.length > 0 && (
+        <div className="mt-4">
+          <h3 className="text-xs font-semibold text-slate-300">Who voted for what</h3>
+          <ul className="mt-1 space-y-0.5">
+            {results.ballots.map((b) => (
+              <li key={b.voter} className="text-xs text-slate-400">
+                <span className="text-slate-300">{b.voter}</span>: {b.picks.join(', ')}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </section>
   );
 }
 

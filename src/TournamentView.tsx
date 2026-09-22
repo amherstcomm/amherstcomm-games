@@ -85,13 +85,53 @@ function TriviaBoard({ trivia }: { trivia: RoundStandings['trivia'][number] }) {
   );
 }
 
+/** One card for a contest a round counted.
+ *
+ *  Shaped like the trivia's and the games' for the same reason theirs match
+ *  each other: it is one more thing you placed in. What it has to say that
+ *  they do not is that an empty list can mean "not decided yet" as well as
+ *  "nobody took part" -- a contest pays nothing until its voting closes, and a
+ *  card that just looked empty would read as the latter. */
+function ContestBoard({ contest }: { contest: RoundStandings['contests'][number] }) {
+  return (
+    <div className="rounded-xl bg-white/5 border border-white/10 p-3">
+      <p className="text-sm font-semibold text-white mb-1.5 flex items-baseline gap-2">
+        <span className="min-w-0 truncate">{contest.name}</span>
+        {contest.weight !== 1 && (
+          <span className="text-xs font-normal text-accent shrink-0">
+            worth {contest.weight}×
+          </span>
+        )}
+      </p>
+      {contest.standings.length === 0 ? (
+        <p className="text-xs text-slate-400">
+          {contest.phase === 'over'
+            ? 'Nobody voted on this one.'
+            : 'This one counts once its voting closes.'}
+        </p>
+      ) : (
+        <ol className="space-y-1 text-sm" aria-label={`${contest.name} standings`}>
+          {contest.standings.slice(0, 10).map((r) => (
+            <li key={r.name} className="flex items-baseline gap-2 text-slate-300">
+              <span className="w-5 shrink-0 text-xs text-slate-500 tabular-nums">{r.place}</span>
+              <span className="flex-1 min-w-0 truncate">{r.name}</span>
+              <span className="tabular-nums shrink-0">{r.points} pts</span>
+            </li>
+          ))}
+        </ol>
+      )}
+    </div>
+  );
+}
+
 /** One round's leaderboards, one per game and one per session, labelled and
  *  worded the way the site's own boards are -- the same labels, so a round's
  *  Weave says "best 1:35" exactly as the everyday board would. */
 function RoundBoards({ round }: { round: RoundStandings }) {
   const games = Object.entries(round.boards) as [BoardGame, RoundStandings['boards'][BoardGame]][];
   const trivia = round.trivia ?? [];
-  if (games.length === 0 && trivia.length === 0) {
+  const contests = round.contests ?? [];
+  if (games.length === 0 && trivia.length === 0 && contests.length === 0) {
     return <p className="text-xs text-slate-400">Nobody has finished a board in this round yet.</p>;
   }
   return (
@@ -139,6 +179,9 @@ function RoundBoards({ round }: { round: RoundStandings }) {
       })}
       {trivia.map((v) => (
         <TriviaBoard key={v.session_id} trivia={v} />
+      ))}
+      {contests.map((c) => (
+        <ContestBoard key={c.contest_id} contest={c} />
       ))}
     </div>
   );
