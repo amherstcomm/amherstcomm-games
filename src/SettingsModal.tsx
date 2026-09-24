@@ -562,11 +562,15 @@ export default function SettingsModal({
             <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2.5">
               Coarse words
             </h3>
-            {/* Three equal segments, with the words wrapping inside each one.
-                As a wrapping row of buttons, three labels this long broke into
-                two rows inside one pill in a dialog this narrow, stranding
-                "Hide mild ones too" on a line of its own. */}
-            <div className="grid grid-cols-3 rounded-lg bg-white/5 border border-white/10 p-0.5 gap-0.5">
+            {/* One option per row. As a wrapping row, three labels this long
+                broke into two rows inside one pill, stranding "Hide mild ones
+                too" on a line of its own. As three equal columns they fit here
+                but not in a wider font: "everything" cannot break, and at the
+                largest text it is wider than a third of a dialog this narrow.
+                The dialog is narrow on every screen, so this is a question of
+                text size rather than of width -- and a stack has no width at
+                which it breaks. */}
+            <div className="grid grid-cols-1 rounded-lg bg-white/5 border border-white/10 p-1 gap-1">
               {(
                 [
                   ['none', 'Show everything'],
@@ -579,7 +583,7 @@ export default function SettingsModal({
                   onMouseDown={(e) => e.preventDefault()}
                   onClick={() => onWordFilter(id)}
                   aria-pressed={wordFilter === id}
-                  className={`px-2 py-1.5 rounded-md text-xs font-semibold leading-tight text-center transition-colors
+                  className={`px-3 py-1.5 rounded-md text-xs font-semibold text-left transition-colors
                     ${wordFilter === id
                       ? 'bg-white/15 text-white'
                       : 'text-slate-400 hover:text-white hover:bg-white/10'}`}

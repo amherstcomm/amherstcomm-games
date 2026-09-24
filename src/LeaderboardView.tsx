@@ -189,7 +189,11 @@ export default function LeaderboardView({ signedIn }: { signedIn: boolean }) {
         <div
           role="group"
           aria-label="How many days the boards cover"
-          className="inline-flex flex-wrap justify-center max-w-full rounded-lg bg-white/5 border border-white/10 p-0.5 gap-0.5"
+          // Three equal columns rather than a wrapping row: a row that ran out
+          // of room at the largest text dropped "30 days" onto a line of its
+          // own inside the pill. In columns, "30 days" wraps inside its own
+          // segment instead, and no label here is one long word.
+          className="inline-grid grid-cols-3 max-w-full rounded-lg bg-white/5 border border-white/10 p-0.5 gap-0.5"
         >
           {WINDOWS.map((w) => (
             <button
@@ -197,7 +201,7 @@ export default function LeaderboardView({ signedIn }: { signedIn: boolean }) {
               onMouseDown={(e) => e.preventDefault()}
               onClick={() => setDays(w.days)}
               aria-pressed={days === w.days}
-              className={`px-3 py-1.5 rounded-md text-sm font-semibold transition-colors
+              className={`px-3 py-1.5 rounded-md text-sm font-semibold leading-tight text-center transition-colors
                 ${days === w.days ? 'bg-emerald-400/15 text-emerald-300' : 'text-slate-400 hover:text-white'}`}
             >
               {w.label}

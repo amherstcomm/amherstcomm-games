@@ -240,10 +240,24 @@ const PAGES: [string, string][] = [
   ['scores', `/scores/${SESSION}`],
 ];
 
+// The site has no font of its own: it draws in the system's UI font, so how
+// wide a label is depends on whose machine draws it -- Segoe here, Roboto on
+// Android, San Francisco on an iPhone, and something wider on the CI runner.
+// Two controls that fit on this machine broke there, and there is no
+// installing "whatever GitHub has". So the last setup widens every letter,
+// and a control that only fits in a narrow font fails here as well as there.
+//
+// Calibrated against CI rather than guessed: at 0.09em this reproduces the
+// runner's two failures exactly, and nothing else fails. 0.12em leaves
+// headroom for fonts wider than the runner's and still flags only real
+// problems -- a stress setup that caught less than CI would prove nothing.
+const WIDE_FONT = 'body { letter-spacing: 0.12em !important; }';
+
 const SETUPS = [
-  ['desk', { width: 1280, height: 900 }, 'normal'],
-  ['phone', { width: 390, height: 844 }, 'normal'],
-  ['phone, largest text', { width: 390, height: 844 }, 'larger'],
+  ['desk', { width: 1280, height: 900 }, 'normal', ''],
+  ['phone', { width: 390, height: 844 }, 'normal', ''],
+  ['phone, largest text', { width: 390, height: 844 }, 'larger', ''],
+  ['phone, largest text, wide font', { width: 390, height: 844 }, 'larger', WIDE_FONT],
 ] as const;
 
 type Finding = { kind: string; a: string; b: string };
@@ -384,7 +398,7 @@ function measure(atBottom: boolean): Finding[] {
   return out;
 }
 
-for (const [setup, size, scale] of SETUPS) {
+for (const [setup, size, scale, css] of SETUPS) {
   for (const [name, path] of PAGES) {
     test(`${name} on a ${setup} has nothing touching that should not`, async ({ page }) => {
       await page.setViewportSize(size);
@@ -406,6 +420,7 @@ for (const [setup, size, scale] of SETUPS) {
       });
 
       await page.goto(path);
+      if (css) await page.addStyleTag({ content: css });
       await page.waitForLoadState('networkidle');
       // Settled, not merely loaded: a board that draws after the first paint
       // moves things, and a measurement taken mid-move is of a moment rather
