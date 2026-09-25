@@ -568,7 +568,11 @@ const CryptogramGame = forwardRef<CryptogramGameHandle, object>(
 
             <div className="flex flex-wrap justify-center gap-x-3 gap-y-3 max-w-2xl mx-auto">
               {chunks.map((chunk, ci) => (
-                <span key={ci} className="inline-flex">
+                // data-joined: a word's letters sit against each other and on
+                // their cipher numbers on purpose -- that is what makes a run
+                // of cells read as one word. e2e/spacing.spec.ts reads this
+                // rather than exempting the whole page from the check.
+                <span key={ci} className="inline-flex" data-joined="">
                   {chunk.map((i) => {
                     const token = record.tokens[i];
                     const cipher = isCipherToken(record, token);
