@@ -2,8 +2,9 @@
 --
 -- A round is a span of dates and a list of games, with one fixed board per
 -- game for the whole span. What has to hold is what a page cannot hold for
--- itself: rounds sit inside their tournament and never overlap, a round under
--- way cannot be changed under the people playing it, the board is only served
+-- itself: rounds sit inside their tournament and may overlap only without
+-- sharing a game (overlap.sql has the rest), a round under way cannot be
+-- changed under the people playing it, the board is only served
 -- while its round is on and only for its games, and once a round result is
 -- finished it stays the first one.
 \set ON_ERROR_STOP on
@@ -52,9 +53,11 @@ select pg_temp.check('and so is a one-day round',
 select pg_temp.check('a round outside its tournament is refused',
   (public.save_round(null, (select id from t), pg_temp.d(38), pg_temp.d(45), array['hive'])->>'reason')
     = 'a round has to fall inside its tournament');
-select pg_temp.check('and one that overlaps another round',
+-- Rounds may overlap now (overlap.sql); what may not is the same game in two
+-- of them on the same day, and this one puts Hive on a day the first round has it.
+select pg_temp.check('and one that puts a game in two rounds on the same day',
   (public.save_round(null, (select id from t), pg_temp.d(3), pg_temp.d(6), array['hive'])->>'reason')
-    = 'another round already covers some of those days');
+    = 'Hive is already in another round on some of those days');
 -- No games is fine if the round has trivia or a contest; none of the three
 -- is not.
 select pg_temp.check('and one with neither games, trivia nor a contest',
@@ -64,11 +67,15 @@ select pg_temp.check('and one naming a game this site does not have',
   (public.save_round(null, (select id from t), pg_temp.d(10), pg_temp.d(12), array['chess'])->>'reason')
     = 'that is not a game this site has');
 
--- A day belongs to one round across every tournament, not just within one.
+-- A day belongs to one tournament: the site shows one at a time.
 select public.save_tournament(null, 'Other', 'easy', pg_temp.d(-10), pg_temp.d(50));
+-- Grid, which no round has: refused for the day alone, which is the point --
+-- rounds within one tournament may share days now, across two they still
+-- may not.
 select pg_temp.check('another tournament cannot claim a day a round already has',
   (public.save_round(null, (select id from public.tournaments where name = 'Other'),
-     pg_temp.d(0), pg_temp.d(1), array['grid'])->>'ok') = 'false');
+     pg_temp.d(0), pg_temp.d(1), array['grid'])->>'reason')
+    = 'another tournament already has a round on some of those days');
 
 select public.save_round(null, (select id from t), pg_temp.d(10), pg_temp.d(16), array['weave']);
 select pg_temp.check('a future round can be changed freely',

@@ -47,7 +47,8 @@ import ReportQueueView from '@/ReportQueueView';
 import TournamentView from '@/TournamentView';
 import { BoardChannelContext, DAILY_CHANNEL, type BoardChannel } from '@/boardChannel';
 import {
-  readCurrentRound,
+  readCurrentRounds,
+  roundFor,
   readCurrentTournament,
   type CurrentRound,
   type CurrentTournament,
@@ -717,11 +718,12 @@ function App() {
   //
   // Grid is here too now: it varies by board size, 4x4 then 5x5. Not shown
   // when someone has asked to be left with one puzzle.
-  // A tournament round, when one is on. Asked once, and again whenever the
+  // The tournament rounds on today. Asked once, and again whenever the
   // tournament's own page is opened, so a round that started while the tab sat
-  // open is found rather than missed. Undefined while asking, null when nothing
-  // is running -- which is most of the year.
-  const [round, setRound] = useState<CurrentRound | null | undefined>(undefined);
+  // open is found rather than missed. Undefined while asking, empty when nothing
+  // is running -- which is most of the year. A list because rounds may overlap:
+  // a week-long contest round runs across the daily ones.
+  const [rounds, setRounds] = useState<CurrentRound[] | undefined>(undefined);
   // The tournament covering today, round or no round: between rounds of a
   // locked tournament it is all there is to show.
   const [tournament, setTournament] = useState<CurrentTournament | null>(null);
@@ -729,8 +731,8 @@ function App() {
   const onTournamentPage = tournamentPage !== null;
   useEffect(() => {
     let alive = true;
-    void readCurrentRound().then((res) => {
-      if (alive) setRound(res.ok ? res.round : null);
+    void readCurrentRounds().then((res) => {
+      if (alive) setRounds(res.ok ? res.rounds : []);
     });
     void readCurrentTournament().then((t) => {
       if (alive) setTournament(t);
@@ -757,24 +759,35 @@ function App() {
   // instead. The round's own games, at /tournament/<game>, are the tournament.
   const lockedHere = lockedToTournament && !reportPage && !inRound;
   // A session may be joined when sessions are not locked, or when it is the
-  // round's own trivia.
-  const roundSessions = new Set((round?.trivia ?? []).map((v) => v.session_id));
+  // trivia of any round on today.
+  const roundSessions = new Set(
+    (rounds ?? []).flatMap((r) => (r.trivia ?? []).map((v) => v.session_id))
+  );
   const sessionOpen = (id: string) => !otherSessionsOff || roundSessions.has(id);
   // Whether a session page may draw yet: the server has said what is locked,
   // and if sessions are locked, the round has said which are its own. Drawing
   // on the cache alone let a locked session mount and ask for its question
   // before the lock arrived.
-  const sessionKnown = availabilityAnswered && (!otherSessionsOff || round !== undefined);
+  const sessionKnown = availabilityAnswered && (!otherSessionsOff || rounds !== undefined);
+  // The round this game page is played in: the one on today that has the game.
+  // Never more than one -- two rounds on a day may not share a game -- so the
+  // address /tournament/<game> still names exactly one board.
+  const playing = useMemo(
+    () =>
+      tournamentPage?.slug && rounds
+        ? roundFor(rounds, FEED_NAME[modeOf(tournamentPage.slug)])
+        : null,
+    [tournamentPage?.slug, rounds]
+  );
   const roundChannel = useMemo<Extract<BoardChannel, { kind: 'round' }> | null>(() => {
-    if (!tournamentPage?.slug || !round) return null;
-    if (!round.games.includes(FEED_NAME[modeOf(tournamentPage.slug)])) return null;
+    if (!playing) return null;
     return {
       kind: 'round',
-      difficulty: round.difficulty,
-      startsOn: round.starts_on,
-      roundId: round.round_id,
+      difficulty: playing.difficulty,
+      startsOn: playing.starts_on,
+      roundId: playing.round_id,
     };
-  }, [tournamentPage?.slug, round]);
+  }, [playing]);
 
   // The difficulties this deployment is offering, which is not the same
   // question as which one you are playing.
@@ -1143,7 +1156,7 @@ function App() {
           <>
           {lockedHere && (
             <TournamentView
-              round={round}
+              rounds={rounds}
               tournament={tournament}
               locked
               link={pageLink}
@@ -1154,7 +1167,7 @@ function App() {
           {reportPage?.kind === 'reportQueue' && <ReportQueueView />}
           {reportPage?.kind === 'tournament' && (
             <TournamentView
-              round={round}
+              rounds={rounds}
               tournament={tournament}
               locked={lockedToTournament}
               link={pageLink}
@@ -1224,13 +1237,13 @@ function App() {
           <>
           {/* A round being on is worth a line on the front page: it is the one
               thing here with a deadline. */}
-          {atHome && round && (
+          {atHome && rounds && rounds.length > 0 && (
             <RouteLink
               {...pageLink({ kind: 'tournament', slug: null })}
               className="mb-6 flex items-center gap-2 rounded-xl border border-accent/40 bg-accent/10 px-4 py-3 text-sm font-semibold text-white hover:bg-accent/20"
             >
               <Trophy className="w-4 h-4 text-accent shrink-0" aria-hidden="true" />
-              {round.tournament}: round {round.number} of {round.of} is on
+              {roundsOn(rounds)}
             </RouteLink>
           )}
           {atHome && (
@@ -1256,14 +1269,14 @@ function App() {
               rest of it. Said above the board rather than in a corner, because
               "one attempt, the first finish counts" is the thing somebody needs
               to know before they touch it. */}
-          {inRound && round && roundChannel && (
+          {inRound && playing && roundChannel && (
             <section className="mb-6 rounded-xl border border-accent/40 bg-accent/10 px-4 py-3 text-sm" aria-label="Tournament round">
               <p className="font-semibold text-white flex items-center gap-2">
                 <Trophy className="w-4 h-4 text-accent shrink-0" aria-hidden="true" />
-                {round.tournament} · Round {round.number} of {round.of}
+                {playing.tournament} · Round {playing.number} of {playing.of}
               </p>
               <p className="mt-1 text-slate-300">
-                {DIFFICULTY_LABEL[round.difficulty]} · until {round.ends_on}. One attempt: your
+                {DIFFICULTY_LABEL[playing.difficulty]} · until {playing.ends_on}. One attempt: your
                 first finish is the one that counts.{' '}
                 <RouteLink
                   {...pageLink({ kind: 'tournament', slug: null })}
@@ -1274,12 +1287,16 @@ function App() {
               </p>
             </section>
           )}
-          {inRound && round === undefined && (
+          {inRound && rounds === undefined && (
             <p className="text-sm text-slate-400 py-8 text-center">Loading the round…</p>
           )}
-          {inRound && round !== undefined && !roundChannel && (
+          {inRound && rounds !== undefined && !roundChannel && (
             <p className="text-sm text-slate-400 py-8 text-center">
-              {round ? "That game isn't in this round." : 'No tournament round is on today.'}{' '}
+              {rounds.length === 0
+                ? 'No tournament round is on today.'
+                : rounds.length === 1
+                  ? "That game isn't in this round."
+                  : "That game isn't in any of today's rounds."}{' '}
               <RouteLink
                 {...pageLink({ kind: 'tournament', slug: null })}
                 className="underline underline-offset-2 hover:text-white"
@@ -2304,6 +2321,18 @@ function App() {
     </PrefsContext.Provider>
     </PaletteContext.Provider>
   );
+}
+
+/** What the front page says is on: "Ownership Cup: round 2 of 5 is on", or
+ *  for overlapping rounds "Ownership Cup: rounds 2 and 3 of 5 are on". Rounds
+ *  on the same day are always one tournament's -- two tournaments may not
+ *  share a day -- so the first round's tournament names them all. */
+function roundsOn(rounds: CurrentRound[]): string {
+  const [first] = rounds;
+  if (rounds.length === 1) return `${first.tournament}: round ${first.number} of ${first.of} is on`;
+  const numbers = rounds.map((r) => r.number);
+  const listed = `${numbers.slice(0, -1).join(', ')} and ${numbers[numbers.length - 1]}`;
+  return `${first.tournament}: rounds ${listed} of ${first.of} are on`;
 }
 
 export default App;

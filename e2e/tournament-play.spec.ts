@@ -47,7 +47,7 @@ async function tournament(page: import('@playwright/test').Page, round: unknown)
     const fn = url.match(/\/rpc\/(\w+)/)?.[1] ?? '';
     const reply = (body: unknown) =>
       route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });
-    if (fn === 'current_round') return reply(round);
+    if (fn === 'current_rounds') return reply(round ? [round] : []);
     if (fn === 'round_puzzle') {
       const game = JSON.parse(route.request().postData() ?? '{}').p_game;
       return reply(game === 'hive' ? hive : null);

@@ -5,7 +5,7 @@
 // and the first finish counts. This page is the way in, and says plainly when
 // nothing is running, which is most of the year.
 import { useEffect, useState } from 'react';
-import { Trophy, MessagesSquare, Gift } from 'lucide-react';
+import { Camera, Trophy, MessagesSquare, Gift } from 'lucide-react';
 import RouteLink from '@/RouteLink';
 import { BOARD_LABELS, type BoardGame } from '@/leaderboard';
 import {
@@ -18,6 +18,7 @@ import { DIFFICULTY_LABEL } from '@/difficulty';
 import { MODE_SLUG, GAME_NAME, type Mode } from '@/games';
 import { roundGameName } from '@/tournaments';
 import type { CurrentRound, CurrentTournament } from '@/rounds';
+import { PHASE_WORD, type ContestPhase } from '@/contests';
 import { FEED_NAME } from '@/games';
 import type { Route } from '@/routes';
 
@@ -211,7 +212,7 @@ function RoundBoards({ round }: { round: RoundStandings }) {
 /** The tournament table and every started round's boards. Fetched here rather
  *  than handed down, because only this page wants them and a leaderboard read
  *  on every page load would be a query for nothing most of the year. */
-function Standings({ tournamentId, currentRound }: { tournamentId: string; currentRound: string }) {
+function Standings({ tournamentId, currentRounds }: { tournamentId: string; currentRounds: string[] }) {
   const [standings, setStandings] = useState<TournamentStandings | null | undefined>(undefined);
   useEffect(() => {
     let alive = true;
@@ -226,8 +227,11 @@ function Standings({ tournamentId, currentRound }: { tournamentId: string; curre
   if (standings === undefined) return <p className="mt-6 text-sm text-slate-400">Loading the standings…</p>;
   if (standings === null) return null;
 
-  const current = standings.rounds.find((r) => r.id === currentRound);
-  const earlier = standings.rounds.filter((r) => r.id !== currentRound).reverse();
+  // The rounds on today, and the ones before them. Several can be on at once
+  // now, and each gets its own boards; one on its own keeps the page it had.
+  const onNow = new Set(currentRounds);
+  const current = standings.rounds.filter((r) => onNow.has(r.id));
+  const earlier = standings.rounds.filter((r) => !onNow.has(r.id)).reverse();
 
   return (
     <div className="mt-8 space-y-6">
@@ -257,13 +261,23 @@ function Standings({ tournamentId, currentRound }: { tournamentId: string; curre
         )}
       </section>
 
-      {current && (
+      {current.length === 1 && (
         <section aria-label="This round's standings">
           <h3 className="text-base font-bold text-white mb-2">This round</h3>
-          <Prizes items={[['This round', current.prize]]} />
-          <RoundBoards round={current} />
+          <Prizes items={[['This round', current[0].prize]]} />
+          <RoundBoards round={current[0]} />
         </section>
       )}
+      {current.length > 1 &&
+        current.map((r) => (
+          <section key={r.id} aria-label={`Round ${r.number}'s standings`}>
+            <h3 className="text-base font-bold text-white mb-2">
+              Round {r.number} · {span(r.starts_on, r.ends_on)}
+            </h3>
+            <Prizes items={[['This round', r.prize]]} />
+            <RoundBoards round={r} />
+          </section>
+        ))}
 
       {earlier.map((r) => (
         <details key={r.id} className="rounded-xl border border-white/10 p-3">
@@ -280,34 +294,140 @@ function Standings({ tournamentId, currentRound }: { tournamentId: string; curre
   );
 }
 
-export default function TournamentView({
+type RoundLink = (
+  route: Extract<Route, { kind: 'tournament' } | { kind: 'live' } | { kind: 'contest' }>
+) => { to: string; onGo: () => void };
+
+/**
+ * What one round offers: its trivia, its games and its contests, one card
+ * each. Contests are here because a round can be nothing but a contest -- the
+ * week-long pumpkin round that runs across the daily ones is why rounds may
+ * overlap at all -- and a round whose only content has no card is a round
+ * that looks empty.
+ */
+function RoundCards({
   round,
+  link,
+  sessionsOn,
+  label,
+  className,
+}: {
+  round: CurrentRound;
+  link: RoundLink;
+  sessionsOn: boolean;
+  label: string;
+  className: string;
+}) {
+  const card = 'block rounded-xl bg-white/5 border border-white/10 p-4';
+  const live = card + ' hover:bg-white/10 hover:border-white/20 transition-colors';
+  return (
+    <ul className={`${className} grid gap-2 sm:grid-cols-2`} aria-label={label}>
+      {(round.trivia ?? []).map((v) => {
+        const open = v.state === 'live' && sessionsOn;
+        const note = !sessionsOn
+          ? 'Sessions are off just now'
+          : v.state === 'closed'
+            ? 'Finished — the standings below are final'
+            : v.state === 'draft'
+              ? 'Not open yet'
+              : v.mode === 'open'
+                ? 'Open now — play it on your own time'
+                : 'Live now';
+        const inside = (
+          <>
+            <span className="text-sm font-semibold text-white flex items-center gap-2">
+              <MessagesSquare className="w-4 h-4 text-accent shrink-0" aria-hidden="true" />
+              <span className="min-w-0 truncate">{v.title}</span>
+            </span>
+            <span className="block mt-0.5 text-xs text-slate-400">
+              {note}
+              {v.weight !== 1 && ` · worth ${v.weight}×`}
+            </span>
+          </>
+        );
+        if (!open) {
+          return (
+            <li key={v.session_id}>
+              <div className={card + ' opacity-60'}>{inside}</div>
+            </li>
+          );
+        }
+        const { to, onGo } = link({ kind: 'live', session: v.session_id, host: false });
+        return (
+          <li key={v.session_id}>
+            <RouteLink to={to} onGo={onGo} className={live}>
+              {inside}
+            </RouteLink>
+          </li>
+        );
+      })}
+      {round.games.map((feed) => {
+        const mode = modeOfFeed(feed);
+        if (!mode) return null;
+        const { to, onGo } = link({ kind: 'tournament', slug: MODE_SLUG[mode] });
+        return (
+          <li key={feed}>
+            <RouteLink to={to} onGo={onGo} className={live}>
+              <span className="text-sm font-semibold text-white">
+                {GAME_NAME[mode]?.full ?? roundGameName(feed)}
+              </span>
+              {round.game_weights?.[feed] !== undefined && round.game_weights[feed] !== 1 && (
+                <span className="block mt-0.5 text-xs text-accent">
+                  worth {round.game_weights[feed]}×
+                </span>
+              )}
+            </RouteLink>
+          </li>
+        );
+      })}
+      {(round.contests ?? []).map((c) => {
+        const { to, onGo } = link({ kind: 'contest', contest: c.contest_id });
+        return (
+          <li key={c.contest_id}>
+            <RouteLink to={to} onGo={onGo} className={live}>
+              <span className="text-sm font-semibold text-white flex items-center gap-2">
+                <Camera className="w-4 h-4 text-accent shrink-0" aria-hidden="true" />
+                <span className="min-w-0 truncate">{c.name}</span>
+              </span>
+              <span className="block mt-0.5 text-xs text-slate-400">
+                {PHASE_WORD[c.phase as ContestPhase] ?? c.phase}
+                {c.weight !== 1 && ` · worth ${c.weight}×`}
+              </span>
+            </RouteLink>
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
+export default function TournamentView({
+  rounds,
   tournament = null,
   locked = false,
   link,
   sessionsOn = true,
 }: {
-  /** undefined while it is being asked, null when nothing is on */
-  round: CurrentRound | null | undefined;
+  /** undefined while it is being asked, empty when nothing is on; several
+   *  when rounds overlap */
+  rounds: CurrentRound[] | undefined;
   /** the tournament covering today, round or no round */
   tournament?: CurrentTournament | null;
   /** the tournament is the only thing on offer until it ends */
   locked?: boolean;
-  /** the two kinds of address this page links to: its games and its trivia */
-  link: (
-    route: Extract<Route, { kind: 'tournament' } | { kind: 'live' }>
-  ) => { to: string; onGo: () => void };
+  /** the addresses this page links to: its games, its trivia, its contests */
+  link: RoundLink;
   /** sessions switched off site-wide: the trivia is listed but not openable,
    *  the same refusal the address itself gives */
   sessionsOn?: boolean;
 }) {
-  if (round === undefined) {
+  if (rounds === undefined) {
     return <p className="max-w-2xl mx-auto px-4 py-10 text-sm text-slate-400">Loading…</p>;
   }
   // Between rounds of a tournament that is still running: its standings, and
   // when it picks up again. For a tournament holding the site this is the
   // whole site, so it has to say more than "nothing is on".
-  if (round === null && tournament) {
+  if (rounds.length === 0 && tournament) {
     return (
       <section className="max-w-2xl mx-auto px-4 py-6" aria-label="Between rounds">
         <h2 className="text-xl font-bold text-white flex items-center gap-2">
@@ -325,11 +445,11 @@ export default function TournamentView({
           </p>
         )}
         <Prizes items={[['Overall prize', tournament.prize]]} />
-        <Standings tournamentId={tournament.id} currentRound="" />
+        <Standings tournamentId={tournament.id} currentRounds={[]} />
       </section>
     );
   }
-  if (round === null) {
+  if (rounds.length === 0) {
     return (
       <section className="max-w-2xl mx-auto px-4 py-10">
         <h2 className="text-xl font-bold text-white flex items-center gap-2">
@@ -343,26 +463,38 @@ export default function TournamentView({
     );
   }
 
+  // One round on its own keeps the page it always had. Several -- rounds may
+  // overlap, a contest running across the daily ones -- get the tournament once
+  // and then a block each, so each round's games, trivia, contests and prize
+  // stay together under its own number.
+  const [first] = rounds;
+  const one = rounds.length === 1;
   return (
-    <section className="max-w-2xl mx-auto px-4 py-6" aria-label="This round">
+    <section className="max-w-2xl mx-auto px-4 py-6" aria-label={one ? 'This round' : "Today's rounds"}>
       <h2 className="text-xl font-bold text-white flex items-center gap-2">
         <Trophy className="w-5 h-5 text-accent shrink-0" aria-hidden="true" />
-        {round.tournament}
+        {first.tournament}
       </h2>
       <p className="mt-1 text-sm text-slate-300">
-        Round {round.number} of {round.of} · {span(round.starts_on, round.ends_on)} ·{' '}
-        {DIFFICULTY_LABEL[round.difficulty]}
+        {one
+          ? `Round ${first.number} of ${first.of} · ${span(first.starts_on, first.ends_on)} · `
+          : `${rounds.length} rounds are on · `}
+        {DIFFICULTY_LABEL[first.difficulty]}
       </p>
       {locked && (
         <p className="mt-2 text-sm text-slate-400">
-          Until {round.tournament_ends_on}, the tournament is the only thing on the site.
+          Until {first.tournament_ends_on}, the tournament is the only thing on the site.
         </p>
       )}
       <Prizes
-        items={[
-          ['This round', round.prize],
-          ['Overall prize', round.tournament_prize],
-        ]}
+        items={
+          one
+            ? [
+                ['This round', first.prize],
+                ['Overall prize', first.tournament_prize],
+              ]
+            : [['Overall prize', first.tournament_prize]]
+        }
       />
       <p className="mt-2 text-sm text-slate-400">
         Each game has one board for the whole round. You get one attempt at it,
@@ -370,75 +502,33 @@ export default function TournamentView({
         before you start.
       </p>
 
-      <ul className="mt-5 grid gap-2 sm:grid-cols-2" aria-label="In this round">
-        {(round.trivia ?? []).map((v) => {
-          const open = v.state === 'live' && sessionsOn;
-          const card =
-            'block rounded-xl bg-white/5 border border-white/10 p-4 ' +
-            (open ? 'hover:bg-white/10 hover:border-white/20 transition-colors' : 'opacity-60');
-          const note = !sessionsOn
-            ? 'Sessions are off just now'
-            : v.state === 'closed'
-              ? 'Finished — the standings below are final'
-              : v.state === 'draft'
-                ? 'Not open yet'
-                : v.mode === 'open'
-                  ? 'Open now — play it on your own time'
-                  : 'Live now';
-          const inside = (
-            <>
-              <span className="text-sm font-semibold text-white flex items-center gap-2">
-                <MessagesSquare className="w-4 h-4 text-accent shrink-0" aria-hidden="true" />
-                <span className="min-w-0 truncate">{v.title}</span>
-              </span>
-              <span className="block mt-0.5 text-xs text-slate-400">
-                {note}
-                {v.weight !== 1 && ` · worth ${v.weight}×`}
-              </span>
-            </>
-          );
-          if (!open) {
-            return (
-              <li key={v.session_id}>
-                <div className={card}>{inside}</div>
-              </li>
-            );
-          }
-          const { to, onGo } = link({ kind: 'live', session: v.session_id, host: false });
-          return (
-            <li key={v.session_id}>
-              <RouteLink to={to} onGo={onGo} className={card}>
-                {inside}
-              </RouteLink>
-            </li>
-          );
-        })}
-        {round.games.map((feed) => {
-          const mode = modeOfFeed(feed);
-          if (!mode) return null;
-          const { to, onGo } = link({ kind: 'tournament', slug: MODE_SLUG[mode] });
-          return (
-            <li key={feed}>
-              <RouteLink
-                to={to}
-                onGo={onGo}
-                className="block rounded-xl bg-white/5 border border-white/10 p-4 hover:bg-white/10 hover:border-white/20 transition-colors"
-              >
-                <span className="text-sm font-semibold text-white">
-                  {GAME_NAME[mode]?.full ?? roundGameName(feed)}
-                </span>
-                {round.game_weights?.[feed] !== undefined && round.game_weights[feed] !== 1 && (
-                  <span className="block mt-0.5 text-xs text-accent">
-                    worth {round.game_weights[feed]}×
-                  </span>
-                )}
-              </RouteLink>
-            </li>
-          );
-        })}
-      </ul>
+      {one ? (
+        <RoundCards
+          round={first}
+          link={link}
+          sessionsOn={sessionsOn}
+          label="In this round"
+          className="mt-5"
+        />
+      ) : (
+        rounds.map((r) => (
+          <section key={r.round_id} className="mt-6" aria-label={`Round ${r.number}`}>
+            <h3 className="text-base font-bold text-white">
+              Round {r.number} of {r.of} · {span(r.starts_on, r.ends_on)}
+            </h3>
+            <Prizes items={[['This round', r.prize]]} />
+            <RoundCards
+              round={r}
+              link={link}
+              sessionsOn={sessionsOn}
+              label={`In round ${r.number}`}
+              className="mt-3"
+            />
+          </section>
+        ))
+      )}
 
-      <Standings tournamentId={round.tournament_id} currentRound={round.round_id} />
+      <Standings tournamentId={first.tournament_id} currentRounds={rounds.map((r) => r.round_id)} />
     </section>
   );
 }

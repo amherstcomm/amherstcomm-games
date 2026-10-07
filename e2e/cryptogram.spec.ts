@@ -109,7 +109,13 @@ test('the crossed-off alphabet has a spoken equivalent', async ({ page }) => {
   const free = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('').find((l) => !before.includes(l));
   expect(free, 'the board had already used every letter').toBeTruthy();
 
-  await open.click();
+  // Forced, because on some days this cell is the selected one, and the
+  // selected cell wears a transparent "Type a letter" input over it -- how a
+  // phone gets its keyboard. A tap there lands on that input, which is right;
+  // Playwright's check that the button itself takes the click is what fails,
+  // and only on the days the passage puts this cell first. Forcing it still
+  // clicks at the cell's position, so it is the tap a person makes.
+  await open.click({ force: true });
   await page.keyboard.press((free as string).toLowerCase());
   await expect(page.getByText(new RegExp(`Plaintext letters used:[^.]*${free}`))).toBeAttached();
 });
