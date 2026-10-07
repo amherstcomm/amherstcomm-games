@@ -124,14 +124,22 @@ function contestPage(id: string) {
   return { ok: true, contest: CONTEST, entries: ENTRIES, my_votes: ['e2'] };
 }
 
-function reply(fn: string, args: Record<string, unknown>): unknown {
+/** A contest round running across the daily one: what the tournament page
+ *  draws when rounds overlap, which is a different layout from one round. */
+const CONTEST_ROUND = {
+  ...ROUND,
+  round_id: 'r2', number: 2, starts_on: plus(-1), ends_on: plus(4),
+  games: [], trivia: [], prize: 'A day off',
+};
+
+function reply(fn: string, args: Record<string, unknown>, path: string): unknown {
   switch (fn) {
     case 'my_capabilities':
       return ['site.settings', 'users.manage', 'games.setup', 'winners.view'];
     case 'is_owner':
       return true;
-    case 'current_round':
-      return ROUND;
+    case 'current_rounds':
+      return path.includes('rounds=several') ? [ROUND, CONTEST_ROUND] : [ROUND];
     case 'tournament_standings':
       return STANDINGS;
     case 'contest_view':
@@ -219,6 +227,7 @@ const PAGES: [string, string][] = [
     (slug): [string, string] => [`daily ${slug}`, `/daily/${slug}`]
   ),
   ['tournament', '/tournament'],
+  ['tournament, several rounds', '/tournament?rounds=several'],
   ['round game', '/tournament/weave'],
   ['contest list', '/contest'],
   ['contest voting', '/contest/c1'],
@@ -416,7 +425,11 @@ for (const [setup, size, scale, css] of SETUPS) {
         } catch {
           // a GET rpc carries nothing this file reads
         }
-        return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(reply(fn, args)) });
+        return route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify(reply(fn, args, path)),
+        });
       });
 
       await page.goto(path);

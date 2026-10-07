@@ -84,7 +84,7 @@ async function tournament(page: import('@playwright/test').Page) {
     const fn = route.request().url().match(/\/rpc\/(\w+)/)?.[1] ?? '';
     const reply = (body: unknown) =>
       route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });
-    if (fn === 'current_round') return reply(ROUND);
+    if (fn === 'current_rounds') return reply([ROUND]);
     if (fn === 'tournament_standings') return reply(STANDINGS);
     return route.fallback();
   });
@@ -198,7 +198,7 @@ test('a tournament with no prize says nothing about one', async ({ page }) => {
     const fn = route.request().url().match(/\/rpc\/(\w+)/)?.[1] ?? '';
     const reply = (body: unknown) =>
       route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });
-    if (fn === 'current_round') return reply({ ...ROUND, prize: null, tournament_prize: null });
+    if (fn === 'current_rounds') return reply([{ ...ROUND, prize: null, tournament_prize: null }]);
     if (fn === 'tournament_standings') {
       return reply({
         ...STANDINGS,

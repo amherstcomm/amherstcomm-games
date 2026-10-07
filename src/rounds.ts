@@ -43,11 +43,33 @@ export type CurrentRound = {
   of: number;
 };
 
-export async function readCurrentRound(): Promise<{ ok: boolean; round: CurrentRound | null }> {
-  if (!supabase) return { ok: false, round: null };
-  const { data, error } = await supabase.rpc('current_round');
-  if (error) return { ok: false, round: null };
-  return { ok: true, round: (data as CurrentRound | null) ?? null };
+/**
+ * Every round on today, in round order -- empty when nothing is running.
+ *
+ * Rounds may overlap now: a contest that runs for a week sits across the daily
+ * rounds, and "the round on today" stopped being one round. No game is in two
+ * of them on the same day (the server refuses it), so a game still has exactly
+ * one round to be played in -- see `roundFor`.
+ */
+export async function readCurrentRounds(): Promise<{ ok: boolean; rounds: CurrentRound[] }> {
+  if (!supabase) return { ok: false, rounds: [] };
+  const { data, error } = await supabase.rpc('current_rounds');
+  if (!error) return { ok: true, rounds: Array.isArray(data) ? (data as CurrentRound[]) : [] };
+
+  // A database that has not had this release's schema yet has no
+  // current_rounds. The site deploys on merge and the schema is applied by
+  // hand after, and in that gap a live tournament would otherwise read as
+  // having no round on at all -- so ask the old single-round question, which
+  // every database has, and show the one round it knows about.
+  const old = await supabase.rpc('current_round');
+  if (old.error) return { ok: false, rounds: [] };
+  return { ok: true, rounds: old.data ? [old.data as CurrentRound] : [] };
+}
+
+/** The round on today that has this game, by feed name. At most one: two
+ *  rounds on the same day may not share a game. */
+export function roundFor(rounds: CurrentRound[], feed: string): CurrentRound | null {
+  return rounds.find((r) => r.games.includes(feed)) ?? null;
 }
 
 /** The tournament covering today, whether or not a round is on: what the

@@ -56,7 +56,7 @@ async function locked(
     const reply = (body: unknown) =>
       route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });
     if (fn === 'read_availability') return reply(off);
-    if (fn === 'current_round') return reply(round);
+    if (fn === 'current_rounds') return reply(round ? [round] : []);
     if (fn === 'current_tournament') return reply(TOURNAMENT);
     if (fn === 'round_puzzle') return reply(hive);
     if (fn === 'tournament_standings') {
