@@ -168,3 +168,51 @@ export async function deleteRound(id: string): Promise<{ ok: boolean; reason?: s
   if (error) return fail(error.message);
   return (data as { ok: boolean; reason?: string }) ?? fail('no answer');
 }
+
+// ---------------------------------------------------------------------------
+// Giving one player another go
+// ---------------------------------------------------------------------------
+
+/** What one person has in one round, for the organiser deciding what to
+ *  reset: each game with where they got to, each session with how far. */
+export type RoundPlayer = {
+  ok: boolean;
+  reason?: string;
+  name?: string | null;
+  /** only a round that is on can be reset in */
+  on?: boolean;
+  games?: {
+    game: string;
+    name: string;
+    status: 'finished' | 'started' | 'not started';
+    hints: number;
+    resets: number;
+  }[];
+  sessions?: { session_id: string; title: string; answered: number; total: number }[];
+};
+
+export async function readRoundPlayer(round: string, user: string): Promise<RoundPlayer> {
+  if (!supabase) return { ok: false, reason: 'not connected' };
+  const { data, error } = await supabase.rpc('round_player', { p_round: round, p_user: user });
+  if (error) return { ok: false, reason: error.message };
+  return data as RoundPlayer;
+}
+
+/** One game board, or one session -- never both at once, and never the whole
+ *  round: a Weave that errored is no reason to throw away the same person's
+ *  trivia answers. */
+export async function resetRoundPlayer(
+  round: string,
+  user: string,
+  what: { game: string } | { session: string }
+): Promise<{ ok: boolean; reason?: string; attempt?: number }> {
+  if (!supabase) return { ok: false, reason: 'not connected' };
+  const { data, error } = await supabase.rpc('reset_round_player', {
+    p_round: round,
+    p_user: user,
+    p_game: 'game' in what ? what.game : null,
+    p_session: 'session' in what ? what.session : null,
+  });
+  if (error) return { ok: false, reason: error.message };
+  return data as { ok: boolean; reason?: string; attempt?: number };
+}

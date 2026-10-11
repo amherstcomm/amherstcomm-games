@@ -23,6 +23,10 @@ export type BoardChannel =
       /** the round's first day, which its boards and results are keyed by */
       startsOn: string;
       roundId: string;
+      /** How many times an organiser has given this player another go at
+       *  this game in this round. Part of where the board is kept -- see
+       *  channelStoreKey -- and 0 for almost everybody. */
+      attempt?: number;
     };
 
 export const DAILY_CHANNEL: BoardChannel = { kind: 'daily' };
@@ -47,10 +51,18 @@ export function channelEnv(channel: BoardChannel): string {
 
 /** Where a game keeps its board in this browser. A round gets its own key, so
  *  opening the tournament never costs anybody the daily they were halfway
- *  through, and the daily's key is the one it always had. */
+ *  through, and the daily's key is the one it always had.
+ *
+ *  A player an organiser has reset gets a key with the attempt in it. Syncing
+ *  keeps whichever copy of a board has more done, so a device still holding
+ *  the finished board would push it straight back over the reset; on a fresh
+ *  key it has nothing to push, and the old copy is never read again. Attempt 0
+ *  -- everybody never reset -- keeps the key it always had, so this arriving
+ *  mid-round moves nobody's board in progress. */
 export function channelStoreKey(base: string, channel: BoardChannel): string {
   if (channel.kind === 'daily') return base;
-  // 'anagrimoire:hive:v1' -> 'anagrimoire:hive:round:v1'
+  const again = channel.attempt ? `:a${channel.attempt}` : '';
+  // 'anagrimoire:hive:v1' -> 'anagrimoire:hive:round:v1', or ':round:a2:v1'
   const m = base.match(/^(.*):(v\d+)$/);
-  return m ? `${m[1]}:round:${m[2]}` : `${base}:round`;
+  return m ? `${m[1]}:round${again}:${m[2]}` : `${base}:round${again}`;
 }

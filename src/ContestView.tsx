@@ -13,7 +13,6 @@ import {
   castVotes,
   deleteEntry,
   drawable,
-  findEntrants,
   photoLinks,
   readEntrySheet,
   readResults,
@@ -30,6 +29,7 @@ import {
   type EntrySheetRow,
 } from '@/contests';
 import RouteLink from '@/RouteLink';
+import PersonSearch from '@/PersonSearch';
 
 const FIELD =
   'w-full rounded-lg bg-white/5 border border-white/15 px-3 py-2 text-sm text-slate-200 ' +
@@ -594,83 +594,6 @@ function ManageEntries({
 }
 
 /**
- * Who this entry is for.
- *
- * A search, because the alternative is a dropdown of everybody who has ever
- * signed in, sorted by nothing anybody remembers. Two characters is the floor
- * the server keeps, so typing one letter asks nothing.
- */
-function WhoFor({
-  chosen,
-  onChoose,
-}: {
-  chosen: Entrant | null;
-  onChoose: (who: Entrant | null) => void;
-}) {
-  const [query, setQuery] = useState('');
-  const [found, setFound] = useState<Entrant[]>([]);
-
-  async function look(q: string) {
-    setQuery(q);
-    setFound(await findEntrants(q));
-  }
-
-  if (chosen) {
-    return (
-      <p className="text-xs text-slate-400">
-        For <span className="text-slate-200 font-semibold">{chosen.name ?? chosen.email}</span>{' '}
-        <button
-          type="button"
-          className="text-accent hover:brightness-110 underline"
-          onClick={() => {
-            onChoose(null);
-            setQuery('');
-            setFound([]);
-          }}
-        >
-          change
-        </button>
-      </p>
-    );
-  }
-
-  return (
-    <div>
-      <label className="block text-xs text-slate-400">
-        Whose entry is this?
-        <input
-          className={FIELD + ' mt-1'}
-          value={query}
-          placeholder="Name or email"
-          onChange={(e) => void look(e.target.value)}
-        />
-      </label>
-      {found.length > 0 && (
-        <ul className="mt-1 space-y-0.5" aria-label="People you can enter for">
-          {found.map((who) => (
-            <li key={who.user}>
-              <button
-                type="button"
-                className="w-full text-left rounded-lg px-2 py-1 text-xs text-slate-300 hover:bg-white/10"
-                onClick={() => onChoose(who)}
-              >
-                <span className="font-semibold text-slate-200">{who.name ?? 'No name yet'}</span>{' '}
-                <span className="text-slate-400">{who.email}</span>
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
-      {query.trim().length >= 2 && found.length === 0 && (
-        <p className="text-xs text-slate-400 mt-1">
-          Nobody matches that. Somebody who has never signed in will not be here yet.
-        </p>
-      )}
-    </div>
-  );
-}
-
-/**
  * Putting yours in, or changing it.
  *
  * One form whether or not there is already an entry, because "change mine" and
@@ -814,7 +737,15 @@ function EntryForm({
           </button>
         </div>
         <div className="space-y-2">
-          {onBehalf && <WhoFor chosen={who} onChoose={setWho} />}
+          {onBehalf && (
+            <PersonSearch
+              chosen={who}
+              onChoose={setWho}
+              label="Whose entry is this?"
+              listLabel="People you can enter for"
+              chosenWord="For"
+            />
+          )}
           <label className="block text-xs text-slate-400">
             What it is called
             <input

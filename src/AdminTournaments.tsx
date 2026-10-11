@@ -17,6 +17,7 @@
 // only move its end date, because its board is being played.
 import { useCallback, useEffect, useState } from 'react';
 import Waiting from '@/Waiting';
+import AdminRoundReset from '@/AdminRoundReset';
 import { readSessions, type SessionSummary } from '@/authoring';
 import { DIFFICULTIES, DIFFICULTY_LABEL, type Difficulty } from '@/difficulty';
 import { PHASE_WORD, readContests, type ContestRow } from '@/contests';
@@ -99,6 +100,8 @@ export default function AdminTournaments() {
   const [busy, setBusy] = useState(false);
   const [tForm, setTForm] = useState<TournamentForm | null>(null);
   const [rForm, setRForm] = useState<RoundForm | null>(null);
+  /** the round whose reset panel is open, if any */
+  const [resetting, setResetting] = useState<string | null>(null);
 
   const pull = useCallback(async () => {
     const res = await readTournaments();
@@ -355,7 +358,26 @@ export default function AdminTournaments() {
                               Delete round
                             </button>
                           )}
+                          {/* Only while it is on: before, there is nothing to
+                              reset; after, a reset could only take a result
+                              out of the final standings. */}
+                          {state === 'under way' && (
+                            <button
+                              className={BUTTON}
+                              aria-expanded={resetting === r.id}
+                              onClick={() => setResetting(resetting === r.id ? null : r.id)}
+                            >
+                              Reset a player
+                            </button>
+                          )}
                         </div>
+                        {resetting === r.id && (
+                          <AdminRoundReset
+                            round={r.id}
+                            label={`Round ${i + 1}`}
+                            onClose={() => setResetting(null)}
+                          />
+                        )}
                       </li>
                     );
                   })}

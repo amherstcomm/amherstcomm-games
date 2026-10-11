@@ -780,14 +780,16 @@ function App() {
     [tournamentPage?.slug, rounds]
   );
   const roundChannel = useMemo<Extract<BoardChannel, { kind: 'round' }> | null>(() => {
-    if (!playing) return null;
+    if (!playing || !tournamentPage?.slug) return null;
     return {
       kind: 'round',
       difficulty: playing.difficulty,
       startsOn: playing.starts_on,
       roundId: playing.round_id,
+      // which go at this board this is, if an organiser has reset them
+      attempt: playing.attempts?.[FEED_NAME[modeOf(tournamentPage.slug)]] ?? 0,
     };
-  }, [playing]);
+  }, [playing, tournamentPage?.slug]);
 
   // The difficulties this deployment is offering, which is not the same
   // question as which one you are playing.
