@@ -33,6 +33,14 @@ export function BridgeRow({
     : shown.length
       ? shown.prefix + '·'.repeat(shown.length - shown.prefix.length)
       : '?';
+  // The row may wrap, and a word may break. Three uppercase words with their
+  // own letter spacing, on one line that could not wrap, needed more room than
+  // a phone at the largest text has whenever the day's words were long --
+  // CAMERA · ? · SLAUGHTER ran 4px out of its box on the CI machine's font,
+  // and fit on this one's. How wide a word is depends on whose font draws it,
+  // so this cannot depend on it: past the width, the row takes a second line,
+  // and a single word wider than the whole row breaks rather than spilling.
+  const word = 'min-w-0 [overflow-wrap:anywhere]';
   return (
     <>
       <button
@@ -40,7 +48,7 @@ export function BridgeRow({
         onClick={onPick}
         disabled={!onPick}
         aria-current={picked ? 'true' : undefined}
-        className={`w-full flex items-center justify-center gap-2 rounded-lg border-2 px-2 py-2 transition-colors ${
+        className={`w-full flex flex-wrap items-center justify-center gap-x-2 gap-y-0.5 rounded-lg border-2 px-2 py-2 transition-colors ${
           answer
             ? 'border-emerald-400/40 bg-emerald-400/10'
             : picked
@@ -48,17 +56,17 @@ export function BridgeRow({
               : 'border-white/10 bg-white/[0.02] hover:bg-white/5'
         }`}
       >
-        <span className="text-sm font-bold uppercase tracking-wide text-sky-300">{prompt.x}</span>
+        <span className={`${word} text-sm font-bold uppercase tracking-wide text-sky-300`}>{prompt.x}</span>
         <span aria-hidden className="text-slate-600">·</span>
         <span
-          className={`min-w-16 text-sm font-bold uppercase tracking-widest ${
+          className={`${word} min-w-16 text-sm font-bold uppercase tracking-widest ${
             answer ? 'text-emerald-200' : 'text-slate-500'
           }`}
         >
           {middle}
         </span>
         <span aria-hidden className="text-slate-600">·</span>
-        <span className="text-sm font-bold uppercase tracking-wide text-violet-300">{prompt.y}</span>
+        <span className={`${word} text-sm font-bold uppercase tracking-wide text-violet-300`}>{prompt.y}</span>
       </button>
       {/* The row reads as three separate words to a screen reader otherwise,
           with no way to tell which is the gap. */}
