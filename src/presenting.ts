@@ -33,7 +33,7 @@ export type Door = {
   closes_at?: string | null;
 };
 
-export type Action = 'start' | 'show' | 'lock' | 'reveal' | 'close';
+export type Action = 'start' | 'show' | 'lock' | 'reveal' | 'close' | 'reopen';
 
 export type Move = { action: Action; label: string };
 
@@ -45,7 +45,10 @@ export type Move = { action: Action; label: string };
  *  running out of things to click. */
 export function nextMove(door: Door): Move | null {
   if (!door.ok || !door.state) return null;
-  if (door.state === 'closed') return null;
+  // A closed session's one move is to undo the close. It used to have none,
+  // and the only way back was SQL -- which, written the obvious way, left every
+  // question locked.
+  if (door.state === 'closed') return { action: 'reopen', label: 'Reopen it' };
 
   const total = door.total ?? 0;
 

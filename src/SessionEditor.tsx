@@ -45,7 +45,7 @@ import {
   type SessionSummary,
 } from '@/authoring';
 import { JOIN_HOST, pathOf } from '@/routes';
-import { setSessionOptions } from '@/live';
+import { advance, setSessionOptions } from '@/live';
 import { INTL_UNITS, formatGuess } from '@/guessFormat';
 import { describeWindow, fromOfficeInput, toOfficeInput } from '@/schedule';
 import { readWordLists, type WordList } from '@/wordLists';
@@ -1053,6 +1053,20 @@ function SessionEditorFor({ session }: { session: string }) {
               : 'Running now.'
             : 'Finished.'}
       </p>
+      {/* "Finished." used to be the end of it: a closed session could not be
+          opened again from anywhere on the site, and the way back by hand left
+          every question locked. Reopening undoes the whole close and keeps
+          every answer already given. */}
+      {meta.state === 'closed' && (
+        <button
+          type="button"
+          disabled={busy}
+          onClick={() => void run(() => advance(session, 'reopen'))}
+          className="mb-4 -mt-2 inline-flex items-center px-3 h-9 rounded-lg text-sm font-semibold bg-white/10 border border-white/15 text-slate-200 hover:bg-white/15 disabled:opacity-50"
+        >
+          Reopen it
+        </button>
+      )}
 
       {/* The code, at the size it needs to be read at. This is the thing that
           goes on the slide, and the whole reason a session is reachable by
