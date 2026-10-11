@@ -1083,8 +1083,32 @@ export default function LiveSession({ session, host }: { session: string; host: 
   }
 
   async function control(action: Action) {
+    // Closing ends it for everybody at once, and on a session played on your
+    // own time it is the big button on this screen -- one stray tap from a
+    // phone left open on this page. So it asks, by name.
+    if (
+      action === 'close' &&
+      !window.confirm(
+        `Close ${door?.title ?? 'this session'}? Nobody can answer after this. You can reopen it from here.`
+      )
+    ) {
+      return;
+    }
     const res = await advance(session, action);
     if (!res.ok) setNote(res.reason ?? 'That did not work');
+    else if (action === 'reopen') {
+      setNote(
+        [
+          'Reopened.',
+          res.schedule_cleared ? 'Its closing time had passed, so that was cleared.' : '',
+          res.code && door?.code && res.code !== door.code
+            ? `Its old code went to another session, so it is ${res.code} now.`
+            : '',
+        ]
+          .filter(Boolean)
+          .join(' ')
+      );
+    }
     void pull();
   }
 
@@ -1534,7 +1558,9 @@ export default function LiveSession({ session, host }: { session: string; host: 
 
       {note && (
         <p
-          className={`mt-4 text-sm ${note === 'Sent' ? 'text-emerald-300' : 'text-danger'}`}
+          className={`mt-4 text-sm ${
+            note === 'Sent' || note.startsWith('Reopened') ? 'text-emerald-300' : 'text-danger'
+          }`}
           role="status"
         >
           {note === 'Sent' ? (

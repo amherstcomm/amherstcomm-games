@@ -63,8 +63,10 @@ describe('the next move', () => {
     });
   });
 
-  it('offers nothing once it is closed', () => {
-    expect(nextMove(live({ state: 'closed' }))).toBeNull();
+  // A closed session used to offer nothing at all, and the only way back was
+  // SQL. Its one move now is to undo the close -- and only that.
+  it('offers only to reopen it once it is closed', () => {
+    expect(nextMove(live({ state: 'closed' }))).toEqual({ action: 'reopen', label: 'Reopen it' });
     expect(otherMoves(live({ state: 'closed' }))).toEqual([]);
     expect(whereWeAre(live({ state: 'closed' }))).toBe('Finished');
   });
@@ -106,8 +108,8 @@ describe('an open session, which has nobody at the front', () => {
     expect(otherMoves(open({ state: 'live' }))).toEqual([]);
   });
 
-  it('does not offer to close one that is already closed', () => {
-    expect(nextMove(open({ state: 'closed' }))).toBeNull();
+  it('does not offer to close one that is already closed, only to reopen it', () => {
+    expect(nextMove(open({ state: 'closed' }))?.action).toBe('reopen');
   });
 
   it('counts people rather than questions, because they are all in different places', () => {

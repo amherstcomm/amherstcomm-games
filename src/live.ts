@@ -362,9 +362,9 @@ export async function sendAnswer(
  *  interesting part is which moves the server refuses. */
 export async function advance(
   session: string,
-  action: 'start' | 'show' | 'lock' | 'reveal' | 'close',
+  action: 'start' | 'show' | 'lock' | 'reveal' | 'close' | 'reopen',
   item?: string
-): Promise<{ ok: boolean; reason?: string }> {
+): Promise<{ ok: boolean; reason?: string; schedule_cleared?: boolean; code?: string }> {
   if (!supabase) return { ok: false, reason: 'not connected' };
   const { data, error } = await supabase.rpc('advance_session', {
     p_session: session,
@@ -372,7 +372,12 @@ export async function advance(
     p_item: item ?? null,
   });
   if (error) return { ok: false, reason: error.message };
-  return (data as { ok: boolean; reason?: string }) ?? { ok: false, reason: 'no answer' };
+  return (
+    (data as { ok: boolean; reason?: string; schedule_cleared?: boolean; code?: string }) ?? {
+      ok: false,
+      reason: 'no answer',
+    }
+  );
 }
 
 /** The tally, which the server withholds until the item is revealed — a live
