@@ -27,6 +27,7 @@ import {
   advance,
   onSessionMoved,
   readCurrentItem,
+  pauseSession,
   readItemWinner,
   readLeaderboard,
   readMyStanding,
@@ -857,6 +858,10 @@ export default function LiveSession({ session, host }: { session: string; host: 
    *  at how they did, waiting to move on. Declared here rather than beside the
    *  other derived values because the poll below reads it. */
   const holding = !host && (justAnswered !== null || gameOver || outOfTime);
+  /** Open mode: "pause after this question" is set. The server holds it -- it
+   *  comes back on every question -- and this mirrors it so the switch can
+   *  change before the next read does. */
+  const [pauseArmed, setPauseArmed] = useState(false);
   // Stable, so WordGame's effects do not re-run on every render of this one.
   const [board, setBoard] = useState<Leaderboard | null>(null);
   const [mine, setMine] = useState<{ points?: number; scored?: number } | null>(null);
@@ -931,6 +936,7 @@ export default function LiveSession({ session, host }: { session: string; host: 
     // when the answer arrived.
     if (next.now) setSkewMs(Date.parse(next.now) - Date.now());
     setItem(next);
+    if (next.mode === 'open') setPauseArmed(!!next.paused);
     if (next.id !== itemId.current) {
       itemId.current = next.id;
       setTally(null);
@@ -1054,6 +1060,26 @@ export default function LiveSession({ session, host }: { session: string; host: 
       return;
     }
     if (res.ok) void pull();
+  }
+
+  async function togglePause() {
+    const want = !pauseArmed;
+    setPauseArmed(want);
+    const res = await pauseSession(session, want);
+    if (!res.ok) {
+      setPauseArmed(!want);
+      setNote(res.reason ?? 'That did not work');
+    }
+  }
+
+  async function resume() {
+    const res = await pauseSession(session, false);
+    if (!res.ok) {
+      setNote(res.reason ?? 'That did not work');
+      return;
+    }
+    setPauseArmed(false);
+    void pull();
   }
 
   async function control(action: Action) {
@@ -1216,8 +1242,29 @@ export default function LiveSession({ session, host }: { session: string; host: 
         <p className="text-xs uppercase tracking-wider text-slate-500 mb-2">
           {shown.state === 'done'
             ? `All ${item.total} answered`
-            : `Question ${(item.done ?? 0) + 1} of ${item.total}`}
+            : shown.state === 'paused'
+              ? `Paused before question ${(item.done ?? 0) + 1} of ${item.total}`
+              : `Question ${(item.done ?? 0) + 1} of ${item.total}`}
         </p>
+      )}
+
+      {/* Paused: nothing is in front of them, so nothing is being timed. The
+          next question is served -- and its clock started -- by Resume and by
+          nothing else, which is why a reload lands back here. */}
+      {shown.state === 'paused' && !host && (
+        <div className="py-10 text-center">
+          <p className="text-lg text-white font-semibold">Paused</p>
+          <p className="text-sm text-slate-400 mt-1">
+            Your next question, and its clock, will wait until you come back.
+          </p>
+          <button
+            type="button"
+            onClick={() => void resume()}
+            className="mt-5 w-full h-11 rounded-xl bg-emerald-400 text-ink font-semibold"
+          >
+            Resume
+          </button>
+        </div>
       )}
 
       {shown.state === 'done' && (
@@ -1448,13 +1495,36 @@ export default function LiveSession({ session, host }: { session: string; host: 
           }}
           className="w-full h-11 mt-5 rounded-xl bg-emerald-400 text-ink font-semibold"
         >
-          {outOfTime && !justAnswered
-            ? 'Move on'
-            : (item.done ?? 0) + 1 >= (item.total ?? 0)
-              ? 'Finish'
-              : 'Next question'}
+          {(item.done ?? 0) + 1 >= (item.total ?? 0)
+            ? 'Finish'
+            : pauseArmed
+              ? 'Pause here'
+              : outOfTime && !justAnswered
+                ? 'Move on'
+                : 'Next question'}
         </button>
       )}
+
+      {/* Open mode: stop after this question. Offered while answering and
+          while looking at how it went, which is when somebody gets called
+          away -- and not on the last question, after which there is nothing
+          left to hold back. */}
+      {item.mode === 'open' && !host && !readOnly &&
+        (shown.state === 'open' || holding) &&
+        (item.done ?? 0) + 1 < (item.total ?? 0) && (
+          <button
+            type="button"
+            aria-pressed={pauseArmed}
+            onClick={() => void togglePause()}
+            className={`mt-3 w-full h-10 rounded-xl text-sm font-semibold border transition-colors ${
+              pauseArmed
+                ? 'bg-accent/20 border-accent text-slate-200'
+                : 'bg-white/5 border-white/15 text-slate-300 hover:bg-white/10'
+            }`}
+          >
+            {pauseArmed ? 'Pausing after this question — tap to carry on' : 'Pause after this question'}
+          </button>
+        )}
 
       {/* Alongside, not in the sequence. It is here on both screens because a
           question gets asked while somebody is looking at something else —

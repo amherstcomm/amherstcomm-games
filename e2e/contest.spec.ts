@@ -511,7 +511,9 @@ test('an organiser can enter for somebody else, and for more than one', async ({
   await page.getByRole('textbox', { name: 'What it is called' }).fill('Tart');
   await page.getByRole('button', { name: 'Enter' }).click();
 
-  expect(saved).toHaveLength(1);
+  // Waited for, not assumed: the click returns before the save goes out, and
+  // on a busy machine a check made straight after it ran first and failed.
+  await expect.poll(() => saved.length).toBe(1);
   expect(saved[0].p_title).toBe('Tart');
   // The whole point: it is credited to them, not to the organiser.
   expect(saved[0].p_entrant).toBe('u-bea');

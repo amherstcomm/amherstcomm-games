@@ -51,6 +51,30 @@ describe('a round channel', () => {
     expect(channelStoreKey('somekey', ROUND)).toBe('somekey:round');
   });
 
+  // A player an organiser has reset starts on a key with the attempt in it, so
+  // the device's copy of the old finished board is never read -- or synced back
+  // over the reset -- again.
+  it('a reset player keeps their next go somewhere new', () => {
+    expect(channelStoreKey('anagrimoire:hive:v1', { ...ROUND, attempt: 1 })).toBe(
+      'anagrimoire:hive:round:a1:v1'
+    );
+    expect(channelStoreKey('anagrimoire:hive:v1', { ...ROUND, attempt: 2 })).toBe(
+      'anagrimoire:hive:round:a2:v1'
+    );
+    expect(channelStoreKey('somekey', { ...ROUND, attempt: 1 })).toBe('somekey:round:a1');
+  });
+
+  // Everybody never reset keeps the key they had, so the attempt arriving in
+  // the middle of a round moves nobody's board in progress.
+  it('and nobody else moves', () => {
+    expect(channelStoreKey('anagrimoire:hive:v1', { ...ROUND, attempt: 0 })).toBe(
+      'anagrimoire:hive:round:v1'
+    );
+    expect(channelStoreKey('anagrimoire:hive:v1', { ...ROUND, attempt: undefined })).toBe(
+      'anagrimoire:hive:round:v1'
+    );
+  });
+
   // 'round' is what the server's first-finish lock and result_is_plausible
   // key a round result by; anything else would record it as a daily.
   it("records under 'round'", () => {

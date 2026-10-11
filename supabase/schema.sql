@@ -13822,3 +13822,396 @@ $fn$;
 
 revoke all on function public.current_rounds() from public;
 grant execute on function public.current_rounds() to anon, authenticated;
+
+-- ---------------------------------------------------------------------------
+-- Pausing a session played on your own time
+-- ---------------------------------------------------------------------------
+--
+-- Somebody halfway through the round's trivia gets called into a meeting. In
+-- an open session each question's clock starts when it is put in front of
+-- them, and the next one was put in front of them the moment they asked for
+-- it -- including by coming back to the page later, which served it on load.
+--
+-- So: a pause, held on the server where a reload or another device cannot
+-- step past it. The question they are on when they pause is already served
+-- and is theirs to finish; what the pause holds back is the next one, whose
+-- clock does not start until they resume. Nobody gains time on a question by
+-- pausing, because no question is in front of them while they are paused.
+create table if not exists public.session_pauses (
+  session_id uuid not null references public.sessions (id) on delete cascade,
+  user_id uuid not null references auth.users (id) on delete cascade,
+  paused_at timestamptz not null default now(),
+  primary key (session_id, user_id)
+);
+alter table public.session_pauses enable row level security;
+revoke all on public.session_pauses from public, anon, authenticated;
+
+create or replace function public.pause_session(p_session uuid, p_on boolean)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $fn$
+declare
+  uid uuid := (select auth.uid());
+begin
+  if uid is null then
+    return jsonb_build_object('ok', false, 'reason', 'not signed in');
+  end if;
+  if not exists (select 1 from public.sessions s where s.id = p_session and s.mode = 'open') then
+    return jsonb_build_object('ok', false, 'reason',
+      'only a session played on your own time can be paused');
+  end if;
+  if coalesce(p_on, false) then
+    insert into public.session_pauses (session_id, user_id) values (p_session, uid)
+    on conflict do nothing;
+  else
+    delete from public.session_pauses where session_id = p_session and user_id = uid;
+  end if;
+  return jsonb_build_object('ok', true, 'paused', coalesce(p_on, false));
+end;
+$fn$;
+
+revoke all on function public.pause_session(uuid, boolean) from public, anon;
+grant execute on function public.pause_session(uuid, boolean) to authenticated;
+
+create or replace function public.current_item(p_session uuid)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $fn$
+declare
+  sess public.sessions;
+  me uuid := (select auth.uid());
+  it public.items;
+  yours boolean;
+begin
+  -- The clock before the question: a survey whose closing time has passed is
+  -- shut, whether or not anybody has been by since.
+  perform public.apply_schedule(p_session);
+  select * into sess from public.sessions where id = p_session;
+  if sess.id is null then
+    return jsonb_build_object('state', 'not-live', 'now', now(), 'yours', false);
+  end if;
+  yours := public.runs_session(p_session);
+  if sess.state <> 'live' then
+    -- `shared` travels with the refusal, because the screen that says "this is
+    -- not running" is the same screen that should offer the way to see how it
+    -- went — and it has nothing else to ask.
+    return jsonb_build_object('state', 'not-live', 'now', now(), 'yours', yours,
+                              'shared', sess.share_results and sess.state = 'closed');
+  end if;
+
+  if sess.mode = 'open' then
+    if me is null or yours then
+      return jsonb_build_object('state', 'not-live', 'mode', 'open', 'now', now(),
+                                'yours', yours);
+    end if;
+    select i.* into it
+    from public.items i
+    where i.session_id = p_session
+      and i.state <> 'pending'
+      -- Finished rather than merely written against — a word game writes a row
+      -- per guess, and the old test took the board away after the first one.
+      and not public.finished_item(i.id, me)
+      -- see the note above: a question whose window has closed is behind them
+      and not public.expired_for(i.id, me)
+    order by i.position
+    limit 1;
+    if it.id is null then
+      return jsonb_build_object(
+        'state', 'done', 'mode', 'open', 'now', now(), 'yours', false,
+        'total', (select count(*) from public.items i where i.session_id = p_session
+                  and i.state <> 'pending'));
+    end if;
+    -- Paused, and this question not yet in front of them: say so rather than
+    -- serve it, so its clock does not start until they come back. One already
+    -- served -- the question they were on when they paused -- is theirs to
+    -- finish, which is what "pause after this question" means.
+    if exists (select 1 from public.session_pauses sp
+               where sp.session_id = p_session and sp.user_id = me)
+       and not exists (select 1 from public.item_served sv
+                       where sv.item_id = it.id and sv.user_id = me) then
+      return jsonb_build_object(
+        'state', 'paused', 'mode', 'open', 'now', now(), 'yours', false, 'paused', true,
+        'total', (select count(*) from public.items i where i.session_id = p_session
+                  and i.state <> 'pending'),
+        'done', (select count(*) from public.items i
+               where i.session_id = p_session and i.state <> 'pending'
+                 and (public.finished_item(i.id, me)
+                      or public.expired_for(i.id, me))));
+    end if;
+
+    insert into public.item_served (item_id, user_id) values (it.id, me)
+    on conflict (item_id, user_id) do nothing;
+
+    return jsonb_build_object(
+      'state', 'open', 'mode', 'open', 'yours', false,
+      'id', it.id, 'kind', it.kind, 'prompt', it.prompt, 'payload', it.payload,
+      'position', it.position,
+      'opened_at', public.started_at(it.id, me),
+      'seconds', public.item_seconds(it.payload),
+      'now', now(),
+      'mine', null,
+      'answer', null,
+      -- whether "pause after this question" is set, so the switch shows it
+      'paused', exists (select 1 from public.session_pauses sp
+                        where sp.session_id = p_session and sp.user_id = me),
+      'total', (select count(*) from public.items i where i.session_id = p_session
+                and i.state <> 'pending'),
+      -- how many are behind them, answered or timed out, so "Question 3 of 6"
+      -- keeps counting while a skipped one still counts as gone
+      'done', (select count(*) from public.items i
+               where i.session_id = p_session and i.state <> 'pending'
+                 and (public.finished_item(i.id, me)
+                      or public.expired_for(i.id, me))));
+  end if;
+
+  if sess.current_item is null then
+    return jsonb_build_object('state', 'waiting', 'mode', 'live', 'now', now(), 'yours', yours);
+  end if;
+  select * into it from public.items
+  where id = sess.current_item and state <> 'pending';
+  if it.id is null then
+    return jsonb_build_object('state', 'waiting', 'mode', 'live', 'now', now(), 'yours', yours);
+  end if;
+
+  return jsonb_build_object(
+    'state', it.state, 'mode', 'live', 'yours', yours,
+    'id', it.id, 'kind', it.kind, 'prompt', it.prompt, 'payload', it.payload,
+    'position', it.position,
+    'opened_at', it.opened_at,
+    'seconds', public.item_seconds(it.payload),
+    'now', now(),
+    'mine', (select r.value from public.responses r
+             where r.item_id = it.id and r.user_id = me),
+    'answer', case when it.state = 'revealed'
+                   then (select a.answer from public.item_answers a where a.item_id = it.id)
+              end);
+end;
+$fn$;
+
+revoke all on function public.current_item(uuid) from public, anon;
+grant execute on function public.current_item(uuid) to authenticated;
+
+-- ---------------------------------------------------------------------------
+-- Resetting a player in a round
+-- ---------------------------------------------------------------------------
+--
+-- Something went wrong for one person -- a board that stuck, a page that fell
+-- over mid-question -- and they need another go at that one thing. Per item
+-- rather than the whole round: a Weave that errored is no reason to throw away
+-- the same person's trivia answers.
+--
+-- A game board is deleted with the hints taken on it. That alone does not
+-- hold: the player's device still has its copy of the finished board, and
+-- syncing keeps whichever copy has more of the puzzle done, so the device
+-- would put the old result straight back. So each reset also counts an
+-- attempt, the device keeps its copy of a round board under a key that
+-- includes the attempt, and a reset player's device starts on a fresh key
+-- that has nothing in it -- the old copy is never read again, so it is never
+-- pushed back. Nobody who has not been reset changes key, so nobody's board
+-- in progress is touched by this arriving mid-round.
+--
+-- A trivia session is their answers and the times each question reached them,
+-- both read from the server every time, so deleting them is the whole reset:
+-- the next visit serves question one.
+--
+-- Only while the round is on. Before it, there is nothing to reset; after it,
+-- a "reset" can only take a result out of final standings, which is a
+-- different decision from giving somebody another go.
+create table if not exists public.round_resets (
+  user_id uuid not null references auth.users (id) on delete cascade,
+  round_id uuid not null references public.tournament_rounds (id) on delete cascade,
+  -- the feed name, the way a round lists its games
+  game text not null,
+  resets int not null default 0,
+  last_reset_at timestamptz not null default now(),
+  last_reset_by uuid references auth.users (id) on delete set null,
+  primary key (user_id, round_id, game)
+);
+alter table public.round_resets enable row level security;
+revoke all on public.round_resets from public, anon, authenticated;
+
+/*
+ * What one person has in one round, for the organiser deciding what to reset:
+ * each game with where they got to, and each session with how far through.
+ */
+create or replace function public.round_player(p_round uuid, p_user uuid)
+returns jsonb
+language sql
+stable
+security definer
+set search_path = ''
+as $fn$
+  select case
+    when not public.can('games.setup')
+      then jsonb_build_object('ok', false, 'reason', 'not allowed')
+    when not exists (select 1 from public.tournament_rounds r where r.id = p_round)
+      then jsonb_build_object('ok', false, 'reason', 'no such round')
+    else (
+      select jsonb_build_object(
+        'ok', true,
+        'name', (select p.display_name from public.profiles p where p.id = p_user),
+        'on', public.puzzle_day() between r.starts_on and r.ends_on,
+        'games', coalesce((
+          select jsonb_agg(jsonb_build_object(
+                   'game', g.feed,
+                   'name', g.name_full,
+                   'status', case
+                     when exists (select 1 from public.daily_progress dp
+                                  where dp.user_id = p_user and dp.game = g.progress
+                                    and dp.env = 'round' and dp.puzzle_date = r.starts_on
+                                    and dp.completed) then 'finished'
+                     when exists (select 1 from public.daily_progress dp
+                                  where dp.user_id = p_user and dp.game = g.progress
+                                    and dp.env = 'round' and dp.puzzle_date = r.starts_on)
+                       then 'started'
+                     else 'not started'
+                   end,
+                   'hints', coalesce((select h.taken from public.round_hints h
+                                      where h.user_id = p_user and h.game = g.feed
+                                        and h.puzzle_date = r.starts_on), 0),
+                   'resets', coalesce((select x.resets from public.round_resets x
+                                       where x.user_id = p_user and x.round_id = r.id
+                                         and x.game = g.feed), 0))
+                 order by g.ordinal)
+          from public.games g
+          where g.feed = any (r.games)), '[]'::jsonb),
+        'sessions', coalesce((
+          select jsonb_agg(jsonb_build_object(
+                   'session_id', s.id,
+                   'title', s.title,
+                   'answered', (select count(*) from public.responses rs
+                                join public.items i on i.id = rs.item_id
+                                where i.session_id = s.id and rs.user_id = p_user),
+                   'total', (select count(*) from public.items i
+                             where i.session_id = s.id and i.state <> 'pending'))
+                 order by s.title)
+          from public.tournament_round_sessions rs2
+          join public.sessions s on s.id = rs2.session_id
+          where rs2.round_id = r.id), '[]'::jsonb))
+      from public.tournament_rounds r where r.id = p_round)
+  end
+$fn$;
+
+revoke all on function public.round_player(uuid, uuid) from public, anon;
+grant execute on function public.round_player(uuid, uuid) to authenticated;
+
+create or replace function public.reset_round_player(
+  p_round uuid,
+  p_user uuid,
+  -- one or the other: a game by its feed name, or one of the round's sessions
+  p_game text default null,
+  p_session uuid default null
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $fn$
+declare
+  r public.tournament_rounds;
+  g public.games;
+  attempt int;
+begin
+  if not public.can('games.setup') then
+    return jsonb_build_object('ok', false, 'reason', 'not allowed');
+  end if;
+  select * into r from public.tournament_rounds where id = p_round;
+  if not found then
+    return jsonb_build_object('ok', false, 'reason', 'no such round');
+  end if;
+  if not public.puzzle_day() between r.starts_on and r.ends_on then
+    return jsonb_build_object('ok', false, 'reason',
+      'that round is not on -- a reset only gives somebody another go while it is');
+  end if;
+  if (p_game is null) = (p_session is null) then
+    return jsonb_build_object('ok', false, 'reason', 'reset one game or one session at a time');
+  end if;
+
+  if p_game is not null then
+    select * into g from public.games where feed = p_game;
+    if not found or not (p_game = any (r.games)) then
+      return jsonb_build_object('ok', false, 'reason', 'that game is not in this round');
+    end if;
+    -- Every variant and difficulty of this board: the row is keyed more
+    -- finely than a round needs, and a stray one would still count.
+    delete from public.daily_progress
+     where user_id = p_user and game = g.progress and env = 'round'
+       and puzzle_date = r.starts_on;
+    delete from public.round_hints
+     where user_id = p_user and game in (g.feed, g.progress) and puzzle_date = r.starts_on;
+    insert into public.round_resets (user_id, round_id, game, resets, last_reset_at, last_reset_by)
+    values (p_user, r.id, g.feed, 1, now(), (select auth.uid()))
+    on conflict (user_id, round_id, game) do update
+      set resets = public.round_resets.resets + 1,
+          last_reset_at = now(),
+          last_reset_by = (select auth.uid())
+    returning resets into attempt;
+    return jsonb_build_object('ok', true, 'attempt', attempt);
+  end if;
+
+  if not exists (select 1 from public.tournament_round_sessions x
+                 where x.round_id = r.id and x.session_id = p_session) then
+    return jsonb_build_object('ok', false, 'reason', 'that session does not count in this round');
+  end if;
+  delete from public.responses
+   where user_id = p_user
+     and item_id in (select i.id from public.items i where i.session_id = p_session);
+  delete from public.item_served
+   where user_id = p_user
+     and item_id in (select i.id from public.items i where i.session_id = p_session);
+  -- A fresh start, not a paused one.
+  delete from public.session_pauses where session_id = p_session and user_id = p_user;
+  return jsonb_build_object('ok', true);
+end;
+$fn$;
+
+revoke all on function public.reset_round_player(uuid, uuid, text, uuid) from public, anon;
+grant execute on function public.reset_round_player(uuid, uuid, text, uuid) to authenticated;
+
+create or replace function public.current_rounds()
+returns jsonb
+language sql
+stable
+security definer
+set search_path = ''
+as $fn$
+  with numbered as (
+    select q.id,
+           row_number() over (partition by q.tournament_id
+                              order by q.starts_on, q.ends_on, q.id) as number,
+           count(*) over (partition by q.tournament_id) as total
+    from public.tournament_rounds q
+  )
+  select coalesce(jsonb_agg(jsonb_build_object(
+           'tournament_id', t.id, 'tournament', t.name, 'difficulty', t.difficulty,
+           'tournament_starts_on', t.starts_on, 'tournament_ends_on', t.ends_on,
+           'tournament_prize', t.prize,
+           'round_id', r.id, 'starts_on', r.starts_on, 'ends_on', r.ends_on,
+           'games', to_jsonb(r.games),
+           'game_weights', r.game_weights,
+           'trivia', public.round_trivia(r.id),
+           'contests', public.round_contests(r.id),
+           'prize', r.prize,
+           'number', n.number,
+           'of', n.total,
+           -- How many times this person has been given another go at each of
+           -- the round's games. Their device keeps a round board under a key
+           -- that includes this, so a reset starts them on a key with nothing
+           -- in it -- see "Resetting a player in a round".
+           'attempts', coalesce((
+             select jsonb_object_agg(x.game, x.resets)
+             from public.round_resets x
+             where x.round_id = r.id and x.user_id = (select auth.uid())), '{}'::jsonb))
+         order by r.starts_on, r.ends_on, r.id), '[]'::jsonb)
+  from public.tournament_rounds r
+  join public.tournaments t on t.id = r.tournament_id
+  join numbered n on n.id = r.id
+  where public.puzzle_day() between r.starts_on and r.ends_on
+$fn$;
+
+revoke all on function public.current_rounds() from public;
+grant execute on function public.current_rounds() to anon, authenticated;

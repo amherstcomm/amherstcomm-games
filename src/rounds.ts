@@ -38,6 +38,9 @@ export type CurrentRound = {
   prize?: string | null;
   /** and what winning the whole tournament is worth */
   tournament_prize?: string | null;
+  /** how many times this player has been reset on each game, by feed name;
+   *  missing is never */
+  attempts?: Record<string, number>;
   /** this round's place in its tournament, counted from 1 */
   number: number;
   of: number;

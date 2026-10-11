@@ -260,7 +260,18 @@ const PAGES: [string, string][] = [
 // runner's two failures exactly, and nothing else fails. 0.12em leaves
 // headroom for fonts wider than the runner's and still flags only real
 // problems -- a stress setup that caught less than CI would prove nothing.
-const WIDE_FONT = 'body { letter-spacing: 0.12em !important; }';
+//
+// On every element, not the body: set on the body it is inherited, and any
+// element with letter spacing of its own -- Bridge's uppercase words, with
+// tracking-wide -- overrides it and was never stressed at all. That is how a
+// row the CI font spilled 4px out of passed here even at 0.2em.
+//
+// It is still not CI's font, and cannot be: the runner draws in a font wider
+// than anything this setting reproduces, so a layout that only fits by a few
+// pixels can still pass here and fail there. The fix for that is a layout that
+// does not depend on how wide a word is -- one that wraps -- not a bigger
+// number here.
+const WIDE_FONT = '*, *::before, *::after { letter-spacing: 0.12em !important; }';
 
 const SETUPS = [
   ['desk', { width: 1280, height: 900 }, 'normal', ''],

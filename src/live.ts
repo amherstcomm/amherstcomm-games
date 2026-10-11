@@ -21,14 +21,19 @@ import type { Chart } from '@/Charts';
  *  it — the server withholds it, this type just admits that it might not be
  *  there. */
 export type LiveItem = {
-  /** `done` is open-mode only: they have answered everything there is. */
-  state: 'not-live' | 'waiting' | 'open' | 'locked' | 'revealed' | 'done';
+  /** `done` is open-mode only: they have answered everything there is.
+   *  `paused` is open-mode only too: they asked to stop after a question, and
+   *  the next one is held back -- not served, its clock not started -- until
+   *  they resume. */
+  state: 'not-live' | 'waiting' | 'open' | 'locked' | 'revealed' | 'done' | 'paused';
   /** which kind of session this came from — the screen differs, so it has to
    *  be told rather than inferred from what happens to be on it */
   mode?: 'live' | 'open';
   /** open mode: where they are in it, which nobody else's progress affects */
   total?: number;
   done?: number;
+  /** open mode: they have asked to stop after the question they are on */
+  paused?: boolean;
   /** whether *this viewer* is the one running the session.
    *
    *  Not the same question as "is this the presenter's address", which is what
@@ -302,6 +307,22 @@ export async function setSessionOptions(
   });
   if (error) return { ok: false, reason: error.message };
   return (data as { ok: boolean }) ?? { ok: false, reason: 'no answer' };
+}
+
+/**
+ * Stop after the question in front of you, or carry on. Held by the server,
+ * so a reload or another device cannot step past it: the question already
+ * served is still yours to finish, and the next is not served -- its clock not
+ * started -- until you resume.
+ */
+export async function pauseSession(
+  session: string,
+  on: boolean
+): Promise<{ ok: boolean; reason?: string; paused?: boolean }> {
+  if (!supabase) return { ok: false, reason: 'not connected' };
+  const { data, error } = await supabase.rpc('pause_session', { p_session: session, p_on: on });
+  if (error) return { ok: false, reason: error.message };
+  return data as { ok: boolean; reason?: string; paused?: boolean };
 }
 
 export async function readCurrentItem(session: string): Promise<LiveItem> {
