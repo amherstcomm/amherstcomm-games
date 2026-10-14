@@ -79,6 +79,8 @@ type RoundForm = {
   prize: string;
   /** what each game is worth against the others, by feed name */
   gameWeights: Record<string, number>;
+  /** the games dealt a new board each day, by feed name */
+  dailyGames: string[];
   /** a round being played: only its end date may change */
   started: boolean;
   /** a round that is over: its trivia may still be attached, nothing else */
@@ -179,7 +181,18 @@ export default function AdminTournaments() {
     // refuses, with a reason about a game nobody can see on screen.
     const gameWeights = { ...rForm.gameWeights };
     if (off) delete gameWeights[feed];
-    setRForm({ ...rForm, games, gameWeights });
+    // Likewise a new board each day: only for a game the round still has.
+    const dailyGames = off ? rForm.dailyGames.filter((g) => g !== feed) : rForm.dailyGames;
+    setRForm({ ...rForm, games, gameWeights, dailyGames });
+  }
+
+  function toggleDaily(feed: string) {
+    if (!rForm) return;
+    const on = rForm.dailyGames.includes(feed);
+    setRForm({
+      ...rForm,
+      dailyGames: on ? rForm.dailyGames.filter((g) => g !== feed) : [...rForm.dailyGames, feed],
+    });
   }
 
   function setGameWeight(feed: string, weight: number) {
@@ -304,8 +317,12 @@ export default function AdminTournaments() {
                             {r.games
                               .map((feed) => {
                                 const w = r.game_weights?.[feed];
-                                return w && w !== 1
-                                  ? `${roundGameName(feed)} (×${w})`
+                                const notes = [
+                                  w && w !== 1 ? `×${w}` : '',
+                                  r.daily_games?.includes(feed) ? 'new each day' : '',
+                                ].filter(Boolean);
+                                return notes.length > 0
+                                  ? `${roundGameName(feed)} (${notes.join(', ')})`
                                   : roundGameName(feed);
                               })
                               .join(', ') || 'No games'}
@@ -346,6 +363,7 @@ export default function AdminTournaments() {
                                 })),
                                 prize: r.prize ?? '',
                                 gameWeights: r.game_weights ?? {},
+                                dailyGames: r.daily_games ?? [],
                                 started: r.started,
                                 finished: state === 'finished',
                               })
@@ -477,6 +495,15 @@ export default function AdminTournaments() {
                                   />
                                   ×
                                 </label>
+                                <label className="mt-1 flex items-center gap-1.5 text-xs text-slate-400">
+                                  <input
+                                    type="checkbox"
+                                    checked={rForm.dailyGames.includes(g.feed)}
+                                    onChange={() => toggleDaily(g.feed)}
+                                    aria-label={`${g.name}: a new board each day`}
+                                  />
+                                  New board each day
+                                </label>
                               </li>
                             ))}
                           </ul>
@@ -485,6 +512,11 @@ export default function AdminTournaments() {
                           At 1× every board pays the same for placing — ten points for
                           first down to one for tenth. Raise it for the game the round
                           is really about.
+                        </p>
+                        <p className="text-xs text-slate-400 mt-1">
+                          A game with a new board each day is still one placing for the
+                          round: everybody is ranked across all its days, the way the
+                          7-day leaderboard ranks a week.
                         </p>
                       </fieldset>
                     )}
@@ -668,6 +700,7 @@ export default function AdminTournaments() {
                         contests: [],
                         prize: '',
                         gameWeights: {},
+                        dailyGames: [],
                         started: false,
                         finished: false,
                       })

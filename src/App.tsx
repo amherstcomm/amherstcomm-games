@@ -1278,8 +1278,11 @@ function App() {
                 {playing.tournament} · Round {playing.number} of {playing.of}
               </p>
               <p className="mt-1 text-slate-300">
-                {DIFFICULTY_LABEL[playing.difficulty]} · until {playing.ends_on}. One attempt: your
-                first finish is the one that counts.{' '}
+                {DIFFICULTY_LABEL[playing.difficulty]} · until {playing.ends_on}.{' '}
+                {tournamentPage?.slug &&
+                playing.daily_games?.includes(FEED_NAME[modeOf(tournamentPage.slug)])
+                  ? 'A new board each day: one attempt a day, and your first finish each day is the one that counts.'
+                  : 'One attempt: your first finish is the one that counts.'}{' '}
                 <RouteLink
                   {...pageLink({ kind: 'tournament', slug: null })}
                   className="underline underline-offset-2 hover:text-white"

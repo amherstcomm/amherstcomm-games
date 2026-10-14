@@ -61,6 +61,8 @@ export type RoundStandings = {
   contests: ContestStandings[];
   /** what each board was worth, keyed the way the boards are */
   weights?: Record<string, number>;
+  /** the games ranked across every day of the round, by feed name */
+  daily_games?: string[];
   /** what winning the round was worth */
   prize?: string | null;
 };

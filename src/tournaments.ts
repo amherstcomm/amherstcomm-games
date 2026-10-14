@@ -43,6 +43,8 @@ export type Round = {
   games: string[];
   /** what each game is worth against the others, by feed name; missing is 1 */
   game_weights?: Record<string, number>;
+  /** the games dealt a new board each day, by feed name */
+  daily_games?: string[];
   /** the contests this round counts, and what each is worth */
   contests?: RoundContestRow[];
   /** the sessions counting in this round */
@@ -139,6 +141,8 @@ export async function saveRound(r: {
   prize?: string;
   /** what each game is worth, by feed name; a game left out is worth 1 */
   gameWeights?: Record<string, number>;
+  /** the games dealt a new board each day rather than one for the round */
+  dailyGames?: string[];
   /** the contests this round counts, and what each is worth */
   contests?: { id: string; weight: number }[];
 }): Promise<{ ok: boolean; reason?: string; id?: string }> {
@@ -157,6 +161,8 @@ export async function saveRound(r: {
       Object.entries(r.gameWeights ?? {}).filter(([game, w]) => r.games.includes(game) && w !== 1)
     ),
     p_contests: (r.contests ?? []).map((c) => ({ id: c.id, weight: c.weight })),
+    // Only games the round has: the server refuses a stray one.
+    p_daily_games: (r.dailyGames ?? []).filter((g) => r.games.includes(g)),
   });
   if (error) return fail(error.message);
   return (data as { ok: boolean; reason?: string; id?: string }) ?? fail('no answer');

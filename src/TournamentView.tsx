@@ -371,6 +371,9 @@ function RoundCards({
               <span className="text-sm font-semibold text-white">
                 {GAME_NAME[mode]?.full ?? roundGameName(feed)}
               </span>
+              {round.daily_games?.includes(feed) && (
+                <span className="block mt-0.5 text-xs text-slate-400">New board each day</span>
+              )}
               {round.game_weights?.[feed] !== undefined && round.game_weights[feed] !== 1 && (
                 <span className="block mt-0.5 text-xs text-accent">
                   worth {round.game_weights[feed]}×
@@ -497,9 +500,9 @@ export default function TournamentView({
         }
       />
       <p className="mt-2 text-sm text-slate-400">
-        Each game has one board for the whole round. You get one attempt at it,
-        and your first finish is the one that counts — so take your time
-        before you start.
+        {rounds.some((r) => (r.daily_games ?? []).length > 0)
+          ? 'Most games have one board for the whole round. Those marked "new board each day" have a fresh one every day, ranked across all of them. Either way you get one attempt at each board, and your first finish is the one that counts.'
+          : 'Each game has one board for the whole round. You get one attempt at it, and your first finish is the one that counts — so take your time before you start.'}
       </p>
 
       {one ? (
