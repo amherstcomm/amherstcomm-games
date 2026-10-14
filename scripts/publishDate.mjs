@@ -109,16 +109,28 @@ export async function publishRoundBoards(date, games, dir, baseEnv = process.env
     payload: JSON.parse(readFileSync(join(dir, `round-daily-${game}.json`), 'utf8')),
   }));
   const key = baseEnv.SUPABASE_SERVICE_ROLE_KEY;
-  const res = await fetchImpl(`${baseEnv.SUPABASE_URL}/rest/v1/daily_puzzles`, {
-    method: 'POST',
-    headers: {
-      apikey: key,
-      Authorization: `Bearer ${key}`,
-      'Content-Type': 'application/json',
-      Prefer: 'resolution=merge-duplicates',
-    },
-    body: JSON.stringify(rows),
-  });
+  const post = () =>
+    fetchImpl(`${baseEnv.SUPABASE_URL}/rest/v1/daily_puzzles`, {
+      method: 'POST',
+      headers: {
+        apikey: key,
+        Authorization: `Bearer ${key}`,
+        'Content-Type': 'application/json',
+        Prefer: 'resolution=merge-duplicates',
+      },
+      body: JSON.stringify(rows),
+    });
+  // The generator above runs synchronously, for seconds a day, holding the
+  // event loop: a kept-alive connection from an earlier request can be closed
+  // by the server meanwhile, and the post then goes out on a dead socket and
+  // fails before it reaches anybody. The post is an upsert, so sending it
+  // again on a fresh connection is safe.
+  let res;
+  try {
+    res = await post();
+  } catch {
+    res = await post();
+  }
   if (!res.ok) throw new Error(`Round publish failed: ${res.status} ${await res.text()}`);
   return rows.length;
 }

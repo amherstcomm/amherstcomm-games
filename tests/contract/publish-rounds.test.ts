@@ -58,8 +58,11 @@ beforeAll(async () => {
         return send([], 201);
       }
       if (url.startsWith('/rest/v1/daily_puzzles')) {
-        const date = url.match(/puzzle_date=eq\.([\d-]+)/)?.[1] ?? '';
-        const asked = decodeURIComponent(url.match(/game=in\.\(([^)]*)\)/)?.[1] ?? 'hive').split(',');
+        const query = new URL(url, 'http://stub').searchParams;
+        const date = (query.get('puzzle_date') ?? '').replace(/^eq\./, '');
+        // game=in.(words,hive); a request without one asks for hive
+        const game = query.get('game') ?? 'in.(hive)';
+        const asked = game.slice('in.('.length, -1).split(',');
         return send(
           asked
             .filter((g) => alreadyPublished.includes(date) || alreadyPublished.includes(`${date}:${g}`))
