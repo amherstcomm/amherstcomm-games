@@ -136,6 +136,45 @@ test('a round sends its games as the feeds its boards are published under', asyn
   );
 });
 
+// A game can be dealt a new board each day of the round instead of one board
+// for the whole round -- and taking it out of the round takes that with it,
+// or the server refuses the save over a game nobody can see on screen.
+test('a game can be given a new board each day', async ({ page }) => {
+  const sent = await portal(page, [
+    { id: 't1', name: 'Ownership Cup', difficulty: 'hard', starts_on: '2026-10-01', ends_on: '2026-10-24', rounds: [] },
+  ]);
+  await page.getByRole('button', { name: 'Add a round' }).click();
+  await page.getByLabel('Round starts').fill('2026-10-01');
+  await page.getByLabel('Round ends').fill('2026-10-05');
+  const games = page.getByRole('group', { name: 'Games in this round' });
+  await games.getByRole('button', { name: /Guess/ }).click();
+  await games.getByRole('button', { name: /Hive/ }).click();
+  await page.getByRole('checkbox', { name: /Guess.*: a new board each day/ }).click();
+  await page.getByRole('button', { name: 'Save round' }).click();
+
+  await expect.poll(() => sent.filter((s) => s.fn === 'save_round').length).toBe(1);
+  const round = sent.find((s) => s.fn === 'save_round')!.args;
+  expect(round.p_daily_games).toEqual(['words']);
+});
+
+test('and taking the game out of the round takes its new-board-each-day with it', async ({ page }) => {
+  const sent = await portal(page, [
+    { id: 't1', name: 'Ownership Cup', difficulty: 'hard', starts_on: '2026-10-01', ends_on: '2026-10-24', rounds: [] },
+  ]);
+  await page.getByRole('button', { name: 'Add a round' }).click();
+  await page.getByLabel('Round starts').fill('2026-10-01');
+  await page.getByLabel('Round ends').fill('2026-10-05');
+  const games = page.getByRole('group', { name: 'Games in this round' });
+  await games.getByRole('button', { name: /Guess/ }).click();
+  await games.getByRole('button', { name: /Hive/ }).click();
+  await page.getByRole('checkbox', { name: /Guess.*: a new board each day/ }).click();
+  await games.getByRole('button', { name: /Guess/ }).click();
+  await page.getByRole('button', { name: 'Save round' }).click();
+
+  await expect.poll(() => sent.filter((s) => s.fn === 'save_round').length).toBe(1);
+  expect(sent.find((s) => s.fn === 'save_round')!.args.p_daily_games).toEqual([]);
+});
+
 test("and the server's refusal is shown, not swallowed", async ({ page }) => {
   await portal(
     page,

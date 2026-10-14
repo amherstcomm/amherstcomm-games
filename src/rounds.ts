@@ -30,6 +30,8 @@ export type CurrentRound = {
   games: string[];
   /** what each game is worth against the others; missing is 1 */
   game_weights?: Record<string, number>;
+  /** the games dealt a new board each day rather than one for the round */
+  daily_games?: string[];
   /** the sessions counting in this round, live and open alike */
   trivia: RoundTrivia[];
   /** the contests counting in this round */

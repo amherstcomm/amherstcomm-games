@@ -128,9 +128,13 @@ select pg_temp.check('a game in the round is served its round board',
 select pg_temp.check('a game not in the round is served nothing',
   public.round_puzzle('grid') is null);
 
+-- Every round the window overlaps, the one under way included: a round with
+-- a new board each day still has days ahead of it once it has started, and
+-- what to make for each round is the host's to work out -- for a one-board
+-- round under way, nothing (see publishRounds).
 select pg_temp.check('the host is told which rounds to generate, with their difficulty',
   (select count(*) from jsonb_array_elements(public.rounds_to_publish(pg_temp.d(0), pg_temp.d(13))) r
-   where r->>'difficulty' = 'hard') = 2);
+   where r->>'difficulty' = 'hard') = 3);
 
 select pg_temp.check('the admin page sees each tournament with its rounds',
   (select jsonb_array_length(x->'rounds') from jsonb_array_elements(public.tournaments_sheet()->'tournaments') x

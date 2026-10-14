@@ -22,11 +22,20 @@ const plus = (date: string, n: number) =>
   new Date(new Date(`${date}T12:00:00Z`).getTime() + n * 86_400_000).toISOString().slice(0, 10);
 
 type Row = { puzzle_date: string; env: string; game: string; payload: Record<string, unknown> };
-type Round = { id: string; starts_on: string; ends_on: string; games: string[]; difficulty: string };
+type Round = {
+  id: string;
+  starts_on: string;
+  ends_on: string;
+  games: string[];
+  daily_games?: string[];
+  difficulty: string;
+};
 
 let server: Server;
 let base: string;
 let rounds: Round[] = [];
+/** What is already up: a date on its own is every game that day, as the
+ *  earlier tests meant it; `date:game` is one game's board. */
 let alreadyPublished: string[] = [];
 let posted: Row[] = [];
 
@@ -49,8 +58,16 @@ beforeAll(async () => {
         return send([], 201);
       }
       if (url.startsWith('/rest/v1/daily_puzzles')) {
-        const date = url.match(/puzzle_date=eq\.([\d-]+)/)?.[1] ?? '';
-        return send(alreadyPublished.includes(date) ? [{ game: 'hive' }] : []);
+        const query = new URL(url, 'http://stub').searchParams;
+        const date = (query.get('puzzle_date') ?? '').replace(/^eq\./, '');
+        // game=in.(words,hive); a request without one asks for hive
+        const game = query.get('game') ?? 'in.(hive)';
+        const asked = game.slice('in.('.length, -1).split(',');
+        return send(
+          asked
+            .filter((g) => alreadyPublished.includes(date) || alreadyPublished.includes(`${date}:${g}`))
+            .map((game) => ({ game }))
+        );
       }
       return send([], 404);
     });
@@ -177,5 +194,58 @@ describe('publishing tournament rounds', () => {
     alreadyPublished = [today];
     await publishRounds(today, plus(today, 13));
     expect(posted).toEqual([]);
+  });
+
+  // ---------------------------------------------------------------------------
+  // A new board each day
+  // ---------------------------------------------------------------------------
+
+  it('a game with a new board each day gets one for every day of the round, each dated at its day', async () => {
+    const start = plus(easternToday(), 3);
+    rounds = [
+      { id: 'd1', starts_on: start, ends_on: plus(start, 2), games: ['words'], daily_games: ['words'], difficulty: 'hard' },
+    ];
+    const { code, out } = await publishRounds(easternToday(), plus(easternToday(), 13));
+    expect(code, out).toBe(0);
+    const days = posted.filter((r) => r.game === 'words').map((r) => r.puzzle_date).sort();
+    expect(days).toEqual([start, plus(start, 1), plus(start, 2)]);
+    // Each board is that day's own, which is the date a game saves its result
+    // under -- so a different word each day.
+    for (const row of posted) expect(row.payload.date).toBe(row.puzzle_date);
+    const words = new Set(posted.map((r) => JSON.stringify(r.payload.byDifficulty)));
+    expect(words.size, 'two days were dealt the same board').toBe(3);
+    expect(out).toContain(`a new board each day for words (${start} to ${plus(start, 2)})`);
+  });
+
+  it('a round under way gets its days ahead, today only if missing, and never a day that is over', async () => {
+    const today = easternToday();
+    rounds = [
+      {
+        id: 'd2', starts_on: plus(today, -2), ends_on: plus(today, 1),
+        games: ['words', 'hive'], daily_games: ['words'], difficulty: 'hard',
+      },
+    ];
+    // Today's word is up and being played; tomorrow's is not up yet.
+    alreadyPublished = [`${today}:words`];
+    const { code, out } = await publishRounds(plus(today, -7), plus(today, 13));
+    expect(code, out).toBe(0);
+    expect(posted.map((r) => `${r.puzzle_date}:${r.game}`)).toEqual([`${plus(today, 1)}:words`]);
+    // and the round's one-board game, under way, is left exactly as it is
+    expect(posted.some((r) => r.game === 'hive')).toBe(false);
+  });
+
+  it("and a round's daily game and its one-board game are each published their own way", async () => {
+    const start = plus(easternToday(), 2);
+    rounds = [
+      {
+        id: 'd3', starts_on: start, ends_on: plus(start, 1),
+        games: ['words', 'hive'], daily_games: ['words'], difficulty: 'hard',
+      },
+    ];
+    const { code, out } = await publishRounds(easternToday(), plus(easternToday(), 13));
+    expect(code, out).toBe(0);
+    expect(posted.map((r) => `${r.puzzle_date}:${r.game}`).sort()).toEqual(
+      [`${start}:hive`, `${start}:words`, `${plus(start, 1)}:words`].sort()
+    );
   });
 });

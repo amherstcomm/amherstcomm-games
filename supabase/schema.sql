@@ -14328,3 +14328,852 @@ $fn$;
 
 revoke all on function public.advance_session(uuid, text, uuid) from public, anon;
 grant execute on function public.advance_session(uuid, text, uuid) to authenticated;
+
+-- ---------------------------------------------------------------------------
+-- A new board each day
+-- ---------------------------------------------------------------------------
+--
+-- A round has been one board per game for its whole span: play it once, your
+-- first finish counts. Asked for: a Guess the Word round that runs several
+-- days with a different word each day, still worth one placing in the round --
+-- ten points for first, not ten a day.
+--
+-- So a round can name games that get a new board each day. Each day's board is
+-- kept under that day rather than the round's first day -- the key everything
+-- downstream already reads a board's date from, since a published board
+-- carries its own date and a game saves its result under it. Under the rule
+-- that no game is in two rounds on the same day, (game, day) stays unique.
+--
+-- The standing for such a game is one ranking across every day of the round
+-- played so far, the way the site's 7-day board ranks a week: the round counts
+-- it once, at the same placing points as any other game.
+alter table public.tournament_rounds
+  add column if not exists daily_games text[] not null default '{}';
+
+drop function if exists public.save_round(uuid, uuid, date, date, text[], jsonb, text, jsonb, jsonb);
+
+create or replace function public.save_round(
+  p_id uuid,
+  p_tournament uuid,
+  p_starts date,
+  p_ends date,
+  p_games text[],
+  -- [{"id": "<session uuid>", "weight": 2}, ...]; absent is no trivia.
+  p_sessions jsonb default '[]'::jsonb,
+  p_prize text default null,
+  -- {"weave": 3, "hive": 1}; a game left out is worth 1.
+  p_game_weights jsonb default '{}'::jsonb,
+  -- [{"id": "<contest uuid>", "weight": 2}, ...]; absent is no contests.
+  p_contests jsonb default '[]'::jsonb,
+  -- the games that get a new board each day, rather than one for the round
+  p_daily_games text[] default '{}'
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $fn$
+declare
+  v_id uuid := p_id;
+  v_t record;
+  v_old record;
+  v_games text[];
+  v_sessions jsonb := coalesce(p_sessions, '[]'::jsonb);
+  v_contests jsonb := coalesce(p_contests, '[]'::jsonb);
+  v_weights jsonb;
+  v_taken uuid;
+  v_clash text;
+  v_daily text[];
+begin
+  if not public.can('games.setup') then
+    return jsonb_build_object('ok', false, 'reason', 'not allowed');
+  end if;
+  select * into v_t from public.tournaments where id = p_tournament;
+  if not found then
+    return jsonb_build_object('ok', false, 'reason', 'no such tournament');
+  end if;
+  if p_starts is null or p_ends is null or p_ends < p_starts then
+    return jsonb_build_object('ok', false, 'reason', 'it needs dates, ending on or after it starts');
+  end if;
+  if p_starts < v_t.starts_on or p_ends > v_t.ends_on then
+    return jsonb_build_object('ok', false, 'reason', 'a round has to fall inside its tournament');
+  end if;
+
+  -- Distinct and known. Read off public.games rather than a list kept here: a
+  -- game this site does not publish is a round board nobody could be dealt.
+  select array_agg(distinct g order by g) into v_games
+  from unnest(coalesce(p_games, '{}'::text[])) g;
+  v_games := coalesce(v_games, '{}'::text[]);
+  if exists (select 1 from unnest(v_games) g where g not in (select feed from public.games)) then
+    return jsonb_build_object('ok', false, 'reason', 'that is not a game this site has');
+  end if;
+
+  if jsonb_typeof(v_sessions) <> 'array' then
+    return jsonb_build_object('ok', false, 'reason', 'the trivia has to be a list');
+  end if;
+
+  v_weights := coalesce(p_game_weights, '{}'::jsonb);
+  if jsonb_typeof(v_weights) <> 'object' then
+    return jsonb_build_object('ok', false, 'reason', 'what the games are worth has to be a list of games');
+  end if;
+  -- Only games this round actually has, so a weight cannot outlive the game it
+  -- was set for -- a stale key would sit there paying nothing and explaining
+  -- nothing the next time somebody read the row.
+  if exists (
+    select 1 from jsonb_object_keys(v_weights) k where not (k = any (v_games))
+  ) then
+    return jsonb_build_object('ok', false, 'reason',
+      'a game was given a weight without being in the round');
+  end if;
+  if exists (
+    select 1 from jsonb_each_text(v_weights) e
+    where e.value !~ '^[0-9]+(\.[0-9]+)?$'
+       or e.value::numeric <= 0 or e.value::numeric > 10
+  ) then
+    return jsonb_build_object('ok', false, 'reason',
+      'a weight has to be more than zero and at most ten');
+  end if;
+  -- A new board each day only for a game the round has: a stray name would
+  -- sit there doing nothing and explaining nothing the next time somebody read
+  -- the row, the same reason game weights are held to the round's games.
+  select coalesce(array_agg(distinct d order by d), '{}'::text[]) into v_daily
+  from unnest(coalesce(p_daily_games, '{}'::text[])) d;
+  if exists (select 1 from unnest(v_daily) d where not (d = any (v_games))) then
+    return jsonb_build_object('ok', false, 'reason',
+      'a game was set to a new board each day without being in the round');
+  end if;
+
+  if jsonb_typeof(v_contests) <> 'array' then
+    return jsonb_build_object('ok', false, 'reason', 'the contests have to be a list');
+  end if;
+  -- A contest counts for a round the same way a session does, so it satisfies
+  -- this the same way: a round of nothing but a pumpkin competition is a real
+  -- thing to want in October.
+  if cardinality(v_games) = 0 and jsonb_array_length(v_sessions) = 0
+     and jsonb_array_length(v_contests) = 0 then
+    return jsonb_build_object('ok', false, 'reason',
+      'a round needs at least one game, one session or one contest');
+  end if;
+  if exists (
+    select 1 from jsonb_array_elements(v_contests) e
+    where not exists (select 1 from public.contests c where c.id = (e->>'id')::uuid)
+  ) then
+    return jsonb_build_object('ok', false, 'reason', 'that is not a contest this site has');
+  end if;
+  if exists (
+    select 1 from jsonb_array_elements(v_contests) e
+    where coalesce((e->>'weight')::numeric, 1) <= 0
+       or coalesce((e->>'weight')::numeric, 1) > 10
+  ) then
+    return jsonb_build_object('ok', false, 'reason', 'a weight has to be more than zero and at most ten');
+  end if;
+  if exists (
+    select 1 from jsonb_array_elements(v_sessions) e
+    where not exists (select 1 from public.sessions s where s.id = (e->>'id')::uuid)
+  ) then
+    return jsonb_build_object('ok', false, 'reason', 'that is not a session this site has');
+  end if;
+  if exists (
+    select 1 from jsonb_array_elements(v_sessions) e
+    where coalesce((e->>'weight')::numeric, 1) <= 0
+       or coalesce((e->>'weight')::numeric, 1) > 10
+  ) then
+    return jsonb_build_object('ok', false, 'reason', 'a weight has to be more than zero and at most ten');
+  end if;
+
+  -- Across tournaments a day still belongs to one round's tournament: the
+  -- tournament page, the banner on the front page and the standings all show
+  -- one tournament at a time, and two tournaments' rounds on one day would
+  -- have one of them drawn under the other's name.
+  if exists (
+    select 1 from public.tournament_rounds r
+    where r.id is distinct from v_id
+      and r.tournament_id <> p_tournament
+      and daterange(r.starts_on, r.ends_on, '[]') && daterange(p_starts, p_ends, '[]')
+  ) then
+    return jsonb_build_object('ok', false, 'reason',
+      'another tournament already has a round on some of those days');
+  end if;
+
+  -- Within one, rounds may overlap: a pumpkin contest that runs for a week
+  -- sits across several daily rounds, and that was refused outright.
+  --
+  -- What may not overlap is a game. A round's board is kept under its game
+  -- and its first day, and a player reaches it as /tournament/<game> -- so
+  -- two rounds on the same day with the same game would be two boards behind
+  -- one address, and the one a player was dealt would come down to which row
+  -- the database happened to return. Said by name, because "a round already
+  -- covers those days" was the old rule and no longer the reason.
+  select g.name_short into v_clash
+  from public.tournament_rounds r
+  join public.games g on g.feed = any (r.games)
+  where r.id is distinct from v_id
+    and g.feed = any (v_games)
+    and daterange(r.starts_on, r.ends_on, '[]') && daterange(p_starts, p_ends, '[]')
+  order by g.ordinal
+  limit 1;
+  if v_clash is not null then
+    return jsonb_build_object('ok', false, 'reason',
+      v_clash || ' is already in another round on some of those days');
+  end if;
+
+  if v_id is not null then
+    select * into v_old from public.tournament_rounds where id = v_id;
+    if not found then
+      return jsonb_build_object('ok', false, 'reason', 'no such round');
+    end if;
+    -- A round that has started is being played: its first day is what its
+    -- boards are keyed by and its games are what people have been dealt. Only
+    -- the end may move, and not into the past.
+    --
+    -- The trivia is deliberately not frozen with the games. A board is
+    -- generated the night before and played from the first day; a session is an
+    -- event somewhere inside the round, and "add Thursday's trivia night to the
+    -- round that is already running" is the ordinary case, not an edge one.
+    if v_old.starts_on <= public.puzzle_day() then
+      if p_starts <> v_old.starts_on or v_games <> v_old.games
+         or v_daily <> v_old.daily_games then
+        return jsonb_build_object('ok', false, 'reason', 'a round under way can only change its end date');
+      end if;
+      -- Only *moving* the end into the past is refused. A round that has
+      -- already finished has an end date in the past by definition, and a save
+      -- that leaves it alone is how its trivia gets attached -- which is the
+      -- ordinary order of things, since a session has to have been run before
+      -- there is anything to attach.
+      if p_ends <> v_old.ends_on and p_ends < public.puzzle_day() then
+        return jsonb_build_object('ok', false, 'reason', 'a round under way cannot end in the past');
+      end if;
+    end if;
+    update public.tournament_rounds
+       set tournament_id = p_tournament, starts_on = p_starts, ends_on = p_ends, games = v_games,
+           prize = nullif(btrim(coalesce(p_prize, '')), ''),
+           game_weights = v_weights,
+           daily_games = v_daily
+     where id = v_id;
+  else
+    insert into public.tournament_rounds (tournament_id, starts_on, ends_on, games, prize,
+                                          game_weights, daily_games)
+    values (p_tournament, p_starts, p_ends, v_games,
+            nullif(btrim(coalesce(p_prize, '')), ''),
+            v_weights, v_daily)
+    returning id into v_id;
+  end if;
+
+  -- Said plainly rather than left to the unique index, so the admin is told
+  -- which session and which round instead of reading a constraint name.
+  select rs.session_id into v_taken
+  from public.tournament_round_sessions rs
+  join jsonb_array_elements(v_sessions) e on (e->>'id')::uuid = rs.session_id
+  where rs.round_id <> v_id
+  limit 1;
+  if v_taken is not null then
+    return jsonb_build_object('ok', false, 'reason',
+      (select 'the session "' || s.title || '" already counts in another round'
+       from public.sessions s where s.id = v_taken));
+  end if;
+
+  delete from public.tournament_round_sessions rs
+  where rs.round_id = v_id
+    and not exists (select 1 from jsonb_array_elements(v_sessions) e
+                    where (e->>'id')::uuid = rs.session_id);
+  insert into public.tournament_round_sessions (round_id, session_id, weight)
+  select v_id, (e->>'id')::uuid, coalesce((e->>'weight')::numeric, 1)
+  from jsonb_array_elements(v_sessions) e
+  on conflict (round_id, session_id) do update set weight = excluded.weight;
+
+  -- And the same for contests, said plainly for the same reason the sessions
+  -- get it said plainly: counting one pumpkin in two rounds would pay its
+  -- winner twice for one pumpkin, and a constraint name explains nothing.
+  select rc.contest_id into v_taken
+  from public.tournament_round_contests rc
+  join jsonb_array_elements(v_contests) e on (e->>'id')::uuid = rc.contest_id
+  where rc.round_id <> v_id
+  limit 1;
+  if v_taken is not null then
+    return jsonb_build_object('ok', false, 'reason',
+      (select 'the contest "' || c.name || '" already counts in another round'
+       from public.contests c where c.id = v_taken));
+  end if;
+
+  delete from public.tournament_round_contests rc
+  where rc.round_id = v_id
+    and not exists (select 1 from jsonb_array_elements(v_contests) e
+                    where (e->>'id')::uuid = rc.contest_id);
+  insert into public.tournament_round_contests (round_id, contest_id, weight)
+  select v_id, (e->>'id')::uuid, coalesce((e->>'weight')::numeric, 1)
+  from jsonb_array_elements(v_contests) e
+  on conflict (round_id, contest_id) do update set weight = excluded.weight;
+
+  return jsonb_build_object('ok', true, 'id', v_id);
+end;
+$fn$;
+
+revoke all on function public.save_round(uuid, uuid, date, date, text[], jsonb, text, jsonb, jsonb, text[]) from public, anon;
+grant execute on function public.save_round(uuid, uuid, date, date, text[], jsonb, text, jsonb, jsonb, text[]) to authenticated;
+
+create or replace function public.rounds_to_publish(p_from date, p_until date)
+returns jsonb
+language sql
+stable
+security definer
+set search_path = ''
+as $fn$
+  select coalesce(jsonb_agg(jsonb_build_object(
+           'id', r.id, 'starts_on', r.starts_on, 'ends_on', r.ends_on,
+           'games', to_jsonb(r.games), 'daily_games', to_jsonb(r.daily_games),
+           'difficulty', t.difficulty)
+         order by r.starts_on), '[]'::jsonb)
+  from public.tournament_rounds r
+  join public.tournaments t on t.id = r.tournament_id
+  where r.starts_on <= p_until and r.ends_on >= p_from
+$fn$;
+
+revoke all on function public.rounds_to_publish(date, date) from public, anon, authenticated;
+grant execute on function public.rounds_to_publish(date, date) to service_role;
+
+create or replace function public.round_puzzle(p_game text)
+returns jsonb
+language sql
+stable
+security definer
+set search_path = ''
+as $fn$
+  select p.payload
+  from public.tournament_rounds r
+  join public.daily_puzzles p
+    on p.env = 'round' and p.game = p_game
+   -- today's board, for a game with a new one each day
+   and p.puzzle_date = case when p_game = any (r.daily_games) then public.puzzle_day() else r.starts_on end
+  where public.puzzle_day() between r.starts_on and r.ends_on
+    and p_game = any (r.games)
+  limit 1
+$fn$;
+
+revoke all on function public.round_puzzle(text) from public;
+grant execute on function public.round_puzzle(text) to anon, authenticated;
+
+create or replace function public.take_round_hint(p_game text)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $fn$
+declare
+  uid uuid := (select auth.uid());
+  r record;
+  board jsonb;
+  answers jsonb;
+  v_found text[];
+  row_hints public.round_hints;
+  v_day date;
+  target text;
+  words text[];
+begin
+  if uid is null then
+    return jsonb_build_object('ok', false, 'reason', 'not signed in');
+  end if;
+
+  -- The round on today that has this game. "The round on today" stopped
+  -- being one round when rounds could overlap, and taking whichever came back
+  -- first refused a hint on a game that was in the other one. A round with
+  -- the game sorts first; failing that any round on, so the refusal below
+  -- still says the game is not in the round rather than that nothing is on.
+  select tr.*, t.difficulty into r
+  from public.tournament_rounds tr
+  join public.tournaments t on t.id = tr.tournament_id
+  where public.puzzle_day() between tr.starts_on and tr.ends_on
+  order by (p_game = any (tr.games)) desc, tr.starts_on
+  limit 1;
+  if not found then
+    return jsonb_build_object('ok', false, 'reason', 'no round is on');
+  end if;
+  if not (p_game = any (r.games)) then
+    return jsonb_build_object('ok', false, 'reason', 'that game is not in this round');
+  end if;
+  -- the board in front of them: today's, for a game with a new one each day
+  v_day := case when p_game = any (r.daily_games) then public.puzzle_day() else r.starts_on end;
+
+  select dp.payload into board
+  from public.daily_puzzles dp
+  where dp.game = p_game and dp.env = 'round' and dp.puzzle_date = v_day;
+  if board is null then
+    return jsonb_build_object('ok', false, 'reason', 'the round has no board for that game');
+  end if;
+
+  begin
+    answers := convert_from(
+      decode(board->'byDifficulty'->r.difficulty->>'answers', 'base64'), 'UTF8')::jsonb;
+  exception when others then
+    answers := null;
+  end;
+  if answers is null or jsonb_typeof(answers->'words') <> 'array' then
+    return jsonb_build_object('ok', false, 'reason', 'that game has no hints');
+  end if;
+
+  select coalesce(array(select jsonb_array_elements_text(p.state->'found')), '{}')
+    into v_found
+  from public.daily_progress p
+  where p.user_id = uid and p.game = p_game and p.difficulty = r.difficulty
+    and p.puzzle_date = v_day and p.env = 'round';
+  v_found := coalesce(v_found, '{}');
+
+  select * into row_hints from public.round_hints h
+  where h.user_id = uid and h.game = p_game and h.puzzle_date = v_day;
+
+  -- One already given and still unfound is the same hint, not another.
+  select w into target
+  from unnest(coalesce(row_hints.targets, '{}'::text[])) w
+  where not (w = any (v_found))
+  limit 1;
+
+  if target is null then
+    select array(select jsonb_array_elements(answers->'words') ->> 'w') into words;
+    words := words || (answers #>> '{spangram,w}');
+    select w into target
+    from unnest(words) w
+    where not (w = any (v_found)) and not (w = any (coalesce(row_hints.targets, '{}'::text[])))
+    limit 1;
+    if target is null then
+      return jsonb_build_object('ok', false, 'reason', 'there is nothing left to hint');
+    end if;
+    -- Nobody gets more hints than the board has words to give.
+    if coalesce(row_hints.taken, 0) >= cardinality(words) then
+      return jsonb_build_object('ok', false, 'reason', 'no hints left on this board');
+    end if;
+    insert into public.round_hints (user_id, game, puzzle_date, taken, targets)
+    values (uid, p_game, v_day, 1, array[target])
+    on conflict (user_id, game, puzzle_date) do update
+      set taken = public.round_hints.taken + 1,
+          targets = public.round_hints.targets || excluded.targets,
+          updated_at = now();
+  end if;
+
+  return jsonb_build_object(
+    'ok', true,
+    'target', target,
+    'taken', (select h.taken from public.round_hints h
+              where h.user_id = uid and h.game = p_game and h.puzzle_date = v_day));
+end;
+$fn$;
+
+revoke all on function public.take_round_hint(text) from public, anon;
+grant execute on function public.take_round_hint(text) to authenticated;
+
+create or replace function public.my_round_hints(p_game text)
+returns jsonb
+language sql
+stable
+security definer
+set search_path = ''
+as $fn$
+  select coalesce((
+    select jsonb_build_object('taken', h.taken, 'targets', to_jsonb(h.targets))
+    from public.round_hints h
+    -- Matched on the game as well as the first day: two rounds can start on
+    -- the same day now, and matching the day alone found both and failed
+    -- with more than one row.
+    join public.tournament_rounds r
+      on h.puzzle_date = case when h.game = any (r.daily_games)
+                              then public.puzzle_day() else r.starts_on end
+     and h.game = any (r.games)
+     and public.puzzle_day() between r.starts_on and r.ends_on
+    where h.user_id = (select auth.uid()) and h.game = p_game
+  ), jsonb_build_object('taken', 0, 'targets', '[]'::jsonb))
+$fn$;
+
+revoke all on function public.my_round_hints(text) from public, anon;
+grant execute on function public.my_round_hints(text) to authenticated;
+
+create or replace function public.round_player(p_round uuid, p_user uuid)
+returns jsonb
+language sql
+stable
+security definer
+set search_path = ''
+as $fn$
+  select case
+    when not public.can('games.setup')
+      then jsonb_build_object('ok', false, 'reason', 'not allowed')
+    when not exists (select 1 from public.tournament_rounds r where r.id = p_round)
+      then jsonb_build_object('ok', false, 'reason', 'no such round')
+    else (
+      select jsonb_build_object(
+        'ok', true,
+        'name', (select p.display_name from public.profiles p where p.id = p_user),
+        'on', public.puzzle_day() between r.starts_on and r.ends_on,
+        'games', coalesce((
+          select jsonb_agg(jsonb_build_object(
+                   'game', g.feed,
+                   'name', g.name_full,
+                   'status', case
+                     when exists (select 1 from public.daily_progress dp
+                                  where dp.user_id = p_user and dp.game = g.progress
+                                    and dp.env = 'round' and dp.puzzle_date = case when g.feed = any (r.daily_games) then public.puzzle_day() else r.starts_on end
+                                    and dp.completed) then 'finished'
+                     when exists (select 1 from public.daily_progress dp
+                                  where dp.user_id = p_user and dp.game = g.progress
+                                    and dp.env = 'round' and dp.puzzle_date = case when g.feed = any (r.daily_games) then public.puzzle_day() else r.starts_on end)
+                       then 'started'
+                     else 'not started'
+                   end,
+                   'hints', coalesce((select h.taken from public.round_hints h
+                                      where h.user_id = p_user and h.game = g.feed
+                                        and h.puzzle_date = case when g.feed = any (r.daily_games)
+                                                              then public.puzzle_day() else r.starts_on end), 0),
+                   'resets', coalesce((select x.resets from public.round_resets x
+                                       where x.user_id = p_user and x.round_id = r.id
+                                         and x.game = g.feed), 0))
+                 order by g.ordinal)
+          from public.games g
+          where g.feed = any (r.games)), '[]'::jsonb),
+        'sessions', coalesce((
+          select jsonb_agg(jsonb_build_object(
+                   'session_id', s.id,
+                   'title', s.title,
+                   'answered', (select count(*) from public.responses rs
+                                join public.items i on i.id = rs.item_id
+                                where i.session_id = s.id and rs.user_id = p_user),
+                   'total', (select count(*) from public.items i
+                             where i.session_id = s.id and i.state <> 'pending'))
+                 order by s.title)
+          from public.tournament_round_sessions rs2
+          join public.sessions s on s.id = rs2.session_id
+          where rs2.round_id = r.id), '[]'::jsonb))
+      from public.tournament_rounds r where r.id = p_round)
+  end
+$fn$;
+
+revoke all on function public.round_player(uuid, uuid) from public, anon;
+grant execute on function public.round_player(uuid, uuid) to authenticated;
+
+create or replace function public.reset_round_player(
+  p_round uuid,
+  p_user uuid,
+  -- one or the other: a game by its feed name, or one of the round's sessions
+  p_game text default null,
+  p_session uuid default null
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $fn$
+declare
+  r public.tournament_rounds;
+  g public.games;
+  attempt int;
+  v_day date;
+begin
+  if not public.can('games.setup') then
+    return jsonb_build_object('ok', false, 'reason', 'not allowed');
+  end if;
+  select * into r from public.tournament_rounds where id = p_round;
+  if not found then
+    return jsonb_build_object('ok', false, 'reason', 'no such round');
+  end if;
+  if not public.puzzle_day() between r.starts_on and r.ends_on then
+    return jsonb_build_object('ok', false, 'reason',
+      'that round is not on -- a reset only gives somebody another go while it is');
+  end if;
+  if (p_game is null) = (p_session is null) then
+    return jsonb_build_object('ok', false, 'reason', 'reset one game or one session at a time');
+  end if;
+
+  if p_game is not null then
+    select * into g from public.games where feed = p_game;
+    if not found or not (p_game = any (r.games)) then
+      return jsonb_build_object('ok', false, 'reason', 'that game is not in this round');
+    end if;
+    -- Today's board, for a game with a new one each day: that is the one
+    -- that went wrong, and the days before it were played and stand.
+    v_day := case when p_game = any (r.daily_games) then public.puzzle_day() else r.starts_on end;
+    -- Every variant and difficulty of this board: the row is keyed more
+    -- finely than a round needs, and a stray one would still count.
+    delete from public.daily_progress
+     where user_id = p_user and game = g.progress and env = 'round'
+       and puzzle_date = v_day;
+    delete from public.round_hints
+     where user_id = p_user and game in (g.feed, g.progress) and puzzle_date = v_day;
+    insert into public.round_resets (user_id, round_id, game, resets, last_reset_at, last_reset_by)
+    values (p_user, r.id, g.feed, 1, now(), (select auth.uid()))
+    on conflict (user_id, round_id, game) do update
+      set resets = public.round_resets.resets + 1,
+          last_reset_at = now(),
+          last_reset_by = (select auth.uid())
+    returning resets into attempt;
+    return jsonb_build_object('ok', true, 'attempt', attempt);
+  end if;
+
+  if not exists (select 1 from public.tournament_round_sessions x
+                 where x.round_id = r.id and x.session_id = p_session) then
+    return jsonb_build_object('ok', false, 'reason', 'that session does not count in this round');
+  end if;
+  delete from public.responses
+   where user_id = p_user
+     and item_id in (select i.id from public.items i where i.session_id = p_session);
+  delete from public.item_served
+   where user_id = p_user
+     and item_id in (select i.id from public.items i where i.session_id = p_session);
+  -- A fresh start, not a paused one.
+  delete from public.session_pauses where session_id = p_session and user_id = p_user;
+  return jsonb_build_object('ok', true);
+end;
+$fn$;
+
+revoke all on function public.reset_round_player(uuid, uuid, text, uuid) from public, anon;
+grant execute on function public.reset_round_player(uuid, uuid, text, uuid) to authenticated;
+
+create or replace function public.tournament_standings(p_tournament uuid)
+returns jsonb
+language plpgsql
+stable
+security definer
+set search_path = ''
+as $fn$
+declare
+  t record;
+  r record;
+  n int := 0;
+  keys text[];
+  dkeys text[];
+  boards jsonb;
+  weights jsonb;
+  trivia jsonb;
+  contests jsonb;
+  rounds jsonb := '[]'::jsonb;
+  tbl jsonb;
+begin
+  select * into t from public.tournaments where id = p_tournament;
+  if not found then
+    return jsonb_build_object('ok', false, 'reason', 'no such tournament');
+  end if;
+
+  for r in
+    select * from public.tournament_rounds
+    where tournament_id = t.id
+    -- Two rounds can start on the same day now, and "Round 3" has to be the
+    -- same round here, on the round's own page and in the admin list.
+    order by starts_on, ends_on, id
+  loop
+    n := n + 1;
+    continue when r.starts_on > public.puzzle_day();
+
+    -- The boards keyed as the site's leaderboards key them: by progress name,
+    -- with squares split by size -- 4x4 for easy, 5x5 for hard and extreme.
+    select array_agg(case
+             when g.progress = 'squares'
+               then 'squares' || case when t.difficulty = 'easy' then '4' else '5' end
+             else g.progress
+           end)
+      into keys
+    from public.games g
+    where g.feed = any (r.games);
+
+    -- The same mapping again, carrying what each board is worth: the weights
+    -- are keyed by feed name and the boards by progress name, and this is the
+    -- one place that knows both.
+    select coalesce(jsonb_object_agg(
+             case
+               when g.progress = 'squares'
+                 then 'squares' || case when t.difficulty = 'easy' then '4' else '5' end
+               else g.progress
+             end,
+             coalesce((r.game_weights ->> g.feed)::numeric, 1)), '{}'::jsonb)
+      into weights
+    from public.games g
+    where g.feed = any (r.games);
+
+    -- The games with a new board each day, keyed the same way.
+    select array_agg(case
+             when g.progress = 'squares'
+               then 'squares' || case when t.difficulty = 'easy' then '4' else '5' end
+             else g.progress
+           end)
+      into dkeys
+    from public.games g
+    where g.feed = any (r.daily_games);
+
+    select coalesce(jsonb_object_agg(e.key, e.value), '{}'::jsonb)
+      into boards
+    from jsonb_each(public.boards_between(r.starts_on, r.starts_on, 'round', t.difficulty, null, 500)) e
+    where e.key = any (coalesce(keys, '{}'::text[]))
+      and not (e.key = any (coalesce(dkeys, '{}'::text[])));
+
+    -- A game with a new board each day is ranked across every day of the round
+    -- played so far, the way the site's 7-day board ranks a week -- one standing
+    -- per game per round, at the same placing points as a one-board game.
+    if dkeys is not null then
+      boards := boards || coalesce((
+        select jsonb_object_agg(e.key, e.value)
+        from jsonb_each(public.boards_between(r.starts_on, least(r.ends_on, public.puzzle_day()),
+                                              'round', t.difficulty, null, 500)) e
+        where e.key = any (dkeys)), '{}'::jsonb);
+    end if;
+
+    select coalesce(jsonb_agg(jsonb_build_object(
+             'session_id', s.id, 'title', s.title, 'mode', s.mode,
+             'weight', trim_scale(rs.weight),
+             'standings', coalesce((
+               select jsonb_agg(row_to_json(k)::jsonb order by k.place, k.name)
+               from public.session_ranking(s.id) k), '[]'::jsonb))
+           order by s.title), '[]'::jsonb)
+      into trivia
+    from public.tournament_round_sessions rs
+    join public.sessions s on s.id = rs.session_id
+    where rs.round_id = r.id;
+
+    select coalesce(jsonb_agg(jsonb_build_object(
+             'contest_id', c.id, 'name', c.name,
+             'phase', public.contest_phase(c),
+             'weight', trim_scale(rc.weight),
+             'standings', coalesce((
+               select jsonb_agg(row_to_json(k)::jsonb order by k.place, k.name)
+               from public.contest_ranking(c.id) k), '[]'::jsonb))
+           order by c.name), '[]'::jsonb)
+      into contests
+    from public.tournament_round_contests rc
+    join public.contests c on c.id = rc.contest_id
+    where rc.round_id = r.id;
+
+    rounds := rounds || jsonb_build_array(jsonb_build_object(
+      'id', r.id, 'number', n, 'starts_on', r.starts_on, 'ends_on', r.ends_on,
+      'prize', r.prize,
+      'boards', boards, 'weights', weights, 'trivia', trivia,
+      'daily_games', to_jsonb(r.daily_games),
+      'contests', contests));
+  end loop;
+
+  select coalesce(jsonb_agg(jsonb_build_object(
+           'name', s.name, 'points', s.points, 'wins', s.wins, 'placed', s.placed)
+         order by s.points desc, s.wins desc, s.name), '[]'::jsonb)
+    into tbl
+  from (
+    select pl.name,
+           trim_scale(round(sum(pl.pts), 2)) as points,
+           count(*) filter (where pl.place = 1)::int as wins,
+           count(*)::int as placed
+    from (
+      -- Ten down to one for placing, times what the round said that board was
+      -- worth. Unlisted is 1, which is what every board paid before a round
+      -- could say otherwise.
+      select x.row->>'name' as name,
+             greatest(0, 11 - x.ord)::numeric
+               * coalesce((rd->'weights'->>b.key)::numeric, 1) as pts,
+             x.ord::int as place
+      from jsonb_array_elements(rounds) rd,
+           jsonb_each(rd->'boards') b,
+           jsonb_array_elements(b.value) with ordinality as x(row, ord)
+      union all
+      select e->>'name',
+             greatest(0, 11 - (e->>'place')::int) * (tv->>'weight')::numeric,
+             (e->>'place')::int
+      from jsonb_array_elements(rounds) rd,
+           jsonb_array_elements(rd->'trivia') tv,
+           jsonb_array_elements(tv->'standings') e
+      union all
+      -- A contest pays the same way, and pays nothing until its voting has
+      -- closed: contest_ranking is empty before that, so a tournament does not
+      -- shift under the people in it every time somebody votes.
+      select e->>'name',
+             greatest(0, 11 - (e->>'place')::int) * (ct->>'weight')::numeric,
+             (e->>'place')::int
+      from jsonb_array_elements(rounds) rd,
+           jsonb_array_elements(rd->'contests') ct,
+           jsonb_array_elements(ct->'standings') e
+    ) pl
+    group by pl.name
+  ) s;
+
+  return jsonb_build_object(
+    'ok', true,
+    'tournament', jsonb_build_object('id', t.id, 'name', t.name, 'difficulty', t.difficulty,
+                                     'prize', t.prize),
+    'table', tbl,
+    'rounds', rounds);
+end;
+$fn$;
+
+revoke all on function public.tournament_standings(uuid) from public;
+grant execute on function public.tournament_standings(uuid) to anon, authenticated;
+
+create or replace function public.current_rounds()
+returns jsonb
+language sql
+stable
+security definer
+set search_path = ''
+as $fn$
+  with numbered as (
+    select q.id,
+           row_number() over (partition by q.tournament_id
+                              order by q.starts_on, q.ends_on, q.id) as number,
+           count(*) over (partition by q.tournament_id) as total
+    from public.tournament_rounds q
+  )
+  select coalesce(jsonb_agg(jsonb_build_object(
+           'tournament_id', t.id, 'tournament', t.name, 'difficulty', t.difficulty,
+           'tournament_starts_on', t.starts_on, 'tournament_ends_on', t.ends_on,
+           'tournament_prize', t.prize,
+           'round_id', r.id, 'starts_on', r.starts_on, 'ends_on', r.ends_on,
+           'games', to_jsonb(r.games),
+           -- the games dealt a new board each day rather than one for the round
+           'daily_games', to_jsonb(r.daily_games),
+           'game_weights', r.game_weights,
+           'trivia', public.round_trivia(r.id),
+           'contests', public.round_contests(r.id),
+           'prize', r.prize,
+           'number', n.number,
+           'of', n.total,
+           -- How many times this person has been given another go at each of
+           -- the round's games. Their device keeps a round board under a key
+           -- that includes this, so a reset starts them on a key with nothing
+           -- in it -- see "Resetting a player in a round".
+           'attempts', coalesce((
+             select jsonb_object_agg(x.game, x.resets)
+             from public.round_resets x
+             where x.round_id = r.id and x.user_id = (select auth.uid())), '{}'::jsonb))
+         order by r.starts_on, r.ends_on, r.id), '[]'::jsonb)
+  from public.tournament_rounds r
+  join public.tournaments t on t.id = r.tournament_id
+  join numbered n on n.id = r.id
+  where public.puzzle_day() between r.starts_on and r.ends_on
+$fn$;
+
+revoke all on function public.current_rounds() from public;
+grant execute on function public.current_rounds() to anon, authenticated;
+
+create or replace function public.tournaments_sheet()
+returns jsonb
+language sql
+stable
+security definer
+set search_path = ''
+as $fn$
+  select case
+    when not public.can('games.setup')
+      then jsonb_build_object('ok', false, 'reason', 'not allowed')
+    else jsonb_build_object('ok', true, 'tournaments', coalesce((
+      select jsonb_agg(jsonb_build_object(
+               'id', t.id, 'name', t.name, 'difficulty', t.difficulty,
+               'starts_on', t.starts_on, 'ends_on', t.ends_on,
+               'locks_site', t.locks_site, 'sessions_open', t.sessions_open,
+               'prize', t.prize,
+               'rounds', coalesce((
+                 select jsonb_agg(jsonb_build_object(
+                          'id', r.id, 'starts_on', r.starts_on, 'ends_on', r.ends_on,
+                          'games', to_jsonb(r.games),
+                          'daily_games', to_jsonb(r.daily_games),
+                          'game_weights', r.game_weights,
+                          'trivia', public.round_trivia(r.id),
+                          'contests', public.round_contests(r.id),
+                          'prize', r.prize,
+                          'started', r.starts_on <= public.puzzle_day())
+                        order by r.starts_on, r.ends_on, r.id)
+                 from public.tournament_rounds r where r.tournament_id = t.id), '[]'::jsonb))
+             order by t.starts_on desc)
+      from public.tournaments t), '[]'::jsonb))
+  end
+$fn$;
+
+revoke all on function public.tournaments_sheet() from public, anon;
+grant execute on function public.tournaments_sheet() to authenticated;
