@@ -187,6 +187,33 @@ test('an organiser sets one up and enters somebody who has never signed in, by n
   });
 });
 
+// Asked as chances, because "counts half as much after a year" read as 50%
+// and meant 67%: the page fits the curve the server stores to the two figures.
+test('the odds are set as chances: right after going, and a year after', async ({ page }) => {
+  const sent = await server(page, { manage: true });
+  await page.goto('/giveaways');
+  await page.getByRole('button', { name: 'New giveaway' }).click();
+  await expect(page.getByLabel('Right after going')).toHaveValue('50');
+  await expect(page.getByLabel('A year after')).toHaveValue('67');
+  await page.getByLabel('What it is').fill('Bucks vs Bulls');
+  await page.getByLabel('A year after').fill('75');
+  await expect(page.getByText(/50% right after, \d+% a month later, 75% a year later/)).toBeVisible();
+  await page.getByRole('button', { name: 'Create it' }).click();
+  // 1 / (1 + 1 x 0.5^(365/h)) = 0.75  =>  h = 365 ln 2 / ln 3 = 230 days
+  await expect.poll(() => sent.find((s) => s.fn === 'save_giveaway')?.args).toMatchObject({
+    p_strength: 1, p_half_life_days: 230,
+  });
+});
+
+test('and a year after that is not higher than right after is refused before saving', async ({ page }) => {
+  await server(page, { manage: true });
+  await page.goto('/giveaways');
+  await page.getByRole('button', { name: 'New giveaway' }).click();
+  await page.getByLabel('A year after').fill('40');
+  await expect(page.getByRole('status')).toContainText('has to be higher than right after');
+  await expect(page.getByRole('button', { name: 'Create it' })).toBeDisabled();
+});
+
 test('a drawing counts down to its drand round, records it, and lands on who it picks', async ({ page }) => {
   await page.emulateMedia({ reducedMotion: 'reduce' });
   const sent = await server(page, { manage: true });
