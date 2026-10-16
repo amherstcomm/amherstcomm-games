@@ -404,6 +404,46 @@ export function chance(weight: number, total: number): string {
   return pct >= 10 ? `${pct.toFixed(0)}%` : pct >= 1 ? `${pct.toFixed(1)}%` : `${pct.toFixed(2)}%`;
 }
 
+/** The odds settings as an organiser is asked them: somebody's chance right
+ *  after going, and a year after, each as a percentage of the chance of
+ *  somebody who has never been. The server stores the curve's two numbers
+ *  instead -- how hard a visit counts against (strength) and how fast that
+ *  fades (half-life) -- and these two convert between the pair.
+ *
+ *  Asked as chances because the curve's own terms read wrong: "counts half as
+ *  much after a year" halves the penalty, not the chance, and a person a year
+ *  on is at 67%, not 50%. */
+export function oddsSettings(strength: number, halfLifeDays: number): { after: number; year: number } {
+  return {
+    after: Math.round(100 / (1 + strength)),
+    year: Math.round(100 / (1 + strength * 0.5 ** (365 / halfLifeDays))),
+  };
+}
+
+export function curveFor(
+  after: number,
+  year: number
+): { ok: true; strength: number; halfLifeDays: number } | { ok: false; reason: string } {
+  if (!(after >= 10 && after <= 100)) {
+    return { ok: false, reason: 'Right after going is between 10% and 100%.' };
+  }
+  // 100% right after is "attendance does not count": no curve to fit.
+  if (after === 100) return { ok: true, strength: 0, halfLifeDays: 365 };
+  const strength = 100 / after - 1;
+  if (!(year > after)) {
+    return { ok: false, reason: 'A year after has to be higher than right after: the chance comes back over time.' };
+  }
+  if (!(year < 100)) return { ok: false, reason: 'A year after is under 100%: the chance never quite comes all the way back.' };
+  const halfLifeDays = Math.round((365 * Math.LN2) / Math.log(strength / (100 / year - 1)));
+  // The server's range: a week to ten years.
+  if (halfLifeDays > 3650) {
+    const least = Math.ceil(100 / (1 + strength / 2 ** (365 / 3650)));
+    return { ok: false, reason: `That comes back too slowly to keep track of. Try ${least}% or more a year after.` };
+  }
+  if (halfLifeDays < 7) return { ok: false, reason: 'That comes back too quickly. Try a lower figure a year after.' };
+  return { ok: true, strength: Math.round(strength * 10_000) / 10_000, halfLifeDays };
+}
+
 /** How the server weighs somebody: giveaway_weight. For explaining a weight
  *  on the page; the drawing uses the server's number, frozen at commit. */
 export function weightFor(attended: { on: string }[], asOf: string, strength: number, halfLifeDays: number): number {

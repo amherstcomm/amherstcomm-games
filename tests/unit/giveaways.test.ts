@@ -5,7 +5,17 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { checkDraw, hexBytes, pickWinners, sha256Hex, snapshotText, weightFor, type Draw } from '@/giveaways';
+import {
+  checkDraw,
+  curveFor,
+  hexBytes,
+  oddsSettings,
+  pickWinners,
+  sha256Hex,
+  snapshotText,
+  weightFor,
+  type Draw,
+} from '@/giveaways';
 
 const ENTRANTS = [
   { person: '00000000-0000-0000-0000-00000000000c', name: 'Cy', weight: 250000 },
@@ -119,5 +129,32 @@ describe('checking a drawing', () => {
     const check = await checkDraw('g-1', await drawn(), drand({ round: 1000, randomness: '1'.repeat(64), signature: SIGNATURE }));
     expect(check.beacon).toBeNull();
     expect(check.randomness).toBeNull();
+  });
+});
+
+describe('the odds, asked as chances', () => {
+  it('shows the defaults as half right after and two thirds a year after', () => {
+    expect(oddsSettings(1, 365)).toEqual({ after: 50, year: 67 });
+  });
+
+  it('turns the two chances back into the curve the server stores', () => {
+    const got = curveFor(50, 75);
+    expect(got.ok).toBe(true);
+    if (!got.ok) return;
+    expect(got.strength).toBe(1);
+    // and the curve gives back the chances asked for
+    expect(oddsSettings(got.strength, got.halfLifeDays)).toEqual({ after: 50, year: 75 });
+  });
+
+  it('100% right after means attendance does not count', () => {
+    expect(curveFor(100, 0)).toEqual({ ok: true, strength: 0, halfLifeDays: 365 });
+  });
+
+  it('refuses a chance that does not come back, or comes back too slowly to store', () => {
+    expect(curveFor(50, 40).ok).toBe(false);
+    expect(curveFor(50, 100).ok).toBe(false);
+    const slow = curveFor(50, 51);
+    expect(slow.ok).toBe(false);
+    if (!slow.ok) expect(slow.reason).toMatch(/Try \d+% or more/);
   });
 });

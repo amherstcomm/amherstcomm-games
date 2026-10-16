@@ -17,6 +17,8 @@ import {
   cancelGiveaway,
   chance,
   checkDraw,
+  curveFor,
+  oddsSettings,
   commitDraw,
   decideWinner,
   deleteAttendance,
@@ -53,6 +55,8 @@ const PRIMARY =
   'inline-flex items-center justify-center px-4 h-10 rounded-lg text-sm font-semibold ' +
   'bg-accent text-slate-950 hover:brightness-110 disabled:opacity-50';
 const CARD = 'rounded-xl border border-white/15 bg-white/5 p-4';
+// A box for a two- or three-digit percentage: sized to that, not to the row.
+const PERCENT = FIELD.replace('w-full', 'w-24');
 
 /** How this page addresses another one. */
 export type GiveawayLink = (p: { kind: 'giveaways'; giveaway: string | null; view: GiveawayView }) => {
@@ -230,13 +234,16 @@ function localInput(t: string | null): string {
 
 /** The odds settings, said as what they do to a person. */
 function oddsInWords(strength: number, halfLife: number): string {
-  if (strength === 0) return 'Past attendance does not change anybody’s chance.';
+  if (Number(strength) === 0) return 'Past attendance does not change anybody’s chance.';
   const now = today();
   const back = (days: number) => new Date(Date.now() - days * 86_400_000).toLocaleDateString('en-CA');
   const pct = (days: number) => Math.round(weightFor([{ on: back(days) }], now, strength, halfLife) / 10_000);
+  const twice = Math.round(weightFor([{ on: back(30) }, { on: back(365) }], now, strength, halfLife) / 10_000);
   return (
-    `Compared with somebody who has never been, somebody who went a month ago has ${pct(30)}% of the chance, ` +
-    `a year ago ${pct(365)}%, three years ago ${pct(3 * 365)}%. Each attendance counts, so twice is lower still.`
+    `Somebody who has been has this much of the chance of somebody who never has: ` +
+    `${pct(0)}% right after, ${pct(30)}% a month later, ${pct(365)}% a year later, ${pct(2 * 365)}% after two ` +
+    `years, ${pct(3 * 365)}% after three. Each visit counts, so somebody who went last month and last year ` +
+    `has ${twice}%.`
   );
 }
 
@@ -251,13 +258,32 @@ function GiveawayEditor({
   onDone: (id: string | null) => void;
 }) {
   const [form, setForm] = useState<GiveawayForm>(initial ?? BLANK);
+  // The odds are asked as chances and stored as a curve; the fields hold what
+  // was typed, and the curve follows whenever the two make one.
+  const [odds, setOdds] = useState(() => {
+    const o = oddsSettings(Number((initial ?? BLANK).strength), (initial ?? BLANK).halfLifeDays);
+    return { after: String(o.after), year: String(o.year) };
+  });
+  // Left as shown, the odds stay exactly as they were: the figures are
+  // rounded, and fitting a curve back to them would shift it a little on
+  // every save.
+  const shown = oddsSettings(Number((initial ?? BLANK).strength), (initial ?? BLANK).halfLifeDays);
+  const curve =
+    Number(odds.after) === shown.after && Number(odds.year) === shown.year
+      ? { ok: true as const, strength: Number((initial ?? BLANK).strength), halfLifeDays: (initial ?? BLANK).halfLifeDays }
+      : curveFor(Number(odds.after), Number(odds.year));
   const [said, setSaid] = useState('');
   const [busy, setBusy] = useState(false);
   const set = <K extends keyof GiveawayForm>(k: K, v: GiveawayForm[K]) => setForm((f) => ({ ...f, [k]: v }));
 
   async function save() {
+    if (!curve.ok) return setSaid(curve.reason);
     setBusy(true);
-    const got = await saveGiveaway(id ?? null, form);
+    const got = await saveGiveaway(id ?? null, {
+      ...form,
+      strength: curve.strength,
+      halfLifeDays: curve.halfLifeDays,
+    });
     setBusy(false);
     if (!got.ok) return setSaid(got.reason);
     onDone(got.id);
@@ -306,23 +332,38 @@ function GiveawayEditor({
       )}
       <fieldset className="space-y-2">
         <legend className="text-xs font-semibold text-slate-300">The odds</legend>
-        <div className="grid gap-3 sm:grid-cols-2">
+        <p className="text-xs text-slate-400">
+          Each as a share of the chance of somebody who has never been. Set right after going to
+          100% and past visits do not count at all.
+        </p>
+        <div className="grid gap-3 grid-cols-2">
           <label className="block text-xs text-slate-400">
-            How much each past attendance counts against (0 is not at all)
-            <input className={`${FIELD} mt-1`} type="number" min={0} max={10} step={0.25} value={form.strength}
-                   onChange={(e) => set('strength', Number(e.target.value))} />
+            Right after going
+            <span className="mt-1 flex items-center gap-2">
+              <input className={PERCENT} type="number" min={10} max={100} value={odds.after}
+                     onChange={(e) => setOdds((o) => ({ ...o, after: e.target.value }))} />
+              <span aria-hidden="true">%</span>
+            </span>
           </label>
           <label className="block text-xs text-slate-400">
-            Days until a past attendance counts half as much
-            <input className={`${FIELD} mt-1`} type="number" min={7} max={3650} value={form.halfLifeDays}
-                   onChange={(e) => set('halfLifeDays', Number(e.target.value))} />
+            A year after
+            <span className="mt-1 flex items-center gap-2">
+              <input className={PERCENT} type="number" min={11} max={99} value={odds.year}
+                     disabled={Number(odds.after) === 100}
+                     onChange={(e) => setOdds((o) => ({ ...o, year: e.target.value }))} />
+              <span aria-hidden="true">%</span>
+            </span>
           </label>
         </div>
-        <p className="text-xs text-slate-400">{oddsInWords(form.strength, form.halfLifeDays)}</p>
+        {curve.ok ? (
+          <p className="text-xs text-slate-400">{oddsInWords(curve.strength, curve.halfLifeDays)}</p>
+        ) : (
+          <p className="text-xs text-rose-300" role="status">{curve.reason}</p>
+        )}
       </fieldset>
       {said && <p className="text-xs text-rose-300" role="status">{said}</p>}
       <div className="flex flex-wrap gap-2">
-        <button type="button" className={BUTTON} disabled={busy} onClick={() => void save()}>
+        <button type="button" className={BUTTON} disabled={busy || !curve.ok} onClick={() => void save()}>
           {id ? 'Save changes' : 'Create it'}
         </button>
         <button type="button" className={BUTTON} onClick={() => onDone(null)}>
