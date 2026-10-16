@@ -90,6 +90,9 @@ export const SITE = ORIGIN.replace(/^https?:\/\//, '');
 
 // A panel sits on top of whatever you were doing rather than replacing it, so
 // the address bar shows the panel and closing it puts the game back.
+/** Which part of the giveaways a /giveaways address is. */
+export type GiveawayView = 'page' | 'replay' | 'history';
+
 export type Route =
   | { kind: 'home' }
   | { kind: 'game'; view: View; slug: Slug; daily: boolean }
@@ -121,6 +124,10 @@ export type Route =
   // phone and coming back to it, and because a contest is the sort of thing
   // somebody sends round in an email.
   | { kind: 'contest'; contest: string | null }
+  // Giveaways: the list, everybody's history, one giveaway, or one's drawing
+  // replayed -- the last on its own address because it goes on a screen, or
+  // gets recorded, and a link to it is the thing somebody sends round.
+  | { kind: 'giveaways'; giveaway: string | null; view: GiveawayView }
   // A live session. Two addresses for the same room: the one everybody opens,
   // and the presenter's, which shows the answer and the controls. Separate
   // addresses rather than a mode on one page, because the presenter's screen
@@ -169,6 +176,10 @@ export function pathOf(route: Route): string {
       return route.slug ? `/tournament/${route.slug}` : '/tournament';
     case 'contest':
       return route.contest ? `/contest/${route.contest}` : '/contest';
+    case 'giveaways':
+      if (route.view === 'history') return '/giveaways/history';
+      if (!route.giveaway) return '/giveaways';
+      return route.view === 'replay' ? `/giveaways/${route.giveaway}/replay` : `/giveaways/${route.giveaway}`;
     case 'live':
       return route.host ? `/live/${route.session}/host` : `/live/${route.session}`;
     case 'sessions':
@@ -238,6 +249,8 @@ export function titleOf(route: Route): string {
       return route.slug ? `${SLUG_NAME[route.slug]} · Tournament${suffix}` : `Tournament${suffix}`;
     case 'contest':
       return `Contest${suffix}`;
+    case 'giveaways':
+      return `${route.view === 'history' ? 'Giveaway history' : route.view === 'replay' ? 'The drawing' : 'Giveaways'}${suffix}`;
     case 'live':
       // The presenter's title says so, because this address goes on a
       // projector and the tab is the last thing anyone checks before it does.
@@ -313,6 +326,12 @@ export function parsePath(pathname: string): Route | null {
   // /contest and /contest/<id>. A bare /contest is the list, which is what an
   // address somebody half-remembers should land on.
   if (first === 'contest') return { kind: 'contest', contest: second || null };
+
+  // /giveaways, /giveaways/history, /giveaways/<id> and /giveaways/<id>/replay.
+  if (first === 'giveaways') {
+    if (second === 'history') return { kind: 'giveaways', giveaway: null, view: 'history' };
+    return { kind: 'giveaways', giveaway: second || null, view: second && parts[2] === 'replay' ? 'replay' : 'page' };
+  }
 
   if (first === 'live') {
     // A bare /live is somebody guessing at the address for "the thing that is

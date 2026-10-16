@@ -14,7 +14,7 @@ import { PALETTES, PaletteContext, resolveTheme, TEXT_SCALES, THEME_MODES, useTh
 import { PrefsContext } from '@/prefs';
 import OnboardingCard from '@/OnboardingCard';
 import { useModalA11y } from '@/useModalA11y';
-import { Camera, Combine, Flag as FlagIcon, Radio, SlidersHorizontal } from 'lucide-react';
+import { Camera, Combine, Flag as FlagIcon, Gift, Radio, SlidersHorizontal } from 'lucide-react';
 import BridgeGame, { type BridgeGameHandle } from '@/BridgeGame';
 import GameMenu from '@/GameMenu';
 import LadderIcon from '@/LadderIcon';
@@ -36,6 +36,8 @@ import { onDailyReport, requestDaily } from '@/dailyBus';
 import { entryGame, entryRoute } from '@/routing/entry';
 import ContestView from '@/ContestView';
 import { readContestsOn } from '@/contests';
+import GiveawaysView from '@/GiveawaysView';
+import { readGiveaways } from '@/giveaways';
 import {
   gameFeature, FEED_NAME, GAME_NAME } from '@/games';
 import { useAddressBar, useNav } from '@/routing/useRouting';
@@ -273,6 +275,8 @@ function App() {
     nav.page.kind === 'live' ||
     nav.page.kind === 'sessions' ||
     nav.page.kind === 'contest' ||
+    // Not a game, so a tournament locking the site does not lock it out.
+    nav.page.kind === 'giveaways' ||
     nav.page.kind === 'admin' ||
     nav.page.kind === 'join' ||
     nav.page.kind === 'scores'
@@ -283,7 +287,9 @@ function App() {
    *  presenter's half of a live session and the scoreboard; the participant's
    *  half is a phone in a hand and stays narrow. */
   const forTheRoom =
-    (nav.page.kind === 'live' && nav.page.host) || nav.page.kind === 'scores';
+    (nav.page.kind === 'live' && nav.page.host) ||
+    nav.page.kind === 'scores' ||
+    (nav.page.kind === 'giveaways' && nav.page.view === 'replay');
 
   // `some`, not `top` — the consent banner opens Legal over an open Settings,
   // and both modals stay mounted. The address is the top; what renders is
@@ -322,6 +328,10 @@ function App() {
   // reason and on the same terms: it is a deadline, and the link has to be
   // believed on the few days a year it is there.
   const [contestsNow, setContestsNow] = useState(0);
+  // Open giveaways, and whether this person runs them: the footer link shows
+  // for either.
+  const [giveawaysNow, setGiveawaysNow] = useState(0);
+  const [canGive, setCanGive] = useState(false);
   const [learnMode, setLearnMode] = useState(entryGame()?.view === 'learn');
   const [theme, setTheme] = useState<ThemeMode>(initial.theme);
   const [palette, setPalette] = useState<Palette>(initial.palette);
@@ -354,6 +364,8 @@ function App() {
       setCanAdmin(false);
       setLiveNow(0);
       setContestsNow(0);
+      setGiveawaysNow(0);
+      setCanGive(false);
       return;
     }
     let alive = true;
@@ -366,6 +378,11 @@ function App() {
     const count = () => readLiveSessions().then((live) => alive && setLiveNow(live.length));
     void count();
     void readContestsOn().then((on) => alive && setContestsNow(on.length));
+    void readGiveaways().then((got) => {
+      if (!alive || !got.ok) return;
+      setGiveawaysNow(got.giveaways.filter((g) => g.status === 'open' || g.status === 'drawing').length);
+      setCanGive(got.can_manage);
+    });
     window.addEventListener('focus', count);
     return () => {
       alive = false;
@@ -1217,6 +1234,9 @@ function App() {
           {reportPage?.kind === 'contest' && (
             <ContestView contest={reportPage.contest} link={pageLink} />
           )}
+          {reportPage?.kind === 'giveaways' && (
+            <GiveawaysView giveaway={reportPage.giveaway} view={reportPage.view} link={pageLink} />
+          )}
           {reportPage?.kind === 'admin' && <AdminSettings
               tab={reportPage.tab}
               tabLink={(tab) => pageLink({ kind: 'admin', tab })}
@@ -1642,6 +1662,15 @@ function App() {
               >
                 <Camera className="w-3.5 h-3.5" aria-hidden="true" />
                 {contestsNow === 1 ? 'The contest' : `Contests (${contestsNow})`}
+              </RouteLink>
+            )}
+            {(giveawaysNow > 0 || canGive) && (
+              <RouteLink
+                {...pageLink({ kind: 'giveaways', giveaway: null, view: 'page' })}
+                className="inline-flex items-center gap-1.5 text-accent hover:brightness-110 transition"
+              >
+                <Gift className="w-3.5 h-3.5" aria-hidden="true" />
+                {giveawaysNow > 0 ? `Giveaways (${giveawaysNow})` : 'Giveaways'}
               </RouteLink>
             )}
             {canSetUp && sessionsOn && (

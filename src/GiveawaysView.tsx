@@ -1,0 +1,1076 @@
+// Giveaways: tickets and the like, drawn for staff.
+//
+// Four addresses. The list; one giveaway, with everything about it in the
+// open -- who is in it, at what odds and why, every drawing and the record of
+// every step; everybody's history over time; and a drawing replayed, which is
+// GiveawayReplay and lives on a screen of its own.
+//
+// Asked for fully transparent, so nothing here is hidden from staff: the
+// controls for running a giveaway are what giveaways.manage adds, and the
+// server refuses anybody without it whatever this page draws.
+import { useCallback, useEffect, useRef, useState } from 'react';
+import Waiting from '@/Waiting';
+import RouteLink from '@/RouteLink';
+import GiveawayReplay from '@/GiveawayReplay';
+import {
+  addEntrant,
+  cancelGiveaway,
+  chance,
+  checkDraw,
+  commitDraw,
+  decideWinner,
+  deleteAttendance,
+  enterGiveaway,
+  findGiveawayPeople,
+  readGiveaway,
+  readGiveawayHistory,
+  readGiveaways,
+  recordAttendance,
+  removeEntrant,
+  saveGiveaway,
+  updatePerson,
+  weightFor,
+  type Check,
+  type Draw,
+  type Found,
+  type GiveawayDetail,
+  type GiveawayForm,
+  type GiveawayStatus,
+  type GiveawaySummary,
+  type HistoryPerson,
+  type LogEntry,
+  type WinnerStatus,
+} from '@/giveaways';
+import type { GiveawayView } from '@/routes';
+
+const FIELD =
+  'w-full rounded-lg bg-white/5 border border-white/15 px-3 py-2 text-sm text-slate-200 ' +
+  'placeholder:text-slate-500 focus:outline-none focus:border-accent';
+const BUTTON =
+  'inline-flex items-center justify-center px-3 h-9 rounded-lg text-sm font-semibold ' +
+  'bg-white/10 border border-white/15 text-slate-200 hover:bg-white/15 disabled:opacity-50';
+const PRIMARY =
+  'inline-flex items-center justify-center px-4 h-10 rounded-lg text-sm font-semibold ' +
+  'bg-accent text-slate-950 hover:brightness-110 disabled:opacity-50';
+const CARD = 'rounded-xl border border-white/15 bg-white/5 p-4';
+
+/** How this page addresses another one. */
+export type GiveawayLink = (p: { kind: 'giveaways'; giveaway: string | null; view: GiveawayView }) => {
+  to: string;
+  onGo: () => void;
+};
+
+const STATUS_WORD: Record<GiveawayStatus, string> = {
+  open: 'Taking entries',
+  drawing: 'Drawing now',
+  drawn: 'Drawn',
+  cancelled: 'Called off',
+};
+
+const WINNER_WORD: Record<WinnerStatus, string> = {
+  pending: 'Drawn, not yet confirmed',
+  accepted: 'Going',
+  declined: 'Declined',
+};
+
+const day = (d: string) =>
+  new Date(`${d}T12:00:00`).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
+const when = (t: string) =>
+  new Date(t).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+const today = () => new Date().toLocaleDateString('en-CA');
+
+export default function GiveawaysView({
+  giveaway,
+  view,
+  link,
+}: {
+  giveaway: string | null;
+  view: GiveawayView;
+  link: GiveawayLink;
+}) {
+  if (view === 'history') return <History link={link} />;
+  if (giveaway && view === 'replay') return <GiveawayReplay id={giveaway} link={link} />;
+  if (giveaway) return <OneGiveaway id={giveaway} link={link} />;
+  return <GiveawayList link={link} />;
+}
+
+// ---------------------------------------------------------------------------
+// The list
+// ---------------------------------------------------------------------------
+
+function GiveawayList({ link }: { link: GiveawayLink }) {
+  const [rows, setRows] = useState<GiveawaySummary[] | null>(null);
+  const [canManage, setCanManage] = useState(false);
+  const [refused, setRefused] = useState('');
+  const [making, setMaking] = useState(false);
+
+  const load = useCallback(async () => {
+    const got = await readGiveaways();
+    if (!got.ok) return setRefused(got.reason === 'not allowed' ? 'Sign in to see the giveaways.' : got.reason);
+    setRefused('');
+    setRows(got.giveaways);
+    setCanManage(got.can_manage);
+  }, []);
+  useEffect(() => void load(), [load]);
+
+  if (refused) return <p className="max-w-2xl mx-auto px-4 py-10 text-sm text-slate-400">{refused}</p>;
+  if (!rows) return <Waiting what="the giveaways" onRetry={() => void load()} />;
+
+  const open = rows.filter((r) => r.status === 'open' || r.status === 'drawing');
+  const past = rows.filter((r) => r.status === 'drawn' || r.status === 'cancelled');
+
+  return (
+    <div className="max-w-2xl mx-auto px-4 py-8">
+      <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-2">
+        <h1 className="text-xl font-semibold text-slate-200">Giveaways</h1>
+        <RouteLink
+          {...link({ kind: 'giveaways', giveaway: null, view: 'history' })}
+          className="text-sm text-accent hover:brightness-110"
+        >
+          Who has been to what
+        </RouteLink>
+      </div>
+      <p className="text-sm text-slate-400 mt-2">
+        Tickets and other things we get to give away, drawn at random. Everybody starts with the
+        same chance; going to one lowers your chance at the next, by less the longer ago it was.
+        Every drawing can be checked and replayed by anyone.
+      </p>
+
+      {canManage &&
+        (making ? (
+          <GiveawayEditor
+            onDone={(id) => {
+              setMaking(false);
+              if (id) link({ kind: 'giveaways', giveaway: id, view: 'page' }).onGo();
+            }}
+          />
+        ) : (
+          <button type="button" className={`${BUTTON} mt-4`} onClick={() => setMaking(true)}>
+            New giveaway
+          </button>
+        ))}
+
+      <h2 className="text-sm font-semibold text-slate-200 mt-6">Open now</h2>
+      {open.length === 0 ? (
+        <p className="text-sm text-slate-400 mt-2">Nothing is open just now.</p>
+      ) : (
+        <ul className="mt-2 space-y-2">
+          {open.map((g) => (
+            <SummaryRow key={g.id} g={g} link={link} />
+          ))}
+        </ul>
+      )}
+
+      {past.length > 0 && (
+        <>
+          <h2 className="text-sm font-semibold text-slate-200 mt-8">Earlier</h2>
+          <ul className="mt-2 space-y-2">
+            {past.map((g) => (
+              <SummaryRow key={g.id} g={g} link={link} />
+            ))}
+          </ul>
+        </>
+      )}
+    </div>
+  );
+}
+
+function SummaryRow({ g, link }: { g: GiveawaySummary; link: GiveawayLink }) {
+  return (
+    <li>
+      <RouteLink
+        {...link({ kind: 'giveaways', giveaway: g.id, view: 'page' })}
+        className="block rounded-xl border border-white/15 bg-white/5 px-4 py-3 hover:bg-white/10"
+      >
+        <span className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+          <span className="font-semibold text-slate-200 min-w-0 break-words">{g.title}</span>
+          <span className="text-xs text-slate-400">{STATUS_WORD[g.status]}</span>
+        </span>
+        <span className="block text-xs text-slate-400 mt-1 break-words">
+          {[
+            g.prize,
+            g.event_on && day(g.event_on),
+            `${g.entrants} ${g.entrants === 1 ? 'entrant' : 'entrants'}`,
+            g.entered && 'you are in',
+          ]
+            .filter(Boolean)
+            .join(' · ')}
+        </span>
+        {g.drawn.length > 0 && (
+          <span className="block text-xs text-accent mt-1 break-words">Drawn: {g.drawn.join(', ')}</span>
+        )}
+      </RouteLink>
+    </li>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Setting one up
+// ---------------------------------------------------------------------------
+
+const BLANK: GiveawayForm = {
+  title: '',
+  prize: '',
+  details: '',
+  winners: 1,
+  eventOn: '',
+  selfEntry: true,
+  entriesCloseAt: '',
+  strength: 1,
+  halfLifeDays: 365,
+};
+
+/** A datetime-local field's value for a stored time, in this browser's zone. */
+function localInput(t: string | null): string {
+  if (!t) return '';
+  const d = new Date(t);
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+/** The odds settings, said as what they do to a person. */
+function oddsInWords(strength: number, halfLife: number): string {
+  if (strength === 0) return 'Past attendance does not change anybody’s chance.';
+  const now = today();
+  const back = (days: number) => new Date(Date.now() - days * 86_400_000).toLocaleDateString('en-CA');
+  const pct = (days: number) => Math.round(weightFor([{ on: back(days) }], now, strength, halfLife) / 10_000);
+  return (
+    `Compared with somebody who has never been, somebody who went a month ago has ${pct(30)}% of the chance, ` +
+    `a year ago ${pct(365)}%, three years ago ${pct(3 * 365)}%. Each attendance counts, so twice is lower still.`
+  );
+}
+
+function GiveawayEditor({
+  id,
+  initial,
+  onDone,
+}: {
+  id?: string;
+  initial?: GiveawayForm;
+  /** the saved giveaway's id, or null when cancelled */
+  onDone: (id: string | null) => void;
+}) {
+  const [form, setForm] = useState<GiveawayForm>(initial ?? BLANK);
+  const [said, setSaid] = useState('');
+  const [busy, setBusy] = useState(false);
+  const set = <K extends keyof GiveawayForm>(k: K, v: GiveawayForm[K]) => setForm((f) => ({ ...f, [k]: v }));
+
+  async function save() {
+    setBusy(true);
+    const got = await saveGiveaway(id ?? null, form);
+    setBusy(false);
+    if (!got.ok) return setSaid(got.reason);
+    onDone(got.id);
+  }
+
+  return (
+    <section className={`${CARD} mt-4 space-y-3`} aria-label={id ? 'Change the giveaway' : 'New giveaway'}>
+      <label className="block text-xs text-slate-400">
+        What it is
+        <input className={`${FIELD} mt-1`} value={form.title} placeholder="e.g. Brewers vs Cubs"
+               onChange={(e) => set('title', e.target.value)} />
+      </label>
+      <label className="block text-xs text-slate-400">
+        The prize, for each person drawn
+        <input className={`${FIELD} mt-1`} value={form.prize} placeholder="e.g. 2 tickets, section 112"
+               onChange={(e) => set('prize', e.target.value)} />
+      </label>
+      <label className="block text-xs text-slate-400">
+        Anything else people should know
+        <textarea className={`${FIELD} mt-1`} rows={2} value={form.details}
+                  onChange={(e) => set('details', e.target.value)} />
+      </label>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <label className="block text-xs text-slate-400">
+          How many people to draw
+          <input className={`${FIELD} mt-1`} type="number" min={1} max={100} value={form.winners}
+                 onChange={(e) => set('winners', Number(e.target.value))} />
+        </label>
+        <label className="block text-xs text-slate-400">
+          The day of the event
+          <input className={`${FIELD} mt-1`} type="date" value={form.eventOn}
+                 onChange={(e) => set('eventOn', e.target.value)} />
+        </label>
+      </div>
+      <label className="flex items-start gap-2 text-sm text-slate-300">
+        <input type="checkbox" className="mt-1" checked={form.selfEntry}
+               onChange={(e) => set('selfEntry', e.target.checked)} />
+        <span>Staff can put themselves in</span>
+      </label>
+      {form.selfEntry && (
+        <label className="block text-xs text-slate-400">
+          Until (leave empty to take entries until the drawing)
+          <input className={`${FIELD} mt-1`} type="datetime-local" value={form.entriesCloseAt}
+                 onChange={(e) => set('entriesCloseAt', e.target.value)} />
+        </label>
+      )}
+      <fieldset className="space-y-2">
+        <legend className="text-xs font-semibold text-slate-300">The odds</legend>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <label className="block text-xs text-slate-400">
+            How much each past attendance counts against (0 is not at all)
+            <input className={`${FIELD} mt-1`} type="number" min={0} max={10} step={0.25} value={form.strength}
+                   onChange={(e) => set('strength', Number(e.target.value))} />
+          </label>
+          <label className="block text-xs text-slate-400">
+            Days until a past attendance counts half as much
+            <input className={`${FIELD} mt-1`} type="number" min={7} max={3650} value={form.halfLifeDays}
+                   onChange={(e) => set('halfLifeDays', Number(e.target.value))} />
+          </label>
+        </div>
+        <p className="text-xs text-slate-400">{oddsInWords(form.strength, form.halfLifeDays)}</p>
+      </fieldset>
+      {said && <p className="text-xs text-rose-300" role="status">{said}</p>}
+      <div className="flex flex-wrap gap-2">
+        <button type="button" className={BUTTON} disabled={busy} onClick={() => void save()}>
+          {id ? 'Save changes' : 'Create it'}
+        </button>
+        <button type="button" className={BUTTON} onClick={() => onDone(null)}>
+          Cancel
+        </button>
+      </div>
+    </section>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// One giveaway
+// ---------------------------------------------------------------------------
+
+function OneGiveaway({ id, link }: { id: string; link: GiveawayLink }) {
+  const [got, setGot] = useState<GiveawayDetail | null>(null);
+  const [problem, setProblem] = useState('');
+  const [said, setSaid] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [editing, setEditing] = useState(false);
+
+  const load = useCallback(async () => {
+    const res = await readGiveaway(id);
+    if (!res.ok) return setProblem(res.reason === 'not allowed' ? 'Sign in to see the giveaways.' : res.reason);
+    setProblem('');
+    setGot(res);
+  }, [id]);
+  useEffect(() => void load(), [load]);
+
+  // A drawing waiting on its round comes out by itself; keep the page current.
+  useEffect(() => {
+    if (got?.giveaway.status !== 'drawing') return;
+    const t = window.setInterval(() => void load(), 5000);
+    return () => window.clearInterval(t);
+  }, [got?.giveaway.status, load]);
+
+  async function act(run: () => Promise<{ ok: boolean; reason?: string }>) {
+    setBusy(true);
+    const res = await run();
+    setBusy(false);
+    setSaid(res.ok ? '' : (res.reason ?? 'That did not work'));
+    await load();
+    return res.ok;
+  }
+
+  if (problem) return <p className="max-w-2xl mx-auto px-4 py-10 text-sm text-slate-400">{problem}</p>;
+  if (!got) return <Waiting what="the giveaway" onRetry={() => void load()} />;
+
+  const g = got.giveaway;
+  const manage = got.can_manage;
+  const mine = got.entrants.some((e) => e.person === got.me);
+  const closed = g.entries_close_at !== null && Date.now() >= Date.parse(g.entries_close_at);
+  const total = got.entrants.reduce((s, e) => s + e.weight, 0);
+  const missing = g.winners - got.winners.filter((w) => w.status !== 'declined').length;
+  const undrawn = got.entrants.filter((e) => !got.winners.some((w) => w.person === e.person)).length;
+  const pending = got.draws.find((d) => !d.randomness);
+
+  async function draw() {
+    const n = got!.draws.length === 0 ? got!.entrants.length : undrawn;
+    const ok = window.confirm(
+      `This freezes the ${n} ${n === 1 ? 'person' : 'people'} in the drawing and their odds, and names a ` +
+        'public drand round about 30 seconds from now. That round decides who wins; it cannot be undone or redone.'
+    );
+    if (!ok) return;
+    setBusy(true);
+    const res = await commitDraw(id);
+    setBusy(false);
+    if (!res.ok) return setSaid(res.reason);
+    link({ kind: 'giveaways', giveaway: id, view: 'replay' }).onGo();
+  }
+
+  return (
+    <div className="max-w-3xl mx-auto px-4 py-8">
+      <RouteLink {...link({ kind: 'giveaways', giveaway: null, view: 'page' })} className="text-sm text-accent">
+        ← All giveaways
+      </RouteLink>
+      <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 mt-3">
+        <h1 className="text-xl font-semibold text-slate-200 min-w-0 break-words">{g.title}</h1>
+        <span className="text-sm text-slate-400">{STATUS_WORD[g.status]}</span>
+      </div>
+      <p className="text-sm text-slate-300 mt-1 break-words">
+        {[g.prize, g.winners > 1 && `${g.winners} people drawn`, g.event_on && day(g.event_on)]
+          .filter(Boolean)
+          .join(' · ')}
+      </p>
+      {g.details && <p className="text-sm text-slate-400 mt-2 whitespace-pre-line break-words">{g.details}</p>}
+      {g.status === 'cancelled' && (
+        <p className="text-sm text-rose-300 mt-2">Called off: {g.cancelled_reason}</p>
+      )}
+      <p className="text-xs text-slate-500 mt-2">{oddsInWords(g.strength, g.half_life_days)}</p>
+
+      {said && <p className="text-sm text-rose-300 mt-3" role="status">{said}</p>}
+
+      {g.status === 'open' && g.self_entry && (
+        <div className="mt-4">
+          {closed && !mine ? (
+            <p className="text-sm text-slate-400">Entries closed {when(g.entries_close_at!)}.</p>
+          ) : (
+            <button
+              type="button"
+              className={mine ? BUTTON : PRIMARY}
+              disabled={busy || (closed && mine)}
+              onClick={() => void act(() => enterGiveaway(id, !mine))}
+            >
+              {mine ? 'Take me out' : 'Put me in'}
+            </button>
+          )}
+          {!closed && g.entries_close_at && (
+            <p className="text-xs text-slate-400 mt-1">Entries close {when(g.entries_close_at)}.</p>
+          )}
+        </div>
+      )}
+
+      {manage && g.status === 'open' && (
+        <section className={`${CARD} mt-6`} aria-label="Running it">
+          <h2 className="text-sm font-semibold text-slate-200">Running it</h2>
+          {editing ? (
+            <GiveawayEditor
+              id={id}
+              initial={{
+                title: g.title,
+                prize: g.prize,
+                details: g.details,
+                winners: g.winners,
+                eventOn: g.event_on ?? '',
+                selfEntry: g.self_entry,
+                entriesCloseAt: localInput(g.entries_close_at),
+                strength: Number(g.strength),
+                halfLifeDays: g.half_life_days,
+              }}
+              onDone={() => {
+                setEditing(false);
+                void load();
+              }}
+            />
+          ) : (
+            <div className="flex flex-wrap gap-2 mt-2">
+              <button type="button" className={PRIMARY} disabled={busy || got.entrants.length === 0}
+                      onClick={() => void draw()}>
+                Draw {g.winners === 1 ? 'the winner' : `${g.winners} winners`}
+              </button>
+              <button type="button" className={BUTTON} onClick={() => setEditing(true)}>
+                Change it
+              </button>
+              <CancelButton id={id} busy={busy} act={act} />
+            </div>
+          )}
+          <AddEntrant id={id} onAdded={() => void load()} />
+        </section>
+      )}
+
+      {pending && (
+        <section className={`${CARD} mt-6`} aria-label="Drawing now">
+          <h2 className="text-sm font-semibold text-slate-200">Drawing now</h2>
+          <p className="text-sm text-slate-300 mt-1">
+            Decided by drand round {pending.round.toLocaleString()} at {when(pending.round_at)}.
+          </p>
+          <RouteLink {...link({ kind: 'giveaways', giveaway: id, view: 'replay' })} className={`${PRIMARY} mt-3`}>
+            Watch it
+          </RouteLink>
+        </section>
+      )}
+
+      {got.winners.length > 0 && (
+        <section className="mt-6" aria-label="Who was drawn">
+          <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+            <h2 className="text-sm font-semibold text-slate-200">Who was drawn</h2>
+            <RouteLink {...link({ kind: 'giveaways', giveaway: id, view: 'replay' })} className="text-sm text-accent">
+              Replay the drawing
+            </RouteLink>
+          </div>
+          <ul className="mt-2 space-y-2">
+            {got.winners.map((w) => (
+              <li key={w.person} className={`${CARD} flex flex-wrap items-center justify-between gap-3`}>
+                <span className="min-w-0">
+                  <span className="block font-semibold text-slate-200 break-words">{w.name}</span>
+                  <span className="block text-xs text-slate-400">
+                    {WINNER_WORD[w.status]}
+                    {got.draws.length > 1 && ` · drawing ${w.draw}`}
+                  </span>
+                </span>
+                {manage && g.status !== 'cancelled' && (
+                  <span className="flex flex-wrap gap-2">
+                    {w.status !== 'accepted' && (
+                      <button type="button" className={BUTTON} disabled={busy}
+                              onClick={() => void act(() => decideWinner(id, w.person, 'accepted'))}>
+                        Going
+                      </button>
+                    )}
+                    {w.status !== 'declined' && (
+                      <button type="button" className={BUTTON} disabled={busy}
+                              onClick={() => void act(() => decideWinner(id, w.person, 'declined'))}>
+                        Declined
+                      </button>
+                    )}
+                  </span>
+                )}
+              </li>
+            ))}
+          </ul>
+          {manage && g.status === 'drawn' && missing > 0 && undrawn > 0 && (
+            <button type="button" className={`${PRIMARY} mt-3`} disabled={busy} onClick={() => void draw()}>
+              Draw {missing === 1 ? 'a replacement' : `${missing} replacements`}
+            </button>
+          )}
+          {manage && g.status === 'drawn' && missing > 0 && undrawn === 0 && (
+            <p className="text-sm text-slate-400 mt-3">Everybody who entered has been drawn.</p>
+          )}
+        </section>
+      )}
+
+      <Entrants got={got} total={total} busy={busy} act={act} />
+
+      {got.draws.map((d) => (
+        <DrawRecord key={d.id} giveaway={id} draw={d} />
+      ))}
+
+      <Log entries={got.log} />
+    </div>
+  );
+}
+
+function CancelButton({
+  id,
+  busy,
+  act,
+}: {
+  id: string;
+  busy: boolean;
+  act: (run: () => Promise<{ ok: boolean; reason?: string }>) => Promise<boolean>;
+}) {
+  return (
+    <button
+      type="button"
+      className={BUTTON}
+      disabled={busy}
+      onClick={() => {
+        const why = window.prompt('Why is it being called off? This goes on the record.');
+        if (why?.trim()) void act(() => cancelGiveaway(id, why.trim()));
+      }}
+    >
+      Call it off
+    </button>
+  );
+}
+
+function Entrants({
+  got,
+  total,
+  busy,
+  act,
+}: {
+  got: GiveawayDetail;
+  total: number;
+  busy: boolean;
+  act: (run: () => Promise<{ ok: boolean; reason?: string }>) => Promise<boolean>;
+}) {
+  const g = got.giveaway;
+  return (
+    <section className="mt-8" aria-label="Who is in it">
+      <h2 className="text-sm font-semibold text-slate-200">
+        Who is in it ({got.entrants.length})
+      </h2>
+      <p className="text-xs text-slate-400 mt-1">
+        {g.status === 'open'
+          ? 'Chances as they stand today. They are fixed when the drawing is made.'
+          : 'Chances as they would be today. Each drawing below keeps the ones it was made with.'}
+      </p>
+      {got.entrants.length === 0 ? (
+        <p className="text-sm text-slate-400 mt-2">Nobody yet.</p>
+      ) : (
+        <ul className="mt-2 space-y-2">
+          {got.entrants.map((e) => (
+            <li key={e.person} className="rounded-xl border border-white/15 bg-white/5 px-4 py-3 flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-semibold text-slate-200 break-words">
+                  {e.name}
+                  {!e.linked && <span className="text-xs font-normal text-slate-500"> · no account</span>}
+                </p>
+                <p className="text-xs text-slate-400 break-words">
+                  {e.attended.length === 0
+                    ? 'Has not been to one yet'
+                    : `Went to ${e.attended.map((a) => `${a.what} (${day(a.on)})`).join(', ')}`}
+                </p>
+                <p className="text-xs text-slate-500">
+                  {e.self ? 'Entered themselves' : `Entered by ${e.entered_by ?? 'an organiser'}`} · {when(e.entered_at)}
+                </p>
+              </div>
+              <div className="text-right">
+                <p className="text-sm font-semibold text-slate-200 tabular-nums">{chance(e.weight, total)}</p>
+                <p className="text-xs text-slate-500 tabular-nums"
+                   title={`weight ${e.weight.toLocaleString()} of ${total.toLocaleString()}`}>
+                  weight {e.weight.toLocaleString()}
+                </p>
+                {got.can_manage && g.status === 'open' && (
+                  <button
+                    type="button"
+                    className="text-xs text-rose-300 hover:underline mt-1"
+                    disabled={busy}
+                    aria-label={`Take ${e.name} out`}
+                    onClick={() => {
+                      if (window.confirm(`Take ${e.name} out of the drawing?`)) {
+                        void act(() => removeEntrant(g.id, e.person));
+                      }
+                    }}
+                  >
+                    Take out
+                  </button>
+                )}
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}
+
+/** Searching for somebody to enter: a drawing's own record, an account, or a
+ *  name typed for staff who have never signed in. */
+function PeoplePicker({
+  label,
+  onPick,
+  busy,
+  action,
+}: {
+  label: string;
+  onPick: (who: { person?: string | null; user?: string | null; name?: string }) => void;
+  busy: boolean;
+  action: string;
+}) {
+  const [query, setQuery] = useState('');
+  const [found, setFound] = useState<Found[]>([]);
+  const timer = useRef(0);
+  useEffect(() => {
+    window.clearTimeout(timer.current);
+    if (query.trim().length < 2) {
+      setFound([]);
+      return;
+    }
+    timer.current = window.setTimeout(() => void findGiveawayPeople(query).then(setFound), 250);
+    return () => window.clearTimeout(timer.current);
+  }, [query]);
+
+  const typed = query.trim();
+  const exact = found.some((f) => f.name.toLowerCase() === typed.toLowerCase());
+  return (
+    <div>
+      <input className={FIELD} value={query} aria-label={label} placeholder="Name or address"
+             onChange={(e) => setQuery(e.target.value)} />
+      {typed.length >= 2 && (
+        <ul className="mt-2 space-y-1" aria-label={`${label}: matches`}>
+          {found.map((f) => (
+            <li key={f.person ?? f.user ?? f.name} className="flex flex-wrap items-center justify-between gap-2">
+              <span className="text-sm text-slate-300 min-w-0 break-words">
+                {f.name}
+                {f.email && <span className="text-xs text-slate-500"> · {f.email}</span>}
+                {!f.user && <span className="text-xs text-slate-500"> · no account</span>}
+              </span>
+              <button type="button" className={BUTTON} disabled={busy}
+                      onClick={() => {
+                        onPick({ person: f.person, user: f.person ? null : f.user });
+                        setQuery('');
+                      }}>
+                {action}
+              </button>
+            </li>
+          ))}
+          {!exact && (
+            <li className="flex flex-wrap items-center justify-between gap-2">
+              <span className="text-sm text-slate-400 min-w-0 break-words">
+                “{typed}” — somebody without an account
+              </span>
+              <button type="button" className={BUTTON} disabled={busy}
+                      onClick={() => {
+                        onPick({ name: typed });
+                        setQuery('');
+                      }}>
+                {action} by name
+              </button>
+            </li>
+          )}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+function AddEntrant({ id, onAdded }: { id: string; onAdded: () => void }) {
+  const [said, setSaid] = useState('');
+  const [busy, setBusy] = useState(false);
+  return (
+    <div className="mt-4">
+      <h3 className="text-xs font-semibold text-slate-300 mb-1">Enter somebody</h3>
+      <PeoplePicker
+        label="Enter somebody"
+        action="Enter"
+        busy={busy}
+        onPick={async (who) => {
+          setBusy(true);
+          const got = await addEntrant(id, who);
+          setBusy(false);
+          setSaid(got.ok ? '' : got.reason);
+          if (got.ok) onAdded();
+        }}
+      />
+      {said && <p className="text-xs text-rose-300 mt-1" role="status">{said}</p>}
+    </div>
+  );
+}
+
+/** One drawing, as committed and as revealed, and whether it checks out. */
+function DrawRecord({ giveaway, draw }: { giveaway: string; draw: Draw }) {
+  const [check, setCheck] = useState<Check | null>(null);
+  const [checking, setChecking] = useState(false);
+  async function run() {
+    setChecking(true);
+    setCheck(await checkDraw(giveaway, draw));
+    setChecking(false);
+  }
+  const verdict =
+    check &&
+    (!check.fingerprint
+      ? { ok: false, text: 'The fingerprint does not match the entrants on record.' }
+      : !check.beacon
+        ? { ok: null, text: 'Could not get this round from drand to check it.' }
+        : check.randomness === false
+          ? { ok: false, text: 'The randomness on record is not what drand published for this round.' }
+          : check.winners === false
+            ? { ok: false, text: 'The winners on record are not the ones drand’s randomness picks.' }
+            : check.winners
+              ? { ok: true, text: 'Checks out: same entrants, drand’s own randomness, the same winners.' }
+              : { ok: true, text: `Fingerprint matches; drand’s round picks ${check.picks?.map((p) => p.name).join(', ')}.` });
+
+  return (
+    <section className={`${CARD} mt-6`} aria-label={`Drawing ${draw.seq}`}>
+      <h2 className="text-sm font-semibold text-slate-200">
+        Drawing {draw.seq}: {draw.reason}
+      </h2>
+      <dl className="mt-2 grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-1 text-xs">
+        <dt className="text-slate-400">Committed</dt>
+        <dd className="text-slate-300">{when(draw.committed_at)} by {draw.committed_by ?? 'an organiser'}</dd>
+        <dt className="text-slate-400">Between</dt>
+        <dd className="text-slate-300">
+          {draw.entrants.length} {draw.entrants.length === 1 ? 'person' : 'people'}, drawing {draw.wanted}
+        </dd>
+        <dt className="text-slate-400">Fingerprint</dt>
+        <dd className="text-slate-300 font-mono break-all">{draw.snapshot_hash}</dd>
+        <dt className="text-slate-400">drand round</dt>
+        <dd className="text-slate-300">
+          <a className="text-accent hover:underline break-all"
+             href={`https://api.drand.sh/${draw.chain}/public/${draw.round}`} target="_blank" rel="noreferrer">
+            {draw.round.toLocaleString()}
+          </a>{' '}
+          at {when(draw.round_at)}
+        </dd>
+        <dt className="text-slate-400">Randomness</dt>
+        <dd className="text-slate-300 font-mono break-all">{draw.randomness ?? 'not out yet'}</dd>
+        {draw.winners && (
+          <>
+            <dt className="text-slate-400">Drew</dt>
+            <dd className="text-slate-300 break-words">
+              {draw.winners.map((w) => w.name).join(', ')}
+              {draw.revealed_at && ` · ${when(draw.revealed_at)}`}
+            </dd>
+          </>
+        )}
+      </dl>
+      <div className="mt-3 flex flex-wrap items-center gap-3">
+        <button type="button" className={BUTTON} disabled={checking} onClick={() => void run()}>
+          {checking ? 'Checking…' : 'Check it against drand'}
+        </button>
+        {verdict && (
+          <p role="status"
+             className={`text-xs ${verdict.ok === false ? 'text-rose-300' : verdict.ok ? 'text-emerald-300' : 'text-slate-400'}`}>
+            {verdict.text}
+          </p>
+        )}
+      </div>
+    </section>
+  );
+}
+
+const ACTION_WORD: Record<string, string> = {
+  created: 'set it up',
+  changed: 'changed it',
+  cancelled: 'called it off',
+  entered: 'entered',
+  withdrew: 'withdrew',
+  removed: 'took out',
+  committed: 'committed a drawing',
+  revealed: 'revealed the drawing',
+  accepted: 'marked going',
+  declined: 'marked declined',
+  pending: 'marked unconfirmed',
+  granted: 'gave the running of giveaways to',
+  revoked: 'took the running of giveaways from',
+  'attendance recorded': 'recorded an attendance for',
+  'attendance deleted': 'deleted an attendance for',
+  renamed: 'renamed',
+  'joined to account': 'joined an account to',
+};
+
+function describe(e: LogEntry): string {
+  const d = e.detail as Record<string, string | number | boolean | string[] | null>;
+  const who = e.actor ?? 'Somebody';
+  switch (e.action) {
+    case 'entered':
+      return d.self ? `${d.name} entered` : `${who} entered ${d.name}`;
+    case 'withdrew':
+      return `${d.name} withdrew`;
+    case 'removed':
+    case 'accepted':
+    case 'declined':
+    case 'pending':
+      return `${who} ${ACTION_WORD[e.action]} ${d.name}`;
+    case 'committed':
+      return `${who} committed drawing ${d.draw}: ${d.entrants} people, ${d.wanted} to draw, drand round ${Number(d.round).toLocaleString()}`;
+    case 'revealed':
+      return `Drawing ${d.draw} revealed: ${(d.winners as string[] | null)?.join(', ') ?? 'nobody'}`;
+    case 'cancelled':
+      return `${who} called it off: ${d.reason}`;
+    case 'granted':
+    case 'revoked':
+    case 'attendance recorded':
+    case 'attendance deleted':
+      return `${who} ${ACTION_WORD[e.action]} ${d.name}${d.what ? `: ${d.what}, ${d.on}` : ''}`;
+    case 'renamed':
+      return `${who} renamed ${d.from} to ${d.to}`;
+    case 'joined to account':
+      return `${who} joined ${d.name} to ${d.account}'s account`;
+    default:
+      return `${who} ${ACTION_WORD[e.action] ?? e.action}`;
+  }
+}
+
+function Log({ entries }: { entries: LogEntry[] }) {
+  if (entries.length === 0) return null;
+  return (
+    <section className="mt-8" aria-label="The record">
+      <h2 className="text-sm font-semibold text-slate-200">The record</h2>
+      <p className="text-xs text-slate-400 mt-1">Everything that has happened to it. Nothing here can be changed.</p>
+      <ol className="mt-2 space-y-1">
+        {entries.map((e, i) => (
+          <li key={i} className="text-xs text-slate-300 flex flex-wrap gap-x-3">
+            <span className="text-slate-500 tabular-nums">{when(e.at)}</span>
+            <span className="min-w-0 break-words">{describe(e)}</span>
+          </li>
+        ))}
+      </ol>
+    </section>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// History
+// ---------------------------------------------------------------------------
+
+function History({ link }: { link: GiveawayLink }) {
+  const [people, setPeople] = useState<HistoryPerson[] | null>(null);
+  const [log, setLog] = useState<LogEntry[]>([]);
+  const [canManage, setCanManage] = useState(false);
+  const [problem, setProblem] = useState('');
+  const [said, setSaid] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [on, setOn] = useState(today());
+  const [what, setWhat] = useState('');
+
+  const load = useCallback(async () => {
+    const got = await readGiveawayHistory();
+    if (!got.ok) return setProblem(got.reason === 'not allowed' ? 'Sign in to see the giveaways.' : got.reason);
+    setPeople(got.people);
+    setLog(got.log);
+    setCanManage(got.can_manage);
+  }, []);
+  useEffect(() => void load(), [load]);
+
+  async function act(run: () => Promise<{ ok: boolean; reason?: string }>) {
+    setBusy(true);
+    const res = await run();
+    setBusy(false);
+    setSaid(res.ok ? '' : (res.reason ?? 'That did not work'));
+    await load();
+  }
+
+  if (problem) return <p className="max-w-2xl mx-auto px-4 py-10 text-sm text-slate-400">{problem}</p>;
+  if (!people) return <Waiting what="the history" onRetry={() => void load()} />;
+
+  const sorted = [...people].sort(
+    (a, b) => b.attended.length - a.attended.length || a.name.localeCompare(b.name)
+  );
+
+  return (
+    <div className="max-w-3xl mx-auto px-4 py-8">
+      <RouteLink {...link({ kind: 'giveaways', giveaway: null, view: 'page' })} className="text-sm text-accent">
+        ← All giveaways
+      </RouteLink>
+      <h1 className="text-xl font-semibold text-slate-200 mt-3">Who has been to what</h1>
+      <p className="text-sm text-slate-400 mt-1">
+        Everybody a drawing has ever named, and what they went to. The chance shown is against
+        somebody who has never been, with the usual settings: a past attendance counts half as
+        much after a year.
+      </p>
+
+      {canManage && (
+        <section className={`${CARD} mt-4 space-y-2`} aria-label="Record an attendance">
+          <h2 className="text-sm font-semibold text-slate-200">Record an attendance</h2>
+          <p className="text-xs text-slate-400">
+            For tickets given out before this site kept track, or some other way. Pick the person
+            after filling in what and when.
+          </p>
+          <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
+            <input className={FIELD} value={what} placeholder="e.g. Brewers vs Cubs" aria-label="What they went to"
+                   onChange={(e) => setWhat(e.target.value)} />
+            <input className={FIELD} type="date" value={on} aria-label="When"
+                   onChange={(e) => setOn(e.target.value)} />
+          </div>
+          <PeoplePicker
+            label="Who went"
+            action="Record"
+            busy={busy || !what.trim() || !on}
+            onPick={(who) => void act(() => recordAttendance(who, on, what.trim()))}
+          />
+          {said && <p className="text-xs text-rose-300" role="status">{said}</p>}
+        </section>
+      )}
+
+      {sorted.length === 0 ? (
+        <p className="text-sm text-slate-400 mt-6">Nobody yet.</p>
+      ) : (
+        <ul className="mt-6 space-y-2">
+          {sorted.map((p) => (
+            <HistoryRow key={p.person} p={p} canManage={canManage} busy={busy} act={act} />
+          ))}
+        </ul>
+      )}
+
+      {log.length > 0 && <Log entries={log} />}
+    </div>
+  );
+}
+
+function HistoryRow({
+  p,
+  canManage,
+  busy,
+  act,
+}: {
+  p: HistoryPerson;
+  canManage: boolean;
+  busy: boolean;
+  act: (run: () => Promise<{ ok: boolean; reason?: string }>) => Promise<void>;
+}) {
+  const [joining, setJoining] = useState(false);
+  return (
+    <li className="rounded-xl border border-white/15 bg-white/5 px-4 py-3">
+      <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+        <p className="text-sm font-semibold text-slate-200 min-w-0 break-words">
+          {p.name}
+          {!p.linked && <span className="text-xs font-normal text-slate-500"> · no account</span>}
+        </p>
+        <p className="text-xs text-slate-400 tabular-nums">
+          {p.attended.length} {p.attended.length === 1 ? 'attendance' : 'attendances'} · entered {p.entries} ·{' '}
+          chance {Math.round(p.weight / 10_000)}%
+        </p>
+      </div>
+      {p.attended.length > 0 && (
+        <ul className="mt-1 space-y-0.5">
+          {p.attended.map((a) => (
+            <li key={a.id} className="text-xs text-slate-400 flex flex-wrap gap-x-2">
+              <span className="tabular-nums">{day(a.on)}</span>
+              <span className="min-w-0 break-words">{a.what}</span>
+              {a.source === 'manual' && <span className="text-slate-500">recorded by hand</span>}
+              {canManage && a.source === 'manual' && (
+                <button type="button" className="text-rose-300 hover:underline" disabled={busy}
+                        aria-label={`Delete ${a.what} for ${p.name}`}
+                        onClick={() => {
+                          if (window.confirm(`Delete ${a.what} (${a.on}) from ${p.name}'s history?`)) {
+                            void act(() => deleteAttendance(a.id));
+                          }
+                        }}>
+                  delete
+                </button>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+      {canManage && (
+        <div className="mt-2 flex flex-wrap gap-3 text-xs">
+          <button type="button" className="text-accent hover:underline" disabled={busy}
+                  onClick={() => {
+                    const name = window.prompt('Their name', p.name);
+                    if (name?.trim() && name.trim() !== p.name) void act(() => updatePerson(p.person, { name: name.trim() }));
+                  }}>
+            Rename
+          </button>
+          {!p.linked && (
+            <button type="button" className="text-accent hover:underline" onClick={() => setJoining((j) => !j)}>
+              Join to their account
+            </button>
+          )}
+        </div>
+      )}
+      {joining && <JoinAccount person={p} busy={busy} act={act} />}
+    </li>
+  );
+}
+
+/** A typed name, joined to the account its owner has since signed in with. */
+function JoinAccount({
+  person,
+  busy,
+  act,
+}: {
+  person: HistoryPerson;
+  busy: boolean;
+  act: (run: () => Promise<{ ok: boolean; reason?: string }>) => Promise<void>;
+}) {
+  const [query, setQuery] = useState('');
+  const [found, setFound] = useState<Found[]>([]);
+  useEffect(() => {
+    const t = window.setTimeout(() => void findGiveawayPeople(query).then(setFound), 250);
+    return () => window.clearTimeout(t);
+  }, [query]);
+  const accounts = found.filter((f) => f.user);
+  return (
+    <div className="mt-2">
+      <input className={FIELD} value={query} placeholder="Their name or address"
+             aria-label={`Account for ${person.name}`} onChange={(e) => setQuery(e.target.value)} />
+      <ul className="mt-1 space-y-1">
+        {accounts.map((f) => (
+          <li key={f.user!} className="flex flex-wrap items-center justify-between gap-2 text-sm text-slate-300">
+            <span className="min-w-0 break-words">
+              {f.name} <span className="text-xs text-slate-500">{f.email}</span>
+            </span>
+            <button type="button" className={BUTTON} disabled={busy}
+                    onClick={() => {
+                      const merge = f.person ? ' Their own history will be added to this one.' : '';
+                      if (window.confirm(`Join ${person.name} to ${f.email}?${merge}`)) {
+                        void act(() => updatePerson(person.person, { user: f.user! }));
+                      }
+                    }}>
+              Join
+            </button>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}

@@ -34,6 +34,8 @@ export type Person = {
   /** null for somebody who holds no row — an ordinary player */
   role: Role | null;
   granted_at?: string | null;
+  /** capabilities held by this person on their own, whatever their role */
+  grants?: string[];
   /** whether this is the person reading the page */
   self?: boolean;
 };
@@ -70,6 +72,27 @@ export async function setPersonRole(
   const { data, error } = await supabase.rpc('set_person_role', {
     p_user: user,
     p_role: role,
+  });
+  if (error) return fail(error.message);
+  return (data as { ok: boolean; reason?: string }) ?? fail('no answer');
+}
+
+/** The capabilities that can be handed to one person rather than to a rung,
+ *  and what each is called on the page. The server's list is the check on
+ *  capability_grants; this one only decides what to draw. */
+export const PERSON_GRANTS = { 'giveaways.manage': 'Runs giveaways' } as const;
+export type PersonGrant = keyof typeof PERSON_GRANTS;
+
+export async function setPersonCapability(
+  user: string,
+  capability: PersonGrant,
+  on: boolean
+): Promise<{ ok: boolean; reason?: string }> {
+  if (!supabase) return fail('not connected');
+  const { data, error } = await supabase.rpc('set_person_capability', {
+    p_user: user,
+    p_capability: capability,
+    p_on: on,
   });
   if (error) return fail(error.message);
   return (data as { ok: boolean; reason?: string }) ?? fail('no answer');

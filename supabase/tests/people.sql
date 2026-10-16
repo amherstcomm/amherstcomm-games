@@ -49,9 +49,11 @@ select pg_temp.check('an admin can see who holds something',
 -- Every test file here shares one database, so a total is a claim about the
 -- other files rather than about this one. What matters is that the list is the
 -- people holding a row, not the people who exist.
+-- A row is a role, or a capability held by that person alone (giveaways).
 select pg_temp.check('and it is the people with a row, not everybody at all',
   (select count(*) from jsonb_array_elements(public.people_with_roles()->'people'))
-    = (select count(*) from public.role_grants)
+    = (select count(*) from (select user_id from public.role_grants
+                             union select user_id from public.capability_grants) held)
   and (select count(*) from public.role_grants) < (select count(*) from auth.users));
 select pg_temp.check('including the administrator this file set up',
   exists (select 1 from jsonb_array_elements(public.people_with_roles()->'people') e

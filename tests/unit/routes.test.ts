@@ -54,6 +54,11 @@ const EVERY_ROUTE: Route[] = [
   // where an address somebody half-remembers should land.
   { kind: 'contest', contest: null },
   { kind: 'contest', contest: '7a1c9e30-5b2d-4f81-a3c6-0d9e8f7a6b54' },
+  // Giveaways: the list, the history, one, and its drawing replayed.
+  { kind: 'giveaways', giveaway: null, view: 'page' },
+  { kind: 'giveaways', giveaway: null, view: 'history' },
+  { kind: 'giveaways', giveaway: '3c2b1a00-5b2d-4f81-a3c6-0d9e8f7a6b54', view: 'page' },
+  { kind: 'giveaways', giveaway: '3c2b1a00-5b2d-4f81-a3c6-0d9e8f7a6b54', view: 'replay' },
   ...PANELS.map((panel) => ({ kind: 'panel', panel }) as const),
   ...DOCS.map((doc) => ({ kind: 'legal', doc }) as const),
   ...STATS_TABS.map((tab) => ({ kind: 'stats', tab }) as const),

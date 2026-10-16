@@ -40,6 +40,8 @@ export const IS_OVERLAY: Record<Route['kind'], boolean> = {
   // A page: entering one means leaving to find a photo on a phone and coming
   // back, and Back has to land where the reader expects afterwards.
   contest: false,
+  // likewise: a page with its own address, sent round in a message
+  giveaways: false,
   // a page you stay on for the length of a session, not something over a board
   live: false,
   sessions: false,
