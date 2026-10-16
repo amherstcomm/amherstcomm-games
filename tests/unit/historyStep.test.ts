@@ -163,6 +163,8 @@ describe('the overlay table', () => {
       // and a contest, which is a page somebody leaves to find a photo and
       // comes back to
       'contest',
+      // and giveaways, whose drawings get sent round as links
+      'giveaways',
       // a live session is a page you stay on, not something over a board
       'live',
       // and so is building one — Back from the editor should leave it, not

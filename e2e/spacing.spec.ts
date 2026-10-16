@@ -132,6 +132,54 @@ const CONTEST_ROUND = {
   games: [], trivia: [], prize: 'A day off',
 };
 
+// A giveaway taking entries, run by the reader, and one drawn twice over --
+// somebody declined -- so every part of the page has something in it.
+const GIVEAWAY_ENTRANTS = [
+  { person: 'p1', name: 'Ray Tetzloff', weight: 1000000 },
+  { person: 'p2', name: 'A rather long display name for somebody', weight: 514239 },
+  { person: 'p3', name: 'Bea', weight: 250000 },
+];
+function giveawayPage(id: string) {
+  const drawn = id === 'g2';
+  const draw = (seq: number, winner: (typeof GIVEAWAY_ENTRANTS)[number]) => ({
+    id: `d${seq}`, seq, reason: seq === 1 ? 'first drawing' : 'drawing again: Bea declined', wanted: 1,
+    entrants: GIVEAWAY_ENTRANTS, total: 1764239, snapshot_hash: 'ab'.repeat(32),
+    chain: '52db9ba70e0cc0f6eaf7803dd07447a1f5477735fd3f661792ba94600c84e971', round: 22_000_000 + seq,
+    round_at: `2026-10-0${seq}T15:00:00Z`, committed_at: `2026-10-0${seq}T14:59:30Z`, committed_by: 'Ray Tetzloff',
+    randomness: 'fe290beca10872ef2fb164d2aa4442de4566183ec51c56ff3cd603d930e54fdd', signature: 'b4',
+    winners: [{ ...winner, pick: 1, hash: 'f94c1c77a99a6'.padEnd(64, '0'), target: 959526, total: 1764239 }],
+    revealed_at: `2026-10-0${seq}T15:00:02Z`, revealed_by: 'Ray Tetzloff',
+  });
+  return {
+    ok: true, can_manage: true, me: 'p1',
+    chain: { hash: '52db9ba70e0cc0f6eaf7803dd07447a1f5477735fd3f661792ba94600c84e971', genesis: 1692803367, period: 3 },
+    giveaway: {
+      id, title: drawn ? 'Brewers vs Cubs, the last home game of the season' : 'Bucks vs Bulls',
+      prize: '2 tickets, section 112, row 4', details: 'Saturday 1:10pm. Parking pass included.',
+      winners: 1, event_on: plus(8), self_entry: true, entries_close_at: drawn ? null : `${plus(3)}T17:00:00Z`,
+      strength: 1, half_life_days: 365, status: drawn ? 'drawn' : 'open', cancelled_reason: null,
+      created_at: `${plus(-6)}T14:00:00Z`, created_by: 'Ray Tetzloff',
+    },
+    entrants: GIVEAWAY_ENTRANTS.map((e, i) => ({
+      ...e, linked: i < 2, entered_at: `${plus(-5)}T14:00:00Z`, entered_by: 'Ray Tetzloff', self: i === 0,
+      attended: i === 1 ? [{ on: plus(-30), what: 'Bucks game' }, { on: plus(-400), what: 'Brewers opening day' }] : [],
+    })),
+    draws: drawn ? [draw(1, GIVEAWAY_ENTRANTS[2]), draw(2, GIVEAWAY_ENTRANTS[0])] : [],
+    winners: drawn
+      ? [
+          { person: 'p3', name: 'Bea', pick: 1, draw: 1, status: 'declined', decided_at: null, decided_by: 'Ray Tetzloff' },
+          { person: 'p1', name: 'Ray Tetzloff', pick: 1, draw: 2, status: 'pending', decided_at: null, decided_by: null },
+        ]
+      : [],
+    log: [
+      { at: `${plus(-6)}T14:00:00Z`, actor: 'Ray Tetzloff', action: 'created', detail: {} },
+      { at: `${plus(-5)}T14:00:00Z`, actor: 'Ray Tetzloff', action: 'entered', detail: { name: 'Bea', self: false } },
+      { at: `${plus(-1)}T14:00:00Z`, actor: 'Ray Tetzloff', action: 'committed',
+        detail: { draw: 1, entrants: 3, wanted: 1, round: 22000001 } },
+    ],
+  };
+}
+
 function reply(fn: string, args: Record<string, unknown>, path: string): unknown {
   switch (fn) {
     case 'my_capabilities':
@@ -210,6 +258,32 @@ function reply(fn: string, args: Record<string, unknown>, path: string): unknown
       };
     case 'my_standing':
       return { ok: true, points: 6, scored: 2 };
+    case 'giveaways_list':
+      return {
+        ok: true, can_manage: true,
+        giveaways: [
+          { id: 'g1', title: 'Bucks vs Bulls', prize: '2 tickets, section 112, row 4', winners: 1, event_on: plus(8),
+            status: 'open', self_entry: true, entries_close_at: null, entrants: 3, entered: true, drawn: [] },
+          { id: 'g2', title: 'Brewers vs Cubs, the last home game of the season', prize: '4 tickets', winners: 2,
+            event_on: plus(-2), status: 'drawn', self_entry: true, entries_close_at: null, entrants: 12,
+            entered: false, drawn: ['Ray Tetzloff', 'A rather long display name for somebody'] },
+        ],
+      };
+    case 'giveaway_detail':
+      return giveawayPage(String(args.p_id));
+    case 'giveaway_history':
+      return {
+        ok: true, can_manage: true,
+        people: GIVEAWAY_ENTRANTS.map((e, i) => ({
+          person: e.person, name: e.name, linked: i < 2, entries: 4, wins: i, weight: e.weight,
+          attended: i === 1
+            ? [{ id: 'a1', on: plus(-30), what: 'Bucks game', source: 'giveaway', giveaway: 'g0' },
+               { id: 'a2', on: plus(-400), what: 'Brewers opening day', source: 'manual', giveaway: null }]
+            : [],
+        })),
+        log: [{ at: `${plus(-3)}T14:00:00Z`, actor: 'Ray Tetzloff', action: 'attendance recorded',
+                detail: { name: 'Bea', what: 'Brewers opening day', on: plus(-400) } }],
+      };
     default:
       return { ok: true };
   }
@@ -233,6 +307,11 @@ const PAGES: [string, string][] = [
   ['contest voting', '/contest/c1'],
   ['contest entering', '/contest/c2'],
   ['contest over', '/contest/c3'],
+  ['giveaways', '/giveaways'],
+  ['giveaway open', '/giveaways/g1'],
+  ['giveaway drawn', '/giveaways/g2'],
+  ['giveaway replay', '/giveaways/g2/replay'],
+  ['giveaway history', '/giveaways/history'],
   ...['site', 'games', 'lists', 'weave', 'passages', 'pins', 'coverage', 'tournaments', 'contests', 'people'].map(
     (tab): [string, string] => [`admin ${tab}`, `/admin/${tab}`]
   ),

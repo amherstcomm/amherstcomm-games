@@ -17,11 +17,14 @@ import {
   LADDER,
   ROLE_LABEL,
   ROLE_MEANS,
+  PERSON_GRANTS,
   findPeople,
   nameOf,
   readPeople,
+  setPersonCapability,
   setPersonRole,
   type Person,
+  type PersonGrant,
   type Role,
 } from '@/people';
 
@@ -34,10 +37,12 @@ const SELECT = FIELD + ' w-auto';
 function Row({
   person,
   onChanged,
+  onGrant,
   note,
 }: {
   person: Person;
   onChanged: (user: string, role: Role) => void;
+  onGrant: (user: string, grant: PersonGrant, on: boolean) => void;
   note: string;
 }) {
   const held: Role = person.role ?? 'games.view';
@@ -72,6 +77,26 @@ function Row({
             ))}
           </select>
         </label>
+      </div>
+      {/* A job rather than a rank: whoever looks after the ticket drawings
+          need not be somebody who builds trivia. An administrator holds it
+          already, so the box says so rather than offering nothing. */}
+      <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1">
+        {(Object.keys(PERSON_GRANTS) as PersonGrant[]).map((grant) => {
+          const byRole = held === 'games.admin';
+          return (
+            <label key={grant} className="flex items-center gap-2 text-xs text-slate-300">
+              <input
+                type="checkbox"
+                checked={byRole || (person.grants ?? []).includes(grant)}
+                disabled={byRole}
+                onChange={(e) => onGrant(person.user, grant, e.target.checked)}
+              />
+              {PERSON_GRANTS[grant]}
+              {byRole && <span className="text-slate-500">(as an administrator)</span>}
+            </label>
+          );
+        })}
       </div>
       {note && <p className="text-xs text-rose-300 mt-2">{note}</p>}
     </li>
@@ -113,6 +138,16 @@ export default function AdminPeople() {
     return () => window.clearTimeout(timer.current);
   }, [query]);
 
+  async function grant(user: string, capability: PersonGrant, on: boolean) {
+    const res = await setPersonCapability(user, capability, on);
+    setNotes((n) => ({ ...n, [user]: res.ok ? '' : (res.reason ?? 'That did not work') }));
+    if (res.ok) {
+      setQuery('');
+      setFound([]);
+      await pull();
+    }
+  }
+
   async function change(user: string, role: Role) {
     const res = await setPersonRole(user, role);
     setNotes((n) => ({ ...n, [user]: res.ok ? '' : (res.reason ?? 'That did not work') }));
@@ -144,6 +179,7 @@ export default function AdminPeople() {
             person={person}
             note={notes[person.user] ?? ''}
             onChanged={change}
+            onGrant={grant}
           />
         ))}
       </ul>
@@ -173,6 +209,7 @@ export default function AdminPeople() {
                 person={person}
                 note={notes[person.user] ?? ''}
                 onChanged={change}
+                onGrant={grant}
               />
             ))}
         </ul>

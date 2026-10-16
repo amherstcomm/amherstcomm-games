@@ -22,6 +22,7 @@
 import type {
   AccountTab,
   AdminTab,
+  GiveawayView,
   LegalDoc,
   Panel,
   Route,
@@ -40,6 +41,7 @@ export type Page =
   | { kind: 'reportQueue' }
   | { kind: 'tournament'; slug: Slug | null }
   | { kind: 'contest'; contest: string | null }
+  | { kind: 'giveaways'; giveaway: string | null; view: GiveawayView }
   | { kind: 'live'; session: string; host: boolean }
   | { kind: 'sessions'; session?: string }
   | { kind: 'admin'; tab: AdminTab }
@@ -147,6 +149,8 @@ export function navOf(route: Route, last: Tabs = DEFAULT_TABS): { nav: Nav; game
       return { nav: page({ kind: 'tournament', slug: route.slug }), game: null };
     case 'contest':
       return { nav: page({ kind: 'contest', contest: route.contest }), game: null };
+    case 'giveaways':
+      return { nav: page({ kind: 'giveaways', giveaway: route.giveaway, view: route.view }), game: null };
     case 'admin':
       return {
         nav: { page: { kind: 'admin', tab: route.tab }, overlays: [], last: { ...last, admin: route.tab } },
