@@ -12,9 +12,15 @@ import { SLUG_NAME } from '@/games';
 import { tiersFor } from '@/cryptogramFit';
 import { fitsBoards } from '@/weaveFit';
 
+/** Which board a pin is for: the day's daily, or the tournament round board
+ *  dated that day. A pin from before rounds could be pinned has no env, and is
+ *  the daily's. */
+export type PinFor = 'daily' | 'round';
+
 export type Pin = {
   id: string;
   on_date: string;
+  env?: PinFor;
   game: string;
   /** null is every difficulty */
   difficulty: string | null;
@@ -80,6 +86,7 @@ export async function pinPuzzle(pin: {
   game: string;
   difficulty: string | null;
   choice: Record<string, unknown>;
+  env?: PinFor;
 }): Promise<{ ok: boolean; reason?: string; id?: string }> {
   if (!supabase) return fail('not connected');
   const { data, error } = await supabase.rpc('pin_puzzle', {
@@ -87,9 +94,37 @@ export async function pinPuzzle(pin: {
     p_game: pin.game,
     p_difficulty: pin.difficulty,
     p_choice: pin.choice,
+    // Only when it is a round's: the site deploys before the schema is
+    // applied, and a database without round pins still takes the daily's.
+    ...(pin.env === 'round' ? { p_env: 'round' } : {}),
   });
   if (error) return fail(error.message);
   return (data as { ok: boolean; reason?: string }) ?? fail('no answer');
+}
+
+/** A tournament round's board dated on a day. */
+export type RoundBoard = {
+  /** as the pin page names games: guess, hive, boxed... */
+  game: string;
+  /** a new board each day of the round, rather than one for the round */
+  daily: boolean;
+  round: string;
+  round_starts_on: string;
+  round_ends_on: string;
+  tournament: string;
+  difficulty: string;
+};
+
+/** The round boards dated this day, so the page offers those games and no
+ *  others. */
+export async function readRoundBoards(
+  date: string
+): Promise<{ ok: boolean; reason?: string; boards: RoundBoard[] }> {
+  if (!supabase) return { ok: false, reason: 'not connected', boards: [] };
+  const { data, error } = await supabase.rpc('round_boards_on', { p_date: date });
+  if (error) return { ok: false, reason: error.message, boards: [] };
+  const res = (data ?? {}) as { ok?: boolean; reason?: string; boards?: RoundBoard[] };
+  return { ok: res.ok === true, reason: res.reason, boards: res.boards ?? [] };
 }
 
 export async function unpinPuzzle(id: string): Promise<{ ok: boolean; reason?: string }> {

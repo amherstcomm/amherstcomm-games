@@ -10,7 +10,7 @@
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { checkPublished, easternToday, publishDate } from './publishDate.mjs';
+import { checkPublished, easternToday, publishDate, publishRounds } from './publishDate.mjs';
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -69,6 +69,13 @@ if (!SUPABASE_URL || !KEY || !process.env.PUZZLES_SEED_SALT) {
         const check = await checkPublished(date, process.env);
         ok = check.ok;
         note = check.message;
+        // And the day's tournament round boards, so a round pin made on the
+        // same page is live now rather than at tonight's window. By the
+        // window's own rules: a round board already being played is left
+        // alone, force or not -- it is somebody's attempt, not a draft.
+        const rounds = await publishRounds(date, date, dir);
+        for (const line of rounds) console.log(line);
+        if (rounds.length > 0) note = `${note} Round boards: ${rounds.join('; ')}.`.slice(0, 500);
       } catch (error) {
         // The first line of whatever the generator said, which is the part a
         // person can act on; the whole trace is in the journal.

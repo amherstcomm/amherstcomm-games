@@ -710,3 +710,42 @@ describe('a square headed by the theme', () => {
     expect(THEME.words).not.toContain(rows[0]);
   });
 });
+
+// A tournament round's own pins. The round run reads round pins and never the
+// daily's -- a round board the same as that morning's daily has already been
+// seen -- and the daily run never reads the round's.
+describe('a pinned round', () => {
+  let dir: string;
+
+  beforeAll(async () => {
+    dir = await mkdtemp(join(tmpdir(), 'anagrimoire-pinned-round-'));
+    await run('node', ['scripts/fetch-puzzles.mjs'], {
+      env: {
+        ...process.env,
+        SKIP_SOLVER_DATA: '1',
+        PUZZLES_DATE: DATE,
+        PUZZLES_DATA_DIR: dir,
+        PUZZLES_SEED_SALT: 'themed-test-salt',
+        PUZZLES_ROUND: '1',
+        PUZZLES_THEME: JSON.stringify(THEME),
+        // the daily's pin, which a round run must not use
+        PUZZLES_PINS: JSON.stringify({ guess: { all: { word: 'trustee' } } }),
+        PUZZLES_ROUND_PINS: JSON.stringify({ guess: { all: { word: 'employer' } } }),
+      },
+      maxBuffer: 10 * 1024 * 1024,
+    });
+  });
+  afterAll(async () => rm(dir, { recursive: true, force: true }));
+
+  it("plays the round's pinned word, as the round's only board", async () => {
+    const got = words(await read(dir, 'round-daily-words.json'), 'hard');
+    expect(got).toEqual({ 8: 'employer' });
+  });
+
+  it("and the daily's pin is nowhere in it", async () => {
+    const payload = await read(dir, 'round-daily-words.json');
+    for (const tier of Object.keys(payload.byDifficulty)) {
+      expect(Object.values(words(payload, tier))).not.toContain('trustee');
+    }
+  });
+});

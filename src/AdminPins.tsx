@@ -37,9 +37,12 @@ import {
   PIN_TITLE,
   PINNABLE,
   readPins,
+  readRoundBoards,
   unpinPuzzle,
   type Pin,
+  type PinFor,
   type Pinnable,
+  type RoundBoard,
 } from '@/pins';
 import { NoAnswer, noAnswerToRead, noAnswerToWrite, withinWait } from '@/giveUp';
 
@@ -283,6 +286,12 @@ export default function AdminPins() {
   // Which difficulty a pin is for. Every one of them is the ordinary answer —
   // "the box on the 8th" usually means all three — so it is the default.
   const [tier, setTier] = useState<string>('');
+  // The daily, or the tournament round boards dated that day. A round's pin
+  // is its own: the round run reads only those, so a round never deals the
+  // puzzle the daily already did.
+  const [pinFor, setPinFor] = useState<PinFor>('daily');
+  const [boards, setBoards] = useState<RoundBoard[] | null>(null);
+  const onRound = pinFor === 'round';
 
   // Republishing the chosen day. The page can only ask: the generator runs on
   // the VM, whose minute timer claims the request, publishes the day through
@@ -368,8 +377,11 @@ export default function AdminPins() {
     // them at once is a page nobody reads.
     let coverage: Awaited<ReturnType<typeof readCoverage>>;
     let pinned: Awaited<ReturnType<typeof readPins>>;
+    let rounds: Awaited<ReturnType<typeof readRoundBoards>> | null = null;
     try {
-      [coverage, pinned] = await withinWait(Promise.all([readCoverage(date, date), readPins(date, date)]));
+      [coverage, pinned, rounds] = await withinWait(
+        Promise.all([readCoverage(date, date), readPins(date, date), onRound ? readRoundBoards(date) : null])
+      );
     } catch (error) {
       setBusy(false);
       setDay(null);
@@ -382,9 +394,22 @@ export default function AdminPins() {
       setDay(null);
       return;
     }
+    if (rounds && !rounds.ok) {
+      setNote(rounds.reason ?? 'That did not work');
+      setDay(null);
+      return;
+    }
     setDay(coverage.days[0] ?? null);
-    setPins(pinned.pins);
-  }, [date]);
+    setPins(pinned.pins.filter((p) => (p.env ?? 'daily') === pinFor));
+    setBoards(rounds ? rounds.boards : null);
+  }, [date, onRound, pinFor]);
+
+  // What was looked at belongs to the board it was looked at for.
+  useEffect(() => {
+    setDay(null);
+    setBoards(null);
+    setNote('');
+  }, [pinFor]);
 
   // The squares come from the calculators' worker rather than from here: they
   // are the one search on this page measured in seconds rather than
@@ -419,7 +444,11 @@ export default function AdminPins() {
     setBusy(true);
     let res: Awaited<ReturnType<typeof pinPuzzle>>;
     try {
-      res = await withinWait(pinPuzzle({ date, game, difficulty: tier || null, choice }));
+      // A round is played at its tournament's difficulty, and the pin is for
+      // every one: the round run builds all three and the round uses its own.
+      res = await withinWait(
+        pinPuzzle({ date, game, difficulty: onRound ? null : tier || null, choice, env: pinFor })
+      );
     } catch (error) {
       setBusy(false);
       setNote(
@@ -457,6 +486,24 @@ export default function AdminPins() {
         nightly log.
       </p>
 
+      <div className="flex flex-wrap items-center gap-2 mb-3" role="group" aria-label="Pin for">
+        <span className="text-xs text-slate-400">For</span>
+        <Chip on={!onRound} label="The daily" onClick={() => setPinFor('daily')}>
+          The daily
+        </Chip>
+        <Chip on={onRound} label="Tournament rounds" onClick={() => setPinFor('round')}>
+          Tournament rounds
+        </Chip>
+      </div>
+      {onRound && (
+        <p className="text-xs text-slate-400 mb-3">
+          A round’s board, kept apart from the daily’s: the daily’s pin never reaches a
+          round, so the round is never the puzzle everybody played that morning. Pick the
+          date of the board — a round’s first day for a game with one board, or any day
+          of it for a game with a new board each day.
+        </p>
+      )}
+
       <div className="flex flex-wrap items-end gap-3 mb-4">
         <label className="flex flex-col gap-1 text-xs text-slate-400">
           Date
@@ -468,6 +515,7 @@ export default function AdminPins() {
             onChange={(e) => setDate(e.target.value)}
           />
         </label>
+        {!onRound && (
         <label className="flex flex-col gap-1 text-xs text-slate-400">
           Difficulty
           <select
@@ -484,6 +532,7 @@ export default function AdminPins() {
             ))}
           </select>
         </label>
+        )}
         <button className={BUTTON} disabled={busy || !date} onClick={() => void look()}>
           {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Look'}
         </button>
@@ -500,7 +549,8 @@ export default function AdminPins() {
           </button>
           <p className="mt-1 text-xs text-slate-500">
             Regenerates {date} from the settings as they stand now, instead of at
-            03:15 tonight.
+            03:15 tonight — its tournament round boards too, except one already
+            being played.
           </p>
           {confirmLive && (
             <div
@@ -546,7 +596,27 @@ export default function AdminPins() {
       )}
 
 
-      {day && !day.theme && (day.weave ?? []).length === 0 && (
+      {onRound && boards && (
+        boards.length === 0 ? (
+          <p className="text-sm text-amber-300 mb-4">
+            No tournament round has a board on {date}. A game with one board for its round is
+            dated at the round’s first day.
+          </p>
+        ) : (
+          <ul className="mb-4 space-y-1 text-sm text-slate-300" aria-label="Round boards on this day">
+            {boards.map((b) => (
+              <li key={`${b.round} ${b.game}`}>
+                {PIN_TITLE[b.game as Pinnable] ?? b.game} — {b.tournament}, the round of{' '}
+                {b.round_starts_on === b.round_ends_on ? b.round_starts_on : `${b.round_starts_on} to ${b.round_ends_on}`}
+                , {b.difficulty}
+                {b.daily ? ' (a new board each day)' : ''}
+              </li>
+            ))}
+          </ul>
+        )
+      )}
+
+      {day && !day.theme && (day.weave ?? []).length === 0 && (!onRound || (boards ?? []).length > 0) && (
         <p className="text-sm text-amber-300">
           Nothing themes that day, so there is nothing to choose between — it
           gets the puzzles the site would have made anyway.
@@ -555,7 +625,7 @@ export default function AdminPins() {
 
       {day && (
         <div className="space-y-6" data-pins>
-          {PINNABLE.map((game: Pinnable) => (
+          {PINNABLE.filter((game) => !onRound || (boards ?? []).some((b) => b.game === game)).map((game: Pinnable) => (
             <Shortlist
               key={game}
               game={game}
@@ -566,7 +636,7 @@ export default function AdminPins() {
                   ? (terms) => candidatesFor(day, 'boxed', rungs ?? undefined, terms)
                   : undefined
               }
-              pinned={pinnedHere.get(`${game} ${tier || 'all'}`)}
+              pinned={pinnedHere.get(`${game} ${onRound ? 'all' : tier || 'all'}`)}
               busy={busy}
               onPin={(choice) => void pin(game, choice)}
               onUnpin={(id) => void unpin(id)}

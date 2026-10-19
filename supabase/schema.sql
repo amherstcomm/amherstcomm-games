@@ -16449,3 +16449,254 @@ begin
   end loop;
 end
 $grants$;
+
+-- ===========================================================================
+-- Pinning a tournament round's puzzles
+-- ===========================================================================
+--
+-- A pin was always about the *daily*, and a round run ignored them on purpose:
+-- applying the day's pin would make the round's board the puzzle everybody
+-- played on the daily that morning. But choosing the round's own word is a
+-- fair thing to want -- the round is the puzzle people are competing on -- so
+-- a pin now says which it is for. 'daily' is every pin there was before this;
+-- 'round' is read only by the round run, for the round board dated that day.
+--
+-- A round board's date is its round's first day for a game with one board, or
+-- each day of the round for a game with a new board each day: the same rule
+-- round_puzzle serves by. Within one tournament no game is in two rounds on a
+-- day, and tournaments do not share days, so (date, game) names one board.
+alter table public.puzzle_pins add column if not exists env text not null default 'daily';
+
+do $pins$
+begin
+  if not exists (select 1 from pg_constraint where conname = 'puzzle_pins_env_check') then
+    alter table public.puzzle_pins add constraint puzzle_pins_env_check check (env in ('daily', 'round'));
+  end if;
+  -- One pin per board, and a round's board is not the daily's.
+  --
+  -- An index on coalesce(difficulty, 'all') rather than the old constraint on
+  -- difficulty itself, which never held for "every difficulty": a unique
+  -- constraint treats each null as different, so pinning every difficulty a
+  -- second time added a pin beside the first instead of replacing it, and
+  -- which one the generator got was whichever came out of the aggregate last.
+  -- The duplicates that left are cleared first, newest kept -- the one
+  -- somebody meant when they pinned again.
+  if exists (select 1 from pg_constraint where conname = 'puzzle_pins_on_date_game_difficulty_key') then
+    alter table public.puzzle_pins drop constraint puzzle_pins_on_date_game_difficulty_key;
+  end if;
+  delete from public.puzzle_pins p
+   using public.puzzle_pins newer
+   where newer.on_date = p.on_date and newer.env = p.env and newer.game = p.game
+     and coalesce(newer.difficulty, 'all') = coalesce(p.difficulty, 'all')
+     and (newer.created_at, newer.id) > (p.created_at, p.id);
+end
+$pins$;
+
+create unique index if not exists puzzle_pins_one_per_board
+  on public.puzzle_pins (on_date, env, game, (coalesce(difficulty, 'all')));
+
+-- The pin page and the round tables name games differently: a pin by the
+-- game's page slug (guess, boxed), a round by its feed name (words, box).
+create or replace function public.pin_game_of_feed(p_feed text)
+returns text
+language sql
+immutable
+as $fn$
+  select case p_feed when 'words' then 'guess' when 'box' then 'boxed' else p_feed end
+$fn$;
+
+-- The round boards dated this day: which game, in which round of which
+-- tournament, at what difficulty.
+create or replace function public.round_boards_on_date(p_date date)
+returns jsonb
+language sql
+stable
+security definer
+set search_path = ''
+as $fn$
+  select coalesce(jsonb_agg(jsonb_build_object(
+           'game', public.pin_game_of_feed(g.feed), 'feed', g.feed,
+           'daily', g.feed = any (r.daily_games),
+           'round', r.id, 'round_starts_on', r.starts_on, 'round_ends_on', r.ends_on,
+           'tournament', t.name, 'difficulty', t.difficulty)
+         order by r.starts_on, g.feed), '[]'::jsonb)
+  from public.tournament_rounds r
+  join public.tournaments t on t.id = r.tournament_id
+  cross join lateral unnest(r.games) as g(feed)
+  where (g.feed = any (r.daily_games) and p_date between r.starts_on and r.ends_on)
+     or (not (g.feed = any (r.daily_games)) and p_date = r.starts_on)
+$fn$;
+
+revoke all on function public.round_boards_on_date(date) from public, anon, authenticated;
+
+-- For the pin page: the round boards on a day, so it offers those games and
+-- no others.
+create or replace function public.round_boards_on(p_date date)
+returns jsonb
+language sql
+stable
+security definer
+set search_path = ''
+as $fn$
+  select case
+    when not public.can('games.setup') then jsonb_build_object('ok', false, 'reason', 'not allowed')
+    when p_date is null then jsonb_build_object('ok', false, 'reason', 'it needs a date')
+    else jsonb_build_object('ok', true, 'boards', public.round_boards_on_date(p_date))
+  end
+$fn$;
+
+revoke all on function public.round_boards_on(date) from public, anon;
+grant execute on function public.round_boards_on(date) to authenticated;
+
+-- The daily's pins: what there always was, and now only that.
+create or replace function public.daily_pins(p_date date)
+returns jsonb
+language sql
+stable
+security definer
+set search_path = ''
+as $fn$
+  select coalesce(
+    (select jsonb_object_agg(game, boards)
+     from (
+       select p.game,
+              jsonb_object_agg(coalesce(p.difficulty, 'all'), p.choice) as boards
+       from public.puzzle_pins p
+       where p.on_date = p_date and p.env = 'daily'
+       group by p.game
+     ) by_game),
+    '{}'::jsonb)
+$fn$;
+
+revoke all on function public.daily_pins(date) from public, anon, authenticated;
+grant execute on function public.daily_pins(date) to service_role;
+
+-- The round boards' pins for a day, for the round run. Same shape.
+create or replace function public.round_pins(p_date date)
+returns jsonb
+language sql
+stable
+security definer
+set search_path = ''
+as $fn$
+  select coalesce(
+    (select jsonb_object_agg(game, boards)
+     from (
+       select p.game,
+              jsonb_object_agg(coalesce(p.difficulty, 'all'), p.choice) as boards
+       from public.puzzle_pins p
+       where p.on_date = p_date and p.env = 'round'
+       group by p.game
+     ) by_game),
+    '{}'::jsonb)
+$fn$;
+
+revoke all on function public.round_pins(date) from public, anon, authenticated;
+grant execute on function public.round_pins(date) to service_role;
+
+-- Every pin over a range, each saying which it is for. A pin from before this
+-- reads as the daily's, which is what it was.
+create or replace function public.pins_sheet(p_from date, p_until date)
+returns jsonb
+language sql
+stable
+security definer
+set search_path = ''
+as $fn$
+  select case
+    when not public.can('games.setup')
+      then jsonb_build_object('ok', false, 'reason', 'not allowed')
+    when p_from is null or p_until is null
+      then jsonb_build_object('ok', false, 'reason', 'it needs both dates')
+    when p_until < p_from
+      then jsonb_build_object('ok', false, 'reason', 'it cannot finish before it starts')
+    else jsonb_build_object('ok', true, 'pins', coalesce(
+      (select jsonb_agg(jsonb_build_object(
+                'id', p.id,
+                'on_date', p.on_date,
+                'env', p.env,
+                'game', p.game,
+                'difficulty', p.difficulty,
+                'choice', p.choice)
+              order by p.on_date, p.env, p.game, p.difficulty nulls first)
+       from public.puzzle_pins p
+       where p.on_date between p_from and p_until),
+      '[]'::jsonb))
+  end
+$fn$;
+
+revoke all on function public.pins_sheet(date, date) from public, anon;
+grant execute on function public.pins_sheet(date, date) to authenticated;
+
+-- Pinning, now for the daily or a round. The old four-argument version goes:
+-- next to one with a defaulted fifth, a four-argument call would match both.
+drop function if exists public.pin_puzzle(date, text, text, jsonb);
+
+create or replace function public.pin_puzzle(
+  p_date date,
+  p_game text,
+  p_difficulty text,
+  p_choice jsonb,
+  p_env text default 'daily'
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $fn$
+declare
+  v_id uuid;
+  v_game text := btrim(lower(coalesce(p_game, '')));
+  v_difficulty text := nullif(btrim(lower(coalesce(p_difficulty, ''))), '');
+  v_env text := coalesce(nullif(btrim(lower(p_env)), ''), 'daily');
+begin
+  if not public.can('games.setup') then
+    return jsonb_build_object('ok', false, 'reason', 'not allowed');
+  end if;
+  if p_date is null then
+    return jsonb_build_object('ok', false, 'reason', 'it needs a date');
+  end if;
+  if v_game !~ '^[a-z]{3,12}$' then
+    return jsonb_build_object('ok', false, 'reason', 'it needs a game');
+  end if;
+  -- A grid is dice: nothing themed to choose between.
+  if v_game in ('grid') then
+    return jsonb_build_object('ok', false, 'reason',
+      format('%s has no themed candidates to choose between', v_game));
+  end if;
+  if v_difficulty is not null and v_difficulty not in ('easy', 'hard', 'extreme') then
+    return jsonb_build_object('ok', false, 'reason', 'a difficulty is easy, hard or extreme');
+  end if;
+  if p_choice is null or jsonb_typeof(p_choice) <> 'object' then
+    return jsonb_build_object('ok', false, 'reason', 'it needs a candidate');
+  end if;
+  if v_env not in ('daily', 'round') then
+    return jsonb_build_object('ok', false, 'reason', 'a pin is for the daily or a round');
+  end if;
+  if v_env = 'round' then
+    -- Only a board that exists: a pin for a round that has no such game that
+    -- day would sit there doing nothing, and look as if it had.
+    if not exists (select 1 from jsonb_array_elements(public.round_boards_on_date(p_date)) b
+                   where b->>'game' = v_game) then
+      return jsonb_build_object('ok', false, 'reason',
+        'no tournament round has a board for that game on that day');
+    end if;
+    -- A day that is over has been played.
+    if p_date < public.puzzle_day() then
+      return jsonb_build_object('ok', false, 'reason', 'that day''s round board has been played');
+    end if;
+  end if;
+
+  insert into public.puzzle_pins (on_date, env, game, difficulty, choice, created_by)
+  values (p_date, v_env, v_game, v_difficulty, p_choice, (select auth.uid()))
+  on conflict (on_date, env, game, (coalesce(difficulty, 'all')))
+    do update set choice = excluded.choice, created_by = excluded.created_by,
+                  created_at = now()
+  returning puzzle_pins.id into v_id;
+
+  return jsonb_build_object('ok', true, 'id', v_id);
+end;
+$fn$;
+
+revoke all on function public.pin_puzzle(date, text, text, jsonb, text) from public, anon;
+grant execute on function public.pin_puzzle(date, text, text, jsonb, text) to authenticated;

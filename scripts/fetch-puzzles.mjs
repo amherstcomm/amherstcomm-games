@@ -18,6 +18,7 @@ import {
   passagesFor,
   pinOf,
   pinsFor,
+  roundPinsFor,
   policyFor,
   policyOf,
   passagesForBand,
@@ -597,12 +598,14 @@ const themeIn = (game) => {
 // written as round-daily-*.json beside the prod and dev dailies and published
 // under env 'round' by publishRound (scripts/publishDate.mjs).
 //
-// Pins are a choice about the day's *daily*, so a round run ignores them.
-// Applying one would make the round's board the same puzzle as the daily
-// everybody played that morning, and a round board that has already been seen
-// is not a round board.
+// A daily's pins are a choice about the daily, so a round run does not read
+// them: applying one would make the round's board the puzzle everybody played
+// on the daily that morning, and a round board that has already been seen is
+// not a round board. A round has pins of its own instead (round_pins), made on
+// the same page with "Tournament rounds" chosen, and the daily run never sees
+// those.
 const ROUND = process.env.PUZZLES_ROUND === '1';
-const pins = ROUND ? {} : await pinsFor(etDate);
+const pins = ROUND ? await roundPinsFor(etDate) : await pinsFor(etDate);
 const pinnedCount = Object.keys(pins).length;
 if (pinnedCount > 0) {
   console.log(`${pinnedCount} pinned ${pinnedCount === 1 ? 'game' : 'games'} for ${etDate}`);

@@ -37,6 +37,8 @@ let base: string;
 let queue: Job[] = [];
 let finished: { p_id: string; p_ok: boolean; p_note: string }[] = [];
 let posted: Row[] = [];
+/** what rounds_to_publish answers: none, unless a test says otherwise */
+let rounds: unknown[] = [];
 
 beforeAll(async () => {
   server = createServer((req, res) => {
@@ -61,6 +63,7 @@ beforeAll(async () => {
         return res.end();
       }
       if (rpc === 'daily_word_policy' || rpc === 'daily_pins') return send({});
+      if (rpc === 'rounds_to_publish') return send(rounds);
       if (rpc) return send([]);
       if (url.startsWith('/rest/v1/daily_puzzles') && req.method === 'POST') {
         posted.push(...(JSON.parse(body) as Row[]));
@@ -84,6 +87,7 @@ beforeEach(() => {
   queue = [];
   finished = [];
   posted = [];
+  rounds = [];
 });
 
 async function drain(env: Record<string, string> = {}) {
@@ -127,6 +131,29 @@ describe('the publish host draining requests', () => {
     expect(finished).toEqual([
       { p_id: 'r1', p_ok: true, p_note: 'published, themed from "Employee ownership"' },
     ]);
+  });
+
+  // A round pin is made on the same page as a daily one, so republishing the
+  // day makes the round's boards for it too -- with the round's pin -- rather
+  // than leaving them for tonight's window.
+  it("publishes the day's tournament round boards as well, with the round's pin", async () => {
+    const day = plus(easternToday(), 20);
+    queue = [{ id: 'r1', on_date: day, force: false }];
+    rounds = [{
+      id: 'round-1', starts_on: plus(day, -1), ends_on: plus(day, 1),
+      games: ['words', 'hive'], daily_games: ['words'], difficulty: 'hard',
+    }];
+    const { code, out } = await drain({
+      PUZZLES_ROUND_PINS: JSON.stringify({ guess: { all: { word: 'employer' } } }),
+    });
+    expect(code, out).toBe(0);
+    const round = posted.filter((r) => r.env === 'round');
+    // the daily game's board for that day; the one-board game's is dated at
+    // the round's first day, which this request is not about
+    expect(round.map((r) => `${r.puzzle_date}:${r.game}`)).toEqual([`${day}:words`]);
+    const hard = (round[0].payload.byDifficulty as Record<string, { words: Record<string, string> }>).hard.words;
+    expect(Object.values(hard).map((b64) => Buffer.from(b64, 'base64').toString())).toEqual(['employer']);
+    expect(finished[0].p_note).toContain('Round boards:');
   });
 
   // Asked for tomorrow at 11:59 p.m., drained a minute later: by then it is

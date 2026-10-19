@@ -998,6 +998,53 @@ test('a day s puzzles can be picked from what its words can make', async ({ page
     p_difficulty: null,
     p_choice: { word: 'capital' },
   });
+  // and is the daily's: nothing says otherwise, so a database from before
+  // round pins takes it the way it always did
+  expect(pinned[0]).not.toHaveProperty('p_env');
+});
+
+// A tournament round's own pin, chosen on the same page. Only the games that
+// have a round board that day are offered, and the pin is sent as the round's.
+test('a tournament round s word can be pinned, apart from the daily s', async ({ page }) => {
+  const pinned: Record<string, unknown>[] = [];
+  const day = { date: '2026-10-22', theme: { name: 'October', words: ['voting', 'shared', 'capital', 'employer'] } };
+  await page.route('**/rest/v1/rpc/**', (route) => {
+    const url = route.request().url();
+    const reply = (body: unknown) =>
+      route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });
+    if (url.includes('pin_puzzle')) {
+      pinned.push(JSON.parse(route.request().postData() ?? '{}'));
+      return reply({ ok: true, id: 'pin1' });
+    }
+    if (url.includes('round_boards_on')) {
+      return reply({ ok: true, boards: [{
+        game: 'guess', daily: true, round: 'r1', round_starts_on: '2026-10-21', round_ends_on: '2026-10-23',
+        tournament: 'Ownership Cup', difficulty: 'hard',
+      }] });
+    }
+    if (url.includes('theme_coverage')) return reply({ ok: true, days: [day] });
+    if (url.includes('pins_sheet')) return reply({ ok: true, pins: [] });
+    return reply([]);
+  });
+
+  await page.goto('/admin/pins');
+  await page.getByRole('group', { name: 'Pin for' }).getByRole('button', { name: 'Tournament rounds' }).click();
+  // a round is played at its tournament's difficulty: nothing to choose
+  await expect(page.getByLabel('Pin difficulty')).toHaveCount(0);
+  await page.getByLabel('Pin date').fill('2026-10-22');
+  await page.getByRole('button', { name: 'Look' }).click();
+
+  await expect(page.getByRole('list', { name: 'Round boards on this day' })).toContainText(
+    'Ownership Cup, the round of 2026-10-21 to 2026-10-23, hard (a new board each day)'
+  );
+  // The round's games and no others: the rack the daily could pin is not offered.
+  await expect(page.getByText('Guess the Word', { exact: true })).toBeVisible();
+  await expect(page.getByRole('searchbox', { name: /Filter/ })).toHaveCount(1);
+  await page.getByRole('button', { name: 'capital (7)' }).click();
+  await expect(page.getByText('Pinned.')).toBeVisible();
+  expect(pinned).toEqual([
+    { p_date: '2026-10-22', p_game: 'guess', p_difficulty: null, p_choice: { word: 'capital' }, p_env: 'round' },
+  ]);
 });
 
 // The square search is the one calculator on this page that costs seconds, and
