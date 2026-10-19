@@ -16700,3 +16700,570 @@ $fn$;
 
 revoke all on function public.pin_puzzle(date, text, text, jsonb, text) from public, anon;
 grant execute on function public.pin_puzzle(date, text, text, jsonb, text) to authenticated;
+
+create or replace function public.boards_between(
+  p_from date,
+  p_until date,
+  p_env text,
+  p_difficulty text,
+  p_users uuid[],
+  p_limit int default 10
+)
+returns jsonb
+language plpgsql
+set search_path = ''
+stable
+as $$
+declare
+  out_json jsonb := '{}'::jsonb;
+  part jsonb;
+begin
+  -- guess: days won, then the cleanest win, then the fewest clues taken on
+  -- a round board, then the clock. A clue exists only on a round board whose
+  -- word was pinned with one, and taking it is the server's record, not the
+  -- page's -- see "A clue for a round's word".
+  select coalesce(jsonb_agg(jsonb_build_object(
+           'name', name, 'value', value, 'detail', detail, 'clues', clues) order by rk), '[]'::jsonb)
+    into part
+  from (
+    select *, row_number() over (order by value desc, detail asc, clues asc, tiebreak asc) as rk
+    from (
+      select p.display_name as name,
+             count(*) filter (where (dp.result->>'won')::boolean) as value,
+             min((dp.result->>'guesses')::int) filter (where (dp.result->>'won')::boolean) as detail,
+             coalesce(sum(case when dp.env = 'round'
+                               then coalesce(public.round_hints_taken(dp.user_id, 'guess', dp.puzzle_date), 0)
+                               else 0 end) filter (where (dp.result->>'won')::boolean), 0) as clues,
+             sum((dp.result->>'timeMs')::numeric) as tiebreak
+      from public.daily_progress dp
+      join public.profiles p on p.id = dp.user_id
+      where dp.game = 'guess' and dp.completed and dp.env = p_env and dp.difficulty = p_difficulty and dp.puzzle_date between p_from and p_until
+        and (p_users is null or dp.user_id = any(p_users))
+        and p.display_name is not null
+        and public.result_counts(dp.user_id, dp.game, dp.variant, dp.difficulty, dp.puzzle_date, dp.env)
+        and public.result_is_plausible('guess', dp.state, dp.result, dp.difficulty, dp.variant, dp.puzzle_date, dp.env)
+      group by p.display_name
+      having count(*) filter (where (dp.result->>'won')::boolean) > 0
+    ) a
+    order by rk
+    limit p_limit
+  ) s;
+  out_json := jsonb_set(out_json, '{guess}', part);
+
+  -- hive, scramble and grid all rank on points added up across the window,
+  -- so they share one query shape with the game as a parameter
+  select coalesce(jsonb_object_agg(game, board), '{}'::jsonb) into part
+  from (
+    -- the filter matters: a game nobody has played leaves the lateral empty,
+    -- and without it jsonb_agg would hand back [null] rather than []
+    select g.game,
+           coalesce(
+             jsonb_agg(jsonb_build_object('name', t.name, 'value', t.value, 'detail', t.detail)
+                       order by t.rk) filter (where t.name is not null),
+             '[]'::jsonb
+           ) as board
+    from (values ('hive'), ('scramble'), ('grid')) as g(game)
+    left join lateral (
+      select p.display_name as name,
+             sum((dp.result->>'score')::numeric) as value,
+             count(*) as detail,
+             row_number() over (order by sum((dp.result->>'score')::numeric) desc, count(*) desc) as rk
+      from public.daily_progress dp
+      join public.profiles p on p.id = dp.user_id
+      where dp.game = g.game and dp.completed and dp.env = p_env and dp.difficulty = p_difficulty and dp.puzzle_date between p_from and p_until
+        and (p_users is null or dp.user_id = any(p_users))
+        and p.display_name is not null
+        and public.result_counts(dp.user_id, dp.game, dp.variant, dp.difficulty, dp.puzzle_date, dp.env)
+        and public.result_is_plausible(g.game, dp.state, dp.result, dp.difficulty, dp.variant, dp.puzzle_date, dp.env)
+      group by p.display_name
+      order by value desc, detail desc
+      limit p_limit
+    ) t on true
+    group by g.game
+  ) boards;
+  out_json := out_json || part;
+
+  -- box: days solved, then the shortest chain
+  select coalesce(jsonb_agg(jsonb_build_object('name', name, 'value', value, 'detail', detail) order by rk), '[]'::jsonb)
+    into part
+  from (
+    select *, row_number() over (order by value desc, detail asc) as rk
+    from (
+      select p.display_name as name, count(*) as value, min((dp.result->>'words')::int) as detail
+      from public.daily_progress dp
+      join public.profiles p on p.id = dp.user_id
+      where dp.game = 'box' and dp.completed and dp.env = p_env and dp.difficulty = p_difficulty and dp.puzzle_date between p_from and p_until
+        and (p_users is null or dp.user_id = any(p_users))
+        and p.display_name is not null
+        and public.result_counts(dp.user_id, dp.game, dp.variant, dp.difficulty, dp.puzzle_date, dp.env)
+        and public.result_is_plausible('box', dp.state, dp.result, dp.difficulty, dp.variant, dp.puzzle_date, dp.env)
+      group by p.display_name
+    ) a
+    order by rk
+    limit p_limit
+  ) s;
+  out_json := jsonb_set(out_json, '{box}', part);
+
+  -- weave: days solved, then the fastest, then the fewest hints.
+  --
+  -- The third level because the first two tie: a round is one board, so every
+  -- solver has one solve, and two people within a second of each other is an
+  -- ordinary Thursday. Hints are the thing that separates them and the thing
+  -- the game already counts -- and they are shown on the row, because a
+  -- ranking the board does not show reads as no ranking at all.
+  --
+  -- Totalled over the solved boards, not taken from the fastest one, so it
+  -- answers "how much help did this take" over the window rather than on one
+  -- lucky day. Client-reported, like the clock beside it.
+  select coalesce(jsonb_agg(jsonb_build_object(
+           'name', name, 'value', value, 'detail', detail, 'hints', hints) order by rk), '[]'::jsonb)
+    into part
+  from (
+    select *, row_number() over (order by value desc, detail asc, hints asc) as rk
+    from (
+      select p.display_name as name,
+             count(*) filter (where (dp.result->>'solved')::boolean) as value,
+             min((dp.result->>'timeMs')::numeric) filter (
+               where (dp.result->>'solved')::boolean and (dp.result->>'timeMs')::numeric > 0
+             ) as detail,
+             -- The server's count on a round board, the browser's on a daily.
+             -- A round is what this ranks for, and a number the page writes is
+             -- a number the page can lower; see "Hints a round's board issues".
+             coalesce(sum(case
+               when dp.env = 'round'
+                 then coalesce(public.round_hints_taken(dp.user_id, dp.game, dp.puzzle_date), 0)::numeric
+               else coalesce((dp.result->>'hints')::numeric, 0)
+             end) filter (
+               where (dp.result->>'solved')::boolean
+             ), 0) as hints
+      from public.daily_progress dp
+      join public.profiles p on p.id = dp.user_id
+      where dp.game = 'weave' and dp.completed and dp.env = p_env and dp.difficulty = p_difficulty and dp.puzzle_date between p_from and p_until
+        and (p_users is null or dp.user_id = any(p_users))
+        and p.display_name is not null
+        and public.result_counts(dp.user_id, dp.game, dp.variant, dp.difficulty, dp.puzzle_date, dp.env)
+        and public.result_is_plausible('weave', dp.state, dp.result, dp.difficulty, dp.variant, dp.puzzle_date, dp.env)
+      group by p.display_name
+      having count(*) filter (where (dp.result->>'solved')::boolean) > 0
+    ) a
+    order by rk
+    limit p_limit
+  ) s;
+  out_json := jsonb_set(out_json, '{weave}', part);
+
+  -- cryptogram: days solved, then the fastest — weave's shape exactly, since
+  -- a passage is one puzzle with one outcome and a clock
+  select coalesce(jsonb_agg(jsonb_build_object('name', name, 'value', value, 'detail', detail) order by rk), '[]'::jsonb)
+    into part
+  from (
+    select *, row_number() over (order by value desc, detail asc) as rk
+    from (
+      select p.display_name as name,
+             count(*) filter (where (dp.result->>'solved')::boolean) as value,
+             min((dp.result->>'timeMs')::numeric) filter (
+               where (dp.result->>'solved')::boolean and (dp.result->>'timeMs')::numeric > 0
+             ) as detail
+      from public.daily_progress dp
+      join public.profiles p on p.id = dp.user_id
+      where dp.game = 'cryptogram' and dp.completed and dp.env = p_env and dp.difficulty = p_difficulty and dp.puzzle_date between p_from and p_until
+        and (p_users is null or dp.user_id = any(p_users))
+        and p.display_name is not null
+        and public.result_counts(dp.user_id, dp.game, dp.variant, dp.difficulty, dp.puzzle_date, dp.env)
+        and public.result_is_plausible('cryptogram', dp.state, dp.result, dp.difficulty, dp.variant, dp.puzzle_date, dp.env)
+      group by p.display_name
+      having count(*) filter (where (dp.result->>'solved')::boolean) > 0
+    ) a
+    order by rk
+    limit p_limit
+  ) s;
+  out_json := jsonb_set(out_json, '{cryptogram}', part);
+
+  -- ladder: days solved, then how many of those came in at par. The tie-break
+  -- is the game's own measure rather than the clock — a ladder walked in the
+  -- fewest steps is the better game, and racing one rewards typing speed over
+  -- finding the route. `steps` is the chain the player kept, so this counts
+  -- what result_is_plausible has already checked rung by rung.
+  select coalesce(jsonb_agg(jsonb_build_object('name', name, 'value', value, 'detail', detail) order by rk), '[]'::jsonb)
+    into part
+  from (
+    select *, row_number() over (order by value desc, detail desc) as rk
+    from (
+      select p.display_name as name,
+             count(*) filter (where (dp.result->>'solved')::boolean) as value,
+             count(*) filter (
+               where (dp.result->>'solved')::boolean
+                 and jsonb_array_length(coalesce(dp.state->'chain', '[]'::jsonb))
+                     <= coalesce((dp.state->>'par')::int, 2147483647)
+             ) as detail
+      from public.daily_progress dp
+      join public.profiles p on p.id = dp.user_id
+      where dp.game = 'ladder' and dp.completed and dp.env = p_env and dp.difficulty = p_difficulty and dp.puzzle_date between p_from and p_until
+        and (p_users is null or dp.user_id = any(p_users))
+        and p.display_name is not null
+        and public.result_counts(dp.user_id, dp.game, dp.variant, dp.difficulty, dp.puzzle_date, dp.env)
+        and public.result_is_plausible('ladder', dp.state, dp.result, dp.difficulty, dp.variant, dp.puzzle_date, dp.env)
+      group by p.display_name
+      having count(*) filter (where (dp.result->>'solved')::boolean) > 0
+    ) a
+    order by rk
+    limit p_limit
+  ) s;
+  out_json := jsonb_set(out_json, '{ladder}', part);
+
+  -- bridge: boards finished, then prompts found. A board is five prompts and a
+  -- day where four came out is worth more than a day where none did, so the
+  -- second number counts the whole run rather than only the clean sweeps —
+  -- otherwise a near-miss and a no-show rank identically.
+  --
+  -- Hints are the difficulty setting rather than a ranking, and they are
+  -- self-reported besides: under-claiming cannot be caught, so ranking on them
+  -- would reward the claim rather than the play. They belong beside a result,
+  -- not in the order of one.
+  select coalesce(jsonb_agg(jsonb_build_object('name', name, 'value', value, 'detail', detail) order by rk), '[]'::jsonb)
+    into part
+  from (
+    select *, row_number() over (order by value desc, detail desc) as rk
+    from (
+      select p.display_name as name,
+             count(*) filter (where coalesce((dp.result->>'solved')::int, 0) >= 5) as value,
+             sum(least(coalesce((dp.result->>'solved')::int, 0), 5)) as detail
+      from public.daily_progress dp
+      join public.profiles p on p.id = dp.user_id
+      where dp.game = 'bridge' and dp.completed and dp.env = p_env and dp.difficulty = p_difficulty and dp.puzzle_date between p_from and p_until
+        and (p_users is null or dp.user_id = any(p_users))
+        and p.display_name is not null
+        and public.result_counts(dp.user_id, dp.game, dp.variant, dp.difficulty, dp.puzzle_date, dp.env)
+        and public.result_is_plausible('bridge', dp.state, dp.result, dp.difficulty, dp.variant, dp.puzzle_date, dp.env)
+      group by p.display_name
+      having sum(coalesce((dp.result->>'solved')::int, 0)) > 0
+    ) a
+    order by rk
+    limit p_limit
+  ) s;
+  out_json := jsonb_set(out_json, '{bridge}', part);
+
+  -- squares: one board per size. A 4×4 and a 5×5 aren't the same puzzle, and a
+  -- combined ranking would quietly reward whoever played more of the easier
+  -- one. Days solved, then the fastest — weave's shape, keyed on variant.
+  select coalesce(jsonb_object_agg('squares' || b.variant, b.board), '{}'::jsonb) into part
+  from (
+    select v.variant as variant,
+           coalesce(
+             jsonb_agg(jsonb_build_object('name', t.name, 'value', t.value, 'detail', t.detail)
+                       order by t.rk) filter (where t.name is not null),
+             '[]'::jsonb
+           ) as board
+    from (values ('4'), ('5')) as v(variant)
+    left join lateral (
+      select p.display_name as name,
+             count(*) filter (where (dp.result->>'solved')::boolean) as value,
+             min((dp.result->>'timeMs')::numeric) filter (
+               where (dp.result->>'solved')::boolean and (dp.result->>'timeMs')::numeric > 0
+             ) as detail,
+             row_number() over (
+               order by count(*) filter (where (dp.result->>'solved')::boolean) desc,
+                        min((dp.result->>'timeMs')::numeric) filter (
+                          where (dp.result->>'solved')::boolean
+                            and (dp.result->>'timeMs')::numeric > 0
+                        ) asc
+             ) as rk
+      from public.daily_progress dp
+      join public.profiles p on p.id = dp.user_id
+      where dp.game = 'squares' and dp.variant = v.variant and dp.completed
+        and dp.env = p_env and dp.difficulty = p_difficulty and dp.puzzle_date between p_from and p_until
+        and (p_users is null or dp.user_id = any(p_users))
+        and p.display_name is not null
+        and public.result_counts(dp.user_id, dp.game, dp.variant, dp.difficulty, dp.puzzle_date, dp.env)
+        and public.result_is_plausible('squares', dp.state, dp.result, dp.difficulty, dp.variant, dp.puzzle_date, dp.env)
+      group by p.display_name
+      having count(*) filter (where (dp.result->>'solved')::boolean) > 0
+      limit p_limit
+    ) t on true
+    group by v.variant
+  ) b;
+  out_json := out_json || part;
+
+  return out_json;
+end;
+$$;
+
+-- ===========================================================================
+-- A clue for a round's word
+-- ===========================================================================
+--
+-- A tournament round's Guess the Word, pinned to a word, can carry a clue --
+-- "what every employee-owner holds" -- which a player can ask for, at a cost:
+-- taking it counts against them in the round's ranking, after days won and
+-- the fewest guesses and before the clock.
+--
+-- So the clue is never in the board. A board is published for anybody to
+-- fetch, and a clue in it is a clue everybody has taken without saying so.
+-- It lives on the pin, and the server hands it over only when asked, writing
+-- down that it did -- in round_hints, under the progress name 'guess', which
+-- is what the board counts and what an organiser's reset already clears.
+--
+-- And always the clue for the word in front of the player: a pin's clue only
+-- while the board is the pinned word -- a pin the generator could not build
+-- falls back to its own draw, and the clue for a word that is not there is
+-- worse than none -- and otherwise the clue that word's list gave it.
+
+create or replace function public.set_pin_clue(p_pin uuid, p_clue text)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $fn$
+declare
+  pin public.puzzle_pins;
+  v_clue text := btrim(coalesce(p_clue, ''));
+begin
+  if not public.can('games.setup') then
+    return jsonb_build_object('ok', false, 'reason', 'not allowed');
+  end if;
+  select * into pin from public.puzzle_pins where id = p_pin;
+  if pin.id is null then
+    return jsonb_build_object('ok', false, 'reason', 'no such pin');
+  end if;
+  if pin.env <> 'round' or pin.game <> 'guess' then
+    return jsonb_build_object('ok', false, 'reason', 'a clue is for a tournament round''s Guess the Word');
+  end if;
+  if char_length(v_clue) > 200 then
+    return jsonb_build_object('ok', false, 'reason', 'a clue is at most 200 characters');
+  end if;
+  update public.puzzle_pins
+     set choice = case when v_clue = '' then choice - 'clue' else choice || jsonb_build_object('clue', v_clue) end
+   where id = p_pin;
+  return jsonb_build_object('ok', true);
+end;
+$fn$;
+
+revoke all on function public.set_pin_clue(uuid, text) from public, anon;
+grant execute on function public.set_pin_clue(uuid, text) to authenticated;
+
+-- Whether the round's board in front of the player has a clue, whether they
+-- have taken it, and -- once they have -- what it is. With p_take, takes it:
+-- the first time is recorded, asking again just repeats it.
+create or replace function public.round_clue(p_game text, p_take boolean default false, p_length int default null)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $fn$
+declare
+  uid uuid := (select auth.uid());
+  r record;
+  v_day date;
+  board jsonb;
+  boards jsonb;
+  pin jsonb;
+  v_word text;
+  v_clue text;
+  v_taken boolean;
+begin
+  if uid is null or not public.can('games.play') then
+    return jsonb_build_object('ok', false, 'reason', 'not allowed');
+  end if;
+  if p_game is distinct from 'words' then
+    return jsonb_build_object('ok', true, 'available', false);
+  end if;
+  select tr.*, t.difficulty into r
+  from public.tournament_rounds tr
+  join public.tournaments t on t.id = tr.tournament_id
+  where public.puzzle_day() between tr.starts_on and tr.ends_on
+    and p_game = any (tr.games)
+  order by tr.starts_on
+  limit 1;
+  if not found then
+    return jsonb_build_object('ok', true, 'available', false);
+  end if;
+  v_day := case when p_game = any (r.daily_games) then public.puzzle_day() else r.starts_on end;
+
+  -- The word in front of the player: the board at their length, or the only
+  -- board there is when the word was pinned.
+  select dp.payload into board
+  from public.daily_puzzles dp
+  where dp.game = p_game and dp.env = 'round' and dp.puzzle_date = v_day;
+  boards := board->'byDifficulty'->r.difficulty->'words';
+  begin
+    if boards is null or jsonb_typeof(boards) <> 'object' then
+      return jsonb_build_object('ok', true, 'available', false);
+    end if;
+    select lower(convert_from(decode(w.value, 'base64'), 'UTF8')) into v_word
+    from jsonb_each_text(boards) w
+    where w.key = p_length::text
+       or (select count(*) from jsonb_each_text(boards)) = 1
+    limit 1;
+  exception when others then
+    return jsonb_build_object('ok', true, 'available', false);
+  end;
+  if v_word is null then
+    return jsonb_build_object('ok', true, 'available', false);
+  end if;
+
+  -- A clue written on the round's pin for this word, and failing that the
+  -- one its word list gives -- a list themeing that day first.
+  select p.choice into pin
+  from public.puzzle_pins p
+  where p.env = 'round' and p.game = 'guess' and p.on_date = v_day
+    and (p.difficulty is null or p.difficulty = r.difficulty)
+  order by p.difficulty nulls last
+  limit 1;
+  if lower(pin->>'word') = v_word then
+    v_clue := nullif(btrim(pin->>'clue'), '');
+  end if;
+  if v_clue is null then
+    select e.clue into v_clue
+    from public.word_list_entries e
+    join public.word_lists l on l.id = e.list_id
+    where e.word = v_word and nullif(btrim(e.clue), '') is not null
+    order by (v_day between coalesce(l.daily_from, v_day) and coalesce(l.daily_until, v_day)
+              and (l.daily_from is not null or l.daily_until is not null)) desc,
+             l.created_at
+    limit 1;
+  end if;
+  if v_clue is null then
+    return jsonb_build_object('ok', true, 'available', false);
+  end if;
+
+  v_taken := coalesce((select h.taken > 0 from public.round_hints h
+                       where h.user_id = uid and h.game = 'guess' and h.puzzle_date = v_day), false);
+  if p_take and not v_taken then
+    -- After the board is finished a clue is no help, and counting it would
+    -- only cost somebody who opened it out of curiosity.
+    if exists (select 1 from public.daily_progress dp
+               where dp.user_id = uid and dp.game = 'guess' and dp.env = 'round'
+                 and dp.puzzle_date = v_day and dp.completed) then
+      return jsonb_build_object('ok', false, 'reason', 'you have finished this board');
+    end if;
+    insert into public.round_hints (user_id, game, puzzle_date, taken, targets)
+    values (uid, 'guess', v_day, 1, array['clue'])
+    on conflict (user_id, game, puzzle_date) do nothing;
+    v_taken := true;
+  end if;
+
+  return jsonb_build_object('ok', true, 'available', true, 'taken', v_taken,
+                            'clue', case when v_taken then v_clue end);
+end;
+$fn$;
+
+revoke all on function public.round_clue(text, boolean, int) from public, anon;
+grant execute on function public.round_clue(text, boolean, int) to authenticated;
+
+-- ===========================================================================
+-- Clues that come with a word list
+-- ===========================================================================
+--
+-- A list's words can carry a clue each -- imported with the list, as
+-- {"word": "stock", "clue": "The S in ESOP"} -- so a round's Guess the Word
+-- has a clue to offer for whatever word the board holds, without anybody
+-- typing it twice. A clue written on a round's pin still wins: it is the one
+-- somebody chose for that day.
+alter table public.word_list_entries add column if not exists clue text;
+
+-- The editor's save and the import's are the same call; the clues are new,
+-- and a seven-argument version next to an eight with a default would make
+-- every seven-argument call ambiguous.
+drop function if exists public.save_word_list(uuid, text, text, text, text, date, date);
+
+create or replace function public.save_word_list(
+  p_id uuid,
+  p_name text,
+  p_words text,
+  p_clue text default null,
+  p_spangrams text default null,
+  p_from date default null,
+  p_until date default null,
+  p_clues jsonb default null
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $fn$
+declare
+  id uuid;
+  nm text := btrim(coalesce(p_name, ''));
+  kept int;
+  spans text[];
+  i int;
+  -- The clues the list had, so a save from the editor -- which knows words,
+  -- not clues -- keeps them for every word still in it.
+  old_clues jsonb := '{}'::jsonb;
+begin
+  if not public.can('games.setup') then
+    return jsonb_build_object('ok', false, 'reason', 'not allowed');
+  end if;
+  if nm = '' then
+    return jsonb_build_object('ok', false, 'reason', 'it needs a name');
+  end if;
+  if length(nm) > 60 then
+    return jsonb_build_object('ok', false, 'reason', 'that name is longer than the space it goes in');
+  end if;
+
+  -- Weave threads a spangram corner to corner, so its shape is the board's
+  -- problem rather than a matter of taste. Refused here, naming the one at
+  -- fault, because a list that cannot build a board should say so while
+  -- somebody is looking at it rather than at three in the morning when the
+  -- window is generated.
+  spans := array(
+    select w from regexp_split_to_table(coalesce(p_spangrams, ''), '[^A-Za-z]+') as w
+    where w <> '');
+  for i in 1 .. coalesce(array_length(spans, 1), 0) loop
+    if lower(spans[i]) !~ '^[a-z]{6,16}$' then
+      return jsonb_build_object('ok', false, 'reason',
+        format('"%s" cannot be a spangram — it is one word of 6 to 16 letters', spans[i]));
+    end if;
+    spans[i] := lower(spans[i]);
+  end loop;
+  if p_from is not null and p_until is not null and p_until < p_from then
+    return jsonb_build_object('ok', false, 'reason', 'it cannot finish before it starts');
+  end if;
+  -- Lists may overlap. This used to refuse it, on the grounds that two lists
+  -- covering a day would make the daily depend on which row was read first —
+  -- which was true of the answer given then, and is the wrong fix. A day now
+  -- takes the *union* of every list covering it, so there is nothing to decide
+  -- and no order to depend on: a standing list for the month and a narrower one
+  -- for a week are both simply available that week.
+
+  if p_id is null then
+    insert into public.word_lists (name, created_by, clue, spangrams, daily_from, daily_until)
+    values (nm, (select auth.uid()), nullif(btrim(coalesce(p_clue, '')), ''),
+            nullif(spans, '{}'), p_from, p_until)
+    returning word_lists.id into id;
+  else
+    update public.word_lists
+       set name = nm,
+           clue = nullif(btrim(coalesce(p_clue, '')), ''),
+           spangrams = nullif(spans, '{}'),
+           daily_from = p_from,
+           daily_until = p_until
+     where word_lists.id = p_id returning word_lists.id into id;
+    if id is null then
+      return jsonb_build_object('ok', false, 'reason', 'no such list');
+    end if;
+    select coalesce(jsonb_object_agg(e.word, e.clue), '{}'::jsonb) into old_clues
+    from public.word_list_entries e where e.list_id = id and e.clue is not null;
+    delete from public.word_list_entries where list_id = id;
+  end if;
+
+  -- A clue given with the save wins; otherwise the one the word had.
+  insert into public.word_list_entries (list_id, word, clue)
+  select id, w,
+         left(coalesce(nullif(btrim(p_clues->>w), ''), old_clues->>w), 200)
+  from (
+    select distinct lower(t) as w
+    from regexp_split_to_table(coalesce(p_words, ''), '[^A-Za-z]+') as t
+    where length(t) between 3 and 15
+  ) cleaned
+  on conflict do nothing;
+
+  select count(*) into kept from public.word_list_entries where list_id = id;
+  return jsonb_build_object('ok', true, 'id', id, 'name', nm, 'words', kept);
+exception
+  when unique_violation then
+    return jsonb_build_object('ok', false, 'reason', 'there is already a list with that name');
+end;
+$fn$;
+
+revoke all on function public.save_word_list(uuid, text, text, text, text, date, date, jsonb) from public, anon;
+grant execute on function public.save_word_list(uuid, text, text, text, text, date, date, jsonb) to authenticated;

@@ -23,7 +23,10 @@ const README_LISTS =
   'Words of your own, for a themed round in a session and for the daily word. ' +
   'A word does not have to be in the dictionary — ESOP is the point. Three to ' +
   'fifteen letters. daily_from and daily_until are optional and make the list ' +
-  'take over the daily word for those days.';
+  'take over the daily word for those days. A word can be written as ' +
+  '{ "word": ..., "clue": ... } instead, and a tournament round\'s Guess the ' +
+  'Word offers that clue to players who ask for it. Importing a list with the ' +
+  'name of one already here replaces it.';
 
 const README_PASSAGES =
   'Passages for the daily cryptogram. Length is counted in letters — spaces ' +
@@ -59,7 +62,14 @@ export const LIST_TEMPLATE = {
   lists: [
     {
       name: 'Employee ownership',
-      words: ['shares', 'dividend', 'esop', 'vesting', 'buyout', 'equity'],
+      words: [
+        { word: 'stock', clue: 'The S in ESOP' },
+        { word: 'equity', clue: 'Your piece of the company, in a word' },
+        'shares',
+        'dividend',
+        'esop',
+        'vesting',
+      ],
     },
     {
       name: 'Around the office',

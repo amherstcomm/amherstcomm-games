@@ -34,6 +34,8 @@ export type BoardRow = {
   /** Weave's third level: the hints taken over the boards counted here. Only
    *  Weave ranks on it, so only Weave sends it. */
   hints?: number | null;
+  /** Guess's third level on a round board: clues taken. Only Guess sends it. */
+  clues?: number | null;
 };
 export type Boards = Record<BoardGame, BoardRow[]>;
 
@@ -147,6 +149,12 @@ export const BOARD_LABELS: Record<
     label: nameOfProgress('guess'),
     value: (n) => `${n} won`,
     detail: (n) => `best ${n}/6`,
+    // Only where somebody took one: a clue exists on a round board whose word
+    // was pinned with one, and "no clues" on every daily row is noise.
+    extra: (row) => {
+      const n = row.clues ?? 0;
+      return n > 0 ? `${n} clue${n === 1 ? '' : 's'}` : '';
+    },
   },
   hive: { label: nameOfProgress('hive'), value: (n) => `${n} pts`, detail: (n) => `${n} day${n === 1 ? '' : 's'}` },
   scramble: {

@@ -457,6 +457,63 @@ test('and several word lists at once, with a template to start from', async ({ p
   expect(saved[1].p_words).toBe('fibre splice conduit router');
 });
 
+// A list whose words come with clues, in the shape Ray's own list came in --
+// and with the name of a list already here, which it replaces rather than
+// being refused: importing it again with clues is updating it.
+test('a word list can be imported with a clue for each word, over the list of that name', async ({ page }) => {
+  const saved: Record<string, unknown>[] = [];
+  await page.route('**/rest/v1/rpc/**', (route) => {
+    const url = route.request().url();
+    const reply = (body: unknown) =>
+      route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });
+    if (url.includes('save_word_list')) {
+      saved.push(JSON.parse(route.request().postData() ?? '{}'));
+      return reply({ ok: true, words: 3 });
+    }
+    if (url.includes('word_lists_sheet')) {
+      return reply({ ok: true, lists: [{
+        id: 'l-culture', name: 'Employee ownership culture', words: 120, lengths: [4, 5, 6], clue: null, spangrams: [],
+        daily_from: '2026-10-01', daily_until: '2026-10-31',
+      }] });
+    }
+    return reply(url.includes('_sheet') ? { ok: true, settings: [], themes: [], features: [] } : []);
+  });
+  await page.goto('/admin/lists');
+  await page.getByRole('button', { name: 'Paste lists' }).click();
+  await page.getByLabel('Paste lists', { exact: true }).fill(JSON.stringify({
+    _readme: 'Words of your own...',
+    lists: [{
+      name: 'Employee ownership culture',
+      words: [
+        { word: 'stock', clue: 'The S in ESOP' },
+        { word: 'speakup', clue: 'What an owner does instead of staying quiet' },
+        { word: 'equity', clue: 'Your piece of the company, in a word' },
+      ],
+      daily_from: '2026-10-01',
+      daily_until: '2026-10-31',
+    }],
+  }));
+
+  await expect(page.getByText(
+    'Employee ownership culture (3 words, 3 with clues) — replaces the list of that name'
+  )).toBeVisible();
+  await page.getByRole('button', { name: /^Import 1$/ }).click();
+  await expect(page.getByText('Imported 1 of 1.')).toBeVisible();
+  expect(saved).toHaveLength(1);
+  expect(saved[0]).toMatchObject({
+    p_id: 'l-culture',
+    p_name: 'Employee ownership culture',
+    p_words: 'stock speakup equity',
+    p_from: '2026-10-01',
+    p_until: '2026-10-31',
+    p_clues: {
+      stock: 'The S in ESOP',
+      speakup: 'What an owner does instead of staying quiet',
+      equity: 'Your piece of the company, in a word',
+    },
+  });
+});
+
 // A file, not just a paste. The file fills the same box, so everything after
 // that point is the path the other tests already cover — what this checks is
 // that opening one actually gets there.

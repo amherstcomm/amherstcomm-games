@@ -231,6 +231,12 @@ function App() {
   // twelve, the grids -- was something you typed *into a solver*, and the
   // stored copies are ignored from this version on rather than migrated.
   const [length, setLength] = useState(initial.pattern.length);
+  // The lengths the Guess board on screen holds when it is a round's. One means
+  // the round's word was chosen: it is played at that length whatever the
+  // player's own setting, which is left alone for the daily and practice.
+  const [roundLengths, setRoundLengths] = useState<number[]>([]);
+  const roundLength = roundLengths.length === 1 ? roundLengths[0] : null;
+  const playLength = roundLength ?? length;
 
 
 
@@ -1513,7 +1519,7 @@ function App() {
           <>
           {/* length selector — gone when the range allows only one, the same way
               the view switch goes when one tab is left */}
-          <section className={`mb-7 text-center ${shownLengths.length > 1 ? '' : 'hidden'}`}>
+          <section className={`mb-7 text-center ${shownLengths.length > 1 && roundLength === null ? '' : 'hidden'}`}>
             <label className="block text-xs font-medium text-slate-400 uppercase tracking-wider mb-2.5">
               Word length
             </label>
@@ -1536,7 +1542,8 @@ function App() {
           <div className="mb-8">
             <GuessGame
               ref={gameRef}
-              length={length}
+              length={playLength}
+              onRoundLengths={setRoundLengths}
               commonWords={commonWordsArr}
               practiceWords={practiceWordsArr}
               fullWords={acceptWordsArr ?? fullWordsArr}

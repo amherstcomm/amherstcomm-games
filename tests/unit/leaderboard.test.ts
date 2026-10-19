@@ -113,6 +113,19 @@ describe("Weave's hints", () => {
     const withExtra = Object.entries(BOARD_LABELS)
       .filter(([, l]) => l.extra)
       .map(([game]) => game);
-    expect(withExtra).toEqual(['weave']);
+    // Guess has one on purpose: clues taken on a round board.
+    expect(withExtra).toEqual(['guess', 'weave']);
+  });
+});
+
+// A round's Guess ranks clues taken after the fewest guesses. Shown only where
+// somebody took one: on every daily row "no clues" would be noise.
+describe("Guess's clues", () => {
+  const label = BOARD_LABELS.guess;
+  it('are shown when taken, and not otherwise', () => {
+    expect(label.extra?.({ name: 'Ada', value: 1, detail: 3, clues: 1 })).toBe('1 clue');
+    expect(label.extra?.({ name: 'Ada', value: 2, detail: 3, clues: 2 })).toBe('2 clues');
+    expect(label.extra?.({ name: 'Ada', value: 1, detail: 3, clues: 0 })).toBe('');
+    expect(label.extra?.({ name: 'Ada', value: 1, detail: 3 })).toBe('');
   });
 });

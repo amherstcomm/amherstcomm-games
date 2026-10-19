@@ -102,6 +102,14 @@ export async function pinPuzzle(pin: {
   return (data as { ok: boolean; reason?: string }) ?? fail('no answer');
 }
 
+/** The clue a round's pinned Guess word offers players, or '' to have none. */
+export async function setPinClue(pin: string, clue: string): Promise<{ ok: boolean; reason?: string }> {
+  if (!supabase) return fail('not connected');
+  const { data, error } = await supabase.rpc('set_pin_clue', { p_pin: pin, p_clue: clue });
+  if (error) return fail(error.message);
+  return (data as { ok: boolean; reason?: string }) ?? fail('no answer');
+}
+
 /** A tournament round's board dated on a day. */
 export type RoundBoard = {
   /** as the pin page names games: guess, hive, boxed... */
