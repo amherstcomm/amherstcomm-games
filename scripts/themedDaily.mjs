@@ -373,19 +373,33 @@ export function policyOf(policy, game) {
  *
  *  `PUZZLES_PINS` short-circuits it with inline JSON, for the contract test. */
 export async function pinsFor(date, env = process.env, fetchImpl = fetch) {
-  const inline = (env.PUZZLES_PINS || '').trim();
+  return pinsFrom('daily_pins', 'PUZZLES_PINS', date, env, fetchImpl);
+}
+
+/** What a person pinned to this date's tournament round boards: the same
+ *  shape as pinsFor, kept apart from the daily's -- a round run reads these and
+ *  only these, so the round never deals the puzzle the daily already did.
+ *
+ *  `PUZZLES_ROUND_PINS` short-circuits it, as PUZZLES_PINS does the daily's.
+ *  A database from before round pins answers 404, which reads as none. */
+export async function roundPinsFor(date, env = process.env, fetchImpl = fetch) {
+  return pinsFrom('round_pins', 'PUZZLES_ROUND_PINS', date, env, fetchImpl);
+}
+
+async function pinsFrom(fn, inlineName, date, env, fetchImpl) {
+  const inline = (env[inlineName] || '').trim();
   if (inline) {
     try {
       return cleanPins(JSON.parse(inline));
     } catch {
-      throw new Error('PUZZLES_PINS is set but is not valid JSON');
+      throw new Error(`${inlineName} is set but is not valid JSON`);
     }
   }
   const credentials = credentialsFor(env);
   if (!credentials) return {};
   const { url, key } = credentials;
   try {
-    const res = await fetchImpl(`${url}/rest/v1/rpc/daily_pins`, {
+    const res = await fetchImpl(`${url}/rest/v1/rpc/${fn}`, {
       method: 'POST',
       headers: {
         apikey: key,

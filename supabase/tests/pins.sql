@@ -138,6 +138,6 @@ select pg_temp.check('while the generator may',
   has_function_privilege('service_role', 'public.daily_pins(date)', 'execute'));
 select pg_temp.check('and anon may call none of the rest',
   not has_function_privilege('anon', 'public.pins_sheet(date, date)', 'execute')
-  and not has_function_privilege('anon', 'public.pin_puzzle(date, text, text, jsonb)', 'execute'));
+  and not has_function_privilege('anon', 'public.pin_puzzle(date, text, text, jsonb, text)', 'execute'));
 
 \echo '--- pin checks passed ---'
