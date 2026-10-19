@@ -24,7 +24,9 @@ const THEME = {
 };
 
 const easternToday = () =>
-  new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York' }).format(new Date());
+  new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York' }).format(
+    new Date(Date.now() - (3 * 60 + 15) * 60_000)
+  );
 const plus = (date: string, n: number) =>
   new Date(new Date(`${date}T12:00:00Z`).getTime() + n * 86_400_000).toISOString().slice(0, 10);
 

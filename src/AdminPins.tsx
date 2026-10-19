@@ -47,6 +47,7 @@ import {
   type RoundBoard,
 } from '@/pins';
 import { NoAnswer, noAnswerToRead, noAnswerToWrite, withinWait } from '@/giveUp';
+import { puzzleDayEt } from '@/dailyStatus';
 
 const FIELD =
   'w-full rounded-lg bg-white/5 border border-white/15 px-3 py-2 text-sm text-slate-200 ' +
@@ -398,9 +399,9 @@ export default function AdminPins() {
   useEffect(() => setConfirmLive(false), [date]);
 
   // Eastern, where the puzzles roll, not this browser's zone.
-  const easternToday = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York' }).format(
-    new Date()
-  );
+  // The site's day, which rolls at 3:15 a.m. Eastern -- not the calendar's,
+  // which has moved on by midnight while tomorrow's board is still unseen.
+  const easternToday = puzzleDayEt();
   const live = Boolean(date) && date <= easternToday;
 
   async function republish(force: boolean) {

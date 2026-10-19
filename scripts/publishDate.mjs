@@ -10,11 +10,23 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { themeFor } from './themedDaily.mjs';
 
-/** Today's date where the puzzles roll, which is Eastern. Not the machine's
- *  zone: a VM in UTC would call 8 p.m. Eastern "tomorrow" and treat the board
- *  people are playing as one nobody has seen yet. */
+/** The site's day: Eastern time, rolling at 3:15 a.m. -- puzzle_day() in the
+ *  schema, and what every page and every board is keyed by.
+ *
+ *  It was the Eastern *calendar* date, which is the same thing for all but
+ *  three and a quarter hours of every night -- and those hours are when
+ *  somebody fixing tomorrow's board works. Between midnight and 3:15 the
+ *  calendar had already moved on while the site had not, so a republish of the
+ *  next day thought that day was live: it would not regenerate a round board
+ *  nobody had seen yet, and a pin changed at 12:53 a.m. never reached it.
+ *  The nightly window runs at 03:15 and later, where the two agree, so it is
+ *  unchanged. And Eastern, not the machine's zone: a VM in UTC would call
+ *  8 p.m. Eastern "tomorrow" and treat the board people are playing as one
+ *  nobody has seen yet. */
 export function easternToday(now = new Date()) {
-  return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York' }).format(now);
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York' }).format(
+    new Date(now.getTime() - (3 * 60 + 15) * 60_000)
+  );
 }
 
 /** Calendar arithmetic on the date itself; noon UTC keeps clear of DST. */

@@ -1367,7 +1367,13 @@ function App() {
               since a switch with one position is just clutter. Hiding Solve and
               Learn is how the site becomes a game site rather than a tool with
               games attached. */}
-          <section className={`mb-7 text-center ${shownViews.length > 1 && !inRound ? '' : 'hidden'}`}>
+          {/* On a round's game page as well: the round is the only place to
+              play while a tournament locks the site, so it is the only place
+              left to learn a game too. There the switch changes the view in
+              place rather than going to /learn, which would leave the round
+              -- and is locked out while the tournament runs. The tutorial is
+              its own demo boards, so it never touches the round's. */}
+          <section className={`mb-7 text-center ${shownViews.length > 1 ? '' : 'hidden'}`}>
             {/* wraps rather than overflowing: at 320px with the largest text
                 this row is wider than the viewport, and the page clips its
                 horizontal overflow, so Learn was cut off with no way to reach
@@ -1382,6 +1388,24 @@ function App() {
                   .filter(({ view }) => shownViews.includes(view))
                   .map(({ view, label, Icon }) => {
                   const active = currentView === view;
+                  const look = `inline-flex items-center gap-1.5 px-4 sm:px-5 h-10 rounded-lg text-sm font-semibold transition-all duration-150
+                        ${active
+                          ? 'bg-emerald-400 text-ink shadow-lg shadow-emerald-500/30'
+                          : 'text-slate-300 hover:bg-white/10'}`;
+                  if (inRound) {
+                    return (
+                      <button
+                        key={label}
+                        type="button"
+                        aria-pressed={active}
+                        onClick={() => goToView(view)}
+                        className={look}
+                      >
+                        <Icon className="w-4 h-4" />
+                        {label}
+                      </button>
+                    );
+                  }
                   return (
                     <RouteLink
                       key={label}
