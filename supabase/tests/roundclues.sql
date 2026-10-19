@@ -145,6 +145,15 @@ select pg_temp.check('and a save that does not mention clues keeps them for the 
    where list_id = (select (v->>'id')::uuid from t where k = 'list') and clue is not null)
     = '{"stock": "The S in ESOP"}'::jsonb);
 
+-- The pin page shows the same clue the round would give.
+select pg_temp.check('the pin page is told the clue the word''s list gives it',
+  public.word_list_clue('STOCK', pg_temp.d(0)) = '{"ok": true, "clue": "The S in ESOP"}'::jsonb
+  and public.word_list_clue('growth', pg_temp.d(0)) = '{"ok": true, "clue": null}'::jsonb);
+set session "test.uid" = '0c000000-0000-0000-0000-000000000002';
+select pg_temp.check('which a player may not ask',
+  public.word_list_clue('stock', pg_temp.d(0))->>'reason' = 'not allowed');
+set session "test.uid" = '0c000000-0000-0000-0000-000000000001';
+
 -- An unpinned board: a word at every length. The clue is the one for the
 -- word at the length being played, from its list.
 delete from public.puzzle_pins where on_date = pg_temp.d(0) and env = 'round' and game = 'guess';

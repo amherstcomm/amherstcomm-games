@@ -110,6 +110,16 @@ export async function setPinClue(pin: string, clue: string): Promise<{ ok: boole
   return (data as { ok: boolean; reason?: string }) ?? fail('no answer');
 }
 
+/** The clue a word's lists give it on a day -- what a round offers when its
+ *  pin has none of its own. Null for none, or for a database without clues. */
+export async function readListClue(word: string, date: string): Promise<string | null> {
+  if (!supabase) return null;
+  const { data, error } = await supabase.rpc('word_list_clue', { p_word: word, p_date: date });
+  if (error || !data) return null;
+  const res = data as { ok?: boolean; clue?: string | null };
+  return res.ok ? (res.clue ?? null) : null;
+}
+
 /** A tournament round's board dated on a day. */
 export type RoundBoard = {
   /** as the pin page names games: guess, hive, boxed... */

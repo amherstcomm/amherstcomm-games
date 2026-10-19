@@ -108,6 +108,7 @@ test('the organiser writes the clue on the round s pinned word', async ({ page }
       sent.push(JSON.parse(route.request().postData() ?? '{}'));
       return reply({ ok: true });
     }
+    if (url.includes('word_list_clue')) return reply({ ok: true, clue: null });
     if (url.includes('round_boards_on')) {
       return reply({ ok: true, boards: [{
         game: 'guess', daily: true, round: 'r1', round_starts_on: ROUND.starts_on, round_ends_on: ROUND.ends_on,
@@ -129,7 +130,7 @@ test('the organiser writes the clue on the round s pinned word', async ({ page }
   await page.getByRole('group', { name: 'Pin for' }).getByRole('button', { name: 'Tournament rounds' }).click();
   await page.getByLabel('Pin date').fill(day.date);
   await page.getByRole('button', { name: 'Look' }).click();
-  await page.getByLabel('Clue for OWNERS (optional)').fill('What every employee-owner holds');
+  await page.getByLabel('Clue for OWNERS').fill('What every employee-owner holds');
   await page.getByRole('button', { name: 'Save the clue' }).click();
   await expect(page.getByText('Clue saved.')).toBeVisible();
   expect(sent).toEqual([{ p_pin: 'pin-r', p_clue: 'What every employee-owner holds' }]);
@@ -162,4 +163,62 @@ test("a round with a chosen word plays at that word's length", async ({ page }) 
   // and the daily still plays at the player's own length afterwards
   await page.goto('/daily/guess');
   await expect(page.getByText('Word length')).toBeVisible();
+});
+
+// The box under a pinned word shows the clue players will get. Empty, it read
+// as "no clue" when the word's list had one all along.
+async function pinPage(page: import('@playwright/test').Page, pinClue: string | null) {
+  const sent: Record<string, unknown>[] = [];
+  const date = plus(TODAY, 1);
+  await page.route('**/rest/v1/rpc/**', (route) => {
+    const url = route.request().url();
+    const reply = (body: unknown) =>
+      route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });
+    if (url.includes('set_pin_clue')) {
+      sent.push(JSON.parse(route.request().postData() ?? '{}'));
+      return reply({ ok: true });
+    }
+    if (url.includes('word_list_clue')) return reply({ ok: true, clue: 'One unit of what you own here' });
+    if (url.includes('round_boards_on')) {
+      return reply({ ok: true, boards: [{
+        game: 'guess', daily: true, round: 'r1', round_starts_on: ROUND.starts_on, round_ends_on: ROUND.ends_on,
+        tournament: 'Ownership Cup', difficulty: 'hard',
+      }] });
+    }
+    if (url.includes('theme_coverage')) return reply({ ok: true, days: [{ date, theme: { name: 'October', words: ['share'] } }] });
+    if (url.includes('pins_sheet')) {
+      return reply({ ok: true, pins: [{
+        id: 'pin-r', on_date: date, env: 'round', game: 'guess', difficulty: null,
+        choice: pinClue ? { word: 'share', clue: pinClue } : { word: 'share' },
+      }] });
+    }
+    return reply([]);
+  });
+  await page.goto('/admin/pins');
+  await page.getByRole('group', { name: 'Pin for' }).getByRole('button', { name: 'Tournament rounds' }).click();
+  await page.getByLabel('Pin date').fill(date);
+  await page.getByRole('button', { name: 'Look' }).click();
+  return sent;
+}
+
+test("a pinned word's clue box shows its word list's clue", async ({ page }) => {
+  const sent = await pinPage(page, null);
+  await expect(page.getByLabel('Clue for SHARE')).toHaveValue('One unit of what you own here');
+  await expect(page.getByRole('note')).toContainText('From the word list');
+  // nothing to save until it is changed
+  await expect(page.getByRole('button', { name: 'Save the clue' })).toBeDisabled();
+  await page.getByLabel('Clue for SHARE').fill('A slice of the company');
+  await page.getByRole('button', { name: 'Save the clue' }).click();
+  await expect(page.getByText('Clue saved.')).toBeVisible();
+  expect(sent).toEqual([{ p_pin: 'pin-r', p_clue: 'A slice of the company' }]);
+});
+
+test("and a clue written for the round says so, and can go back to the list's", async ({ page }) => {
+  const sent = await pinPage(page, 'A slice of the company');
+  await expect(page.getByLabel('Clue for SHARE')).toHaveValue('A slice of the company');
+  await expect(page.getByRole('note')).toContainText('The word list’s clue is “One unit of what you own here”');
+  await page.getByLabel('Clue for SHARE').fill('');
+  await page.getByRole('button', { name: 'Save the clue' }).click();
+  await expect(page.getByText('Back to the word list’s clue.')).toBeVisible();
+  expect(sent).toEqual([{ p_pin: 'pin-r', p_clue: '' }]);
 });
