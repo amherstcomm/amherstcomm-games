@@ -134,3 +134,32 @@ test('the organiser writes the clue on the round s pinned word', async ({ page }
   await expect(page.getByText('Clue saved.')).toBeVisible();
   expect(sent).toEqual([{ p_pin: 'pin-r', p_clue: 'What every employee-owner holds' }]);
 });
+
+// A round whose word was chosen holds that word at its own length and no
+// other. The page plays it there, whatever length the player usually plays,
+// rather than telling them "today's word is 6 letters" and leaving them to
+// find it -- and the length picker goes, because there is nothing to pick.
+test("a round with a chosen word plays at that word's length", async ({ page }) => {
+  const six = { date: TODAY, byDifficulty: Object.fromEntries(
+    ['easy', 'hard', 'extreme'].map((d) => [d, { words: { 6: b64('owners') } }])) };
+  await page.route('**/rest/v1/rpc/**', (route) => {
+    const fn = route.request().url().match(/\/rpc\/(\w+)/)?.[1] ?? '';
+    const reply = (b: unknown) =>
+      route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(b) });
+    if (fn === 'current_rounds') return reply([ROUND]);
+    if (fn === 'current_round') return reply(ROUND);
+    if (fn === 'read_availability') return reply([]);
+    if (fn === 'current_tournament') return reply(null);
+    if (fn === 'round_puzzle') return reply(six);
+    if (fn === 'round_clue') return reply({ ok: true, available: false });
+    return route.fallback();
+  });
+  await page.goto('/tournament/guess');
+  await expect(page.getByLabel('Tap the board and type your guess')).toBeVisible();
+  await expect(page.getByText(/No daily puzzle at/)).toHaveCount(0);
+  await expect(page.getByText('Word length')).toBeHidden();
+
+  // and the daily still plays at the player's own length afterwards
+  await page.goto('/daily/guess');
+  await expect(page.getByText('Word length')).toBeVisible();
+});

@@ -125,8 +125,11 @@ const GuessGame = forwardRef<
     practiceWords: string[] | null;
     fullWords: string[] | null;
     onLetterStates: (states: Record<string, LetterState>) => void;
+    /** The lengths a round's board holds, so the page can play the only one
+     *  when the round's word was chosen. Empty off a round. */
+    onRoundLengths?: (lengths: number[]) => void;
   }
->(function GuessGame({ length, commonWords, fullWords, onLetterStates, practiceWords }, ref) {
+>(function GuessGame({ length, commonWords, fullWords, onLetterStates, onRoundLengths, practiceWords }, ref) {
   const channel = useBoardChannel();
   const [store, setStore] = useState<PlayStore>(() => loadStore(channel));
   const { practiceAllowed } = usePrefs();
@@ -289,6 +292,14 @@ const GuessGame = forwardRef<
     [dailyData]
   );
   const noDailyAtLength = dailyMode && !!dailyData && !dailyData.words[lenKey];
+
+  // A round whose word was chosen holds that word and no other length, and
+  // the page plays it rather than telling the player to go and find it.
+  const roundLengthsKey = channel.kind === 'round' ? dailyLengths.join(',') : '';
+  useEffect(() => {
+    onRoundLengths?.(roundLengthsKey ? roundLengthsKey.split(',').map(Number) : []);
+  }, [roundLengthsKey, onRoundLengths]);
+  useEffect(() => () => onRoundLengths?.([]), [onRoundLengths]);
 
   const record = dailyMode ? store.daily[lenKey] : store.practice[lenKey];
   const answer = useMemo(() => {
