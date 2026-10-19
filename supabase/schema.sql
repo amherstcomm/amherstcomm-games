@@ -17267,3 +17267,147 @@ $fn$;
 
 revoke all on function public.save_word_list(uuid, text, text, text, text, date, date, jsonb) from public, anon;
 grant execute on function public.save_word_list(uuid, text, text, text, text, date, date, jsonb) to authenticated;
+
+-- ===========================================================================
+-- A word's clue from its lists, in one place
+-- ===========================================================================
+--
+-- The round asks it when a player takes the clue, and the pin page asks it so
+-- the clue box under a pinned word shows the clue players will actually get
+-- -- an empty box there read as "no clue", when the list had one all along.
+-- One function, so the page can never show a different clue from the one the
+-- round hands out.
+create or replace function public.list_clue(p_word text, p_day date)
+returns text
+language sql
+stable
+security definer
+set search_path = ''
+as $fn$
+  select e.clue
+  from public.word_list_entries e
+  join public.word_lists l on l.id = e.list_id
+  where e.word = lower(p_word) and nullif(btrim(e.clue), '') is not null
+  order by (p_day between coalesce(l.daily_from, p_day) and coalesce(l.daily_until, p_day)
+            and (l.daily_from is not null or l.daily_until is not null)) desc,
+           l.created_at
+  limit 1
+$fn$;
+
+revoke all on function public.list_clue(text, date) from public, anon, authenticated;
+
+-- For the pin page: what the lists say about a word on a day.
+create or replace function public.word_list_clue(p_word text, p_date date)
+returns jsonb
+language sql
+stable
+security definer
+set search_path = ''
+as $fn$
+  select case
+    when not public.can('games.setup') then jsonb_build_object('ok', false, 'reason', 'not allowed')
+    else jsonb_build_object('ok', true, 'clue', public.list_clue(p_word, p_date))
+  end
+$fn$;
+
+revoke all on function public.word_list_clue(text, date) from public, anon;
+grant execute on function public.word_list_clue(text, date) to authenticated;
+
+create or replace function public.round_clue(p_game text, p_take boolean default false, p_length int default null)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $fn$
+declare
+  uid uuid := (select auth.uid());
+  r record;
+  v_day date;
+  board jsonb;
+  boards jsonb;
+  pin jsonb;
+  v_word text;
+  v_clue text;
+  v_taken boolean;
+begin
+  if uid is null or not public.can('games.play') then
+    return jsonb_build_object('ok', false, 'reason', 'not allowed');
+  end if;
+  if p_game is distinct from 'words' then
+    return jsonb_build_object('ok', true, 'available', false);
+  end if;
+  select tr.*, t.difficulty into r
+  from public.tournament_rounds tr
+  join public.tournaments t on t.id = tr.tournament_id
+  where public.puzzle_day() between tr.starts_on and tr.ends_on
+    and p_game = any (tr.games)
+  order by tr.starts_on
+  limit 1;
+  if not found then
+    return jsonb_build_object('ok', true, 'available', false);
+  end if;
+  v_day := case when p_game = any (r.daily_games) then public.puzzle_day() else r.starts_on end;
+
+  -- The word in front of the player: the board at their length, or the only
+  -- board there is when the word was pinned.
+  select dp.payload into board
+  from public.daily_puzzles dp
+  where dp.game = p_game and dp.env = 'round' and dp.puzzle_date = v_day;
+  boards := board->'byDifficulty'->r.difficulty->'words';
+  begin
+    if boards is null or jsonb_typeof(boards) <> 'object' then
+      return jsonb_build_object('ok', true, 'available', false);
+    end if;
+    select lower(convert_from(decode(w.value, 'base64'), 'UTF8')) into v_word
+    from jsonb_each_text(boards) w
+    where w.key = p_length::text
+       or (select count(*) from jsonb_each_text(boards)) = 1
+    limit 1;
+  exception when others then
+    return jsonb_build_object('ok', true, 'available', false);
+  end;
+  if v_word is null then
+    return jsonb_build_object('ok', true, 'available', false);
+  end if;
+
+  -- A clue written on the round's pin for this word, and failing that the
+  -- one its word list gives -- a list themeing that day first.
+  select p.choice into pin
+  from public.puzzle_pins p
+  where p.env = 'round' and p.game = 'guess' and p.on_date = v_day
+    and (p.difficulty is null or p.difficulty = r.difficulty)
+  order by p.difficulty nulls last
+  limit 1;
+  if lower(pin->>'word') = v_word then
+    v_clue := nullif(btrim(pin->>'clue'), '');
+  end if;
+  if v_clue is null then
+    v_clue := public.list_clue(v_word, v_day);
+  end if;
+  if v_clue is null then
+    return jsonb_build_object('ok', true, 'available', false);
+  end if;
+
+  v_taken := coalesce((select h.taken > 0 from public.round_hints h
+                       where h.user_id = uid and h.game = 'guess' and h.puzzle_date = v_day), false);
+  if p_take and not v_taken then
+    -- After the board is finished a clue is no help, and counting it would
+    -- only cost somebody who opened it out of curiosity.
+    if exists (select 1 from public.daily_progress dp
+               where dp.user_id = uid and dp.game = 'guess' and dp.env = 'round'
+                 and dp.puzzle_date = v_day and dp.completed) then
+      return jsonb_build_object('ok', false, 'reason', 'you have finished this board');
+    end if;
+    insert into public.round_hints (user_id, game, puzzle_date, taken, targets)
+    values (uid, 'guess', v_day, 1, array['clue'])
+    on conflict (user_id, game, puzzle_date) do nothing;
+    v_taken := true;
+  end if;
+
+  return jsonb_build_object('ok', true, 'available', true, 'taken', v_taken,
+                            'clue', case when v_taken then v_clue end);
+end;
+$fn$;
+
+revoke all on function public.round_clue(text, boolean, int) from public, anon;
+grant execute on function public.round_clue(text, boolean, int) to authenticated;

@@ -37,6 +37,7 @@ import {
   PIN_TITLE,
   PINNABLE,
   readPins,
+  readListClue,
   readRoundBoards,
   setPinClue,
   unpinPuzzle,
@@ -277,31 +278,72 @@ function Shortlist({
 
 /** The clue a round's pinned Guess word offers. Players see that there is one
  *  and choose whether to take it; taking it counts against them in the round. */
-function ClueEditor({ pin, onSaved }: { pin: Pin; onSaved: () => void }) {
-  const [text, setText] = useState(String(pin.choice.clue ?? ''));
+function ClueEditor({ pin, date, onSaved }: { pin: Pin; date: string; onSaved: () => void }) {
+  const word = String(pin.choice.word ?? '');
+  const own = String(pin.choice.clue ?? '');
+  // The word list's clue for this word, which is what players get when the
+  // pin has none of its own -- so the box shows it rather than sitting empty.
+  const [fromList, setFromList] = useState<string | null>(null);
+  const [text, setText] = useState(own);
   const [said, setSaid] = useState('');
   const [busy, setBusy] = useState(false);
-  useEffect(() => setText(String(pin.choice.clue ?? '')), [pin]);
+  useEffect(() => {
+    let alive = true;
+    setFromList(null);
+    setText(own);
+    if (word) {
+      void readListClue(word, date).then((clue) => {
+        if (!alive) return;
+        setFromList(clue);
+        if (!own && clue) setText(clue);
+      });
+    }
+    return () => {
+      alive = false;
+    };
+  }, [word, own, date]);
+  const shown = own || fromList || '';
   async function save() {
     setBusy(true);
-    const res = await setPinClue(pin.id, text);
+    // The list's own words saved back are no change: storing a copy would
+    // stop the pin following the list if the list's clue is edited later.
+    const res = await setPinClue(pin.id, fromList && text.trim() === fromList ? '' : text);
     setBusy(false);
-    setSaid(res.ok ? (text.trim() ? 'Clue saved.' : 'Clue removed.') : (res.reason ?? 'That did not work'));
+    setSaid(
+      res.ok
+        ? !text.trim()
+          ? fromList
+            ? 'Back to the word list’s clue.'
+            : 'Clue removed.'
+          : fromList && text.trim() === fromList
+            ? 'Using the word list’s clue.'
+            : 'Clue saved.'
+        : (res.reason ?? 'That did not work')
+    );
     if (res.ok) onSaved();
   }
   return (
     <div className="mt-2 rounded-lg border border-white/15 bg-white/5 p-3">
       <label className="block text-xs text-slate-400">
-        Clue for {String(pin.choice.word ?? 'the word').toUpperCase()} (optional)
+        Clue for {(word || 'the word').toUpperCase()}
         <input className={FIELD + ' mt-1'} value={text} maxLength={200} placeholder="e.g. What every employee-owner holds"
                onChange={(e) => setText(e.target.value)} />
       </label>
+      <p className="mt-1 text-xs text-slate-400" role="note">
+        {own
+          ? fromList
+            ? `Written for this round. The word list’s clue is “${fromList}”; clear the box to use it.`
+            : 'Written for this round.'
+          : fromList
+            ? 'From the word list. Change it to give this round a different clue.'
+            : 'No clue yet: the word lists have none for this word. Write one to offer it.'}
+      </p>
       <p className="mt-1 text-xs text-slate-500">
         Players can ask for it during the round. Taking it counts against them: among players
         with the same number of guesses, those who did not take it place first.
       </p>
       <div className="mt-2 flex flex-wrap items-center gap-3">
-        <button className={BUTTON} disabled={busy || text.trim() === String(pin.choice.clue ?? '')}
+        <button className={BUTTON} disabled={busy || text.trim() === shown}
                 onClick={() => void save()}>
           Save the clue
         </button>
@@ -681,7 +723,7 @@ export default function AdminPins() {
             />
             {/* A round's Guess word can carry a clue for players to ask for. */}
             {onRound && game === 'guess' && pinnedHere.get('guess all') && (
-              <ClueEditor pin={pinnedHere.get('guess all')!} onSaved={() => void look()} />
+              <ClueEditor pin={pinnedHere.get('guess all')!} date={date} onSaved={() => void look()} />
             )}
             </div>
           ))}
