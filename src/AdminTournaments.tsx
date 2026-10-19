@@ -32,6 +32,7 @@ import {
   type Round,
   type Tournament,
 } from '@/tournaments';
+import { puzzleDayEt } from '@/dailyStatus';
 
 const FIELD =
   'w-full rounded-lg bg-white/5 border border-white/15 px-3 py-2 text-sm text-slate-200 ' +
@@ -40,9 +41,9 @@ const BUTTON =
   'inline-flex items-center justify-center px-3 h-9 rounded-lg text-sm font-semibold ' +
   'bg-white/10 border border-white/15 text-slate-200 hover:bg-white/15 disabled:opacity-50';
 
-/** Today where the puzzles roll, for saying whether a round is on or over. */
-const easternToday = () =>
-  new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York' }).format(new Date());
+/** Today where the puzzles roll, for saying whether a round is on or over:
+ *  the site's day, which turns at 3:15 a.m. Eastern rather than at midnight. */
+const easternToday = () => puzzleDayEt();
 
 const span = (from: string, until: string) => (from === until ? `on ${from}` : `${from} to ${until}`);
 

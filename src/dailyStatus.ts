@@ -17,6 +17,15 @@ import { store as siteStore } from '@/siteStorage';
 
 export type DailyState = 'none' | 'started' | 'done';
 
+/** The site's day exactly: Eastern time, rolling at 3:15 a.m. -- puzzle_day()
+ *  in the schema. For a page that says whether a day has started, where
+ *  "nearly" is a board somebody replaces by mistake or refuses to. */
+export function puzzleDayEt(now = Date.now()): string {
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York' }).format(
+    new Date(now - (3 * 60 + 15) * 60_000)
+  );
+}
+
 /** the daily rolls at 3am Eastern; noon UTC lands on the right calendar day
  *  either side of the boundary without pulling in a timezone library */
 export function todayEt(): string {
