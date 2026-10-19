@@ -23,6 +23,9 @@ export type ParsedTheme = {
 export type ParsedList = {
   name: string;
   words: string[];
+  /** a clue per word, for the ones given one -- a round's Guess the Word
+   *  offers it to players who ask */
+  clues?: Record<string, string>;
   clue?: string;
   spangrams?: string[];
   from?: string;
@@ -69,10 +72,20 @@ function entries(value: unknown): unknown[] {
   return [];
 }
 
-/** Words as an array, or as anything a person might paste instead. */
+/** Words as an array, or as anything a person might paste instead -- a
+ *  `{ "word": ..., "clue": ... }` entry is its word here; cluesOf reads the
+ *  clue. */
 function wordsOf(raw: unknown): string[] {
   const from = Array.isArray(raw)
-    ? raw.filter((w): w is string => typeof w === 'string')
+    ? raw
+        // An object names one word, so "Speak-Up" is speakup rather than two
+        // words -- the key its clue is filed under. A string may be a blob.
+        .map((w) =>
+          w && typeof w === 'object'
+            ? String((w as Record<string, unknown>).word ?? '').replace(/[^A-Za-z]+/g, '')
+            : w
+        )
+        .filter((w): w is string => typeof w === 'string')
     : typeof raw === 'string'
       ? [raw]
       : [];
@@ -87,6 +100,22 @@ function wordsOf(raw: unknown): string[] {
 }
 
 const text = (raw: unknown): string => (typeof raw === 'string' ? raw.trim() : '');
+
+/** The clues among a list's words: `{ "word": "stock", "clue": "The S in ESOP" }`.
+ *  Keyed the way the word is stored -- lower case, letters only -- and cut at
+ *  the 200 characters the server keeps. */
+function cluesOf(raw: unknown): Record<string, string> {
+  const out: Record<string, string> = {};
+  if (!Array.isArray(raw)) return out;
+  for (const w of raw) {
+    if (!w || typeof w !== 'object') continue;
+    const o = w as Record<string, unknown>;
+    const word = text(o.word).toLowerCase().replace(/[^a-z]+/g, '');
+    const clue = text(o.clue ?? o.hint);
+    if (word && clue) out[word] = clue.slice(0, 200);
+  }
+  return out;
+}
 
 /** A date, or nothing. Anything that is not `YYYY-MM-DD` is ignored rather than
  *  guessed at: a date read wrong is a theme that appears in the wrong week. */
@@ -161,9 +190,11 @@ export function parseWordLists(input: string): Parsed<ParsedList> {
     const spangrams = wordsOf(o.spangrams ?? o.spangram).filter((w) =>
       /^[a-z]{6,16}$/.test(w)
     );
+    const clues = cluesOf(o.words);
     items.push({
       name,
       words,
+      ...(Object.keys(clues).length > 0 ? { clues } : {}),
       clue: text(o.clue) || undefined,
       spangrams: spangrams.length > 0 ? spangrams : undefined,
       from: date(o.from ?? o.daily_from ?? o.start),

@@ -51,7 +51,7 @@ export async function saveWordList(
   id: string | null,
   name: string,
   words: string,
-  daily: { clue?: string; spangrams?: string; from?: string; until?: string } = {}
+  daily: { clue?: string; spangrams?: string; from?: string; until?: string; clues?: Record<string, string> } = {}
 ): Promise<{ ok: boolean; reason?: string; id?: string; words?: number }> {
   if (!supabase) return fail('not connected');
   const { data, error } = await supabase.rpc('save_word_list', {
@@ -64,6 +64,9 @@ export async function saveWordList(
     // distinguishable: a list with no dates themes nothing.
     p_from: daily.from || null,
     p_until: daily.until || null,
+    // Only when there are some: a save from the editor keeps the clues the
+    // list has, and a database from before clues takes the call as it was.
+    ...(daily.clues && Object.keys(daily.clues).length > 0 ? { p_clues: daily.clues } : {}),
   });
   if (error) return fail(error.message);
   return (data as { ok: boolean; reason?: string }) ?? fail('no answer');

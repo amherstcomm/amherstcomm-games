@@ -170,7 +170,7 @@ select pg_temp.check('nor draw from one',
   not has_function_privilege('authenticated', 'public.draw_word(uuid, int)', 'execute'));
 select pg_temp.check('and anon may call none of it',
   not has_function_privilege('anon', 'public.word_lists_sheet()', 'execute')
-  and not has_function_privilege('anon', 'public.save_word_list(uuid, text, text, text, text, date, date)', 'execute'));
+  and not has_function_privilege('anon', 'public.save_word_list(uuid, text, text, text, text, date, date, jsonb)', 'execute'));
 
 -- ---------------------------------------------------------------------------
 -- Tidying up

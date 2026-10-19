@@ -38,6 +38,7 @@ import {
   PINNABLE,
   readPins,
   readRoundBoards,
+  setPinClue,
   unpinPuzzle,
   type Pin,
   type PinFor,
@@ -270,6 +271,42 @@ function Shortlist({
           {matching.length - showing} more
         </button>
       )}
+    </div>
+  );
+}
+
+/** The clue a round's pinned Guess word offers. Players see that there is one
+ *  and choose whether to take it; taking it counts against them in the round. */
+function ClueEditor({ pin, onSaved }: { pin: Pin; onSaved: () => void }) {
+  const [text, setText] = useState(String(pin.choice.clue ?? ''));
+  const [said, setSaid] = useState('');
+  const [busy, setBusy] = useState(false);
+  useEffect(() => setText(String(pin.choice.clue ?? '')), [pin]);
+  async function save() {
+    setBusy(true);
+    const res = await setPinClue(pin.id, text);
+    setBusy(false);
+    setSaid(res.ok ? (text.trim() ? 'Clue saved.' : 'Clue removed.') : (res.reason ?? 'That did not work'));
+    if (res.ok) onSaved();
+  }
+  return (
+    <div className="mt-2 rounded-lg border border-white/15 bg-white/5 p-3">
+      <label className="block text-xs text-slate-400">
+        Clue for {String(pin.choice.word ?? 'the word').toUpperCase()} (optional)
+        <input className={FIELD + ' mt-1'} value={text} maxLength={200} placeholder="e.g. What every employee-owner holds"
+               onChange={(e) => setText(e.target.value)} />
+      </label>
+      <p className="mt-1 text-xs text-slate-500">
+        Players can ask for it during the round. Taking it counts against them: among players
+        with the same number of guesses, those who did not take it place first.
+      </p>
+      <div className="mt-2 flex flex-wrap items-center gap-3">
+        <button className={BUTTON} disabled={busy || text.trim() === String(pin.choice.clue ?? '')}
+                onClick={() => void save()}>
+          Save the clue
+        </button>
+        {said && <span className="text-xs text-slate-400" role="status">{said}</span>}
+      </div>
     </div>
   );
 }
@@ -626,6 +663,7 @@ export default function AdminPins() {
       {day && (
         <div className="space-y-6" data-pins>
           {PINNABLE.filter((game) => !onRound || (boards ?? []).some((b) => b.game === game)).map((game: Pinnable) => (
+            <div key={game}>
             <Shortlist
               key={game}
               game={game}
@@ -641,6 +679,11 @@ export default function AdminPins() {
               onPin={(choice) => void pin(game, choice)}
               onUnpin={(id) => void unpin(id)}
             />
+            {/* A round's Guess word can carry a clue for players to ask for. */}
+            {onRound && game === 'guess' && pinnedHere.get('guess all') && (
+              <ClueEditor pin={pinnedHere.get('guess all')!} onSaved={() => void look()} />
+            )}
+            </div>
           ))}
         </div>
       )}

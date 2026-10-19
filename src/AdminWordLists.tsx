@@ -153,14 +153,29 @@ export default function AdminWordLists() {
             template={LIST_TEMPLATE}
             templateName="word-lists-template.json"
             parse={parseWordLists}
-            describe={(l) => `${l.name} (${l.words.length} words)`}
+            describe={(l) => {
+              const clued = Object.keys(l.clues ?? {}).length;
+              const same = (lists ?? []).some((x) => x.name.toLowerCase() === l.name.toLowerCase());
+              return (
+                `${l.name} (${l.words.length} words${clued > 0 ? `, ${clued} with clues` : ''})` +
+                (same ? ' — replaces the list of that name' : '')
+              );
+            }}
             save={(l) =>
-              saveWordList(null, l.name, l.words.join(' '), {
-                clue: l.clue,
-                spangrams: l.spangrams?.join(' '),
-                from: l.from,
-                until: l.until,
-              })
+              // A list already here by that name is replaced rather than
+              // refused: importing it again -- now with clues -- is updating it.
+              saveWordList(
+                (lists ?? []).find((x) => x.name.toLowerCase() === l.name.toLowerCase())?.id ?? null,
+                l.name,
+                l.words.join(' '),
+                {
+                  clue: l.clue,
+                  spangrams: l.spangrams?.join(' '),
+                  from: l.from,
+                  until: l.until,
+                  clues: l.clues,
+                }
+              )
             }
             onDone={() => void pull()}
           />

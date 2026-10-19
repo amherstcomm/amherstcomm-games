@@ -144,6 +144,41 @@ describe('parseWordLists', () => {
     expect(items[0].from).toBe('2026-10-01');
   });
 
+  // The shape Ray's own list came in: words as objects, each with its clue.
+  it('reads words given with clues, and keeps the clues', () => {
+    const { items, problems } = parseWordLists(
+      JSON.stringify({
+        _readme: 'ignored',
+        lists: [
+          {
+            name: 'Employee ownership culture',
+            words: [
+              { word: 'stock', clue: 'The S in ESOP' },
+              { word: 'Speak-Up', clue: '  What an owner does instead of staying quiet  ' },
+              { word: 'equity' },
+              'shares',
+            ],
+            daily_from: '2026-10-01',
+            daily_until: '2026-10-31',
+          },
+        ],
+      })
+    );
+    expect(problems).toEqual([]);
+    // one word, the key its clue is under
+    expect(items[0].words).toEqual(['stock', 'speakup', 'equity', 'shares']);
+    expect(items[0].clues).toEqual({
+      stock: 'The S in ESOP',
+      speakup: 'What an owner does instead of staying quiet',
+    });
+    expect(items[0].from).toBe('2026-10-01');
+  });
+
+  it('and a list of plain words has no clues to send', () => {
+    const { items } = parseWordLists(JSON.stringify([{ name: 'x', words: ['shares'] }]));
+    expect(items[0]).not.toHaveProperty('clues');
+  });
+
   it('and names the entries it could not use', () => {
     const { items, problems } = parseWordLists(
       JSON.stringify([{ words: ['shares'] }, { name: 'Empty', words: [] }])

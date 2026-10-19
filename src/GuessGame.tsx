@@ -21,6 +21,7 @@ import {
   type BoardChannel,
 } from '@/boardChannel';
 import DailyStats from '@/DailyStats';
+import { readRoundClue, takeRoundClue, type RoundClue } from '@/roundClue';
 import MobileKeyInput from '@/MobileKeyInput';
 import ShareButton from '@/ShareButton';
 import { GAME_NAME } from '@/games';
@@ -505,6 +506,35 @@ const GuessGame = forwardRef<
     }
   };
 
+  // A round's clue, when its word was pinned with one. Asked of the server and
+  // never carried in the board, and taking it is the server's record: the
+  // round's ranking counts it after the fewest guesses.
+  const [clue, setClue] = useState<RoundClue | null>(null);
+  const [clueNote, setClueNote] = useState('');
+  useEffect(() => {
+    if (channel.kind !== 'round') return;
+    let alive = true;
+    setClue(null);
+    void readRoundClue('words', length).then((got) => alive && setClue(got));
+    return () => {
+      alive = false;
+    };
+  }, [channel, length]);
+  async function showClue() {
+    const ok = window.confirm(
+      'Taking the clue counts against you in this round: among players who solve it in the same ' +
+        'number of guesses, those who did not take it place first. Show it?'
+    );
+    if (!ok) return;
+    const got = await takeRoundClue('words', length);
+    if ('error' in got) {
+      setClueNote(got.error === 'you have finished this board' ? 'You have finished this board.' : 'The clue could not be fetched. Try again.');
+      return;
+    }
+    setClueNote('');
+    setClue(got);
+  }
+
   // hold the board until the synced copy has merged — reconciling after
   // someone has typed a guess is worse than a moment of waiting
   const loading = (dailyMode ? !dailyData && !dailyError : !commonWords) || syncing;
@@ -563,6 +593,28 @@ const GuessGame = forwardRef<
             : `today's run from ${dailyLengths[0]} to ${dailyLengths[dailyLengths.length - 1]}`}
           .{channel.kind === 'daily' && ' Practice works at every length.'}
         </p>
+      )}
+
+      {answer && clue?.available && (
+        <div className="mb-4" aria-label="Clue" role="region">
+          {clue.taken && clue.clue ? (
+            <p className="text-sm text-slate-200">
+              <span className="text-slate-400">Clue: </span>
+              {clue.clue}
+            </p>
+          ) : (
+            playing && (
+              <button
+                type="button"
+                onClick={() => void showClue()}
+                className="inline-flex items-center justify-center px-3 h-9 rounded-lg text-sm font-semibold bg-white/10 border border-white/15 text-slate-200 hover:bg-white/15"
+              >
+                Show the clue
+              </button>
+            )
+          )}
+          {clueNote && <p className="text-xs text-rose-300 mt-1" role="status">{clueNote}</p>}
+        </div>
       )}
 
       {answer && (

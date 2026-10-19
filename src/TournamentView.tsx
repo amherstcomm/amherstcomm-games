@@ -187,7 +187,7 @@ function RoundBoards({ round }: { round: RoundStandings }) {
                         {label.detail(r.detail ?? 0)}
                       </span>
                     )}
-                    {label.extra && (
+                    {label.extra && label.extra(r) !== '' && (
                       <span className="text-xs text-slate-500 tabular-nums shrink-0">
                         {label.extra(r)}
                       </span>

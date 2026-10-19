@@ -113,7 +113,7 @@ function Board({
               )}
               {/* The level below the clock, where a game has one: Weave's
                   hints break a tie the two numbers above cannot. */}
-              {extra && (
+              {extra && extra(r) !== '' && (
                 <span className="text-xs text-slate-500 tabular-nums shrink-0 hidden sm:inline">
                   {extra(r)}
                 </span>

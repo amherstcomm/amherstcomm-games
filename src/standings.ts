@@ -16,6 +16,8 @@ export type StandingRow = {
   detail: number | null;
   /** Weave's third level, the hints taken. Only Weave sends it. */
   hints?: number | null;
+  /** Guess's, on a round board: the clues taken. */
+  clues?: number | null;
 };
 
 /** One person's finish in a session, as session_ranking ranked it. `place` is
