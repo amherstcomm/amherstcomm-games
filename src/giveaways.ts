@@ -11,7 +11,10 @@
 // itself rather than taking the server's word for it.
 import { supabase } from '@/supabase';
 
-export type GiveawayStatus = 'open' | 'drawing' | 'drawn' | 'cancelled';
+export type GiveawayStatus = 'open' | 'drawing' | 'judging' | 'drawn' | 'cancelled';
+
+/** Drawn at random, or answered and judged. */
+export type GiveawayMode = 'draw' | 'judged';
 
 export type GiveawaySummary = {
   id: string;
@@ -27,6 +30,7 @@ export type GiveawaySummary = {
   entered: boolean;
   /** the names drawn so far, less anybody who declined */
   drawn: string[];
+  mode?: GiveawayMode;
 };
 
 export type Giveaway = {
@@ -40,6 +44,10 @@ export type Giveaway = {
   entries_close_at: string | null;
   strength: number;
   half_life_days: number;
+  /** absent from a database that has not had judged giveaways applied */
+  mode?: GiveawayMode;
+  /** how many entries each judge ranks */
+  picks?: number;
   status: GiveawayStatus;
   cancelled_reason: string | null;
   created_at: string;
@@ -179,6 +187,11 @@ export type GiveawayForm = {
   entriesCloseAt: string;
   strength: number;
   halfLifeDays: number;
+  mode: GiveawayMode;
+  /** how many entries each judge ranks, for a judged one */
+  picks: number;
+  /** the questions, in order, for a judged one */
+  questions: string[];
 };
 
 export const saveGiveaway = (id: string | null, f: GiveawayForm) =>
@@ -193,6 +206,9 @@ export const saveGiveaway = (id: string | null, f: GiveawayForm) =>
     p_entries_close_at: f.entriesCloseAt ? new Date(f.entriesCloseAt).toISOString() : null,
     p_strength: f.strength,
     p_half_life_days: f.halfLifeDays,
+    p_mode: f.mode,
+    p_picks: f.picks,
+    p_questions: f.mode === 'judged' ? f.questions.map((q) => q.trim()).filter(Boolean) : [],
   });
 
 export const cancelGiveaway = (id: string, reason: string) =>
@@ -243,6 +259,90 @@ export const recordAttendance = (
   });
 
 export const deleteAttendance = (id: string) => call('delete_giveaway_attendance', { p_id: id });
+
+// ---------------------------------------------------------------------------
+// Judged giveaways
+// ---------------------------------------------------------------------------
+
+export type JudgedEntry = {
+  /** who it is, once the results are out */
+  person: string | null;
+  /** an organiser's handle on it, for settling a tie */
+  key: string | null;
+  /** what a judge sees instead of a name: "Entry 3" */
+  label: string;
+  name: string | null;
+  /** the reader's own entry, which a judge may not rank */
+  own: boolean;
+  answers: { question: string; answer: string }[];
+  points: number | null;
+  firsts: number | null;
+  /** each judge's rank for it, once the results are out */
+  ranks: { judge: string; rank: number }[] | null;
+};
+
+export type Judging = {
+  is_judge: boolean;
+  decided: boolean;
+  picks: number;
+  questions: { id: string; prompt: string }[];
+  judges: { user: string; name: string; ranked: boolean }[];
+  entries_count: number;
+  /** the reader's own answers, by question id */
+  mine: Record<string, string> | null;
+  entered: boolean;
+  entries: JudgedEntry[];
+  /** a judge's own ranking, best first, by label */
+  my_ranking: string[] | null;
+};
+
+export const readJudging = (id: string) => call<Judging>('giveaway_judging', { p_id: id });
+
+/** Enter by answering -- yourself, or for an organiser, somebody else. */
+export const enterJudged = (
+  id: string,
+  answers: Record<string, string>,
+  who?: { person?: string | null; user?: string | null; name?: string }
+) =>
+  call<{ person: string }>('enter_judged_giveaway', {
+    p_id: id,
+    p_answers: answers,
+    p_person: who?.person ?? null,
+    p_user: who?.user ?? null,
+    p_name: who?.name ?? null,
+  });
+
+export const addJudge = (id: string, user: string) => call('add_giveaway_judge', { p_id: id, p_user: user });
+export const removeJudge = (id: string, user: string) => call('remove_giveaway_judge', { p_id: id, p_user: user });
+export const startJudging = (id: string) => call('start_giveaway_judging', { p_id: id });
+export const saveRanking = (id: string, labels: string[]) =>
+  call('save_giveaway_ranking', { p_id: id, p_labels: labels });
+
+/** What a tie at the last winning place looks like: how many of the tied to
+ *  choose, and which they are. */
+export type Tie = { need: number; points: number; tied: { key: string; label: string }[] };
+
+/** Announce, or hear that a tie needs settling first. */
+async function settling(
+  fn: string,
+  args: Record<string, unknown>
+): Promise<{ ok: true; person?: string } | { ok: false; reason: string; tie?: Tie }> {
+  if (!supabase) return fail('not connected');
+  const { data, error } = await supabase.rpc(fn, args);
+  if (error) return fail(error.message);
+  const got = (data ?? {}) as { ok?: boolean; reason?: string; person?: string } & Partial<Tie>;
+  if (got.ok) return { ok: true, person: got.person };
+  if (got.reason === 'tie') {
+    return { ok: false, reason: 'tie', tie: { need: Number(got.need), points: Number(got.points), tied: got.tied ?? [] } };
+  }
+  return fail(got.reason ?? 'that did not work');
+}
+
+export const announceResults = (id: string, tiebreak?: string[]) =>
+  settling('announce_giveaway_results', { p_id: id, p_tiebreak: tiebreak ?? null });
+
+export const offerPlace = (id: string, person?: string) =>
+  settling('offer_giveaway_place', { p_id: id, p_person: person ?? null });
 
 export const updatePerson = (person: string, change: { name?: string; user?: string }) =>
   call('update_giveaway_person', { p_person: person, p_name: change.name ?? null, p_user: change.user ?? null });
