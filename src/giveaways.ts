@@ -11,10 +11,11 @@
 // itself rather than taking the server's word for it.
 import { supabase } from '@/supabase';
 
-export type GiveawayStatus = 'open' | 'drawing' | 'judging' | 'drawn' | 'cancelled';
+export type GiveawayStatus = 'open' | 'drawing' | 'judging' | 'qualified' | 'drawn' | 'cancelled';
 
-/** Drawn at random, or answered and judged. */
-export type GiveawayMode = 'draw' | 'judged';
+/** Drawn at random; answered and judged; or answered, rated, and drawn from
+ *  the entries that met the bar. */
+export type GiveawayMode = 'draw' | 'judged' | 'screened';
 
 export type GiveawaySummary = {
   id: string;
@@ -48,6 +49,8 @@ export type Giveaway = {
   mode?: GiveawayMode;
   /** how many entries each judge ranks */
   picks?: number;
+  /** the average rating that puts a rated entry into the drawing */
+  bar?: number;
   status: GiveawayStatus;
   cancelled_reason: string | null;
   created_at: string;
@@ -68,6 +71,8 @@ export type Entrant = {
   /** today's weight; a committed drawing keeps its own */
   weight: number;
   attended: Attended[];
+  /** a rated one's: in the pool or not, once it is set */
+  qualified?: boolean | null;
 };
 
 /** Who a drawing is between, frozen when it was committed. */
@@ -192,6 +197,8 @@ export type GiveawayForm = {
   picks: number;
   /** the questions, in order, for a judged one */
   questions: string[];
+  /** the average rating an entry needs to go into the drawing, for a rated one */
+  bar: number;
 };
 
 export const saveGiveaway = (id: string | null, f: GiveawayForm) =>
@@ -208,7 +215,8 @@ export const saveGiveaway = (id: string | null, f: GiveawayForm) =>
     p_half_life_days: f.halfLifeDays,
     p_mode: f.mode,
     p_picks: f.picks,
-    p_questions: f.mode === 'judged' ? f.questions.map((q) => q.trim()).filter(Boolean) : [],
+    p_questions: f.mode !== 'draw' ? f.questions.map((q) => q.trim()).filter(Boolean) : [],
+    p_bar: f.bar,
   });
 
 export const cancelGiveaway = (id: string, reason: string) =>
@@ -279,6 +287,12 @@ export type JudgedEntry = {
   firsts: number | null;
   /** each judge's rank for it, once the results are out */
   ranks: { judge: string; rank: number }[] | null;
+  /** a rated one's: the average, how many judges rated it, whether it is in
+   *  the pool, and each judge's rating once the pool is set */
+  average?: number | null;
+  rated_by?: number | null;
+  qualified?: boolean | null;
+  ratings?: { judge: string; rating: number }[] | null;
 };
 
 export type Judging = {
@@ -294,6 +308,10 @@ export type Judging = {
   entries: JudgedEntry[];
   /** a judge's own ranking, best first, by label */
   my_ranking: string[] | null;
+  mode?: GiveawayMode;
+  bar?: number;
+  /** a judge's own ratings, by label, for a rated one */
+  my_ratings?: Record<string, number> | null;
 };
 
 export const readJudging = (id: string) => call<Judging>('giveaway_judging', { p_id: id });
@@ -337,6 +355,14 @@ async function settling(
   }
   return fail(got.reason ?? 'that did not work');
 }
+
+/** A judge's ratings, 1 to 5, by the labels they were shown. */
+export const saveRatings = (id: string, ratings: Record<string, number>) =>
+  call('save_giveaway_ratings', { p_id: id, p_ratings: ratings });
+
+/** Set the pool: every entry averaging the bar or more goes into the drawing. */
+export const qualifyGiveaway = (id: string, bar: number) =>
+  call<{ in: number }>('qualify_giveaway', { p_id: id, p_bar: bar });
 
 export const announceResults = (id: string, tiebreak?: string[]) =>
   settling('announce_giveaway_results', { p_id: id, p_tiebreak: tiebreak ?? null });

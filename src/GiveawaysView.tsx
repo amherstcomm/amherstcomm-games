@@ -74,12 +74,17 @@ const STATUS_WORD: Record<GiveawayStatus, string> = {
   open: 'Taking entries',
   drawing: 'Drawing now',
   judging: 'Being judged',
+  qualified: 'Ready to draw',
   drawn: 'Drawn',
   cancelled: 'Called off',
 };
 /** A judged one has winners the judges chose, not a drawing. */
 const statusWord = (status: GiveawayStatus, mode?: GiveawayMode) =>
-  mode === 'judged' && status === 'drawn' ? 'Decided' : STATUS_WORD[status];
+  mode === 'judged' && status === 'drawn'
+    ? 'Decided'
+    : mode === 'screened' && status === 'judging'
+      ? 'Being rated'
+      : STATUS_WORD[status];
 
 const WINNER_WORD: Record<WinnerStatus, string> = {
   pending: 'Drawn, not yet confirmed',
@@ -201,6 +206,7 @@ function SummaryRow({ g, link }: { g: GiveawaySummary; link: GiveawayLink }) {
           <span className="text-xs text-slate-400">
             {statusWord(g.status, g.mode)}
             {g.mode === 'judged' && ' · judged'}
+            {g.mode === 'screened' && ' · rated, then drawn'}
           </span>
         </span>
         <span className="block text-xs text-slate-400 mt-1 break-words">
@@ -238,6 +244,7 @@ const BLANK: GiveawayForm = {
   mode: 'draw',
   picks: 3,
   questions: [],
+  bar: 3,
 };
 
 /** A datetime-local field's value for a stored time, in this browser's zone. */
@@ -293,8 +300,11 @@ function GiveawayEditor({
   const set = <K extends keyof GiveawayForm>(k: K, v: GiveawayForm[K]) => setForm((f) => ({ ...f, [k]: v }));
 
   const judged = form.mode === 'judged';
+  const screened = form.mode === 'screened';
+  // the drawing's odds matter wherever there is a drawing
+  const drawn = !judged;
   async function save() {
-    if (!judged && !curve.ok) return setSaid(curve.reason);
+    if (drawn && !curve.ok) return setSaid(curve.reason);
     setBusy(true);
     const got = await saveGiveaway(id ?? null, {
       ...form,
@@ -311,12 +321,16 @@ function GiveawayEditor({
         <legend className="text-xs font-semibold text-slate-300">How winners are chosen</legend>
         <div className="mt-1 flex flex-wrap gap-x-5 gap-y-1">
           <label className="flex items-center gap-2 text-sm text-slate-300">
-            <input type="radio" name="giveaway-mode" checked={!judged} onChange={() => set('mode', 'draw')} />
+            <input type="radio" name="giveaway-mode" checked={form.mode === 'draw'} onChange={() => set('mode', 'draw')} />
             Random drawing
           </label>
           <label className="flex items-center gap-2 text-sm text-slate-300">
             <input type="radio" name="giveaway-mode" checked={judged} onChange={() => set('mode', 'judged')} />
             Answer questions, judged
+          </label>
+          <label className="flex items-center gap-2 text-sm text-slate-300">
+            <input type="radio" name="giveaway-mode" checked={screened} onChange={() => set('mode', 'screened')} />
+            Answer questions, rated, then drawn
           </label>
         </div>
       </fieldset>
@@ -354,12 +368,12 @@ function GiveawayEditor({
       </label>
       {form.selfEntry && (
         <label className="block text-xs text-slate-400">
-          Until (leave empty to take entries until {judged ? 'the judging starts' : 'the drawing'})
+          Until (leave empty to take entries until {judged ? 'the judging starts' : screened ? 'the rating starts' : 'the drawing'})
           <input className={`${FIELD} mt-1`} type="datetime-local" value={form.entriesCloseAt}
                  onChange={(e) => set('entriesCloseAt', e.target.value)} />
         </label>
       )}
-      {judged && (
+      {(judged || screened) && (
         <fieldset className="space-y-2">
           <legend className="text-xs font-semibold text-slate-300">The questions</legend>
           <label className="block text-xs text-slate-400">
@@ -368,6 +382,7 @@ function GiveawayEditor({
                       placeholder="e.g. What does being an owner mean to you?"
                       onChange={(e) => set('questions', e.target.value.split('\n'))} />
           </label>
+          {judged && (<>
           <label className="block text-xs text-slate-400">
             Each judge ranks their top
             <span className="mt-1 flex items-center gap-2">
@@ -381,9 +396,24 @@ function GiveawayEditor({
             {form.picks > 1 ? `, their ${form.picks === 2 ? '2nd' : form.picks === 3 ? '3rd' : `${form.picks}th`} 1` : ''}
             ; the most points win. Judges see the answers without names until the winners are announced.
           </p>
+          </>)}
+          {screened && (<>
+          <label className="block text-xs text-slate-400">
+            Into the drawing at an average rating of at least
+            <span className="mt-1 flex items-center gap-2">
+              <input className={PERCENT} type="number" min={1} max={5} step={0.5} value={form.bar}
+                     onChange={(e) => set('bar', Number(e.target.value))} />
+              <span>out of 5</span>
+            </span>
+          </label>
+          <p className="text-xs text-slate-400">
+            Judges rate every answer from 1 to 5 without seeing names. You confirm the bar when you set
+            the pool, with every average in front of you, and the pool is then drawn with the usual odds.
+          </p>
+          </>)}
         </fieldset>
       )}
-      {!judged && (
+      {drawn && (
       <fieldset className="space-y-2">
         <legend className="text-xs font-semibold text-slate-300">The odds</legend>
         <p className="text-xs text-slate-400">
@@ -418,7 +448,7 @@ function GiveawayEditor({
       )}
       {said && <p className="text-xs text-rose-300" role="status">{said}</p>}
       <div className="flex flex-wrap gap-2">
-        <button type="button" className={BUTTON} disabled={busy || (!judged && !curve.ok)} onClick={() => void save()}>
+        <button type="button" className={BUTTON} disabled={busy || (drawn && !curve.ok)} onClick={() => void save()}>
           {id ? 'Save changes' : 'Create it'}
         </button>
         <button type="button" className={BUTTON} onClick={() => onDone(null)}>
@@ -450,7 +480,7 @@ function OneGiveaway({ id, link }: { id: string; link: GiveawayLink }) {
     if (!res.ok) return setProblem(res.reason === 'not allowed' ? 'Sign in to see the giveaways.' : res.reason);
     setProblem('');
     setGot(res);
-    if (res.giveaway.mode === 'judged') {
+    if (res.giveaway.mode === 'judged' || res.giveaway.mode === 'screened') {
       const j = await readJudging(id);
       if (j.ok) setQuestions(j.questions.map((q) => q.prompt));
     }
@@ -480,11 +510,16 @@ function OneGiveaway({ id, link }: { id: string; link: GiveawayLink }) {
   const manage = got.can_manage;
   const mine = got.entrants.some((e) => e.person === got.me);
   const closed = g.entries_close_at !== null && Date.now() >= Date.parse(g.entries_close_at);
-  const total = got.entrants.reduce((s, e) => s + e.weight, 0);
-  const missing = g.winners - got.winners.filter((w) => w.status !== 'declined').length;
-  const undrawn = got.entrants.filter((e) => !got.winners.some((w) => w.person === e.person)).length;
-  const pending = got.draws.find((d) => !d.randomness);
   const judged = g.mode === 'judged';
+  const screened = g.mode === 'screened';
+  // entered by answering, rather than by putting yourself in
+  const answered = judged || screened;
+  // who the drawing is between: everybody, or a rated one's pool once set
+  const pool = screened ? got.entrants.filter((e) => e.qualified) : got.entrants;
+  const total = pool.reduce((s, e) => s + e.weight, 0);
+  const missing = g.winners - got.winners.filter((w) => w.status !== 'declined').length;
+  const undrawn = pool.filter((e) => !got.winners.some((w) => w.person === e.person)).length;
+  const pending = got.draws.find((d) => !d.randomness);
 
   async function offer(person?: string) {
     setBusy(true);
@@ -497,7 +532,7 @@ function OneGiveaway({ id, link }: { id: string; link: GiveawayLink }) {
   }
 
   async function draw() {
-    const n = got!.draws.length === 0 ? got!.entrants.length : undrawn;
+    const n = got!.draws.length === 0 ? pool.length : undrawn;
     const ok = window.confirm(
       `This freezes the ${n} ${n === 1 ? 'person' : 'people'} in the drawing and their odds, and names a ` +
         'public drand round about 30 seconds from now. That round decides who wins; it cannot be undone or redone.'
@@ -533,12 +568,16 @@ function OneGiveaway({ id, link }: { id: string; link: GiveawayLink }) {
           ? g.status === 'drawn'
             ? 'Chosen by the judges: every entry, with its points and each judge’s ranking, is below.'
             : 'Answer the questions to enter. Judges rank the entries without seeing names, and the most points win; every entry is shown here once the winners are announced.'
-          : oddsInWords(g.strength, g.half_life_days)}
+          : screened
+            ? g.status === 'open' || g.status === 'judging'
+              ? 'Answer the questions to enter. Judges rate every answer without seeing names; the best go into a drawing with the usual odds. Who made it in, and every rating, is shown once the pool is set.'
+              : `Rated by the judges: entries averaging ${g.bar ?? 3} or more went into the drawing. ${oddsInWords(g.strength, g.half_life_days)}`
+            : oddsInWords(g.strength, g.half_life_days)}
       </p>
 
       {said && <p className="text-sm text-rose-300 mt-3" role="status">{said}</p>}
 
-      {!judged && g.status === 'open' && g.self_entry && (
+      {!answered && g.status === 'open' && g.self_entry && (
         <div className="mt-4">
           {closed && !mine ? (
             <p className="text-sm text-slate-400">Entries closed {when(g.entries_close_at!)}.</p>
@@ -577,6 +616,7 @@ function OneGiveaway({ id, link }: { id: string; link: GiveawayLink }) {
                 mode: g.mode ?? 'draw',
                 picks: g.picks ?? 3,
                 questions,
+                bar: g.bar ?? 3,
               }}
               onDone={() => {
                 setEditing(false);
@@ -585,7 +625,7 @@ function OneGiveaway({ id, link }: { id: string; link: GiveawayLink }) {
             />
           ) : (
             <div className="flex flex-wrap gap-2 mt-2">
-              {!judged && (
+              {!answered && (
                 <button type="button" className={PRIMARY} disabled={busy || got.entrants.length === 0}
                         onClick={() => void draw()}>
                   Draw {g.winners === 1 ? 'the winner' : `${g.winners} winners`}
@@ -597,14 +637,27 @@ function OneGiveaway({ id, link }: { id: string; link: GiveawayLink }) {
               <CancelButton id={id} busy={busy} act={act} />
             </div>
           )}
-          {!judged && <AddEntrant id={id} onAdded={() => void load()} />}
+          {!answered && <AddEntrant id={id} onAdded={() => void load()} />}
         </section>
       )}
 
       {/* While it is open or judged, the judging comes first; once decided,
           after the winners, which are what people came to see. */}
-      {judged && g.status !== 'drawn' && (
+      {answered && g.status !== 'drawn' && (
         <GiveawayJudging giveaway={g} canManage={manage} onChanged={() => void load()} />
+      )}
+
+      {/* The pool is set: draw from it, the same drawing as any other. */}
+      {screened && manage && g.status === 'qualified' && (
+        <section className={`${CARD} mt-6`} aria-label="Draw from the pool">
+          <h2 className="text-sm font-semibold text-slate-200">Draw from the pool</h2>
+          <p className="text-sm text-slate-300 mt-1">
+            {pool.length} {pool.length === 1 ? 'entry' : 'entries'} averaged {g.bar} or more.
+          </p>
+          <button type="button" className={`${PRIMARY} mt-2`} disabled={busy || pool.length === 0} onClick={() => void draw()}>
+            Draw {g.winners === 1 ? 'the winner' : `${g.winners} winners`}
+          </button>
+        </section>
       )}
 
       {pending && (
@@ -689,11 +742,13 @@ function OneGiveaway({ id, link }: { id: string; link: GiveawayLink }) {
         </section>
       )}
 
-      {judged && g.status === 'drawn' && (
+      {answered && g.status === 'drawn' && (
         <GiveawayJudging giveaway={g} canManage={manage} onChanged={() => void load()} />
       )}
 
-      {judged ? <JudgedEntrants got={got} busy={busy} act={act} /> : <Entrants got={got} total={total} busy={busy} act={act} />}
+      {judged || (screened && (g.status === 'open' || g.status === 'judging'))
+        ? <JudgedEntrants got={got} busy={busy} act={act} />
+        : <Entrants got={screened ? { ...got, entrants: pool } : got} total={total} busy={busy} act={act} />}
 
       {got.draws.map((d) => (
         <DrawRecord key={d.id} giveaway={id} draw={d} />
@@ -965,7 +1020,9 @@ const ACTION_WORD: Record<string, string> = {
   'judging started': 'started the judging',
   ranked: 'ranked the entries',
   announced: 'announced the winners',
-  offered: 'offered a place to'
+  offered: 'offered a place to',
+  rated: 'rated the entries',
+  'pool set': 'set the pool'
 };
 
 function describe(e: LogEntry): string {
@@ -1006,6 +1063,10 @@ function describe(e: LogEntry): string {
       return `${who} closed the entries and started the judging: ${d.entries} entries, ${d.judges} judges`;
     case 'ranked':
       return `${d.name} ranked ${d.count} ${d.count === 1 ? 'entry' : 'entries'}`;
+    case 'rated':
+      return `${d.name} rated ${d.count} ${d.count === 1 ? 'entry' : 'entries'}`;
+    case 'pool set':
+      return `${who} set the pool at an average of ${d.bar}: ${d.in} of ${d.of} entries in the drawing`;
     case 'announced':
       return `${who} announced the winners: ${(d.winners as string[] | null)?.join(', ') ?? 'nobody'}${d.tie_settled ? ' (a tie settled by the organiser)' : ''}`;
     default:
