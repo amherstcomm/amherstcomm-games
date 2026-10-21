@@ -40,8 +40,9 @@ permissions:
   contents: read
 
 jobs:
+  # The quick half: a minute, and the answer to most pushes.
   checks:
-    name: typecheck, lint, unit, contract, build
+    name: typecheck, lint, unit, build
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -53,8 +54,60 @@ jobs:
       - run: npm run typecheck
       - run: npm run lint
       - run: npm run test:unit
-      - run: npm run test:contract
       - run: npm run build
+
+  # The contract tests run the real puzzle generator -- thirty-odd runs of
+  # half a minute to a minute each -- and were nine to eleven minutes of the
+  # ten-to-twelve-minute wait, all on the one runner behind the quick checks.
+  # Split three ways by hand rather than by vitest's --shard, which deals out
+  # files without knowing that two of them are a third of the work each: every
+  # group here has one of the heavy files and some of the light ones, measured
+  # (on a laptop, one at a time) at roughly three to four and a half minutes
+  # of generator each. A new contract file has to be added to a group, or it
+  # does not run -- the last step below fails the job when one is missing.
+  contract:
+    name: contract (${{ matrix.group }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - group: themed
+            files: >-
+              tests/contract/themed-daily.test.ts
+              tests/contract/publish-day.test.ts
+              tests/contract/preflight.test.ts
+              tests/contract/check-timers.test.ts
+          - group: round days
+            files: >-
+              tests/contract/publish-rounds-daily.test.ts
+              tests/contract/generator.test.ts
+              tests/contract/preview.test.ts
+          - group: publishing
+            files: >-
+              tests/contract/drain-publish-requests.test.ts
+              tests/contract/publish-rounds.test.ts
+              tests/contract/seed-salt.test.ts
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx vitest run --project contract ${{ matrix.files }}
+      # Every contract file is in exactly one group above. Checked once, in
+      # the first group, so a file added later and forgotten here fails a run
+      # rather than silently never running.
+      - if: matrix.group == 'themed'
+        run: |
+          listed="themed-daily publish-day preflight check-timers publish-rounds-daily generator preview drain-publish-requests publish-rounds seed-salt"
+          missing=0
+          for f in tests/contract/*.test.ts; do
+            name=$(basename "$f" .test.ts)
+            case " $listed " in *" $name "*) ;; *) echo "::error file=$f::$f is in no contract group in ci.yml"; missing=1 ;; esac
+          done
+          exit $missing
 
   # Split three ways. The suite is ten minutes of browser on one runner and
   # nothing about it is sequential — every test stubs its own network and
@@ -65,6 +118,14 @@ jobs:
   e2e:
     name: browser + WCAG
     runs-on: ubuntu-latest
+    # Playwright's own image, the browser and everything it needs already in
+    # it: installing them was twenty to forty-seven seconds of every shard,
+    # and on 2026-10-21 the install itself failed and took a green run red.
+    # The tag is the version package.json pins -- they must move together,
+    # or the test runner looks for a browser build the image does not have.
+    container:
+      image: mcr.microsoft.com/playwright:v1.62.1-noble
+      options: --user 1001
     strategy:
       fail-fast: false
       matrix:
@@ -76,7 +137,6 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      - run: npx playwright install --with-deps chromium
       - run: npm run test:e2e -- --shard=${{ matrix.shard }}/3
         env:
           CI: 'true'
