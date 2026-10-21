@@ -871,7 +871,11 @@ function Trivia({
                       }
                     />
                     <span className="min-w-0 break-words">
-                      {x.title} <span className="text-xs text-slate-500">· {x.mode}, {x.state}</span>
+                      {x.title}{' '}
+                      <span className="text-xs text-slate-500">
+                        · {x.mode === 'open' ? 'on your own time' : 'run live'},{' '}
+                        {x.state === 'draft' ? 'still being built' : x.state === 'live' ? 'on now' : 'over'}
+                      </span>
                     </span>
                   </label>
                 </li>

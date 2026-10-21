@@ -43,6 +43,7 @@ async function server(page: import('@playwright/test').Page, state: { manage?: b
       return reply({ ok: true, sessions: [
         { id: 's-1', title: 'Ownership Trivia', state: 'live', mode: 'open', opens_at: null, closes_at: null },
         { id: 's-2', title: 'Founders Quiz', state: 'closed', mode: 'live', opens_at: null, closes_at: null },
+        { id: 's-3', title: 'Questions Still Being Written', state: 'draft', mode: 'open', opens_at: null, closes_at: null },
       ] });
     }
     if (fn.includes('giveaway')) return reply({ ok: true });
@@ -69,10 +70,14 @@ test('an organiser links the sessions and sets what a point is worth', async ({ 
   const trivia = page.getByRole('region', { name: 'Trivia for extra chances' });
   await trivia.getByRole('button', { name: 'Add trivia' }).click();
   await trivia.getByLabel(/Founders Quiz/).check();
+  // trivia still being built can be linked too, and says so
+  await expect(trivia.getByLabel(/Questions Still Being Written/)).toBeVisible();
+  await expect(trivia).toContainText('Questions Still Being Written · on your own time, still being built');
+  await trivia.getByLabel(/Questions Still Being Written/).check();
   await trivia.getByLabel('Extra tickets for each point').fill('2');
   await trivia.getByRole('button', { name: 'Save the trivia' }).click();
   await expect.poll(() => sent.find((s) => s.fn === 'set_giveaway_trivia')?.args).toEqual({
-    p_id: G, p_sessions: ['s-2'], p_bonus: 2,
+    p_id: G, p_sessions: ['s-2', 's-3'], p_bonus: 2,
   });
 });
 
