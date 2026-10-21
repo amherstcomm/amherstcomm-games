@@ -8,10 +8,12 @@
 // Asked for fully transparent, so nothing here is hidden from staff: the
 // controls for running a giveaway are what giveaways.manage adds, and the
 // server refuses anybody without it whatever this page draws.
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import Waiting from '@/Waiting';
 import RouteLink from '@/RouteLink';
 import GiveawayReplay from '@/GiveawayReplay';
+import GiveawayJudging from '@/GiveawayJudging';
+import PeoplePicker from '@/GiveawayPeoplePicker';
 import {
   addEntrant,
   cancelGiveaway,
@@ -24,6 +26,8 @@ import {
   deleteAttendance,
   enterGiveaway,
   findGiveawayPeople,
+  offerPlace,
+  readJudging,
   readGiveaway,
   readGiveawayHistory,
   readGiveaways,
@@ -37,6 +41,8 @@ import {
   type Found,
   type GiveawayDetail,
   type GiveawayForm,
+  type GiveawayMode,
+  type Tie,
   type GiveawayStatus,
   type GiveawaySummary,
   type HistoryPerson,
@@ -67,9 +73,13 @@ export type GiveawayLink = (p: { kind: 'giveaways'; giveaway: string | null; vie
 const STATUS_WORD: Record<GiveawayStatus, string> = {
   open: 'Taking entries',
   drawing: 'Drawing now',
+  judging: 'Being judged',
   drawn: 'Drawn',
   cancelled: 'Called off',
 };
+/** A judged one has winners the judges chose, not a drawing. */
+const statusWord = (status: GiveawayStatus, mode?: GiveawayMode) =>
+  mode === 'judged' && status === 'drawn' ? 'Decided' : STATUS_WORD[status];
 
 const WINNER_WORD: Record<WinnerStatus, string> = {
   pending: 'Drawn, not yet confirmed',
@@ -188,7 +198,10 @@ function SummaryRow({ g, link }: { g: GiveawaySummary; link: GiveawayLink }) {
       >
         <span className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
           <span className="font-semibold text-slate-200 min-w-0 break-words">{g.title}</span>
-          <span className="text-xs text-slate-400">{STATUS_WORD[g.status]}</span>
+          <span className="text-xs text-slate-400">
+            {statusWord(g.status, g.mode)}
+            {g.mode === 'judged' && ' · judged'}
+          </span>
         </span>
         <span className="block text-xs text-slate-400 mt-1 break-words">
           {[
@@ -222,6 +235,9 @@ const BLANK: GiveawayForm = {
   entriesCloseAt: '',
   strength: 1,
   halfLifeDays: 365,
+  mode: 'draw',
+  picks: 3,
+  questions: [],
 };
 
 /** A datetime-local field's value for a stored time, in this browser's zone. */
@@ -276,13 +292,13 @@ function GiveawayEditor({
   const [busy, setBusy] = useState(false);
   const set = <K extends keyof GiveawayForm>(k: K, v: GiveawayForm[K]) => setForm((f) => ({ ...f, [k]: v }));
 
+  const judged = form.mode === 'judged';
   async function save() {
-    if (!curve.ok) return setSaid(curve.reason);
+    if (!judged && !curve.ok) return setSaid(curve.reason);
     setBusy(true);
     const got = await saveGiveaway(id ?? null, {
       ...form,
-      strength: curve.strength,
-      halfLifeDays: curve.halfLifeDays,
+      ...(curve.ok ? { strength: curve.strength, halfLifeDays: curve.halfLifeDays } : {}),
     });
     setBusy(false);
     if (!got.ok) return setSaid(got.reason);
@@ -291,13 +307,26 @@ function GiveawayEditor({
 
   return (
     <section className={`${CARD} mt-4 space-y-3`} aria-label={id ? 'Change the giveaway' : 'New giveaway'}>
+      <fieldset>
+        <legend className="text-xs font-semibold text-slate-300">How winners are chosen</legend>
+        <div className="mt-1 flex flex-wrap gap-x-5 gap-y-1">
+          <label className="flex items-center gap-2 text-sm text-slate-300">
+            <input type="radio" name="giveaway-mode" checked={!judged} onChange={() => set('mode', 'draw')} />
+            Random drawing
+          </label>
+          <label className="flex items-center gap-2 text-sm text-slate-300">
+            <input type="radio" name="giveaway-mode" checked={judged} onChange={() => set('mode', 'judged')} />
+            Answer questions, judged
+          </label>
+        </div>
+      </fieldset>
       <label className="block text-xs text-slate-400">
         What it is
         <input className={`${FIELD} mt-1`} value={form.title} placeholder="e.g. Brewers vs Cubs"
                onChange={(e) => set('title', e.target.value)} />
       </label>
       <label className="block text-xs text-slate-400">
-        The prize, for each person drawn
+        The prize, for each winner
         <input className={`${FIELD} mt-1`} value={form.prize} placeholder="e.g. 2 tickets, section 112"
                onChange={(e) => set('prize', e.target.value)} />
       </label>
@@ -308,7 +337,7 @@ function GiveawayEditor({
       </label>
       <div className="grid gap-3 sm:grid-cols-2">
         <label className="block text-xs text-slate-400">
-          How many people to draw
+          How many winners
           <input className={`${FIELD} mt-1`} type="number" min={1} max={100} value={form.winners}
                  onChange={(e) => set('winners', Number(e.target.value))} />
         </label>
@@ -321,15 +350,40 @@ function GiveawayEditor({
       <label className="flex items-start gap-2 text-sm text-slate-300">
         <input type="checkbox" className="mt-1" checked={form.selfEntry}
                onChange={(e) => set('selfEntry', e.target.checked)} />
-        <span>Staff can put themselves in</span>
+        <span>Staff can enter themselves</span>
       </label>
       {form.selfEntry && (
         <label className="block text-xs text-slate-400">
-          Until (leave empty to take entries until the drawing)
+          Until (leave empty to take entries until {judged ? 'the judging starts' : 'the drawing'})
           <input className={`${FIELD} mt-1`} type="datetime-local" value={form.entriesCloseAt}
                  onChange={(e) => set('entriesCloseAt', e.target.value)} />
         </label>
       )}
+      {judged && (
+        <fieldset className="space-y-2">
+          <legend className="text-xs font-semibold text-slate-300">The questions</legend>
+          <label className="block text-xs text-slate-400">
+            One per line. Entrants answer every one; up to ten.
+            <textarea className={`${FIELD} mt-1`} rows={3} value={form.questions.join('\n')}
+                      placeholder="e.g. What does being an owner mean to you?"
+                      onChange={(e) => set('questions', e.target.value.split('\n'))} />
+          </label>
+          <label className="block text-xs text-slate-400">
+            Each judge ranks their top
+            <span className="mt-1 flex items-center gap-2">
+              <input className={PERCENT} type="number" min={1} max={10} value={form.picks}
+                     onChange={(e) => set('picks', Number(e.target.value))} />
+              <span>entries</span>
+            </span>
+          </label>
+          <p className="text-xs text-slate-400">
+            A judge’s 1st is worth {form.picks} {form.picks === 1 ? 'point' : 'points'}
+            {form.picks > 1 ? `, their ${form.picks === 2 ? '2nd' : form.picks === 3 ? '3rd' : `${form.picks}th`} 1` : ''}
+            ; the most points win. Judges see the answers without names until the winners are announced.
+          </p>
+        </fieldset>
+      )}
+      {!judged && (
       <fieldset className="space-y-2">
         <legend className="text-xs font-semibold text-slate-300">The odds</legend>
         <p className="text-xs text-slate-400">
@@ -361,9 +415,10 @@ function GiveawayEditor({
           <p className="text-xs text-rose-300" role="status">{curve.reason}</p>
         )}
       </fieldset>
+      )}
       {said && <p className="text-xs text-rose-300" role="status">{said}</p>}
       <div className="flex flex-wrap gap-2">
-        <button type="button" className={BUTTON} disabled={busy || !curve.ok} onClick={() => void save()}>
+        <button type="button" className={BUTTON} disabled={busy || (!judged && !curve.ok)} onClick={() => void save()}>
           {id ? 'Save changes' : 'Create it'}
         </button>
         <button type="button" className={BUTTON} onClick={() => onDone(null)}>
@@ -384,12 +439,21 @@ function OneGiveaway({ id, link }: { id: string; link: GiveawayLink }) {
   const [said, setSaid] = useState('');
   const [busy, setBusy] = useState(false);
   const [editing, setEditing] = useState(false);
+  // A judged one's questions, for its editor; the rest of judging is its own
+  // component's.
+  const [questions, setQuestions] = useState<string[]>([]);
+  // A place offered to the next in the judges' ranking, when two tie for it.
+  const [offerTie, setOfferTie] = useState<Tie | null>(null);
 
   const load = useCallback(async () => {
     const res = await readGiveaway(id);
     if (!res.ok) return setProblem(res.reason === 'not allowed' ? 'Sign in to see the giveaways.' : res.reason);
     setProblem('');
     setGot(res);
+    if (res.giveaway.mode === 'judged') {
+      const j = await readJudging(id);
+      if (j.ok) setQuestions(j.questions.map((q) => q.prompt));
+    }
   }, [id]);
   useEffect(() => void load(), [load]);
 
@@ -420,6 +484,17 @@ function OneGiveaway({ id, link }: { id: string; link: GiveawayLink }) {
   const missing = g.winners - got.winners.filter((w) => w.status !== 'declined').length;
   const undrawn = got.entrants.filter((e) => !got.winners.some((w) => w.person === e.person)).length;
   const pending = got.draws.find((d) => !d.randomness);
+  const judged = g.mode === 'judged';
+
+  async function offer(person?: string) {
+    setBusy(true);
+    const res = await offerPlace(id, person);
+    setBusy(false);
+    if (!res.ok && res.tie) return setOfferTie(res.tie);
+    setOfferTie(null);
+    setSaid(res.ok ? '' : res.reason);
+    await load();
+  }
 
   async function draw() {
     const n = got!.draws.length === 0 ? got!.entrants.length : undrawn;
@@ -442,10 +517,10 @@ function OneGiveaway({ id, link }: { id: string; link: GiveawayLink }) {
       </RouteLink>
       <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 mt-3">
         <h1 className="text-xl font-semibold text-slate-200 min-w-0 break-words">{g.title}</h1>
-        <span className="text-sm text-slate-400">{STATUS_WORD[g.status]}</span>
+        <span className="text-sm text-slate-400">{statusWord(g.status, g.mode)}</span>
       </div>
       <p className="text-sm text-slate-300 mt-1 break-words">
-        {[g.prize, g.winners > 1 && `${g.winners} people drawn`, g.event_on && day(g.event_on)]
+        {[g.prize, g.winners > 1 && `${g.winners} ${judged ? 'winners' : 'people drawn'}`, g.event_on && day(g.event_on)]
           .filter(Boolean)
           .join(' · ')}
       </p>
@@ -453,11 +528,17 @@ function OneGiveaway({ id, link }: { id: string; link: GiveawayLink }) {
       {g.status === 'cancelled' && (
         <p className="text-sm text-rose-300 mt-2">Called off: {g.cancelled_reason}</p>
       )}
-      <p className="text-xs text-slate-500 mt-2">{oddsInWords(g.strength, g.half_life_days)}</p>
+      <p className="text-xs text-slate-500 mt-2">
+        {judged
+          ? g.status === 'drawn'
+            ? 'Chosen by the judges: every entry, with its points and each judge’s ranking, is below.'
+            : 'Answer the questions to enter. Judges rank the entries without seeing names, and the most points win; every entry is shown here once the winners are announced.'
+          : oddsInWords(g.strength, g.half_life_days)}
+      </p>
 
       {said && <p className="text-sm text-rose-300 mt-3" role="status">{said}</p>}
 
-      {g.status === 'open' && g.self_entry && (
+      {!judged && g.status === 'open' && g.self_entry && (
         <div className="mt-4">
           {closed && !mine ? (
             <p className="text-sm text-slate-400">Entries closed {when(g.entries_close_at!)}.</p>
@@ -493,6 +574,9 @@ function OneGiveaway({ id, link }: { id: string; link: GiveawayLink }) {
                 entriesCloseAt: localInput(g.entries_close_at),
                 strength: Number(g.strength),
                 halfLifeDays: g.half_life_days,
+                mode: g.mode ?? 'draw',
+                picks: g.picks ?? 3,
+                questions,
               }}
               onDone={() => {
                 setEditing(false);
@@ -501,18 +585,26 @@ function OneGiveaway({ id, link }: { id: string; link: GiveawayLink }) {
             />
           ) : (
             <div className="flex flex-wrap gap-2 mt-2">
-              <button type="button" className={PRIMARY} disabled={busy || got.entrants.length === 0}
-                      onClick={() => void draw()}>
-                Draw {g.winners === 1 ? 'the winner' : `${g.winners} winners`}
-              </button>
+              {!judged && (
+                <button type="button" className={PRIMARY} disabled={busy || got.entrants.length === 0}
+                        onClick={() => void draw()}>
+                  Draw {g.winners === 1 ? 'the winner' : `${g.winners} winners`}
+                </button>
+              )}
               <button type="button" className={BUTTON} onClick={() => setEditing(true)}>
                 Change it
               </button>
               <CancelButton id={id} busy={busy} act={act} />
             </div>
           )}
-          <AddEntrant id={id} onAdded={() => void load()} />
+          {!judged && <AddEntrant id={id} onAdded={() => void load()} />}
         </section>
+      )}
+
+      {/* While it is open or judged, the judging comes first; once decided,
+          after the winners, which are what people came to see. */}
+      {judged && g.status !== 'drawn' && (
+        <GiveawayJudging giveaway={g} canManage={manage} onChanged={() => void load()} />
       )}
 
       {pending && (
@@ -528,12 +620,14 @@ function OneGiveaway({ id, link }: { id: string; link: GiveawayLink }) {
       )}
 
       {got.winners.length > 0 && (
-        <section className="mt-6" aria-label="Who was drawn">
+        <section className="mt-6" aria-label={judged ? 'Who won' : 'Who was drawn'}>
           <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-            <h2 className="text-sm font-semibold text-slate-200">Who was drawn</h2>
-            <RouteLink {...link({ kind: 'giveaways', giveaway: id, view: 'replay' })} className="text-sm text-accent">
-              Replay the drawing
-            </RouteLink>
+            <h2 className="text-sm font-semibold text-slate-200">{judged ? 'Who won' : 'Who was drawn'}</h2>
+            {!judged && (
+              <RouteLink {...link({ kind: 'giveaways', giveaway: id, view: 'replay' })} className="text-sm text-accent">
+                Replay the drawing
+              </RouteLink>
+            )}
           </div>
           <ul className="mt-2 space-y-2">
             {got.winners.map((w) => (
@@ -541,8 +635,8 @@ function OneGiveaway({ id, link }: { id: string; link: GiveawayLink }) {
                 <span className="min-w-0">
                   <span className="block font-semibold text-slate-200 break-words">{w.name}</span>
                   <span className="block text-xs text-slate-400">
-                    {WINNER_WORD[w.status]}
-                    {got.draws.length > 1 && ` · drawing ${w.draw}`}
+                    {judged && w.status === 'pending' ? 'Chosen, not yet confirmed' : WINNER_WORD[w.status]}
+                    {!judged && got.draws.length > 1 && ` · drawing ${w.draw}`}
                   </span>
                 </span>
                 {manage && g.status !== 'cancelled' && (
@@ -564,10 +658,30 @@ function OneGiveaway({ id, link }: { id: string; link: GiveawayLink }) {
               </li>
             ))}
           </ul>
-          {manage && g.status === 'drawn' && missing > 0 && undrawn > 0 && (
+          {!judged && manage && g.status === 'drawn' && missing > 0 && undrawn > 0 && (
             <button type="button" className={`${PRIMARY} mt-3`} disabled={busy} onClick={() => void draw()}>
               Draw {missing === 1 ? 'a replacement' : `${missing} replacements`}
             </button>
+          )}
+          {judged && manage && g.status === 'drawn' && missing > 0 && undrawn > 0 && (
+            offerTie ? (
+              <div className="mt-3 space-y-2" role="group" aria-label="Settle who is next">
+                <p className="text-sm text-amber-200">
+                  A tie at {offerTie.points} points for the next place. Who gets it?
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {offerTie.tied.map((t) => (
+                    <button key={t.key} type="button" className={BUTTON} disabled={busy} onClick={() => void offer(t.key)}>
+                      {t.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <button type="button" className={`${PRIMARY} mt-3`} disabled={busy} onClick={() => void offer()}>
+                Offer it to the next in the ranking
+              </button>
+            )
           )}
           {manage && g.status === 'drawn' && missing > 0 && undrawn === 0 && (
             <p className="text-sm text-slate-400 mt-3">Everybody who entered has been drawn.</p>
@@ -575,7 +689,11 @@ function OneGiveaway({ id, link }: { id: string; link: GiveawayLink }) {
         </section>
       )}
 
-      <Entrants got={got} total={total} busy={busy} act={act} />
+      {judged && g.status === 'drawn' && (
+        <GiveawayJudging giveaway={g} canManage={manage} onChanged={() => void load()} />
+      )}
+
+      {judged ? <JudgedEntrants got={got} busy={busy} act={act} /> : <Entrants got={got} total={total} busy={busy} act={act} />}
 
       {got.draws.map((d) => (
         <DrawRecord key={d.id} giveaway={id} draw={d} />
@@ -607,6 +725,52 @@ function CancelButton({
     >
       Call it off
     </button>
+  );
+}
+
+function JudgedEntrants({
+  got,
+  busy,
+  act,
+}: {
+  got: GiveawayDetail;
+  busy: boolean;
+  act: (run: () => Promise<{ ok: boolean; reason?: string }>) => Promise<boolean>;
+}) {
+  const g = got.giveaway;
+  return (
+    <section className="mt-8" aria-label="Who is in it">
+      <h2 className="text-sm font-semibold text-slate-200">Who has entered ({got.entrants.length})</h2>
+      {got.entrants.length === 0 ? (
+        <p className="text-sm text-slate-400 mt-2">Nobody yet.</p>
+      ) : (
+        <ul className="mt-2 space-y-2">
+          {got.entrants.map((e) => (
+            <li key={e.person} className="rounded-xl border border-white/15 bg-white/5 px-4 py-3 flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+              <span className="min-w-0 text-sm font-semibold text-slate-200 break-words">
+                {e.name}
+                {!e.linked && <span className="text-xs font-normal text-slate-500"> · no account</span>}
+              </span>
+              {got.can_manage && g.status === 'open' && (
+                <button
+                  type="button"
+                  className="text-xs text-rose-300 hover:underline"
+                  disabled={busy}
+                  aria-label={`Take ${e.name} out`}
+                  onClick={() => {
+                    if (window.confirm(`Take ${e.name} out? Their answers go with them.`)) {
+                      void act(() => removeEntrant(g.id, e.person));
+                    }
+                  }}
+                >
+                  Take out
+                </button>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
   );
 }
 
@@ -679,76 +843,6 @@ function Entrants({
         </ul>
       )}
     </section>
-  );
-}
-
-/** Searching for somebody to enter: a drawing's own record, an account, or a
- *  name typed for staff who have never signed in. */
-function PeoplePicker({
-  label,
-  onPick,
-  busy,
-  action,
-}: {
-  label: string;
-  onPick: (who: { person?: string | null; user?: string | null; name?: string }) => void;
-  busy: boolean;
-  action: string;
-}) {
-  const [query, setQuery] = useState('');
-  const [found, setFound] = useState<Found[]>([]);
-  const timer = useRef(0);
-  useEffect(() => {
-    window.clearTimeout(timer.current);
-    if (query.trim().length < 2) {
-      setFound([]);
-      return;
-    }
-    timer.current = window.setTimeout(() => void findGiveawayPeople(query).then(setFound), 250);
-    return () => window.clearTimeout(timer.current);
-  }, [query]);
-
-  const typed = query.trim();
-  const exact = found.some((f) => f.name.toLowerCase() === typed.toLowerCase());
-  return (
-    <div>
-      <input className={FIELD} value={query} aria-label={label} placeholder="Name or address"
-             onChange={(e) => setQuery(e.target.value)} />
-      {typed.length >= 2 && (
-        <ul className="mt-2 space-y-1" aria-label={`${label}: matches`}>
-          {found.map((f) => (
-            <li key={f.person ?? f.user ?? f.name} className="flex flex-wrap items-center justify-between gap-2">
-              <span className="text-sm text-slate-300 min-w-0 break-words">
-                {f.name}
-                {f.email && <span className="text-xs text-slate-500"> · {f.email}</span>}
-                {!f.user && <span className="text-xs text-slate-500"> · no account</span>}
-              </span>
-              <button type="button" className={BUTTON} disabled={busy}
-                      onClick={() => {
-                        onPick({ person: f.person, user: f.person ? null : f.user });
-                        setQuery('');
-                      }}>
-                {action}
-              </button>
-            </li>
-          ))}
-          {!exact && (
-            <li className="flex flex-wrap items-center justify-between gap-2">
-              <span className="text-sm text-slate-400 min-w-0 break-words">
-                “{typed}” — somebody without an account
-              </span>
-              <button type="button" className={BUTTON} disabled={busy}
-                      onClick={() => {
-                        onPick({ name: typed });
-                        setQuery('');
-                      }}>
-                {action} by name
-              </button>
-            </li>
-          )}
-        </ul>
-      )}
-    </div>
   );
 }
 
@@ -865,6 +959,13 @@ const ACTION_WORD: Record<string, string> = {
   'attendance deleted': 'deleted an attendance for',
   renamed: 'renamed',
   'joined to account': 'joined an account to',
+  'answers changed': 'changed their answers',
+  'judge added': 'added a judge:',
+  'judge removed': 'removed a judge:',
+  'judging started': 'started the judging',
+  ranked: 'ranked the entries',
+  announced: 'announced the winners',
+  offered: 'offered a place to'
 };
 
 function describe(e: LogEntry): string {
@@ -895,6 +996,18 @@ function describe(e: LogEntry): string {
       return `${who} renamed ${d.from} to ${d.to}`;
     case 'joined to account':
       return `${who} joined ${d.name} to ${d.account}'s account`;
+    case 'answers changed':
+      return d.self ? `${d.name} changed their answers` : `${who} changed ${d.name}'s answers`;
+    case 'judge added':
+    case 'judge removed':
+    case 'offered':
+      return `${who} ${ACTION_WORD[e.action]} ${d.name}`;
+    case 'judging started':
+      return `${who} closed the entries and started the judging: ${d.entries} entries, ${d.judges} judges`;
+    case 'ranked':
+      return `${d.name} ranked ${d.count} ${d.count === 1 ? 'entry' : 'entries'}`;
+    case 'announced':
+      return `${who} announced the winners: ${(d.winners as string[] | null)?.join(', ') ?? 'nobody'}${d.tie_settled ? ' (a tie settled by the organiser)' : ''}`;
     default:
       return `${who} ${ACTION_WORD[e.action] ?? e.action}`;
   }

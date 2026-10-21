@@ -17411,3 +17411,1031 @@ $fn$;
 
 revoke all on function public.round_clue(text, boolean, int) from public, anon;
 grant execute on function public.round_clue(text, boolean, int) to authenticated;
+
+-- ===========================================================================
+-- Judged giveaways: answer the questions, and judges choose
+-- ===========================================================================
+--
+-- A second kind of giveaway beside the drawing. Entrants answer a question or
+-- a few; judges an organiser chose each rank the entries they like best, the
+-- way contest voting does -- first is worth as many points as a judge has
+-- picks, the last of them one -- and the totals decide.
+--
+-- Blind until the results: a judge sees "Entry 3" and its answers, not whose
+-- they are, so the judging is about the answers. Once the organiser announces
+-- the winners, everything opens -- every entry with its name, and every
+-- judge's ranking -- the same transparency the drawing has. Past attendance
+-- does not weigh on a judged giveaway; a winner who goes is still recorded as
+-- attending, which counts against them in the drawings after.
+--
+-- Statuses: open (taking answers), judging (entries closed, judges ranking),
+-- drawn (the results are out -- the word the drawing already uses for "it has
+-- winners"), cancelled.
+alter table public.giveaways add column if not exists mode text not null default 'draw';
+alter table public.giveaways add column if not exists picks int not null default 3;
+-- What the entry labels are shuffled by. Never handed out: ordered by a hash
+-- of ids alone, a judge holding the public list of entrants could work out
+-- which label is whose.
+alter table public.giveaways add column if not exists label_salt uuid not null default gen_random_uuid();
+do $judged$
+begin
+  if not exists (select 1 from pg_constraint where conname = 'giveaways_mode_check') then
+    alter table public.giveaways add constraint giveaways_mode_check check (mode in ('draw', 'judged'));
+  end if;
+  if not exists (select 1 from pg_constraint where conname = 'giveaways_picks_check') then
+    alter table public.giveaways add constraint giveaways_picks_check check (picks between 1 and 10);
+  end if;
+  -- 'judging' joins the statuses.
+  if exists (select 1 from pg_constraint where conname = 'giveaways_status_check'
+             and pg_get_constraintdef(oid) not like '%judging%') then
+    alter table public.giveaways drop constraint giveaways_status_check;
+  end if;
+  if not exists (select 1 from pg_constraint where conname = 'giveaways_status_check') then
+    alter table public.giveaways add constraint giveaways_status_check
+      check (status in ('open', 'drawing', 'judging', 'drawn', 'cancelled'));
+  end if;
+end
+$judged$;
+
+-- A judged giveaway's winners come from the judges, not from a drawing.
+alter table public.giveaway_winners alter column draw_id drop not null;
+
+create table if not exists public.giveaway_questions (
+  id uuid primary key default gen_random_uuid(),
+  giveaway_id uuid not null references public.giveaways (id) on delete cascade,
+  position int not null,
+  prompt text not null check (char_length(btrim(prompt)) between 1 and 300),
+  unique (giveaway_id, position)
+);
+
+create table if not exists public.giveaway_answers (
+  giveaway_id uuid not null,
+  person_id uuid not null,
+  question_id uuid not null references public.giveaway_questions (id) on delete cascade,
+  answer text not null check (char_length(answer) <= 2000),
+  updated_at timestamptz not null default now(),
+  primary key (question_id, person_id),
+  -- An answer is part of an entry, and goes with it.
+  foreign key (giveaway_id, person_id) references public.giveaway_entries (giveaway_id, person_id) on delete cascade
+);
+
+create table if not exists public.giveaway_judges (
+  giveaway_id uuid not null references public.giveaways (id) on delete cascade,
+  user_id uuid not null references auth.users (id) on delete cascade,
+  added_by uuid references auth.users (id) on delete set null,
+  added_at timestamptz not null default now(),
+  primary key (giveaway_id, user_id)
+);
+
+create table if not exists public.giveaway_rankings (
+  giveaway_id uuid not null references public.giveaways (id) on delete cascade,
+  judge_id uuid not null references auth.users (id) on delete cascade,
+  person_id uuid not null,
+  rank int not null check (rank >= 1),
+  ranked_at timestamptz not null default now(),
+  primary key (giveaway_id, judge_id, person_id),
+  unique (giveaway_id, judge_id, rank),
+  foreign key (giveaway_id, person_id) references public.giveaway_entries (giveaway_id, person_id) on delete cascade
+);
+
+alter table public.giveaway_questions enable row level security;
+alter table public.giveaway_answers enable row level security;
+alter table public.giveaway_judges enable row level security;
+alter table public.giveaway_rankings enable row level security;
+revoke all on public.giveaway_questions, public.giveaway_answers, public.giveaway_judges,
+  public.giveaway_rankings from public, anon, authenticated;
+
+create or replace function public.save_giveaway(
+  p_id uuid, p_title text, p_prize text, p_details text, p_winners int, p_event_on date,
+  p_self_entry boolean, p_entries_close_at timestamptz, p_strength numeric, p_half_life_days int,
+  p_mode text default 'draw', p_picks int default 3, p_questions jsonb default null)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $fn$
+declare
+  v_id uuid;
+  v_status text;
+  v_mode text := coalesce(nullif(btrim(lower(p_mode)), ''), 'draw');
+  v_questions text[];
+  v_old text[];
+begin
+  if not public.can('giveaways.manage') then
+    return jsonb_build_object('ok', false, 'reason', 'not allowed');
+  end if;
+  if length(btrim(coalesce(p_title, ''))) = 0 then
+    return jsonb_build_object('ok', false, 'reason', 'a giveaway needs a name');
+  end if;
+  if coalesce(p_winners, 0) < 1 or p_winners > 100 then
+    return jsonb_build_object('ok', false, 'reason', 'between 1 and 100 people can be drawn');
+  end if;
+  if coalesce(p_strength, -1) < 0 or p_strength > 10 then
+    return jsonb_build_object('ok', false, 'reason', 'the penalty for past attendance is between 0 and 10');
+  end if;
+  if coalesce(p_half_life_days, 0) < 7 or p_half_life_days > 3650 then
+    return jsonb_build_object('ok', false, 'reason', 'the fade is between a week and ten years');
+  end if;
+  if v_mode not in ('draw', 'judged') then
+    return jsonb_build_object('ok', false, 'reason', 'a giveaway is drawn or judged');
+  end if;
+  v_questions := array(select btrim(q) from jsonb_array_elements_text(coalesce(p_questions, '[]'::jsonb)) q
+                       where btrim(q) <> '');
+  if v_mode = 'judged' then
+    if cardinality(v_questions) = 0 then
+      return jsonb_build_object('ok', false, 'reason', 'a judged giveaway needs at least one question');
+    end if;
+    if cardinality(v_questions) > 10 then
+      return jsonb_build_object('ok', false, 'reason', 'ten questions at most');
+    end if;
+    if exists (select 1 from unnest(v_questions) q where char_length(q) > 300) then
+      return jsonb_build_object('ok', false, 'reason', 'a question is at most 300 characters');
+    end if;
+    if coalesce(p_picks, 0) < 1 or p_picks > 10 then
+      return jsonb_build_object('ok', false, 'reason', 'each judge ranks between 1 and 10 entries');
+    end if;
+  end if;
+
+  if p_id is null then
+    insert into public.giveaways (title, prize, details, winners, event_on, self_entry,
+                                  entries_close_at, strength, half_life_days, created_by, mode, picks)
+    values (btrim(p_title), btrim(coalesce(p_prize, '')), btrim(coalesce(p_details, '')), p_winners,
+            p_event_on, coalesce(p_self_entry, true), p_entries_close_at, p_strength, p_half_life_days,
+            (select auth.uid()), v_mode, coalesce(p_picks, 3))
+    returning id into v_id;
+    perform public.giveaway_note(v_id, 'created', jsonb_build_object('title', btrim(p_title)));
+  else
+    select status into v_status from public.giveaways where id = p_id for update;
+    if v_status is null then
+      return jsonb_build_object('ok', false, 'reason', 'no such giveaway');
+    end if;
+    -- Once anybody is drawn, the terms are what they were drawn under.
+    if v_status <> 'open' then
+      return jsonb_build_object('ok', false, 'reason', 'a giveaway that has been drawn cannot be changed');
+    end if;
+    -- Once somebody has entered, the terms they entered under stand: a
+    -- drawing does not turn into a contest, and an answer stays an answer
+    -- to the question it was given to.
+    if exists (select 1 from public.giveaway_entries e where e.giveaway_id = p_id) then
+      if v_mode is distinct from (select mode from public.giveaways where id = p_id) then
+        return jsonb_build_object('ok', false, 'reason', 'people have entered: it cannot change between drawn and judged');
+      end if;
+      v_old := array(select q.prompt from public.giveaway_questions q where q.giveaway_id = p_id order by q.position);
+      if v_mode = 'judged' and v_old is distinct from v_questions then
+        return jsonb_build_object('ok', false, 'reason', 'people have answered: the questions cannot change');
+      end if;
+    end if;
+    update public.giveaways set
+      title = btrim(p_title), prize = btrim(coalesce(p_prize, '')), details = btrim(coalesce(p_details, '')),
+      winners = p_winners, event_on = p_event_on, self_entry = coalesce(p_self_entry, true),
+      entries_close_at = p_entries_close_at, strength = p_strength, half_life_days = p_half_life_days,
+      mode = v_mode, picks = coalesce(p_picks, 3)
+    where id = p_id;
+    v_id := p_id;
+    perform public.giveaway_note(v_id, 'changed', jsonb_build_object(
+      'title', btrim(p_title), 'winners', p_winners, 'event_on', p_event_on,
+      'strength', p_strength, 'half_life_days', p_half_life_days, 'self_entry', coalesce(p_self_entry, true),
+      'entries_close_at', p_entries_close_at));
+  end if;
+  -- The questions, in order. Replaced only while nobody has answered: past
+  -- that the check above has already said they are unchanged.
+  if not exists (select 1 from public.giveaway_answers a where a.giveaway_id = v_id) then
+    delete from public.giveaway_questions where giveaway_id = v_id;
+    if v_mode = 'judged' then
+      insert into public.giveaway_questions (giveaway_id, position, prompt)
+      select v_id, o, q from unnest(v_questions) with ordinality as x(q, o);
+    end if;
+  end if;
+  return jsonb_build_object('ok', true, 'id', v_id);
+end;
+$fn$;
+create or replace function public.giveaways_list()
+returns jsonb
+language sql
+stable
+security definer
+set search_path = ''
+as $fn$
+  select case
+    when not public.can('games.play') then jsonb_build_object('ok', false, 'reason', 'not allowed')
+    else jsonb_build_object('ok', true,
+      'can_manage', public.can('giveaways.manage'),
+      'giveaways', coalesce((
+        select jsonb_agg(jsonb_build_object(
+                 'id', g.id, 'title', g.title, 'prize', g.prize, 'winners', g.winners, 'mode', g.mode,
+                 'event_on', g.event_on, 'status', g.status, 'self_entry', g.self_entry,
+                 'entries_close_at', g.entries_close_at,
+                 'entrants', (select count(*) from public.giveaway_entries e where e.giveaway_id = g.id),
+                 'entered', exists (select 1 from public.giveaway_entries e
+                                    join public.giveaway_people p on p.id = e.person_id
+                                    where e.giveaway_id = g.id and p.user_id = (select auth.uid())),
+                 'drawn', coalesce((select jsonb_agg(p.name order by w.pick)
+                                    from public.giveaway_winners w
+                                    join public.giveaway_people p on p.id = w.person_id
+                                    where w.giveaway_id = g.id and w.status <> 'declined'), '[]'::jsonb))
+               order by (g.status in ('open', 'drawing')) desc, g.event_on desc nulls last, g.created_at desc)
+        from public.giveaways g), '[]'::jsonb))
+  end
+$fn$;
+create or replace function public.giveaway_detail(p_id uuid)
+returns jsonb
+language sql
+stable
+security definer
+set search_path = ''
+as $fn$
+  select case
+    when not public.can('games.play') then jsonb_build_object('ok', false, 'reason', 'not allowed')
+    when not exists (select 1 from public.giveaways g where g.id = p_id)
+      then jsonb_build_object('ok', false, 'reason', 'no such giveaway')
+    else (
+      select jsonb_build_object('ok', true,
+        'can_manage', public.can('giveaways.manage'),
+        'me', (select p.id from public.giveaway_people p where p.user_id = (select auth.uid())),
+        'chain', public.giveaway_chain(),
+        'giveaway', jsonb_build_object(
+          'id', g.id, 'title', g.title, 'prize', g.prize, 'details', g.details,
+          'winners', g.winners, 'event_on', g.event_on, 'self_entry', g.self_entry,
+          'entries_close_at', g.entries_close_at, 'strength', g.strength,
+          'half_life_days', g.half_life_days, 'status', g.status, 'mode', g.mode, 'picks', g.picks,
+          'cancelled_reason', g.cancelled_reason, 'created_at', g.created_at,
+          'created_by', public.giveaway_account_name(g.created_by)),
+        -- The odds as they stand today; a committed drawing keeps its own.
+        'entrants', coalesce((
+          select jsonb_agg(jsonb_build_object(
+                   'person', p.id, 'name', p.name, 'linked', p.user_id is not null,
+                   'entered_at', e.entered_at,
+                   'entered_by', public.giveaway_account_name(e.entered_by),
+                   'self', p.user_id is not null and p.user_id = e.entered_by,
+                   'weight', public.giveaway_weight(p.id, current_date, g.strength, g.half_life_days),
+                   'attended', coalesce((select jsonb_agg(jsonb_build_object('on', a.attended_on, 'what', a.what)
+                                                          order by a.attended_on desc)
+                                         from public.giveaway_attendance a where a.person_id = p.id), '[]'::jsonb))
+                 order by p.name, p.id)
+          from public.giveaway_entries e
+          join public.giveaway_people p on p.id = e.person_id
+          where e.giveaway_id = g.id), '[]'::jsonb),
+        'draws', coalesce((
+          select jsonb_agg(jsonb_build_object(
+                   'id', d.id, 'seq', d.seq, 'reason', d.reason, 'wanted', d.wanted,
+                   'entrants', d.entrants, 'total', d.total, 'snapshot_hash', d.snapshot_hash,
+                   'chain', d.chain, 'round', d.round, 'round_at', d.round_at,
+                   'committed_at', d.committed_at, 'committed_by', public.giveaway_account_name(d.committed_by),
+                   'randomness', d.randomness, 'signature', d.signature, 'winners', d.winners,
+                   'revealed_at', d.revealed_at, 'revealed_by', public.giveaway_account_name(d.revealed_by))
+                 order by d.seq)
+          from public.giveaway_draws d where d.giveaway_id = g.id), '[]'::jsonb),
+        'winners', coalesce((
+          select jsonb_agg(jsonb_build_object(
+                   'person', p.id, 'name', p.name, 'pick', w.pick, 'status', w.status,
+                   'draw', (select d.seq from public.giveaway_draws d where d.id = w.draw_id),
+                   'decided_at', w.decided_at, 'decided_by', public.giveaway_account_name(w.decided_by))
+                 order by (select d.seq from public.giveaway_draws d where d.id = w.draw_id), w.pick)
+          from public.giveaway_winners w
+          join public.giveaway_people p on p.id = w.person_id
+          where w.giveaway_id = g.id), '[]'::jsonb),
+        'log', coalesce((
+          select jsonb_agg(jsonb_build_object(
+                   'at', l.at, 'actor', public.giveaway_account_name(l.actor),
+                   'action', l.action, 'detail', l.detail)
+                 order by l.id)
+          from public.giveaway_log l where l.giveaway_id = g.id), '[]'::jsonb))
+      from public.giveaways g where g.id = p_id)
+  end
+$fn$;
+create or replace function public.commit_giveaway_draw(p_id uuid)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $fn$
+declare
+  g public.giveaways;
+  chain jsonb := public.giveaway_chain();
+  v_seq int;
+  v_wanted int;
+  v_entrants jsonb;
+  v_total bigint;
+  v_round bigint;
+  v_round_at timestamptz;
+  v_hash text;
+  v_reason text;
+  v_id uuid;
+begin
+  if not public.can('giveaways.manage') then
+    return jsonb_build_object('ok', false, 'reason', 'not allowed');
+  end if;
+  select * into g from public.giveaways where id = p_id for update;
+  if g.id is null then
+    return jsonb_build_object('ok', false, 'reason', 'no such giveaway');
+  end if;
+  if g.status = 'cancelled' then
+    return jsonb_build_object('ok', false, 'reason', 'it has been called off');
+  end if;
+  if g.status = 'drawing' then
+    return jsonb_build_object('ok', false, 'reason', 'a drawing is already waiting on its round');
+  end if;
+  if g.mode = 'judged' then
+    return jsonb_build_object('ok', false, 'reason', 'this one is judged, not drawn');
+  end if;
+
+  select coalesce(max(seq), 0) + 1 into v_seq from public.giveaway_draws where giveaway_id = p_id;
+  v_wanted := g.winners - (select count(*) from public.giveaway_winners w
+                           where w.giveaway_id = p_id and w.status <> 'declined');
+  if v_wanted <= 0 then
+    return jsonb_build_object('ok', false, 'reason', 'everybody it needs is drawn; nobody has declined');
+  end if;
+  v_reason := case when v_seq = 1 then 'first drawing'
+                   else 'drawing again: ' || coalesce((select string_agg(p.name, ', ' order by p.name)
+                                              from public.giveaway_winners w
+                                              join public.giveaway_people p on p.id = w.person_id
+                                              where w.giveaway_id = p_id and w.status = 'declined'
+                                                and not exists (select 1 from public.giveaway_log l
+                                                                where l.giveaway_id = p_id and l.action = 'committed'
+                                                                  and l.detail->'replacing' ? p.id::text)),
+                                                'somebody') || ' declined' end;
+
+  select jsonb_agg(jsonb_build_object('person', p.id, 'name', p.name,
+                     'weight', public.giveaway_weight(p.id, current_date, g.strength, g.half_life_days))
+                   order by p.id::text collate "C")
+    into v_entrants
+  from public.giveaway_entries e
+  join public.giveaway_people p on p.id = e.person_id
+  where e.giveaway_id = p_id
+    and not exists (select 1 from public.giveaway_winners w where w.giveaway_id = p_id and w.person_id = p.id);
+  if v_entrants is null then
+    return jsonb_build_object('ok', false, 'reason',
+      case when v_seq = 1 then 'nobody has entered' else 'nobody is left who has not been drawn' end);
+  end if;
+  v_wanted := least(v_wanted, jsonb_array_length(v_entrants));
+  select sum((e->>'weight')::bigint) into v_total from jsonb_array_elements(v_entrants) e;
+
+  -- Ten rounds ahead: thirty seconds, long enough to say "here it comes" and
+  -- far too long for anybody to know what it will be.
+  v_round := floor((extract(epoch from now()) - (chain->>'genesis')::bigint) / (chain->>'period')::int)::bigint + 1 + 10;
+  v_round_at := to_timestamp((chain->>'genesis')::bigint + (v_round - 1) * (chain->>'period')::int);
+  v_hash := encode(sha256(convert_to(public.giveaway_snapshot_text(
+              p_id, v_seq, v_wanted, chain->>'hash', v_round, v_entrants), 'UTF8')), 'hex');
+
+  insert into public.giveaway_draws (giveaway_id, seq, reason, wanted, entrants, total, snapshot_hash,
+                                     chain, round, round_at, committed_by)
+  values (p_id, v_seq, v_reason, v_wanted, v_entrants, v_total, v_hash,
+          chain->>'hash', v_round, v_round_at, (select auth.uid()))
+  returning id into v_id;
+  update public.giveaways set status = 'drawing' where id = p_id;
+  perform public.giveaway_note(p_id, 'committed', jsonb_build_object(
+    'draw', v_seq, 'wanted', v_wanted, 'entrants', jsonb_array_length(v_entrants),
+    'snapshot_hash', v_hash, 'round', v_round, 'round_at', v_round_at,
+    'replacing', coalesce((select jsonb_agg(w.person_id) from public.giveaway_winners w
+                           where w.giveaway_id = p_id and w.status = 'declined'), '[]'::jsonb)));
+  return jsonb_build_object('ok', true, 'draw', v_id, 'seq', v_seq, 'round', v_round, 'round_at', v_round_at,
+                            'snapshot_hash', v_hash);
+end;
+$fn$;
+create or replace function public.enter_giveaway(p_id uuid, p_in boolean)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $fn$
+declare
+  g public.giveaways;
+  v_person uuid;
+begin
+  if (select auth.uid()) is null or not public.can('games.play') then
+    return jsonb_build_object('ok', false, 'reason', 'not allowed');
+  end if;
+  select * into g from public.giveaways where id = p_id for update;
+  if g.id is null then
+    return jsonb_build_object('ok', false, 'reason', 'no such giveaway');
+  end if;
+  if g.status <> 'open' then
+    return jsonb_build_object('ok', false, 'reason', 'entries are closed: it has been drawn');
+  end if;
+  if not g.self_entry then
+    return jsonb_build_object('ok', false, 'reason', 'the organisers enter people for this one');
+  end if;
+  -- A judged one is entered by answering; taking yourself out is the same.
+  if g.mode = 'judged' and p_in then
+    return jsonb_build_object('ok', false, 'reason', 'this one is entered by answering its questions');
+  end if;
+  if g.entries_close_at is not null and now() >= g.entries_close_at then
+    return jsonb_build_object('ok', false, 'reason', 'entries are closed');
+  end if;
+  v_person := public.giveaway_person_for((select auth.uid()));
+  if p_in then
+    insert into public.giveaway_entries (giveaway_id, person_id, entered_by)
+    values (p_id, v_person, (select auth.uid()))
+    on conflict do nothing;
+    if found then
+      perform public.giveaway_note(p_id, 'entered', jsonb_build_object(
+        'person', v_person, 'name', (select name from public.giveaway_people where id = v_person), 'self', true));
+    end if;
+  else
+    delete from public.giveaway_entries where giveaway_id = p_id and person_id = v_person;
+    if found then
+      perform public.giveaway_note(p_id, 'withdrew', jsonb_build_object(
+        'person', v_person, 'name', (select name from public.giveaway_people where id = v_person), 'self', true));
+    end if;
+  end if;
+  return jsonb_build_object('ok', true);
+end;
+$fn$;
+create or replace function public.add_giveaway_entrant(p_id uuid, p_person uuid, p_user uuid, p_name text)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $fn$
+declare
+  v_status text;
+  v_person uuid := p_person;
+begin
+  if not public.can('giveaways.manage') then
+    return jsonb_build_object('ok', false, 'reason', 'not allowed');
+  end if;
+  select status into v_status from public.giveaways where id = p_id for update;
+  if v_status is null then
+    return jsonb_build_object('ok', false, 'reason', 'no such giveaway');
+  end if;
+  if v_status <> 'open' then
+    return jsonb_build_object('ok', false, 'reason', 'entries are closed: it has been drawn');
+  end if;
+  if (select mode from public.giveaways where id = p_id) = 'judged' then
+    return jsonb_build_object('ok', false, 'reason', 'this one is entered by answering its questions');
+  end if;
+  if v_person is not null then
+    if not exists (select 1 from public.giveaway_people where id = v_person) then
+      return jsonb_build_object('ok', false, 'reason', 'no such person');
+    end if;
+  elsif p_user is not null then
+    if not exists (select 1 from auth.users where id = p_user) then
+      return jsonb_build_object('ok', false, 'reason', 'no such person');
+    end if;
+    v_person := public.giveaway_person_for(p_user);
+  elsif length(btrim(coalesce(p_name, ''))) between 1 and 80 then
+    insert into public.giveaway_people (name, created_by)
+    values (btrim(p_name), (select auth.uid())) returning id into v_person;
+  else
+    return jsonb_build_object('ok', false, 'reason', 'say who to enter');
+  end if;
+
+  insert into public.giveaway_entries (giveaway_id, person_id, entered_by)
+  values (p_id, v_person, (select auth.uid()))
+  on conflict do nothing;
+  if not found then
+    return jsonb_build_object('ok', false, 'reason', 'they are already in it');
+  end if;
+  perform public.giveaway_note(p_id, 'entered', jsonb_build_object(
+    'person', v_person, 'name', (select name from public.giveaway_people where id = v_person), 'self', false));
+  return jsonb_build_object('ok', true, 'person', v_person);
+end;
+$fn$;
+create or replace function public.decide_giveaway_winner(p_id uuid, p_person uuid, p_status text)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $fn$
+declare
+  w public.giveaway_winners;
+  g public.giveaways;
+  v_att uuid;
+begin
+  if not public.can('giveaways.manage') then
+    return jsonb_build_object('ok', false, 'reason', 'not allowed');
+  end if;
+  if p_status not in ('accepted', 'declined', 'pending') then
+    return jsonb_build_object('ok', false, 'reason', 'accepted, declined or pending');
+  end if;
+  select * into g from public.giveaways where id = p_id for update;
+  select * into w from public.giveaway_winners where giveaway_id = p_id and person_id = p_person for update;
+  if w.person_id is null then
+    return jsonb_build_object('ok', false, 'reason', 'they were not drawn');
+  end if;
+  if w.status = p_status then
+    return jsonb_build_object('ok', true);
+  end if;
+  -- A replacement already drawn for somebody who declined: they cannot take
+  -- the place back, or there would be one winner too many.
+  if w.status = 'declined' and exists (
+       select 1 from public.giveaway_log l where l.giveaway_id = p_id and l.action in ('committed', 'offered')
+       and l.detail->'replacing' ? p_person::text) then
+    return jsonb_build_object('ok', false, 'reason', 'somebody has already been drawn in their place');
+  end if;
+
+  if w.attendance_id is not null then
+    delete from public.giveaway_attendance where id = w.attendance_id;
+    v_att := null;
+  end if;
+  if p_status = 'accepted' then
+    insert into public.giveaway_attendance (person_id, attended_on, what, giveaway_id, source, recorded_by)
+    values (p_person, coalesce(g.event_on, current_date), left(g.title, 120), p_id, 'giveaway', (select auth.uid()))
+    returning id into v_att;
+  end if;
+  update public.giveaway_winners
+     set status = p_status, attendance_id = v_att, decided_by = (select auth.uid()), decided_at = now()
+   where giveaway_id = p_id and person_id = p_person;
+  perform public.giveaway_note(p_id, p_status, jsonb_build_object(
+    'person', p_person, 'name', (select name from public.giveaway_people where id = p_person), 'was', w.status));
+  return jsonb_build_object('ok', true);
+end;
+$fn$;
+
+-- The label a judge sees instead of a name: stable for the giveaway, and in
+-- no order a judge could read anything from.
+create or replace function public.giveaway_entry_labels(p_id uuid)
+returns table (person_id uuid, label text)
+language sql
+stable
+security definer
+set search_path = ''
+as $fn$
+  select e.person_id, 'Entry ' || row_number() over (order by md5(g.label_salt::text || e.person_id::text))
+  from public.giveaway_entries e
+  join public.giveaways g on g.id = e.giveaway_id
+  where e.giveaway_id = p_id
+$fn$;
+
+-- The totals: points from every judge, highest first. Ties share a total and
+-- are told apart only by the label, which is no judgement at all -- so the
+-- organiser settles a tie at the last winning place, not this.
+create or replace function public.giveaway_totals(p_id uuid)
+returns table (person_id uuid, points bigint, firsts bigint)
+language sql
+stable
+security definer
+set search_path = ''
+as $fn$
+  select e.person_id,
+         coalesce(sum(g.picks + 1 - r.rank) filter (where r.rank <= g.picks), 0) as points,
+         count(*) filter (where r.rank = 1) as firsts
+  from public.giveaway_entries e
+  join public.giveaways g on g.id = e.giveaway_id
+  left join public.giveaway_rankings r on r.giveaway_id = e.giveaway_id and r.person_id = e.person_id
+  where e.giveaway_id = p_id
+  group by e.person_id
+$fn$;
+
+create or replace function public.giveaway_is_judge(p_id uuid)
+returns boolean
+language sql
+stable
+security definer
+set search_path = ''
+as $fn$
+  select exists (select 1 from public.giveaway_judges j
+                 where j.giveaway_id = p_id and j.user_id = (select auth.uid()))
+$fn$;
+
+-- Everything about the judging of one giveaway, as much of it as the reader
+-- may see: their own entry always; the entries, blind, to judges and
+-- organisers while it is judged; and all of it, named, to everybody once the
+-- results are out.
+create or replace function public.giveaway_judging(p_id uuid)
+returns jsonb
+language plpgsql
+stable
+security definer
+set search_path = ''
+as $fn$
+declare
+  g public.giveaways;
+  uid uuid := (select auth.uid());
+  me uuid;
+  judge boolean;
+  manage boolean := public.can('giveaways.manage');
+  decided boolean;
+  sees boolean;
+begin
+  if not public.can('games.play') then
+    return jsonb_build_object('ok', false, 'reason', 'not allowed');
+  end if;
+  select * into g from public.giveaways where id = p_id;
+  if g.id is null then
+    return jsonb_build_object('ok', false, 'reason', 'no such giveaway');
+  end if;
+  select id into me from public.giveaway_people where user_id = uid;
+  judge := public.giveaway_is_judge(p_id);
+  decided := g.status = 'drawn';
+  sees := decided or judge or manage;
+
+  return jsonb_build_object('ok', true,
+    'is_judge', judge,
+    'decided', decided,
+    'picks', g.picks,
+    'questions', coalesce((select jsonb_agg(jsonb_build_object('id', q.id, 'prompt', q.prompt) order by q.position)
+                           from public.giveaway_questions q where q.giveaway_id = p_id), '[]'::jsonb),
+    'judges', coalesce((select jsonb_agg(jsonb_build_object(
+                          'user', j.user_id, 'name', public.giveaway_account_name(j.user_id),
+                          'ranked', exists (select 1 from public.giveaway_rankings r
+                                            where r.giveaway_id = p_id and r.judge_id = j.user_id))
+                          order by public.giveaway_account_name(j.user_id))
+                        from public.giveaway_judges j where j.giveaway_id = p_id), '[]'::jsonb),
+    'entries_count', (select count(*) from public.giveaway_entries e where e.giveaway_id = p_id),
+    -- The reader's own answers, to change while entries are open.
+    'mine', case when me is null then null else (
+      select jsonb_object_agg(a.question_id, a.answer)
+      from public.giveaway_answers a where a.giveaway_id = p_id and a.person_id = me) end,
+    'entered', me is not null and exists (select 1 from public.giveaway_entries e
+                                          where e.giveaway_id = p_id and e.person_id = me),
+    -- The entries: blind until decided, and only to those who judge or run it.
+    'entries', case when not sees then '[]'::jsonb else coalesce((
+      select jsonb_agg(jsonb_build_object(
+               'person', case when decided then e.person_id end,
+               -- an organiser settles ties by it; a judge ranks by the label
+               'key', case when decided or manage then e.person_id end,
+               'label', l.label,
+               'name', case when decided then p.name end,
+               'own', me is not null and e.person_id = me,
+               'answers', coalesce((select jsonb_agg(jsonb_build_object('question', a.question_id, 'answer', a.answer)
+                                                     order by q.position)
+                                    from public.giveaway_answers a
+                                    join public.giveaway_questions q on q.id = a.question_id
+                                    where a.giveaway_id = p_id and a.person_id = e.person_id), '[]'::jsonb),
+               'points', case when decided or manage then t.points end,
+               'firsts', case when decided or manage then t.firsts end,
+               'ranks', case when decided then coalesce((
+                          select jsonb_agg(jsonb_build_object('judge', public.giveaway_account_name(r.judge_id), 'rank', r.rank)
+                                           order by r.rank, public.giveaway_account_name(r.judge_id))
+                          from public.giveaway_rankings r where r.giveaway_id = p_id and r.person_id = e.person_id), '[]'::jsonb) end)
+             order by case when decided or manage then -t.points end nulls last, l.label)
+      from public.giveaway_entries e
+      join public.giveaway_people p on p.id = e.person_id
+      join public.giveaway_entry_labels(p_id) l on l.person_id = e.person_id
+      join public.giveaway_totals(p_id) t on t.person_id = e.person_id
+      where e.giveaway_id = p_id), '[]'::jsonb) end,
+    -- A judge's own ranking, to change until the results are out.
+    'my_ranking', case when judge then coalesce((
+      select jsonb_agg(l.label order by r.rank)
+      from public.giveaway_rankings r
+      join public.giveaway_entry_labels(p_id) l on l.person_id = r.person_id
+      where r.giveaway_id = p_id and r.judge_id = uid), '[]'::jsonb) end);
+end;
+$fn$;
+
+-- Entering by answering: yourself, or -- for an organiser -- somebody else,
+-- an account or a name, for staff who will never sign in.
+create or replace function public.enter_judged_giveaway(
+  p_id uuid, p_answers jsonb, p_person uuid default null, p_user uuid default null, p_name text default null)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $fn$
+declare
+  g public.giveaways;
+  uid uuid := (select auth.uid());
+  for_someone boolean := p_person is not null or p_user is not null or nullif(btrim(coalesce(p_name, '')), '') is not null;
+  v_person uuid := p_person;
+  q record;
+  v_answer text;
+  was boolean;
+begin
+  if uid is null or not public.can('games.play') then
+    return jsonb_build_object('ok', false, 'reason', 'not allowed');
+  end if;
+  if for_someone and not public.can('giveaways.manage') then
+    return jsonb_build_object('ok', false, 'reason', 'not allowed');
+  end if;
+  select * into g from public.giveaways where id = p_id for update;
+  if g.id is null then
+    return jsonb_build_object('ok', false, 'reason', 'no such giveaway');
+  end if;
+  if g.mode <> 'judged' then
+    return jsonb_build_object('ok', false, 'reason', 'this one is drawn, not judged');
+  end if;
+  if g.status <> 'open' then
+    return jsonb_build_object('ok', false, 'reason', 'entries are closed');
+  end if;
+  if not for_someone then
+    if not g.self_entry then
+      return jsonb_build_object('ok', false, 'reason', 'the organisers enter people for this one');
+    end if;
+    if g.entries_close_at is not null and now() >= g.entries_close_at then
+      return jsonb_build_object('ok', false, 'reason', 'entries are closed');
+    end if;
+    v_person := public.giveaway_person_for(uid);
+  elsif v_person is not null then
+    if not exists (select 1 from public.giveaway_people where id = v_person) then
+      return jsonb_build_object('ok', false, 'reason', 'no such person');
+    end if;
+  elsif p_user is not null then
+    if not exists (select 1 from auth.users where id = p_user) then
+      return jsonb_build_object('ok', false, 'reason', 'no such person');
+    end if;
+    v_person := public.giveaway_person_for(p_user);
+  else
+    insert into public.giveaway_people (name, created_by)
+    values (left(btrim(p_name), 80), uid) returning id into v_person;
+  end if;
+
+  -- Every question answered, each at most 2,000 characters.
+  for q in select id, position from public.giveaway_questions where giveaway_id = p_id order by position loop
+    v_answer := btrim(coalesce(p_answers->>q.id::text, ''));
+    if v_answer = '' then
+      return jsonb_build_object('ok', false, 'reason', format('question %s has no answer', q.position));
+    end if;
+    if char_length(v_answer) > 2000 then
+      return jsonb_build_object('ok', false, 'reason', format('the answer to question %s is over 2,000 characters', q.position));
+    end if;
+  end loop;
+
+  was := exists (select 1 from public.giveaway_entries where giveaway_id = p_id and person_id = v_person);
+  insert into public.giveaway_entries (giveaway_id, person_id, entered_by)
+  values (p_id, v_person, uid) on conflict do nothing;
+  insert into public.giveaway_answers (giveaway_id, person_id, question_id, answer)
+  select p_id, v_person, q2.id, btrim(p_answers->>q2.id::text)
+  from public.giveaway_questions q2 where q2.giveaway_id = p_id
+  on conflict (question_id, person_id) do update set answer = excluded.answer, updated_at = now();
+
+  perform public.giveaway_note(p_id, case when was then 'answers changed' else 'entered' end,
+    jsonb_build_object('person', v_person, 'name', (select name from public.giveaway_people where id = v_person),
+                       'self', not for_someone));
+  return jsonb_build_object('ok', true, 'person', v_person);
+end;
+$fn$;
+
+create or replace function public.add_giveaway_judge(p_id uuid, p_user uuid)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $fn$
+declare
+  v_status text;
+begin
+  if not public.can('giveaways.manage') then
+    return jsonb_build_object('ok', false, 'reason', 'not allowed');
+  end if;
+  select status into v_status from public.giveaways where id = p_id and mode = 'judged';
+  if v_status is null then
+    return jsonb_build_object('ok', false, 'reason', 'no such judged giveaway');
+  end if;
+  if v_status in ('drawn', 'cancelled') then
+    return jsonb_build_object('ok', false, 'reason', 'the judging is over');
+  end if;
+  if p_user is null or not exists (select 1 from auth.users where id = p_user) then
+    return jsonb_build_object('ok', false, 'reason', 'a judge needs an account');
+  end if;
+  insert into public.giveaway_judges (giveaway_id, user_id, added_by)
+  values (p_id, p_user, (select auth.uid())) on conflict do nothing;
+  if found then
+    perform public.giveaway_note(p_id, 'judge added', jsonb_build_object('name', public.giveaway_account_name(p_user)));
+  end if;
+  return jsonb_build_object('ok', true);
+end;
+$fn$;
+
+create or replace function public.remove_giveaway_judge(p_id uuid, p_user uuid)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $fn$
+declare
+  v_status text;
+begin
+  if not public.can('giveaways.manage') then
+    return jsonb_build_object('ok', false, 'reason', 'not allowed');
+  end if;
+  select status into v_status from public.giveaways where id = p_id and mode = 'judged';
+  if v_status is null then
+    return jsonb_build_object('ok', false, 'reason', 'no such judged giveaway');
+  end if;
+  if v_status in ('drawn', 'cancelled') then
+    return jsonb_build_object('ok', false, 'reason', 'the judging is over');
+  end if;
+  -- Their ranking goes with them: a judge taken off does not still count.
+  delete from public.giveaway_rankings where giveaway_id = p_id and judge_id = p_user;
+  delete from public.giveaway_judges where giveaway_id = p_id and user_id = p_user;
+  if found then
+    perform public.giveaway_note(p_id, 'judge removed', jsonb_build_object('name', public.giveaway_account_name(p_user)));
+  end if;
+  return jsonb_build_object('ok', true);
+end;
+$fn$;
+
+-- Entries close and the judging starts.
+create or replace function public.start_giveaway_judging(p_id uuid)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $fn$
+declare
+  g public.giveaways;
+begin
+  if not public.can('giveaways.manage') then
+    return jsonb_build_object('ok', false, 'reason', 'not allowed');
+  end if;
+  select * into g from public.giveaways where id = p_id for update;
+  if g.id is null or g.mode <> 'judged' then
+    return jsonb_build_object('ok', false, 'reason', 'no such judged giveaway');
+  end if;
+  if g.status <> 'open' then
+    return jsonb_build_object('ok', false, 'reason', 'it is not taking entries');
+  end if;
+  if not exists (select 1 from public.giveaway_entries where giveaway_id = p_id) then
+    return jsonb_build_object('ok', false, 'reason', 'nobody has entered');
+  end if;
+  if not exists (select 1 from public.giveaway_judges where giveaway_id = p_id) then
+    return jsonb_build_object('ok', false, 'reason', 'it has no judges yet');
+  end if;
+  update public.giveaways set status = 'judging' where id = p_id;
+  perform public.giveaway_note(p_id, 'judging started', jsonb_build_object(
+    'entries', (select count(*) from public.giveaway_entries where giveaway_id = p_id),
+    'judges', (select count(*) from public.giveaway_judges where giveaway_id = p_id)));
+  return jsonb_build_object('ok', true);
+end;
+$fn$;
+
+-- A judge's ranking, best first, by the labels they were shown: replaced
+-- whole each time, until the results.
+create or replace function public.save_giveaway_ranking(p_id uuid, p_labels text[])
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $fn$
+declare
+  g public.giveaways;
+  uid uuid := (select auth.uid());
+  me uuid;
+  n int := coalesce(cardinality(p_labels), 0);
+  p_people uuid[];
+begin
+  if uid is null or not public.giveaway_is_judge(p_id) then
+    return jsonb_build_object('ok', false, 'reason', 'only this giveaway''s judges can rank it');
+  end if;
+  select * into g from public.giveaways where id = p_id;
+  if g.status <> 'judging' then
+    return jsonb_build_object('ok', false, 'reason',
+      case when g.status = 'open' then 'the judging has not started' else 'the judging is over' end);
+  end if;
+  if n > g.picks then
+    return jsonb_build_object('ok', false, 'reason', format('rank at most %s', g.picks));
+  end if;
+  if n <> (select count(distinct x) from unnest(p_labels) x) then
+    return jsonb_build_object('ok', false, 'reason', 'an entry can be ranked once');
+  end if;
+  p_people := array(select l.person_id from unnest(p_labels) with ordinality as x(label, o)
+                    join public.giveaway_entry_labels(p_id) l on l.label = x.label order by x.o);
+  if cardinality(p_people) <> n then
+    return jsonb_build_object('ok', false, 'reason', 'that is not an entry in this giveaway');
+  end if;
+  select id into me from public.giveaway_people where user_id = uid;
+  if me is not null and me = any (p_people) then
+    return jsonb_build_object('ok', false, 'reason', 'a judge cannot rank their own entry');
+  end if;
+  delete from public.giveaway_rankings where giveaway_id = p_id and judge_id = uid;
+  insert into public.giveaway_rankings (giveaway_id, judge_id, person_id, rank)
+  select p_id, uid, x, o from unnest(p_people) with ordinality as t(x, o);
+  -- Who ranked, not how: the ranking itself opens with the results.
+  perform public.giveaway_note(p_id, 'ranked', jsonb_build_object('name', public.giveaway_account_name(uid), 'count', n));
+  return jsonb_build_object('ok', true);
+end;
+$fn$;
+
+-- The results. The top totals win; a tie across the last winning place is
+-- settled by the organiser, who names which of the tied go through.
+create or replace function public.announce_giveaway_results(p_id uuid, p_tiebreak uuid[] default null)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $fn$
+declare
+  g public.giveaways;
+  order_ jsonb;
+  n int;
+  cut bigint;
+  above uuid[];
+  tied uuid[];
+  need int;
+  chosen uuid[];
+  w uuid;
+  place int := 0;
+begin
+  if not public.can('giveaways.manage') then
+    return jsonb_build_object('ok', false, 'reason', 'not allowed');
+  end if;
+  select * into g from public.giveaways where id = p_id for update;
+  if g.id is null or g.mode <> 'judged' then
+    return jsonb_build_object('ok', false, 'reason', 'no such judged giveaway');
+  end if;
+  if g.status <> 'judging' then
+    return jsonb_build_object('ok', false, 'reason', 'it is not being judged');
+  end if;
+  if not exists (select 1 from public.giveaway_rankings where giveaway_id = p_id) then
+    return jsonb_build_object('ok', false, 'reason', 'no judge has ranked yet');
+  end if;
+  n := least(g.winners, (select count(*) from public.giveaway_entries where giveaway_id = p_id))::int;
+  -- The total at the last winning place.
+  select t.points into cut from public.giveaway_totals(p_id) t order by t.points desc offset n - 1 limit 1;
+  above := array(select t.person_id from public.giveaway_totals(p_id) t where t.points > cut order by t.points desc);
+  tied := array(select t.person_id from public.giveaway_totals(p_id) t where t.points = cut);
+  need := n - coalesce(cardinality(above), 0);
+  if cardinality(tied) > need then
+    if p_tiebreak is null then
+      return jsonb_build_object('ok', false, 'reason', 'tie', 'need', need, 'points', cut,
+        'tied', (select jsonb_agg(jsonb_build_object('key', x, 'label', l.label) order by l.label)
+                 from unnest(tied) x join public.giveaway_entry_labels(p_id) l on l.person_id = x));
+    end if;
+    if cardinality(p_tiebreak) <> need or exists (select 1 from unnest(p_tiebreak) x where not (x = any (tied)))
+       or need <> (select count(distinct x) from unnest(p_tiebreak) x) then
+      return jsonb_build_object('ok', false, 'reason', format('choose %s of the tied entries', need));
+    end if;
+    chosen := coalesce(above, '{}') || p_tiebreak;
+  else
+    chosen := coalesce(above, '{}') || tied;
+  end if;
+
+  foreach w in array chosen loop
+    place := place + 1;
+    insert into public.giveaway_winners (giveaway_id, person_id, draw_id, pick)
+    values (p_id, w, null, place);
+  end loop;
+  update public.giveaways set status = 'drawn' where id = p_id;
+  perform public.giveaway_note(p_id, 'announced', jsonb_build_object(
+    'winners', (select jsonb_agg(p.name order by o) from unnest(chosen) with ordinality as x(id, o)
+                join public.giveaway_people p on p.id = x.id),
+    'tie_settled', p_tiebreak is not null));
+  return jsonb_build_object('ok', true);
+end;
+$fn$;
+
+-- After somebody declines, the place goes to the next-ranked entry not yet
+-- given one -- or, on a tie for it, the one the organiser names.
+create or replace function public.offer_giveaway_place(p_id uuid, p_person uuid default null)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $fn$
+declare
+  g public.giveaways;
+  best bigint;
+  tied uuid[];
+  w uuid := p_person;
+  v_place int;
+begin
+  if not public.can('giveaways.manage') then
+    return jsonb_build_object('ok', false, 'reason', 'not allowed');
+  end if;
+  select * into g from public.giveaways where id = p_id for update;
+  if g.id is null or g.mode <> 'judged' or g.status <> 'drawn' then
+    return jsonb_build_object('ok', false, 'reason', 'no judged giveaway with results');
+  end if;
+  if g.winners - (select count(*) from public.giveaway_winners where giveaway_id = p_id and status <> 'declined') <= 0 then
+    return jsonb_build_object('ok', false, 'reason', 'everybody it needs has a place; nobody has declined');
+  end if;
+  select max(t.points) into best from public.giveaway_totals(p_id) t
+  where not exists (select 1 from public.giveaway_winners x where x.giveaway_id = p_id and x.person_id = t.person_id);
+  if best is null then
+    return jsonb_build_object('ok', false, 'reason', 'nobody is left who has not had a place');
+  end if;
+  tied := array(select t.person_id from public.giveaway_totals(p_id) t
+                where t.points = best
+                  and not exists (select 1 from public.giveaway_winners x where x.giveaway_id = p_id and x.person_id = t.person_id));
+  if w is null then
+    if cardinality(tied) > 1 then
+      return jsonb_build_object('ok', false, 'reason', 'tie', 'need', 1, 'points', best,
+        'tied', (select jsonb_agg(jsonb_build_object('key', x, 'label', p.name) order by p.name)
+                 from unnest(tied) x join public.giveaway_people p on p.id = x));
+    end if;
+    w := tied[1];
+  elsif not (w = any (tied)) then
+    return jsonb_build_object('ok', false, 'reason', 'that is not the next in the ranking');
+  end if;
+  select coalesce(max(pick), 0) + 1 into v_place from public.giveaway_winners where giveaway_id = p_id;
+  insert into public.giveaway_winners (giveaway_id, person_id, draw_id, pick) values (p_id, w, null, v_place);
+  perform public.giveaway_note(p_id, 'offered', jsonb_build_object(
+    'person', w, 'name', (select name from public.giveaway_people where id = w),
+    'replacing', coalesce((select jsonb_agg(x.person_id) from public.giveaway_winners x
+                           where x.giveaway_id = p_id and x.status = 'declined'), '[]'::jsonb)));
+  return jsonb_build_object('ok', true, 'person', w);
+end;
+$fn$;
+
+drop function if exists public.save_giveaway(uuid, text, text, text, int, date, boolean, timestamptz, numeric, int);
+
+do $grants$
+declare
+  f text;
+begin
+  foreach f in array array[
+    'save_giveaway(uuid, text, text, text, int, date, boolean, timestamptz, numeric, int, text, int, jsonb)',
+    'giveaway_judging(uuid)', 'enter_judged_giveaway(uuid, jsonb, uuid, uuid, text)',
+    'add_giveaway_judge(uuid, uuid)', 'remove_giveaway_judge(uuid, uuid)',
+    'start_giveaway_judging(uuid)', 'save_giveaway_ranking(uuid, text[])',
+    'announce_giveaway_results(uuid, uuid[])', 'offer_giveaway_place(uuid, uuid)'
+  ] loop
+    execute format('revoke all on function public.%s from public, anon', f);
+    execute format('grant execute on function public.%s to authenticated', f);
+  end loop;
+  foreach f in array array['giveaway_entry_labels(uuid)', 'giveaway_totals(uuid)', 'giveaway_is_judge(uuid)'] loop
+    execute format('revoke all on function public.%s from public, anon, authenticated', f);
+  end loop;
+end
+$grants$;

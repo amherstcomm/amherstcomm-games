@@ -172,8 +172,8 @@ test('an organiser sets one up and enters somebody who has never signed in, by n
   await page.goto('/giveaways');
   await page.getByRole('button', { name: 'New giveaway' }).click();
   await page.getByLabel('What it is').fill('Bucks vs Bulls');
-  await page.getByLabel('The prize, for each person drawn').fill('4 tickets');
-  await page.getByLabel('How many people to draw').fill('2');
+  await page.getByLabel('The prize, for each winner').fill('4 tickets');
+  await page.getByLabel('How many winners').fill('2');
   await page.getByRole('button', { name: 'Create it' }).click();
   await expect.poll(() => sent.find((s) => s.fn === 'save_giveaway')?.args).toMatchObject({
     p_id: null, p_title: 'Bucks vs Bulls', p_prize: '4 tickets', p_winners: 2, p_strength: 1, p_half_life_days: 365,
