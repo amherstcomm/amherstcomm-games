@@ -28,6 +28,8 @@ import {
   findGiveawayPeople,
   offerPlace,
   readJudging,
+  readTriviaChoices,
+  setGiveawayTrivia,
   readGiveaway,
   readGiveawayHistory,
   readGiveaways,
@@ -43,6 +45,8 @@ import {
   type GiveawayForm,
   type GiveawayMode,
   type Tie,
+  type TriviaSession,
+  type Giveaway,
   type GiveawayStatus,
   type GiveawaySummary,
   type HistoryPerson,
@@ -577,6 +581,15 @@ function OneGiveaway({ id, link }: { id: string; link: GiveawayLink }) {
 
       {said && <p className="text-sm text-rose-300 mt-3" role="status">{said}</p>}
 
+      {!judged && (
+        <Trivia
+          g={g}
+          manage={manage}
+          editable={['open', 'judging', 'qualified'].includes(g.status) && got.draws.length === 0}
+          onChanged={() => void load()}
+        />
+      )}
+
       {!answered && g.status === 'open' && g.self_entry && (
         <div className="mt-4">
           {closed && !mine ? (
@@ -759,6 +772,132 @@ function OneGiveaway({ id, link }: { id: string; link: GiveawayLink }) {
   );
 }
 
+/** Trivia for extra chances: the sessions that score them, what a point is
+ *  worth, and -- for an organiser, until the drawing -- which sessions. */
+function Trivia({
+  g,
+  manage,
+  editable,
+  onChanged,
+}: {
+  g: Giveaway;
+  manage: boolean;
+  editable: boolean;
+  onChanged: () => void;
+}) {
+  const sessions = g.sessions ?? [];
+  const bonus = Number(g.trivia_bonus ?? 1);
+  const [editing, setEditing] = useState(false);
+  const [choices, setChoices] = useState<TriviaSession[] | null>(null);
+  const [picked, setPicked] = useState<string[]>([]);
+  const [worth, setWorth] = useState(String(bonus));
+  const [said, setSaid] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  async function open() {
+    setEditing(true);
+    setPicked(sessions.map((x) => x.id));
+    setWorth(String(bonus));
+    const got = await readTriviaChoices();
+    if (got.ok) setChoices(got.sessions);
+    else setSaid(got.reason);
+  }
+  async function save() {
+    setBusy(true);
+    const res = await setGiveawayTrivia(g.id, picked, Number(worth));
+    setBusy(false);
+    if (!res.ok) return setSaid(res.reason);
+    setSaid('');
+    setEditing(false);
+    onChanged();
+  }
+
+  if (sessions.length === 0 && !(manage && editable)) return null;
+  const example = (n: number) => `${1 + bonus * n}×`;
+  return (
+    <section className={`${CARD} mt-4 space-y-2`} aria-label="Trivia for extra chances">
+      <h2 className="text-sm font-semibold text-slate-200">Trivia for extra chances</h2>
+      {sessions.length > 0 ? (
+        <>
+          <p className="text-sm text-slate-300">
+            Each point you score adds {bonus === 1 ? 'an extra ticket' : `${bonus} extra tickets`}: score 3 and your chance
+            is {example(3)} what it would be. Enter the giveaway as well — the trivia adds chances, it does not enter you.
+          </p>
+          <ul className="space-y-1">
+            {sessions.map((x) => (
+              <li key={x.id} className="flex flex-wrap items-center justify-between gap-2 text-sm text-slate-300">
+                <span className="min-w-0 break-words">
+                  {x.title}
+                  <span className="text-xs text-slate-500">
+                    {' '}
+                    · {x.state === 'closed' ? 'over' : x.state === 'live' ? 'on now' : 'not open yet'}
+                    {x.closes_at && x.state !== 'closed' && `, closes ${when(x.closes_at)}`}
+                  </span>
+                </span>
+                {x.state === 'live' && (
+                  <a className={BUTTON} href={`/live/${x.id}`}>
+                    Play
+                  </a>
+                )}
+              </li>
+            ))}
+          </ul>
+          <p className="text-xs text-slate-500">Points count as they stand when the drawing is made.</p>
+        </>
+      ) : (
+        <p className="text-sm text-slate-400">None yet. Link a trivia session and every point scored in it adds chances.</p>
+      )}
+      {manage && editable && !editing && (
+        <button type="button" className={BUTTON} onClick={() => void open()}>
+          {sessions.length > 0 ? 'Change the trivia' : 'Add trivia'}
+        </button>
+      )}
+      {editing && (
+        <div className="space-y-2 border-t border-white/10 pt-3">
+          {choices === null ? (
+            <p className="text-sm text-slate-400">Loading the sessions…</p>
+          ) : choices.length === 0 ? (
+            <p className="text-sm text-slate-400">There are no sessions yet. Build one under Sessions first.</p>
+          ) : (
+            <ul className="space-y-1 max-h-60 overflow-y-auto" aria-label="Sessions to link">
+              {choices.map((x) => (
+                <li key={x.id}>
+                  <label className="flex items-center gap-2 text-sm text-slate-300">
+                    <input
+                      type="checkbox"
+                      checked={picked.includes(x.id)}
+                      onChange={(e) =>
+                        setPicked((p) => (e.target.checked ? [...p, x.id] : p.filter((id) => id !== x.id)))
+                      }
+                    />
+                    <span className="min-w-0 break-words">
+                      {x.title} <span className="text-xs text-slate-500">· {x.mode}, {x.state}</span>
+                    </span>
+                  </label>
+                </li>
+              ))}
+            </ul>
+          )}
+          <label className="block text-xs text-slate-400">
+            Extra tickets for each point
+            <input className={`${PERCENT} mt-1 block`} type="number" min={0} max={10} step={0.5} value={worth}
+                   onChange={(e) => setWorth(e.target.value)} />
+          </label>
+          {said && <p className="text-xs text-rose-300" role="status">{said}</p>}
+          <div className="flex flex-wrap gap-2">
+            <button type="button" className={PRIMARY} disabled={busy || choices === null} onClick={() => void save()}>
+              Save the trivia
+            </button>
+            <button type="button" className={BUTTON} onClick={() => setEditing(false)}>
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+    </section>
+  );
+}
+
 function CancelButton({
   id,
   busy,
@@ -867,6 +1006,12 @@ function Entrants({
                     ? 'Has not been to one yet'
                     : `Went to ${e.attended.map((a) => `${a.what} (${day(a.on)})`).join(', ')}`}
                 </p>
+                {(g.sessions ?? []).length > 0 && (
+                  <p className="text-xs text-slate-400">
+                    Trivia: {Number(e.trivia ?? 0)} {Number(e.trivia ?? 0) === 1 ? 'point' : 'points'}
+                    {Number(e.trivia ?? 0) > 0 && ` · ${1 + Number(g.trivia_bonus ?? 1) * Number(e.trivia)}× the chance`}
+                  </p>
+                )}
                 <p className="text-xs text-slate-500">
                   {e.self ? 'Entered themselves' : `Entered by ${e.entered_by ?? 'an organiser'}`} · {when(e.entered_at)}
                 </p>
@@ -1022,6 +1167,7 @@ const ACTION_WORD: Record<string, string> = {
   announced: 'announced the winners',
   offered: 'offered a place to',
   rated: 'rated the entries',
+  'trivia set': 'set the trivia',
   'pool set': 'set the pool'
 };
 
@@ -1063,6 +1209,8 @@ function describe(e: LogEntry): string {
       return `${who} closed the entries and started the judging: ${d.entries} entries, ${d.judges} judges`;
     case 'ranked':
       return `${d.name} ranked ${d.count} ${d.count === 1 ? 'entry' : 'entries'}`;
+    case 'trivia set':
+      return `${who} set the trivia: ${((d.sessions as string[] | null) ?? []).join(', ') || 'none'}, ${d.bonus} extra ${Number(d.bonus) === 1 ? 'ticket' : 'tickets'} a point`;
     case 'rated':
       return `${d.name} rated ${d.count} ${d.count === 1 ? 'entry' : 'entries'}`;
     case 'pool set':
