@@ -1,4 +1,5 @@
-// A judged giveaway: answer the questions, and judges choose.
+// A judged giveaway: answer the questions, and judges choose -- or, for one
+// rated then drawn, judges rate the answers and the best go into a drawing.
 //
 // Four moments, one component, because each is the same page seen by
 // different people at a different time:
@@ -19,9 +20,11 @@ import {
   announceResults,
   enterGiveaway,
   enterJudged,
+  qualifyGiveaway,
   readJudging,
   removeJudge,
   saveRanking,
+  saveRatings,
   startJudging,
   type Giveaway,
   type Judging,
@@ -38,6 +41,11 @@ const PRIMARY =
   'inline-flex items-center justify-center px-4 h-10 rounded-lg text-sm font-semibold ' +
   'bg-accent text-slate-950 hover:brightness-110 disabled:opacity-50';
 const CARD = 'rounded-xl border border-white/15 bg-white/5 p-4';
+
+// One empty set of answers, not a new one each render: the entry form resets
+// itself when its starting answers change, and a fresh {} every render wiped
+// whatever somebody had typed before they could press Enter.
+const NO_ANSWERS: Record<string, string> = {};
 
 const ordinal = (n: number) => (n === 1 ? '1st' : n === 2 ? '2nd' : n === 3 ? '3rd' : `${n}th`);
 
@@ -75,6 +83,7 @@ export default function GiveawayJudging({
   if (!j) return said ? <p className="text-sm text-rose-300 mt-4">{said}</p> : null;
 
   const closed = g.entries_close_at !== null && Date.now() >= Date.parse(g.entries_close_at);
+  const rated = g.mode === 'screened';
   return (
     <div className="mt-4 space-y-6">
       {said && <p className="text-sm text-slate-300" role="status">{said}</p>}
@@ -83,7 +92,7 @@ export default function GiveawayJudging({
         <EntryForm
           title={j.entered ? 'Your entry' : 'Enter by answering'}
           questions={j.questions}
-          initial={j.mine ?? {}}
+          initial={j.mine ?? NO_ANSWERS}
           busy={busy}
           submit={j.entered ? 'Save my answers' : 'Enter'}
           onSubmit={(answers) => act(() => enterJudged(g.id, answers), j.entered ? 'Answers saved.' : 'You are in.')}
@@ -95,7 +104,7 @@ export default function GiveawayJudging({
       )}
 
       {canManage && g.status !== 'drawn' && g.status !== 'cancelled' && (
-        <Judges j={j} id={g.id} busy={busy} act={act} />
+        <Judges j={j} id={g.id} busy={busy} act={act} rated={rated} />
       )}
       {canManage && g.status === 'open' && <EnterSomebody j={j} id={g.id} busy={busy} act={act} />}
       {canManage && g.status === 'open' && (
@@ -109,26 +118,29 @@ export default function GiveawayJudging({
             className={`${PRIMARY} mt-2`}
             disabled={busy || j.entries_count === 0 || j.judges.length === 0}
             onClick={() => {
-              if (window.confirm('Close the entries and start the judging? Nobody can enter or change an answer after this.')) {
-                void act(() => startJudging(g.id), 'The judging has started.');
+              if (window.confirm(`Close the entries and start the ${rated ? 'rating' : 'judging'}? Nobody can enter or change an answer after this.`)) {
+                void act(() => startJudging(g.id), `The ${rated ? 'rating' : 'judging'} has started.`);
               }
             }}
           >
-            Close entries and start judging
+            Close entries and start {rated ? 'the rating' : 'judging'}
           </button>
         </section>
       )}
 
-      {g.status === 'judging' && j.is_judge && <Ranking j={j} id={g.id} busy={busy} act={act} />}
+      {g.status === 'judging' && j.is_judge && !rated && <Ranking j={j} id={g.id} busy={busy} act={act} />}
+      {g.status === 'judging' && j.is_judge && rated && <Rating j={j} id={g.id} busy={busy} act={act} />}
       {g.status === 'judging' && !j.is_judge && !canManage && (
         <p className="text-sm text-slate-300">
-          Being judged by {j.judges.map((x) => x.name).join(', ')}. The entries and every judge’s
-          ranking are shown here once the winners are announced.
+          Being {rated ? 'rated' : 'judged'} by {j.judges.map((x) => x.name).join(', ')}. The entries and every
+          judge’s {rated ? 'rating' : 'ranking'} are shown here once {rated ? 'the pool for the drawing is set' : 'the winners are announced'}.
         </p>
       )}
-      {g.status === 'judging' && canManage && <Announce j={j} id={g.id} busy={busy} act={act} />}
+      {g.status === 'judging' && canManage && !rated && <Announce j={j} id={g.id} busy={busy} act={act} />}
+      {g.status === 'judging' && canManage && rated && <SetPool j={j} g={g} busy={busy} act={act} />}
 
-      {j.decided && <Results j={j} />}
+      {j.decided && !rated && <Results j={j} />}
+      {j.decided && rated && <PoolResults j={j} />}
     </div>
   );
 }
@@ -194,7 +206,7 @@ function EntryForm({
 
 type Act = (run: () => Promise<{ ok: boolean; reason?: string }>, done?: string) => Promise<boolean>;
 
-function Judges({ j, id, busy, act }: { j: Judging; id: string; busy: boolean; act: Act }) {
+function Judges({ j, id, busy, act, rated }: { j: Judging; id: string; busy: boolean; act: Act; rated: boolean }) {
   return (
     <section className={`${CARD} space-y-2`} aria-label="Judges">
       <h2 className="text-sm font-semibold text-slate-200">Judges</h2>
@@ -206,8 +218,10 @@ function Judges({ j, id, busy, act }: { j: Judging; id: string; busy: boolean; a
             <li key={x.user} className="flex flex-wrap items-center justify-between gap-2 text-sm text-slate-300">
               <span className="min-w-0 break-words">
                 {x.name}
-                {j.decided ? '' : x.ranked ? <span className="text-xs text-emerald-300"> · has ranked</span> : (
-                  <span className="text-xs text-slate-500"> · not ranked yet</span>
+                {j.decided ? '' : x.ranked ? (
+                  <span className="text-xs text-emerald-300"> · has {rated ? 'rated' : 'ranked'}</span>
+                ) : (
+                  <span className="text-xs text-slate-500"> · not {rated ? 'rated' : 'ranked'} yet</span>
                 )}
               </span>
               <button
@@ -237,7 +251,7 @@ function Judges({ j, id, busy, act }: { j: Judging; id: string; busy: boolean; a
         }}
       />
       <p className="text-xs text-slate-500">
-        A judge needs to have signed in once. A judge may enter, but cannot rank their own entry.
+        A judge needs to have signed in once. A judge may enter, but cannot {rated ? 'rate' : 'rank'} their own entry.
       </p>
     </section>
   );
@@ -262,7 +276,7 @@ function EnterSomebody({ j, id, busy, act }: { j: Judging; id: string; busy: boo
           <EntryForm
             title={`${label}'s answers`}
             questions={j.questions}
-            initial={{}}
+            initial={NO_ANSWERS}
             busy={busy}
             submit="Enter them"
             onSubmit={async (answers) => {
@@ -490,6 +504,178 @@ function Results({ j }: { j: Judging }) {
             {(e.ranks ?? []).length > 0 && (
               <p className="text-xs text-slate-400 mt-1">
                 {(e.ranks ?? []).map((r) => `${ordinal(r.rank)} from ${r.judge}`).join(' · ')}
+              </p>
+            )}
+            <dl className="mt-2 space-y-2">
+              {e.answers.map((a) => (
+                <div key={a.question}>
+                  {j.questions.length > 1 && <dt className="text-xs text-slate-500">{questionOf.get(a.question)}</dt>}
+                  <dd className="text-sm text-slate-200 whitespace-pre-line break-words">{a.answer}</dd>
+                </div>
+              ))}
+            </dl>
+          </li>
+        ))}
+      </ol>
+    </section>
+  );
+}
+
+/** A judge rating every entry 1 to 5, blind. Any left unrated are ones this
+ *  judge said nothing about; ratings can change until the pool is set. */
+function Rating({ j, id, busy, act }: { j: Judging; id: string; busy: boolean; act: Act }) {
+  const [ratings, setRatings] = useState<Record<string, number>>(j.my_ratings ?? {});
+  useEffect(() => setRatings(j.my_ratings ?? {}), [j.my_ratings]);
+  const questionOf = new Map(j.questions.map((q) => [q.id, q.prompt]));
+  const rateable = j.entries.filter((e) => !e.own).length;
+  const done = Object.keys(ratings).length;
+  return (
+    <section className="space-y-3" aria-label="Your rating">
+      <div className={CARD}>
+        <h2 className="text-sm font-semibold text-slate-200">Your rating</h2>
+        <p className="text-sm text-slate-300 mt-1">
+          Rate each answer from 1 (weakest) to 5 (best). Entries averaging {j.bar ?? 3} or more across the
+          judges go into the drawing. Names are hidden until the pool is set.
+        </p>
+        <div className="mt-2 flex flex-wrap items-center gap-3">
+          <button
+            type="button"
+            className={PRIMARY}
+            disabled={busy || done === 0}
+            onClick={() => void act(() => saveRatings(id, ratings), 'Your ratings are saved. You can change them until the pool is set.')}
+          >
+            Save my ratings
+          </button>
+          <span className="text-xs text-slate-400">
+            {done} of {rateable} rated
+          </span>
+        </div>
+      </div>
+      <ul className="space-y-2">
+        {j.entries.map((e) => (
+          <li key={e.label} className={CARD}>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h3 className="text-sm font-semibold text-slate-200">{e.label}</h3>
+              {e.own ? (
+                <span className="text-xs text-slate-500">Your own entry: you cannot rate it</span>
+              ) : (
+                <div className="flex flex-wrap gap-1" role="group" aria-label={`Your rating for ${e.label}`}>
+                  {[1, 2, 3, 4, 5].map((n) => (
+                    <button
+                      key={n}
+                      type="button"
+                      aria-pressed={ratings[e.label] === n}
+                      onClick={() =>
+                        setRatings((r) => {
+                          const next = { ...r };
+                          if (next[e.label] === n) delete next[e.label];
+                          else next[e.label] = n;
+                          return next;
+                        })
+                      }
+                      className={`w-9 h-9 rounded-lg text-sm font-semibold border ${
+                        ratings[e.label] === n
+                          ? 'bg-accent text-slate-950 border-accent'
+                          : 'bg-white/5 border-white/15 text-slate-200 hover:bg-white/10'
+                      }`}
+                    >
+                      {n}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+            <dl className="mt-2 space-y-2">
+              {e.answers.map((a) => (
+                <div key={a.question}>
+                  {j.questions.length > 1 && <dt className="text-xs text-slate-500">{questionOf.get(a.question)}</dt>}
+                  <dd className="text-sm text-slate-200 whitespace-pre-line break-words">{a.answer}</dd>
+                </div>
+              ))}
+            </dl>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
+/** Setting the pool: every average, the bar to confirm or move, and how many
+ *  that lets in -- before anything is fixed. */
+function SetPool({ j, g, busy, act }: { j: Judging; g: Giveaway; busy: boolean; act: Act }) {
+  const [bar, setBar] = useState(String(j.bar ?? g.bar ?? 3));
+  const rated = j.judges.filter((x) => x.ranked).length;
+  const b = Number(bar);
+  const valid = b >= 1 && b <= 5;
+  const meeting = j.entries.filter((e) => e.average !== null && e.average !== undefined && e.average >= b).length;
+  return (
+    <section className={`${CARD} space-y-3`} aria-label="Set the pool">
+      <h2 className="text-sm font-semibold text-slate-200">Set the pool</h2>
+      <p className="text-sm text-slate-300">
+        {rated} of {j.judges.length} {j.judges.length === 1 ? 'judge has' : 'judges have'} rated.
+      </p>
+      <ol className="space-y-1 text-sm text-slate-300">
+        {j.entries.map((e) => (
+          <li key={e.label} className="flex flex-wrap justify-between gap-2">
+            <span>{e.label}</span>
+            <span className={`tabular-nums ${e.average !== null && e.average !== undefined && e.average >= b ? 'text-emerald-300' : 'text-slate-400'}`}>
+              {e.average === null || e.average === undefined ? 'not rated' : `${Number(e.average).toFixed(2)} average`}
+              {e.rated_by ? ` · ${e.rated_by} ${e.rated_by === 1 ? 'rating' : 'ratings'}` : ''}
+            </span>
+          </li>
+        ))}
+      </ol>
+      <label className="block text-xs text-slate-400">
+        Into the drawing at an average of at least
+        <input className={`${FIELD.replace('w-full', 'w-24')} mt-1 block`} type="number" min={1} max={5} step={0.25} value={bar}
+               onChange={(e) => setBar(e.target.value)} />
+      </label>
+      <p className="text-sm text-slate-300">
+        {valid
+          ? `${meeting} of ${j.entries.length} ${j.entries.length === 1 ? 'entry' : 'entries'} ${meeting === 1 ? 'goes' : 'go'} into the drawing.`
+          : 'The bar is between 1 and 5.'}
+      </p>
+      <button
+        type="button"
+        className={PRIMARY}
+        disabled={busy || !valid || meeting === 0}
+        onClick={() => {
+          const waiting = j.judges.length - rated;
+          const ok = window.confirm(
+            (waiting > 0 ? `${waiting} ${waiting === 1 ? 'judge has' : 'judges have'} not rated yet. ` : '') +
+              `Set the pool at ${b}? The rating ends, and who is in -- with every rating -- becomes visible to everybody.`
+          );
+          if (ok) void act(() => qualifyGiveaway(g.id, b), `The pool is set: ${meeting} in.`);
+        }}
+      >
+        Set the pool
+      </button>
+    </section>
+  );
+}
+
+function PoolResults({ j }: { j: Judging }) {
+  const questionOf = new Map(j.questions.map((q) => [q.id, q.prompt]));
+  return (
+    <section className="space-y-2" aria-label="Every entry">
+      <h2 className="text-sm font-semibold text-slate-200">Every entry</h2>
+      <p className="text-xs text-slate-400">
+        Rated by the judges from 1 to 5; entries averaging {j.bar ?? 3} or more went into the drawing.
+      </p>
+      <ol className="space-y-2">
+        {j.entries.map((e) => (
+          <li key={e.label} className={CARD}>
+            <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+              <h3 className="text-sm font-semibold text-slate-200 min-w-0 break-words">{e.name}</h3>
+              <span className={`text-xs tabular-nums ${e.qualified ? 'text-emerald-300' : 'text-slate-400'}`}>
+                {e.average === null || e.average === undefined ? 'not rated' : `${Number(e.average).toFixed(2)} average`}
+                {' · '}
+                {e.qualified ? 'in the drawing' : 'not in the drawing'}
+              </span>
+            </div>
+            {(e.ratings ?? []).length > 0 && (
+              <p className="text-xs text-slate-400 mt-1">
+                {(e.ratings ?? []).map((r) => `${r.rating} from ${r.judge}`).join(' · ')}
               </p>
             )}
             <dl className="mt-2 space-y-2">

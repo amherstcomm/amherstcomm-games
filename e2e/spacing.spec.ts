@@ -146,14 +146,18 @@ const JUDGED_QUESTIONS = [
   { id: 'q2', prompt: 'Who would you take?' },
 ];
 function judgingPage(id: string) {
-  const decided = id === 'g4';
+  const decided = id === 'g4' || id === 'g6';
+  const rated = id === 'g5' || id === 'g6';
   return {
     ok: true, is_judge: !decided, decided, picks: 3, questions: JUDGED_QUESTIONS,
+    mode: rated ? 'screened' : 'judged', bar: 3, my_ratings: rated && !decided ? { 'Entry 2': 4 } : null,
     judges: [{ user: 'u1', name: 'Ray Tetzloff', ranked: true }, { user: 'u2', name: 'A rather long display name for somebody', ranked: false }],
     entries_count: 3, mine: null, entered: false, my_ranking: decided ? null : ['Entry 2'],
     entries: GIVEAWAY_ENTRANTS.map((e, i) => ({
       person: decided ? e.person : null, key: e.person, label: `Entry ${i + 1}`, name: decided ? e.name : null,
       own: i === 0 && !decided, points: 6 - i * 2, firsts: 1,
+      average: rated ? 4.5 - i * 1.5 : null, rated_by: rated ? 2 : null, qualified: rated && decided ? i < 2 : null,
+      ratings: rated && decided ? [{ judge: 'Ray Tetzloff', rating: 5 - i }, { judge: 'A rather long display name for somebody', rating: 4 - i }] : null,
       ranks: decided ? [{ judge: 'Ray Tetzloff', rank: i + 1 }, { judge: 'A rather long display name for somebody', rank: 3 - i }] : null,
       answers: [
         { question: 'q1', answer: 'A voice in what we build, and a share in what it earns when the year goes well for all of us.' },
@@ -182,9 +186,10 @@ function giveawayPage(id: string) {
       prize: '2 tickets, section 112, row 4', details: 'Saturday 1:10pm. Parking pass included.',
       winners: 1, event_on: plus(8), self_entry: true, entries_close_at: drawn ? null : `${plus(3)}T17:00:00Z`,
       strength: 1, half_life_days: 365, cancelled_reason: null,
-      // g3 is a judged one being judged, g4 one decided
-      status: id === 'g3' ? 'judging' : drawn || id === 'g4' ? 'drawn' : 'open',
-      mode: id === 'g3' || id === 'g4' ? 'judged' : 'draw', picks: 3,
+      // g3 is a judged one being judged, g4 one decided; g5 is a rated one
+      // being rated, g6 one whose pool is set
+      status: id === 'g3' || id === 'g5' ? 'judging' : id === 'g6' ? 'qualified' : drawn || id === 'g4' ? 'drawn' : 'open',
+      mode: id === 'g3' || id === 'g4' ? 'judged' : id === 'g5' || id === 'g6' ? 'screened' : 'draw', picks: 3, bar: 3,
       created_at: `${plus(-6)}T14:00:00Z`, created_by: 'Ray Tetzloff',
     },
     entrants: GIVEAWAY_ENTRANTS.map((e, i) => ({
@@ -343,6 +348,8 @@ const PAGES: [string, string][] = [
   ['giveaway history', '/giveaways/history'],
   ['giveaway being judged', '/giveaways/g3'],
   ['giveaway judged and decided', '/giveaways/g4'],
+  ['giveaway being rated', '/giveaways/g5'],
+  ['giveaway rated, pool set', '/giveaways/g6'],
   ...['site', 'games', 'lists', 'weave', 'passages', 'pins', 'coverage', 'tournaments', 'contests', 'people'].map(
     (tab): [string, string] => [`admin ${tab}`, `/admin/${tab}`]
   ),
