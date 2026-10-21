@@ -119,6 +119,19 @@ test("the round's own trivia is let in", async ({ page }) => {
   await expect(page.getByText(/is the only thing running just now/)).toHaveCount(0);
 });
 
+// A giveaway's trivia is how somebody earns extra chances in its drawing, and
+// a tournament's lock is not what should cost them those.
+test("a giveaway's trivia is let in too", async ({ page }) => {
+  await locked(page);
+  await page.route('**/rest/v1/rpc/giveaway_trivia_sessions', (route) =>
+    route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(['s-give']) })
+  );
+  const asked = page.waitForRequest((r) => asksForSession(r.url()));
+  await page.goto('/live/s-give');
+  await asked;
+  await expect(page.getByText(/is the only thing running just now/)).toHaveCount(0);
+});
+
 // Kept open, any session runs: an all-hands in the middle of the month.
 test('a tournament that keeps sessions open lets any session in', async ({ page }) => {
   await locked(page, { off: ['site:outside-tournament'] });

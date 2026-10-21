@@ -53,6 +53,9 @@ export type Giveaway = {
   bar?: number;
   status: GiveawayStatus;
   cancelled_reason: string | null;
+  /** extra tickets per trivia point, and the sessions that score them */
+  trivia_bonus?: number;
+  sessions?: TriviaSession[];
   created_at: string;
   created_by: string | null;
 };
@@ -73,10 +76,23 @@ export type Entrant = {
   attended: Attended[];
   /** a rated one's: in the pool or not, once it is set */
   qualified?: boolean | null;
+  /** points scored in the giveaway's trivia */
+  trivia?: number;
 };
 
 /** Who a drawing is between, frozen when it was committed. */
-export type DrawEntrant = { person: string; name: string; weight: number };
+export type DrawEntrant = { person: string; name: string; weight: number; trivia?: number };
+
+/** A trivia session linked to a giveaway: every point scored in it adds
+ *  extra tickets in the drawing. */
+export type TriviaSession = {
+  id: string;
+  title: string;
+  state: 'draft' | 'live' | 'closed';
+  mode: string;
+  opens_at: string | null;
+  closes_at: string | null;
+};
 
 export type Pick = DrawEntrant & {
   pick: number;
@@ -576,4 +592,22 @@ export function weightFor(attended: { on: string }[], asOf: string, strength: nu
   const day = (d: string) => Date.parse(`${d}T00:00:00Z`) / 86_400_000;
   const load = attended.reduce((sum, a) => sum + 0.5 ** (Math.max(0, day(asOf) - day(a.on)) / halfLifeDays), 0);
   return Math.max(1, Math.round(1_000_000 / (1 + strength * load)));
+}
+
+// ---------------------------------------------------------------------------
+// Trivia for extra chances
+// ---------------------------------------------------------------------------
+
+export const setGiveawayTrivia = (id: string, sessions: string[], bonus: number) =>
+  call('set_giveaway_trivia', { p_id: id, p_sessions: sessions, p_bonus: bonus });
+
+export const readTriviaChoices = () => call<{ sessions: TriviaSession[] }>('giveaway_trivia_choices');
+
+/** Sessions belonging to a giveaway still taking part: a tournament that
+ *  shuts other sessions out lets these in. Empty when the database cannot say. */
+export async function readGiveawayTriviaSessions(): Promise<string[]> {
+  if (!supabase) return [];
+  const { data, error } = await supabase.rpc('giveaway_trivia_sessions');
+  if (error || !Array.isArray(data)) return [];
+  return data as string[];
 }

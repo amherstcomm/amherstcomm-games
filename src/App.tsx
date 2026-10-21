@@ -37,7 +37,7 @@ import { entryGame, entryRoute } from '@/routing/entry';
 import ContestView from '@/ContestView';
 import { readContestsOn } from '@/contests';
 import GiveawaysView from '@/GiveawaysView';
-import { readGiveaways } from '@/giveaways';
+import { readGiveaways, readGiveawayTriviaSessions } from '@/giveaways';
 import {
   gameFeature, FEED_NAME, GAME_NAME } from '@/games';
 import { useAddressBar, useNav } from '@/routing/useRouting';
@@ -668,6 +668,16 @@ function App() {
   // ...and, unless the tournament keeps them open, every session that is not
   // the round's own trivia.
   const otherSessionsOff = unavailable.includes('site:other-sessions');
+  // Only asked for while sessions are locked: otherwise every session is open.
+  const [giveawaySessions, setGiveawaySessions] = useState<string[] | undefined>(undefined);
+  useEffect(() => {
+    if (!otherSessionsOff) return;
+    let alive = true;
+    void readGiveawayTriviaSessions().then((ids) => alive && setGiveawaySessions(ids));
+    return () => {
+      alive = false;
+    };
+  }, [otherSessionsOff, session]);
   const availabilityAnswered = useAvailabilityAnswered();
   /** The games still on offer, by mode — the switches are named by slug. */
   const offeredModes = (off: string[]) =>
@@ -786,12 +796,17 @@ function App() {
   const roundSessions = new Set(
     (rounds ?? []).flatMap((r) => (r.trivia ?? []).map((v) => v.session_id))
   );
-  const sessionOpen = (id: string) => !otherSessionsOff || roundSessions.has(id);
+  // ...or the trivia of a giveaway still taking part: playing it is how
+  // somebody earns their extra chances, and a tournament's lock should not
+  // be what costs them.
+  const sessionOpen = (id: string) =>
+    !otherSessionsOff || roundSessions.has(id) || (giveawaySessions ?? []).includes(id);
   // Whether a session page may draw yet: the server has said what is locked,
   // and if sessions are locked, the round has said which are its own. Drawing
   // on the cache alone let a locked session mount and ask for its question
   // before the lock arrived.
-  const sessionKnown = availabilityAnswered && (!otherSessionsOff || rounds !== undefined);
+  const sessionKnown =
+    availabilityAnswered && (!otherSessionsOff || (rounds !== undefined && giveawaySessions !== undefined));
   // The round this game page is played in: the one on today that has the game.
   // Never more than one -- two rounds on a day may not share a game -- so the
   // address /tournament/<game> still names exactly one board.
