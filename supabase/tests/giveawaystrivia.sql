@@ -66,9 +66,14 @@ select pg_temp.check('a judged giveaway has no drawing for trivia to add chances
   public.set_giveaway_trivia((select (v->>'id')::uuid from t where k = 'judged'),
     array['09000000-0000-0000-0000-0000000000a1']::uuid[], 1)->>'reason'
     = 'a judged giveaway has no drawing for trivia to add chances in');
-select pg_temp.check('the organiser can choose from the sessions there are',
+insert into public.sessions (id, title, host, state, mode)
+values ('09000000-0000-0000-0000-0000000000a2', 'Trivia Still Being Written', '09000000-0000-0000-0000-000000000001', 'draft', 'open')
+on conflict (id) do nothing;
+select pg_temp.check('the organiser can choose from the sessions there are, drafts included',
   exists (select 1 from jsonb_array_elements(public.giveaway_trivia_choices()->'sessions') x
-          where x->>'title' = 'Giveaway Trivia'));
+          where x->>'title' = 'Giveaway Trivia')
+  and exists (select 1 from jsonb_array_elements(public.giveaway_trivia_choices()->'sessions') x
+              where x->>'title' = 'Trivia Still Being Written' and x->>'state' = 'draft'));
 select pg_temp.check('a drawing can link a session, each point worth one extra ticket',
   public.set_giveaway_trivia(pg_temp.gid(), array['09000000-0000-0000-0000-0000000000a1']::uuid[], 1)->>'ok' = 'true');
 
@@ -108,6 +113,6 @@ select pg_temp.check('and after that the trivia cannot change',
 select pg_temp.as_('');
 delete from public.giveaways where id in (pg_temp.gid(), (select (v->>'id')::uuid from t where k = 'judged'));
 delete from public.giveaway_people where name in ('Ada Trivia', 'Bea Trivia', 'Cy Paper');
-delete from public.sessions where id = '09000000-0000-0000-0000-0000000000a1';
+delete from public.sessions where id in ('09000000-0000-0000-0000-0000000000a1', '09000000-0000-0000-0000-0000000000a2');
 
 \echo '--- giveaway trivia checks passed ---'

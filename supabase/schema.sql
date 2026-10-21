@@ -19599,3 +19599,30 @@ begin
   end loop;
 end
 $grants$;
+
+-- Trivia that is still being built can be linked as well. Leaving drafts out
+-- assumed the trivia comes first and the giveaway after; usually it is the
+-- other way round -- the giveaway goes up, then the questions are written.
+-- A draft cannot be played, so it adds nobody anything until it opens.
+create or replace function public.giveaway_trivia_choices()
+returns jsonb
+language sql
+stable
+security definer
+set search_path = ''
+as $fn$
+  select case
+    when not public.can('giveaways.manage') then jsonb_build_object('ok', false, 'reason', 'not allowed')
+    else jsonb_build_object('ok', true, 'sessions', coalesce((
+      select jsonb_agg(jsonb_build_object('id', se.id, 'title', se.title, 'state', se.state, 'mode', se.mode,
+                                          'opens_at', se.opens_at, 'closes_at', se.closes_at)
+                       -- drafts last: the ones being built for the giveaway are
+                       -- usually the newest, but the running ones are what it
+                       -- is most often linked to
+                       order by (se.state = 'draft'), se.created_at desc)
+      from public.sessions se), '[]'::jsonb))
+  end
+$fn$;
+
+revoke all on function public.giveaway_trivia_choices() from public, anon;
+grant execute on function public.giveaway_trivia_choices() to authenticated;
