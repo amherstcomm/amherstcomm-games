@@ -25,7 +25,9 @@ export type LiveItem = {
    *  `paused` is open-mode only too: they asked to stop after a question, and
    *  the next one is held back -- not served, its clock not started -- until
    *  they resume. */
-  state: 'not-live' | 'waiting' | 'open' | 'locked' | 'revealed' | 'done' | 'paused';
+  state: 'not-live' | 'waiting' | 'open' | 'locked' | 'revealed' | 'done' | 'paused' | 'giveaway-only';
+  /** for `giveaway-only`: the giveaway whose trivia this is, to enter first */
+  giveaway?: string | null;
   /** which kind of session this came from — the screen differs, so it has to
    *  be told rather than inferred from what happens to be on it */
   mode?: 'live' | 'open';

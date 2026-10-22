@@ -11,7 +11,8 @@
 insert into auth.users (id, email) values
   ('09000000-0000-0000-0000-000000000001', 'trivia.organiser@example.com'),
   ('09000000-0000-0000-0000-000000000002', 'ada.trivia@example.com'),
-  ('09000000-0000-0000-0000-000000000003', 'bea.trivia@example.com')
+  ('09000000-0000-0000-0000-000000000003', 'bea.trivia@example.com'),
+  ('09000000-0000-0000-0000-000000000004', 'dee.trivia@example.com')
 on conflict do nothing;
 insert into public.role_grants (user_id, role)
 values ('09000000-0000-0000-0000-000000000001', 'games.admin')
@@ -84,6 +85,42 @@ select public.enter_giveaway(pg_temp.gid(), true);
 select pg_temp.as_('09000000-0000-0000-0000-000000000001');
 select public.add_giveaway_entrant(pg_temp.gid(), null, null, 'Cy Paper');
 
+-- ---------------------------------------------------------------------------
+-- The giveaway's trivia is its entrants' alone
+-- ---------------------------------------------------------------------------
+insert into public.sessions (id, title, host, state, mode, code)
+values ('09000000-0000-0000-0000-0000000000a4', 'Entrants Trivia', '09000000-0000-0000-0000-000000000001', 'live', 'open', 'GVTRIV')
+on conflict (id) do nothing;
+insert into public.items (id, session_id, position, kind, prompt, state, opened_at) values
+  ('09000000-0000-0000-0000-0000000000b4', '09000000-0000-0000-0000-0000000000a4', 1, 'choice', 'Who owns this company?', 'open', now())
+on conflict (id) do nothing;
+insert into public.item_answers (item_id, answer) values ('09000000-0000-0000-0000-0000000000b4', '{"correct": ["us"]}'::jsonb)
+on conflict (item_id) do nothing;
+select public.set_giveaway_trivia(pg_temp.gid(), array['09000000-0000-0000-0000-0000000000a1',
+                                                       '09000000-0000-0000-0000-0000000000a4']::uuid[], 1);
+
+select pg_temp.as_('09000000-0000-0000-0000-000000000004');
+select pg_temp.check('a giveaway''s trivia is on nobody''s list of sessions',
+  not exists (select 1 from jsonb_array_elements(public.live_sessions()) x where x->>'title' = 'Entrants Trivia'));
+select pg_temp.check('somebody not entered is told to enter the giveaway, and where',
+  public.current_item('09000000-0000-0000-0000-0000000000a4')->>'state' = 'giveaway-only'
+  and (public.current_item('09000000-0000-0000-0000-0000000000a4')->>'giveaway')::uuid = pg_temp.gid());
+select pg_temp.check('cannot answer it',
+  public.answer_item('09000000-0000-0000-0000-0000000000b4', '"us"'::jsonb)->>'reason'
+    = 'this trivia is for the giveaway''s entrants: enter the giveaway first');
+select pg_temp.check('nor get in with its code',
+  public.session_by_code('gvtriv')->>'ok' = 'false');
+
+select pg_temp.as_('09000000-0000-0000-0000-000000000002');
+select pg_temp.check('while an entrant is served its question, and in by its code',
+  public.current_item('09000000-0000-0000-0000-0000000000a4')->>'state' = 'open'
+  and public.session_by_code('gvtriv')->>'ok' = 'true');
+
+select pg_temp.as_('09000000-0000-0000-0000-000000000001');
+select public.set_giveaway_trivia(pg_temp.gid(), array['09000000-0000-0000-0000-0000000000a1']::uuid[], 1);
+select pg_temp.check('and once unlinked, it is anybody''s session again',
+  exists (select 1 from jsonb_array_elements(public.live_sessions()) x where x->>'title' = 'Entrants Trivia'));
+
 select pg_temp.check('two points is three times the ticket, one point twice, none once',
   pg_temp.weight('Ada Trivia') = 3000000 and pg_temp.weight('Bea Trivia') = 2000000
   and pg_temp.weight('Cy Paper') = 1000000);
@@ -91,6 +128,20 @@ select pg_temp.check('and the page says how many points each scored',
   (select jsonb_object_agg(x->>'name', (x->>'trivia')::numeric)
    from jsonb_array_elements(public.giveaway_detail(pg_temp.gid())->'entrants') x)
     = '{"Ada Trivia": 2, "Bea Trivia": 1, "Cy Paper": 0}'::jsonb);
+-- An on-your-own-time session whose opening time has passed is open, though
+-- the table still says draft until somebody visits it.
+insert into public.sessions (id, title, host, state, mode, opens_at)
+values ('09000000-0000-0000-0000-0000000000a3', 'Scheduled Trivia', '09000000-0000-0000-0000-000000000001',
+        'draft', 'open', now() - interval '1 hour')
+on conflict (id) do nothing;
+select public.set_giveaway_trivia(pg_temp.gid(), array['09000000-0000-0000-0000-0000000000a1',
+                                                       '09000000-0000-0000-0000-0000000000a3']::uuid[], 1);
+select pg_temp.check('a scheduled session past its opening time reads as open, as its own page has it',
+  (select x->>'state' from jsonb_array_elements(public.giveaway_detail(pg_temp.gid())->'giveaway'->'sessions') x
+   where x->>'title' = 'Scheduled Trivia') = 'live'
+  and (select x->>'state' from jsonb_array_elements(public.giveaway_trivia_choices()->'sessions') x
+       where x->>'title' = 'Scheduled Trivia') = 'live');
+select public.set_giveaway_trivia(pg_temp.gid(), array['09000000-0000-0000-0000-0000000000a1']::uuid[], 1);
 select pg_temp.check('the giveaway names its sessions',
   (public.giveaway_detail(pg_temp.gid())->'giveaway'->'sessions'->0->>'title') = 'Giveaway Trivia');
 select pg_temp.check('a session of a giveaway still taking part is let through a tournament''s lock',
@@ -113,6 +164,7 @@ select pg_temp.check('and after that the trivia cannot change',
 select pg_temp.as_('');
 delete from public.giveaways where id in (pg_temp.gid(), (select (v->>'id')::uuid from t where k = 'judged'));
 delete from public.giveaway_people where name in ('Ada Trivia', 'Bea Trivia', 'Cy Paper');
-delete from public.sessions where id in ('09000000-0000-0000-0000-0000000000a1', '09000000-0000-0000-0000-0000000000a2');
+delete from public.sessions where id in ('09000000-0000-0000-0000-0000000000a1', '09000000-0000-0000-0000-0000000000a2',
+                                        '09000000-0000-0000-0000-0000000000a3', '09000000-0000-0000-0000-0000000000a4');
 
 \echo '--- giveaway trivia checks passed ---'

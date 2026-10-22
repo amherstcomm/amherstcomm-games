@@ -19626,3 +19626,503 @@ $fn$;
 
 revoke all on function public.giveaway_trivia_choices() from public, anon;
 grant execute on function public.giveaway_trivia_choices() to authenticated;
+
+-- A session's state as its own pages see it. An on-your-own-time session with
+-- an opening time stays a draft in the table until somebody visits after that
+-- time (scheduled_state is the rule, and the write follows the first read), so
+-- reading the column said "not open yet" -- and offered no way to play -- for
+-- trivia that was open.
+create or replace function public.giveaway_detail(p_id uuid)
+returns jsonb
+language sql
+stable
+security definer
+set search_path = ''
+as $fn$
+  select case
+    when not public.can('games.play') then jsonb_build_object('ok', false, 'reason', 'not allowed')
+    when not exists (select 1 from public.giveaways g where g.id = p_id)
+      then jsonb_build_object('ok', false, 'reason', 'no such giveaway')
+    else (
+      select jsonb_build_object('ok', true,
+        'can_manage', public.can('giveaways.manage'),
+        'me', (select p.id from public.giveaway_people p where p.user_id = (select auth.uid())),
+        'chain', public.giveaway_chain(),
+        'giveaway', jsonb_build_object(
+          'id', g.id, 'title', g.title, 'prize', g.prize, 'details', g.details,
+          'winners', g.winners, 'event_on', g.event_on, 'self_entry', g.self_entry,
+          'entries_close_at', g.entries_close_at, 'strength', g.strength,
+          'half_life_days', g.half_life_days, 'status', g.status, 'mode', g.mode, 'picks', g.picks, 'bar', g.bar,
+          'trivia_bonus', g.trivia_bonus,
+          'sessions', coalesce((select jsonb_agg(jsonb_build_object(
+                                  'id', se.id, 'title', se.title, 'state', public.scheduled_state(se), 'mode', se.mode,
+                                  'opens_at', se.opens_at, 'closes_at', se.closes_at)
+                                  order by se.title)
+                                from public.giveaway_sessions gs join public.sessions se on se.id = gs.session_id
+                                where gs.giveaway_id = g.id), '[]'::jsonb),
+          'cancelled_reason', g.cancelled_reason, 'created_at', g.created_at,
+          'created_by', public.giveaway_account_name(g.created_by)),
+        -- The odds as they stand today; a committed drawing keeps its own.
+        'entrants', coalesce((
+          select jsonb_agg(jsonb_build_object(
+                   'person', p.id, 'name', p.name, 'linked', p.user_id is not null,
+                   'entered_at', e.entered_at,
+                   -- for a rated-then-drawn one: in the pool or not, once set
+                   'qualified', e.qualified,
+                   'entered_by', public.giveaway_account_name(e.entered_by),
+                   'self', p.user_id is not null and p.user_id = e.entered_by,
+                   'weight', public.giveaway_entry_weight(g.id, p.id),
+                   'trivia', public.giveaway_trivia_points(g.id, p.id),
+                   'attended', coalesce((select jsonb_agg(jsonb_build_object('on', a.attended_on, 'what', a.what)
+                                                          order by a.attended_on desc)
+                                         from public.giveaway_attendance a where a.person_id = p.id), '[]'::jsonb))
+                 order by p.name, p.id)
+          from public.giveaway_entries e
+          join public.giveaway_people p on p.id = e.person_id
+          where e.giveaway_id = g.id), '[]'::jsonb),
+        'draws', coalesce((
+          select jsonb_agg(jsonb_build_object(
+                   'id', d.id, 'seq', d.seq, 'reason', d.reason, 'wanted', d.wanted,
+                   'entrants', d.entrants, 'total', d.total, 'snapshot_hash', d.snapshot_hash,
+                   'chain', d.chain, 'round', d.round, 'round_at', d.round_at,
+                   'committed_at', d.committed_at, 'committed_by', public.giveaway_account_name(d.committed_by),
+                   'randomness', d.randomness, 'signature', d.signature, 'winners', d.winners,
+                   'revealed_at', d.revealed_at, 'revealed_by', public.giveaway_account_name(d.revealed_by))
+                 order by d.seq)
+          from public.giveaway_draws d where d.giveaway_id = g.id), '[]'::jsonb),
+        'winners', coalesce((
+          select jsonb_agg(jsonb_build_object(
+                   'person', p.id, 'name', p.name, 'pick', w.pick, 'status', w.status,
+                   'draw', (select d.seq from public.giveaway_draws d where d.id = w.draw_id),
+                   'decided_at', w.decided_at, 'decided_by', public.giveaway_account_name(w.decided_by))
+                 order by (select d.seq from public.giveaway_draws d where d.id = w.draw_id), w.pick)
+          from public.giveaway_winners w
+          join public.giveaway_people p on p.id = w.person_id
+          where w.giveaway_id = g.id), '[]'::jsonb),
+        'log', coalesce((
+          select jsonb_agg(jsonb_build_object(
+                   'at', l.at, 'actor', public.giveaway_account_name(l.actor),
+                   'action', l.action, 'detail', l.detail)
+                 order by l.id)
+          from public.giveaway_log l where l.giveaway_id = g.id), '[]'::jsonb))
+      from public.giveaways g where g.id = p_id)
+  end
+$fn$;
+create or replace function public.giveaway_trivia_choices()
+returns jsonb
+language sql
+stable
+security definer
+set search_path = ''
+as $fn$
+  select case
+    when not public.can('giveaways.manage') then jsonb_build_object('ok', false, 'reason', 'not allowed')
+    else jsonb_build_object('ok', true, 'sessions', coalesce((
+      select jsonb_agg(jsonb_build_object('id', se.id, 'title', se.title, 'state', public.scheduled_state(se), 'mode', se.mode,
+                                          'opens_at', se.opens_at, 'closes_at', se.closes_at)
+                       -- drafts last: the ones being built for the giveaway are
+                       -- usually the newest, but the running ones are what it
+                       -- is most often linked to
+                       order by (public.scheduled_state(se) = 'draft'), se.created_at desc)
+      from public.sessions se), '[]'::jsonb))
+  end
+$fn$;
+
+revoke all on function public.giveaway_trivia_choices() from public, anon;
+grant execute on function public.giveaway_trivia_choices() to authenticated;
+
+-- ===========================================================================
+-- A giveaway's trivia is the giveaway's alone
+-- ===========================================================================
+--
+-- Trivia linked to a giveaway is not another session on the Join list. It is
+-- hidden from every list of sessions, reached from the giveaway's own page,
+-- and played only by the giveaway's entrants -- the people its points can
+-- give extra chances to. Its host and the giveaways' organisers can still
+-- open it, to check it and to run it.
+--
+-- Enforced where the questions are served and the answers taken, not only
+-- where the list is drawn: a code or a link passed round would otherwise get
+-- somebody in.
+
+-- May the caller play this session?
+create or replace function public.session_open_to_me(p_session uuid)
+returns boolean
+language sql
+stable
+security definer
+set search_path = ''
+as $fn$
+  select not exists (select 1 from public.giveaway_sessions gs where gs.session_id = p_session)
+      or public.runs_session(p_session)
+      or public.can('giveaways.manage')
+      or exists (select 1 from public.giveaway_sessions gs
+                 join public.giveaway_entries e on e.giveaway_id = gs.giveaway_id
+                 join public.giveaway_people p on p.id = e.person_id
+                 where gs.session_id = p_session and p.user_id = (select auth.uid()))
+$fn$;
+
+-- The giveaway a session belongs to, for the "enter it first" link: one still
+-- taking part, or failing that the newest.
+create or replace function public.giveaway_of_session(p_session uuid)
+returns uuid
+language sql
+stable
+security definer
+set search_path = ''
+as $fn$
+  select g.id from public.giveaway_sessions gs join public.giveaways g on g.id = gs.giveaway_id
+  where gs.session_id = p_session
+  order by (g.status in ('open', 'judging', 'qualified')) desc, g.created_at desc
+  limit 1
+$fn$;
+
+revoke all on function public.session_open_to_me(uuid) from public, anon, authenticated;
+revoke all on function public.giveaway_of_session(uuid) from public, anon, authenticated;
+
+create or replace function public.live_sessions()
+returns jsonb
+language sql
+stable
+security definer
+set search_path = ''
+as $fn$
+  select coalesce(
+    (select jsonb_agg(jsonb_build_object('id', s.id, 'title', s.title, 'code', s.code)
+                      order by s.started_at desc)
+     from public.sessions s
+     where public.scheduled_state(s) = 'live' and (select auth.uid()) is not null
+       -- a giveaway's trivia is reached from the giveaway, by its entrants
+       and not exists (select 1 from public.giveaway_sessions gs where gs.session_id = s.id)),
+    '[]'::jsonb)
+$fn$;
+create or replace function public.session_by_code(p_code text)
+returns jsonb
+language sql
+stable
+security definer
+set search_path = ''
+as $fn$
+  select coalesce(
+    (select jsonb_build_object('ok', true, 'id', s.id, 'title', s.title)
+     from public.sessions s
+     where public.scheduled_state(s) = 'live'
+       and s.code = upper(regexp_replace(coalesce(p_code, ''), '[^A-Za-z0-9]', '', 'g'))
+       and (select auth.uid()) is not null
+       and public.session_open_to_me(s.id)),
+    jsonb_build_object('ok', false, 'reason', 'no session is running with that code'))
+$fn$;
+create or replace function public.current_item(p_session uuid)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $fn$
+declare
+  sess public.sessions;
+  me uuid := (select auth.uid());
+  it public.items;
+  yours boolean;
+begin
+  -- The clock before the question: a survey whose closing time has passed is
+  -- shut, whether or not anybody has been by since.
+  perform public.apply_schedule(p_session);
+  select * into sess from public.sessions where id = p_session;
+  if sess.id is null then
+    return jsonb_build_object('state', 'not-live', 'now', now(), 'yours', false);
+  end if;
+  yours := public.runs_session(p_session);
+  -- A giveaway's trivia is its entrants' alone: anybody else is told to enter
+  -- the giveaway, and where, rather than shown a question they cannot answer.
+  if not public.session_open_to_me(p_session) then
+    return jsonb_build_object('state', 'giveaway-only', 'now', now(), 'yours', false,
+                              'giveaway', public.giveaway_of_session(p_session));
+  end if;
+  if sess.state <> 'live' then
+    -- `shared` travels with the refusal, because the screen that says "this is
+    -- not running" is the same screen that should offer the way to see how it
+    -- went — and it has nothing else to ask.
+    return jsonb_build_object('state', 'not-live', 'now', now(), 'yours', yours,
+                              'shared', sess.share_results and sess.state = 'closed');
+  end if;
+
+  if sess.mode = 'open' then
+    if me is null or yours then
+      return jsonb_build_object('state', 'not-live', 'mode', 'open', 'now', now(),
+                                'yours', yours);
+    end if;
+    select i.* into it
+    from public.items i
+    where i.session_id = p_session
+      and i.state <> 'pending'
+      -- Finished rather than merely written against — a word game writes a row
+      -- per guess, and the old test took the board away after the first one.
+      and not public.finished_item(i.id, me)
+      -- see the note above: a question whose window has closed is behind them
+      and not public.expired_for(i.id, me)
+    order by i.position
+    limit 1;
+    if it.id is null then
+      return jsonb_build_object(
+        'state', 'done', 'mode', 'open', 'now', now(), 'yours', false,
+        'total', (select count(*) from public.items i where i.session_id = p_session
+                  and i.state <> 'pending'));
+    end if;
+    -- Paused, and this question not yet in front of them: say so rather than
+    -- serve it, so its clock does not start until they come back. One already
+    -- served -- the question they were on when they paused -- is theirs to
+    -- finish, which is what "pause after this question" means.
+    if exists (select 1 from public.session_pauses sp
+               where sp.session_id = p_session and sp.user_id = me)
+       and not exists (select 1 from public.item_served sv
+                       where sv.item_id = it.id and sv.user_id = me) then
+      return jsonb_build_object(
+        'state', 'paused', 'mode', 'open', 'now', now(), 'yours', false, 'paused', true,
+        'total', (select count(*) from public.items i where i.session_id = p_session
+                  and i.state <> 'pending'),
+        'done', (select count(*) from public.items i
+               where i.session_id = p_session and i.state <> 'pending'
+                 and (public.finished_item(i.id, me)
+                      or public.expired_for(i.id, me))));
+    end if;
+
+    insert into public.item_served (item_id, user_id) values (it.id, me)
+    on conflict (item_id, user_id) do nothing;
+
+    return jsonb_build_object(
+      'state', 'open', 'mode', 'open', 'yours', false,
+      'id', it.id, 'kind', it.kind, 'prompt', it.prompt, 'payload', it.payload,
+      'position', it.position,
+      'opened_at', public.started_at(it.id, me),
+      'seconds', public.item_seconds(it.payload),
+      'now', now(),
+      'mine', null,
+      'answer', null,
+      -- whether "pause after this question" is set, so the switch shows it
+      'paused', exists (select 1 from public.session_pauses sp
+                        where sp.session_id = p_session and sp.user_id = me),
+      'total', (select count(*) from public.items i where i.session_id = p_session
+                and i.state <> 'pending'),
+      -- how many are behind them, answered or timed out, so "Question 3 of 6"
+      -- keeps counting while a skipped one still counts as gone
+      'done', (select count(*) from public.items i
+               where i.session_id = p_session and i.state <> 'pending'
+                 and (public.finished_item(i.id, me)
+                      or public.expired_for(i.id, me))));
+  end if;
+
+  if sess.current_item is null then
+    return jsonb_build_object('state', 'waiting', 'mode', 'live', 'now', now(), 'yours', yours);
+  end if;
+  select * into it from public.items
+  where id = sess.current_item and state <> 'pending';
+  if it.id is null then
+    return jsonb_build_object('state', 'waiting', 'mode', 'live', 'now', now(), 'yours', yours);
+  end if;
+
+  return jsonb_build_object(
+    'state', it.state, 'mode', 'live', 'yours', yours,
+    'id', it.id, 'kind', it.kind, 'prompt', it.prompt, 'payload', it.payload,
+    'position', it.position,
+    'opened_at', it.opened_at,
+    'seconds', public.item_seconds(it.payload),
+    'now', now(),
+    'mine', (select r.value from public.responses r
+             where r.item_id = it.id and r.user_id = me),
+    'answer', case when it.state = 'revealed'
+                   then (select a.answer from public.item_answers a where a.item_id = it.id)
+              end);
+end;
+$fn$;
+create or replace function public.answer_item(
+  p_item uuid,
+  p_value jsonb,
+  p_anonymous boolean default false
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $fn$
+declare
+  it public.items;
+  sess public.sessions;
+  me uuid := (select auth.uid());
+  window_seconds int;
+  began timestamptz;
+begin
+  -- The clock before the question: a survey whose closing time has passed is
+  -- shut, whether or not anybody has been by since.
+  perform public.apply_schedule(
+    (select i.session_id from public.items i where i.id = p_item));
+  select * into it from public.items where id = p_item;
+  if it.id is null then
+    return jsonb_build_object('ok', false, 'reason', 'no such item');
+  end if;
+  select * into sess from public.sessions where id = it.session_id;
+  if sess.state <> 'live' then
+    return jsonb_build_object('ok', false, 'reason', 'this session is not running');
+  end if;
+  if not public.session_open_to_me(sess.id) then
+    return jsonb_build_object('ok', false, 'reason', 'this trivia is for the giveaway''s entrants: enter the giveaway first');
+  end if;
+  if public.runs_session(sess.id) then
+    return jsonb_build_object('ok', false, 'reason', 'you are running this one');
+  end if;
+  if it.state <> 'open' then
+    return jsonb_build_object('ok', false, 'reason', 'answers are closed for this one');
+  end if;
+
+  if sess.mode = 'open' then
+    if exists (select 1 from public.responses r where r.item_id = p_item and r.user_id = me) then
+      return jsonb_build_object('ok', false, 'reason', 'you have answered that one');
+    end if;
+    if not exists (select 1 from public.item_served s
+                   where s.item_id = p_item and s.user_id = me) then
+      return jsonb_build_object('ok', false, 'reason', 'that is not the question in front of you');
+    end if;
+  elsif sess.current_item is distinct from p_item then
+    return jsonb_build_object('ok', false, 'reason', 'that is not the question on screen');
+  end if;
+
+  window_seconds := public.item_seconds(it.payload);
+  began := public.started_at(p_item, me);
+  if window_seconds is not null and began is not null
+     and now() > began + (window_seconds * interval '1 second') then
+    return jsonb_build_object('ok', false, 'reason', 'time is up for this one');
+  end if;
+
+  insert into public.responses (item_id, user_id, value, anonymous)
+  values (p_item, me, p_value, coalesce(p_anonymous, false))
+  on conflict (item_id, user_id) do update
+    set value = excluded.value,
+        anonymous = excluded.anonymous,
+        submitted_at = now();
+
+  return jsonb_build_object(
+    'ok', true,
+    'answer', case when sess.mode = 'open'
+                   then (select a.answer from public.item_answers a where a.item_id = p_item)
+              end);
+end;
+$fn$;
+create or replace function public.guess_word(p_item uuid, p_guess text)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $fn$
+declare
+  it public.items;
+  sess public.sessions;
+  me uuid := (select auth.uid());
+  word text;
+  tries int;
+  guesses jsonb;
+  said text;
+  marks text[];
+  max_tries int;
+  window_seconds int;
+  began timestamptz;
+begin
+  -- The clock before the question: a survey whose closing time has passed is
+  -- shut, whether or not anybody has been by since.
+  perform public.apply_schedule(
+    (select i.session_id from public.items i where i.id = p_item));
+  select * into it from public.items where id = p_item;
+  if it.id is null or it.kind <> 'game' then
+    return jsonb_build_object('ok', false, 'reason', 'no such question');
+  end if;
+  select * into sess from public.sessions where id = it.session_id;
+  if not public.session_open_to_me(sess.id) then
+    return jsonb_build_object('ok', false, 'reason', 'this trivia is for the giveaway''s entrants: enter the giveaway first');
+  end if;
+  if sess.state <> 'live' then
+    return jsonb_build_object('ok', false, 'reason', 'that is not the question on screen');
+  end if;
+  -- The host set the word. There is no game here for them.
+  if public.runs_session(sess.id) then
+    return jsonb_build_object('ok', false, 'reason', 'you are running this one');
+  end if;
+  if sess.mode = 'open' then
+    if not exists (select 1 from public.item_served s
+                   where s.item_id = p_item and s.user_id = me) then
+      return jsonb_build_object('ok', false, 'reason', 'that is not the question in front of you');
+    end if;
+  elsif sess.current_item is distinct from p_item then
+    return jsonb_build_object('ok', false, 'reason', 'that is not the question on screen');
+  end if;
+  if it.state <> 'open' then
+    return jsonb_build_object('ok', false, 'reason', 'answers are closed for this one');
+  end if;
+
+  window_seconds := public.item_seconds(it.payload);
+  began := public.started_at(p_item, me);
+  if window_seconds is not null and began is not null
+     and now() > began + (window_seconds * interval '1 second') then
+    return jsonb_build_object('ok', false, 'reason', 'time is up for this one');
+  end if;
+
+  select upper(a.answer ->> 'word') into word
+  from public.item_answers a where a.item_id = p_item;
+  if word is null then
+    return jsonb_build_object('ok', false, 'reason', 'this one has no solution set');
+  end if;
+
+  said := upper(regexp_replace(coalesce(p_guess, ''), '[^A-Za-z]', '', 'g'));
+  if length(said) <> length(word) then
+    return jsonb_build_object('ok', false, 'reason',
+      format('Guesses are %s letters.', length(word)));
+  end if;
+  -- The dictionary decides what may be typed, and the round's own list is
+  -- allowed on top of it. A themed list supplies the answer, not the language:
+  -- a board that rejects HOUSE because the theme is about shares does not read
+  -- as themed, it reads as broken. And the other direction matters too — ESOP
+  -- is not in SCOWL and has to be typeable in a round built out of it.
+  if said <> word
+     and not exists (select 1 from public.words w where w.word = lower(said))
+     and not exists (
+       select 1 from public.item_answers a
+       join public.word_list_entries e
+         on e.list_id = (a.answer ->> 'list')::uuid and e.word = lower(said)
+       where a.item_id = p_item and (a.answer ->> 'list') is not null)
+  then
+    return jsonb_build_object('ok', false, 'reason', 'That is not a word I know.');
+  end if;
+
+  select coalesce(r.value -> 'guesses', '[]'::jsonb) into guesses
+  from public.responses r where r.item_id = p_item and r.user_id = me;
+  guesses := coalesce(guesses, '[]'::jsonb);
+  tries := jsonb_array_length(guesses);
+
+  max_tries := coalesce(nullif(it.payload ->> 'tries', '')::int, 6);
+  if tries >= max_tries then
+    return jsonb_build_object('ok', false, 'reason', 'No guesses left.');
+  end if;
+  if guesses -> (tries - 1) ->> 'word' = word then
+    return jsonb_build_object('ok', false, 'reason', 'You have already got it.');
+  end if;
+
+  marks := public.mark_guess(word, said);
+  guesses := guesses || jsonb_build_array(
+    jsonb_build_object('word', said, 'marks', to_jsonb(marks)));
+
+  insert into public.responses (item_id, user_id, value)
+  values (p_item, me, jsonb_build_object('guesses', guesses, 'solved', said = word))
+  on conflict (item_id, user_id) do update
+    set value = excluded.value,
+        submitted_at = case when said = word then now() else public.responses.submitted_at end;
+
+  return jsonb_build_object(
+    'ok', true,
+    'marks', to_jsonb(marks),
+    'solved', said = word,
+    'left', max_tries - (tries + 1),
+    'word', case when said = word or tries + 1 >= max_tries then word end);
+end;
+$fn$;
+
+revoke all on function public.live_sessions() from public, anon;
+grant execute on function public.live_sessions() to authenticated;
+revoke all on function public.session_by_code(text) from public, anon;
+grant execute on function public.session_by_code(text) to authenticated;
