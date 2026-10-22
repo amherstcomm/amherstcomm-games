@@ -39,6 +39,7 @@ import {
   recordAttendance,
   removeEntrant,
   removeTestEntrant,
+  resetGiveawayTrivia,
   saveGiveaway,
   updatePerson,
   weightFor,
@@ -774,7 +775,8 @@ function OneGiveaway({ id, link }: { id: string; link: GiveawayLink }) {
 
       <Log entries={got.log} />
 
-      {/* Organisers only: the test entries removed from the public record. */}
+      {/* Organisers only: test entries removed from the public record, and
+          trivia reset for another go. */}
       {manage && (got.private_log ?? []).length > 0 && (
         <section className="mt-6" aria-label="Organisers only">
           <h2 className="text-sm font-semibold text-slate-200">Organisers only</h2>
@@ -784,7 +786,9 @@ function OneGiveaway({ id, link }: { id: string; link: GiveawayLink }) {
               <li key={i} className="text-xs text-slate-300 flex flex-wrap gap-x-3">
                 <span className="text-slate-500 tabular-nums">{when(e.at)}</span>
                 <span className="min-w-0 break-words">
-                  {e.actor ?? 'Somebody'} removed {String((e.detail as { name?: string }).name ?? 'an entry')} as a test entry
+                  {e.action === 'trivia reset'
+                    ? `${e.actor ?? 'Somebody'} reset ${String((e.detail as { name?: string }).name ?? 'somebody')}'s trivia`
+                    : `${e.actor ?? 'Somebody'} removed ${String((e.detail as { name?: string }).name ?? 'an entry')} as a test entry`}
                 </span>
               </li>
             ))}
@@ -1180,6 +1184,28 @@ function Entrants({
                 )}
                 {got.can_manage && g.status === 'open' && got.draws.length === 0 && (
                   <TestRemove name={e.name} onRemove={() => act(() => removeTestEntrant(g.id, e.person))} busy={busy} />
+                )}
+                {got.can_manage && g.status === 'open' && got.draws.length === 0 &&
+                  (g.sessions ?? []).length > 0 && e.linked && (
+                  <button
+                    type="button"
+                    className="block ml-auto text-xs text-slate-400 hover:underline mt-1"
+                    disabled={busy}
+                    aria-label={`Reset ${e.name}'s trivia`}
+                    onClick={() => {
+                      if (
+                        window.confirm(
+                          `Reset ${e.name}'s trivia? Their answers in this giveaway's trivia go, and its points with ` +
+                            'them, so they can take it again from the start. They stay entered. Organisers can see ' +
+                            'that it was reset.'
+                        )
+                      ) {
+                        void act(() => resetGiveawayTrivia(g.id, e.person));
+                      }
+                    }}
+                  >
+                    Reset their trivia
+                  </button>
                 )}
               </div>
             </li>

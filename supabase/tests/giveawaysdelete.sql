@@ -127,6 +127,93 @@ select pg_temp.as_('');
 delete from public.giveaways where id = (select (v->>'id')::uuid from t where k = 'q');
 delete from public.giveaway_people where name = 'Real Person';
 
+-- ---------------------------------------------------------------------------
+-- A test giveaway that really was drawn: committed drawings go with it
+-- ---------------------------------------------------------------------------
+select pg_temp.as_('07000000-0000-0000-0000-000000000001');
+insert into t select 'd', public.save_giveaway(null, 'Drawn Test', '', '', 1, null, true, null, 1, 365);
+select public.add_giveaway_entrant((select (v->>'id')::uuid from t where k = 'd'), null, null, 'Drawn Person');
+insert into t select 'ddraw', public.commit_giveaway_draw((select (v->>'id')::uuid from t where k = 'd'));
+select pg_temp.check('the test giveaway has a committed drawing',
+  exists (select 1 from public.giveaway_draws where giveaway_id = (select (v->>'id')::uuid from t where k = 'd')));
+insert into t select 'ddeleted', public.delete_giveaway((select (v->>'id')::uuid from t where k = 'd'), 'Drawn Test');
+select pg_temp.check('a drawn test giveaway can be deleted, drawings and all',
+  (select v->>'ok' from t where k = 'ddeleted') = 'true'
+  and not exists (select 1 from public.giveaways where id = (select (v->>'id')::uuid from t where k = 'd'))
+  and not exists (select 1 from public.giveaway_draws where giveaway_id = (select (v->>'id')::uuid from t where k = 'd')));
+delete from public.giveaway_people where name = 'Drawn Person';
+
+-- ---------------------------------------------------------------------------
+-- Resetting somebody's trivia, so they can take it again
+-- ---------------------------------------------------------------------------
+insert into auth.users (id, email) values
+  ('07000000-0000-0000-0000-000000000003', 'cy.reset@example.com'),
+  ('07000000-0000-0000-0000-000000000004', 'di.reset@example.com')
+on conflict do nothing;
+insert into public.profiles (id, display_name) values
+  ('07000000-0000-0000-0000-000000000003', 'Cy Reset'),
+  ('07000000-0000-0000-0000-000000000004', 'Di Reset')
+on conflict (id) do update set display_name = excluded.display_name;
+insert into public.sessions (id, title, host, state, mode)
+values ('07000000-0000-0000-0000-0000000000a2', 'Reset Trivia', '07000000-0000-0000-0000-000000000001', 'closed', 'live')
+on conflict (id) do nothing;
+insert into public.items (id, session_id, position, kind, prompt, state, opened_at) values
+  ('07000000-0000-0000-0000-0000000000b1', '07000000-0000-0000-0000-0000000000a2', 1, 'choice', 'Who owns this company?', 'revealed', now() - interval '5 minutes')
+on conflict (id) do nothing;
+insert into public.item_answers (item_id, answer)
+values ('07000000-0000-0000-0000-0000000000b1', '{"correct": ["us"]}'::jsonb)
+on conflict (item_id) do update set answer = excluded.answer;
+insert into public.responses (item_id, user_id, value, submitted_at) values
+  ('07000000-0000-0000-0000-0000000000b1', '07000000-0000-0000-0000-000000000003', '"us"'::jsonb, now() - interval '4 minutes 50 seconds'),
+  ('07000000-0000-0000-0000-0000000000b1', '07000000-0000-0000-0000-000000000004', '"us"'::jsonb, now() - interval '4 minutes 40 seconds')
+on conflict do nothing;
+insert into public.item_served (item_id, user_id)
+values ('07000000-0000-0000-0000-0000000000b1', '07000000-0000-0000-0000-000000000003') on conflict do nothing;
+insert into public.session_pauses (session_id, user_id)
+values ('07000000-0000-0000-0000-0000000000a2', '07000000-0000-0000-0000-000000000003') on conflict do nothing;
+
+select pg_temp.as_('07000000-0000-0000-0000-000000000001');
+insert into t select 'r', public.save_giveaway(null, 'Reset Test', '', '', 1, null, true, null, 1, 365);
+select public.set_giveaway_trivia((select (v->>'id')::uuid from t where k = 'r'),
+  array['07000000-0000-0000-0000-0000000000a2']::uuid[], 1);
+select pg_temp.as_('07000000-0000-0000-0000-000000000003');
+select public.enter_giveaway((select (v->>'id')::uuid from t where k = 'r'), true);
+select pg_temp.as_('07000000-0000-0000-0000-000000000004');
+select public.enter_giveaway((select (v->>'id')::uuid from t where k = 'r'), true);
+create or replace function pg_temp.cy() returns uuid
+language sql as $$ select id from public.giveaway_people where user_id = '07000000-0000-0000-0000-000000000003' $$;
+create or replace function pg_temp.rid() returns uuid
+language sql as $$ select (v->>'id')::uuid from t where k = 'r' $$;
+select pg_temp.check('the test person has a trivia point to reset',
+  public.giveaway_trivia_points(pg_temp.rid(), pg_temp.cy()) = 1);
+select pg_temp.check('a player cannot reset somebody''s trivia',
+  public.reset_giveaway_trivia(pg_temp.rid(), pg_temp.cy())->>'reason' = 'not allowed');
+select pg_temp.as_('07000000-0000-0000-0000-000000000001');
+insert into t select 'reset', public.reset_giveaway_trivia(pg_temp.rid(), pg_temp.cy());
+select pg_temp.check('an organiser resets it: their answer, what they were shown and their pause go',
+  (select v->>'answers' from t where k = 'reset') = '1'
+  and not exists (select 1 from public.responses where user_id = '07000000-0000-0000-0000-000000000003')
+  and not exists (select 1 from public.item_served where user_id = '07000000-0000-0000-0000-000000000003')
+  and not exists (select 1 from public.session_pauses where user_id = '07000000-0000-0000-0000-000000000003'));
+select pg_temp.check('so their extra chances go with it, and they stay entered',
+  public.giveaway_trivia_points(pg_temp.rid(), pg_temp.cy()) = 0
+  and exists (select 1 from public.giveaway_entries where giveaway_id = pg_temp.rid() and person_id = pg_temp.cy()));
+select pg_temp.check('nobody else''s answers are touched',
+  exists (select 1 from public.responses where user_id = '07000000-0000-0000-0000-000000000004'));
+select pg_temp.check('organisers can see that it was reset, and the public record says nothing',
+  exists (select 1 from jsonb_array_elements(public.giveaway_detail(pg_temp.rid())->'private_log') x
+          where x->>'action' = 'trivia reset' and x->'detail'->>'name' = 'Cy Reset')
+  and not exists (select 1 from jsonb_array_elements(public.giveaway_detail(pg_temp.rid())->'log') x
+                  where x->>'action' = 'trivia reset'));
+insert into t select 'rdraw', public.commit_giveaway_draw(pg_temp.rid());
+select pg_temp.check('once it is drawn, trivia is part of the odds and cannot be reset',
+  public.reset_giveaway_trivia(pg_temp.rid(), pg_temp.cy())->>'reason'
+    = 'only while it is taking entries: after that their trivia is part of the odds that were drawn');
+select public.delete_giveaway(pg_temp.rid(), 'Reset Test');
+select pg_temp.as_('');
+delete from public.giveaway_people where user_id in ('07000000-0000-0000-0000-000000000003', '07000000-0000-0000-0000-000000000004');
+delete from public.sessions where id = '07000000-0000-0000-0000-0000000000a2';
+
 -- Leave nothing behind but the log.
 select pg_temp.as_('');
 delete from public.sessions where id = '07000000-0000-0000-0000-0000000000a1';
