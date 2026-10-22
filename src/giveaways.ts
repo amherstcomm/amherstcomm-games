@@ -614,3 +614,24 @@ export async function readGiveawayTriviaSessions(): Promise<string[]> {
   if (error || !Array.isArray(data)) return [];
   return data as string[];
 }
+
+// ---------------------------------------------------------------------------
+// Deleting a test giveaway, a test person
+// ---------------------------------------------------------------------------
+
+/** Gone, with everything it recorded. The title has to be typed: it cannot be
+ *  brought back. */
+export const deleteGiveaway = (id: string, title: string) =>
+  call('delete_giveaway', { p_id: id, p_title: title });
+
+/** Out of every giveaway and the history. Refused for a winner of a giveaway
+ *  that still exists. */
+export const deleteGiveawayPerson = (person: string) => call('delete_giveaway_person', { p_person: person });
+
+/** The giveaway a trivia session belongs to, for the way back to it. */
+export async function readSessionGiveaway(session: string): Promise<{ id: string; title: string } | null> {
+  if (!supabase) return null;
+  const { data, error } = await supabase.rpc('session_giveaway', { p_session: session });
+  if (error || !data || typeof data !== 'object') return null;
+  return data as { id: string; title: string };
+}

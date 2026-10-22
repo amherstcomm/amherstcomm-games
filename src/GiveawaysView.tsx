@@ -25,6 +25,8 @@ import {
   commitDraw,
   decideWinner,
   deleteAttendance,
+  deleteGiveaway,
+  deleteGiveawayPerson,
   enterGiveaway,
   findGiveawayPeople,
   offerPlace,
@@ -770,6 +772,33 @@ function OneGiveaway({ id, link }: { id: string; link: GiveawayLink }) {
       ))}
 
       <Log entries={got.log} />
+
+      {/* For the giveaway made to try it out. Typed, because there is no way
+          back from it, and anywhere in its life, because a test one is most
+          often a drawn one by the time somebody comes to tidy up. */}
+      {manage && (
+        <section className="mt-10 border-t border-white/10 pt-4" aria-label="Delete this giveaway">
+          <button
+            type="button"
+            className="text-sm text-rose-300 hover:underline"
+            disabled={busy}
+            onClick={async () => {
+              const typed = window.prompt(
+                `Delete "${g.title}" for good? Its entries, drawings and winners go, and so does any attendance ` +
+                  'it recorded. One line stays in the record saying it was deleted. Type its name to confirm.'
+              );
+              if (typed === null) return;
+              setBusy(true);
+              const res = await deleteGiveaway(id, typed);
+              setBusy(false);
+              if (!res.ok) return setSaid(res.reason);
+              link({ kind: 'giveaways', giveaway: null, view: 'page' }).onGo();
+            }}
+          >
+            Delete this giveaway
+          </button>
+        </section>
+      )}
     </div>
   );
 }
@@ -1232,7 +1261,9 @@ const ACTION_WORD: Record<string, string> = {
   offered: 'offered a place to',
   rated: 'rated the entries',
   'trivia set': 'set the trivia',
-  'pool set': 'set the pool'
+  'pool set': 'set the pool',
+  'giveaway deleted': 'deleted a giveaway',
+  'person deleted': 'deleted'
 };
 
 function describe(e: LogEntry): string {
@@ -1273,6 +1304,10 @@ function describe(e: LogEntry): string {
       return `${who} closed the entries and started the judging: ${d.entries} entries, ${d.judges} judges`;
     case 'ranked':
       return `${d.name} ranked ${d.count} ${d.count === 1 ? 'entry' : 'entries'}`;
+    case 'giveaway deleted':
+      return `${who} deleted the giveaway ${d.title}`;
+    case 'person deleted':
+      return `${who} deleted ${d.name} from the giveaways`;
     case 'trivia set':
       return `${who} set the trivia: ${((d.sessions as string[] | null) ?? []).join(', ') || 'none'}, ${d.bonus} extra ${Number(d.bonus) === 1 ? 'ticket' : 'tickets'} a point`;
     case 'rated':
@@ -1452,6 +1487,15 @@ function HistoryRow({
               Join to their account
             </button>
           )}
+          <button type="button" className="text-rose-300 hover:underline" disabled={busy}
+                  aria-label={`Delete ${p.name}`}
+                  onClick={() => {
+                    if (window.confirm(`Delete ${p.name} from every giveaway and the history? This cannot be undone.`)) {
+                      void act(() => deleteGiveawayPerson(p.person));
+                    }
+                  }}>
+            Delete
+          </button>
         </div>
       )}
       {joining && <JoinAccount person={p} busy={busy} act={act} />}

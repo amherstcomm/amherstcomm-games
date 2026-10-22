@@ -20471,3 +20471,108 @@ as $fn$
       from public.giveaways g where g.id = p_id)
   end
 $fn$;
+
+-- ===========================================================================
+-- Deleting a test giveaway, a test person; and the way back from the trivia
+-- ===========================================================================
+--
+-- A giveaway is never edited out of the record, but a giveaway made to try
+-- the thing out is not part of the record either. So an organiser can delete
+-- one -- typing its title, because it cannot be brought back -- and it goes
+-- with everything that hangs off it: entries, answers, ratings, drawings,
+-- winners, and the attendance it recorded, so a test win does not lower
+-- anybody's chances in the real drawings after. One line stays in the general
+-- record saying who deleted what and when, which is the part of the record
+-- that was real.
+create or replace function public.delete_giveaway(p_id uuid, p_title text)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $fn$
+declare
+  g public.giveaways;
+begin
+  if not public.can('giveaways.manage') then
+    return jsonb_build_object('ok', false, 'reason', 'not allowed');
+  end if;
+  select * into g from public.giveaways where id = p_id for update;
+  if g.id is null then
+    return jsonb_build_object('ok', false, 'reason', 'no such giveaway');
+  end if;
+  if lower(btrim(coalesce(p_title, ''))) <> lower(btrim(g.title)) then
+    return jsonb_build_object('ok', false, 'reason', 'type its name exactly to delete it');
+  end if;
+  insert into public.giveaway_log (actor, giveaway_id, action, detail)
+  values ((select auth.uid()), null, 'giveaway deleted', jsonb_build_object(
+    'title', g.title, 'status', g.status, 'mode', g.mode,
+    'entrants', (select count(*) from public.giveaway_entries where giveaway_id = p_id),
+    'drawings', (select count(*) from public.giveaway_draws where giveaway_id = p_id),
+    'winners', (select jsonb_agg(p.name order by w.pick) from public.giveaway_winners w
+                join public.giveaway_people p on p.id = w.person_id where w.giveaway_id = p_id)));
+  delete from public.giveaway_attendance where giveaway_id = p_id and source = 'giveaway';
+  delete from public.giveaways where id = p_id;
+  return jsonb_build_object('ok', true);
+end;
+$fn$;
+
+-- A test person: out of every giveaway and the history. Not somebody who won
+-- a giveaway that still exists -- that would take a winner out of the record
+-- of a real drawing; delete the test giveaway first.
+create or replace function public.delete_giveaway_person(p_person uuid)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $fn$
+declare
+  p public.giveaway_people;
+  won text;
+begin
+  if not public.can('giveaways.manage') then
+    return jsonb_build_object('ok', false, 'reason', 'not allowed');
+  end if;
+  select * into p from public.giveaway_people where id = p_person for update;
+  if p.id is null then
+    return jsonb_build_object('ok', false, 'reason', 'no such person');
+  end if;
+  select g.title into won from public.giveaway_winners w join public.giveaways g on g.id = w.giveaway_id
+  where w.person_id = p_person order by g.created_at desc limit 1;
+  if won is not null then
+    return jsonb_build_object('ok', false, 'reason',
+      format('%s won %s: delete that giveaway first if it was a test', p.name, won));
+  end if;
+  insert into public.giveaway_log (actor, giveaway_id, action, detail)
+  values ((select auth.uid()), null, 'person deleted', jsonb_build_object(
+    'name', p.name,
+    'entries', (select count(*) from public.giveaway_entries where person_id = p_person),
+    'attended', (select count(*) from public.giveaway_attendance where person_id = p_person)));
+  delete from public.giveaway_people where id = p_person;
+  return jsonb_build_object('ok', true);
+end;
+$fn$;
+
+-- The giveaway a session's trivia belongs to, for the way back to it from the
+-- session's page. Null for a session no giveaway has linked.
+create or replace function public.session_giveaway(p_session uuid)
+returns jsonb
+language sql
+stable
+security definer
+set search_path = ''
+as $fn$
+  select case when not public.can('games.play') then null else (
+    select jsonb_build_object('id', g.id, 'title', g.title)
+    from public.giveaways g where g.id = public.giveaway_of_session(p_session)) end
+$fn$;
+
+do $grants$
+declare
+  f text;
+begin
+  foreach f in array array['delete_giveaway(uuid, text)', 'delete_giveaway_person(uuid)', 'session_giveaway(uuid)'] loop
+    execute format('revoke all on function public.%s from public, anon', f);
+    execute format('grant execute on function public.%s to authenticated', f);
+  end loop;
+end
+$grants$;
