@@ -1161,6 +1161,31 @@ function SessionEditorFor({ session }: { session: string }) {
         Let the room ask questions of its own
       </label>
 
+      {/* Multiple-choice and poll options, in a shuffled order rather than the
+          one they were written in. On your own time each player gets their own
+          order, so "it's the third one" does not travel; live, the room shares
+          one, so the phones match the projector. Rank and match questions are
+          scrambled already. */}
+      <div className="mb-6 -mt-4">
+        <label className="flex items-center gap-2 text-xs text-slate-400">
+          <input
+            type="checkbox"
+            checked={meta.shuffle ?? false}
+            onChange={(e) => {
+              // Read before the await, for the reason above.
+              const on = e.target.checked;
+              void run(() => setSessionOptions(session, { shuffleOptions: on }));
+            }}
+          />
+          Shuffle the answer options
+        </label>
+        <p className="text-xs text-slate-500 mt-1 ml-6">
+          {meta.mode === 'open'
+            ? 'Each player sees their own order of every multiple-choice and poll question.'
+            : 'The room sees one shuffled order, the same on every phone and on the projector.'}
+        </p>
+      </div>
+
       {/* Only for a session that runs without anybody at the front. A live one
           has a presenter, and the presenter is the schedule — a clock that
           opened or shut it underneath them would take the one thing they are
