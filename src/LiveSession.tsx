@@ -1336,6 +1336,23 @@ export default function LiveSession({ session, host }: { session: string; host: 
             />
           )}
           {shown.state === 'waiting' && <Waiting text="Waiting for the next question…" />}
+          {/* A giveaway's trivia is its entrants': the way in is the giveaway. */}
+          {shown.state === 'giveaway-only' && (
+            <div className="py-10 text-center">
+              <p className="text-lg text-white font-semibold">This trivia is part of a giveaway.</p>
+              <p className="text-sm text-slate-400 mt-1">
+                Only people entered in the giveaway can play it, for extra chances in its drawing.
+              </p>
+              {item.giveaway && (
+                <a
+                  href={pathOf({ kind: 'giveaways', giveaway: item.giveaway, view: 'page' })}
+                  className="inline-flex items-center justify-center mt-4 px-4 h-10 rounded-lg text-sm font-semibold bg-accent text-slate-950 hover:brightness-110"
+                >
+                  Go to the giveaway
+                </a>
+              )}
+            </div>
+          )}
         </>
       )}
 

@@ -19,7 +19,10 @@ const giveaway = (over: Record<string, unknown> = {}) => ({
 
 type Sent = { fn: string; args: Record<string, unknown> };
 
-async function server(page: import('@playwright/test').Page, state: { manage?: boolean; giveaway?: Record<string, unknown> } = {}) {
+async function server(
+  page: import('@playwright/test').Page,
+  state: { manage?: boolean; giveaway?: Record<string, unknown>; me?: string | null } = {}
+) {
   const sent: Sent[] = [];
   await page.route('**/rest/v1/rpc/**', (route) => {
     const fn = route.request().url().match(/\/rpc\/(\w+)/)?.[1] ?? '';
@@ -29,7 +32,7 @@ async function server(page: import('@playwright/test').Page, state: { manage?: b
     if (fn.includes('giveaway')) sent.push({ fn, args });
     if (fn === 'giveaway_detail') {
       return reply({
-        ok: true, can_manage: state.manage ?? false, me: null,
+        ok: true, can_manage: state.manage ?? false, me: state.me ?? null,
         chain: { hash: 'x', genesis: 1692803367, period: 3 },
         giveaway: giveaway(state.giveaway),
         entrants: [
@@ -53,11 +56,13 @@ async function server(page: import('@playwright/test').Page, state: { manage?: b
 }
 
 test('players see the trivia that counts, what a point is worth, and where to play it', async ({ page }) => {
-  await server(page);
+  // Ada, who is entered: the trivia is for entrants
+  await server(page, { me: 'p-ada' });
   await page.goto(`/giveaways/${G}`);
   const trivia = page.getByRole('region', { name: 'Trivia for extra chances' });
   await expect(trivia).toContainText('Each point you score adds an extra ticket: score 3 and your chance is 4×');
   await expect(trivia.getByRole('link', { name: 'Play' })).toHaveAttribute('href', '/live/s-1');
+  await expect(trivia).toContainText('you are in, so play away');
   // and each entrant's points, beside their chance
   const who = page.getByRole('region', { name: 'Who is in it' });
   await expect(who.locator('li', { hasText: 'Ada' })).toContainText('Trivia: 2 points · 3× the chance');
@@ -81,9 +86,44 @@ test('an organiser links the sessions and sets what a point is worth', async ({ 
   });
 });
 
+// A session waiting on its opening time says when; one with no opening time
+// that nobody has started cannot open by itself, and the organiser is told how.
+test('trivia not open yet says when it opens, or tells the organiser how to open it', async ({ page }) => {
+  await server(page, { manage: true, giveaway: { sessions: [
+    { id: 's-1', title: 'Brewers Trivia', state: 'draft', mode: 'open', opens_at: null, closes_at: null },
+    { id: 's-2', title: 'Packers Trivia', state: 'draft', mode: 'open', opens_at: '2026-11-01T13:00:00Z', closes_at: null },
+  ] } });
+  await page.goto(`/giveaways/${G}`);
+  const trivia = page.getByRole('region', { name: 'Trivia for extra chances' });
+  await expect(trivia.locator('li', { hasText: 'Packers Trivia' })).toContainText('opens Nov 1');
+  await expect(trivia.locator('li', { hasText: 'Brewers Trivia' })).toContainText('not open yet');
+  await expect(trivia).toContainText('Brewers Trivia has no opening time and is not started: open it under Sessions');
+  await expect(trivia.getByRole('link', { name: 'Play' })).toHaveCount(0);
+});
+
 test('a judged giveaway offers no trivia: it has no drawing to add chances in', async ({ page }) => {
   await server(page, { manage: true, giveaway: { mode: 'judged', sessions: [] } });
   await page.goto(`/giveaways/${G}`);
   await expect(page.getByRole('heading', { name: 'Brewers tickets' })).toBeVisible();
   await expect(page.getByRole('region', { name: 'Trivia for extra chances' })).toHaveCount(0);
+});
+
+// The trivia is the entrants': somebody not in is told to enter first, on the
+// giveaway and on the session's own page -- where the server refuses them too.
+test('somebody not entered is sent to enter first, not handed the trivia', async ({ page }) => {
+  await server(page, { me: null });
+  await page.goto(`/giveaways/${G}`);
+  const trivia = page.getByRole('region', { name: 'Trivia for extra chances' });
+  await expect(trivia).toContainText('The trivia is for entrants only: enter the giveaway first, then play.');
+  await expect(trivia.getByRole('link', { name: 'Play' })).toHaveCount(0);
+});
+
+test("the trivia's own page sends somebody not entered to the giveaway", async ({ page }) => {
+  await page.route('**/rest/v1/rpc/current_item', (route) =>
+    route.fulfill({ status: 200, contentType: 'application/json',
+                    body: JSON.stringify({ state: 'giveaway-only', now: new Date().toISOString(), yours: false, giveaway: G }) })
+  );
+  await page.goto('/live/s-1');
+  await expect(page.getByText('This trivia is part of a giveaway.')).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Go to the giveaway' })).toHaveAttribute('href', `/giveaways/${G}`);
 });

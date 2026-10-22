@@ -585,6 +585,7 @@ function OneGiveaway({ id, link }: { id: string; link: GiveawayLink }) {
         <Trivia
           g={g}
           manage={manage}
+          entered={mine}
           editable={['open', 'judging', 'qualified'].includes(g.status) && got.draws.length === 0}
           onChanged={() => void load()}
         />
@@ -777,16 +778,21 @@ function OneGiveaway({ id, link }: { id: string; link: GiveawayLink }) {
 function Trivia({
   g,
   manage,
+  entered,
   editable,
   onChanged,
 }: {
   g: Giveaway;
   manage: boolean;
+  /** only entrants can play a giveaway's trivia */
+  entered: boolean;
   editable: boolean;
   onChanged: () => void;
 }) {
   const sessions = g.sessions ?? [];
   const bonus = Number(g.trivia_bonus ?? 1);
+  // linked, but with no way to open by itself
+  const unstarted = sessions.filter((x) => x.state === 'draft' && !x.opens_at);
   const [editing, setEditing] = useState(false);
   const [choices, setChoices] = useState<TriviaSession[] | null>(null);
   const [picked, setPicked] = useState<string[]>([]);
@@ -821,7 +827,8 @@ function Trivia({
         <>
           <p className="text-sm text-slate-300">
             Each point you score adds {bonus === 1 ? 'an extra ticket' : `${bonus} extra tickets`}: score 3 and your chance
-            is {example(3)} what it would be. Enter the giveaway as well — the trivia adds chances, it does not enter you.
+            is {example(3)} what it would be. The trivia is for entrants only:{' '}
+            {entered ? 'you are in, so play away.' : 'enter the giveaway first, then play.'}
           </p>
           <ul className="space-y-1">
             {sessions.map((x) => (
@@ -830,11 +837,18 @@ function Trivia({
                   {x.title}
                   <span className="text-xs text-slate-500">
                     {' '}
-                    · {x.state === 'closed' ? 'over' : x.state === 'live' ? 'on now' : 'not open yet'}
+                    ·{' '}
+                    {x.state === 'closed'
+                      ? 'over'
+                      : x.state === 'live'
+                        ? 'on now'
+                        : x.opens_at
+                          ? `opens ${when(x.opens_at)}`
+                          : 'not open yet'}
                     {x.closes_at && x.state !== 'closed' && `, closes ${when(x.closes_at)}`}
                   </span>
                 </span>
-                {x.state === 'live' && (
+                {x.state === 'live' && (entered || manage) && (
                   <a className={BUTTON} href={`/live/${x.id}`}>
                     Play
                   </a>
@@ -843,6 +857,15 @@ function Trivia({
             ))}
           </ul>
           <p className="text-xs text-slate-500">Points count as they stand when the drawing is made.</p>
+          {/* Only an organiser can do anything about it, and they need to know
+              how: a session with no opening time stays shut until it is started. */}
+          {manage && unstarted.length > 0 && (
+            <p className="text-xs text-amber-200">
+              {unstarted.map((x) => x.title).join(', ')} {unstarted.length === 1 ? 'has' : 'have'} no opening time
+              and {unstarted.length === 1 ? 'is' : 'are'} not started: open {unstarted.length === 1 ? 'it' : 'them'} under
+              Sessions, or give {unstarted.length === 1 ? 'it' : 'them'} an opening time, so people can play.
+            </p>
+          )}
         </>
       ) : (
         <p className="text-sm text-slate-400">None yet. Link a trivia session and every point scored in it adds chances.</p>
