@@ -51,6 +51,7 @@ import type { NumberPayload } from '@/authoring';
 import QrCode from '@/QrCode';
 import AskPanel from '@/AskPanel';
 import MobileKeyInput from '@/MobileKeyInput';
+import { readSessionGiveaway } from '@/giveaways';
 import {
   nextMove,
   otherMoves,
@@ -826,6 +827,18 @@ function Ask({ onSend, sending }: { onSend: (value: unknown, anon: boolean) => v
 
 export default function LiveSession({ session, host }: { session: string; host: boolean }) {
   const [item, setItem] = useState<LiveItem>({ state: 'not-live' });
+  // A giveaway's trivia is played from the giveaway, so it leads back to it.
+  const [giveaway, setGiveaway] = useState<{ id: string; title: string } | null>(null);
+  useEffect(() => {
+    let alive = true;
+    void readSessionGiveaway(session).then((g) => alive && setGiveaway(g));
+    return () => {
+      alive = false;
+    };
+  }, [session]);
+  const backToGiveaway = giveaway
+    ? pathOf({ kind: 'giveaways', giveaway: giveaway.id, view: 'page' })
+    : null;
   const [view, setView] = useState<PresenterView | null>(null);
   const [tally, setTally] = useState<Record<string, number> | null>(null);
   const [sending, setSending] = useState(false);
@@ -1142,6 +1155,11 @@ export default function LiveSession({ session, host }: { session: string; host: 
 
   return (
     <div className={`mx-auto px-4 py-8 ${host ? 'max-w-5xl' : 'max-w-xl'}`}>
+      {backToGiveaway && giveaway && (
+        <a href={backToGiveaway} className="inline-block text-sm text-accent hover:brightness-110 mb-4">
+          ← Back to {giveaway.title}
+        </a>
+      )}
       {host && (
         /* The presenter's screen is a room's screen, not a page in a column.
            It was a small card at the top of the same narrow measure everybody
@@ -1299,6 +1317,16 @@ export default function LiveSession({ session, host }: { session: string; host: 
               ? `You got ${mine.points} of ${mine.scored}.`
               : 'Thanks for playing.'}
           </p>
+          {/* Played for a giveaway: the points are its extra chances, and
+              that page is where they show. */}
+          {backToGiveaway && (
+            <a
+              href={backToGiveaway}
+              className="inline-flex items-center justify-center mt-4 px-4 h-10 rounded-lg text-sm font-semibold bg-accent text-slate-950 hover:brightness-110"
+            >
+              Back to the giveaway
+            </a>
+          )}
         </div>
       )}
 

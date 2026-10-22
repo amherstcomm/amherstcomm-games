@@ -25,6 +25,8 @@ import {
   commitDraw,
   decideWinner,
   deleteAttendance,
+  deleteGiveaway,
+  deleteGiveawayPerson,
   enterGiveaway,
   findGiveawayPeople,
   offerPlace,
@@ -36,6 +38,7 @@ import {
   readGiveaways,
   recordAttendance,
   removeEntrant,
+  removeTestEntrant,
   saveGiveaway,
   updatePerson,
   weightFor,
@@ -770,6 +773,51 @@ function OneGiveaway({ id, link }: { id: string; link: GiveawayLink }) {
       ))}
 
       <Log entries={got.log} />
+
+      {/* Organisers only: the test entries removed from the public record. */}
+      {manage && (got.private_log ?? []).length > 0 && (
+        <section className="mt-6" aria-label="Organisers only">
+          <h2 className="text-sm font-semibold text-slate-200">Organisers only</h2>
+          <p className="text-xs text-slate-400 mt-1">Not in the public record.</p>
+          <ol className="mt-2 space-y-1">
+            {(got.private_log ?? []).map((e, i) => (
+              <li key={i} className="text-xs text-slate-300 flex flex-wrap gap-x-3">
+                <span className="text-slate-500 tabular-nums">{when(e.at)}</span>
+                <span className="min-w-0 break-words">
+                  {e.actor ?? 'Somebody'} removed {String((e.detail as { name?: string }).name ?? 'an entry')} as a test entry
+                </span>
+              </li>
+            ))}
+          </ol>
+        </section>
+      )}
+
+      {/* For the giveaway made to try it out. Typed, because there is no way
+          back from it, and anywhere in its life, because a test one is most
+          often a drawn one by the time somebody comes to tidy up. */}
+      {manage && (
+        <section className="mt-10 border-t border-white/10 pt-4" aria-label="Delete this giveaway">
+          <button
+            type="button"
+            className="text-sm text-rose-300 hover:underline"
+            disabled={busy}
+            onClick={async () => {
+              const typed = window.prompt(
+                `Delete "${g.title}" for good? Its entries, drawings and winners go, and so does any attendance ` +
+                  'it recorded. One line stays in the record saying it was deleted. Type its name to confirm.'
+              );
+              if (typed === null) return;
+              setBusy(true);
+              const res = await deleteGiveaway(id, typed);
+              setBusy(false);
+              if (!res.ok) return setSaid(res.reason);
+              link({ kind: 'giveaways', giveaway: null, view: 'page' }).onGo();
+            }}
+          >
+            Delete this giveaway
+          </button>
+        </section>
+      )}
     </div>
   );
 }
@@ -986,6 +1034,32 @@ function CancelButton({
   );
 }
 
+/** Removing a test entry: gone from the public record as if it had never
+ *  been. Said plainly before it is done, because that is the whole difference
+ *  from Take out. */
+function TestRemove({ name, onRemove, busy }: { name: string; onRemove: () => void; busy: boolean }) {
+  return (
+    <button
+      type="button"
+      className="block text-xs text-slate-400 hover:underline mt-1"
+      disabled={busy}
+      aria-label={`Remove ${name} as a test entry`}
+      onClick={() => {
+        if (
+          window.confirm(
+            `Remove ${name} as a test entry? Their entry and every public line about it go, as if they had never ` +
+              'entered. Organisers can still see that it was removed. Use Take out for a real entrant.'
+          )
+        ) {
+          onRemove();
+        }
+      }}
+    >
+      Remove as a test
+    </button>
+  );
+}
+
 function JudgedEntrants({
   got,
   busy,
@@ -1010,19 +1084,22 @@ function JudgedEntrants({
                 {!e.linked && <span className="text-xs font-normal text-slate-500"> · no account</span>}
               </span>
               {got.can_manage && g.status === 'open' && (
-                <button
-                  type="button"
-                  className="text-xs text-rose-300 hover:underline"
-                  disabled={busy}
-                  aria-label={`Take ${e.name} out`}
-                  onClick={() => {
-                    if (window.confirm(`Take ${e.name} out? Their answers go with them.`)) {
-                      void act(() => removeEntrant(g.id, e.person));
-                    }
-                  }}
-                >
-                  Take out
-                </button>
+                <span className="flex flex-wrap gap-3">
+                  <button
+                    type="button"
+                    className="text-xs text-rose-300 hover:underline"
+                    disabled={busy}
+                    aria-label={`Take ${e.name} out`}
+                    onClick={() => {
+                      if (window.confirm(`Take ${e.name} out? Their answers go with them.`)) {
+                        void act(() => removeEntrant(g.id, e.person));
+                      }
+                    }}
+                  >
+                    Take out
+                  </button>
+                  <TestRemove name={e.name} onRemove={() => act(() => removeTestEntrant(g.id, e.person))} busy={busy} />
+                </span>
               )}
             </li>
           ))}
@@ -1100,6 +1177,9 @@ function Entrants({
                   >
                     Take out
                   </button>
+                )}
+                {got.can_manage && g.status === 'open' && got.draws.length === 0 && (
+                  <TestRemove name={e.name} onRemove={() => act(() => removeTestEntrant(g.id, e.person))} busy={busy} />
                 )}
               </div>
             </li>
@@ -1232,7 +1312,9 @@ const ACTION_WORD: Record<string, string> = {
   offered: 'offered a place to',
   rated: 'rated the entries',
   'trivia set': 'set the trivia',
-  'pool set': 'set the pool'
+  'pool set': 'set the pool',
+  'giveaway deleted': 'deleted a giveaway',
+  'person deleted': 'deleted'
 };
 
 function describe(e: LogEntry): string {
@@ -1273,6 +1355,10 @@ function describe(e: LogEntry): string {
       return `${who} closed the entries and started the judging: ${d.entries} entries, ${d.judges} judges`;
     case 'ranked':
       return `${d.name} ranked ${d.count} ${d.count === 1 ? 'entry' : 'entries'}`;
+    case 'giveaway deleted':
+      return `${who} deleted the giveaway ${d.title}`;
+    case 'person deleted':
+      return `${who} deleted ${d.name} from the giveaways`;
     case 'trivia set':
       return `${who} set the trivia: ${((d.sessions as string[] | null) ?? []).join(', ') || 'none'}, ${d.bonus} extra ${Number(d.bonus) === 1 ? 'ticket' : 'tickets'} a point`;
     case 'rated':
@@ -1452,6 +1538,15 @@ function HistoryRow({
               Join to their account
             </button>
           )}
+          <button type="button" className="text-rose-300 hover:underline" disabled={busy}
+                  aria-label={`Delete ${p.name}`}
+                  onClick={() => {
+                    if (window.confirm(`Delete ${p.name} from every giveaway and the history? This cannot be undone.`)) {
+                      void act(() => deleteGiveawayPerson(p.person));
+                    }
+                  }}>
+            Delete
+          </button>
         </div>
       )}
       {joining && <JoinAccount person={p} busy={busy} act={act} />}
