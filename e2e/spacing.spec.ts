@@ -314,6 +314,7 @@ function reply(fn: string, args: Record<string, unknown>, path: string): unknown
             ? [{ id: 'a1', on: plus(-30), what: 'Bucks game', source: 'giveaway', giveaway: 'g0' },
                { id: 'a2', on: plus(-400), what: 'Brewers opening day', source: 'manual', giveaway: null }]
             : [],
+          won: i === 1 ? [{ on: plus(-60), what: 'Employee Ownership Month gift card, the big one', giveaway: 'g9' }] : [],
         })),
         log: [{ at: `${plus(-3)}T14:00:00Z`, actor: 'Ray Tetzloff', action: 'attendance recorded',
                 detail: { name: 'Bea', what: 'Brewers opening day', on: plus(-400) } }],

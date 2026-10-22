@@ -100,6 +100,8 @@ const WINNER_WORD: Record<WinnerStatus, string> = {
   accepted: 'Going',
   declined: 'Declined',
 };
+// A prize is kept, not gone to.
+const PRIZE_WINNER_WORD: Record<WinnerStatus, string> = { ...WINNER_WORD, accepted: 'Accepted' };
 
 const day = (d: string) =>
   new Date(`${d}T12:00:00`).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
@@ -155,13 +157,13 @@ function GiveawayList({ link }: { link: GiveawayLink }) {
           {...link({ kind: 'giveaways', giveaway: null, view: 'history' })}
           className="text-sm text-accent hover:brightness-110"
         >
-          Who has been to what
+          Who has won what
         </RouteLink>
       </div>
       <p className="text-sm text-slate-400 mt-2">
-        Tickets and other things we get to give away, drawn at random. Everybody starts with the
-        same chance; going to one lowers your chance at the next, by less the longer ago it was.
-        Every drawing can be checked and replayed by anyone.
+        Tickets, prizes and other things we get to give away, drawn at random. Everybody starts with
+        the same chance; going to an event lowers your chance at the next, by less the longer ago it
+        was. Every drawing can be checked and replayed by anyone.
       </p>
 
       {canManage &&
@@ -254,6 +256,7 @@ const BLANK: GiveawayForm = {
   picks: 3,
   questions: [],
   bar: 3,
+  kind: 'event',
 };
 
 /** A datetime-local field's value for a stored time, in this browser's zone. */
@@ -310,6 +313,7 @@ function GiveawayEditor({
 
   const judged = form.mode === 'judged';
   const screened = form.mode === 'screened';
+  const prize = form.kind === 'prize';
   // the drawing's odds matter wherever there is a drawing
   const drawn = !judged;
   async function save() {
@@ -343,14 +347,34 @@ function GiveawayEditor({
           </label>
         </div>
       </fieldset>
+      <fieldset>
+        <legend className="text-xs font-semibold text-slate-300">What it is for</legend>
+        <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1">
+          <label className="flex items-center gap-2 text-sm text-slate-300">
+            <input type="radio" name="giveaway-kind" checked={!prize} onChange={() => set('kind', 'event')} />
+            An event: tickets, a game, a show
+          </label>
+          <label className="flex items-center gap-2 text-sm text-slate-300">
+            <input type="radio" name="giveaway-kind" checked={prize} onChange={() => set('kind', 'prize')} />
+            A prize to keep: a gift card, swag
+          </label>
+        </div>
+        <p className="text-xs text-slate-400 mt-1">
+          {prize
+            ? 'Winning a prize goes in the history but does not lower anybody’s chance next time.'
+            : 'Going to an event lowers the winner’s chance next time, by the odds below.'}
+        </p>
+      </fieldset>
       <label className="block text-xs text-slate-400">
         What it is
-        <input className={`${FIELD} mt-1`} value={form.title} placeholder="e.g. Brewers vs Cubs"
+        <input className={`${FIELD} mt-1`} value={form.title}
+               placeholder={prize ? 'e.g. Employee Ownership Month gift card' : 'e.g. Brewers vs Cubs'}
                onChange={(e) => set('title', e.target.value)} />
       </label>
       <label className="block text-xs text-slate-400">
         The prize, for each winner
-        <input className={`${FIELD} mt-1`} value={form.prize} placeholder="e.g. 2 tickets, section 112"
+        <input className={`${FIELD} mt-1`} value={form.prize}
+               placeholder={prize ? 'e.g. a $50 gift card' : 'e.g. 2 tickets, section 112'}
                onChange={(e) => set('prize', e.target.value)} />
       </label>
       <label className="block text-xs text-slate-400">
@@ -364,11 +388,13 @@ function GiveawayEditor({
           <input className={`${FIELD} mt-1`} type="number" min={1} max={100} value={form.winners}
                  onChange={(e) => set('winners', Number(e.target.value))} />
         </label>
+        {!prize && (
         <label className="block text-xs text-slate-400">
           The day of the event
           <input className={`${FIELD} mt-1`} type="date" value={form.eventOn}
                  onChange={(e) => set('eventOn', e.target.value)} />
         </label>
+        )}
       </div>
       <label className="flex items-start gap-2 text-sm text-slate-300">
         <input type="checkbox" className="mt-1" checked={form.selfEntry}
@@ -426,6 +452,7 @@ function GiveawayEditor({
       <fieldset className="space-y-2">
         <legend className="text-xs font-semibold text-slate-300">The odds</legend>
         <p className="text-xs text-slate-400">
+          {prize ? 'Events people have been to still count against them here. ' : ''}
           Each as a share of the chance of somebody who has never been. Set right after going to
           100% and past visits do not count at all.
         </p>
@@ -636,6 +663,7 @@ function OneGiveaway({ id, link }: { id: string; link: GiveawayLink }) {
                 picks: g.picks ?? 3,
                 questions,
                 bar: g.bar ?? 3,
+                kind: g.kind ?? 'event',
               }}
               onDone={() => {
                 setEditing(false);
@@ -707,7 +735,9 @@ function OneGiveaway({ id, link }: { id: string; link: GiveawayLink }) {
                 <span className="min-w-0">
                   <span className="block font-semibold text-slate-200 break-words">{w.name}</span>
                   <span className="block text-xs text-slate-400">
-                    {judged && w.status === 'pending' ? 'Chosen, not yet confirmed' : WINNER_WORD[w.status]}
+                    {judged && w.status === 'pending'
+                      ? 'Chosen, not yet confirmed'
+                      : (g.kind === 'prize' ? PRIZE_WINNER_WORD : WINNER_WORD)[w.status]}
                     {!judged && got.draws.length > 1 && ` · drawing ${w.draw}`}
                   </span>
                 </span>
@@ -716,7 +746,7 @@ function OneGiveaway({ id, link }: { id: string; link: GiveawayLink }) {
                     {w.status !== 'accepted' && (
                       <button type="button" className={BUTTON} disabled={busy}
                               onClick={() => void act(() => decideWinner(id, w.person, 'accepted'))}>
-                        Going
+                        {g.kind === 'prize' ? 'Accepted' : 'Going'}
                       </button>
                     )}
                     {w.status !== 'declined' && (
@@ -807,8 +837,9 @@ function OneGiveaway({ id, link }: { id: string; link: GiveawayLink }) {
             disabled={busy}
             onClick={async () => {
               const typed = window.prompt(
-                `Delete "${g.title}" for good? Its entries, drawings and winners go, and so does any attendance ` +
-                  'it recorded. One line stays in the record saying it was deleted. Type its name to confirm.'
+                `Delete "${g.title}" for good? Its entries, drawings and winners go` +
+                  (g.kind === 'prize' ? '. ' : ', and so does any attendance it recorded. ') +
+                  'One line stays in the record saying it was deleted. Type its name to confirm.'
               );
               if (typed === null) return;
               setBusy(true);
@@ -1351,8 +1382,9 @@ function describe(e: LogEntry): string {
       return d.self ? `${d.name} entered` : `${who} entered ${d.name}`;
     case 'withdrew':
       return `${d.name} withdrew`;
-    case 'removed':
     case 'accepted':
+      return d.kind === 'prize' ? `${who} marked ${d.name} as having accepted` : `${who} marked ${d.name} going`;
+    case 'removed':
     case 'declined':
     case 'pending':
       return `${who} ${ACTION_WORD[e.action]} ${d.name}`;
@@ -1459,11 +1491,11 @@ function History({ link }: { link: GiveawayLink }) {
       <RouteLink {...link({ kind: 'giveaways', giveaway: null, view: 'page' })} className="text-sm text-accent">
         ← All giveaways
       </RouteLink>
-      <h1 className="text-xl font-semibold text-slate-200 mt-3">Who has been to what</h1>
+      <h1 className="text-xl font-semibold text-slate-200 mt-3">Who has won what</h1>
       <p className="text-sm text-slate-400 mt-1">
-        Everybody a drawing has ever named, and what they went to. The chance shown is against
-        somebody who has never been, with the usual settings: a past attendance counts half as
-        much after a year.
+        Everybody a giveaway has ever named: the events they went to and the prizes they won. Only
+        events change anybody’s chance. The chance shown is against somebody who has never been, with
+        the usual settings: a past attendance counts half as much after a year.
       </p>
 
       {canManage && (
@@ -1524,7 +1556,9 @@ function HistoryRow({
           {!p.linked && <span className="text-xs font-normal text-slate-500"> · no account</span>}
         </p>
         <p className="text-xs text-slate-400 tabular-nums">
-          {p.attended.length} {p.attended.length === 1 ? 'attendance' : 'attendances'} · entered {p.entries} ·{' '}
+          {p.attended.length} {p.attended.length === 1 ? 'attendance' : 'attendances'} ·{' '}
+          {(p.won ?? []).length > 0 && `${(p.won ?? []).length} ${(p.won ?? []).length === 1 ? 'prize' : 'prizes'} · `}
+          entered {p.entries} ·{' '}
           chance {Math.round(p.weight / 10_000)}%
         </p>
       </div>
@@ -1546,6 +1580,16 @@ function HistoryRow({
                   delete
                 </button>
               )}
+            </li>
+          ))}
+        </ul>
+      )}
+      {(p.won ?? []).length > 0 && (
+        <ul className="mt-1 space-y-0.5" aria-label={`Prizes ${p.name} won`}>
+          {(p.won ?? []).map((w) => (
+            <li key={w.giveaway} className="text-xs text-slate-400 flex flex-wrap gap-x-2">
+              <span className="tabular-nums">{day(w.on)}</span>
+              <span className="min-w-0 break-words">Won {w.what}</span>
             </li>
           ))}
         </ul>

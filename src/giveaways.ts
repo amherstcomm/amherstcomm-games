@@ -17,6 +17,10 @@ export type GiveawayStatus = 'open' | 'drawing' | 'judging' | 'qualified' | 'dra
  *  the entries that met the bar. */
 export type GiveawayMode = 'draw' | 'judged' | 'screened';
 
+/** Something you go to, or something you keep. Only going to something
+ *  lowers anybody's chance next time. */
+export type GiveawayKind = 'event' | 'prize';
+
 export type GiveawaySummary = {
   id: string;
   title: string;
@@ -32,6 +36,8 @@ export type GiveawaySummary = {
   /** the names drawn so far, less anybody who declined */
   drawn: string[];
   mode?: GiveawayMode;
+  /** absent from a database without prizes: an event, as all were */
+  kind?: GiveawayKind;
 };
 
 export type Giveaway = {
@@ -51,6 +57,8 @@ export type Giveaway = {
   picks?: number;
   /** the average rating that puts a rated entry into the drawing */
   bar?: number;
+  /** absent from a database without prizes: an event, as all were */
+  kind?: GiveawayKind;
   status: GiveawayStatus;
   cancelled_reason: string | null;
   /** extra tickets per trivia point, and the sessions that score them */
@@ -171,6 +179,8 @@ export type HistoryPerson = {
   /** at the default fade, as of today */
   weight: number;
   attended: (Attended & { id: string; source: 'giveaway' | 'manual'; giveaway: string | null })[];
+  /** prizes to keep they accepted: in the history, not the odds */
+  won?: (Attended & { giveaway: string })[];
 };
 
 export type Found = { person: string | null; user: string | null; name: string; email: string | null };
@@ -221,6 +231,7 @@ export type GiveawayForm = {
   questions: string[];
   /** the average rating an entry needs to go into the drawing, for a rated one */
   bar: number;
+  kind: GiveawayKind;
 };
 
 export const saveGiveaway = (id: string | null, f: GiveawayForm) =>
@@ -239,6 +250,7 @@ export const saveGiveaway = (id: string | null, f: GiveawayForm) =>
     p_picks: f.picks,
     p_questions: f.mode !== 'draw' ? f.questions.map((q) => q.trim()).filter(Boolean) : [],
     p_bar: f.bar,
+    p_kind: f.kind,
   });
 
 export const cancelGiveaway = (id: string, reason: string) =>
