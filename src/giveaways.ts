@@ -157,6 +157,9 @@ export type GiveawayDetail = {
   draws: Draw[];
   winners: Winner[];
   log: LogEntry[];
+  /** what organisers did that the public record does not show -- test
+   *  entries removed before anything was drawn. Organisers only. */
+  private_log?: LogEntry[] | null;
 };
 
 export type HistoryPerson = {
@@ -635,3 +638,8 @@ export async function readSessionGiveaway(session: string): Promise<{ id: string
   if (error || !data || typeof data !== 'object') return null;
   return data as { id: string; title: string };
 }
+
+/** A test entry out, with its lines in the public record, before anything is
+ *  drawn. Organisers still see that it happened. */
+export const removeTestEntrant = (id: string, person: string) =>
+  call('remove_test_entrant', { p_id: id, p_person: person });

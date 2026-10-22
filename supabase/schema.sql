@@ -20576,3 +20576,193 @@ begin
   end loop;
 end
 $grants$;
+
+-- ===========================================================================
+-- Removing a test entry without a trace in the public record
+-- ===========================================================================
+--
+-- Taking somebody out is public, as everything here is: "Ray took out Dee".
+-- That is right for a real entrant and noise for the ones made to try the
+-- thing out. So a test entry can be removed with its public lines -- the
+-- entering, any changed answers -- as if it had never been.
+--
+-- Only before anything is decided: while the giveaway is still taking
+-- entries and nothing has been drawn, rated or judged. An entry that never
+-- reached a drawing cannot have changed an outcome, so wiping it changes the
+-- record of nothing that happened. Past that point there is a drawing it took
+-- part in, and its trace stays.
+--
+-- And not without any trace: one line goes to a record only organisers see,
+-- because a removal nobody can see is also how somebody running a giveaway
+-- would quietly drop a real entrant to better another's odds.
+create table if not exists public.giveaway_private_log (
+  id bigint generated always as identity primary key,
+  at timestamptz not null default now(),
+  actor uuid references auth.users (id) on delete set null,
+  giveaway_id uuid,
+  action text not null,
+  detail jsonb not null default '{}'::jsonb
+);
+alter table public.giveaway_private_log enable row level security;
+revoke all on public.giveaway_private_log from public, anon, authenticated;
+
+create or replace function public.giveaway_log_guard()
+returns trigger
+language plpgsql
+set search_path = ''
+as $fn$
+begin
+  if tg_op = 'DELETE' then
+    -- The one way out: remove_test_entrant clearing a test entry's lines,
+    -- before anything was drawn. It says so for the length of its own
+    -- transaction, and nothing else does.
+    if current_setting('giveaways.erasing_test_entry', true) = 'on' then
+      return old;
+    end if;
+    raise exception 'the giveaway log cannot be deleted from';
+  end if;
+  if new.at is distinct from old.at or new.action is distinct from old.action
+     or new.detail is distinct from old.detail
+     or (new.actor is not null and new.actor is distinct from old.actor)
+     or (new.giveaway_id is not null and new.giveaway_id is distinct from old.giveaway_id) then
+    raise exception 'the giveaway log cannot be rewritten';
+  end if;
+  return new;
+end;
+$fn$;
+create or replace function public.giveaway_detail(p_id uuid)
+returns jsonb
+language sql
+stable
+security definer
+set search_path = ''
+as $fn$
+  select case
+    when not public.can('games.play') then jsonb_build_object('ok', false, 'reason', 'not allowed')
+    when not exists (select 1 from public.giveaways g where g.id = p_id)
+      then jsonb_build_object('ok', false, 'reason', 'no such giveaway')
+    else (
+      select jsonb_build_object('ok', true,
+        'can_manage', public.can('giveaways.manage'),
+        'me', (select p.id from public.giveaway_people p where p.user_id = (select auth.uid())),
+        'chain', public.giveaway_chain(),
+        'giveaway', jsonb_build_object(
+          'id', g.id, 'title', g.title, 'prize', g.prize, 'details', g.details,
+          'winners', g.winners, 'event_on', g.event_on, 'self_entry', g.self_entry,
+          'entries_close_at', g.entries_close_at, 'strength', g.strength,
+          'half_life_days', g.half_life_days, 'status', g.status, 'mode', g.mode, 'picks', g.picks, 'bar', g.bar,
+          'trivia_bonus', g.trivia_bonus,
+          'sessions', coalesce((select jsonb_agg(jsonb_build_object(
+                                  'id', se.id, 'title', se.title, 'state', public.scheduled_state(se), 'mode', se.mode,
+                                  'opens_at', se.opens_at, 'closes_at', se.closes_at,
+                                  -- the reader's own progress through it, for the checklist
+                                  'mine', public.giveaway_trivia_progress(se.id))
+                                  order by se.title)
+                                from public.giveaway_sessions gs join public.sessions se on se.id = gs.session_id
+                                where gs.giveaway_id = g.id), '[]'::jsonb),
+          'cancelled_reason', g.cancelled_reason, 'created_at', g.created_at,
+          'created_by', public.giveaway_account_name(g.created_by)),
+        -- The odds as they stand today; a committed drawing keeps its own.
+        'entrants', coalesce((
+          select jsonb_agg(jsonb_build_object(
+                   'person', p.id, 'name', p.name, 'linked', p.user_id is not null,
+                   'entered_at', e.entered_at,
+                   -- for a rated-then-drawn one: in the pool or not, once set
+                   'qualified', e.qualified,
+                   'entered_by', public.giveaway_account_name(e.entered_by),
+                   'self', p.user_id is not null and p.user_id = e.entered_by,
+                   'weight', public.giveaway_entry_weight(g.id, p.id),
+                   'trivia', public.giveaway_trivia_points(g.id, p.id),
+                   'attended', coalesce((select jsonb_agg(jsonb_build_object('on', a.attended_on, 'what', a.what)
+                                                          order by a.attended_on desc)
+                                         from public.giveaway_attendance a where a.person_id = p.id), '[]'::jsonb))
+                 order by p.name, p.id)
+          from public.giveaway_entries e
+          join public.giveaway_people p on p.id = e.person_id
+          where e.giveaway_id = g.id), '[]'::jsonb),
+        'draws', coalesce((
+          select jsonb_agg(jsonb_build_object(
+                   'id', d.id, 'seq', d.seq, 'reason', d.reason, 'wanted', d.wanted,
+                   'entrants', d.entrants, 'total', d.total, 'snapshot_hash', d.snapshot_hash,
+                   'chain', d.chain, 'round', d.round, 'round_at', d.round_at,
+                   'committed_at', d.committed_at, 'committed_by', public.giveaway_account_name(d.committed_by),
+                   'randomness', d.randomness, 'signature', d.signature, 'winners', d.winners,
+                   'revealed_at', d.revealed_at, 'revealed_by', public.giveaway_account_name(d.revealed_by))
+                 order by d.seq)
+          from public.giveaway_draws d where d.giveaway_id = g.id), '[]'::jsonb),
+        'winners', coalesce((
+          select jsonb_agg(jsonb_build_object(
+                   'person', p.id, 'name', p.name, 'pick', w.pick, 'status', w.status,
+                   'draw', (select d.seq from public.giveaway_draws d where d.id = w.draw_id),
+                   'decided_at', w.decided_at, 'decided_by', public.giveaway_account_name(w.decided_by))
+                 order by (select d.seq from public.giveaway_draws d where d.id = w.draw_id), w.pick)
+          from public.giveaway_winners w
+          join public.giveaway_people p on p.id = w.person_id
+          where w.giveaway_id = g.id), '[]'::jsonb),
+        'log', coalesce((
+          select jsonb_agg(jsonb_build_object(
+                   'at', l.at, 'actor', public.giveaway_account_name(l.actor),
+                   'action', l.action, 'detail', l.detail)
+                 order by l.id)
+          from public.giveaway_log l where l.giveaway_id = g.id), '[]'::jsonb),
+        -- What organisers did that the public record does not show: test
+        -- entries removed before anything was drawn. Theirs alone.
+        'private_log', case when public.can('giveaways.manage') then coalesce((
+          select jsonb_agg(jsonb_build_object(
+                   'at', l.at, 'actor', public.giveaway_account_name(l.actor),
+                   'action', l.action, 'detail', l.detail)
+                 order by l.id)
+          from public.giveaway_private_log l where l.giveaway_id = g.id), '[]'::jsonb) end)
+      from public.giveaways g where g.id = p_id)
+  end
+$fn$;
+
+create or replace function public.remove_test_entrant(p_id uuid, p_person uuid)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $fn$
+declare
+  g public.giveaways;
+  person public.giveaway_people;
+begin
+  if not public.can('giveaways.manage') then
+    return jsonb_build_object('ok', false, 'reason', 'not allowed');
+  end if;
+  select * into g from public.giveaways where id = p_id for update;
+  if g.id is null then
+    return jsonb_build_object('ok', false, 'reason', 'no such giveaway');
+  end if;
+  if g.status <> 'open' or exists (select 1 from public.giveaway_draws d where d.giveaway_id = p_id) then
+    return jsonb_build_object('ok', false, 'reason',
+      'only while it is taking entries: after that the entry has been part of what was decided');
+  end if;
+  select * into person from public.giveaway_people where id = p_person;
+  if person.id is null or not exists (select 1 from public.giveaway_entries
+                                       where giveaway_id = p_id and person_id = p_person) then
+    return jsonb_build_object('ok', false, 'reason', 'they are not in it');
+  end if;
+
+  delete from public.giveaway_entries where giveaway_id = p_id and person_id = p_person;
+  perform set_config('giveaways.erasing_test_entry', 'on', true);
+  delete from public.giveaway_log l
+   where l.giveaway_id = p_id and l.detail->>'person' = p_person::text;
+  perform set_config('giveaways.erasing_test_entry', 'off', true);
+  insert into public.giveaway_private_log (actor, giveaway_id, action, detail)
+  values ((select auth.uid()), p_id, 'test entry removed',
+          jsonb_build_object('person', p_person, 'name', person.name));
+  -- A name typed for the test and used nowhere else goes with it, so it
+  -- does not linger in the history.
+  if person.user_id is null
+     and not exists (select 1 from public.giveaway_entries where person_id = p_person)
+     and not exists (select 1 from public.giveaway_attendance where person_id = p_person)
+     and not exists (select 1 from public.giveaway_winners where person_id = p_person) then
+    delete from public.giveaway_people where id = p_person;
+  end if;
+  return jsonb_build_object('ok', true);
+end;
+$fn$;
+
+revoke all on function public.remove_test_entrant(uuid, uuid) from public, anon;
+grant execute on function public.remove_test_entrant(uuid, uuid) to authenticated;

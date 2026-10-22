@@ -78,6 +78,55 @@ select pg_temp.check('and is gone from the history',
   not exists (select 1 from public.giveaway_people where user_id = '07000000-0000-0000-0000-000000000002')
   and exists (select 1 from public.giveaway_log l where l.action = 'person deleted' and l.detail->>'name' = 'Ada Delete'));
 
+-- ---------------------------------------------------------------------------
+-- A test entry, removed quietly
+-- ---------------------------------------------------------------------------
+insert into t select 'q', public.save_giveaway(null, 'Quiet Test', '', '', 1, null, true, null, 1, 365);
+select public.add_giveaway_entrant((select (v->>'id')::uuid from t where k = 'q'), null, null, 'Test Person');
+select public.add_giveaway_entrant((select (v->>'id')::uuid from t where k = 'q'), null, null, 'Real Person');
+select pg_temp.as_('07000000-0000-0000-0000-000000000002');
+select pg_temp.check('a player cannot remove a test entry',
+  public.remove_test_entrant((select (v->>'id')::uuid from t where k = 'q'),
+    (select id from public.giveaway_people where name = 'Test Person'))->>'reason' = 'not allowed');
+select pg_temp.as_('07000000-0000-0000-0000-000000000001');
+insert into t select 'quiet', public.remove_test_entrant((select (v->>'id')::uuid from t where k = 'q'),
+  (select id from public.giveaway_people where name = 'Test Person'));
+select pg_temp.check('a test entry goes, and its lines with it, from the public record',
+  (select v->>'ok' from t where k = 'quiet') = 'true'
+  and (select jsonb_agg(x->>'action' order by x->>'at') from jsonb_array_elements(
+         public.giveaway_detail((select (v->>'id')::uuid from t where k = 'q'))->'log') x)
+      = '["created", "entered"]'::jsonb
+  and not exists (select 1 from jsonb_array_elements(
+                    public.giveaway_detail((select (v->>'id')::uuid from t where k = 'q'))->'log') x
+                  where x->'detail'->>'name' = 'Test Person'));
+select pg_temp.check('and so does the typed name, used nowhere else',
+  not exists (select 1 from public.giveaway_people where name = 'Test Person'));
+select pg_temp.check('but organisers can see that it happened',
+  (public.giveaway_detail((select (v->>'id')::uuid from t where k = 'q'))->'private_log'->0->>'action') = 'test entry removed'
+  and (public.giveaway_detail((select (v->>'id')::uuid from t where k = 'q'))->'private_log'->0->'detail'->>'name') = 'Test Person');
+select pg_temp.as_('07000000-0000-0000-0000-000000000002');
+select pg_temp.check('and nobody else can',
+  public.giveaway_detail((select (v->>'id')::uuid from t where k = 'q'))->'private_log' = 'null'::jsonb
+  or public.giveaway_detail((select (v->>'id')::uuid from t where k = 'q'))->>'private_log' is null);
+select pg_temp.as_('07000000-0000-0000-0000-000000000001');
+-- Once anything is drawn, an entry has taken part in a decision and stays.
+update public.giveaways set status = 'drawing' where id = (select (v->>'id')::uuid from t where k = 'q');
+select pg_temp.check('after the drawing starts, an entry cannot be removed quietly',
+  public.remove_test_entrant((select (v->>'id')::uuid from t where k = 'q'),
+    (select id from public.giveaway_people where name = 'Real Person'))->>'reason'
+    = 'only while it is taking entries: after that the entry has been part of what was decided');
+select pg_temp.check('and the public record still cannot be deleted from directly',
+  (select count(*) from public.giveaway_log where giveaway_id = (select (v->>'id')::uuid from t where k = 'q')) = 2);
+do $$ begin
+  delete from public.giveaway_log where giveaway_id = (select (v->>'id')::uuid from t where k = 'q');
+  raise exception 'the log was deleted from';
+exception when others then
+  if sqlerrm = 'the log was deleted from' then raise; end if;
+end $$;
+select pg_temp.as_('');
+delete from public.giveaways where id = (select (v->>'id')::uuid from t where k = 'q');
+delete from public.giveaway_people where name = 'Real Person';
+
 -- Leave nothing behind but the log.
 select pg_temp.as_('');
 delete from public.sessions where id = '07000000-0000-0000-0000-0000000000a1';
