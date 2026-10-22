@@ -20358,3 +20358,116 @@ as $fn$
         '[]'::jsonb))
   end
 $fn$;
+
+-- ===========================================================================
+-- Where the reader stands on a giveaway's trivia
+-- ===========================================================================
+--
+-- The giveaway page lists its trivia as ways to earn extra chances, and the
+-- natural question on reading it is "have I done that one?". So each session
+-- carries the reader's own progress: how many of its questions are behind
+-- them -- answered, or timed out, the way the session itself counts "Question
+-- 3 of 6" -- out of how many there are to play, and the points they scored.
+-- Null for somebody signed out.
+create or replace function public.giveaway_trivia_progress(p_session uuid)
+returns jsonb
+language sql
+stable
+security definer
+set search_path = ''
+as $fn$
+  select case when (select auth.uid()) is null then null else jsonb_build_object(
+    'total', (select count(*) from public.items i
+              where i.session_id = p_session and i.state <> 'pending'),
+    'done', (select count(*) from public.items i
+             where i.session_id = p_session and i.state <> 'pending'
+               and (public.finished_item(i.id, (select auth.uid()))
+                    or public.expired_for(i.id, (select auth.uid())))),
+    'points', (select coalesce(trim_scale(round(sum(ip.points), 2)), 0)
+               from public.items i
+               cross join lateral public.item_points(i.id) ip
+               where i.session_id = p_session and public.item_counts(i.id)
+                 and ip.user_id = (select auth.uid()) and ip.points > 0))
+  end
+$fn$;
+
+revoke all on function public.giveaway_trivia_progress(uuid) from public, anon, authenticated;
+
+create or replace function public.giveaway_detail(p_id uuid)
+returns jsonb
+language sql
+stable
+security definer
+set search_path = ''
+as $fn$
+  select case
+    when not public.can('games.play') then jsonb_build_object('ok', false, 'reason', 'not allowed')
+    when not exists (select 1 from public.giveaways g where g.id = p_id)
+      then jsonb_build_object('ok', false, 'reason', 'no such giveaway')
+    else (
+      select jsonb_build_object('ok', true,
+        'can_manage', public.can('giveaways.manage'),
+        'me', (select p.id from public.giveaway_people p where p.user_id = (select auth.uid())),
+        'chain', public.giveaway_chain(),
+        'giveaway', jsonb_build_object(
+          'id', g.id, 'title', g.title, 'prize', g.prize, 'details', g.details,
+          'winners', g.winners, 'event_on', g.event_on, 'self_entry', g.self_entry,
+          'entries_close_at', g.entries_close_at, 'strength', g.strength,
+          'half_life_days', g.half_life_days, 'status', g.status, 'mode', g.mode, 'picks', g.picks, 'bar', g.bar,
+          'trivia_bonus', g.trivia_bonus,
+          'sessions', coalesce((select jsonb_agg(jsonb_build_object(
+                                  'id', se.id, 'title', se.title, 'state', public.scheduled_state(se), 'mode', se.mode,
+                                  'opens_at', se.opens_at, 'closes_at', se.closes_at,
+                                  -- the reader's own progress through it, for the checklist
+                                  'mine', public.giveaway_trivia_progress(se.id))
+                                  order by se.title)
+                                from public.giveaway_sessions gs join public.sessions se on se.id = gs.session_id
+                                where gs.giveaway_id = g.id), '[]'::jsonb),
+          'cancelled_reason', g.cancelled_reason, 'created_at', g.created_at,
+          'created_by', public.giveaway_account_name(g.created_by)),
+        -- The odds as they stand today; a committed drawing keeps its own.
+        'entrants', coalesce((
+          select jsonb_agg(jsonb_build_object(
+                   'person', p.id, 'name', p.name, 'linked', p.user_id is not null,
+                   'entered_at', e.entered_at,
+                   -- for a rated-then-drawn one: in the pool or not, once set
+                   'qualified', e.qualified,
+                   'entered_by', public.giveaway_account_name(e.entered_by),
+                   'self', p.user_id is not null and p.user_id = e.entered_by,
+                   'weight', public.giveaway_entry_weight(g.id, p.id),
+                   'trivia', public.giveaway_trivia_points(g.id, p.id),
+                   'attended', coalesce((select jsonb_agg(jsonb_build_object('on', a.attended_on, 'what', a.what)
+                                                          order by a.attended_on desc)
+                                         from public.giveaway_attendance a where a.person_id = p.id), '[]'::jsonb))
+                 order by p.name, p.id)
+          from public.giveaway_entries e
+          join public.giveaway_people p on p.id = e.person_id
+          where e.giveaway_id = g.id), '[]'::jsonb),
+        'draws', coalesce((
+          select jsonb_agg(jsonb_build_object(
+                   'id', d.id, 'seq', d.seq, 'reason', d.reason, 'wanted', d.wanted,
+                   'entrants', d.entrants, 'total', d.total, 'snapshot_hash', d.snapshot_hash,
+                   'chain', d.chain, 'round', d.round, 'round_at', d.round_at,
+                   'committed_at', d.committed_at, 'committed_by', public.giveaway_account_name(d.committed_by),
+                   'randomness', d.randomness, 'signature', d.signature, 'winners', d.winners,
+                   'revealed_at', d.revealed_at, 'revealed_by', public.giveaway_account_name(d.revealed_by))
+                 order by d.seq)
+          from public.giveaway_draws d where d.giveaway_id = g.id), '[]'::jsonb),
+        'winners', coalesce((
+          select jsonb_agg(jsonb_build_object(
+                   'person', p.id, 'name', p.name, 'pick', w.pick, 'status', w.status,
+                   'draw', (select d.seq from public.giveaway_draws d where d.id = w.draw_id),
+                   'decided_at', w.decided_at, 'decided_by', public.giveaway_account_name(w.decided_by))
+                 order by (select d.seq from public.giveaway_draws d where d.id = w.draw_id), w.pick)
+          from public.giveaway_winners w
+          join public.giveaway_people p on p.id = w.person_id
+          where w.giveaway_id = g.id), '[]'::jsonb),
+        'log', coalesce((
+          select jsonb_agg(jsonb_build_object(
+                   'at', l.at, 'actor', public.giveaway_account_name(l.actor),
+                   'action', l.action, 'detail', l.detail)
+                 order by l.id)
+          from public.giveaway_log l where l.giveaway_id = g.id), '[]'::jsonb))
+      from public.giveaways g where g.id = p_id)
+  end
+$fn$;

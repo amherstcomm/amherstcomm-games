@@ -9,6 +9,7 @@
 // controls for running a giveaway are what giveaways.manage adds, and the
 // server refuses anybody without it whatever this page draws.
 import { useCallback, useEffect, useState } from 'react';
+import { CheckCircle2, Circle, CircleDashed } from 'lucide-react';
 import Waiting from '@/Waiting';
 import RouteLink from '@/RouteLink';
 import GiveawayReplay from '@/GiveawayReplay';
@@ -830,31 +831,55 @@ function Trivia({
             is {example(3)} what it would be. The trivia is for entrants only:{' '}
             {entered ? 'you are in, so play away.' : 'enter the giveaway first, then play.'}
           </p>
-          <ul className="space-y-1">
-            {sessions.map((x) => (
-              <li key={x.id} className="flex flex-wrap items-center justify-between gap-2 text-sm text-slate-300">
-                <span className="min-w-0 break-words">
-                  {x.title}
-                  <span className="text-xs text-slate-500">
-                    {' '}
-                    ·{' '}
-                    {x.state === 'closed'
-                      ? 'over'
-                      : x.state === 'live'
-                        ? 'on now'
-                        : x.opens_at
-                          ? `opens ${when(x.opens_at)}`
-                          : 'not open yet'}
-                    {x.closes_at && x.state !== 'closed' && `, closes ${when(x.closes_at)}`}
-                  </span>
+          {/* A checklist, the way a giveaway that rewards extra entries shows
+              what you have done: entering first, then each session, ticked
+              when it is behind you. */}
+          <ul className="space-y-2" aria-label="Your chances">
+            <li className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
+              <Tick state={entered ? 'done' : 'todo'} />
+              <span className="min-w-0 break-words text-slate-300">
+                {entered ? 'You are entered' : 'Enter the giveaway'}
+                <span className="block text-xs text-slate-500">
+                  {entered ? 'Your ticket is in the drawing.' : 'Trivia counts only once you are in.'}
                 </span>
-                {x.state === 'live' && (entered || manage) && (
-                  <a className={BUTTON} href={`/live/${x.id}`}>
-                    Play
-                  </a>
-                )}
-              </li>
-            ))}
+              </span>
+            </li>
+            {sessions.map((x) => {
+              const m = x.mine;
+              const finished = !!m && m.total > 0 && m.done >= m.total;
+              const started = !!m && m.done > 0 && !finished;
+              const points = Number(m?.points ?? 0);
+              const tickets = points * bonus;
+              return (
+                <li key={x.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
+                  <Tick state={finished ? 'done' : started ? 'partly' : 'todo'} />
+                  <span className="min-w-0 flex-1 break-words text-slate-300">
+                    {x.title}
+                    <span className="block text-xs text-slate-500">
+                      {finished
+                        ? `Done · ${points} ${points === 1 ? 'point' : 'points'}${
+                            tickets > 0 ? ` · ${tickets} extra ${tickets === 1 ? 'ticket' : 'tickets'}` : ''
+                          }`
+                        : started
+                          ? `${m!.done} of ${m!.total} answered · ${points} ${points === 1 ? 'point' : 'points'} so far`
+                          : x.state === 'closed'
+                            ? 'Over'
+                            : x.state === 'live'
+                              ? 'On now'
+                              : x.opens_at
+                                ? `Opens ${when(x.opens_at)}`
+                                : 'Not open yet'}
+                      {!finished && x.closes_at && x.state !== 'closed' && `, closes ${when(x.closes_at)}`}
+                    </span>
+                  </span>
+                  {x.state === 'live' && !finished && (entered || manage) && (
+                    <a className={BUTTON} href={`/live/${x.id}`}>
+                      {started ? 'Continue' : 'Play'}
+                    </a>
+                  )}
+                </li>
+              );
+            })}
           </ul>
           <p className="text-xs text-slate-500">Points count as they stand when the drawing is made.</p>
           {/* Only an organiser can do anything about it, and they need to know
@@ -923,6 +948,18 @@ function Trivia({
       )}
     </section>
   );
+}
+
+/** One line of the checklist: done, partly done, or still to do -- said in
+ *  the icon's name as well as its shape, for anybody not seeing it. */
+function Tick({ state }: { state: 'done' | 'partly' | 'todo' }) {
+  if (state === 'done') {
+    return <CheckCircle2 className="w-5 h-5 shrink-0 text-emerald-400" role="img" aria-label="Done" />;
+  }
+  if (state === 'partly') {
+    return <CircleDashed className="w-5 h-5 shrink-0 text-amber-300" role="img" aria-label="Partly done" />;
+  }
+  return <Circle className="w-5 h-5 shrink-0 text-slate-500" role="img" aria-label="Not done yet" />;
 }
 
 function CancelButton({

@@ -95,8 +95,8 @@ test('trivia not open yet says when it opens, or tells the organiser how to open
   ] } });
   await page.goto(`/giveaways/${G}`);
   const trivia = page.getByRole('region', { name: 'Trivia for extra chances' });
-  await expect(trivia.locator('li', { hasText: 'Packers Trivia' })).toContainText('opens Nov 1');
-  await expect(trivia.locator('li', { hasText: 'Brewers Trivia' })).toContainText('not open yet');
+  await expect(trivia.locator('li', { hasText: 'Packers Trivia' })).toContainText('Opens Nov 1');
+  await expect(trivia.locator('li', { hasText: 'Brewers Trivia' })).toContainText('Not open yet');
   await expect(trivia).toContainText('Brewers Trivia has no opening time and is not started: open it under Sessions');
   await expect(trivia.getByRole('link', { name: 'Play' })).toHaveCount(0);
 });
@@ -126,4 +126,44 @@ test("the trivia's own page sends somebody not entered to the giveaway", async (
   await page.goto('/live/s-1');
   await expect(page.getByText('This trivia is part of a giveaway.')).toBeVisible();
   await expect(page.getByRole('link', { name: 'Go to the giveaway' })).toHaveAttribute('href', `/giveaways/${G}`);
+});
+
+// The trivia as a checklist of ways to more chances: entering ticked first,
+// then each session ticked once it is behind you, with what it earned.
+test('the reader sees which trivia they have done, as a checklist', async ({ page }) => {
+  await server(page, { me: 'p-ada', giveaway: { sessions: [
+    { id: 's-1', title: 'Brewers Trivia', state: 'live', mode: 'open', opens_at: null, closes_at: null,
+      mine: { total: 13, done: 13, points: 13 } },
+    { id: 's-2', title: 'Packers Trivia', state: 'live', mode: 'open', opens_at: null, closes_at: null,
+      mine: { total: 10, done: 3, points: 2 } },
+    { id: 's-3', title: 'Bucks Trivia', state: 'live', mode: 'open', opens_at: null, closes_at: null,
+      mine: { total: 8, done: 0, points: 0 } },
+  ] } });
+  await page.goto(`/giveaways/${G}`);
+  const list = page.getByRole('list', { name: 'Your chances' });
+  const entered = list.locator('li', { hasText: 'You are entered' });
+  await expect(entered.getByRole('img', { name: 'Done' })).toBeVisible();
+
+  const done = list.locator('li', { hasText: 'Brewers Trivia' });
+  await expect(done.getByRole('img', { name: 'Done' })).toBeVisible();
+  await expect(done).toContainText('Done · 13 points · 13 extra tickets');
+  // nothing left to play there
+  await expect(done.getByRole('link')).toHaveCount(0);
+
+  const partly = list.locator('li', { hasText: 'Packers Trivia' });
+  await expect(partly.getByRole('img', { name: 'Partly done' })).toBeVisible();
+  await expect(partly).toContainText('3 of 10 answered · 2 points so far');
+  await expect(partly.getByRole('link', { name: 'Continue' })).toHaveAttribute('href', '/live/s-2');
+
+  const todo = list.locator('li', { hasText: 'Bucks Trivia' });
+  await expect(todo.getByRole('img', { name: 'Not done yet' })).toBeVisible();
+  await expect(todo.getByRole('link', { name: 'Play' })).toBeVisible();
+});
+
+test('and somebody not yet entered sees that first', async ({ page }) => {
+  await server(page, { me: null });
+  await page.goto(`/giveaways/${G}`);
+  const first = page.getByRole('list', { name: 'Your chances' }).locator('li').first();
+  await expect(first).toContainText('Enter the giveaway');
+  await expect(first.getByRole('img', { name: 'Not done yet' })).toBeVisible();
 });
