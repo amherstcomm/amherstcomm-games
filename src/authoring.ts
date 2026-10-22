@@ -50,6 +50,9 @@ export type Sheet = {
     mode: SessionMode;
     qa: boolean;
     shared: boolean;
+    /** the answer options come in a shuffled order; absent from a database
+     *  that has not had it applied, which reads as off */
+    shuffle?: boolean;
     /** an open session's window, either end of which may be unset */
     opens_at: string | null;
     closes_at: string | null;

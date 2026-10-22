@@ -295,17 +295,22 @@ export async function markAsk(
   return (data as { ok: boolean }) ?? { ok: false, reason: 'no answer' };
 }
 
-/** The session's two switches. Null leaves one alone, so a screen that only
- *  knows about one of them cannot turn the other off by omission. */
+/** The session's switches. Null leaves one alone, so a screen that only
+ *  knows about one of them cannot turn the others off by omission. */
 export async function setSessionOptions(
   session: string,
-  opts: { qa?: boolean | null; shareResults?: boolean | null }
+  opts: { qa?: boolean | null; shareResults?: boolean | null; shuffleOptions?: boolean | null }
 ): Promise<{ ok: boolean; reason?: string }> {
   if (!supabase) return { ok: false, reason: 'not connected' };
   const { data, error } = await supabase.rpc('set_session_options', {
     p_session: session,
     p_qa: opts.qa ?? null,
     p_share_results: opts.shareResults ?? null,
+    // only when it is being set: a database from before shuffling has the
+    // three-argument version, and the other two switches still work against it
+    ...(opts.shuffleOptions !== undefined && opts.shuffleOptions !== null
+      ? { p_shuffle_options: opts.shuffleOptions }
+      : {}),
   });
   if (error) return { ok: false, reason: error.message };
   return (data as { ok: boolean }) ?? { ok: false, reason: 'no answer' };

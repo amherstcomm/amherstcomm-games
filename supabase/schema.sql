@@ -20126,3 +20126,235 @@ revoke all on function public.live_sessions() from public, anon;
 grant execute on function public.live_sessions() to authenticated;
 revoke all on function public.session_by_code(text) from public, anon;
 grant execute on function public.session_by_code(text) to authenticated;
+
+-- ===========================================================================
+-- Shuffling a question's answer options
+-- ===========================================================================
+--
+-- A multiple-choice question shows its options in the order they were
+-- written, which is often the order the author thought of them -- right answer
+-- first, more often than chance. And on a session played on your own time,
+-- the same order for everybody is "it's the third one" passed down the
+-- corridor. So a session can shuffle them:
+--
+--   on your own time  each player their own order, the same every time they
+--                     come back to the question
+--   live              one order for the whole room, so the phones agree with
+--                     the projector -- the presenter's screen is served by the
+--                     same function
+--
+-- Choice and survey only. Rank and match are scrambled already, once, when
+-- they are saved, because their answer is an arrangement. A choice is scored
+-- by the option chosen, not its position, so reordering cannot change a score.
+-- Off by default: an author who wrote "All of the above" last meant it last.
+alter table public.sessions add column if not exists shuffle_options boolean not null default false;
+
+create or replace function public.served_payload(p_kind text, p_payload jsonb, p_shuffle boolean, p_seed text)
+returns jsonb
+language sql
+immutable
+set search_path = ''
+as $fn$
+  select case
+    when not coalesce(p_shuffle, false)
+      or p_kind not in ('choice', 'survey')
+      or jsonb_typeof(p_payload -> 'options') is distinct from 'array'
+      or jsonb_array_length(p_payload -> 'options') < 2
+      then p_payload
+    else jsonb_set(p_payload, '{options}',
+                   (select jsonb_agg(o order by md5(p_seed || ':' || o::text), o::text)
+                    from jsonb_array_elements(p_payload -> 'options') o))
+  end
+$fn$;
+
+create or replace function public.current_item(p_session uuid)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $fn$
+declare
+  sess public.sessions;
+  me uuid := (select auth.uid());
+  it public.items;
+  yours boolean;
+begin
+  -- The clock before the question: a survey whose closing time has passed is
+  -- shut, whether or not anybody has been by since.
+  perform public.apply_schedule(p_session);
+  select * into sess from public.sessions where id = p_session;
+  if sess.id is null then
+    return jsonb_build_object('state', 'not-live', 'now', now(), 'yours', false);
+  end if;
+  yours := public.runs_session(p_session);
+  -- A giveaway's trivia is its entrants' alone: anybody else is told to enter
+  -- the giveaway, and where, rather than shown a question they cannot answer.
+  if not public.session_open_to_me(p_session) then
+    return jsonb_build_object('state', 'giveaway-only', 'now', now(), 'yours', false,
+                              'giveaway', public.giveaway_of_session(p_session));
+  end if;
+  if sess.state <> 'live' then
+    -- `shared` travels with the refusal, because the screen that says "this is
+    -- not running" is the same screen that should offer the way to see how it
+    -- went — and it has nothing else to ask.
+    return jsonb_build_object('state', 'not-live', 'now', now(), 'yours', yours,
+                              'shared', sess.share_results and sess.state = 'closed');
+  end if;
+
+  if sess.mode = 'open' then
+    if me is null or yours then
+      return jsonb_build_object('state', 'not-live', 'mode', 'open', 'now', now(),
+                                'yours', yours);
+    end if;
+    select i.* into it
+    from public.items i
+    where i.session_id = p_session
+      and i.state <> 'pending'
+      -- Finished rather than merely written against — a word game writes a row
+      -- per guess, and the old test took the board away after the first one.
+      and not public.finished_item(i.id, me)
+      -- see the note above: a question whose window has closed is behind them
+      and not public.expired_for(i.id, me)
+    order by i.position
+    limit 1;
+    if it.id is null then
+      return jsonb_build_object(
+        'state', 'done', 'mode', 'open', 'now', now(), 'yours', false,
+        'total', (select count(*) from public.items i where i.session_id = p_session
+                  and i.state <> 'pending'));
+    end if;
+    -- Paused, and this question not yet in front of them: say so rather than
+    -- serve it, so its clock does not start until they come back. One already
+    -- served -- the question they were on when they paused -- is theirs to
+    -- finish, which is what "pause after this question" means.
+    if exists (select 1 from public.session_pauses sp
+               where sp.session_id = p_session and sp.user_id = me)
+       and not exists (select 1 from public.item_served sv
+                       where sv.item_id = it.id and sv.user_id = me) then
+      return jsonb_build_object(
+        'state', 'paused', 'mode', 'open', 'now', now(), 'yours', false, 'paused', true,
+        'total', (select count(*) from public.items i where i.session_id = p_session
+                  and i.state <> 'pending'),
+        'done', (select count(*) from public.items i
+               where i.session_id = p_session and i.state <> 'pending'
+                 and (public.finished_item(i.id, me)
+                      or public.expired_for(i.id, me))));
+    end if;
+
+    insert into public.item_served (item_id, user_id) values (it.id, me)
+    on conflict (item_id, user_id) do nothing;
+
+    return jsonb_build_object(
+      'state', 'open', 'mode', 'open', 'yours', false,
+      'id', it.id, 'kind', it.kind, 'prompt', it.prompt,
+      -- their own order of the options, when the session shuffles them
+      'payload', public.served_payload(it.kind, it.payload, sess.shuffle_options, it.id::text || me::text),
+      'position', it.position,
+      'opened_at', public.started_at(it.id, me),
+      'seconds', public.item_seconds(it.payload),
+      'now', now(),
+      'mine', null,
+      'answer', null,
+      -- whether "pause after this question" is set, so the switch shows it
+      'paused', exists (select 1 from public.session_pauses sp
+                        where sp.session_id = p_session and sp.user_id = me),
+      'total', (select count(*) from public.items i where i.session_id = p_session
+                and i.state <> 'pending'),
+      -- how many are behind them, answered or timed out, so "Question 3 of 6"
+      -- keeps counting while a skipped one still counts as gone
+      'done', (select count(*) from public.items i
+               where i.session_id = p_session and i.state <> 'pending'
+                 and (public.finished_item(i.id, me)
+                      or public.expired_for(i.id, me))));
+  end if;
+
+  if sess.current_item is null then
+    return jsonb_build_object('state', 'waiting', 'mode', 'live', 'now', now(), 'yours', yours);
+  end if;
+  select * into it from public.items
+  where id = sess.current_item and state <> 'pending';
+  if it.id is null then
+    return jsonb_build_object('state', 'waiting', 'mode', 'live', 'now', now(), 'yours', yours);
+  end if;
+
+  return jsonb_build_object(
+    'state', it.state, 'mode', 'live', 'yours', yours,
+    'id', it.id, 'kind', it.kind, 'prompt', it.prompt,
+    -- the room's one order of the options, the projector's included
+    'payload', public.served_payload(it.kind, it.payload, sess.shuffle_options, it.id::text),
+    'position', it.position,
+    'opened_at', it.opened_at,
+    'seconds', public.item_seconds(it.payload),
+    'now', now(),
+    'mine', (select r.value from public.responses r
+             where r.item_id = it.id and r.user_id = me),
+    'answer', case when it.state = 'revealed'
+                   then (select a.answer from public.item_answers a where a.item_id = it.id)
+              end);
+end;
+$fn$;
+
+drop function if exists public.set_session_options(uuid, boolean, boolean);
+create or replace function public.set_session_options(
+  p_session uuid,
+  p_qa boolean default null,
+  p_share_results boolean default null,
+  p_shuffle_options boolean default null
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $fn$
+begin
+  if not public.hosts_session(p_session) then
+    return jsonb_build_object('ok', false, 'reason', 'not allowed');
+  end if;
+  update public.sessions
+     set qa = coalesce(p_qa, qa),
+         share_results = coalesce(p_share_results, share_results),
+         shuffle_options = coalesce(p_shuffle_options, shuffle_options)
+   where id = p_session;
+  return jsonb_build_object('ok', true);
+end;
+$fn$;
+
+revoke all on function public.set_session_options(uuid, boolean, boolean, boolean) from public, anon;
+grant execute on function public.set_session_options(uuid, boolean, boolean, boolean) to authenticated;
+create or replace function public.session_sheet(p_session uuid)
+returns jsonb
+language sql
+stable
+security definer
+set search_path = ''
+as $fn$
+  select case
+    when not public.hosts_session(p_session)
+      then jsonb_build_object('ok', false, 'reason', 'not allowed')
+    else jsonb_build_object(
+      'ok', true,
+      'session', (select jsonb_build_object(
+         'id', s.id, 'title', s.title, 'state', public.scheduled_state(s),
+         'late_join', s.late_join, 'current_item', s.current_item,
+         'code', s.code, 'mode', s.mode, 'qa', s.qa,
+         'shared', s.share_results, 'opens_at', s.opens_at, 'closes_at', s.closes_at,
+         'shuffle', s.shuffle_options)
+       from public.sessions s where s.id = p_session),
+      'kinds', (select jsonb_agg(jsonb_build_object(
+                  'kind', k.kind, 'description', k.description, 'scored', k.scored)
+                order by k.kind)
+                from public.item_kinds k),
+      'items', coalesce(
+        (select jsonb_agg(jsonb_build_object(
+           'id', i.id, 'position', i.position, 'kind', i.kind, 'prompt', i.prompt,
+           'payload', i.payload, 'state', i.state,
+           'points', trim_scale(i.points),
+           'penalty_wrong', i.penalty_wrong,
+           'penalty_skip', i.penalty_skip,
+           'answer', (select a.answer from public.item_answers a where a.item_id = i.id),
+           'responses', (select count(*) from public.responses r where r.item_id = i.id)
+         ) order by i.position)
+         from public.items i where i.session_id = p_session),
+        '[]'::jsonb))
+  end
+$fn$;

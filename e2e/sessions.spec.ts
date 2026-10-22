@@ -803,6 +803,56 @@ test('the room’s own questions can be switched off after the session exists', 
   await expect(asks).not.toBeChecked();
 });
 
+// The answer options in a shuffled order, so "it's the third one" does not
+// travel -- switched per session, and sent alone so it changes nothing else.
+test('a session can shuffle its answer options', async ({ page }) => {
+  const sent: Record<string, unknown>[] = [];
+  const sheet = { ...SHEET, session: { ...SHEET.session, shuffle: false } };
+  await page.route('**/rest/v1/rpc/**', (route) => {
+    const url = route.request().url();
+    if (url.includes('set_session_options')) {
+      const args = JSON.parse(route.request().postData() ?? '{}');
+      sent.push(args);
+      if (typeof args.p_shuffle_options === 'boolean') sheet.session.shuffle = args.p_shuffle_options;
+      return route.fulfill({ status: 200, contentType: 'application/json', body: '{"ok":true}' });
+    }
+    return route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(url.includes('session_sheet') ? sheet : []),
+    });
+  });
+  await page.goto(`/sessions/${SESSION}`);
+  const shuffle = page.getByRole('checkbox', { name: /Shuffle the answer options/ });
+  await expect(shuffle).not.toBeChecked();
+  await shuffle.click();
+  await expect.poll(() => sent.length).toBe(1);
+  expect(sent[0]).toMatchObject({ p_shuffle_options: true, p_qa: null, p_share_results: null });
+  await expect(shuffle).toBeChecked();
+});
+
+// And the other switches do not send it, so they keep working against a
+// database that has not had shuffling applied yet.
+test('the other switches leave the shuffle alone', async ({ page }) => {
+  const sent: Record<string, unknown>[] = [];
+  await page.route('**/rest/v1/rpc/**', (route) => {
+    const url = route.request().url();
+    if (url.includes('set_session_options')) {
+      sent.push(JSON.parse(route.request().postData() ?? '{}'));
+      return route.fulfill({ status: 200, contentType: 'application/json', body: '{"ok":true}' });
+    }
+    return route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(url.includes('session_sheet') ? SHEET : []),
+    });
+  });
+  await page.goto(`/sessions/${SESSION}`);
+  await page.getByRole('checkbox', { name: 'Let everyone see the results afterwards' }).click();
+  await expect.poll(() => sent.length).toBe(1);
+  expect(sent[0]).not.toHaveProperty('p_shuffle_options');
+});
+
 // ---------------------------------------------------------------------------
 // What a question is worth
 // ---------------------------------------------------------------------------
