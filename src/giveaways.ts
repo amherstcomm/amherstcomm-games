@@ -643,3 +643,8 @@ export async function readSessionGiveaway(session: string): Promise<{ id: string
  *  drawn. Organisers still see that it happened. */
 export const removeTestEntrant = (id: string, person: string) =>
   call('remove_test_entrant', { p_id: id, p_person: person });
+
+/** Their answers in the giveaway's trivia cleared, so they can take it again,
+ *  before anything is drawn. Organisers see that it happened. */
+export const resetGiveawayTrivia = (id: string, person: string) =>
+  call('reset_giveaway_trivia', { p_id: id, p_person: person });

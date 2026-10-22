@@ -3,7 +3,8 @@
 // The server holds the rules (giveawaysdelete.sql): only an organiser, a
 // giveaway only by its typed name, a person not while they won a giveaway that
 // still exists. What the pages owe: the buttons, the typed confirmation, and
-// a way back to the giveaway from its trivia, during it and at the end.
+// a way back to the giveaway from its trivia, during it and at the end, and
+// a reset of a test person's trivia.
 import { expect, test } from './fixtures';
 
 const G = '7a6f5e4d-5b2d-4f81-a3c6-0d9e8f7a6b54';
@@ -24,14 +25,20 @@ async function server(page: import('@playwright/test').Page, open = false) {
           id: G, title: 'Test Test Test', prize: '1 ticket', details: '', winners: 1, event_on: null,
           self_entry: true, entries_close_at: null, strength: 1, half_life_days: 365, status: open ? 'open' : 'drawn',
           cancelled_reason: null, created_at: '2026-10-21T14:00:00Z', created_by: 'Ray', mode: 'draw',
+          trivia_bonus: 1,
+          sessions: open
+            ? [{ id: 's-1', title: 'Brewers Trivia', state: 'open', mode: 'open', opens_at: null, closes_at: null,
+                 mine: { total: 3, done: 3, points: 2 } }]
+            : [],
         },
         entrants: open
           ? [{ person: 'p-test', name: 'Ray Tetzloff 2', linked: true, entered_at: '2026-10-21T19:26:00Z',
-               entered_by: 'Ray Tetzloff 2', self: true, weight: 1000000, attended: [] }]
+               entered_by: 'Ray Tetzloff 2', self: true, weight: 1000000, trivia: 2, attended: [] }]
           : [],
         draws: [], winners: [], log: [],
         private_log: open
-          ? [{ at: '2026-10-21T20:00:00Z', actor: 'Ray Tetzloff', action: 'test entry removed', detail: { name: 'Test Person' } }]
+          ? [{ at: '2026-10-21T20:00:00Z', actor: 'Ray Tetzloff', action: 'test entry removed', detail: { name: 'Test Person' } },
+             { at: '2026-10-21T20:05:00Z', actor: 'Ray Tetzloff', action: 'trivia reset', detail: { name: 'Ray Tetzloff 2' } }]
           : [],
       });
     }
@@ -96,5 +103,21 @@ test('an organiser removes a test entry quietly, and sees that it was done', asy
   expect(asked).toContain('as if they had never entered');
   await expect(page.getByRole('region', { name: 'Organisers only' })).toContainText(
     'Ray Tetzloff removed Test Person as a test entry'
+  );
+});
+
+test("an organiser resets a test person's trivia so they can take it again", async ({ page }) => {
+  const sent = await server(page, true);
+  let asked = '';
+  page.once('dialog', (d) => {
+    asked = d.message();
+    void d.accept();
+  });
+  await page.goto(`/giveaways/${G}`);
+  await page.getByRole('button', { name: "Reset Ray Tetzloff 2's trivia" }).click();
+  await expect.poll(() => sent.find((s) => s.fn === 'reset_giveaway_trivia')?.args).toEqual({ p_id: G, p_person: 'p-test' });
+  expect(asked).toContain('take it again from the start');
+  await expect(page.getByRole('region', { name: 'Organisers only' })).toContainText(
+    "Ray Tetzloff reset Ray Tetzloff 2's trivia"
   );
 });

@@ -20766,3 +20766,82 @@ $fn$;
 
 revoke all on function public.remove_test_entrant(uuid, uuid) from public, anon;
 grant execute on function public.remove_test_entrant(uuid, uuid) to authenticated;
+
+-- ===========================================================================
+-- Resetting somebody's trivia for a giveaway
+-- ===========================================================================
+--
+-- For the person who tried it out: their answers in the giveaway's trivia go,
+-- with what they were shown (so the clocks start again), anything forfeited
+-- while sitting out, and a pause, so they can take it again from the start.
+-- The same things a tournament round's reset clears for one of its sessions.
+--
+-- Only before anything is drawn. Trivia points are odds, and a drawing
+-- freezes the odds it was made with; a reset after that would change the
+-- checklist and not the drawing, which is worse than not resetting. And
+-- noted where organisers see it, because another go at the trivia is another
+-- go at the odds.
+create or replace function public.reset_giveaway_trivia(p_id uuid, p_person uuid)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $fn$
+declare
+  g public.giveaways;
+  person public.giveaway_people;
+  cleared int;
+begin
+  if not public.can('giveaways.manage') then
+    return jsonb_build_object('ok', false, 'reason', 'not allowed');
+  end if;
+  select * into g from public.giveaways where id = p_id for update;
+  if g.id is null then
+    return jsonb_build_object('ok', false, 'reason', 'no such giveaway');
+  end if;
+  if g.status <> 'open' or exists (select 1 from public.giveaway_draws d where d.giveaway_id = p_id) then
+    return jsonb_build_object('ok', false, 'reason',
+      'only while it is taking entries: after that their trivia is part of the odds that were drawn');
+  end if;
+  select * into person from public.giveaway_people where id = p_person;
+  if person.id is null or not exists (select 1 from public.giveaway_entries
+                                       where giveaway_id = p_id and person_id = p_person) then
+    return jsonb_build_object('ok', false, 'reason', 'they are not in it');
+  end if;
+  if person.user_id is null then
+    return jsonb_build_object('ok', false, 'reason', 'they have no account, so they have no trivia to reset');
+  end if;
+
+  with its as (
+    select i.id from public.items i
+    join public.giveaway_sessions gs on gs.session_id = i.session_id
+    where gs.giveaway_id = p_id
+  ), gone as (
+    delete from public.responses
+     where user_id = person.user_id and item_id in (select id from its)
+    returning 1
+  )
+  select count(*) into cleared from gone;
+  delete from public.item_served
+   where user_id = person.user_id
+     and item_id in (select i.id from public.items i
+                     join public.giveaway_sessions gs on gs.session_id = i.session_id
+                     where gs.giveaway_id = p_id);
+  delete from public.forfeited_answers
+   where user_id = person.user_id
+     and item_id in (select i.id from public.items i
+                     join public.giveaway_sessions gs on gs.session_id = i.session_id
+                     where gs.giveaway_id = p_id);
+  delete from public.session_pauses
+   where user_id = person.user_id
+     and session_id in (select gs.session_id from public.giveaway_sessions gs where gs.giveaway_id = p_id);
+
+  insert into public.giveaway_private_log (actor, giveaway_id, action, detail)
+  values ((select auth.uid()), p_id, 'trivia reset',
+          jsonb_build_object('person', p_person, 'name', person.name, 'answers', cleared));
+  return jsonb_build_object('ok', true, 'answers', cleared);
+end;
+$fn$;
+
+revoke all on function public.reset_giveaway_trivia(uuid, uuid) from public, anon;
+grant execute on function public.reset_giveaway_trivia(uuid, uuid) to authenticated;
