@@ -92,6 +92,9 @@ export type TriviaSession = {
   mode: string;
   opens_at: string | null;
   closes_at: string | null;
+  /** the reader's own progress: questions behind them of those there are to
+   *  play, and the points scored. Absent signed out, or from an older database. */
+  mine?: { total: number; done: number; points: number } | null;
 };
 
 export type Pick = DrawEntrant & {

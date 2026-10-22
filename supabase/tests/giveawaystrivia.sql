@@ -142,6 +142,16 @@ select pg_temp.check('a scheduled session past its opening time reads as open, a
   and (select x->>'state' from jsonb_array_elements(public.giveaway_trivia_choices()->'sessions') x
        where x->>'title' = 'Scheduled Trivia') = 'live');
 select public.set_giveaway_trivia(pg_temp.gid(), array['09000000-0000-0000-0000-0000000000a1']::uuid[], 1);
+-- Each reader sees their own progress through the trivia, for the checklist.
+select pg_temp.as_('09000000-0000-0000-0000-000000000002');
+select pg_temp.check('a reader sees how far through the trivia they are, and what they scored',
+  (public.giveaway_detail(pg_temp.gid())->'giveaway'->'sessions'->0->'mine')
+    = '{"total": 2, "done": 2, "points": 2}'::jsonb);
+select pg_temp.as_('09000000-0000-0000-0000-000000000004');
+select pg_temp.check('and somebody who has not played it sees none of it done',
+  (public.giveaway_detail(pg_temp.gid())->'giveaway'->'sessions'->0->'mine')
+    = '{"total": 2, "done": 0, "points": 0}'::jsonb);
+select pg_temp.as_('09000000-0000-0000-0000-000000000001');
 select pg_temp.check('the giveaway names its sessions',
   (public.giveaway_detail(pg_temp.gid())->'giveaway'->'sessions'->0->>'title') = 'Giveaway Trivia');
 select pg_temp.check('a session of a giveaway still taking part is let through a tournament''s lock',
