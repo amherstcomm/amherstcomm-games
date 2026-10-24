@@ -1,0 +1,21 @@
+{
+  "date": "2026-10-24",
+  "byDifficulty": {
+    "easy": {
+      "from": "damp",
+      "to": "mute",
+      "par": 4
+    },
+    "hard": {
+      "from": "poke",
+      "to": "prod",
+      "par": 6
+    },
+    "extreme": {
+      "from": "lazy",
+      "to": "slow",
+      "par": 8
+    }
+  },
+  "fetchedAt": "2026-10-24T12:43:04.323Z"
+}

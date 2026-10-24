@@ -1,0 +1,84 @@
+{
+  "date": "2026-10-24",
+  "byDifficulty": {
+    "easy": {
+      "prompts": [
+        {
+          "x": "black",
+          "y": "live"
+        },
+        {
+          "x": "paper",
+          "y": "space"
+        },
+        {
+          "x": "slaughter",
+          "y": "break"
+        },
+        {
+          "x": "side",
+          "y": "man"
+        },
+        {
+          "x": "fly",
+          "y": "use"
+        }
+      ],
+      "answers": "WyJvdXQiLCJiYWNrIiwiaG91c2UiLCJzaG93Iiwib3ZlciJd",
+      "hints": 3
+    },
+    "hard": {
+      "prompts": [
+        {
+          "x": "nap",
+          "y": "folk"
+        },
+        {
+          "x": "imp",
+          "y": "fare"
+        },
+        {
+          "x": "heart",
+          "y": "lord"
+        },
+        {
+          "x": "out",
+          "y": "box"
+        },
+        {
+          "x": "gang",
+          "y": "ward"
+        }
+      ],
+      "answers": "WyJraW4iLCJhaXIiLCJsYW5kIiwicG9zdCIsIndheSJd",
+      "hints": 1
+    },
+    "extreme": {
+      "prompts": [
+        {
+          "x": "blast",
+          "y": "shore"
+        },
+        {
+          "x": "show",
+          "y": "cast"
+        },
+        {
+          "x": "cry",
+          "y": "sit"
+        },
+        {
+          "x": "lone",
+          "y": "place"
+        },
+        {
+          "x": "attend",
+          "y": "eater"
+        }
+      ],
+      "answers": "WyJvZmYiLCJkb3duIiwiYmFieSIsInNvbWUiLCJhbnQiXQ==",
+      "hints": 0
+    }
+  },
+  "fetchedAt": "2026-10-24T12:43:08.291Z"
+}

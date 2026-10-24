@@ -1,0 +1,54 @@
+{
+  "date": "2026-10-24",
+  "byDifficulty": {
+    "easy": {
+      "clue": "Trees of the forest",
+      "cols": 6,
+      "board": [
+        "hrpopl",
+        "adoora",
+        "awbhds",
+        "ldiebh",
+        "erecci",
+        "spcokr",
+        "rhmpry",
+        "uceale"
+      ],
+      "answers": "eyJzcGFuZ3JhbSI6eyJ3IjoiaGFyZHdvb2RzIiwicGF0aCI6WzAsNiwxLDcsMTMsOCw5LDE2LDE3XX0sIndvcmRzIjpbeyJ3IjoicG9wbGFyIiwicGF0aCI6WzIsMyw0LDUsMTEsMTBdfSx7InciOiJhbGRlciIsInBhdGgiOlsxMiwxOCwxOSwyNCwyNV19LHsidyI6ImJlZWNoIiwicGF0aCI6WzE0LDIxLDI2LDMyLDM3XX0seyJ3IjoiaGlja29yeSIsInBhdGgiOlsxNSwyMCwyNywzNCwzMyw0MCw0MV19LHsidyI6ImJpcmNoIiwicGF0aCI6WzIyLDI5LDM1LDI4LDIzXX0seyJ3Ijoic3BydWNlIiwicGF0aCI6WzMwLDMxLDM2LDQyLDQzLDQ0XX0seyJ3IjoibWFwbGUiLCJwYXRoIjpbMzgsNDUsMzksNDYsNDddfV19"
+    },
+    "hard": {
+      "clue": "Weather report",
+      "cols": 7,
+      "board": [
+        "rathamb",
+        "ihuciir",
+        "fnnsyle",
+        "rosdtce",
+        "fretlez",
+        "gorcowd",
+        "alenain",
+        "soesest",
+        "nwhower"
+      ],
+      "answers": "eyJzcGFuZ3JhbSI6eyJ3IjoiZm9yZWNhc3QiLCJwYXRoIjpbMjgsMzYsMzcsNDQsMzgsNDYsNTQsNTVdfSwid29yZHMiOlt7InciOiJyYWluIiwicGF0aCI6WzAsMSw3LDE1XX0seyJ3IjoidGh1bmRlciIsInBhdGgiOlsyLDgsOSwxNiwyNCwzMCwyOV19LHsidyI6ImhhaWwiLCJwYXRoIjpbMyw0LDEyLDE5XX0seyJ3IjoibWlzdCIsInBhdGgiOls1LDExLDE3LDI1XX0seyJ3IjoiYnJlZXplIiwicGF0aCI6WzYsMTMsMjAsMjcsMzQsMzNdfSx7InciOiJjeWNsb25lIiwicGF0aCI6WzEwLDE4LDI2LDMyLDM5LDQ1LDUzXX0seyJ3IjoiZnJvc3QiLCJwYXRoIjpbMTQsMjEsMjIsMjMsMzFdfSx7InciOiJnYWxlIiwicGF0aCI6WzM1LDQyLDQzLDUxXX0seyJ3Ijoid2luZCIsInBhdGgiOls0MCw0Nyw0OCw0MV19LHsidyI6InNub3ciLCJwYXRoIjpbNDksNTYsNTAsNTddfSx7InciOiJzaG93ZXIiLCJwYXRoIjpbNTIsNTgsNTksNjAsNjEsNjJdfV19"
+    },
+    "extreme": {
+      "clue": "Slice of the action",
+      "cols": 8,
+      "board": [
+        "ceesprba",
+        "gheaeeis",
+        "arnzpeia",
+        "plzcpprl",
+        "piichped",
+        "ilevopuo",
+        "npiyoreg",
+        "pesntorh",
+        "ataomien",
+        "oamlagao"
+      ],
+      "answers": "eyJzcGFuZ3JhbSI6eyJ3IjoicGl6emVyaWEiLCJwYXRoIjpbMjQsMzMsMjYsMTksMTIsNSwxNCwyM119LCJ3b3JkcyI6W3sidyI6ImNoZWVzZSIsInBhdGgiOlswLDksMSwxMCwzLDJdfSx7InciOiJwZXBwZXIiLCJwYXRoIjpbNCwxMywyMCwyOCwyMSwzMF19LHsidyI6ImJhc2lsIiwicGF0aCI6WzYsNywxNSwyMiwzMV19LHsidyI6ImdhcmxpYyIsInBhdGgiOls4LDE2LDE3LDI1LDM0LDM1XX0seyJ3IjoiYW5jaG92eSIsInBhdGgiOlsxMSwxOCwyNywzNiw0NCw0Myw1MV19LHsidyI6InBlcHBlcm9uaSIsInBhdGgiOlsyOSwzOCwzNyw0NSw1NCw1Myw1Miw1OSw1MF19LHsidyI6InBpbmVhcHBsZSIsInBhdGgiOlszMiw0MCw0OCw1Nyw2NCw1Niw0OSw0MSw0Ml19LHsidyI6ImRvdWdoIiwicGF0aCI6WzM5LDQ3LDQ2LDU1LDYzXX0seyJ3Ijoic2FsYW1pIiwicGF0aCI6WzU4LDY2LDc1LDc2LDY4LDY5XX0seyJ3IjoidG9tYXRvIiwicGF0aCI6WzYwLDY3LDc0LDczLDY1LDcyXX0seyJ3Ijoib3JlZ2FubyIsInBhdGgiOls2MSw2Miw3MCw3Nyw3OCw3MSw3OV19XX0="
+    }
+  },
+  "fetchedAt": "2026-10-24T12:43:08.291Z"
+}

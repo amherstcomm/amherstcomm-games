@@ -1,0 +1,162 @@
+{
+  "date": "2026-10-24",
+  "byDifficulty": {
+    "easy": [
+      {
+        "from": "gist",
+        "to": "meat",
+        "par": 4
+      },
+      {
+        "from": "cat",
+        "to": "guy",
+        "par": 3
+      },
+      {
+        "from": "dame",
+        "to": "lady",
+        "par": 3
+      },
+      {
+        "from": "mint",
+        "to": "peck",
+        "par": 4
+      },
+      {
+        "from": "blink",
+        "to": "flash",
+        "par": 4
+      },
+      {
+        "from": "con",
+        "to": "pro",
+        "par": 4
+      },
+      {
+        "from": "head",
+        "to": "mind",
+        "par": 4
+      },
+      {
+        "from": "care",
+        "to": "like",
+        "par": 3
+      },
+      {
+        "from": "vie",
+        "to": "win",
+        "par": 3
+      },
+      {
+        "from": "coiled",
+        "to": "rolled",
+        "par": 3
+      }
+    ],
+    "hard": [
+      {
+        "from": "buns",
+        "to": "seat",
+        "par": 5
+      },
+      {
+        "from": "lean",
+        "to": "thin",
+        "par": 5
+      },
+      {
+        "from": "flux",
+        "to": "weld",
+        "par": 5
+      },
+      {
+        "from": "fry",
+        "to": "kid",
+        "par": 5
+      },
+      {
+        "from": "teeter",
+        "to": "totter",
+        "par": 5
+      },
+      {
+        "from": "bold",
+        "to": "rash",
+        "par": 5
+      },
+      {
+        "from": "dry",
+        "to": "wet",
+        "par": 5
+      },
+      {
+        "from": "mitt",
+        "to": "palm",
+        "par": 5
+      },
+      {
+        "from": "bend",
+        "to": "turn",
+        "par": 5
+      },
+      {
+        "from": "heap",
+        "to": "mass",
+        "par": 6
+      }
+    ],
+    "extreme": [
+      {
+        "from": "piles",
+        "to": "slews",
+        "par": 8
+      },
+      {
+        "from": "doom",
+        "to": "fate",
+        "par": 7
+      },
+      {
+        "from": "flex",
+        "to": "hump",
+        "par": 7
+      },
+      {
+        "from": "pout",
+        "to": "sulk",
+        "par": 7
+      },
+      {
+        "from": "dish",
+        "to": "meal",
+        "par": 7
+      },
+      {
+        "from": "molded",
+        "to": "shaped",
+        "par": 8
+      },
+      {
+        "from": "bang",
+        "to": "clap",
+        "par": 7
+      },
+      {
+        "from": "carved",
+        "to": "graven",
+        "par": 8
+      },
+      {
+        "from": "keep",
+        "to": "lose",
+        "par": 7
+      },
+      {
+        "from": "dose",
+        "to": "drug",
+        "par": 8
+      }
+    ]
+  },
+  "fetchedAt": "2026-10-24T12:43:44.384Z"
+}

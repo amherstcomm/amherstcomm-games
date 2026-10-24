@@ -1,0 +1,84 @@
+{
+  "date": "2026-10-24",
+  "byDifficulty": {
+    "easy": {
+      "prompts": [
+        {
+          "x": "skin",
+          "y": "rest"
+        },
+        {
+          "x": "alpha",
+          "y": "ally"
+        },
+        {
+          "x": "knock",
+          "y": "placement"
+        },
+        {
+          "x": "dumb",
+          "y": "boy"
+        },
+        {
+          "x": "push",
+          "y": "populate"
+        }
+      ],
+      "answers": "WyJoZWFkIiwibnVtZXJpYyIsIm91dCIsImJlbGwiLCJvdmVyIl0=",
+      "hints": 3
+    },
+    "hard": {
+      "prompts": [
+        {
+          "x": "burden",
+          "y": "one"
+        },
+        {
+          "x": "disinfect",
+          "y": "acid"
+        },
+        {
+          "x": "camera",
+          "y": "slaughter"
+        },
+        {
+          "x": "road",
+          "y": "work"
+        },
+        {
+          "x": "hand",
+          "y": "out"
+        }
+      ],
+      "answers": "WyJzb21lIiwiYW50IiwibWFuIiwiaG91c2UiLCJzdGFuZCJd",
+      "hints": 1
+    },
+    "extreme": {
+      "prompts": [
+        {
+          "x": "play",
+          "y": "set"
+        },
+        {
+          "x": "sea",
+          "y": "kick"
+        },
+        {
+          "x": "set",
+          "y": "side"
+        },
+        {
+          "x": "off",
+          "y": "cuff"
+        },
+        {
+          "x": "melt",
+          "y": "grade"
+        }
+      ],
+      "answers": "WyJvZmYiLCJzaWRlIiwiYmFjayIsImhhbmQiLCJkb3duIl0=",
+      "hints": 0
+    }
+  },
+  "fetchedAt": "2026-10-24T12:43:04.323Z"
+}
