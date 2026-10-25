@@ -141,7 +141,17 @@ rebuild.
 
 ```sh
 psql "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 -f supabase/words.sql
-psql "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 -f supabase/schema.sql
+scripts/apply-schema.sh
+```
+
+`scripts/apply-schema.sh` applies `schema.sql` in one transaction, into the
+Supabase database container (found by its `supabase/postgres` image) or over
+`SUPABASE_DB_URL` when that is set. Use it after every change to
+`schema.sql`, not the Studio SQL editor: the file passed a megabyte in October
+2026, and the editor refuses a query that size.
+
+```sh
+cd /home/rtetzloff/git/amherstcomm-games && git pull && scripts/apply-schema.sh
 ```
 
 Then point the app at it and rebuild — every `VITE_*` value is compiled into
