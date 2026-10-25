@@ -8,13 +8,16 @@
 // Asked for fully transparent, so nothing here is hidden from staff: the
 // controls for running a giveaway are what giveaways.manage adds, and the
 // server refuses anybody without it whatever this page draws.
-import { useCallback, useEffect, useState } from 'react';
+import { Suspense, lazy, useCallback, useEffect, useState } from 'react';
 import { CheckCircle2, Circle, CircleDashed } from 'lucide-react';
 import Waiting from '@/Waiting';
 import RouteLink from '@/RouteLink';
 import GiveawayReplay from '@/GiveawayReplay';
 import GiveawayJudging from '@/GiveawayJudging';
 import PeoplePicker from '@/GiveawayPeoplePicker';
+
+// Only a page with terms on it loads the Markdown parser.
+const Markdown = lazy(() => import('@/Markdown'));
 import {
   addEntrant,
   cancelGiveaway,
@@ -241,6 +244,7 @@ function StandardTerms({ saved, onSaved }: { saved: string; onSaved: () => void 
                       placeholder="e.g. Open to staff only. Prizes cannot be swapped for cash."
                       onChange={(e) => setBody(e.target.value)} />
           </label>
+          <TermsPreview text={body} />
           <p className="text-xs text-slate-400">
             A change reaches every giveaway nobody has entered yet. Giveaways people have entered keep
             the terms those people agreed to.
@@ -268,12 +272,40 @@ function StandardTerms({ saved, onSaved }: { saved: string; onSaved: () => void 
   );
 }
 
+/** Terms as written, in Markdown; as plain text for the moment the parser
+ *  is still arriving. */
+function Formatted({ text, className = '' }: { text: string; className?: string }) {
+  return (
+    <Suspense fallback={<p className={`whitespace-pre-line break-words ${className}`}>{text}</p>}>
+      <Markdown text={text} className={className} />
+    </Suspense>
+  );
+}
+
+/** Under a terms box: that it takes Markdown, and how it will look. */
+function TermsPreview({ text }: { text: string }) {
+  return (
+    <>
+      <p className="text-xs text-slate-500">
+        Formatting: **bold**, *italic*, lines starting with - or 1. for lists, # for a heading,
+        [words](https://link) for a link.
+      </p>
+      {text.trim() !== '' && (
+        <div className="rounded-lg border border-white/10 px-3 py-2" aria-label="How the terms will look">
+          <p className="text-xs text-slate-500 mb-1">How it will look</p>
+          <Formatted text={text} className="text-sm text-slate-300" />
+        </div>
+      )}
+    </>
+  );
+}
+
 /** A giveaway's terms, to read before agreeing. */
 function TermsText({ text }: { text: string }) {
   return (
     <details className={`${CARD} mt-4`}>
       <summary className="text-sm font-semibold text-slate-200 cursor-pointer">Terms and conditions</summary>
-      <p className="text-sm text-slate-300 mt-2 whitespace-pre-line break-words">{text}</p>
+      <Formatted text={text} className="text-sm text-slate-300 mt-2" />
     </details>
   );
 }
@@ -523,6 +555,7 @@ function GiveawayEditor({
                   placeholder={prize ? 'e.g. Picked up from the front desk by Nov 15.' : 'e.g. You must be able to go on the 30th.'}
                   onChange={(e) => set('terms', e.target.value)} />
       </label>
+      {!termsLocked && <TermsPreview text={form.terms} />}
       {termsLocked && (
         <p className="text-xs text-slate-400">People have entered, so the terms they agreed to cannot change.</p>
       )}
