@@ -44,6 +44,10 @@ import {
   removeTestEntrant,
   agreeToTerms,
   setStandardTerms,
+  disqualifyEntry,
+  reinstateEntry,
+  liftBar,
+  respondToWin,
   resetGiveawayTrivia,
   saveGiveaway,
   updatePerson,
@@ -51,6 +55,7 @@ import {
   type Check,
   type Draw,
   type Entrant,
+  type Winner,
   type Found,
   type GiveawayDetail,
   type GiveawayForm,
@@ -353,6 +358,126 @@ function Agreement({
   );
 }
 
+/** What a winner's place stands at, in words. */
+function winnerWord(g: Giveaway, w: Winner, judged: boolean, e: Entrant | undefined): string {
+  if (e?.disqualified) return 'Disqualified';
+  if (w.status === 'pending') {
+    if (w.respond_by && Date.now() > Date.parse(w.respond_by)) return 'Did not accept in time';
+    const base = judged ? 'Chosen, not yet confirmed' : WINNER_WORD.pending;
+    return w.respond_by ? `${base} · accept by ${when(w.respond_by)}` : base;
+  }
+  return (g.kind === 'prize' ? PRIZE_WINNER_WORD : WINNER_WORD)[w.status];
+}
+
+/** The reader drew a place: accept it, agreeing to the terms, or decline it,
+ *  while the time to answer lasts. */
+function YouWon({
+  g,
+  win,
+  busy,
+  act,
+}: {
+  g: Giveaway;
+  win: Winner;
+  busy: boolean;
+  act: (run: () => Promise<{ ok: boolean; reason?: string }>) => Promise<boolean>;
+}) {
+  const [agreeing, setAgreeing] = useState(false);
+  const late = !!win.respond_by && Date.now() > Date.parse(win.respond_by);
+  return (
+    <section className={`${CARD} mt-6 space-y-2 border-accent/40`} aria-label="You won">
+      <h2 className="text-base font-semibold text-slate-200">You won{g.prize ? `: ${g.prize}` : ''}</h2>
+      {late ? (
+        <p className="text-sm text-slate-300">
+          The time to accept ran out {when(win.respond_by!)}. Ask an organiser if you still want it.
+        </p>
+      ) : (
+        <>
+          <p className="text-sm text-slate-300">
+            {win.respond_by ? `Accept by ${when(win.respond_by)}, ` : 'Accept it, '}
+            or decline so somebody else can have it.
+          </p>
+          {g.terms_hash && (
+            <label className="flex items-start gap-2 text-sm text-slate-300">
+              <input type="checkbox" className="mt-1" checked={agreeing} onChange={(e) => setAgreeing(e.target.checked)} />
+              I have read and agree to the terms and conditions
+            </label>
+          )}
+          <div className="flex flex-wrap gap-2">
+            <button type="button" className={PRIMARY} disabled={busy || (!!g.terms_hash && !agreeing)}
+                    onClick={() => void act(() => respondToWin(g.id, true, g.terms_hash))}>
+              Accept
+            </button>
+            <button type="button" className={BUTTON} disabled={busy}
+                    onClick={() => {
+                      if (window.confirm('Decline your place? Somebody else will be drawn for it.')) {
+                        void act(() => respondToWin(g.id, false));
+                      }
+                    }}>
+              Decline
+            </button>
+          </div>
+        </>
+      )}
+    </section>
+  );
+}
+
+/** Disqualified or not: marked for everyone, why for organisers, and for an
+ *  organiser the way to do it or undo it. */
+function Disqualification({
+  got,
+  e,
+  busy,
+  act,
+}: {
+  got: GiveawayDetail;
+  e: Entrant;
+  busy: boolean;
+  act: (run: () => Promise<{ ok: boolean; reason?: string }>) => Promise<boolean>;
+}) {
+  const g = got.giveaway;
+  const manage = got.can_manage;
+  if (e.disqualified) {
+    return (
+      <span className="block text-xs text-rose-300">
+        Disqualified{e.barred ? ' · barred from giveaways' : ''}
+        {manage && e.disqualified_reason && <span className="text-slate-400">: {e.disqualified_reason}</span>}
+        {manage && g.status === 'open' && got.draws.length === 0 && !e.barred && (
+          <button type="button" className="ml-2 text-accent hover:underline" disabled={busy}
+                  aria-label={`Reinstate ${e.name}`}
+                  onClick={() => void act(() => reinstateEntry(g.id, e.person))}>
+            Reinstate
+          </button>
+        )}
+      </span>
+    );
+  }
+  if (!manage || g.status === 'cancelled') return null;
+  return (
+    <button
+      type="button"
+      className="block text-xs text-rose-300 hover:underline mt-1"
+      disabled={busy}
+      aria-label={`Disqualify ${e.name}`}
+      onClick={() => {
+        const reason = window.prompt(
+          `Disqualify ${e.name}? Their entry stays listed as disqualified and is in no drawing. ` +
+            'Why? Only organisers see this.'
+        );
+        if (!reason?.trim()) return;
+        const bar = window.confirm(
+          `Also bar ${e.name} from every giveaway until the bar is lifted? ` +
+            'OK to bar them; Cancel to disqualify this entry only.'
+        );
+        void act(() => disqualifyEntry(g.id, e.person, reason.trim(), bar));
+      }}
+    >
+      Disqualify
+    </button>
+  );
+}
+
 function SummaryRow({ g, link }: { g: GiveawaySummary; link: GiveawayLink }) {
   return (
     <li>
@@ -406,6 +531,7 @@ const BLANK: GiveawayForm = {
   bar: 3,
   kind: 'event',
   terms: '',
+  acceptHours: null,
 };
 
 /** A datetime-local field's value for a stored time, in this browser's zone. */
@@ -539,6 +665,12 @@ function GiveawayEditor({
           How many winners
           <input className={`${FIELD} mt-1`} type="number" min={1} max={100} value={form.winners}
                  onChange={(e) => set('winners', Number(e.target.value))} />
+        </label>
+        <label className="block text-xs text-slate-400">
+          Hours a winner has to accept (empty for no limit)
+          <input className={`${FIELD} mt-1`} type="number" min={1} max={1440}
+                 value={form.acceptHours ?? ''}
+                 onChange={(e) => set('acceptHours', e.target.value === '' ? null : Number(e.target.value))} />
         </label>
         {!prize && (
         <label className="block text-xs text-slate-400">
@@ -717,7 +849,10 @@ function OneGiveaway({ id, link }: { id: string; link: GiveawayLink }) {
   // entered by answering, rather than by putting yourself in
   const answered = judged || screened;
   // who the drawing is between: everybody, or a rated one's pool once set
-  const pool = screened ? got.entrants.filter((e) => e.qualified) : got.entrants;
+  const pool = (screened ? got.entrants.filter((e) => e.qualified) : got.entrants).filter((e) => !e.disqualified);
+  // the reader's own place, if drawn and not yet answered
+  const myWin = got.winners.find((w) => w.person === got.me && w.status === 'pending');
+  const myEntry = got.entrants.find((e) => e.person === got.me);
   const total = pool.reduce((s, e) => s + e.weight, 0);
   const missing = g.winners - got.winners.filter((w) => w.status !== 'declined').length;
   const undrawn = pool.filter((e) => !got.winners.some((w) => w.person === e.person)).length;
@@ -852,6 +987,7 @@ function OneGiveaway({ id, link }: { id: string; link: GiveawayLink }) {
                 bar: g.bar ?? 3,
                 kind: g.kind ?? 'event',
                 terms: g.terms ?? '',
+                acceptHours: g.accept_hours ?? null,
               }}
               termsLocked={got.entrants.length > 0}
               onDone={() => {
@@ -908,6 +1044,10 @@ function OneGiveaway({ id, link }: { id: string; link: GiveawayLink }) {
         </section>
       )}
 
+      {myWin && !myEntry?.disqualified && g.status !== 'cancelled' && (
+        <YouWon g={g} win={myWin} busy={busy} act={act} />
+      )}
+
       {got.winners.length > 0 && (
         <section className="mt-6" aria-label={judged ? 'Who won' : 'Who was drawn'}>
           <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
@@ -924,9 +1064,7 @@ function OneGiveaway({ id, link }: { id: string; link: GiveawayLink }) {
                 <span className="min-w-0">
                   <span className="block font-semibold text-slate-200 break-words">{w.name}</span>
                   <span className="block text-xs text-slate-400">
-                    {judged && w.status === 'pending'
-                      ? 'Chosen, not yet confirmed'
-                      : (g.kind === 'prize' ? PRIZE_WINNER_WORD : WINNER_WORD)[w.status]}
+                    {winnerWord(g, w, judged, got.entrants.find((x) => x.person === w.person))}
                     {!judged && got.draws.length > 1 && ` · drawing ${w.draw}`}
                   </span>
                   {(() => {
@@ -934,7 +1072,8 @@ function OneGiveaway({ id, link }: { id: string; link: GiveawayLink }) {
                     return e ? <Agreement g={g} e={e} manage={manage} busy={busy} act={act} /> : null;
                   })()}
                 </span>
-                {manage && g.status !== 'cancelled' && (
+                {manage && g.status !== 'cancelled' &&
+                  !got.entrants.find((x) => x.person === w.person)?.disqualified && (
                   <span className="flex flex-wrap gap-2">
                     {w.status !== 'accepted' && (
                       <button type="button" className={BUTTON} disabled={busy}
@@ -1011,7 +1150,9 @@ function OneGiveaway({ id, link }: { id: string; link: GiveawayLink }) {
                 <span className="min-w-0 break-words">
                   {e.action === 'trivia reset'
                     ? `${e.actor ?? 'Somebody'} reset ${String((e.detail as { name?: string }).name ?? 'somebody')}'s trivia`
-                    : `${e.actor ?? 'Somebody'} removed ${String((e.detail as { name?: string }).name ?? 'an entry')} as a test entry`}
+                    : e.action === 'disqualified'
+                      ? `${e.actor ?? 'Somebody'} disqualified ${String((e.detail as { name?: string }).name ?? 'somebody')}: ${String((e.detail as { reason?: string }).reason ?? '')}`
+                      : `${e.actor ?? 'Somebody'} removed ${String((e.detail as { name?: string }).name ?? 'an entry')} as a test entry`}
                 </span>
               </li>
             ))}
@@ -1311,8 +1452,9 @@ function JudgedEntrants({
                 {e.name}
                 {!e.linked && <span className="text-xs font-normal text-slate-500"> · no account</span>}
                 <Agreement g={g} e={e} manage={got.can_manage} busy={busy} act={act} />
+                <Disqualification got={got} e={e} busy={busy} act={act} />
               </span>
-              {got.can_manage && g.status === 'open' && (
+              {got.can_manage && g.status === 'open' && !e.disqualified && (
                 <span className="flex flex-wrap gap-3">
                   <button
                     type="button"
@@ -1386,14 +1528,17 @@ function Entrants({
                   {e.self ? 'Entered themselves' : `Entered by ${e.entered_by ?? 'an organiser'}`} · {when(e.entered_at)}
                 </p>
                 <Agreement g={g} e={e} manage={got.can_manage} busy={busy} act={act} />
+                <Disqualification got={got} e={e} busy={busy} act={act} />
               </div>
               <div className="text-right">
-                <p className="text-sm font-semibold text-slate-200 tabular-nums">{chance(e.weight, total)}</p>
+                <p className="text-sm font-semibold text-slate-200 tabular-nums">
+                  {e.disqualified ? 'Out' : chance(e.weight, total)}
+                </p>
                 <p className="text-xs text-slate-500 tabular-nums"
                    title={`weight ${e.weight.toLocaleString()} of ${total.toLocaleString()}`}>
                   weight {e.weight.toLocaleString()}
                 </p>
-                {got.can_manage && g.status === 'open' && (
+                {got.can_manage && g.status === 'open' && !e.disqualified && (
                   <button
                     type="button"
                     className="text-xs text-rose-300 hover:underline mt-1"
@@ -1578,9 +1723,21 @@ function describe(e: LogEntry): string {
     case 'withdrew':
       return `${d.name} withdrew`;
     case 'accepted':
+      if (d.self) return `${d.name} accepted`;
       return d.kind === 'prize' ? `${who} marked ${d.name} as having accepted` : `${who} marked ${d.name} going`;
-    case 'removed':
     case 'declined':
+      if (d.self) return `${d.name} declined`;
+      if (d.lapsed) return `${who} marked ${d.name} as not accepting in time`;
+      return `${who} marked ${d.name} declined`;
+    case 'disqualified':
+      return `${who} disqualified ${d.name}${d.barred ? ' and barred them from giveaways' : ''}`;
+    case 'reinstated':
+      return `${who} reinstated ${d.name}`;
+    case 'barred':
+      return `${who} barred ${d.name} from giveaways`;
+    case 'bar lifted':
+      return `${who} lifted the bar on ${d.name}`;
+    case 'removed':
     case 'pending':
       return `${who} ${ACTION_WORD[e.action]} ${d.name}`;
     case 'committed':
@@ -1753,6 +1910,7 @@ function HistoryRow({
         <p className="text-sm font-semibold text-slate-200 min-w-0 break-words">
           {p.name}
           {!p.linked && <span className="text-xs font-normal text-slate-500"> · no account</span>}
+          {p.barred && <span className="text-xs font-normal text-rose-300"> · barred from giveaways</span>}
         </p>
         <p className="text-xs text-slate-400 tabular-nums">
           {p.attended.length} {p.attended.length === 1 ? 'attendance' : 'attendances'} ·{' '}
@@ -1805,6 +1963,17 @@ function HistoryRow({
           {!p.linked && (
             <button type="button" className="text-accent hover:underline" onClick={() => setJoining((j) => !j)}>
               Join to their account
+            </button>
+          )}
+          {p.barred && (
+            <button type="button" className="text-accent hover:underline" disabled={busy}
+                    aria-label={`Lift the bar on ${p.name}`}
+                    onClick={() => {
+                      if (window.confirm(`Let ${p.name} enter giveaways again? Their disqualified entries stay so.`)) {
+                        void act(() => liftBar(p.person));
+                      }
+                    }}>
+              Lift the bar
             </button>
           )}
           <button type="button" className="text-rose-300 hover:underline" disabled={busy}
