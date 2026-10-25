@@ -59,6 +59,13 @@ export type Giveaway = {
   bar?: number;
   /** absent from a database without prizes: an event, as all were */
   kind?: GiveawayKind;
+  /** its own terms, on top of the standard ones it took */
+  terms?: string;
+  standard_terms?: string;
+  /** both, as one text: what entering agrees to. Empty is no terms. */
+  terms_text?: string;
+  /** that text's fingerprint, sent back to agree to exactly it; null is no terms */
+  terms_hash?: string | null;
   status: GiveawayStatus;
   cancelled_reason: string | null;
   /** extra tickets per trivia point, and the sessions that score them */
@@ -86,6 +93,9 @@ export type Entrant = {
   qualified?: boolean | null;
   /** points scored in the giveaway's trivia */
   trivia?: number;
+  /** agreed to the terms: themselves, or recorded by an organiser */
+  agreed?: boolean;
+  agreed_self?: boolean;
 };
 
 /** Who a drawing is between, frozen when it was committed. */
@@ -200,7 +210,16 @@ async function call<T = object>(fn: string, args?: Record<string, unknown>): Pro
 }
 
 export const readGiveaways = () =>
-  call<{ can_manage: boolean; giveaways: GiveawaySummary[] }>('giveaways_list');
+  call<{ can_manage: boolean; giveaways: GiveawaySummary[]; standard_terms?: string }>('giveaways_list');
+
+/** The terms every giveaway carries; giveaways nobody has entered take them. */
+export const setStandardTerms = (body: string) =>
+  call<{ applied: number }>('set_giveaway_standard_terms', { p_body: body });
+
+/** Agreeing to a giveaway's terms after being entered: yourself, or an
+ *  organiser recording it for somebody who agreed some other way. */
+export const agreeToTerms = (id: string, terms: string, person?: string) =>
+  call('agree_giveaway_terms', { p_id: id, p_terms: terms, p_person: person ?? null });
 
 export const readGiveaway = (id: string) => call<GiveawayDetail>('giveaway_detail', { p_id: id });
 
@@ -232,6 +251,8 @@ export type GiveawayForm = {
   /** the average rating an entry needs to go into the drawing, for a rated one */
   bar: number;
   kind: GiveawayKind;
+  /** its own terms, on top of the standard ones */
+  terms: string;
 };
 
 export const saveGiveaway = (id: string | null, f: GiveawayForm) =>
@@ -251,12 +272,15 @@ export const saveGiveaway = (id: string | null, f: GiveawayForm) =>
     p_questions: f.mode !== 'draw' ? f.questions.map((q) => q.trim()).filter(Boolean) : [],
     p_bar: f.bar,
     p_kind: f.kind,
+    p_terms: f.terms,
   });
 
 export const cancelGiveaway = (id: string, reason: string) =>
   call('cancel_giveaway', { p_id: id, p_reason: reason });
 
-export const enterGiveaway = (id: string, inIt: boolean) => call('enter_giveaway', { p_id: id, p_in: inIt });
+/** In or out. Going in, `terms` is the fingerprint of the terms agreed to. */
+export const enterGiveaway = (id: string, inIt: boolean, terms?: string | null) =>
+  call('enter_giveaway', { p_id: id, p_in: inIt, p_terms: terms ?? null });
 
 /** An organiser entering somebody: an existing record, an account, or a name. */
 export const addEntrant = (id: string, who: { person?: string | null; user?: string | null; name?: string }) =>
@@ -354,7 +378,8 @@ export const readJudging = (id: string) => call<Judging>('giveaway_judging', { p
 export const enterJudged = (
   id: string,
   answers: Record<string, string>,
-  who?: { person?: string | null; user?: string | null; name?: string }
+  who?: { person?: string | null; user?: string | null; name?: string },
+  terms?: string | null
 ) =>
   call<{ person: string }>('enter_judged_giveaway', {
     p_id: id,
@@ -362,6 +387,7 @@ export const enterJudged = (
     p_person: who?.person ?? null,
     p_user: who?.user ?? null,
     p_name: who?.name ?? null,
+    p_terms: terms ?? null,
   });
 
 export const addJudge = (id: string, user: string) => call('add_giveaway_judge', { p_id: id, p_user: user });

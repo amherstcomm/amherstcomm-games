@@ -191,8 +191,14 @@ function giveawayPage(id: string) {
       status: id === 'g3' || id === 'g5' ? 'judging' : id === 'g6' ? 'qualified' : drawn || id === 'g4' ? 'drawn' : 'open',
       mode: id === 'g3' || id === 'g4' ? 'judged' : id === 'g5' || id === 'g6' ? 'screened' : 'draw', picks: 3, bar: 3,
       created_at: `${plus(-6)}T14:00:00Z`, created_by: 'Ray Tetzloff',
+      terms: 'You must be able to go on the day; tickets are not transferable.',
+      standard_terms: 'Open to staff only. Prizes cannot be swapped for cash.',
+      terms_text: 'Open to staff only. Prizes cannot be swapped for cash.\n\nYou must be able to go on the day; tickets are not transferable.',
+      terms_hash: 'h-terms',
     },
     entrants: GIVEAWAY_ENTRANTS.map((e, i) => ({
+      // the reader (p1) was put in by an organiser and has yet to agree
+      agreed: i === 0 ? false : i !== 1,
       ...e, linked: i < 2, entered_at: `${plus(-5)}T14:00:00Z`, entered_by: 'Ray Tetzloff', self: i === 0,
       attended: i === 1 ? [{ on: plus(-30), what: 'Bucks game' }, { on: plus(-400), what: 'Brewers opening day' }] : [],
     })),
@@ -292,7 +298,7 @@ function reply(fn: string, args: Record<string, unknown>, path: string): unknown
       return { ok: true, points: 6, scored: 2 };
     case 'giveaways_list':
       return {
-        ok: true, can_manage: true,
+        ok: true, can_manage: true, standard_terms: 'Open to staff only. Prizes cannot be swapped for cash.',
         giveaways: [
           { id: 'g1', title: 'Bucks vs Bulls', prize: '2 tickets, section 112, row 4', winners: 1, event_on: plus(8),
             status: 'open', self_entry: true, entries_close_at: null, entrants: 3, entered: true, drawn: [] },

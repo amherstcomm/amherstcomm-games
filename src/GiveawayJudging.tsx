@@ -52,10 +52,13 @@ const ordinal = (n: number) => (n === 1 ? '1st' : n === 2 ? '2nd' : n === 3 ? '3
 export default function GiveawayJudging({
   giveaway: g,
   canManage,
+  agreed = true,
   onChanged,
 }: {
   giveaway: Giveaway;
   canManage: boolean;
+  /** the reader has agreed to the terms, or is not in it yet to have */
+  agreed?: boolean;
   /** the giveaway page re-reads itself: status, winners, the record */
   onChanged: () => void;
 }) {
@@ -95,7 +98,11 @@ export default function GiveawayJudging({
           initial={j.mine ?? NO_ANSWERS}
           busy={busy}
           submit={j.entered ? 'Save my answers' : 'Enter'}
-          onSubmit={(answers) => act(() => enterJudged(g.id, answers), j.entered ? 'Answers saved.' : 'You are in.')}
+          // a tick to agree, unless already agreed
+          terms={!g.terms_hash || (j.entered && agreed) ? null : g.terms_hash}
+          onSubmit={(answers) =>
+            act(() => enterJudged(g.id, answers, undefined, g.terms_hash), j.entered ? 'Answers saved.' : 'You are in.')
+          }
           onWithdraw={j.entered ? () => act(() => enterGiveaway(g.id, false), 'You are out.') : undefined}
         />
       )}
@@ -151,6 +158,7 @@ function EntryForm({
   initial,
   busy,
   submit,
+  terms = null,
   onSubmit,
   onWithdraw,
 }: {
@@ -159,12 +167,15 @@ function EntryForm({
   initial: Record<string, string>;
   busy: boolean;
   submit: string;
+  /** terms to agree to before submitting, or null */
+  terms?: string | null;
   onSubmit: (answers: Record<string, string>) => Promise<boolean>;
   onWithdraw?: () => void;
 }) {
   const [answers, setAnswers] = useState<Record<string, string>>(initial);
   useEffect(() => setAnswers(initial), [initial]);
-  const complete = questions.every((q) => (answers[q.id] ?? '').trim() !== '');
+  const [agreeing, setAgreeing] = useState(false);
+  const complete = questions.every((q) => (answers[q.id] ?? '').trim() !== '') && (!terms || agreeing);
   return (
     <section className={`${CARD} space-y-3`} aria-label={title}>
       <h2 className="text-sm font-semibold text-slate-200">{title}</h2>
@@ -183,6 +194,12 @@ function EntryForm({
           />
         </label>
       ))}
+      {terms && (
+        <label className="flex items-start gap-2 text-sm text-slate-300">
+          <input type="checkbox" className="mt-1" checked={agreeing} onChange={(e) => setAgreeing(e.target.checked)} />
+          I have read and agree to the terms and conditions
+        </label>
+      )}
       <div className="flex flex-wrap gap-2">
         <button type="button" className={PRIMARY} disabled={busy || !complete} onClick={() => void onSubmit(answers)}>
           {submit}
