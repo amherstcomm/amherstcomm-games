@@ -31,6 +31,7 @@
     "qrcode-generator": "^2.0.4",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
+    "react-markdown": "^9.1.0",
     "wordlist-english": "^1.2.1"
   },
   "devDependencies": {

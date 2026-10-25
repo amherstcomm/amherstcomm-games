@@ -10,7 +10,7 @@ import { expect, test } from './fixtures';
 
 const G = '6c5b4a3d-2e1f-4a0b-9c8d-7e6f5a4b3c2d';
 
-type Over = { me?: string | null; manage?: boolean; entrants?: unknown[] };
+type Over = { me?: string | null; manage?: boolean; entrants?: unknown[]; text?: string };
 
 async function server(page: import('@playwright/test').Page, over: Over = {}) {
   const sent: { fn: string; args: Record<string, unknown> }[] = [];
@@ -32,7 +32,7 @@ async function server(page: import('@playwright/test').Page, over: Over = {}) {
           self_entry: true, entries_close_at: null, strength: 1, half_life_days: 365, status: 'open',
           cancelled_reason: null, created_at: '2026-10-21T14:00:00Z', created_by: 'Ray', mode: 'draw', kind: 'event',
           terms: 'You must be able to go on the 30th.', standard_terms: 'Staff only.',
-          terms_text: 'Staff only.\n\nYou must be able to go on the 30th.', terms_hash: 'h-terms',
+          terms_text: over.text ?? 'Staff only.\n\nYou must be able to go on the 30th.', terms_hash: 'h-terms',
         },
         entrants: over.entrants ?? [], draws: [], winners: [], log: [],
       });
@@ -51,7 +51,7 @@ test('an organiser sets the standard terms every giveaway carries', async ({ pag
   await page.goto('/giveaways');
   const terms = page.getByRole('region', { name: 'Standard terms' });
   await terms.getByRole('button', { name: 'Change' }).click();
-  await terms.getByLabel('The terms').fill('Staff only. No cash in place of a prize.');
+  await terms.getByRole('textbox', { name: /^The terms/ }).fill('Staff only. No cash in place of a prize.');
   await terms.getByRole('button', { name: 'Save the standard terms' }).click();
   await expect.poll(() => sent.find((s) => s.fn === 'set_giveaway_standard_terms')?.args).toEqual({
     p_body: 'Staff only. No cash in place of a prize.',
@@ -98,4 +98,42 @@ test("once people are in, the giveaway's own terms cannot be changed", async ({ 
   await page.getByRole('region', { name: 'Running it' }).getByRole('button', { name: /Change/ }).first().click();
   await expect(page.getByLabel('Terms for this giveaway, on top of the standard terms')).toBeDisabled();
   await expect(page.getByText('People have entered, so the terms they agreed to cannot change.')).toBeVisible();
+});
+
+test('the terms are formatted from Markdown, and nothing else in them runs', async ({ page }) => {
+  await server(page, {
+    text: [
+      '## Eligibility',
+      '',
+      'Open to **staff only**. See [the policy](https://example.com/policy).',
+      '',
+      '- No cash in place of a prize',
+      '- Not transferable',
+      '',
+      '<img src=x onerror="window.__owned = 1"> <script>window.__owned = 2</script>',
+      '',
+      '[Click me](javascript:window.__owned=3)',
+    ].join('\n'),
+  });
+  await page.goto(`/giveaways/${G}`);
+  await page.getByText('Terms and conditions', { exact: true }).click();
+  const terms = page.locator('details');
+  await expect(terms.locator('strong', { hasText: 'staff only' })).toBeVisible();
+  await expect(terms.getByRole('listitem')).toHaveCount(2);
+  await expect(terms.getByText('Eligibility')).toBeVisible();
+  await expect(terms.getByRole('link', { name: 'the policy' })).toHaveAttribute('href', 'https://example.com/policy');
+  // raw HTML is never elements, and a script link is no link
+  await expect(terms.locator('img, script')).toHaveCount(0);
+  await expect(terms.locator('a[href^="javascript"]')).toHaveCount(0);
+  await terms.getByText('Click me').click();
+  expect(await page.evaluate(() => (window as unknown as { __owned?: number }).__owned)).toBeUndefined();
+});
+
+test('an organiser sees how the terms will look as they write them', async ({ page }) => {
+  await server(page);
+  await page.goto('/giveaways');
+  const terms = page.getByRole('region', { name: 'Standard terms' });
+  await terms.getByRole('button', { name: 'Change' }).click();
+  await terms.getByRole('textbox', { name: /^The terms/ }).fill('Open to **staff only**.');
+  await expect(terms.getByLabel('How the terms will look').locator('strong')).toHaveText('staff only');
 });
