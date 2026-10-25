@@ -12,7 +12,7 @@
 # way leaves the database as it was. schema.sql is idempotent on a database
 # that already has it, so running this again is always safe.
 #
-# The container is found by its image (supabase/postgres); set
+# The container is found by its image (supabase/postgres:<tag>); set
 # SUPABASE_DB_CONTAINER to name it instead. It connects as postgres; set
 # SUPABASE_DB_USER for another role, e.g. if a run fails "must be owner of".
 set -euo pipefail
@@ -28,8 +28,10 @@ if [ -n "${SUPABASE_DB_URL:-}" ]; then
   echo "Applying $schema over SUPABASE_DB_URL..."
   PGOPTIONS="$quiet" psql "$SUPABASE_DB_URL" "${args[@]}" -f "$schema"
 else
+  # The image is supabase/postgres:<tag> exactly: supabase/postgres-meta
+  # (Studio's API, no psql in it) starts the same way and is listed first.
   container=${SUPABASE_DB_CONTAINER:-$(docker ps --format '{{.Names}} {{.Image}}' |
-    awk '$2 ~ /^supabase\/postgres/ { print $1; exit }')}
+    awk '$2 ~ /^supabase\/postgres:/ { print $1; exit }')}
   if [ -z "$container" ]; then
     echo "No running Supabase database container found. Set SUPABASE_DB_CONTAINER to its name" >&2
     echo "(docker ps lists them), or SUPABASE_DB_URL to a connection string." >&2
