@@ -39,12 +39,15 @@ import {
   recordAttendance,
   removeEntrant,
   removeTestEntrant,
+  agreeToTerms,
+  setStandardTerms,
   resetGiveawayTrivia,
   saveGiveaway,
   updatePerson,
   weightFor,
   type Check,
   type Draw,
+  type Entrant,
   type Found,
   type GiveawayDetail,
   type GiveawayForm,
@@ -133,6 +136,7 @@ function GiveawayList({ link }: { link: GiveawayLink }) {
   const [canManage, setCanManage] = useState(false);
   const [refused, setRefused] = useState('');
   const [making, setMaking] = useState(false);
+  const [standard, setStandard] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     const got = await readGiveaways();
@@ -140,6 +144,7 @@ function GiveawayList({ link }: { link: GiveawayLink }) {
     setRefused('');
     setRows(got.giveaways);
     setCanManage(got.can_manage);
+    setStandard(got.standard_terms ?? null);
   }, []);
   useEffect(() => void load(), [load]);
 
@@ -180,6 +185,8 @@ function GiveawayList({ link }: { link: GiveawayLink }) {
           </button>
         ))}
 
+      {canManage && standard !== null && <StandardTerms saved={standard} onSaved={() => void load()} />}
+
       <h2 className="text-sm font-semibold text-slate-200 mt-6">Open now</h2>
       {open.length === 0 ? (
         <p className="text-sm text-slate-400 mt-2">Nothing is open just now.</p>
@@ -202,6 +209,115 @@ function GiveawayList({ link }: { link: GiveawayLink }) {
         </>
       )}
     </div>
+  );
+}
+
+/** The terms every giveaway carries, set once. Giveaways nobody has entered
+ *  take a change; the rest keep what their entrants agreed to. */
+function StandardTerms({ saved, onSaved }: { saved: string; onSaved: () => void }) {
+  const [open, setOpen] = useState(false);
+  const [body, setBody] = useState(saved);
+  const [said, setSaid] = useState('');
+  const [busy, setBusy] = useState(false);
+  useEffect(() => setBody(saved), [saved]);
+  return (
+    <section className={`${CARD} mt-4 space-y-2`} aria-label="Standard terms">
+      <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+        <h2 className="text-sm font-semibold text-slate-200">Standard terms</h2>
+        <button type="button" className="text-sm text-accent hover:underline" onClick={() => setOpen((o) => !o)}>
+          {open ? 'Close' : saved ? 'Change' : 'Set them'}
+        </button>
+      </div>
+      <p className="text-xs text-slate-400">
+        {saved
+          ? 'Every giveaway carries these, and entering means agreeing to them.'
+          : 'None yet. Terms set here are carried by every giveaway, and entering means agreeing to them.'}
+      </p>
+      {open && (
+        <>
+          <label className="block text-xs text-slate-400">
+            The terms
+            <textarea className={`${FIELD} mt-1`} rows={6} maxLength={10000} value={body}
+                      placeholder="e.g. Open to staff only. Prizes cannot be swapped for cash."
+                      onChange={(e) => setBody(e.target.value)} />
+          </label>
+          <p className="text-xs text-slate-400">
+            A change reaches every giveaway nobody has entered yet. Giveaways people have entered keep
+            the terms those people agreed to.
+          </p>
+          <button
+            type="button"
+            className={PRIMARY}
+            disabled={busy || body.trim() === saved.trim()}
+            onClick={async () => {
+              setBusy(true);
+              const res = await setStandardTerms(body);
+              setBusy(false);
+              if (!res.ok) return setSaid(res.reason);
+              setSaid(`Saved. ${res.applied} ${res.applied === 1 ? 'giveaway' : 'giveaways'} not yet entered took them.`);
+              setOpen(false);
+              onSaved();
+            }}
+          >
+            Save the standard terms
+          </button>
+        </>
+      )}
+      {said && <p className="text-xs text-slate-300" role="status">{said}</p>}
+    </section>
+  );
+}
+
+/** A giveaway's terms, to read before agreeing. */
+function TermsText({ text }: { text: string }) {
+  return (
+    <details className={`${CARD} mt-4`}>
+      <summary className="text-sm font-semibold text-slate-200 cursor-pointer">Terms and conditions</summary>
+      <p className="text-sm text-slate-300 mt-2 whitespace-pre-line break-words">{text}</p>
+    </details>
+  );
+}
+
+/** Whether somebody in it has agreed to the terms, and for an organiser a
+ *  way to record that they agreed some other way. */
+function Agreement({
+  g,
+  e,
+  manage,
+  busy,
+  act,
+}: {
+  g: Giveaway;
+  e: Entrant;
+  manage: boolean;
+  busy: boolean;
+  act: (run: () => Promise<{ ok: boolean; reason?: string }>) => Promise<boolean>;
+}) {
+  if (!g.terms_hash || e.agreed) return null;
+  return (
+    <span className="block text-xs text-amber-300">
+      Has not agreed to the terms
+      {manage && g.status !== 'cancelled' && (
+        <button
+          type="button"
+          className="ml-2 text-accent hover:underline"
+          disabled={busy}
+          aria-label={`Record that ${e.name} agreed to the terms`}
+          onClick={() => {
+            if (
+              window.confirm(
+                `Record that ${e.name} agreed to the terms? Only if they did, some other way, such as in writing. ` +
+                  'This goes on the public record.'
+              )
+            ) {
+              void act(() => agreeToTerms(g.id, g.terms_hash!, e.person));
+            }
+          }}
+        >
+          Record that they agreed
+        </button>
+      )}
+    </span>
   );
 }
 
@@ -257,6 +373,7 @@ const BLANK: GiveawayForm = {
   questions: [],
   bar: 3,
   kind: 'event',
+  terms: '',
 };
 
 /** A datetime-local field's value for a stored time, in this browser's zone. */
@@ -285,10 +402,13 @@ function oddsInWords(strength: number, halfLife: number): string {
 function GiveawayEditor({
   id,
   initial,
+  termsLocked = false,
   onDone,
 }: {
   id?: string;
   initial?: GiveawayForm;
+  /** people have entered: the terms they agreed to stand */
+  termsLocked?: boolean;
   /** the saved giveaway's id, or null when cancelled */
   onDone: (id: string | null) => void;
 }) {
@@ -396,6 +516,16 @@ function GiveawayEditor({
         </label>
         )}
       </div>
+      <label className="block text-xs text-slate-400">
+        Terms for this giveaway, on top of the standard terms
+        <textarea className={`${FIELD} mt-1`} rows={3} maxLength={10000} value={form.terms}
+                  disabled={termsLocked}
+                  placeholder={prize ? 'e.g. Picked up from the front desk by Nov 15.' : 'e.g. You must be able to go on the 30th.'}
+                  onChange={(e) => set('terms', e.target.value)} />
+      </label>
+      {termsLocked && (
+        <p className="text-xs text-slate-400">People have entered, so the terms they agreed to cannot change.</p>
+      )}
       <label className="flex items-start gap-2 text-sm text-slate-300">
         <input type="checkbox" className="mt-1" checked={form.selfEntry}
                onChange={(e) => set('selfEntry', e.target.checked)} />
@@ -504,6 +634,7 @@ function OneGiveaway({ id, link }: { id: string; link: GiveawayLink }) {
   const [problem, setProblem] = useState('');
   const [said, setSaid] = useState('');
   const [busy, setBusy] = useState(false);
+  const [agreeing, setAgreeing] = useState(false);
   const [editing, setEditing] = useState(false);
   // A judged one's questions, for its editor; the rest of judging is its own
   // component's.
@@ -545,6 +676,8 @@ function OneGiveaway({ id, link }: { id: string; link: GiveawayLink }) {
   const g = got.giveaway;
   const manage = got.can_manage;
   const mine = got.entrants.some((e) => e.person === got.me);
+  // in, but put in by an organiser and not yet agreed to the terms
+  const owesAgreement = !!g.terms_hash && got.entrants.some((e) => e.person === got.me && !e.agreed);
   const closed = g.entries_close_at !== null && Date.now() >= Date.parse(g.entries_close_at);
   const judged = g.mode === 'judged';
   const screened = g.mode === 'screened';
@@ -623,16 +756,37 @@ function OneGiveaway({ id, link }: { id: string; link: GiveawayLink }) {
         />
       )}
 
+      {g.terms_text && <TermsText text={g.terms_text} />}
+
+      {owesAgreement && g.status !== 'cancelled' && (
+        <section className={`${CARD} mt-4 space-y-2`} aria-label="Agree to the terms">
+          <p className="text-sm text-slate-300">
+            You were entered by an organiser. Agree to the terms and conditions so that, if you win, you
+            can take the prize.
+          </p>
+          <button type="button" className={PRIMARY} disabled={busy}
+                  onClick={() => void act(() => agreeToTerms(id, g.terms_hash!))}>
+            I agree to the terms
+          </button>
+        </section>
+      )}
+
       {!answered && g.status === 'open' && g.self_entry && (
         <div className="mt-4">
+          {!mine && !closed && g.terms_hash && (
+            <label className="flex items-start gap-2 text-sm text-slate-300 mb-2">
+              <input type="checkbox" className="mt-1" checked={agreeing} onChange={(e) => setAgreeing(e.target.checked)} />
+              I have read and agree to the terms and conditions
+            </label>
+          )}
           {closed && !mine ? (
             <p className="text-sm text-slate-400">Entries closed {when(g.entries_close_at!)}.</p>
           ) : (
             <button
               type="button"
               className={mine ? BUTTON : PRIMARY}
-              disabled={busy || (closed && mine)}
-              onClick={() => void act(() => enterGiveaway(id, !mine))}
+              disabled={busy || (closed && mine) || (!mine && !!g.terms_hash && !agreeing)}
+              onClick={() => void act(() => enterGiveaway(id, !mine, mine ? null : g.terms_hash))}
             >
               {mine ? 'Take me out' : 'Put me in'}
             </button>
@@ -664,7 +818,9 @@ function OneGiveaway({ id, link }: { id: string; link: GiveawayLink }) {
                 questions,
                 bar: g.bar ?? 3,
                 kind: g.kind ?? 'event',
+                terms: g.terms ?? '',
               }}
+              termsLocked={got.entrants.length > 0}
               onDone={() => {
                 setEditing(false);
                 void load();
@@ -691,7 +847,7 @@ function OneGiveaway({ id, link }: { id: string; link: GiveawayLink }) {
       {/* While it is open or judged, the judging comes first; once decided,
           after the winners, which are what people came to see. */}
       {answered && g.status !== 'drawn' && (
-        <GiveawayJudging giveaway={g} canManage={manage} onChanged={() => void load()} />
+        <GiveawayJudging giveaway={g} canManage={manage} agreed={!owesAgreement} onChanged={() => void load()} />
       )}
 
       {/* The pool is set: draw from it, the same drawing as any other. */}
@@ -740,6 +896,10 @@ function OneGiveaway({ id, link }: { id: string; link: GiveawayLink }) {
                       : (g.kind === 'prize' ? PRIZE_WINNER_WORD : WINNER_WORD)[w.status]}
                     {!judged && got.draws.length > 1 && ` · drawing ${w.draw}`}
                   </span>
+                  {(() => {
+                    const e = got.entrants.find((x) => x.person === w.person);
+                    return e ? <Agreement g={g} e={e} manage={manage} busy={busy} act={act} /> : null;
+                  })()}
                 </span>
                 {manage && g.status !== 'cancelled' && (
                   <span className="flex flex-wrap gap-2">
@@ -792,7 +952,7 @@ function OneGiveaway({ id, link }: { id: string; link: GiveawayLink }) {
       )}
 
       {answered && g.status === 'drawn' && (
-        <GiveawayJudging giveaway={g} canManage={manage} onChanged={() => void load()} />
+        <GiveawayJudging giveaway={g} canManage={manage} agreed={!owesAgreement} onChanged={() => void load()} />
       )}
 
       {judged || (screened && (g.status === 'open' || g.status === 'judging'))
@@ -1117,6 +1277,7 @@ function JudgedEntrants({
               <span className="min-w-0 text-sm font-semibold text-slate-200 break-words">
                 {e.name}
                 {!e.linked && <span className="text-xs font-normal text-slate-500"> · no account</span>}
+                <Agreement g={g} e={e} manage={got.can_manage} busy={busy} act={act} />
               </span>
               {got.can_manage && g.status === 'open' && (
                 <span className="flex flex-wrap gap-3">
@@ -1191,6 +1352,7 @@ function Entrants({
                 <p className="text-xs text-slate-500">
                   {e.self ? 'Entered themselves' : `Entered by ${e.entered_by ?? 'an organiser'}`} · {when(e.entered_at)}
                 </p>
+                <Agreement g={g} e={e} manage={got.can_manage} busy={busy} act={act} />
               </div>
               <div className="text-right">
                 <p className="text-sm font-semibold text-slate-200 tabular-nums">{chance(e.weight, total)}</p>
@@ -1417,6 +1579,10 @@ function describe(e: LogEntry): string {
       return `${who} deleted the giveaway ${d.title}`;
     case 'person deleted':
       return `${who} deleted ${d.name} from the giveaways`;
+    case 'terms agreed':
+      return d.self ? `${d.name} agreed to the terms` : `${who} recorded that ${d.name} agreed to the terms`;
+    case 'standard terms changed':
+      return `${who} changed the standard terms`;
     case 'trivia set':
       return `${who} set the trivia: ${((d.sessions as string[] | null) ?? []).join(', ') || 'none'}, ${d.bonus} extra ${Number(d.bonus) === 1 ? 'ticket' : 'tickets'} a point`;
     case 'rated':

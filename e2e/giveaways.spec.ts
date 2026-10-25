@@ -164,7 +164,7 @@ test('staff can put themselves in', async ({ page }) => {
   const sent = await server(page);
   await page.goto(`/giveaways/${G}`);
   await page.getByRole('button', { name: 'Put me in' }).click();
-  await expect.poll(() => sent.find((s) => s.fn === 'enter_giveaway')?.args).toEqual({ p_id: G, p_in: true });
+  await expect.poll(() => sent.find((s) => s.fn === 'enter_giveaway')?.args).toEqual({ p_id: G, p_in: true, p_terms: null });
 });
 
 test('an organiser sets one up and enters somebody who has never signed in, by name', async ({ page }) => {

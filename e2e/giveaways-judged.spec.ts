@@ -104,7 +104,7 @@ test('staff enter by answering every question', async ({ page }) => {
   await form.getByRole('button', { name: 'Enter' }).click();
   await expect.poll(() => sent.find((s) => s.fn === 'enter_judged_giveaway')?.args).toEqual({
     p_id: G, p_answers: { [Q1]: 'A voice in what we build', [Q2]: 'My dad' },
-    p_person: null, p_user: null, p_name: null,
+    p_person: null, p_user: null, p_name: null, p_terms: null,
   });
   // and there is no "put me in" for a judged one
   await expect(page.getByRole('button', { name: 'Put me in' })).toHaveCount(0);
@@ -178,4 +178,16 @@ test('once decided, every entry shows with its name, points and the judges’ ra
   await expect(all).toContainText('1. Ada');
   await expect(all).toContainText('1st from Judge Two · 2nd from Judge One');
   await expect(all).toContainText('Pride in the work');
+});
+
+test('with terms, answering waits on agreeing to them, and sends what was agreed to', async ({ page }) => {
+  const sent = await server(page, { giveaway: { terms_text: 'Staff only.', terms_hash: 'h-terms' } });
+  await page.goto(`/giveaways/${G}`);
+  const form = page.getByRole('region', { name: 'Enter by answering' });
+  await form.getByLabel('What does being an owner mean to you?').fill('A voice in what we build');
+  await form.getByLabel('Who would you take?').fill('My dad');
+  await expect(form.getByRole('button', { name: 'Enter' })).toBeDisabled();
+  await form.getByLabel('I have read and agree to the terms and conditions').check();
+  await form.getByRole('button', { name: 'Enter' }).click();
+  await expect.poll(() => sent.find((s) => s.fn === 'enter_judged_giveaway')?.args).toMatchObject({ p_terms: 'h-terms' });
 });
