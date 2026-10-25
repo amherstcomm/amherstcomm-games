@@ -192,7 +192,7 @@ Signed out — or without the env vars below — every auth surface hides and ev
 Setup:
 
 1. Create a free Supabase project.
-2. Run [supabase/schema.sql](supabase/schema.sql) in the SQL Editor (safe to re-run — re-run it after pulling changes, since it also adds new columns like `profiles.settings`), then [supabase/words.sql](supabase/words.sql) and load `scripts/words.csv` (from `npm run build-words`) into the `words` table — or dispatch the **Rebuild word lists** workflow, which does the whole thing in one transaction.
+2. Apply [supabase/schema.sql](supabase/schema.sql) with [scripts/apply-schema.sh](scripts/apply-schema.sh) (safe to re-run — re-run it after pulling changes, since it also adds new columns like `profiles.settings`). It is over a megabyte, more than the Studio SQL Editor will take. Then [supabase/words.sql](supabase/words.sql) and load `scripts/words.csv` (from `npm run build-words`) into the `words` table — or dispatch the **Rebuild word lists** workflow, which does the whole thing in one transaction.
 3. In **Authentication → URL Configuration**, set the Site URL to `https://games.amherstcomm.net` and add `http://localhost:5173` as an additional redirect URL — sign-in redirects back to whichever origin the visitor is on. See [docs/selfhost.md](docs/selfhost.md) for the self-hosted setup this deployment actually uses.
 4. Copy the Project URL and anon/publishable key (**Settings → API**) into env vars — `.env.local` for local dev (see [.env.example](.env.example)), and environment variables on each Render static site. The anon key is public by design; row-level security protects the data.
 
