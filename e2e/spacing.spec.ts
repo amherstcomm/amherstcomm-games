@@ -199,6 +199,8 @@ function giveawayPage(id: string) {
     entrants: GIVEAWAY_ENTRANTS.map((e, i) => ({
       // the reader (p1) was put in by an organiser and has yet to agree
       agreed: i === 0 ? false : i !== 1,
+      // Bea was disqualified, and organisers see why
+      disqualified: i === 2, disqualified_reason: i === 2 ? 'Entered twice, under a second name and email' : null,
       ...e, linked: i < 2, entered_at: `${plus(-5)}T14:00:00Z`, entered_by: 'Ray Tetzloff', self: i === 0,
       attended: i === 1 ? [{ on: plus(-30), what: 'Bucks game' }, { on: plus(-400), what: 'Brewers opening day' }] : [],
     })),
@@ -206,7 +208,9 @@ function giveawayPage(id: string) {
     winners: drawn
       ? [
           { person: 'p3', name: 'Bea', pick: 1, draw: 1, status: 'declined', decided_at: null, decided_by: 'Ray Tetzloff' },
-          { person: 'p1', name: 'Ray Tetzloff', pick: 1, draw: 2, status: 'pending', decided_at: null, decided_by: null },
+          // the reader, with a day and a half left to accept
+          { person: 'p1', name: 'Ray Tetzloff', pick: 1, draw: 2, status: 'pending', decided_at: null, decided_by: null,
+            respond_by: `${plus(2)}T03:00:00Z` },
         ]
       : [],
     log: [

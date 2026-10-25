@@ -59,6 +59,8 @@ export type Giveaway = {
   bar?: number;
   /** absent from a database without prizes: an event, as all were */
   kind?: GiveawayKind;
+  /** hours each winner has to accept, or null for no limit */
+  accept_hours?: number | null;
   /** its own terms, on top of the standard ones it took */
   terms?: string;
   standard_terms?: string;
@@ -96,6 +98,12 @@ export type Entrant = {
   /** agreed to the terms: themselves, or recorded by an organiser */
   agreed?: boolean;
   agreed_self?: boolean;
+  /** in no drawing or ranking; the entry stays listed */
+  disqualified?: boolean;
+  /** why, for organisers only */
+  disqualified_reason?: string | null;
+  /** barred from every giveaway until an organiser lifts it */
+  barred?: boolean;
 };
 
 /** Who a drawing is between, frozen when it was committed. */
@@ -154,6 +162,8 @@ export type Winner = {
   status: WinnerStatus;
   decided_at: string | null;
   decided_by: string | null;
+  /** when the time to accept runs out, or null for no limit */
+  respond_by?: string | null;
 };
 
 export type LogEntry = {
@@ -191,6 +201,10 @@ export type HistoryPerson = {
   attended: (Attended & { id: string; source: 'giveaway' | 'manual'; giveaway: string | null })[];
   /** prizes to keep they accepted: in the history, not the odds */
   won?: (Attended & { giveaway: string })[];
+  barred?: boolean;
+  barred_at?: string | null;
+  /** why, for organisers only */
+  barred_reason?: string | null;
 };
 
 export type Found = { person: string | null; user: string | null; name: string; email: string | null };
@@ -253,6 +267,8 @@ export type GiveawayForm = {
   kind: GiveawayKind;
   /** its own terms, on top of the standard ones */
   terms: string;
+  /** hours each winner has to accept, or null for no limit */
+  acceptHours: number | null;
 };
 
 export const saveGiveaway = (id: string | null, f: GiveawayForm) =>
@@ -273,7 +289,23 @@ export const saveGiveaway = (id: string | null, f: GiveawayForm) =>
     p_bar: f.bar,
     p_kind: f.kind,
     p_terms: f.terms,
+    p_accept_hours: f.acceptHours,
   });
+
+/** Out of every drawing and ranking, with a reason only organisers see;
+ *  `bar` keeps them out of every giveaway until it is lifted. */
+export const disqualifyEntry = (id: string, person: string, reason: string, bar: boolean) =>
+  call('disqualify_giveaway_entry', { p_id: id, p_person: person, p_reason: reason, p_bar: bar });
+
+/** Undone, while the giveaway still takes entries. */
+export const reinstateEntry = (id: string, person: string) =>
+  call('reinstate_giveaway_entry', { p_id: id, p_person: person });
+
+export const liftBar = (person: string) => call('lift_giveaway_bar', { p_person: person });
+
+/** A winner answering for themselves; accepting agrees to `terms`. */
+export const respondToWin = (id: string, accept: boolean, terms?: string | null) =>
+  call('respond_to_giveaway_win', { p_id: id, p_accept: accept, p_terms: terms ?? null });
 
 export const cancelGiveaway = (id: string, reason: string) =>
   call('cancel_giveaway', { p_id: id, p_reason: reason });
