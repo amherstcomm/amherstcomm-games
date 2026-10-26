@@ -299,7 +299,13 @@ export async function markAsk(
  *  knows about one of them cannot turn the others off by omission. */
 export async function setSessionOptions(
   session: string,
-  opts: { qa?: boolean | null; shareResults?: boolean | null; shuffleOptions?: boolean | null }
+  opts: {
+    qa?: boolean | null;
+    shareResults?: boolean | null;
+    shuffleOptions?: boolean | null;
+    /** avatars on a choice question's answers: off, as people answer, or at the reveal */
+    avatars?: 'off' | 'live' | 'reveal' | null;
+  }
 ): Promise<{ ok: boolean; reason?: string }> {
   if (!supabase) return { ok: false, reason: 'not connected' };
   const { data, error } = await supabase.rpc('set_session_options', {
@@ -311,6 +317,8 @@ export async function setSessionOptions(
     ...(opts.shuffleOptions !== undefined && opts.shuffleOptions !== null
       ? { p_shuffle_options: opts.shuffleOptions }
       : {}),
+    // likewise: only when it is being set
+    ...(opts.avatars ? { p_avatars: opts.avatars } : {}),
   });
   if (error) return { ok: false, reason: error.message };
   return (data as { ok: boolean }) ?? { ok: false, reason: 'no answer' };

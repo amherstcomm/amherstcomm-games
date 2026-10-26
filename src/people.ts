@@ -38,6 +38,10 @@ export type Person = {
   grants?: string[];
   /** whether this is the person reading the page */
   self?: boolean;
+  /** their avatar as they set it, or null for initials */
+  avatar?: import('@/avatars').Avatar | null;
+  /** an organiser took it down and they may not set another */
+  avatar_blocked?: boolean;
 };
 
 const fail = (reason: string) => ({ ok: false as const, reason });

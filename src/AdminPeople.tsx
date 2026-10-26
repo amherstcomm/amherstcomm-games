@@ -13,6 +13,8 @@
 // about the row being pressed.
 import { useCallback, useEffect, useRef, useState } from 'react';
 import Waiting from '@/Waiting';
+import Avatar from '@/Avatar';
+import { setPersonAvatar } from '@/avatars';
 import {
   LADDER,
   ROLE_LABEL,
@@ -38,18 +40,21 @@ function Row({
   person,
   onChanged,
   onGrant,
+  onAvatar,
   note,
 }: {
   person: Person;
   onChanged: (user: string, role: Role) => void;
   onGrant: (user: string, grant: PersonGrant, on: boolean) => void;
+  onAvatar: (user: string, blocked: boolean) => void;
   note: string;
 }) {
   const held: Role = person.role ?? 'games.view';
   return (
     <li className="rounded-xl border border-white/15 p-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="min-w-0">
+        <Avatar avatar={person.avatar_blocked ? null : (person.avatar ?? null)} name={nameOf(person)} seed={person.user} />
+        <div className="min-w-0 flex-1">
           <p className="text-sm font-semibold text-slate-200 truncate">
             {nameOf(person)}
             {person.self && <span className="text-xs text-slate-500 font-normal"> — you</span>}
@@ -97,6 +102,24 @@ function Row({
             </label>
           );
         })}
+      </div>
+      {/* Taking an avatar down also stops them setting another, until they
+          are allowed again: an avatar that was a problem once is otherwise
+          one click from being back. */}
+      <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
+        <label className="flex items-center gap-2 text-slate-300">
+          <input
+            type="checkbox"
+            checked={!person.avatar_blocked}
+            onChange={(e) => {
+              const allow = e.target.checked;
+              if (!allow && !window.confirm(`Take down ${nameOf(person)}'s avatar and stop them setting another?`)) return;
+              onAvatar(person.user, !allow);
+            }}
+          />
+          Can have an avatar
+          {person.avatar_blocked && <span className="text-slate-500">(taken down; shows as initials)</span>}
+        </label>
       </div>
       {note && <p className="text-xs text-rose-300 mt-2">{note}</p>}
     </li>
@@ -148,6 +171,15 @@ export default function AdminPeople() {
     }
   }
 
+  async function avatar(user: string, blocked: boolean) {
+    const res = await setPersonAvatar(user, blocked);
+    setNotes((n) => ({ ...n, [user]: res.ok ? '' : (res.reason ?? 'That did not work') }));
+    if (res.ok) {
+      await pull();
+      if (query.trim().length >= 2) setFound(await findPeople(query));
+    }
+  }
+
   async function change(user: string, role: Role) {
     const res = await setPersonRole(user, role);
     setNotes((n) => ({ ...n, [user]: res.ok ? '' : (res.reason ?? 'That did not work') }));
@@ -180,6 +212,7 @@ export default function AdminPeople() {
             note={notes[person.user] ?? ''}
             onChanged={change}
             onGrant={grant}
+            onAvatar={(u, b) => void avatar(u, b)}
           />
         ))}
       </ul>
@@ -210,6 +243,7 @@ export default function AdminPeople() {
                 note={notes[person.user] ?? ''}
                 onChanged={change}
                 onGrant={grant}
+                onAvatar={(u, b) => void avatar(u, b)}
               />
             ))}
         </ul>

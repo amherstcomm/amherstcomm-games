@@ -7,6 +7,7 @@ import { useSetting } from '@/settings';
 import { beginSso, releaseAutoAttempt } from '@/signIn';
 import { clearMyStats, deleteAccount, readCompeting, setCompeting } from '@/account';
 import { fetchDisplayName } from '@/leaderboard';
+import AvatarSettings from '@/AvatarSettings';
 import {
   acceptInvite,
   blockFriend,
@@ -347,6 +348,12 @@ export default function AccountModal({
                   : 'Company sign-in names your account. If this stays empty, sign out and back in.'}
               </p>
             </div>
+
+            {tab === 'personal' && (
+              <div className="mb-6">
+                <AvatarSettings name={name ?? null} user={session.user.id} />
+              </div>
+            )}
 
             {competing !== null && (
               <div className={`mb-6 ${tab === 'personal' ? '' : 'hidden'}`} data-competing>

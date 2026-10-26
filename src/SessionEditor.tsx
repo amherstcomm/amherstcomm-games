@@ -1186,6 +1186,35 @@ function SessionEditorFor({ session }: { session: string }) {
         </p>
       </div>
 
+      {/* Who picked what, as avatars on the answers: for the fun of the room
+          seeing itself. Anybody who answers anonymously is only a count. */}
+      <div className="mb-6 -mt-2">
+        <label className="flex flex-wrap items-center gap-2 text-xs text-slate-400">
+          Show avatars on the answers
+          <select
+            className="h-8 rounded-lg bg-white/5 border border-white/15 px-2 text-xs text-slate-200"
+            value={meta.avatars ?? 'off'}
+            onChange={(e) => {
+              const v = e.target.value as 'off' | 'live' | 'reveal';
+              void run(() => setSessionOptions(session, { avatars: v }));
+            }}
+          >
+            <option value="off">Off</option>
+            <option value="live">As people answer</option>
+            <option value="reveal">At the reveal</option>
+          </select>
+        </label>
+        <p className="text-xs text-slate-500 mt-1">
+          {(meta.avatars ?? 'off') === 'off'
+            ? 'Multiple-choice and poll questions show counts only.'
+            : meta.mode === 'open'
+              ? 'Each player sees who picked what once they have answered, on their own screen.'
+              : (meta.avatars === 'live'
+                  ? 'Avatars land on each answer as people pick it, on the projector and on phones.'
+                  : 'When you reveal the answer, everybody’s avatar appears on what they picked.')}
+        </p>
+      </div>
+
       {/* Only for a session that runs without anybody at the front. A live one
           has a presenter, and the presenter is the schedule — a clock that
           opened or shut it underneath them would take the one thing they are
