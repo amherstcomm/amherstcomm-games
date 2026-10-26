@@ -2,8 +2,8 @@
 import { useEffect, useState } from 'react';
 import { colorFor, initials, photoLink, presetEmoji, type Avatar as AvatarData, type Pick } from '@/avatars';
 
-const SIZE = { sm: 'w-7 h-7 text-[11px]', md: 'w-10 h-10 text-sm', lg: 'w-16 h-16 text-2xl' } as const;
-const EMOJI = { sm: 'text-sm', md: 'text-xl', lg: 'text-4xl' } as const;
+const SIZE = { sm: 'w-8 h-8 text-xs', md: 'w-10 h-10 text-sm', lg: 'w-16 h-16 text-2xl' } as const;
+const EMOJI = { sm: 'text-lg', md: 'text-xl', lg: 'text-4xl' } as const;
 
 export default function Avatar({
   avatar,
@@ -11,6 +11,7 @@ export default function Avatar({
   seed,
   size = 'md',
   className = '',
+  ring = false,
 }: {
   avatar: AvatarData | null;
   name: string | null;
@@ -18,6 +19,8 @@ export default function Avatar({
   seed?: string | null;
   size?: keyof typeof SIZE;
   className?: string;
+  /** an edge, for one overlapping another */
+  ring?: boolean;
 }) {
   const [url, setUrl] = useState<string | null>(null);
   const photo = avatar?.kind === 'photo' ? avatar.value : null;
@@ -30,19 +33,22 @@ export default function Avatar({
     };
   }, [photo]);
 
+  const edge = ring ? { boxShadow: '0 0 0 2px rgba(255, 255, 255, 0.85)' } : {};
   const base = `inline-flex items-center justify-center rounded-full shrink-0 overflow-hidden select-none ${SIZE[size]} ${className}`;
   if (photo && url) {
-    return <img src={url} alt="" className={`${base} object-cover bg-white/10`} />;
+    return <img src={url} alt="" className={`${base} object-cover bg-white/10`} style={edge} />;
   }
   if (avatar?.kind === 'preset') {
     return (
-      <span aria-hidden="true" className={base} style={{ background: avatar.color ?? colorFor(seed) }}>
+      <span aria-hidden="true" className={base} style={{ background: avatar.color ?? colorFor(seed), ...edge }}>
         <span className={EMOJI[size]}>{presetEmoji(avatar.value)}</span>
       </span>
     );
   }
   return (
-    <span aria-hidden="true" className={`${base} font-semibold text-white`} style={{ background: colorFor(seed ?? name) }}>
+    // White set directly: the themes recolour the white utility, and initials
+    // on a mid-tone need it white in both.
+    <span aria-hidden="true" className={`${base} font-semibold`} style={{ background: colorFor(seed ?? name), color: '#ffffff', ...edge }}>
       {initials(name)}
     </span>
   );
@@ -61,7 +67,8 @@ export function AvatarStack({ picks, max = 8 }: { picks: Pick[]; max?: number })
           data-joined>
       {shown.map((p, i) => (
         <Avatar key={p.user} avatar={p.avatar} name={p.name} seed={p.user} size="sm"
-                className={`ring-2 ring-ink ${i > 0 ? '-ml-2' : ''}`} />
+                // a light edge between overlapped faces, on either theme
+                className={i > 0 ? '-ml-2' : ''} ring />
       ))}
       {more > 0 && <span className="ml-1 text-xs text-slate-300 tabular-nums">+{more}</span>}
     </span>

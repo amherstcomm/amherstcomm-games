@@ -109,12 +109,14 @@ export default function AvatarSettings({ name, user }: { name: string | null; us
             <div className="grid grid-cols-[repeat(auto-fill,minmax(2.75rem,1fr))] gap-2">
               {PRESETS.map((p) => (
                 <button key={p.id} type="button" aria-label={p.label} disabled={busy}
+                        aria-pressed={mine.avatar?.kind === 'preset' && mine.avatar.value === p.id}
                         onClick={() => void run(async () => {
                           const res = await setMyAvatar({ kind: 'preset', value: p.id, color });
                           if (res.ok) await dropPhoto(mine.avatar);
                           return res;
                         }, `${p.label} it is.`)}
-                        className="h-11 rounded-full text-xl flex items-center justify-center hover:ring-2 hover:ring-white/60"
+                        className={`h-11 rounded-full text-xl flex items-center justify-center hover:ring-2 hover:ring-white/60
+                          ${mine.avatar?.kind === 'preset' && mine.avatar.value === p.id ? 'ring-2 ring-white' : ''}`}
                         style={{ background: color }}>
                   <span aria-hidden="true">{p.emoji}</span>
                 </button>
