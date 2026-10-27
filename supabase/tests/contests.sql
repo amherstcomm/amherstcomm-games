@@ -288,8 +288,9 @@ select pg_temp.check('while the page everybody reads still names nobody',
    where x->>'entrant' is not null) = 0);
 
 set session "test.uid" = 'd2222222-2222-2222-2222-222222222222';
-select pg_temp.check('a player cannot search for entrants',
-  (public.find_entrants('carver')->>'reason') = 'not allowed');
+-- A player entering with a teammate has to find them.
+select pg_temp.check('a player may look somebody up, to enter with them',
+  (select count(*) from jsonb_array_elements(public.find_entrants('carver')->'people')) = 2);
 select pg_temp.check('nor read the organiser sheet of entries',
   (public.contest_entries_sheet((select id from onbehalf))->>'reason') = 'not allowed');
 

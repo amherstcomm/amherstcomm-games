@@ -38,6 +38,8 @@ export type Contest = {
   /** how many each voter ranks */
   picks: number;
   prize: string | null;
+  /** whether a person may be on more than one entry */
+  many_entries?: boolean;
   phase: ContestPhase;
   /** whether this person may put something in right now */
   may_enter: boolean;
@@ -55,7 +57,19 @@ export type ContestEntry = {
   entrant: string | null;
   /** theirs to change */
   mine: boolean;
+  /** the others on it, besides whoever it is filed under; only on one that
+   *  is the reader's own */
+  partners?: Partner[] | null;
 };
+
+/** Somebody else on an entry: an account, or an email waiting for one. */
+export type Partner = { user: string | null; email: string | null; name: string | null; invite: boolean };
+
+/** A person chosen in the search, as a partner. */
+export const asPartner = (e: { user: string; email: string; name: string | null; invite?: boolean }): Partner =>
+  e.invite
+    ? { user: null, email: e.email, name: e.name, invite: true }
+    : { user: e.user, email: null, name: e.name ?? e.email, invite: false };
 
 /** What the list page shows: the contests that are open or being judged. */
 export type ContestOn = {
@@ -296,6 +310,8 @@ export async function saveEntry(e: {
   /** or somebody who has never signed in, by email, with a name to show */
   inviteEmail?: string | null;
   inviteName?: string | null;
+  /** everybody else on it; left out, the list stays as it was */
+  partners?: Partner[];
 }): Promise<{ ok: boolean; reason?: string; id?: string }> {
   if (!supabase) return { ok: false, reason: 'not connected' };
   const { data, error } = await supabase.rpc('save_contest_entry', {
@@ -307,6 +323,9 @@ export async function saveEntry(e: {
     p_entrant: e.entrant ?? null,
     p_invite_email: e.inviteEmail ?? null,
     p_invite_name: e.inviteName ?? null,
+    p_partners: e.partners
+      ? e.partners.map((p) => (p.invite ? { email: p.email, name: p.name } : { user: p.user }))
+      : null,
   });
   if (error) return { ok: false, reason: error.message };
   return data as { ok: boolean; reason?: string; id?: string };
@@ -352,6 +371,7 @@ export type EntrySheetRow = {
   entrant_name: string | null;
   /** set while the entry waits for somebody who has never signed in */
   invited_email?: string | null;
+  partners?: Partner[];
   entered_by_me: boolean;
 };
 
@@ -384,6 +404,8 @@ export async function saveContest(c: {
   /** "HH:MM" on the company clock, or empty for the end of the day */
   entriesCloseTime?: string;
   votesCloseTime?: string;
+  /** whether a person may be on more than one entry */
+  manyEntries?: boolean;
   whoEnters: 'players' | 'admins';
   entrantsShown: boolean;
   votersShown: boolean;
@@ -406,6 +428,7 @@ export async function saveContest(c: {
     p_prize: (c.prize ?? '').trim() || null,
     p_entries_close_at: closingAt(c.entriesClose, c.entriesCloseTime),
     p_votes_close_at: closingAt(c.votesClose, c.votesCloseTime),
+    p_many_entries: !!c.manyEntries,
   });
   if (error) return { ok: false, reason: error.message };
   return data as { ok: boolean; reason?: string; id?: string };

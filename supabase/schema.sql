@@ -12500,6 +12500,9 @@ revoke all on function public.contest_tally(uuid) from public, anon, authenticat
  * An entry nobody is credited for -- an organiser entered it and said whose it
  * was not -- scores for nobody. There is no one to pay.
  */
+-- Dropped first: the last definition returns a column more than the earlier
+-- ones, and a return type cannot be replaced in place.
+drop function if exists public.contest_ranking(uuid);
 create or replace function public.contest_ranking(p_contest uuid)
 returns table (place bigint, name text, points numeric)
 language sql
@@ -24228,6 +24231,9 @@ $fn$;
 
 revoke all on function public.contest_tally(uuid) from public, anon, authenticated;
 
+-- Dropped first: the last definition returns a column more than the earlier
+-- ones, and a return type cannot be replaced in place.
+drop function if exists public.contest_ranking(uuid);
 create or replace function public.contest_ranking(p_contest uuid)
 returns table (place bigint, name text, points numeric)
 language sql
@@ -24319,3 +24325,931 @@ $fn$;
 
 revoke all on function public.contest_view(uuid) from public;
 grant execute on function public.contest_view(uuid) to anon, authenticated;
+
+-- ---------------------------------------------------------------------------
+-- One entry, several people
+-- ---------------------------------------------------------------------------
+--
+-- A team carving one pumpkin. The entry keeps its entrant -- the person it is
+-- filed under, or the email it waits under -- and the others are partners
+-- beside it. Everything that asks "whose is this" asks the members: the name
+-- on the tile is all of them, none of them may vote for it, any of them may
+-- change it, and a placing it earns is split between them evenly in a
+-- tournament.
+--
+-- Whether a person may be on more than one entry is the contest's to say. Off
+-- is one entry each, as a contest has always been for people entering their
+-- own -- and now for an organiser entering on their behalf as well, so a
+-- person cannot end up on two by being typed twice.
+alter table public.contests add column if not exists many_entries boolean not null default false;
+
+create table if not exists public.contest_entry_partners (
+  entry_id uuid not null references public.contest_entries (id) on delete cascade,
+  user_id uuid references auth.users (id) on delete cascade,
+  invited_email text check (invited_email is null or (invited_email = lower(invited_email)
+                                                      and char_length(invited_email) <= 320)),
+  invited_name text check (invited_name is null or char_length(btrim(invited_name)) between 1 and 80),
+  position int not null default 1,
+  check ((user_id is null) <> (invited_email is null)),
+  unique (entry_id, user_id),
+  unique (entry_id, invited_email)
+);
+
+create index if not exists contest_entry_partners_user_idx on public.contest_entry_partners (user_id);
+create index if not exists contest_entry_partners_invited_idx
+  on public.contest_entry_partners (invited_email) where invited_email is not null;
+
+alter table public.contest_entry_partners enable row level security;
+revoke all on public.contest_entry_partners from anon, authenticated;
+
+-- Everybody on an entry, the entrant first. Internal: the functions that
+-- answer pages read it; no page does.
+create or replace view public.contest_entry_members as
+  select e.id as entry_id, e.contest_id, e.entrant as user_id, e.invited_email,
+         coalesce(p.display_name, e.invited_name, 'Someone') as name, 0 as pos
+  from public.contest_entries e
+  left join public.profiles p on p.id = e.entrant
+  where e.entrant is not null or e.invited_email is not null
+  union all
+  select x.entry_id, e.contest_id, x.user_id, x.invited_email,
+         coalesce(p.display_name, x.invited_name, 'Someone'), x.position
+  from public.contest_entry_partners x
+  join public.contest_entries e on e.id = x.entry_id
+  left join public.profiles p on p.id = x.user_id;
+
+revoke all on public.contest_entry_members from public, anon, authenticated;
+
+create or replace function public.on_contest_entry(p_entry uuid, p_user uuid)
+returns boolean
+language sql
+stable
+security definer
+set search_path = ''
+as $fn$
+  select p_user is not null and exists (
+    select 1 from public.contest_entry_members m where m.entry_id = p_entry and m.user_id = p_user)
+$fn$;
+
+revoke all on function public.on_contest_entry(uuid, uuid) from public, anon, authenticated;
+
+-- The partners, for the form that changes the entry.
+create or replace function public.contest_entry_partner_list(p_entry uuid)
+returns jsonb
+language sql
+stable
+security definer
+set search_path = ''
+as $fn$
+  select coalesce(jsonb_agg(jsonb_build_object(
+           'user', x.user_id,
+           'email', x.invited_email,
+           'name', coalesce(p.display_name, x.invited_name),
+           'invite', x.user_id is null)
+         order by x.position), '[]'::jsonb)
+  from public.contest_entry_partners x
+  left join public.profiles p on p.id = x.user_id
+  where x.entry_id = p_entry
+$fn$;
+
+revoke all on function public.contest_entry_partner_list(uuid) from public, anon, authenticated;
+
+-- Signing in claims partner places too. A person already on the entry under
+-- their account keeps that one place.
+create or replace function public.claim_contest_invites(p_user uuid, p_email text)
+returns void
+language plpgsql
+security definer
+set search_path = ''
+as $fn$
+declare
+  v_email text := lower(btrim(coalesce(p_email, '')));
+begin
+  if v_email = '' then return; end if;
+  update public.contest_entries
+     set entrant = p_user, invited_email = null, invited_name = null
+   where invited_email = v_email;
+  delete from public.contest_entry_partners x
+   where x.invited_email = v_email
+     and exists (select 1 from public.contest_entry_members m
+                 where m.entry_id = x.entry_id and m.user_id = p_user);
+  update public.contest_entry_partners
+     set user_id = p_user, invited_email = null, invited_name = null
+   where invited_email = v_email;
+end;
+$fn$;
+
+revoke all on function public.claim_contest_invites(uuid, text) from public, anon, authenticated;
+
+-- Anybody signed in may look somebody up now: a player entering with a
+-- teammate has to find them. It answers what the entry form shows -- a name
+-- and a work address, among colleagues -- and nothing more.
+create or replace function public.find_entrants(p_query text)
+returns jsonb
+language sql
+stable
+security definer
+set search_path = ''
+as $fn$
+  select case
+    when (select auth.uid()) is null
+      then jsonb_build_object('ok', false, 'reason', 'not allowed')
+    when length(btrim(coalesce(p_query, ''))) < 2
+      then jsonb_build_object('ok', true, 'people', '[]'::jsonb)
+    else jsonb_build_object('ok', true, 'people', coalesce(
+      (select jsonb_agg(x order by x->>'name', x->>'email')
+       from (
+         select jsonb_build_object(
+                  'user', u.id,
+                  'email', u.email,
+                  'name', p.display_name) as x
+         from auth.users u
+         left join public.profiles p on p.id = u.id
+         where u.email ilike '%' || btrim(p_query) || '%'
+            or p.display_name ilike '%' || btrim(p_query) || '%'
+         limit 10
+       ) found),
+      '[]'::jsonb))
+  end
+$fn$;
+
+revoke all on function public.find_entrants(text) from public, anon;
+grant execute on function public.find_entrants(text) to authenticated;
+
+drop function if exists public.save_contest(uuid, text, text, date, date, date, date, text, boolean, boolean, int, text, timestamptz, timestamptz);
+
+create or replace function public.save_contest(
+  p_id uuid,
+  p_name text,
+  p_blurb text,
+  p_entries_open date,
+  p_entries_close date,
+  p_votes_open date,
+  p_votes_close date,
+  p_who_enters text default 'players',
+  p_entrants_shown boolean default true,
+  p_voters_shown boolean default false,
+  p_picks int default 3,
+  p_prize text default null,
+  p_entries_close_at timestamptz default null,
+  p_votes_close_at timestamptz default null,
+  p_many_entries boolean default false
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $fn$
+declare
+  v_id uuid := p_id;
+  v_name text := btrim(coalesce(p_name, ''));
+begin
+  if not public.can('games.setup') then
+    return jsonb_build_object('ok', false, 'reason', 'not allowed');
+  end if;
+  if char_length(v_name) = 0 or char_length(v_name) > 80 then
+    return jsonb_build_object('ok', false, 'reason', 'it needs a name');
+  end if;
+  if p_entries_open is null or p_entries_close is null
+     or p_votes_open is null or p_votes_close is null then
+    return jsonb_build_object('ok', false, 'reason', 'it needs all four dates');
+  end if;
+  if p_entries_close < p_entries_open or p_votes_close < p_votes_open then
+    return jsonb_build_object('ok', false, 'reason', 'each part has to end on or after it starts');
+  end if;
+  -- A closing time is the moment that part ends; without one it runs to the
+  -- end of its last day. Each part has to be open for some of it, and
+  -- voting has to end after entering does.
+  if public.contest_close_at(p_entries_close, p_entries_close_at) <= public.contest_day_start(p_entries_open)
+     or public.contest_close_at(p_votes_close, p_votes_close_at) <= public.contest_day_start(p_votes_open) then
+    return jsonb_build_object('ok', false, 'reason', 'each part has to close after it opens');
+  end if;
+  if public.contest_close_at(p_votes_close, p_votes_close_at)
+     <= public.contest_close_at(p_entries_close, p_entries_close_at) then
+    return jsonb_build_object('ok', false, 'reason', 'voting has to close after entering does');
+  end if;
+  if p_votes_open < p_entries_close then
+    return jsonb_build_object('ok', false, 'reason',
+      'voting starts once entering has finished, or the early entries collect every vote');
+  end if;
+  if coalesce(p_who_enters, 'players') not in ('players', 'admins') then
+    return jsonb_build_object('ok', false, 'reason', 'either the players enter or an organiser does');
+  end if;
+  if coalesce(p_picks, 3) < 1 or coalesce(p_picks, 3) > 5 then
+    return jsonb_build_object('ok', false, 'reason', 'a voter ranks between one and five');
+  end if;
+
+  if v_id is not null then
+    update public.contests
+       set name = v_name,
+           blurb = nullif(btrim(coalesce(p_blurb, '')), ''),
+           entries_open_on = p_entries_open, entries_close_on = p_entries_close,
+           votes_open_on = p_votes_open, votes_close_on = p_votes_close,
+           entries_close_at = p_entries_close_at, votes_close_at = p_votes_close_at,
+           many_entries = coalesce(p_many_entries, false),
+           who_enters = coalesce(p_who_enters, 'players'),
+           entrants_shown = coalesce(p_entrants_shown, true),
+           voters_shown = coalesce(p_voters_shown, false),
+           picks = coalesce(p_picks, 3),
+           prize = nullif(btrim(coalesce(p_prize, '')), '')
+     where id = v_id;
+    if not found then
+      return jsonb_build_object('ok', false, 'reason', 'no such contest');
+    end if;
+  else
+    insert into public.contests (name, blurb, entries_open_on, entries_close_on,
+                                 votes_open_on, votes_close_on, who_enters,
+                                 entrants_shown, voters_shown, picks, prize, created_by,
+                                 entries_close_at, votes_close_at, many_entries)
+    values (v_name, nullif(btrim(coalesce(p_blurb, '')), ''),
+            p_entries_open, p_entries_close, p_votes_open, p_votes_close,
+            coalesce(p_who_enters, 'players'), coalesce(p_entrants_shown, true),
+            coalesce(p_voters_shown, false), coalesce(p_picks, 3),
+            nullif(btrim(coalesce(p_prize, '')), ''), (select auth.uid()),
+            p_entries_close_at, p_votes_close_at, coalesce(p_many_entries, false))
+    returning id into v_id;
+  end if;
+  return jsonb_build_object('ok', true, 'id', v_id);
+end;
+$fn$;
+
+revoke all on function public.save_contest(uuid, text, text, date, date, date, date, text, boolean, boolean, int, text, timestamptz, timestamptz, boolean) from public, anon;
+grant execute on function public.save_contest(uuid, text, text, date, date, date, date, text, boolean, boolean, int, text, timestamptz, timestamptz, boolean) to authenticated;
+
+create or replace function public.contests_sheet()
+returns jsonb
+language sql
+stable
+security definer
+set search_path = ''
+as $fn$
+  select case
+    when not public.can('games.setup')
+      then jsonb_build_object('ok', false, 'reason', 'not allowed')
+    else jsonb_build_object('ok', true, 'contests', coalesce((
+      select jsonb_agg(jsonb_build_object(
+               'id', c.id, 'name', c.name, 'blurb', c.blurb,
+               'entries_open_on', c.entries_open_on, 'entries_close_on', c.entries_close_on,
+               'votes_open_on', c.votes_open_on, 'votes_close_on', c.votes_close_on,
+          'entries_close_at', c.entries_close_at, 'votes_close_at', c.votes_close_at,
+               'who_enters', c.who_enters, 'entrants_shown', c.entrants_shown,
+               'voters_shown', c.voters_shown, 'many_entries', c.many_entries, 'picks', c.picks, 'prize', c.prize,
+               'phase', public.contest_phase(c),
+               'entries', (select count(*) from public.contest_entries e where e.contest_id = c.id))
+             order by c.entries_open_on desc)
+      from public.contests c), '[]'::jsonb))
+  end
+$fn$;
+
+revoke all on function public.contests_sheet() from public, anon;
+grant execute on function public.contests_sheet() to authenticated;
+
+drop function if exists public.save_contest_entry(uuid, uuid, text, text, text, uuid, text, text);
+
+/*
+ * Saving an entry, with whoever else is on it.
+ *
+ * p_partners is the whole list of the others, each {"user": id} or
+ * {"email": ..., "name": ...}; null leaves the list as it is. An email with an
+ * account is that account. The entrant is never their own partner, and
+ * nobody is on it twice.
+ */
+create or replace function public.save_contest_entry(
+  p_contest uuid,
+  p_entry uuid,
+  p_title text,
+  p_blurb text,
+  p_image_path text default null,
+  p_entrant uuid default null,
+  p_invite_email text default null,
+  p_invite_name text default null,
+  p_partners jsonb default null
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $fn$
+declare
+  uid uuid := (select auth.uid());
+  c public.contests;
+  admin boolean := public.can('games.setup');
+  for_them boolean;
+  owner uuid;
+  target uuid := p_entry;
+  v_path text := nullif(btrim(coalesce(p_image_path, '')), '');
+  v_was text;
+  v_email text := nullif(lower(btrim(coalesce(p_invite_email, ''))), '');
+  v_name text := nullif(btrim(coalesce(p_invite_name, '')), '');
+  v_account uuid;
+  v_keep_entrant uuid;
+  v_keep_email text;
+  part jsonb;
+  p_user uuid;
+  p_mail text;
+  p_pname text;
+  v_clash text;
+  v_clash_user uuid;
+begin
+  if uid is null then
+    return jsonb_build_object('ok', false, 'reason', 'not signed in');
+  end if;
+  select * into c from public.contests where id = p_contest;
+  if not found then
+    return jsonb_build_object('ok', false, 'reason', 'no such contest');
+  end if;
+  if public.contest_phase(c) <> 'entries' and not admin then
+    return jsonb_build_object('ok', false, 'reason',
+      case public.contest_phase(c)
+        when 'soon' then 'this one has not opened for entries yet'
+        else 'entries have closed for this one'
+      end);
+  end if;
+  if c.who_enters = 'admins' and not admin then
+    return jsonb_build_object('ok', false, 'reason', 'an organiser enters this one on your behalf');
+  end if;
+  if coalesce(btrim(p_title), '') = '' then
+    return jsonb_build_object('ok', false, 'reason', 'it needs a title');
+  end if;
+  if p_partners is not null and jsonb_typeof(p_partners) <> 'array' then
+    return jsonb_build_object('ok', false, 'reason', 'the others on it come as a list');
+  end if;
+  if jsonb_array_length(coalesce(p_partners, '[]'::jsonb)) > 9 then
+    return jsonb_build_object('ok', false, 'reason', 'an entry is for ten people at most');
+  end if;
+
+  for_them := admin and c.who_enters = 'admins';
+
+  if target is not null then
+    if not exists (
+      select 1 from public.contest_entries e
+      where e.id = target and e.contest_id = p_contest
+        and (admin or public.on_contest_entry(e.id, uid) or e.entered_by = uid)
+    ) then
+      return jsonb_build_object('ok', false, 'reason', 'that is not yours to change');
+    end if;
+    select image_path, entrant, invited_email into v_was, v_keep_entrant, v_keep_email
+      from public.contest_entries where id = target;
+  end if;
+
+  -- Who it is filed under. An organiser entering for people says; a player's
+  -- new entry is their own, and changing one leaves it filed where it was --
+  -- a teammate fixing the title does not make it theirs.
+  if for_them then
+    owner := p_entrant;
+    if p_entrant is not null then v_email := null; end if;
+  elsif target is null then
+    owner := uid;
+    v_email := null;
+  else
+    owner := v_keep_entrant;
+    v_email := v_keep_email;
+    v_name := (select invited_name from public.contest_entries where id = target);
+  end if;
+
+  if v_email is not null and (for_them or target is null) then
+    if v_email !~ '^[^@[:space:]]+@[^@[:space:]]+\.[^@[:space:]]+$' then
+      return jsonb_build_object('ok', false, 'reason', 'that does not look like an email address');
+    end if;
+    select u.id into v_account from auth.users u where lower(u.email) = v_email limit 1;
+    if v_account is not null then
+      owner := v_account;
+      v_email := null;
+    else
+      v_name := left(coalesce(v_name, split_part(v_email, '@', 1)), 80);
+    end if;
+  end if;
+  if v_email is null then
+    v_name := null;
+  end if;
+
+  -- The others, resolved to accounts where there are accounts.
+  create temp table if not exists pg_temp.entry_people (
+    user_id uuid, invited_email text, invited_name text, pos int) on commit drop;
+  delete from pg_temp.entry_people;
+  if p_partners is not null then
+    for part in select * from jsonb_array_elements(p_partners) loop
+      p_user := nullif(part->>'user', '')::uuid;
+      p_mail := nullif(lower(btrim(coalesce(part->>'email', ''))), '');
+      p_pname := nullif(btrim(coalesce(part->>'name', '')), '');
+      if p_user is null and p_mail is null then
+        continue;
+      end if;
+      if p_user is null then
+        if p_mail !~ '^[^@[:space:]]+@[^@[:space:]]+\.[^@[:space:]]+$' then
+          return jsonb_build_object('ok', false, 'reason', p_mail || ' does not look like an email address');
+        end if;
+        select u.id into p_user from auth.users u where lower(u.email) = p_mail limit 1;
+      end if;
+      if p_user is not null then
+        if not exists (select 1 from auth.users u where u.id = p_user) then
+          return jsonb_build_object('ok', false, 'reason', 'one of those people is not here');
+        end if;
+        p_mail := null;
+        p_pname := null;
+      else
+        p_pname := left(coalesce(p_pname, split_part(p_mail, '@', 1)), 80);
+      end if;
+      -- not the entrant, and not twice
+      if p_user is not distinct from owner and p_user is not null then continue; end if;
+      if p_mail is not distinct from v_email and p_mail is not null then continue; end if;
+      if exists (select 1 from pg_temp.entry_people x
+                 where x.user_id = p_user or x.invited_email = p_mail) then
+        continue;
+      end if;
+      insert into pg_temp.entry_people
+      values (p_user, p_mail, p_pname, (select count(*) + 1 from pg_temp.entry_people));
+    end loop;
+  else
+    insert into pg_temp.entry_people
+      select x.user_id, x.invited_email, x.invited_name, x.position
+      from public.contest_entry_partners x where x.entry_id = target;
+  end if;
+
+  -- One entry each, unless the contest says otherwise: nobody on this one may
+  -- already be on another.
+  if not c.many_entries then
+    select m.name, m.user_id into v_clash, v_clash_user
+    from public.contest_entry_members m
+    where m.contest_id = p_contest
+      and m.entry_id is distinct from target
+      and ((m.user_id is not null and (m.user_id = owner
+                                       or m.user_id in (select user_id from pg_temp.entry_people)))
+           or (m.invited_email is not null and (m.invited_email = v_email
+                                                or m.invited_email in (select invited_email from pg_temp.entry_people))))
+    limit 1;
+    if v_clash is not null then
+      return jsonb_build_object('ok', false, 'reason',
+        case when v_clash_user = uid and not for_them
+             then 'you already have an entry in this one'
+             else v_clash || ' is already on another entry in this one' end);
+    end if;
+  end if;
+
+  -- A photograph has to be one this caller just uploaded; unchanged is
+  -- always allowed. See the first version of this function for why.
+  if v_path is not null and v_path is distinct from v_was
+     and split_part(v_path, '/', 1) <> uid::text then
+    return jsonb_build_object('ok', false, 'reason', 'that photo is not one you uploaded');
+  end if;
+
+  if target is not null then
+    update public.contest_entries
+       set title = left(btrim(p_title), 80),
+           blurb = nullif(btrim(coalesce(p_blurb, '')), ''),
+           image_path = coalesce(v_path, image_path),
+           entrant = case when v_email is not null then null
+                          when for_them then coalesce(owner, entrant) else entrant end,
+           invited_email = case when v_email is not null then v_email
+                                when owner is not null then null else invited_email end,
+           invited_name = case when v_email is not null then v_name
+                               when owner is not null then null else invited_name end
+     where id = target;
+  else
+    insert into public.contest_entries (contest_id, entrant, entered_by, title, blurb, image_path,
+                                        invited_email, invited_name)
+    values (p_contest, case when v_email is null then owner end, uid, left(btrim(p_title), 80),
+            nullif(btrim(coalesce(p_blurb, '')), ''), v_path, v_email, v_name)
+    returning id into target;
+  end if;
+
+  if p_partners is not null then
+    delete from public.contest_entry_partners where entry_id = target;
+    insert into public.contest_entry_partners (entry_id, user_id, invited_email, invited_name, position)
+    select target, x.user_id, x.invited_email, x.invited_name, x.pos from pg_temp.entry_people x;
+  end if;
+  return jsonb_build_object('ok', true, 'id', target);
+end;
+$fn$;
+
+revoke all on function public.save_contest_entry(uuid, uuid, text, text, text, uuid, text, text, jsonb) from public, anon;
+grant execute on function public.save_contest_entry(uuid, uuid, text, text, text, uuid, text, text, jsonb) to authenticated;
+
+create or replace function public.contest_tally(p_contest uuid)
+returns table (place bigint, entry_id uuid, name text, title text, points numeric, firsts int)
+language sql
+stable
+set search_path = ''
+as $fn$
+  select rank() over (order by t.points desc, t.firsts desc, t.title) as place,
+         t.entry_id,
+         coalesce((select string_agg(m.name, ' & ' order by m.pos, m.name)
+                   from public.contest_entry_members m where m.entry_id = t.entry_id),
+                  'Someone') as name,
+         t.title,
+         t.points,
+         t.firsts
+  from (
+    select e.id as entry_id, e.entrant, e.invited_name, e.title,
+           coalesce(sum(c.picks + 1 - v.place), 0)::numeric as points,
+           coalesce(count(*) filter (where v.place = 1), 0)::int as firsts
+    from public.contest_entries e
+    join public.contests c on c.id = e.contest_id
+    left join public.contest_votes v on v.entry_id = e.id
+    where e.contest_id = p_contest
+      and coalesce((select pr.competing from public.profiles pr where pr.id = e.entrant), true)
+    group by e.id, e.entrant, e.invited_name, e.title, c.picks
+  ) t
+  left join public.profiles p on p.id = t.entrant
+$fn$;
+
+revoke all on function public.contest_tally(uuid) from public, anon, authenticated;
+
+-- Dropped first: the last definition returns a column more than the earlier
+-- ones, and a return type cannot be replaced in place.
+drop function if exists public.contest_ranking(uuid);
+create or replace function public.contest_ranking(p_contest uuid)
+returns table (place bigint, name text, points numeric, share numeric)
+language sql
+stable
+set search_path = ''
+as $fn$
+  select t.place, m.name, t.points,
+         1.0 / count(*) over (partition by t.entry_id) as share
+  from public.contest_tally(p_contest) t
+  join public.contest_entry_members m on m.entry_id = t.entry_id
+  where (select public.contest_phase(c) from public.contests c where c.id = p_contest) = 'over'
+$fn$;
+
+revoke all on function public.contest_ranking(uuid) from public, anon, authenticated;
+
+create or replace function public.tournament_standings(p_tournament uuid)
+returns jsonb
+language plpgsql
+stable
+security definer
+set search_path = ''
+as $fn$
+declare
+  t record;
+  r record;
+  n int := 0;
+  keys text[];
+  dkeys text[];
+  boards jsonb;
+  weights jsonb;
+  trivia jsonb;
+  contests jsonb;
+  rounds jsonb := '[]'::jsonb;
+  tbl jsonb;
+begin
+  select * into t from public.tournaments where id = p_tournament;
+  if not found then
+    return jsonb_build_object('ok', false, 'reason', 'no such tournament');
+  end if;
+
+  for r in
+    select * from public.tournament_rounds
+    where tournament_id = t.id
+    -- Two rounds can start on the same day now, and "Round 3" has to be the
+    -- same round here, on the round's own page and in the admin list.
+    order by starts_on, ends_on, id
+  loop
+    n := n + 1;
+    continue when r.starts_on > public.puzzle_day();
+
+    -- The boards keyed as the site's leaderboards key them: by progress name,
+    -- with squares split by size -- 4x4 for easy, 5x5 for hard and extreme.
+    select array_agg(case
+             when g.progress = 'squares'
+               then 'squares' || case when t.difficulty = 'easy' then '4' else '5' end
+             else g.progress
+           end)
+      into keys
+    from public.games g
+    where g.feed = any (r.games);
+
+    -- The same mapping again, carrying what each board is worth: the weights
+    -- are keyed by feed name and the boards by progress name, and this is the
+    -- one place that knows both.
+    select coalesce(jsonb_object_agg(
+             case
+               when g.progress = 'squares'
+                 then 'squares' || case when t.difficulty = 'easy' then '4' else '5' end
+               else g.progress
+             end,
+             coalesce((r.game_weights ->> g.feed)::numeric, 1)), '{}'::jsonb)
+      into weights
+    from public.games g
+    where g.feed = any (r.games);
+
+    -- The games with a new board each day, keyed the same way.
+    select array_agg(case
+             when g.progress = 'squares'
+               then 'squares' || case when t.difficulty = 'easy' then '4' else '5' end
+             else g.progress
+           end)
+      into dkeys
+    from public.games g
+    where g.feed = any (r.daily_games);
+
+    select coalesce(jsonb_object_agg(e.key, e.value), '{}'::jsonb)
+      into boards
+    from jsonb_each(public.boards_between(r.starts_on, r.starts_on, 'round', t.difficulty, null, 500)) e
+    where e.key = any (coalesce(keys, '{}'::text[]))
+      and not (e.key = any (coalesce(dkeys, '{}'::text[])));
+
+    -- A game with a new board each day is ranked across every day of the round
+    -- played so far, the way the site's 7-day board ranks a week -- one standing
+    -- per game per round, at the same placing points as a one-board game.
+    if dkeys is not null then
+      boards := boards || coalesce((
+        select jsonb_object_agg(e.key, e.value)
+        from jsonb_each(public.boards_between(r.starts_on, least(r.ends_on, public.puzzle_day()),
+                                              'round', t.difficulty, null, 500)) e
+        where e.key = any (dkeys)), '{}'::jsonb);
+    end if;
+
+    select coalesce(jsonb_agg(jsonb_build_object(
+             'session_id', s.id, 'title', s.title, 'mode', s.mode,
+             'weight', trim_scale(rs.weight),
+             'standings', coalesce((
+               select jsonb_agg(row_to_json(k)::jsonb order by k.place, k.name)
+               from public.session_ranking(s.id) k), '[]'::jsonb))
+           order by s.title), '[]'::jsonb)
+      into trivia
+    from public.tournament_round_sessions rs
+    join public.sessions s on s.id = rs.session_id
+    where rs.round_id = r.id;
+
+    select coalesce(jsonb_agg(jsonb_build_object(
+             'contest_id', c.id, 'name', c.name,
+             'phase', public.contest_phase(c),
+             'weight', trim_scale(rc.weight),
+             'standings', coalesce((
+               select jsonb_agg(row_to_json(k)::jsonb order by k.place, k.name)
+               from public.contest_ranking(c.id) k), '[]'::jsonb))
+           order by c.name), '[]'::jsonb)
+      into contests
+    from public.tournament_round_contests rc
+    join public.contests c on c.id = rc.contest_id
+    where rc.round_id = r.id;
+
+    rounds := rounds || jsonb_build_array(jsonb_build_object(
+      'id', r.id, 'number', n, 'starts_on', r.starts_on, 'ends_on', r.ends_on,
+      'prize', r.prize,
+      'boards', boards, 'weights', weights, 'trivia', trivia,
+      'daily_games', to_jsonb(r.daily_games),
+      'contests', contests));
+  end loop;
+
+  select coalesce(jsonb_agg(jsonb_build_object(
+           'name', s.name, 'points', s.points, 'wins', s.wins, 'placed', s.placed)
+         order by s.points desc, s.wins desc, s.name), '[]'::jsonb)
+    into tbl
+  from (
+    select pl.name,
+           trim_scale(round(sum(pl.pts), 2)) as points,
+           count(*) filter (where pl.place = 1)::int as wins,
+           count(*)::int as placed
+    from (
+      -- Ten down to one for placing, times what the round said that board was
+      -- worth. Unlisted is 1, which is what every board paid before a round
+      -- could say otherwise.
+      select x.row->>'name' as name,
+             greatest(0, 11 - x.ord)::numeric
+               * coalesce((rd->'weights'->>b.key)::numeric, 1) as pts,
+             x.ord::int as place
+      from jsonb_array_elements(rounds) rd,
+           jsonb_each(rd->'boards') b,
+           jsonb_array_elements(b.value) with ordinality as x(row, ord)
+      union all
+      select e->>'name',
+             greatest(0, 11 - (e->>'place')::int) * (tv->>'weight')::numeric,
+             (e->>'place')::int
+      from jsonb_array_elements(rounds) rd,
+           jsonb_array_elements(rd->'trivia') tv,
+           jsonb_array_elements(tv->'standings') e
+      union all
+      -- A contest pays the same way, and pays nothing until its voting has
+      -- closed: contest_ranking is empty before that, so a tournament does not
+      -- shift under the people in it every time somebody votes.
+      select e->>'name',
+             greatest(0, 11 - (e->>'place')::int) * (ct->>'weight')::numeric
+               * coalesce((e->>'share')::numeric, 1),
+             (e->>'place')::int
+      from jsonb_array_elements(rounds) rd,
+           jsonb_array_elements(rd->'contests') ct,
+           jsonb_array_elements(ct->'standings') e
+    ) pl
+    group by pl.name
+  ) s;
+
+  return jsonb_build_object(
+    'ok', true,
+    'tournament', jsonb_build_object('id', t.id, 'name', t.name, 'difficulty', t.difficulty,
+                                     'prize', t.prize),
+    'table', tbl,
+    'rounds', rounds);
+end;
+$fn$;
+
+revoke all on function public.tournament_standings(uuid) from public;
+grant execute on function public.tournament_standings(uuid) to anon, authenticated;
+
+create or replace function public.contest_entries_sheet(p_contest uuid)
+returns jsonb
+language sql
+stable
+security definer
+set search_path = ''
+as $fn$
+  select case
+    when not public.can('games.setup')
+      then jsonb_build_object('ok', false, 'reason', 'not allowed')
+    when not exists (select 1 from public.contests c where c.id = p_contest)
+      then jsonb_build_object('ok', false, 'reason', 'no such contest')
+    else jsonb_build_object('ok', true, 'entries', coalesce((
+      select jsonb_agg(jsonb_build_object(
+               'id', e.id,
+               'title', e.title,
+               'blurb', e.blurb,
+               'image_path', e.image_path,
+               'entrant', e.entrant,
+               'entrant_name', coalesce(p.display_name, e.invited_name),
+               'invited_email', e.invited_email,
+               'partners', public.contest_entry_partner_list(e.id),
+               'entered_by_me', e.entered_by = (select auth.uid()))
+             order by e.created_at)
+      from public.contest_entries e
+      left join public.profiles p on p.id = e.entrant
+      where e.contest_id = p_contest), '[]'::jsonb))
+  end
+$fn$;
+
+revoke all on function public.contest_entries_sheet(uuid) from public, anon;
+grant execute on function public.contest_entries_sheet(uuid) to authenticated;
+
+create or replace function public.contest_view(p_contest uuid)
+returns jsonb
+language sql
+stable
+security definer
+set search_path = ''
+as $fn$
+  select case
+    when not exists (select 1 from public.contests c where c.id = p_contest)
+      then jsonb_build_object('ok', false, 'reason', 'no such contest')
+    else (
+      select jsonb_build_object(
+        'ok', true,
+        'contest', jsonb_build_object(
+          'id', c.id, 'name', c.name, 'blurb', c.blurb,
+          'entries_open_on', c.entries_open_on, 'entries_close_on', c.entries_close_on,
+          'votes_open_on', c.votes_open_on, 'votes_close_on', c.votes_close_on,
+          'entries_close_at', c.entries_close_at, 'votes_close_at', c.votes_close_at,
+          'who_enters', c.who_enters, 'entrants_shown', c.entrants_shown,
+          'voters_shown', c.voters_shown, 'many_entries', c.many_entries, 'picks', c.picks, 'prize', c.prize,
+          'phase', public.contest_phase(c),
+          'may_enter', public.may_enter_contest(c.id),
+          'may_vote', public.may_vote_contest(c.id)),
+        'my_votes', public.my_contest_votes(c.id),
+        'entries', coalesce((
+          select jsonb_agg(jsonb_build_object(
+                   'id', e.id,
+                   'title', e.title,
+                   'blurb', e.blurb,
+                   'image_path', e.image_path,
+                   'entrant', case when c.entrants_shown
+                                   then (select string_agg(m.name, ' & ' order by m.pos, m.name)
+                                         from public.contest_entry_members m where m.entry_id = e.id)
+                              end,
+                   'mine', public.on_contest_entry(e.id, (select auth.uid()))
+                        or e.entered_by = (select auth.uid()),
+                   'partners', case when public.on_contest_entry(e.id, (select auth.uid()))
+                                      or e.entered_by = (select auth.uid())
+                                    then public.contest_entry_partner_list(e.id) end)
+                 order by e.created_at)
+          from public.contest_entries e where e.contest_id = c.id), '[]'::jsonb))
+      from public.contests c where c.id = p_contest)
+  end
+$fn$;
+
+revoke all on function public.contest_view(uuid) from public;
+grant execute on function public.contest_view(uuid) to anon, authenticated;
+
+create or replace function public.may_vote_contest(p_contest uuid)
+returns boolean
+language sql
+stable
+security definer
+set search_path = ''
+as $fn$
+  select exists (
+    select 1 from public.contests c
+    where c.id = p_contest
+      and (select auth.uid()) is not null
+      and public.contest_phase(c) = 'voting'
+      and exists (
+        select 1 from public.contest_entries e
+        where e.contest_id = c.id
+          and not public.on_contest_entry(e.id, (select auth.uid())))
+  )
+$fn$;
+
+revoke all on function public.may_vote_contest(uuid) from public, anon;
+grant execute on function public.may_vote_contest(uuid) to authenticated;
+
+create or replace function public.cast_contest_votes(p_contest uuid, p_entries uuid[])
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $fn$
+declare
+  uid uuid := (select auth.uid());
+  c public.contests;
+  picked uuid[] := coalesce(p_entries, '{}'::uuid[]);
+  n int := cardinality(picked);
+  own int;
+  foreign_entries int;
+begin
+  if uid is null then
+    return jsonb_build_object('ok', false, 'reason', 'not signed in');
+  end if;
+  select * into c from public.contests where id = p_contest;
+  if not found then
+    return jsonb_build_object('ok', false, 'reason', 'no such contest');
+  end if;
+  if public.contest_phase(c) <> 'voting' then
+    return jsonb_build_object('ok', false, 'reason',
+      case public.contest_phase(c)
+        when 'over' then 'voting has closed for this one'
+        else 'voting has not opened for this one yet'
+      end);
+  end if;
+
+  -- An empty ballot is how somebody takes theirs back, which is a thing to
+  -- allow rather than an error: they may have voted and thought better of it.
+  if n = 0 then
+    delete from public.contest_votes where contest_id = p_contest and voter = uid;
+    return jsonb_build_object('ok', true, 'counted', 0);
+  end if;
+
+  if n > c.picks then
+    return jsonb_build_object('ok', false, 'reason',
+      'this one ranks ' || c.picks || ', and that is ' || n);
+  end if;
+  if n <> (select count(distinct x) from unnest(picked) x) then
+    return jsonb_build_object('ok', false, 'reason', 'the same entry cannot be two of your picks');
+  end if;
+
+  select count(*) into foreign_entries
+  from unnest(picked) x
+  where not exists (
+    select 1 from public.contest_entries e where e.id = x and e.contest_id = p_contest);
+  if foreign_entries > 0 then
+    return jsonb_build_object('ok', false, 'reason', 'one of those is not in this contest');
+  end if;
+
+  select count(*) into own
+  from public.contest_entries e
+  where e.id = any (picked) and public.on_contest_entry(e.id, uid);
+  if own > 0 then
+    return jsonb_build_object('ok', false, 'reason', 'you cannot vote for your own');
+  end if;
+
+  delete from public.contest_votes where contest_id = p_contest and voter = uid;
+  insert into public.contest_votes (contest_id, voter, entry_id, place)
+  select p_contest, uid, x.entry, x.ord::int
+  from unnest(picked) with ordinality as x(entry, ord);
+
+  return jsonb_build_object('ok', true, 'counted', n);
+end;
+$fn$;
+
+revoke all on function public.cast_contest_votes(uuid, uuid[]) from public, anon;
+grant execute on function public.cast_contest_votes(uuid, uuid[]) to authenticated;
+
+create or replace function public.delete_contest_entry(p_entry uuid)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $fn$
+declare
+  uid uuid := (select auth.uid());
+  e public.contest_entries;
+  c public.contests;
+begin
+  select * into e from public.contest_entries where id = p_entry;
+  if not found then
+    return jsonb_build_object('ok', true);
+  end if;
+  select * into c from public.contests where id = e.contest_id;
+  if public.can('games.setup') then
+    delete from public.contest_entries where id = p_entry;
+    return jsonb_build_object('ok', true);
+  end if;
+  if uid is null or (not public.on_contest_entry(e.id, uid) and e.entered_by is distinct from uid) then
+    return jsonb_build_object('ok', false, 'reason', 'that is not yours to remove');
+  end if;
+  if public.contest_phase(c) <> 'entries' then
+    return jsonb_build_object('ok', false, 'reason', 'entries have closed for this one');
+  end if;
+  delete from public.contest_entries where id = p_entry;
+  return jsonb_build_object('ok', true);
+end;
+$fn$;
+
+revoke all on function public.delete_contest_entry(uuid) from public, anon;
+grant execute on function public.delete_contest_entry(uuid) to authenticated;
