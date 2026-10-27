@@ -222,9 +222,16 @@ export function drawable(url: string | null | undefined): string | undefined {
 }
 
 /** What a phone will hand us, and what the bucket accepts. HEIC is here
- *  because that is what an iPhone photographs in by default. */
-const KINDS = ['image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif'];
-const MOST = 10 * 1024 * 1024;
+ *  because that is what an iPhone photographs in by default, and QuickTime
+ *  because that is what it films in. */
+const PHOTOS = ['image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif'];
+const CLIPS = ['video/mp4', 'video/quicktime', 'video/webm'];
+const MOST_PHOTO = 10 * 1024 * 1024;
+/** About a minute of phone video, and the storage server's own default cap. */
+const MOST_CLIP = 50 * 1024 * 1024;
+
+/** What the file picker offers. */
+export const ENTRY_ACCEPT = [...PHOTOS, ...CLIPS].join(',');
 
 const EXT: Record<string, string> = {
   'image/jpeg': 'jpg',
@@ -232,7 +239,14 @@ const EXT: Record<string, string> = {
   'image/webp': 'webp',
   'image/heic': 'heic',
   'image/heif': 'heif',
+  'video/mp4': 'mp4',
+  'video/quicktime': 'mov',
+  'video/webm': 'webm',
 };
+
+/** Whether a stored entry is a clip rather than a photo. The path says: it is
+ *  named for its kind when it goes up, so nothing else has to remember. */
+export const isClip = (path: string | null | undefined) => !!path && /\.(mp4|mov|webm)$/i.test(path);
 
 /**
  * Putting the photograph in the bucket.
@@ -248,11 +262,15 @@ const EXT: Record<string, string> = {
  */
 export async function uploadPhoto(file: File): Promise<{ ok: boolean; reason?: string; path?: string }> {
   if (!supabase) return { ok: false, reason: 'not connected' };
-  if (!KINDS.includes(file.type)) {
-    return { ok: false, reason: 'that needs to be a photo — JPEG, PNG, WebP or HEIC' };
+  const clip = CLIPS.includes(file.type);
+  if (!clip && !PHOTOS.includes(file.type)) {
+    return { ok: false, reason: 'that needs to be a photo (JPEG, PNG, WebP or HEIC) or a video clip (MP4, MOV or WebM)' };
   }
-  if (file.size > MOST) {
+  if (!clip && file.size > MOST_PHOTO) {
     return { ok: false, reason: 'that photo is over 10MB; a smaller one will do' };
+  }
+  if (clip && file.size > MOST_CLIP) {
+    return { ok: false, reason: 'that clip is over 50MB — about a minute of phone video; trim it and try again' };
   }
   const { data: who } = await supabase.auth.getUser();
   const uid = who?.user?.id;

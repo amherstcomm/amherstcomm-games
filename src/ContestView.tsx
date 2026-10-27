@@ -22,6 +22,8 @@ import {
   readContestsOn,
   saveEntry,
   uploadPhoto,
+  ENTRY_ACCEPT,
+  isClip,
   type Contest,
   type ContestEntry,
   type ContestOn,
@@ -228,15 +230,11 @@ function OneContest({ id }: { id: string }) {
           {entries.map((e, i) => (
             <li key={e.id} className="rounded-xl border border-white/15 bg-white/5 overflow-hidden">
               {e.image_path && drawable(links[e.image_path]) ? (
-                <img
-                  src={drawable(links[e.image_path])}
-                  alt={e.title}
-                  loading="lazy"
-                  className="w-full aspect-[4/3] object-cover bg-white/5"
-                />
+                <Media path={e.image_path} url={drawable(links[e.image_path]) as string} alt={e.title}
+                       className="w-full aspect-[4/3] object-cover bg-white/5" />
               ) : (
                 <div className="w-full aspect-[4/3] grid place-items-center bg-white/5 text-xs text-slate-400">
-                  No photo yet
+                  No photo or clip yet
                 </div>
               )}
               <div className="px-3 py-2">
@@ -542,7 +540,7 @@ function ManageEntries({
                 </span>
                 <span className="block text-xs text-slate-400">
                   {r.entrant_name ?? 'Nobody is credited for this one'}
-                  {!r.image_path && ' · no photo'}
+                  {!r.image_path && ' · no photo or clip'}
                 </span>
               </span>
               <button type="button" className={BUTTON} onClick={() => setEditing(r)}>
@@ -598,6 +596,19 @@ function ManageEntries({
   );
 }
 
+/** An entry's photo, or its clip with the player's own controls. A clip
+ *  loads only enough to show its first frame until somebody presses play: a
+ *  gallery of them on a phone over cell data is otherwise a gallery that
+ *  never finishes loading. */
+function Media({ path, url, alt, className }: { path: string | null; url: string; alt: string; className: string }) {
+  if (isClip(path)) {
+    return (
+      <video src={`${url}#t=0.1`} controls playsInline preload="metadata" aria-label={alt} className={className} />
+    );
+  }
+  return <img src={url} alt={alt} loading="lazy" className={className} />;
+}
+
 /**
  * Putting yours in, or changing it.
  *
@@ -649,12 +660,12 @@ function EntryForm({
 
   async function pick(f: File | undefined) {
     if (!f) return;
-    setBusy('Sending the photo…');
+    setBusy(f.type.startsWith('video/') ? 'Sending the clip…' : 'Sending the photo…');
     setSaid(null);
     const got = await uploadPhoto(f);
     setBusy(null);
     if (!got.ok) {
-      setSaid(got.reason ?? 'that photo would not go up');
+      setSaid(got.reason ?? 'that would not go up');
       return;
     }
     setPath(got.path ?? null);
@@ -663,7 +674,7 @@ function EntryForm({
     // way, and the entry will show it on the next load.
     const signed = got.path ? (await photoLinks([got.path]))[got.path] : undefined;
     setShot(signed ?? null);
-    setSaid('Photo ready — save the entry to keep it.');
+    setSaid(`${isClip(got.path) ? 'Clip' : 'Photo'} ready — save the entry to keep it.`);
   }
 
   async function save() {
@@ -723,22 +734,22 @@ function EntryForm({
       <div className="mt-3 grid gap-3 sm:grid-cols-[12rem_1fr]">
         <div>
           {shown ? (
-            <img src={shown} alt="Your entry" className="w-full aspect-[4/3] object-cover rounded-lg bg-white/5" />
+            <Media path={path} url={shown} alt="Your entry" className="w-full aspect-[4/3] object-cover rounded-lg bg-white/5" />
           ) : (
             <div className="w-full aspect-[4/3] grid place-items-center rounded-lg bg-white/5 text-xs text-slate-400">
-              No photo yet
+              No photo or clip yet
             </div>
           )}
           <input
             ref={file}
             type="file"
-            accept="image/jpeg,image/png,image/webp,image/heic,image/heif"
+            accept={ENTRY_ACCEPT}
             className="sr-only"
-            aria-label="A photo of your entry"
+            aria-label="A photo or video clip of your entry"
             onChange={(e) => void pick(e.target.files?.[0])}
           />
           <button type="button" className={BUTTON + ' mt-2 w-full'} onClick={() => file.current?.click()}>
-            {shown ? 'Different photo' : 'Add a photo'}
+            {shown ? 'Something different' : 'Add a photo or clip'}
           </button>
         </div>
         <div className="space-y-2">
