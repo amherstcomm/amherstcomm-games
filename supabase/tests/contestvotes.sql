@@ -240,7 +240,7 @@ select pg_temp.check('the tournament shows no points from an undecided contest',
 
 -- Close the voting and it pays: ten down to one for the placing, times two.
 select public.save_contest((select id from vc), 'Carving', null,
-                           pg_temp.d(-5), pg_temp.d(-1), pg_temp.d(-1), pg_temp.d(-1),
+                           pg_temp.d(-5), pg_temp.d(-2), pg_temp.d(-1), pg_temp.d(-1),
                            'admins', true, false, 3, 'A day off');
 select pg_temp.check('once voting closes the contest is decided',
   (select public.contest_phase(c) from public.contests c where c.id = (select id from vc)) = 'over');
@@ -271,7 +271,7 @@ select pg_temp.check('and voting is refused after the window',
 -- ---------------------------------------------------------------------------
 set session "test.uid" = 'b1111111-1111-1111-1111-111111111111';
 select public.save_contest((select id from vc), 'Carving', null,
-                           pg_temp.d(-5), pg_temp.d(-1), pg_temp.d(-1), pg_temp.d(-1),
+                           pg_temp.d(-5), pg_temp.d(-2), pg_temp.d(-1), pg_temp.d(-1),
                            'admins', true, true, 3, 'A day off');
 select pg_temp.check('an open ballot says who voted for what',
   jsonb_array_length(public.contest_results((select id from vc))->'ballots') = 3

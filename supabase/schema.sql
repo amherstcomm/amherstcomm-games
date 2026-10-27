@@ -23672,3 +23672,302 @@ end;
 $fn$;
 revoke all on function public.remove_home_feature(uuid) from public, anon;
 grant execute on function public.remove_home_feature(uuid) to authenticated;
+
+-- ---------------------------------------------------------------------------
+-- Contest closing times
+-- ---------------------------------------------------------------------------
+--
+-- Entering and voting can close at a time of day, Eastern, as well as on a
+-- day: "voting closes Friday at 3". Without a time a part runs to the end of
+-- its last puzzle day, as it always has. Opening stays a day: nobody has asked
+-- for a contest to open at two in the afternoon.
+alter table public.contests add column if not exists entries_close_time time;
+alter table public.contests add column if not exists votes_close_time time;
+
+-- When a puzzle day starts, as an instant.
+create or replace function public.contest_day_start(p_day date)
+returns timestamptz
+language sql
+stable
+set search_path = ''
+as $fn$
+  select (p_day + time '03:15') at time zone 'America/New_York'
+$fn$;
+
+-- When a part that closes on this day, at this time or none, has closed.
+create or replace function public.contest_close_at(p_day date, p_time time)
+returns timestamptz
+language sql
+stable
+set search_path = ''
+as $fn$
+  select case
+    when p_time is null then public.contest_day_start(p_day + 1)
+    else (p_day + p_time) at time zone 'America/New_York'
+  end
+$fn$;
+
+grant execute on function public.contest_day_start(date) to anon, authenticated;
+grant execute on function public.contest_close_at(date, time) to anon, authenticated;
+
+create or replace function public.contest_phase(c public.contests)
+returns text
+language sql
+stable
+set search_path = ''
+as $fn$
+  select case
+    when public.puzzle_day() < c.entries_open_on then 'soon'
+    when now() < public.contest_close_at(c.entries_close_on, c.entries_close_time) then 'entries'
+    when public.puzzle_day() < c.votes_open_on then 'judging'
+    when now() < public.contest_close_at(c.votes_close_on, c.votes_close_time) then 'voting'
+    else 'over'
+  end
+$fn$;
+
+grant execute on function public.contest_phase(public.contests) to anon, authenticated;
+
+drop function if exists public.save_contest(uuid, text, text, date, date, date, date, text, boolean, boolean, int, text);
+
+create or replace function public.save_contest(
+  p_id uuid,
+  p_name text,
+  p_blurb text,
+  p_entries_open date,
+  p_entries_close date,
+  p_votes_open date,
+  p_votes_close date,
+  p_who_enters text default 'players',
+  p_entrants_shown boolean default true,
+  p_voters_shown boolean default false,
+  p_picks int default 3,
+  p_prize text default null,
+  p_entries_close_time time default null,
+  p_votes_close_time time default null
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $fn$
+declare
+  v_id uuid := p_id;
+  v_name text := btrim(coalesce(p_name, ''));
+begin
+  if not public.can('games.setup') then
+    return jsonb_build_object('ok', false, 'reason', 'not allowed');
+  end if;
+  if char_length(v_name) = 0 or char_length(v_name) > 80 then
+    return jsonb_build_object('ok', false, 'reason', 'it needs a name');
+  end if;
+  if p_entries_open is null or p_entries_close is null
+     or p_votes_open is null or p_votes_close is null then
+    return jsonb_build_object('ok', false, 'reason', 'it needs all four dates');
+  end if;
+  if p_entries_close < p_entries_open or p_votes_close < p_votes_open then
+    return jsonb_build_object('ok', false, 'reason', 'each part has to end on or after it starts');
+  end if;
+  -- A closing time is when that part ends, Eastern; without one it runs to
+  -- the end of its last day. Each part has to be open for some of it, and
+  -- voting has to end after entering does.
+  if public.contest_close_at(p_entries_close, p_entries_close_time) <= public.contest_day_start(p_entries_open)
+     or public.contest_close_at(p_votes_close, p_votes_close_time) <= public.contest_day_start(p_votes_open) then
+    return jsonb_build_object('ok', false, 'reason', 'each part has to close after it opens');
+  end if;
+  if public.contest_close_at(p_votes_close, p_votes_close_time)
+     <= public.contest_close_at(p_entries_close, p_entries_close_time) then
+    return jsonb_build_object('ok', false, 'reason', 'voting has to close after entering does');
+  end if;
+  if p_votes_open < p_entries_close then
+    return jsonb_build_object('ok', false, 'reason',
+      'voting starts once entering has finished, or the early entries collect every vote');
+  end if;
+  if coalesce(p_who_enters, 'players') not in ('players', 'admins') then
+    return jsonb_build_object('ok', false, 'reason', 'either the players enter or an organiser does');
+  end if;
+  if coalesce(p_picks, 3) < 1 or coalesce(p_picks, 3) > 5 then
+    return jsonb_build_object('ok', false, 'reason', 'a voter ranks between one and five');
+  end if;
+
+  if v_id is not null then
+    update public.contests
+       set name = v_name,
+           blurb = nullif(btrim(coalesce(p_blurb, '')), ''),
+           entries_open_on = p_entries_open, entries_close_on = p_entries_close,
+           votes_open_on = p_votes_open, votes_close_on = p_votes_close,
+           entries_close_time = p_entries_close_time, votes_close_time = p_votes_close_time,
+           who_enters = coalesce(p_who_enters, 'players'),
+           entrants_shown = coalesce(p_entrants_shown, true),
+           voters_shown = coalesce(p_voters_shown, false),
+           picks = coalesce(p_picks, 3),
+           prize = nullif(btrim(coalesce(p_prize, '')), '')
+     where id = v_id;
+    if not found then
+      return jsonb_build_object('ok', false, 'reason', 'no such contest');
+    end if;
+  else
+    insert into public.contests (name, blurb, entries_open_on, entries_close_on,
+                                 votes_open_on, votes_close_on, who_enters,
+                                 entrants_shown, voters_shown, picks, prize, created_by,
+                                 entries_close_time, votes_close_time)
+    values (v_name, nullif(btrim(coalesce(p_blurb, '')), ''),
+            p_entries_open, p_entries_close, p_votes_open, p_votes_close,
+            coalesce(p_who_enters, 'players'), coalesce(p_entrants_shown, true),
+            coalesce(p_voters_shown, false), coalesce(p_picks, 3),
+            nullif(btrim(coalesce(p_prize, '')), ''), (select auth.uid()),
+            p_entries_close_time, p_votes_close_time)
+    returning id into v_id;
+  end if;
+  return jsonb_build_object('ok', true, 'id', v_id);
+end;
+$fn$;
+
+revoke all on function public.save_contest(uuid, text, text, date, date, date, date, text, boolean, boolean, int, text, time, time) from public, anon;
+grant execute on function public.save_contest(uuid, text, text, date, date, date, date, text, boolean, boolean, int, text, time, time) to authenticated;
+
+create or replace function public.contests_on()
+returns jsonb
+language sql
+stable
+security definer
+set search_path = ''
+as $fn$
+  select coalesce(jsonb_agg(jsonb_build_object(
+           'id', c.id, 'name', c.name, 'phase', public.contest_phase(c),
+           'entries_close_on', c.entries_close_on,
+           'votes_open_on', c.votes_open_on, 'votes_close_on', c.votes_close_on,
+          'entries_close_time', c.entries_close_time, 'votes_close_time', c.votes_close_time,
+           'entries', (select count(*) from public.contest_entries e where e.contest_id = c.id))
+         order by c.entries_open_on), '[]'::jsonb)
+  from public.contests c
+  where public.contest_phase(c) in ('entries', 'judging', 'voting')
+$fn$;
+
+revoke all on function public.contests_on() from public;
+grant execute on function public.contests_on() to anon, authenticated;
+
+create or replace function public.contests_sheet()
+returns jsonb
+language sql
+stable
+security definer
+set search_path = ''
+as $fn$
+  select case
+    when not public.can('games.setup')
+      then jsonb_build_object('ok', false, 'reason', 'not allowed')
+    else jsonb_build_object('ok', true, 'contests', coalesce((
+      select jsonb_agg(jsonb_build_object(
+               'id', c.id, 'name', c.name, 'blurb', c.blurb,
+               'entries_open_on', c.entries_open_on, 'entries_close_on', c.entries_close_on,
+               'votes_open_on', c.votes_open_on, 'votes_close_on', c.votes_close_on,
+          'entries_close_time', c.entries_close_time, 'votes_close_time', c.votes_close_time,
+               'who_enters', c.who_enters, 'entrants_shown', c.entrants_shown,
+               'voters_shown', c.voters_shown, 'picks', c.picks, 'prize', c.prize,
+               'phase', public.contest_phase(c),
+               'entries', (select count(*) from public.contest_entries e where e.contest_id = c.id))
+             order by c.entries_open_on desc)
+      from public.contests c), '[]'::jsonb))
+  end
+$fn$;
+
+revoke all on function public.contests_sheet() from public, anon;
+grant execute on function public.contests_sheet() to authenticated;
+
+create or replace function public.contest_view(p_contest uuid)
+returns jsonb
+language sql
+stable
+security definer
+set search_path = ''
+as $fn$
+  select case
+    when not exists (select 1 from public.contests c where c.id = p_contest)
+      then jsonb_build_object('ok', false, 'reason', 'no such contest')
+    else (
+      select jsonb_build_object(
+        'ok', true,
+        'contest', jsonb_build_object(
+          'id', c.id, 'name', c.name, 'blurb', c.blurb,
+          'entries_open_on', c.entries_open_on, 'entries_close_on', c.entries_close_on,
+          'votes_open_on', c.votes_open_on, 'votes_close_on', c.votes_close_on,
+          'entries_close_time', c.entries_close_time, 'votes_close_time', c.votes_close_time,
+          'who_enters', c.who_enters, 'entrants_shown', c.entrants_shown,
+          'voters_shown', c.voters_shown, 'picks', c.picks, 'prize', c.prize,
+          'phase', public.contest_phase(c),
+          'may_enter', public.may_enter_contest(c.id),
+          'may_vote', public.may_vote_contest(c.id)),
+        'my_votes', public.my_contest_votes(c.id),
+        'entries', coalesce((
+          select jsonb_agg(jsonb_build_object(
+                   'id', e.id,
+                   'title', e.title,
+                   'blurb', e.blurb,
+                   'image_path', e.image_path,
+                   'entrant', case when c.entrants_shown
+                                   then (select p.display_name from public.profiles p
+                                         where p.id = e.entrant)
+                              end,
+                   'mine', e.entrant = (select auth.uid())
+                        or e.entered_by = (select auth.uid()))
+                 order by e.created_at)
+          from public.contest_entries e where e.contest_id = c.id), '[]'::jsonb))
+      from public.contests c where c.id = p_contest)
+  end
+$fn$;
+
+revoke all on function public.contest_view(uuid) from public;
+grant execute on function public.contest_view(uuid) to anon, authenticated;
+
+create or replace function public.home_feature_item(p_kind text, p_ref uuid)
+returns jsonb
+language plpgsql
+stable
+security definer
+set search_path = ''
+as $fn$
+declare
+  sess public.sessions;
+  g public.giveaways;
+  c public.contests;
+  t public.tournaments;
+  v_state text;
+  v_phase text;
+begin
+  if p_kind = 'session' then
+    select * into sess from public.sessions where id = p_ref;
+    if sess.id is null then return null; end if;
+    v_state := public.scheduled_state(sess);
+    -- not before it is ready, not after it is over, and a giveaway's own
+    -- trivia only for that giveaway's entrants
+    if v_state in ('draft', 'closed') or not public.session_open_to_me(sess.id) then return null; end if;
+    return jsonb_build_object('title', sess.title, 'state', v_state, 'mode', sess.mode,
+                              'opens_at', sess.opens_at, 'closes_at', sess.closes_at);
+  elsif p_kind = 'giveaway' then
+    select * into g from public.giveaways where id = p_ref;
+    if g.id is null or g.status in ('drawn', 'cancelled') then return null; end if;
+    return jsonb_build_object('title', g.title, 'prize', g.prize, 'status', g.status, 'mode', g.mode,
+                              'entries_close_at', g.entries_close_at, 'event_on', g.event_on,
+                              'entered', exists (select 1 from public.giveaway_entries e
+                                                 join public.giveaway_people pp on pp.id = e.person_id
+                                                 where e.giveaway_id = g.id and pp.user_id = (select auth.uid())));
+  elsif p_kind = 'contest' then
+    select * into c from public.contests where id = p_ref;
+    if c.id is null then return null; end if;
+    v_phase := public.contest_phase(c);
+    if v_phase = 'over' then return null; end if;
+    return jsonb_build_object('title', c.name, 'phase', v_phase, 'prize', c.prize,
+                              'entries_open_on', c.entries_open_on, 'entries_close_on', c.entries_close_on,
+                              'votes_open_on', c.votes_open_on, 'votes_close_on', c.votes_close_on,
+                              'entries_close_time', c.entries_close_time,
+                              'votes_close_time', c.votes_close_time);
+  elsif p_kind = 'tournament' then
+    select * into t from public.tournaments where id = p_ref;
+    if t.id is null or t.ends_on < public.puzzle_day() then return null; end if;
+    return jsonb_build_object('title', t.name, 'prize', t.prize, 'starts_on', t.starts_on, 'ends_on', t.ends_on,
+                              'on', public.puzzle_day() between t.starts_on and t.ends_on);
+  end if;
+  return null;
+end;
+$fn$;
+revoke all on function public.home_feature_item(text, uuid) from public, anon, authenticated;

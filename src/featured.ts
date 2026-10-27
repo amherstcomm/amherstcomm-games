@@ -5,6 +5,7 @@
 import { supabase } from '@/supabase';
 import { cropped, signedLinker } from '@/signedLinks';
 import type { Page } from '@/routing/nav';
+import { timeWord } from '@/contests';
 
 export type FeaturePage = Exclude<Page, { kind: 'game' }>;
 
@@ -36,6 +37,8 @@ export type FeatureItem = {
   entries_close_on?: string;
   votes_open_on?: string;
   votes_close_on?: string;
+  entries_close_time?: string | null;
+  votes_close_time?: string | null;
   // tournament
   starts_on?: string;
   ends_on?: string;
@@ -146,8 +149,9 @@ export async function uploadFeaturePicture(file: File): Promise<Answer<{ path: s
 
 const when = (t: string) =>
   new Date(t).toLocaleString(undefined, { weekday: 'short', hour: 'numeric', minute: '2-digit' });
-const day = (d: string) =>
-  new Date(`${d}T12:00:00`).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
+const day = (d: string, t?: string | null) =>
+  new Date(`${d}T12:00:00`).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' }) +
+  (t ? ` at ${timeWord(t)}` : '');
 
 /** Where the card's button goes. */
 export function featureRoute(f: Pick<Feature, 'kind' | 'ref'>): FeaturePage {
@@ -179,9 +183,9 @@ export function cardWords(f: Pick<Feature, 'kind' | 'item'>): { status: string; 
     case 'contest':
       switch (it.phase) {
         case 'entries':
-          return { status: it.entries_close_on ? `Entries close ${day(it.entries_close_on)}` : 'Taking entries', action: 'Enter' };
+          return { status: it.entries_close_on ? `Entries close ${day(it.entries_close_on, it.entries_close_time)}` : 'Taking entries', action: 'Enter' };
         case 'voting':
-          return { status: it.votes_close_on ? `Voting until ${day(it.votes_close_on)}` : 'Voting now', action: 'Vote' };
+          return { status: it.votes_close_on ? `Voting until ${day(it.votes_close_on, it.votes_close_time)}` : 'Voting now', action: 'Vote' };
         case 'judging':
           return { status: 'Being judged', action: 'See it' };
         default:
