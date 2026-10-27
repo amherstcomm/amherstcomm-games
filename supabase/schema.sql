@@ -23977,3 +23977,24 @@ begin
 end;
 $fn$;
 revoke all on function public.home_feature_item(text, uuid) from public, anon, authenticated;
+
+-- ---------------------------------------------------------------------------
+-- Contest entries can be video clips
+-- ---------------------------------------------------------------------------
+--
+-- Any entry may be a photo or a clip. The bucket takes up to 50 MB -- about a
+-- minute of phone video, and the storage server's own default cap -- and the
+-- page still holds a photo to 10 MB. A clip is told apart by its name: the
+-- page names every upload for its kind, so image_path needs no partner column.
+do $$
+begin
+  if to_regnamespace('storage') is null then
+    raise notice 'no storage schema here; skipping the contest bucket';
+    return;
+  end if;
+  update storage.buckets
+     set file_size_limit = 52428800,
+         allowed_mime_types = array['image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif',
+                                    'video/mp4', 'video/quicktime', 'video/webm']
+   where id = 'contest-entries';
+end $$;

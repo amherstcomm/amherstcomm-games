@@ -104,7 +104,7 @@ test('the form is there while this person may enter', async ({ page }) => {
 
   await expect(page.getByRole('heading', { name: 'Enter' })).toBeVisible();
   await expect(page.getByRole('textbox', { name: 'What it is called' })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Add a photo' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Add a photo or clip' })).toBeVisible();
 });
 
 test('and is not offered when the server says they may not', async ({ page }) => {
@@ -122,7 +122,7 @@ test('and is not offered when the server says they may not', async ({ page }) =>
   await expect(page.getByText('Entries closed')).toBeVisible();
   await expect(page.getByText(/Voting opens/)).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Enter' })).toHaveCount(0);
-  await expect(page.getByRole('button', { name: 'Add a photo' })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Add a photo or clip' })).toHaveCount(0);
 });
 
 test('a blind contest names nobody', async ({ page }) => {
@@ -227,7 +227,7 @@ test('an entry whose photo cannot be signed keeps its tile', async ({ page }) =>
 
   const tile = page.getByRole('listitem').filter({ hasText: 'Jack the Ripper' });
   await expect(tile).toBeVisible();
-  await expect(tile.getByText('No photo yet')).toBeVisible();
+  await expect(tile.getByText('No photo or clip yet')).toBeVisible();
   await expect(page.getByRole('img', { name: 'Jack the Ripper' })).toHaveCount(0);
 });
 
@@ -616,4 +616,81 @@ test('an organiser sets when voting closes, to the minute, in company time', asy
   await expect.poll(() => sent).toMatchObject({ p_entries_close_at: null });
   // five thirty in Chicago, whatever clock the browser running this is on
   expect(central((sent as unknown as { p_votes_close_at: string }).p_votes_close_at)).toBe('2026-10-29, 17:30');
+});
+
+// ---------------------------------------------------------------------------
+// Video clips
+// ---------------------------------------------------------------------------
+async function signAll(page: import('@playwright/test').Page) {
+  await page.route('**/storage/v1/object/sign/contest-entries', async (route) => {
+    const paths = (JSON.parse(route.request().postData() ?? '{}').paths ?? []) as string[];
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(paths.map((path) => ({ path, signedURL: `/object/sign/contest-entries/${path}?token=t`, error: null }))),
+    });
+  });
+  await page.route('**/storage/v1/object/sign/contest-entries/**', (route) =>
+    route.fulfill({ status: 200, contentType: 'application/octet-stream', body: '' })
+  );
+}
+
+test('a clip entry plays in its tile, a photo entry is still a picture', async ({ page }) => {
+  await signAll(page);
+  await stub(page, CONTEST, [
+    { ...ENTRIES[0], image_path: 'them/one.mov' },
+    { ...ENTRIES[1], image_path: 'them/two.jpg' },
+  ]);
+  await page.goto('/contest/c1');
+  const clip = page.locator('video[aria-label="Jack the Ripper"]');
+  await expect(clip).toHaveAttribute('src', /contest-entries\/them\/one\.mov/);
+  await expect(clip).toHaveAttribute('controls', '');
+  await expect(clip).toHaveAttribute('preload', 'metadata');
+  await expect(page.getByRole('img', { name: 'Gourdon' })).toBeVisible();
+});
+
+test('the entry form takes a clip, and goes up named for it', async ({ page }) => {
+  await signAll(page);
+  let stored = '';
+  await page.route('**/storage/v1/object/contest-entries/**', (route) => {
+    stored = new URL(route.request().url()).pathname;
+    return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ Key: 'k' }) });
+  });
+  await page.addInitScript(() => {
+    const exp = Math.floor(Date.now() / 1000) + 3600;
+    localStorage.setItem('sb-stub-auth-token', JSON.stringify({
+      access_token: 'test', refresh_token: 'test', token_type: 'bearer', expires_in: 3600, expires_at: exp,
+      user: { id: 'me', aud: 'authenticated', role: 'authenticated', email: 'me@example.net',
+              app_metadata: {}, user_metadata: {}, created_at: '2026-01-01T00:00:00Z' },
+    }));
+  });
+  await page.route('**/auth/v1/user', (route) =>
+    route.fulfill({ status: 200, contentType: 'application/json',
+                    body: JSON.stringify({ id: 'me', aud: 'authenticated', role: 'authenticated', email: 'me@example.net' }) })
+  );
+  await stub(page, CONTEST, []);
+  await page.goto('/contest/c1');
+  await expect(page.getByLabel('A photo or video clip of your entry')).toHaveAttribute('accept', /video\/quicktime/);
+  await page.getByLabel('A photo or video clip of your entry').setInputFiles({
+    name: 'pumpkin.mov', mimeType: 'video/quicktime', buffer: Buffer.from('not really a film'),
+  });
+  await expect(page.getByText('Clip ready — save the entry to keep it.')).toBeVisible();
+  expect(stored).toMatch(/\/contest-entries\/me\/[0-9a-f-]+\.mov$/);
+});
+
+test('a clip over 50MB is refused before it is sent', async ({ page }, info) => {
+  let sent = false;
+  await page.route('**/storage/v1/object/contest-entries/**', (route) => {
+    sent = true;
+    return route.fulfill({ status: 200, body: '{}' });
+  });
+  await stub(page, CONTEST, []);
+  await page.goto('/contest/c1');
+  // Playwright will not hand over a buffer that size, so it goes via a file.
+  const big = info.outputPath('long.mp4');
+  const fs = await import('node:fs');
+  fs.writeFileSync(big, Buffer.alloc(50 * 1024 * 1024 + 1));
+  await page.getByLabel('A photo or video clip of your entry').setInputFiles(big);
+  await expect(page.getByText(/that clip is over 50MB/)).toBeVisible();
+  expect(sent).toBe(false);
 });
