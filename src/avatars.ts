@@ -13,6 +13,7 @@ export type Avatar = { kind: 'photo' | 'preset'; value: string; color: string | 
 export const PRESETS: { id: string; emoji: string; label: string }[] = [
   { id: 'badger', emoji: '🦡', label: 'Badger' },
   { id: 'cow', emoji: '🐄', label: 'Cow' },
+  { id: 'llama', emoji: '🦙', label: 'Llama' },
   { id: 'cheese', emoji: '🧀', label: 'Cheese' },
   { id: 'fox', emoji: '🦊', label: 'Fox' },
   { id: 'owl', emoji: '🦉', label: 'Owl' },
