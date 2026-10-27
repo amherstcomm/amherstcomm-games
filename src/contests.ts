@@ -10,6 +10,7 @@
 // phone photo is megabytes, and a dozen of them coming back through an RPC is a
 // page that never loads. A row holds the path; the browser asks for a signed
 // link for the handful it is about to draw.
+import { fromOfficeInput, officeZone, toOfficeInput, when } from '@/schedule';
 import { supabase } from '@/supabase';
 
 /** Which of the four dates today falls in. The server decides this, so a
@@ -24,10 +25,10 @@ export type Contest = {
   entries_close_on: string;
   votes_open_on: string;
   votes_close_on: string;
-  /** when entering closes on its last day, Eastern; null is the end of the day */
-  entries_close_time: string | null;
-  /** when voting closes on its last day, the same way */
-  votes_close_time: string | null;
+  /** the moment entering closes, if it is not the end of its last day */
+  entries_close_at: string | null;
+  /** the moment voting closes, the same way */
+  votes_close_at: string | null;
   /** the people themselves, or an organiser on their behalf */
   who_enters: 'players' | 'admins';
   /** whether whose entry it is appears on screen */
@@ -64,14 +65,33 @@ export type ContestOn = {
   entries_close_on: string;
   votes_open_on: string;
   votes_close_on: string;
-  entries_close_time: string | null;
-  votes_close_time: string | null;
+  entries_close_at: string | null;
+  votes_close_at: string | null;
   entries: number;
 };
 
-/** A closing time as somebody reads it: "3:00 PM". The server sends "15:00:00". */
-export const timeWord = (t: string) =>
-  new Date(`2000-01-01T${t}`).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+/** A closing moment as somebody reads it, on the company clock with its zone:
+ *  "Friday at 3:00 PM CDT" -- the same words a session's window uses. */
+export const closingWord = (at: string) => when(new Date(at), new Date());
+
+/** The moment a closing day and a company-clock "HH:MM" mean, or null when
+ *  there is no time and the part runs to the end of its day. */
+export function closingAt(day: string, time: string | undefined): string | null {
+  if (!day || !time) return null;
+  return fromOfficeInput(`${day}T${time}`)?.toISOString() ?? null;
+}
+
+/** A closing moment back as the "HH:MM" a time field holds, on the company clock. */
+export const closingTime = (at: string | null | undefined) => toOfficeInput(at).slice(11, 16);
+
+/** The company clock's short name right now, "CDT", for the label by the field. */
+export function officeZoneWord(): string {
+  return (
+    new Intl.DateTimeFormat('en-US', { timeZone: officeZone(), timeZoneName: 'short' })
+      .formatToParts(new Date())
+      .find((p) => p.type === 'timeZoneName')?.value ?? officeZone()
+  );
+}
 
 export const BUCKET = 'contest-entries';
 
@@ -331,7 +351,7 @@ export async function saveContest(c: {
   entriesClose: string;
   votesOpen: string;
   votesClose: string;
-  /** "HH:MM", or empty for the end of the day */
+  /** "HH:MM" on the company clock, or empty for the end of the day */
   entriesCloseTime?: string;
   votesCloseTime?: string;
   whoEnters: 'players' | 'admins';
@@ -354,8 +374,8 @@ export async function saveContest(c: {
     p_voters_shown: c.votersShown,
     p_picks: c.picks,
     p_prize: (c.prize ?? '').trim() || null,
-    p_entries_close_time: c.entriesCloseTime || null,
-    p_votes_close_time: c.votesCloseTime || null,
+    p_entries_close_at: closingAt(c.entriesClose, c.entriesCloseTime),
+    p_votes_close_at: closingAt(c.votesClose, c.votesCloseTime),
   });
   if (error) return { ok: false, reason: error.message };
   return data as { ok: boolean; reason?: string; id?: string };

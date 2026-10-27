@@ -23677,12 +23677,20 @@ grant execute on function public.remove_home_feature(uuid) to authenticated;
 -- Contest closing times
 -- ---------------------------------------------------------------------------
 --
--- Entering and voting can close at a time of day, Eastern, as well as on a
--- day: "voting closes Friday at 3". Without a time a part runs to the end of
--- its last puzzle day, as it always has. Opening stays a day: nobody has asked
--- for a contest to open at two in the afternoon.
-alter table public.contests add column if not exists entries_close_time time;
-alter table public.contests add column if not exists votes_close_time time;
+-- Entering and voting can close at a moment as well as on a day: "voting
+-- closes Friday at 3". Like a session's window, the organiser types it on the
+-- company clock (the office_zone setting), the browser turns that into an
+-- instant, and an instant is what is kept and compared with now(). Without
+-- one a part runs to the end of its last puzzle day, as it always has.
+-- Opening stays a day: nobody has asked for a contest to open at two in the
+-- afternoon.
+--
+-- A first cut kept a time of day, Eastern; those columns go.
+alter table public.contests drop column if exists entries_close_time;
+alter table public.contests drop column if exists votes_close_time;
+alter table public.contests add column if not exists entries_close_at timestamptz;
+alter table public.contests add column if not exists votes_close_at timestamptz;
+drop function if exists public.contest_close_at(date, time);
 
 -- When a puzzle day starts, as an instant.
 create or replace function public.contest_day_start(p_day date)
@@ -23694,21 +23702,18 @@ as $fn$
   select (p_day + time '03:15') at time zone 'America/New_York'
 $fn$;
 
--- When a part that closes on this day, at this time or none, has closed.
-create or replace function public.contest_close_at(p_day date, p_time time)
+-- When a part that closes on this day, at this moment or none, has closed.
+create or replace function public.contest_close_at(p_day date, p_at timestamptz)
 returns timestamptz
 language sql
 stable
 set search_path = ''
 as $fn$
-  select case
-    when p_time is null then public.contest_day_start(p_day + 1)
-    else (p_day + p_time) at time zone 'America/New_York'
-  end
+  select coalesce(p_at, public.contest_day_start(p_day + 1))
 $fn$;
 
 grant execute on function public.contest_day_start(date) to anon, authenticated;
-grant execute on function public.contest_close_at(date, time) to anon, authenticated;
+grant execute on function public.contest_close_at(date, timestamptz) to anon, authenticated;
 
 create or replace function public.contest_phase(c public.contests)
 returns text
@@ -23718,9 +23723,9 @@ set search_path = ''
 as $fn$
   select case
     when public.puzzle_day() < c.entries_open_on then 'soon'
-    when now() < public.contest_close_at(c.entries_close_on, c.entries_close_time) then 'entries'
+    when now() < public.contest_close_at(c.entries_close_on, c.entries_close_at) then 'entries'
     when public.puzzle_day() < c.votes_open_on then 'judging'
-    when now() < public.contest_close_at(c.votes_close_on, c.votes_close_time) then 'voting'
+    when now() < public.contest_close_at(c.votes_close_on, c.votes_close_at) then 'voting'
     else 'over'
   end
 $fn$;
@@ -23728,6 +23733,7 @@ $fn$;
 grant execute on function public.contest_phase(public.contests) to anon, authenticated;
 
 drop function if exists public.save_contest(uuid, text, text, date, date, date, date, text, boolean, boolean, int, text);
+drop function if exists public.save_contest(uuid, text, text, date, date, date, date, text, boolean, boolean, int, text, time, time);
 
 create or replace function public.save_contest(
   p_id uuid,
@@ -23742,8 +23748,8 @@ create or replace function public.save_contest(
   p_voters_shown boolean default false,
   p_picks int default 3,
   p_prize text default null,
-  p_entries_close_time time default null,
-  p_votes_close_time time default null
+  p_entries_close_at timestamptz default null,
+  p_votes_close_at timestamptz default null
 )
 returns jsonb
 language plpgsql
@@ -23767,15 +23773,15 @@ begin
   if p_entries_close < p_entries_open or p_votes_close < p_votes_open then
     return jsonb_build_object('ok', false, 'reason', 'each part has to end on or after it starts');
   end if;
-  -- A closing time is when that part ends, Eastern; without one it runs to
-  -- the end of its last day. Each part has to be open for some of it, and
+  -- A closing time is the moment that part ends; without one it runs to the
+  -- end of its last day. Each part has to be open for some of it, and
   -- voting has to end after entering does.
-  if public.contest_close_at(p_entries_close, p_entries_close_time) <= public.contest_day_start(p_entries_open)
-     or public.contest_close_at(p_votes_close, p_votes_close_time) <= public.contest_day_start(p_votes_open) then
+  if public.contest_close_at(p_entries_close, p_entries_close_at) <= public.contest_day_start(p_entries_open)
+     or public.contest_close_at(p_votes_close, p_votes_close_at) <= public.contest_day_start(p_votes_open) then
     return jsonb_build_object('ok', false, 'reason', 'each part has to close after it opens');
   end if;
-  if public.contest_close_at(p_votes_close, p_votes_close_time)
-     <= public.contest_close_at(p_entries_close, p_entries_close_time) then
+  if public.contest_close_at(p_votes_close, p_votes_close_at)
+     <= public.contest_close_at(p_entries_close, p_entries_close_at) then
     return jsonb_build_object('ok', false, 'reason', 'voting has to close after entering does');
   end if;
   if p_votes_open < p_entries_close then
@@ -23795,7 +23801,7 @@ begin
            blurb = nullif(btrim(coalesce(p_blurb, '')), ''),
            entries_open_on = p_entries_open, entries_close_on = p_entries_close,
            votes_open_on = p_votes_open, votes_close_on = p_votes_close,
-           entries_close_time = p_entries_close_time, votes_close_time = p_votes_close_time,
+           entries_close_at = p_entries_close_at, votes_close_at = p_votes_close_at,
            who_enters = coalesce(p_who_enters, 'players'),
            entrants_shown = coalesce(p_entrants_shown, true),
            voters_shown = coalesce(p_voters_shown, false),
@@ -23809,21 +23815,21 @@ begin
     insert into public.contests (name, blurb, entries_open_on, entries_close_on,
                                  votes_open_on, votes_close_on, who_enters,
                                  entrants_shown, voters_shown, picks, prize, created_by,
-                                 entries_close_time, votes_close_time)
+                                 entries_close_at, votes_close_at)
     values (v_name, nullif(btrim(coalesce(p_blurb, '')), ''),
             p_entries_open, p_entries_close, p_votes_open, p_votes_close,
             coalesce(p_who_enters, 'players'), coalesce(p_entrants_shown, true),
             coalesce(p_voters_shown, false), coalesce(p_picks, 3),
             nullif(btrim(coalesce(p_prize, '')), ''), (select auth.uid()),
-            p_entries_close_time, p_votes_close_time)
+            p_entries_close_at, p_votes_close_at)
     returning id into v_id;
   end if;
   return jsonb_build_object('ok', true, 'id', v_id);
 end;
 $fn$;
 
-revoke all on function public.save_contest(uuid, text, text, date, date, date, date, text, boolean, boolean, int, text, time, time) from public, anon;
-grant execute on function public.save_contest(uuid, text, text, date, date, date, date, text, boolean, boolean, int, text, time, time) to authenticated;
+revoke all on function public.save_contest(uuid, text, text, date, date, date, date, text, boolean, boolean, int, text, timestamptz, timestamptz) from public, anon;
+grant execute on function public.save_contest(uuid, text, text, date, date, date, date, text, boolean, boolean, int, text, timestamptz, timestamptz) to authenticated;
 
 create or replace function public.contests_on()
 returns jsonb
@@ -23836,7 +23842,7 @@ as $fn$
            'id', c.id, 'name', c.name, 'phase', public.contest_phase(c),
            'entries_close_on', c.entries_close_on,
            'votes_open_on', c.votes_open_on, 'votes_close_on', c.votes_close_on,
-          'entries_close_time', c.entries_close_time, 'votes_close_time', c.votes_close_time,
+          'entries_close_at', c.entries_close_at, 'votes_close_at', c.votes_close_at,
            'entries', (select count(*) from public.contest_entries e where e.contest_id = c.id))
          order by c.entries_open_on), '[]'::jsonb)
   from public.contests c
@@ -23861,7 +23867,7 @@ as $fn$
                'id', c.id, 'name', c.name, 'blurb', c.blurb,
                'entries_open_on', c.entries_open_on, 'entries_close_on', c.entries_close_on,
                'votes_open_on', c.votes_open_on, 'votes_close_on', c.votes_close_on,
-          'entries_close_time', c.entries_close_time, 'votes_close_time', c.votes_close_time,
+          'entries_close_at', c.entries_close_at, 'votes_close_at', c.votes_close_at,
                'who_enters', c.who_enters, 'entrants_shown', c.entrants_shown,
                'voters_shown', c.voters_shown, 'picks', c.picks, 'prize', c.prize,
                'phase', public.contest_phase(c),
@@ -23891,7 +23897,7 @@ as $fn$
           'id', c.id, 'name', c.name, 'blurb', c.blurb,
           'entries_open_on', c.entries_open_on, 'entries_close_on', c.entries_close_on,
           'votes_open_on', c.votes_open_on, 'votes_close_on', c.votes_close_on,
-          'entries_close_time', c.entries_close_time, 'votes_close_time', c.votes_close_time,
+          'entries_close_at', c.entries_close_at, 'votes_close_at', c.votes_close_at,
           'who_enters', c.who_enters, 'entrants_shown', c.entrants_shown,
           'voters_shown', c.voters_shown, 'picks', c.picks, 'prize', c.prize,
           'phase', public.contest_phase(c),
@@ -23959,8 +23965,8 @@ begin
     return jsonb_build_object('title', c.name, 'phase', v_phase, 'prize', c.prize,
                               'entries_open_on', c.entries_open_on, 'entries_close_on', c.entries_close_on,
                               'votes_open_on', c.votes_open_on, 'votes_close_on', c.votes_close_on,
-                              'entries_close_time', c.entries_close_time,
-                              'votes_close_time', c.votes_close_time);
+                              'entries_close_at', c.entries_close_at,
+                              'votes_close_at', c.votes_close_at);
   elsif p_kind = 'tournament' then
     select * into t from public.tournaments where id = p_ref;
     if t.id is null or t.ends_on < public.puzzle_day() then return null; end if;
