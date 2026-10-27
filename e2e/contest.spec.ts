@@ -746,3 +746,78 @@ test('an email that matches somebody who has signed in offers them, not an invit
   await expect(page.getByRole('button', { name: /Bea Smith/ })).toBeVisible();
   await expect(page.getByRole('group', { name: 'Somebody not signed in yet' })).toHaveCount(0);
 });
+
+// ---------------------------------------------------------------------------
+// One entry, several people
+// ---------------------------------------------------------------------------
+test('a player enters with a teammate and somebody not signed in yet', async ({ page }) => {
+  const saved: Record<string, unknown>[] = [];
+  await stub(page, CONTEST, []);
+  await page.route('**/rest/v1/rpc/find_entrants', (route) =>
+    route.fulfill({ status: 200, contentType: 'application/json',
+                    body: JSON.stringify({ ok: true, people: [{ user: 'u-bea', email: 'bea.smith@example.net', name: 'Bea Smith' }] }) })
+  );
+  await page.route('**/rest/v1/rpc/save_contest_entry', (route) => {
+    saved.push(JSON.parse(route.request().postData() ?? '{}'));
+    return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, id: 'x9' }) });
+  });
+  await page.goto('/contest/c1');
+  const team = page.getByRole('group', { name: 'Also on this entry' });
+  await expect(team).toContainText('Anybody entering with you (nobody yet)');
+
+  await team.getByRole('textbox', { name: 'Add somebody' }).fill('Bea');
+  await team.getByRole('button', { name: /Bea Smith/ }).click();
+  await expect(team.getByRole('listitem')).toHaveText([/Bea Smith/]);
+  // the search starts again, empty, for the next one
+  await expect(team.getByRole('textbox', { name: 'Add somebody' })).toHaveValue('');
+
+  await page.route('**/rest/v1/rpc/find_entrants', (route) =>
+    route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, people: [] }) })
+  );
+  await team.getByRole('textbox', { name: 'Add somebody' }).fill('eve.new@example.net');
+  await team.getByRole('textbox', { name: 'Their name' }).fill('Eve New');
+  await team.getByRole('button', { name: 'Enter it for Eve New' }).click();
+  await expect(team.getByRole('listitem')).toHaveText([/Bea Smith/, /Eve New\s*\(not signed in yet\)/]);
+
+  // and one taken off again
+  await team.getByRole('button', { name: 'Take Bea Smith off this entry' }).click();
+  await team.getByRole('textbox', { name: 'Add somebody' }).fill('Bea');
+  await page.route('**/rest/v1/rpc/find_entrants', (route) =>
+    route.fulfill({ status: 200, contentType: 'application/json',
+                    body: JSON.stringify({ ok: true, people: [{ user: 'u-bea', email: 'bea.smith@example.net', name: 'Bea Smith' }] }) })
+  );
+  await team.getByRole('textbox', { name: 'Add somebody' }).fill('Bea S');
+  await team.getByRole('button', { name: /Bea Smith/ }).click();
+
+  await page.getByRole('textbox', { name: 'What it is called' }).fill('Twin gourds');
+  await page.getByRole('button', { name: 'Enter' }).click();
+  await expect.poll(() => saved.length).toBe(1);
+  expect(saved[0].p_partners).toEqual([{ email: 'eve.new@example.net', name: 'Eve New' }, { user: 'u-bea' }]);
+});
+
+test('a shared entry opens with who is already on it', async ({ page }) => {
+  await stub(page, CONTEST, [
+    { ...ENTRIES[0], entrant: 'Ada Lovelace & Bea Smith', mine: true,
+      partners: [{ user: 'u-bea', email: null, name: 'Bea Smith', invite: false }] },
+  ]);
+  await page.goto('/contest/c1');
+  await expect(page.getByText('Ada Lovelace & Bea Smith')).toBeVisible();
+  await expect(page.getByRole('group', { name: 'Also on this entry' }).getByRole('listitem')).toHaveText([/Bea Smith/]);
+});
+
+test('an organiser says a person may be on more than one entry', async ({ page }) => {
+  let sent: Record<string, unknown> | null = null;
+  await page.route('**/rest/v1/rpc/contests_sheet', (route) =>
+    route.fulfill({ status: 200, contentType: 'application/json',
+                    body: JSON.stringify({ ok: true, contests: [{ ...CONTEST, many_entries: false, entries: 0 }] }) })
+  );
+  await page.route('**/rest/v1/rpc/save_contest', (route) => {
+    sent = JSON.parse(route.request().postData() ?? '{}');
+    return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, id: 'c1' }) });
+  });
+  await page.goto('/admin/contests');
+  await page.getByRole('button', { name: 'Edit' }).click();
+  await page.getByLabel(/A person may be on more than one entry/).check();
+  await page.getByRole('button', { name: 'Save' }).click();
+  await expect.poll(() => sent).toMatchObject({ p_many_entries: true });
+});

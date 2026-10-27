@@ -22,6 +22,8 @@ import {
   readContestsOn,
   saveEntry,
   uploadPhoto,
+  asPartner,
+  type Partner,
   ENTRY_ACCEPT,
   isClip,
   type Contest,
@@ -572,6 +574,7 @@ function ManageEntries({
                   image_path: editing.image_path,
                   entrant: editing.entrant_name,
                   mine: true,
+                  partners: editing.partners ?? [],
                 }
               : null
           }
@@ -645,6 +648,9 @@ function EntryForm({
   const [title, setTitle] = useState(mine?.title ?? '');
   const [blurb, setBlurb] = useState(mine?.blurb ?? '');
   const [who, setWho] = useState<Entrant | null>(forWhom);
+  const [partners, setPartners] = useState<Partner[]>(mine?.partners ?? []);
+  // Remounts the search after each person is added, so it starts empty.
+  const [adds, setAdds] = useState(0);
   const [path, setPath] = useState<string | null>(mine?.image_path ?? null);
   // The photo just uploaded, as a signed link -- not as the local file.
   //
@@ -698,6 +704,7 @@ function EntryForm({
       entrant: who && !who.invite ? who.user : null,
       inviteEmail: who?.invite ? who.email : null,
       inviteName: who?.invite ? who.name : null,
+      partners,
     });
     setBusy(null);
     if (!got.ok) {
@@ -710,6 +717,7 @@ function EntryForm({
     setPath(null);
     setShot(null);
     setWho(null);
+    setPartners([]);
     await onSaved();
   }
 
@@ -768,6 +776,46 @@ function EntryForm({
               invite
             />
           )}
+          <div className="space-y-1" role="group" aria-label="Also on this entry">
+            <p className="text-xs text-slate-400">
+              {onBehalf ? 'Anybody else on it' : 'Anybody entering with you'}
+              {partners.length === 0 && ' (nobody yet)'}
+            </p>
+            {partners.length > 0 && (
+              <ul className="flex flex-wrap gap-1.5">
+                {partners.map((p, i) => (
+                  <li key={p.user ?? p.email ?? i}
+                      className="inline-flex items-center gap-1 rounded-full bg-white/10 pl-2.5 pr-1 py-0.5 text-xs text-slate-200">
+                    {p.name ?? p.email}
+                    {p.invite && <span className="text-slate-400">(not signed in yet)</span>}
+                    <button type="button" className="rounded-full px-1.5 text-slate-400 hover:text-rose-300"
+                            aria-label={`Take ${p.name ?? p.email} off this entry`}
+                            onClick={() => setPartners(partners.filter((_, j) => j !== i))}>
+                      ×
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+            {partners.length < 9 && (
+              <PersonSearch
+                key={adds}
+                chosen={null}
+                onChoose={(e) => {
+                  if (!e) return;
+                  const p = asPartner(e);
+                  const dupe = partners.some((x) => (p.user && x.user === p.user) || (p.email && x.email === p.email))
+                    || (!e.invite && who && !who.invite && who.user === e.user);
+                  if (!dupe) setPartners([...partners, p]);
+                  setAdds(adds + 1);
+                }}
+                label="Add somebody"
+                listLabel="People to add to this entry"
+                chosenWord="Adding"
+                invite
+              />
+            )}
+          </div>
           <label className="block text-xs text-slate-400">
             What it is called
             <input

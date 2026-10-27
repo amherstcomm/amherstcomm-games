@@ -31,6 +31,7 @@ type Form = {
   /** "HH:MM" on the company clock, or empty for the end of the day */
   entriesCloseTime: string;
   votesCloseTime: string;
+  manyEntries: boolean;
   whoEnters: 'players' | 'admins';
   entrantsShown: boolean;
   votersShown: boolean;
@@ -48,6 +49,7 @@ const blank = (): Form => ({
   votesClose: '',
   entriesCloseTime: '',
   votesCloseTime: '',
+  manyEntries: false,
   whoEnters: 'players',
   entrantsShown: true,
   votersShown: false,
@@ -65,6 +67,7 @@ const formOf = (c: ContestRow): Form => ({
   votesClose: c.votes_close_on,
   entriesCloseTime: closingTime(c.entries_close_at),
   votesCloseTime: closingTime(c.votes_close_at),
+  manyEntries: !!c.many_entries,
   whoEnters: c.who_enters,
   entrantsShown: c.entrants_shown,
   votersShown: c.voters_shown,
@@ -295,6 +298,21 @@ export default function AdminContests() {
               Show who voted for what once it is over
               <span className="block text-slate-400">
                 Off is a secret ballot, which is the ordinary expectation at work.
+              </span>
+            </span>
+          </label>
+
+          <label className="flex items-start gap-2 text-xs text-slate-300">
+            <input
+              type="checkbox"
+              className="mt-0.5"
+              checked={form.manyEntries}
+              onChange={(e) => setForm({ ...form, manyEntries: e.target.checked })}
+            />
+            <span>
+              A person may be on more than one entry
+              <span className="block text-slate-400">
+                Off is one entry each, counting a shared one: somebody on a team entry has no other.
               </span>
             </span>
           </label>
