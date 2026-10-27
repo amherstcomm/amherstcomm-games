@@ -34,6 +34,9 @@ export default function AvatarSettings({ name, user }: { name: string | null; us
 
   if (!mine) return null;
   const locked = mine.blocked || mine.off;
+  const preset = mine.avatar?.kind === 'preset' ? mine.avatar : null;
+  // a new colour for the picture they already have, not yet saved
+  const trying = picking && !!preset && preset.color !== color;
 
   async function run(work: () => Promise<{ ok: boolean; reason?: string }>, done: string) {
     setBusy(true);
@@ -51,7 +54,9 @@ export default function AvatarSettings({ name, user }: { name: string | null; us
     <div data-avatar>
       <p className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Avatar</p>
       <div className="flex flex-wrap items-center gap-4">
-        <Avatar avatar={mine.blocked ? null : mine.avatar} name={name} seed={user} size="lg" />
+        {/* While picking, the picture they have shows the colour they are trying. */}
+        <Avatar avatar={mine.blocked ? null : trying ? { ...mine.avatar!, color } : mine.avatar}
+                name={name} seed={user} size="lg" />
         <div className="min-w-0 flex-1 space-y-2">
           <p className="text-xs text-slate-400">
             {mine.blocked
@@ -102,7 +107,26 @@ export default function AvatarSettings({ name, user }: { name: string | null; us
                         className={`w-7 h-7 rounded-full border-2 ${color === c ? 'border-white' : 'border-transparent'}`}
                         style={{ background: c }} />
               ))}
+              {/* Any colour at all: the browser's own picker, which gives
+                  #rrggbb, the one form the server takes. */}
+              <label className={`relative w-7 h-7 rounded-full border-2 cursor-pointer overflow-hidden
+                                 ${COLORS.includes(color) ? 'border-transparent' : 'border-white'}`}
+                     title="Any colour"
+                     style={{ background: COLORS.includes(color)
+                       ? 'conic-gradient(#ef4444, #eab308, #22c55e, #06b6d4, #3b82f6, #a855f7, #ef4444)'
+                       : color }}>
+                <span className="sr-only">Any colour</span>
+                <input type="color" value={color} className="absolute inset-0 opacity-0 cursor-pointer"
+                       onChange={(e) => setColor(e.target.value.toLowerCase())} />
+              </label>
             </div>
+            {trying && (
+              <button type="button" className={`${BUTTON} mt-2`} disabled={busy}
+                      onClick={() => void run(() => setMyAvatar({ kind: 'preset', value: preset!.value, color }),
+                                              'Colour saved.')}>
+                Use this colour
+              </button>
+            )}
           </fieldset>
           <fieldset>
             <legend className="text-xs text-slate-400 mb-1">Picture</legend>

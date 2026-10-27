@@ -58,6 +58,40 @@ test('somebody picks a picture on a colour as their avatar', async ({ page }) =>
   await expect(block.getByRole('status')).toHaveText('Badger it is.');
 });
 
+test('any colour at all, from the full colour picker', async ({ page }) => {
+  await signedIn(page);
+  const sent = await server(page, {
+    my_avatar: { ok: true, avatar: null, blocked: false, off: false },
+    set_my_avatar: { ok: true },
+  });
+  await page.goto('/account');
+  const block = page.locator('[data-avatar]');
+  await block.getByRole('button', { name: 'Pick a picture' }).click();
+  await block.getByLabel('Any colour').fill('#ff8800');
+  await block.getByRole('button', { name: 'Llama' }).click();
+  await expect.poll(() => sent.find((s) => s.fn === 'set_my_avatar')?.args).toEqual({
+    p_kind: 'preset', p_value: 'llama', p_color: '#ff8800',
+  });
+});
+
+test('a new colour for the picture you have, without picking it again', async ({ page }) => {
+  await signedIn(page);
+  const sent = await server(page, {
+    my_avatar: { ok: true, avatar: { kind: 'preset', value: 'cow', color: '#2563eb' }, blocked: false, off: false },
+    set_my_avatar: { ok: true },
+  });
+  await page.goto('/account');
+  const block = page.locator('[data-avatar]');
+  await block.getByRole('button', { name: 'Pick a picture' }).click();
+  // nothing to save until the colour is different
+  await expect(block.getByRole('button', { name: 'Use this colour' })).toHaveCount(0);
+  await block.getByRole('button', { name: 'Colour #dc2626' }).click();
+  await block.getByRole('button', { name: 'Use this colour' }).click();
+  await expect.poll(() => sent.find((s) => s.fn === 'set_my_avatar')?.args).toEqual({
+    p_kind: 'preset', p_value: 'cow', p_color: '#dc2626',
+  });
+});
+
 test('somebody whose avatar was taken down is told so, and offered nothing to set', async ({ page }) => {
   await signedIn(page);
   await server(page, { my_avatar: { ok: true, avatar: null, blocked: true, off: false } });
