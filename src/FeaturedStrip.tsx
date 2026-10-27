@@ -16,10 +16,14 @@ import {
 export default function FeaturedStrip({
   link,
   sessionsOn,
+  sessionAllowed = () => true,
 }: {
   link: (p: FeaturePage) => { to: string; onGo: () => void };
   /** sessions switched off for the site: no trivia cards either */
   sessionsOn: boolean;
+  /** whether this session may be joined just now -- a tournament holding the
+   *  site refuses most of them, and a card for one would lead to a refusal */
+  sessionAllowed?: (id: string) => boolean;
 }) {
   const [features, setFeatures] = useState<Feature[]>([]);
   useEffect(() => {
@@ -33,7 +37,7 @@ export default function FeaturedStrip({
     };
   }, []);
 
-  const shown = features.filter((f) => sessionsOn || f.kind !== 'session');
+  const shown = features.filter((f) => f.kind !== 'session' || (sessionsOn && sessionAllowed(f.ref)));
   if (shown.length === 0) return null;
   const one = shown.length === 1;
 

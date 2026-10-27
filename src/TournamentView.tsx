@@ -444,7 +444,7 @@ export default function TournamentView({
         </p>
         {locked && (
           <p className="mt-1 text-sm text-slate-400">
-            Until {tournament.ends_on}, the tournament is the only thing on the site.
+            Until {tournament.ends_on}, the tournament is the only game on the site.
           </p>
         )}
         <Prizes items={[['Overall prize', tournament.prize]]} />
@@ -486,7 +486,7 @@ export default function TournamentView({
       </p>
       {locked && (
         <p className="mt-2 text-sm text-slate-400">
-          Until {first.tournament_ends_on}, the tournament is the only thing on the site.
+          Until {first.tournament_ends_on}, the tournament is the only game on the site.
         </p>
       )}
       <Prizes
