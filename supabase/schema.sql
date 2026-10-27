@@ -24725,7 +24725,7 @@ begin
   -- The others, resolved to accounts where there are accounts.
   create temp table if not exists pg_temp.entry_people (
     user_id uuid, invited_email text, invited_name text, pos int) on commit drop;
-  delete from pg_temp.entry_people;
+  truncate pg_temp.entry_people;
   if p_partners is not null then
     for part in select * from jsonb_array_elements(p_partners) loop
       p_user := nullif(part->>'user', '')::uuid;
