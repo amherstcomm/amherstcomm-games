@@ -8,7 +8,7 @@
 // on their behalf, giving them another go in a round. One search, so the two
 // cannot drift into finding people differently.
 import { useState } from 'react';
-import { findEntrants, type Entrant } from '@/contests';
+import { findEntrants, looksLikeEmail, type Entrant } from '@/contests';
 
 const FIELD =
   'w-full rounded-lg bg-white/5 border border-white/15 px-3 py-2 text-sm text-slate-200 ' +
@@ -20,6 +20,7 @@ export default function PersonSearch({
   label,
   listLabel,
   chosenWord,
+  invite = false,
 }: {
   chosen: Entrant | null;
   onChoose: (who: Entrant | null) => void;
@@ -29,9 +30,13 @@ export default function PersonSearch({
   listLabel: string;
   /** what is said before the chosen name: "For", "Resetting" */
   chosenWord: string;
+  /** whether somebody who has never signed in may be chosen by email: an
+   *  entry can wait for them, a round reset cannot */
+  invite?: boolean;
 }) {
   const [query, setQuery] = useState('');
   const [found, setFound] = useState<Entrant[]>([]);
+  const [newName, setNewName] = useState('');
 
   async function look(q: string) {
     setQuery(q);
@@ -43,6 +48,7 @@ export default function PersonSearch({
       <p className="text-xs text-slate-400">
         {chosenWord}{' '}
         <span className="text-slate-200 font-semibold">{chosen.name ?? chosen.email}</span>{' '}
+        {chosen.invite && <span>({chosen.email}, not signed in yet) </span>}
         <button
           type="button"
           className="text-accent hover:brightness-110 underline"
@@ -85,10 +91,39 @@ export default function PersonSearch({
           ))}
         </ul>
       )}
-      {query.trim().length >= 2 && found.length === 0 && (
+      {query.trim().length >= 2 && found.length === 0 && !(invite && looksLikeEmail(query)) && (
         <p className="text-xs text-slate-400 mt-1">
-          Nobody matches that. Somebody who has never signed in will not be here yet.
+          {invite
+            ? 'Nobody matches that. For somebody who has never signed in, type their whole email address.'
+            : 'Nobody matches that. Somebody who has never signed in will not be here yet.'}
         </p>
+      )}
+      {invite && looksLikeEmail(query) && !found.some((f) => f.email.toLowerCase() === query.trim().toLowerCase()) && (
+        <div className="mt-2 space-y-2 rounded-lg border border-white/15 p-2" role="group" aria-label="Somebody not signed in yet">
+          <p className="text-xs text-slate-400">
+            Nobody has signed in as {query.trim()} yet. The entry can wait for them: it shows the name
+            below until they sign in with that address, and then it is theirs.
+          </p>
+          <label className="block text-xs text-slate-400">
+            Their name
+            <input
+              className={FIELD + ' mt-1'}
+              value={newName}
+              maxLength={80}
+              placeholder="Nora Hire"
+              onChange={(e) => setNewName(e.target.value)}
+            />
+          </label>
+          <button
+            type="button"
+            className="text-xs text-accent hover:brightness-110 underline"
+            onClick={() =>
+              onChoose({ user: '', email: query.trim().toLowerCase(), name: newName.trim() || null, invite: true })
+            }
+          >
+            Enter it for {newName.trim() || query.trim()}
+          </button>
+        </div>
       )}
     </div>
   );

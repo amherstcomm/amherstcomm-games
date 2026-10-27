@@ -293,6 +293,9 @@ export async function saveEntry(e: {
   imagePath?: string | null;
   /** whose it is; only an organiser entering on somebody's behalf may say */
   entrant?: string | null;
+  /** or somebody who has never signed in, by email, with a name to show */
+  inviteEmail?: string | null;
+  inviteName?: string | null;
 }): Promise<{ ok: boolean; reason?: string; id?: string }> {
   if (!supabase) return { ok: false, reason: 'not connected' };
   const { data, error } = await supabase.rpc('save_contest_entry', {
@@ -302,6 +305,8 @@ export async function saveEntry(e: {
     p_blurb: (e.blurb ?? '').trim() || null,
     p_image_path: e.imagePath ?? null,
     p_entrant: e.entrant ?? null,
+    p_invite_email: e.inviteEmail ?? null,
+    p_invite_name: e.inviteName ?? null,
   });
   if (error) return { ok: false, reason: error.message };
   return data as { ok: boolean; reason?: string; id?: string };
@@ -316,8 +321,13 @@ export async function deleteEntry(id: string): Promise<{ ok: boolean; reason?: s
 
 // --- setting one up -------------------------------------------------------
 
-/** Somebody an organiser can credit an entry to. */
-export type Entrant = { user: string; email: string; name: string | null };
+/** Somebody an organiser can credit an entry to. `invite` is somebody who
+ *  has never signed in: no account yet, so `user` is empty and the email is
+ *  what the entry waits under until they do. */
+export type Entrant = { user: string; email: string; name: string | null; invite?: boolean };
+
+/** Whether what was typed into the search is an email address. */
+export const looksLikeEmail = (s: string) => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(s.trim());
 
 /** A search rather than a list: the whole staff directory on a page is a
  *  different thing from "who am I entering this for". Under two characters
@@ -340,6 +350,8 @@ export type EntrySheetRow = {
   image_path: string | null;
   entrant: string | null;
   entrant_name: string | null;
+  /** set while the entry waits for somebody who has never signed in */
+  invited_email?: string | null;
   entered_by_me: boolean;
 };
 

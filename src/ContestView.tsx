@@ -540,6 +540,7 @@ function ManageEntries({
                 </span>
                 <span className="block text-xs text-slate-400">
                   {r.entrant_name ?? 'Nobody is credited for this one'}
+                  {r.invited_email && ` · ${r.invited_email}, not signed in yet`}
                   {!r.image_path && ' · no photo or clip'}
                 </span>
               </span>
@@ -577,7 +578,9 @@ function ManageEntries({
           forWhom={
             editing && editing.entrant
               ? { user: editing.entrant, email: '', name: editing.entrant_name }
-              : null
+              : editing && editing.invited_email
+                ? { user: '', email: editing.invited_email, name: editing.entrant_name, invite: true }
+                : null
           }
           link={editing?.image_path ? links[editing.image_path] : undefined}
           onSaved={done}
@@ -692,7 +695,9 @@ function EntryForm({
       title,
       blurb,
       imagePath: path,
-      entrant: who?.user ?? null,
+      entrant: who && !who.invite ? who.user : null,
+      inviteEmail: who?.invite ? who.email : null,
+      inviteName: who?.invite ? who.name : null,
     });
     setBusy(null);
     if (!got.ok) {
@@ -760,6 +765,7 @@ function EntryForm({
               label="Whose entry is this?"
               listLabel="People you can enter for"
               chosenWord="For"
+              invite
             />
           )}
           <label className="block text-xs text-slate-400">

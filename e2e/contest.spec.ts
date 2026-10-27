@@ -694,3 +694,55 @@ test('a clip over 50MB is refused before it is sent', async ({ page }, info) => 
   await expect(page.getByText(/that clip is over 50MB/)).toBeVisible();
   expect(sent).toBe(false);
 });
+
+// ---------------------------------------------------------------------------
+// Somebody who has never signed in
+// ---------------------------------------------------------------------------
+test('an organiser enters somebody who has never signed in, by email', async ({ page }) => {
+  const saved: Record<string, unknown>[] = [];
+  await stub(page, ON_BEHALF, []);
+  await stubOrganiser(page, [
+    {
+      id: 'x1', title: 'Five alarm', blurb: null, image_path: null,
+      entrant: null, entrant_name: 'Nora Hire', invited_email: 'nora.hire@example.net', entered_by_me: true,
+    },
+  ]);
+  await page.route('**/rest/v1/rpc/save_contest_entry', (route) => {
+    saved.push(JSON.parse(route.request().postData() ?? '{}'));
+    return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, id: 'x2' }) });
+  });
+  await page.goto('/contest/c1');
+  // the one already waiting says so
+  await expect(page.getByText(/nora\.hire@example\.net, not signed in yet/)).toBeVisible();
+
+  await page.getByRole('button', { name: 'Add an entry' }).click();
+  const search = page.getByRole('textbox', { name: 'Whose entry is this?' });
+  await search.fill('Dev');
+  await expect(page.getByText(/type their whole email address/)).toBeVisible();
+  await search.fill('Dev.Ops@Example.net');
+  const waiting = page.getByRole('group', { name: 'Somebody not signed in yet' });
+  await waiting.getByRole('textbox', { name: 'Their name' }).fill('Devon Ops');
+  await waiting.getByRole('button', { name: 'Enter it for Devon Ops' }).click();
+  await expect(page.getByText(/For Devon Ops \(dev\.ops@example\.net, not signed in yet\)/)).toBeVisible();
+
+  await page.getByRole('textbox', { name: 'What it is called' }).fill('Mild');
+  await page.getByRole('button', { name: 'Enter' }).click();
+  await expect.poll(() => saved.length).toBe(1);
+  expect(saved[0]).toMatchObject({
+    p_entrant: null, p_invite_email: 'dev.ops@example.net', p_invite_name: 'Devon Ops', p_title: 'Mild',
+  });
+});
+
+test('an email that matches somebody who has signed in offers them, not an invitation', async ({ page }) => {
+  await stub(page, ON_BEHALF, []);
+  await stubOrganiser(page, []);
+  await page.route('**/rest/v1/rpc/find_entrants', (route) =>
+    route.fulfill({ status: 200, contentType: 'application/json',
+                    body: JSON.stringify({ ok: true, people: [{ user: 'u-bea', email: 'bea.smith@example.net', name: 'Bea Smith' }] }) })
+  );
+  await page.goto('/contest/c1');
+  await page.getByRole('button', { name: 'Add an entry' }).click();
+  await page.getByRole('textbox', { name: 'Whose entry is this?' }).fill('bea.smith@example.net');
+  await expect(page.getByRole('button', { name: /Bea Smith/ })).toBeVisible();
+  await expect(page.getByRole('group', { name: 'Somebody not signed in yet' })).toHaveCount(0);
+});

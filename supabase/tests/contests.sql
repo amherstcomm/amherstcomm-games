@@ -375,7 +375,48 @@ select pg_temp.check('and a part cannot close before its first day starts',
                        pg_temp.at3(1, '12:00'), null)->>'reason')
     = 'each part has to close after it opens');
 
+-- ---------------------------------------------------------------------------
+-- Entering somebody who has never signed in
+-- ---------------------------------------------------------------------------
+set session "test.uid" = 'd1111111-1111-1111-1111-111111111111';
+create temp table byemail as
+  select (public.save_contest(null, 'Chili cook-off', null, pg_temp.d(-1), pg_temp.d(2),
+                              pg_temp.d(3), pg_temp.d(6), 'admins')->>'id')::uuid id;
+create temp table invited as
+  select public.save_contest_entry((select id from byemail), null, 'Five alarm', null, null,
+                                   null, '  New.Hire@Example.com ', 'Nora Hire') j;
+select pg_temp.check('an organiser enters somebody by email who has no account',
+  (select j->>'ok' from invited) = 'true'
+  and (select entrant is null and invited_email = 'new.hire@example.com' and invited_name = 'Nora Hire'
+       from public.contest_entries where id = (select (j->>'id')::uuid from invited)));
+select pg_temp.check('and the page names them meanwhile',
+  (select x->>'entrant' from jsonb_array_elements(public.contest_view((select id from byemail))->'entries') x
+   where x->>'title' = 'Five alarm') = 'Nora Hire'
+  and (select x->>'invited_email' from jsonb_array_elements(
+         public.contest_entries_sheet((select id from byemail))->'entries') x
+       where x->>'title' = 'Five alarm') = 'new.hire@example.com');
+
+create temp table known as
+  select public.save_contest_entry((select id from byemail), null, 'Mild', null, null,
+                                   null, 'CARVER.ONE@example.com', 'Whoever') j;
+select pg_temp.check('an email that does have an account is simply that account',
+  (select entrant = 'd2222222-2222-2222-2222-222222222222' and invited_email is null and invited_name is null
+   from public.contest_entries where id = (select (j->>'id')::uuid from known)));
+select pg_temp.check('and something that is not an email is refused',
+  (public.save_contest_entry((select id from byemail), null, 'Odd', null, null,
+                             null, 'nora at home', null)->>'reason')
+    = 'that does not look like an email address');
+
+-- Their first sign-in is the account appearing.
+insert into auth.users (id, email)
+values ('d4444444-4444-4444-4444-444444444444', 'New.Hire@example.com');
+select pg_temp.check('the first time they sign in, the entry is theirs',
+  (select entrant = 'd4444444-4444-4444-4444-444444444444' and invited_email is null and invited_name is null
+   from public.contest_entries where id = (select (j->>'id')::uuid from invited)));
+
 -- Leave nothing behind: these dates overlap what later files set up.
+delete from public.contests where id = (select id from byemail);
+delete from auth.users where id = 'd4444444-4444-4444-4444-444444444444';
 delete from public.contests where name = 'Same day';
 delete from public.contests
  where id in ((select id from pk), (select id from later), (select id from shut), (select id from timed));
