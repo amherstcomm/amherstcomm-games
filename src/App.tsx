@@ -1195,6 +1195,14 @@ function App() {
             The header and footer stay: they are the way back out. */}
         {reportPage || lockedHere ? (
           <>
+          {/* A locked site's front page is the tournament, but what organisers
+              have featured still leads it: a contest or a giveaway is not a
+              game, and the lock was never meant to hide them. */}
+          {lockedHere && atHome && (
+            <div className="max-w-2xl mx-auto px-4 pt-6">
+              <FeaturedStrip link={pageLink} sessionsOn={sessionsOn} sessionAllowed={sessionOpen} />
+            </div>
+          )}
           {lockedHere && (
             <TournamentView
               rounds={rounds}
@@ -1281,7 +1289,7 @@ function App() {
           <>
           {/* What organisers have featured: trivia, giveaways, contests,
               tournaments. Above the round's line, which is automatic. */}
-          {atHome && <FeaturedStrip link={pageLink} sessionsOn={sessionsOn} />}
+          {atHome && <FeaturedStrip link={pageLink} sessionsOn={sessionsOn} sessionAllowed={sessionOpen} />}
           {/* A round being on is worth a line on the front page: it is the one
               thing here with a deadline. */}
           {atHome && rounds && rounds.length > 0 && (

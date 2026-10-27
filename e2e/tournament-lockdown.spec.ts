@@ -70,7 +70,7 @@ test('the front page is the tournament, and the game menu is gone', async ({ pag
   await locked(page);
   await page.goto('/');
   await expect(page.getByRole('heading', { name: /Ownership Cup/ })).toBeVisible();
-  await expect(page.getByText(`Until ${ENDS}, the tournament is the only thing on the site.`)).toBeVisible();
+  await expect(page.getByText(`Until ${ENDS}, the tournament is the only game on the site.`)).toBeVisible();
   await expect(page.getByRole('navigation', { name: 'Game modes' })).toHaveCount(0);
 });
 
@@ -146,4 +146,31 @@ test('with no lock the front page is the front page', async ({ page }) => {
   await locked(page, { off: [] });
   await page.goto('/');
   await expect(page.getByRole('navigation', { name: 'Game modes' })).toBeVisible();
+});
+
+// What organisers featured still leads the locked front page -- a contest and
+// a giveaway are not games -- but not a trivia card the lock would refuse.
+test('the locked front page still shows what is featured, less refused trivia', async ({ page }) => {
+  await locked(page);
+  await page.route('**/rest/v1/rpc/home_features', (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        ok: true,
+        features: [
+          { id: 'f1', kind: 'contest', ref: 'c1', blurb: '', image: null,
+            item: { title: 'Desk Photos', phase: 'entries', entries_close_on: ENDS } },
+          { id: 'f2', kind: 'session', ref: 's-other', blurb: '', image: null,
+            item: { title: 'All-hands quiz', state: 'live', mode: 'live' } },
+        ],
+      }),
+    })
+  );
+  await page.goto('/');
+  await expect(page.getByRole('heading', { name: /Ownership Cup/ })).toBeVisible();
+  const strip = page.getByRole('region', { name: 'Featured' });
+  await expect(strip.getByRole('article')).toHaveCount(1);
+  await expect(strip.getByRole('link', { name: 'Enter' })).toHaveAttribute('href', '/contest/c1');
+  await expect(strip).not.toContainText('All-hands quiz');
 });
