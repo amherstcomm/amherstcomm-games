@@ -23014,3 +23014,385 @@ as $fn$
               order by l.id desc limit 200) recent), '[]'::jsonb))
   end
 $fn$;
+
+-- ===========================================================================
+-- Avatars
+-- ===========================================================================
+--
+-- Everybody can have one: a photo of their own, or one of a set of pictures on
+-- a colour. Without one they are their initials. An organiser can take one
+-- down and stop that person setting another, and the whole thing can be
+-- switched off for the site (site:avatars on the switches page), when every
+-- avatar shows as initials and none can be set.
+--
+-- Photos live in a private bucket, read through signed links like the contest
+-- photos, in the owner's own folder.
+alter table public.profiles add column if not exists avatar_kind text;
+alter table public.profiles add column if not exists avatar_value text;
+alter table public.profiles add column if not exists avatar_color text;
+alter table public.profiles add column if not exists avatar_blocked boolean not null default false;
+do $avatar$
+begin
+  if not exists (select 1 from pg_constraint where conname = 'profiles_avatar_kind_check') then
+    alter table public.profiles add constraint profiles_avatar_kind_check
+      check (avatar_kind in ('photo', 'preset'));
+  end if;
+  if not exists (select 1 from pg_constraint where conname = 'profiles_avatar_color_check') then
+    alter table public.profiles add constraint profiles_avatar_color_check
+      check (avatar_color ~ '^#[0-9a-f]{6}$');
+  end if;
+end
+$avatar$;
+
+-- In a trivia, the avatars of the people who picked each answer: off, as
+-- they answer, or at the reveal.
+alter table public.sessions add column if not exists avatars text not null default 'off';
+do $avatar$
+begin
+  if not exists (select 1 from pg_constraint where conname = 'sessions_avatars_check') then
+    alter table public.sessions add constraint sessions_avatars_check check (avatars in ('off', 'live', 'reveal'));
+  end if;
+end
+$avatar$;
+
+do $$
+begin
+  if to_regnamespace('storage') is null then
+    raise notice 'no storage schema here; skipping the avatar bucket';
+    return;
+  end if;
+  -- Small: the browser crops and shrinks a photo to 256 pixels before it is
+  -- sent, so anything near the limit was not sent by this site.
+  insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+  values ('avatars', 'avatars', false, 1048576, array['image/jpeg', 'image/png', 'image/webp'])
+  on conflict (id) do update
+    set public = false, file_size_limit = 1048576, allowed_mime_types = excluded.allowed_mime_types;
+
+  execute $p$drop policy if exists "avatars are readable" on storage.objects$p$;
+  execute $p$create policy "avatars are readable" on storage.objects
+    for select to authenticated using (bucket_id = 'avatars')$p$;
+  execute $p$drop policy if exists "an avatar goes in your own folder" on storage.objects$p$;
+  execute $p$create policy "an avatar goes in your own folder" on storage.objects
+    for insert to authenticated
+    with check (bucket_id = 'avatars' and (storage.foldername(name))[1] = (select auth.uid())::text)$p$;
+  execute $p$drop policy if exists "an avatar stays yours to replace" on storage.objects$p$;
+  execute $p$create policy "an avatar stays yours to replace" on storage.objects
+    for update to authenticated
+    using (bucket_id = 'avatars' and (storage.foldername(name))[1] = (select auth.uid())::text)$p$;
+  execute $p$drop policy if exists "an avatar is yours to take down" on storage.objects$p$;
+  execute $p$create policy "an avatar is yours to take down" on storage.objects
+    for delete to authenticated
+    using (bucket_id = 'avatars' and (storage.foldername(name))[1] = (select auth.uid())::text)$p$;
+end $$;
+
+-- Whether avatars are on for the site.
+create or replace function public.avatars_on()
+returns boolean
+language sql
+stable
+security definer
+set search_path = ''
+as $fn$
+  select not (public.read_availability() @> '["site:avatars"]'::jsonb)
+$fn$;
+
+-- Somebody's avatar as the screens draw it, or null for their initials: no
+-- avatar, an organiser took it down, or avatars are off (pass avatars_on()).
+create or replace function public.avatar_json(p public.profiles, p_on boolean)
+returns jsonb
+language sql
+immutable
+set search_path = ''
+as $fn$
+  select case when not p_on or p.id is null or p.avatar_blocked or p.avatar_kind is null then null
+              else jsonb_build_object('kind', p.avatar_kind, 'value', p.avatar_value, 'color', p.avatar_color) end
+$fn$;
+
+create or replace function public.my_avatar()
+returns jsonb
+language sql
+stable
+security definer
+set search_path = ''
+as $fn$
+  select case when (select auth.uid()) is null then jsonb_build_object('ok', false, 'reason', 'not signed in')
+  else jsonb_build_object('ok', true,
+    'avatar', (select public.avatar_json(p, true) from public.profiles p where p.id = (select auth.uid())),
+    'blocked', coalesce((select p.avatar_blocked from public.profiles p where p.id = (select auth.uid())), false),
+    'off', not public.avatars_on())
+  end
+$fn$;
+
+-- Setting your own: a preset by its name and a colour, a photo by its path in
+-- your own folder, or null to go back to initials.
+create or replace function public.set_my_avatar(p_kind text, p_value text default null, p_color text default null)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $fn$
+declare
+  me uuid := (select auth.uid());
+begin
+  if me is null then
+    return jsonb_build_object('ok', false, 'reason', 'not signed in');
+  end if;
+  if exists (select 1 from public.profiles where id = me and avatar_blocked) then
+    return jsonb_build_object('ok', false, 'reason', 'an organiser has turned off your avatar');
+  end if;
+  if p_kind is not null and not public.avatars_on() then
+    return jsonb_build_object('ok', false, 'reason', 'avatars are turned off just now');
+  end if;
+  if p_kind is not null and p_kind not in ('photo', 'preset') then
+    return jsonb_build_object('ok', false, 'reason', 'a photo or a picture from the set');
+  end if;
+  if p_kind = 'preset' and (coalesce(p_value, '') !~ '^[a-z0-9-]{1,32}$' or coalesce(p_color, '') !~ '^#[0-9a-f]{6}$') then
+    return jsonb_build_object('ok', false, 'reason', 'pick a picture and a colour');
+  end if;
+  if p_kind = 'photo' and coalesce(p_value, '') !~ ('^' || me::text || '/avatar-[0-9a-f-]{36}\.(webp|jpg|png)$') then
+    return jsonb_build_object('ok', false, 'reason', 'that photo is not yours to use');
+  end if;
+  if p_color is not null and p_color !~ '^#[0-9a-f]{6}$' then
+    return jsonb_build_object('ok', false, 'reason', 'pick a colour');
+  end if;
+  insert into public.profiles (id) values (me) on conflict (id) do nothing;
+  update public.profiles
+     set avatar_kind = p_kind,
+         avatar_value = case when p_kind is null then null else p_value end,
+         avatar_color = case when p_kind is null then null else p_color end
+   where id = me;
+  return jsonb_build_object('ok', true);
+end;
+$fn$;
+
+-- An organiser taking one down, and whether that person may set another.
+create or replace function public.set_person_avatar(p_user uuid, p_blocked boolean)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $fn$
+begin
+  if not public.can('users.manage') then
+    return jsonb_build_object('ok', false, 'reason', 'not allowed');
+  end if;
+  if not exists (select 1 from auth.users where id = p_user) then
+    return jsonb_build_object('ok', false, 'reason', 'no such person');
+  end if;
+  insert into public.profiles (id) values (p_user) on conflict (id) do nothing;
+  -- Blocking takes the avatar down with it; allowing again leaves them to set one.
+  update public.profiles
+     set avatar_blocked = p_blocked,
+         avatar_kind = case when p_blocked then null else avatar_kind end,
+         avatar_value = case when p_blocked then null else avatar_value end,
+         avatar_color = case when p_blocked then null else avatar_color end
+   where id = p_user;
+  return jsonb_build_object('ok', true);
+end;
+$fn$;
+
+-- In a trivia set to show them: who picked what, avatar and all, for a choice
+-- or a survey question. Never anybody who answered anonymously -- they are a
+-- count. At the reveal, or live: for a room that moves together, as soon as
+-- the question is open; in a session people play at their own pace, only once
+-- you have answered it yourself, so nobody copies the crowd.
+create or replace function public.item_avatars(p_item uuid)
+returns jsonb
+language plpgsql
+stable
+security definer
+set search_path = ''
+as $fn$
+declare
+  it public.items;
+  sess public.sessions;
+  me uuid := (select auth.uid());
+  host boolean;
+  v_on boolean := public.avatars_on();
+begin
+  if me is null then
+    return jsonb_build_object('ok', false, 'reason', 'not signed in');
+  end if;
+  select * into it from public.items where id = p_item;
+  if it.id is null then
+    return jsonb_build_object('ok', false, 'reason', 'no such question');
+  end if;
+  select * into sess from public.sessions where id = it.session_id;
+  if not public.session_open_to_me(sess.id) then
+    return jsonb_build_object('ok', false, 'reason', 'not allowed');
+  end if;
+  if sess.avatars = 'off' or not v_on or it.kind not in ('choice', 'survey') then
+    return jsonb_build_object('ok', false, 'reason', 'off');
+  end if;
+  host := public.hosts_session(sess.id);
+  if it.state = 'pending'
+     or (it.state <> 'revealed' and sess.avatars = 'reveal')
+     or (it.state <> 'revealed' and sess.mode = 'open' and not host
+         and not exists (select 1 from public.responses r where r.item_id = p_item and r.user_id = me)) then
+    return jsonb_build_object('ok', false, 'reason', 'not yet');
+  end if;
+  return jsonb_build_object('ok', true,
+    'picks', coalesce((
+      select jsonb_agg(jsonb_build_object('option', o.option, 'user', r.user_id,
+                                          'name', pr.display_name, 'avatar', public.avatar_json(pr, v_on))
+                       order by r.submitted_at, r.user_id)
+      from public.responses r
+      left join public.profiles pr on pr.id = r.user_id
+      cross join lateral (
+        select x as option from jsonb_array_elements_text(r.value) x where jsonb_typeof(r.value) = 'array'
+        union all
+        select r.value #>> '{}' where jsonb_typeof(r.value) = 'string'
+      ) o
+      where r.item_id = p_item and not r.anonymous), '[]'::jsonb),
+    'anonymous', (select count(*) from public.responses r where r.item_id = p_item and r.anonymous));
+end;
+$fn$;
+
+revoke all on function public.avatar_json(public.profiles, boolean) from public, anon;
+revoke all on function public.avatars_on() from public, anon;
+do $grants$
+declare
+  f text;
+begin
+  foreach f in array array['my_avatar()', 'set_my_avatar(text, text, text)', 'set_person_avatar(uuid, boolean)',
+                           'item_avatars(uuid)'] loop
+    execute format('revoke all on function public.%s from public, anon', f);
+    execute format('grant execute on function public.%s to authenticated', f);
+  end loop;
+end
+$grants$;
+
+create or replace function public.people_with_roles()
+returns jsonb
+language sql
+stable
+security definer
+set search_path = ''
+as $fn$
+  select case
+    when not public.can('users.manage')
+      then jsonb_build_object('ok', false, 'reason', 'not allowed')
+    else jsonb_build_object('ok', true, 'people', coalesce(
+      (select jsonb_agg(jsonb_build_object(
+                'user', u.id,
+                'email', u.email,
+                'name', p.display_name,
+                'role', g.role,
+                'granted_at', g.granted_at,
+                'grants', coalesce((select jsonb_agg(c.capability order by c.capability)
+                                    from public.capability_grants c where c.user_id = u.id), '[]'::jsonb),
+                'self', u.id = (select auth.uid()),
+                'avatar', public.avatar_json(p, true),
+                'avatar_blocked', coalesce(p.avatar_blocked, false))
+              order by public.role_rank(g.role) desc nulls last, u.email)
+       from auth.users u
+       left join public.role_grants g on g.user_id = u.id
+       left join public.profiles p on p.id = u.id
+       where g.user_id is not null
+          or exists (select 1 from public.capability_grants c where c.user_id = u.id)),
+      '[]'::jsonb))
+  end
+$fn$;
+create or replace function public.find_people(p_query text)
+returns jsonb
+language sql
+stable
+security definer
+set search_path = ''
+as $fn$
+  select case
+    when not public.can('users.manage')
+      then jsonb_build_object('ok', false, 'reason', 'not allowed')
+    when length(btrim(coalesce(p_query, ''))) < 2
+      then jsonb_build_object('ok', true, 'people', '[]'::jsonb)
+    else jsonb_build_object('ok', true, 'people', coalesce(
+      (select jsonb_agg(x order by x->>'email')
+       from (
+         select jsonb_build_object(
+                  'user', u.id,
+                  'email', u.email,
+                  'name', p.display_name,
+                  'role', g.role,
+                  'grants', coalesce((select jsonb_agg(c.capability order by c.capability)
+                                      from public.capability_grants c where c.user_id = u.id), '[]'::jsonb),
+                  'avatar', public.avatar_json(p, true),
+                  'avatar_blocked', coalesce(p.avatar_blocked, false)) as x
+         from auth.users u
+         left join public.profiles p on p.id = u.id
+         left join public.role_grants g on g.user_id = u.id
+         where u.email ilike '%' || btrim(p_query) || '%'
+            or p.display_name ilike '%' || btrim(p_query) || '%'
+         limit 10
+       ) found),
+      '[]'::jsonb))
+  end
+$fn$;
+create or replace function public.set_session_options(
+  p_session uuid,
+  p_qa boolean default null,
+  p_share_results boolean default null,
+  p_shuffle_options boolean default null,
+  p_avatars text default null
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $fn$
+begin
+  if not public.hosts_session(p_session) then
+    return jsonb_build_object('ok', false, 'reason', 'not allowed');
+  end if;
+  if p_avatars is not null and p_avatars not in ('off', 'live', 'reveal') then
+    return jsonb_build_object('ok', false, 'reason', 'avatars are off, live, or at the reveal');
+  end if;
+  update public.sessions
+     set qa = coalesce(p_qa, qa),
+         avatars = coalesce(p_avatars, avatars),
+         share_results = coalesce(p_share_results, share_results),
+         shuffle_options = coalesce(p_shuffle_options, shuffle_options)
+   where id = p_session;
+  return jsonb_build_object('ok', true);
+end;
+$fn$;
+
+drop function if exists public.set_session_options(uuid, boolean, boolean, boolean);
+revoke all on function public.set_session_options(uuid, boolean, boolean, boolean, text) from public, anon;
+grant execute on function public.set_session_options(uuid, boolean, boolean, boolean, text) to authenticated;
+create or replace function public.session_sheet(p_session uuid)
+returns jsonb
+language sql
+stable
+security definer
+set search_path = ''
+as $fn$
+  select case
+    when not public.hosts_session(p_session)
+      then jsonb_build_object('ok', false, 'reason', 'not allowed')
+    else jsonb_build_object(
+      'ok', true,
+      'session', (select jsonb_build_object(
+         'id', s.id, 'title', s.title, 'state', public.scheduled_state(s),
+         'late_join', s.late_join, 'current_item', s.current_item,
+         'code', s.code, 'mode', s.mode, 'qa', s.qa,
+         'shared', s.share_results, 'opens_at', s.opens_at, 'closes_at', s.closes_at,
+         'shuffle', s.shuffle_options, 'avatars', s.avatars)
+       from public.sessions s where s.id = p_session),
+      'kinds', (select jsonb_agg(jsonb_build_object(
+                  'kind', k.kind, 'description', k.description, 'scored', k.scored)
+                order by k.kind)
+                from public.item_kinds k),
+      'items', coalesce(
+        (select jsonb_agg(jsonb_build_object(
+           'id', i.id, 'position', i.position, 'kind', i.kind, 'prompt', i.prompt,
+           'payload', i.payload, 'state', i.state,
+           'points', trim_scale(i.points),
+           'penalty_wrong', i.penalty_wrong,
+           'penalty_skip', i.penalty_skip,
+           'answer', (select a.answer from public.item_answers a where a.item_id = i.id),
+           'responses', (select count(*) from public.responses r where r.item_id = i.id)
+         ) order by i.position)
+         from public.items i where i.session_id = p_session),
+        '[]'::jsonb))
+  end
+$fn$;

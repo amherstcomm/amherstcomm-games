@@ -280,6 +280,18 @@ function reply(fn: string, args: Record<string, unknown>, path: string): unknown
     case 'word_policies_sheet':
       return { ok: true, policies: [] };
     case 'current_item':
+      // A choice question at its reveal, with everybody's avatars on what
+      // they picked: long names, a crowd past the stack's limit, and an answer
+      // long enough to wrap.
+      if (path.includes('q=avatars')) {
+        return {
+          state: 'revealed', mode: 'live', id: 'qa', position: 2, opened_at: new Date().toISOString(), seconds: null,
+          now: new Date().toISOString(), mine: 'Fried cheese curds from a supper club on a Friday night',
+          yours: false, kind: 'choice', prompt: 'What does Wisconsin eat first?',
+          payload: { options: ['Fried cheese curds from a supper club on a Friday night', 'Brats', 'Kringle'] },
+          answer: { correct: ['Fried cheese curds from a supper club on a Friday night'] },
+        };
+      }
       return {
         state: 'open', id: 'q1', position: 1, opened_at: new Date().toISOString(), seconds: 30,
         now: new Date().toISOString(), mine: { One: 'Alpha', Two: 'Beta', Three: 'Gamma' }, answer: null,
@@ -289,6 +301,20 @@ function reply(fn: string, args: Record<string, unknown>, path: string): unknown
           right: ['Alpha', 'Beta', 'Gamma', 'Delta', 'Epsilon', 'Zeta'],
         },
       };
+    case 'item_avatars':
+      return {
+        ok: true, anonymous: 2,
+        picks: [
+          ...Array.from({ length: 11 }, (_, i) => ({
+            option: 'Fried cheese curds from a supper club on a Friday night', user: `u-${i}`,
+            name: i % 3 === 0 ? 'A rather long display name for somebody' : `Player ${i}`,
+            avatar: i % 2 === 0 ? { kind: 'preset', value: 'badger', color: '#2563eb' } : null,
+          })),
+          { option: 'Brats', user: 'u-b', name: 'Bea', avatar: { kind: 'preset', value: 'pretzel', color: '#ea580c' } },
+        ],
+      };
+    case 'item_tally':
+      return { ok: true, total: 14, counts: { '"Fried cheese curds from a supper club on a Friday night"': 11, '"Brats"': 1 } };
     case 'session_leaderboard':
       return {
         ok: true, scored: 4,
@@ -373,6 +399,7 @@ const PAGES: [string, string][] = [
   ['sessions', '/sessions'],
   ['join', '/join'],
   ['live question', `/live/${SESSION}`],
+  ['live question with avatars', `/live/${SESSION}?q=avatars`],
   ['presenter', `/live/${SESSION}/host`],
   ['scores', `/scores/${SESSION}`],
 ];

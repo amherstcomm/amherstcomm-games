@@ -831,6 +831,35 @@ test('a session can shuffle its answer options', async ({ page }) => {
   await expect(shuffle).toBeChecked();
 });
 
+// Avatars on the answers: off, as people answer, or at the reveal -- sent
+// alone, like the shuffle, so it changes nothing else.
+test('a session can show avatars on its answers', async ({ page }) => {
+  const sent: Record<string, unknown>[] = [];
+  const sheet = { ...SHEET, session: { ...SHEET.session, avatars: 'off' as string } };
+  await page.route('**/rest/v1/rpc/**', (route) => {
+    const url = route.request().url();
+    if (url.includes('set_session_options')) {
+      const args = JSON.parse(route.request().postData() ?? '{}');
+      sent.push(args);
+      if (typeof args.p_avatars === 'string') sheet.session.avatars = args.p_avatars;
+      return route.fulfill({ status: 200, contentType: 'application/json', body: '{"ok":true}' });
+    }
+    return route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(url.includes('session_sheet') ? sheet : []),
+    });
+  });
+  await page.goto(`/sessions/${SESSION}`);
+  const avatars = page.getByRole('combobox', { name: /Show avatars on the answers/ });
+  await expect(avatars).toHaveValue('off');
+  await avatars.selectOption('reveal');
+  await expect.poll(() => sent.length).toBe(1);
+  expect(sent[0]).toMatchObject({ p_avatars: 'reveal', p_qa: null, p_share_results: null });
+  expect(sent[0]).not.toHaveProperty('p_shuffle_options');
+  await expect(page.getByText('everybody’s avatar appears on what they picked')).toBeVisible();
+});
+
 // And the other switches do not send it, so they keep working against a
 // database that has not had shuffling applied yet.
 test('the other switches leave the shuffle alone', async ({ page }) => {

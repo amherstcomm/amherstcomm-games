@@ -68,6 +68,9 @@ function everything(): { heading: string; rows: Row[] }[] {
         // opens on practice and the tournament's boards are the ones that
         // count. Results already recorded are untouched.
         { feature: 'site:dailies', label: 'Daily puzzles' },
+        // Everybody shows as their initials, and nobody can set one, while off.
+        // Avatars people set are kept and come back when it is on again.
+        { feature: 'site:avatars', label: 'Avatars' },
       ],
     },
   ];

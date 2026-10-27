@@ -10,6 +10,8 @@
 // no "hide it in the UI" branch here because there is nothing to hide: an
 // unrevealed item comes back with `answer` null, and that is enforced two
 // layers down in a table with no grant.
+import { AvatarStack } from '@/Avatar';
+import { readItemAvatars, type Pick } from '@/avatars';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import MatchBoard from '@/MatchBoard';
 import {
@@ -114,10 +116,13 @@ function Choice({
   onSend,
   sending,
   readOnly,
+  picks,
 }: {
   item: LiveItem;
   onSend: (value: unknown) => void;
   sending: boolean;
+  /** who picked what, with avatars, in a session set to show it */
+  picks?: Pick[] | null;
   /** the presenter's screen: the question is on it because it is pointed at a
    *  room, and whoever is running the session is not playing in it */
   readOnly?: boolean;
@@ -180,6 +185,11 @@ function Choice({
               {option}
               {right && <CheckCircle2 className="w-4 h-4 shrink-0" aria-hidden="true" />}
             </span>
+            {picks && picks.some((p) => p.option === option) && (
+              <span className="mt-2 block">
+                <AvatarStack picks={picks.filter((p) => p.option === option)} />
+              </span>
+            )}
           </button>
         );
       })}
@@ -841,6 +851,14 @@ export default function LiveSession({ session, host }: { session: string; host: 
     : null;
   const [view, setView] = useState<PresenterView | null>(null);
   const [tally, setTally] = useState<Record<string, number> | null>(null);
+  // Who picked what, with avatars, for the question on screen: only in a
+  // session set to show it, and only when the server says it may be seen.
+  const [picks, setPicks] = useState<{ item: string; picks: Pick[] } | null>(null);
+  const refreshPicks = useCallback(async (id: string | null | undefined, kind: string | undefined) => {
+    if (!id || (kind !== 'choice' && kind !== 'survey')) return setPicks(null);
+    const got = await readItemAvatars(id);
+    setPicks(got.ok ? { item: id, picks: got.picks } : null);
+  }, []);
   const [sending, setSending] = useState(false);
   const [note, setNote] = useState('');
   // The presenter's header — the code to read out. Only fetched on the host
@@ -953,10 +971,12 @@ export default function LiveSession({ session, host }: { session: string; host: 
     if (next.id !== itemId.current) {
       itemId.current = next.id;
       setTally(null);
+      setPicks(null);
       setNote('');
       setGameOver(false);
       setOutOfTime(false);
     }
+    void refreshPicks(next.id, next.kind);
     if (next.state === 'revealed' && next.id) {
       const t = await readTally(next.id);
       if (t.ok) setTally(t.counts ?? {});
@@ -978,7 +998,7 @@ export default function LiveSession({ session, host }: { session: string; host: 
       const m = await readMyStanding(session);
       setMine(m.ok ? m : null);
     }
-  }, [session, host]);
+  }, [session, host, refreshPicks]);
 
   useEffect(() => {
     void pull();
@@ -1037,6 +1057,8 @@ export default function LiveSession({ session, host }: { session: string; host: 
     const tick = async () => {
       const v = await readPresenterView(item.id!);
       if (alive) setView(v);
+      // the projector's avatars land as fast as its count does
+      if (alive) void refreshPicks(item.id, item.kind);
     };
     void tick();
     const id = window.setInterval(tick, COUNT_MS);
@@ -1044,7 +1066,7 @@ export default function LiveSession({ session, host }: { session: string; host: 
       alive = false;
       window.clearInterval(id);
     };
-  }, [host, item.id, item.state]);
+  }, [host, item.id, item.state, item.kind, refreshPicks]);
 
   async function send(value: unknown, anon = false) {
     if (!item.id) return;
@@ -1060,6 +1082,8 @@ export default function LiveSession({ session, host }: { session: string; host: 
     // question stays on screen until they choose to move on.
     if (res.ok && item.mode === 'open') {
       setJustAnswered({ ...item, state: 'revealed', mine: value, answer: res.answer });
+      // answered, so who else picked what may now be shown
+      void refreshPicks(item.id, item.kind);
       // The standing, once, on the way into the held screen.
       //
       // The poll stops while somebody is looking at how they did, so without
@@ -1435,7 +1459,8 @@ export default function LiveSession({ session, host }: { session: string; host: 
           )}
 
           {(kind === 'choice' || kind === 'survey') && (
-            <Choice item={shown} onSend={(v) => void send(v)} sending={sending} readOnly={inert} />
+            <Choice item={shown} onSend={(v) => void send(v)} sending={sending} readOnly={inert}
+                    picks={picks && picks.item === shown.id ? picks.picks : null} />
           )}
           {kind === 'match' && (
             <Match item={shown} onSend={(v) => void send(v)} sending={sending} readOnly={inert} />
