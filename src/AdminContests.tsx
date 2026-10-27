@@ -11,7 +11,7 @@
 // each window has to end on or after it starts.
 import { useCallback, useEffect, useState } from 'react';
 import Waiting from '@/Waiting';
-import { deleteContest, PHASE_WORD, readContests, saveContest, timeWord, type ContestRow } from '@/contests';
+import { deleteContest, PHASE_WORD, readContests, saveContest, closingTime, closingWord, officeZoneWord, type ContestRow } from '@/contests';
 
 const FIELD =
   'w-full rounded-lg bg-white/5 border border-white/15 px-3 py-2 text-sm text-slate-200 ' +
@@ -28,7 +28,7 @@ type Form = {
   entriesClose: string;
   votesOpen: string;
   votesClose: string;
-  /** "HH:MM", or empty for the end of the day */
+  /** "HH:MM" on the company clock, or empty for the end of the day */
   entriesCloseTime: string;
   votesCloseTime: string;
   whoEnters: 'players' | 'admins';
@@ -63,8 +63,8 @@ const formOf = (c: ContestRow): Form => ({
   entriesClose: c.entries_close_on,
   votesOpen: c.votes_open_on,
   votesClose: c.votes_close_on,
-  entriesCloseTime: c.entries_close_time?.slice(0, 5) ?? '',
-  votesCloseTime: c.votes_close_time?.slice(0, 5) ?? '',
+  entriesCloseTime: closingTime(c.entries_close_at),
+  votesCloseTime: closingTime(c.votes_close_at),
   whoEnters: c.who_enters,
   entrantsShown: c.entrants_shown,
   votersShown: c.voters_shown,
@@ -73,7 +73,7 @@ const formOf = (c: ContestRow): Form => ({
 });
 
 const span = (from: string, until: string, at: string | null) =>
-  (from === until ? from : `${from} to ${until}`) + (at ? ` at ${timeWord(at)}` : '');
+  (from === until ? from : `${from} to ${until}`) + (at ? `, closing ${closingWord(at)}` : '');
 
 export default function AdminContests() {
   const [rows, setRows] = useState<ContestRow[] | null>(null);
@@ -233,7 +233,8 @@ export default function AdminContests() {
               />
             </div>
             <p className="text-xs text-slate-400 mt-1">
-              A closing time is Eastern; leave it empty to stay open to the end of that day.
+              Closing times are company time ({officeZoneWord()}); leave one empty to stay open to
+              the end of that day.
             </p>
             <p className="text-xs text-slate-400 mt-1">
               Voting starts once entering has finished — otherwise the entries that arrived
@@ -342,8 +343,8 @@ export default function AdminContests() {
                 <div>
                   <p className="font-semibold text-slate-200 text-sm">{c.name}</p>
                   <p className="text-xs text-slate-400">
-                    {PHASE_WORD[c.phase]} · entries {span(c.entries_open_on, c.entries_close_on, c.entries_close_time)} ·
-                    voting {span(c.votes_open_on, c.votes_close_on, c.votes_close_time)}
+                    {PHASE_WORD[c.phase]} · entries {span(c.entries_open_on, c.entries_close_on, c.entries_close_at)} ·
+                    voting {span(c.votes_open_on, c.votes_close_on, c.votes_close_at)}
                   </p>
                   <p className="text-xs text-slate-400">
                     {c.entries} {c.entries === 1 ? 'entry' : 'entries'} ·{' '}
