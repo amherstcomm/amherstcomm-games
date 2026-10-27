@@ -6,6 +6,7 @@
 // Photos are in a private bucket and read through signed links, asked for in
 // one batch for however many avatars a screen is about to draw.
 import { supabase } from '@/supabase';
+import { cropped, signedLinker } from '@/signedLinks';
 
 export type Avatar = { kind: 'photo' | 'preset'; value: string; color: string | null };
 
@@ -89,7 +90,9 @@ async function call<T = object>(fn: string, args?: Record<string, unknown>): Pro
   if (!supabase) return { ok: false, reason: 'not connected' };
   const { data, error } = await supabase.rpc(fn, args);
   if (error) return { ok: false, reason: error.message };
-  if (!data || typeof data !== 'object') return { ok: false, reason: 'no answer' };
+  // An array, or anything else that is not one of our answers, is no answer:
+  // a stub or an older database, and a page should not trust its fields.
+  if (!data || typeof data !== 'object' || Array.isArray(data)) return { ok: false, reason: 'no answer' };
   const d = data as { ok?: boolean; reason?: string };
   return d.ok === false ? { ok: false, reason: d.reason ?? 'refused' } : ({ ok: true, ...(data as T) } as Answer<T>);
 }
@@ -122,26 +125,6 @@ export const readItemAvatars = (item: string) =>
 export const BUCKET = 'avatars';
 const SIDE = 256;
 
-/** Cropped to the middle square and shrunk to 256 pixels in the browser, so
- *  what is stored is a few kilobytes whatever the camera made. */
-async function square(file: File): Promise<Blob> {
-  const bitmap = await createImageBitmap(file);
-  const side = Math.min(bitmap.width, bitmap.height);
-  const canvas = document.createElement('canvas');
-  canvas.width = SIDE;
-  canvas.height = SIDE;
-  const ctx = canvas.getContext('2d');
-  if (!ctx) throw new Error('no canvas');
-  ctx.drawImage(bitmap, (bitmap.width - side) / 2, (bitmap.height - side) / 2, side, side, 0, 0, SIDE, SIDE);
-  bitmap.close?.();
-  const blob = await new Promise<Blob | null>((done) => canvas.toBlob(done, 'image/webp', 0.85));
-  if (blob && blob.type === 'image/webp') return blob;
-  // A browser that cannot write webp hands back a png; jpeg is smaller.
-  const jpeg = await new Promise<Blob | null>((done) => canvas.toBlob(done, 'image/jpeg', 0.85));
-  if (!jpeg) throw new Error('could not encode');
-  return jpeg;
-}
-
 /** Upload a photo and make it your avatar. The previous photo, if there was
  *  one, is taken down after. */
 export async function uploadAvatarPhoto(file: File, previous: Avatar | null): Promise<Answer> {
@@ -155,7 +138,7 @@ export async function uploadAvatarPhoto(file: File, previous: Avatar | null): Pr
   if (!uid) return { ok: false, reason: 'not signed in' };
   let blob: Blob;
   try {
-    blob = await square(file);
+    blob = await cropped(file, SIDE, SIDE);
   } catch {
     return { ok: false, reason: 'That photo could not be read.' };
   }
@@ -177,36 +160,5 @@ export async function dropPhoto(previous: Avatar | null): Promise<void> {
   if (supabase && previous?.kind === 'photo') await supabase.storage.from(BUCKET).remove([previous.value]);
 }
 
-// Signed links, asked for together: a stack of thirty avatars is one request.
-const links = new Map<string, { url: string; until: number }>();
-let queued = new Set<string>();
-let waiting: Promise<void> | null = null;
-
-function flush(): Promise<void> {
-  waiting ??= new Promise<void>((done) => {
-    queueMicrotask(async () => {
-      const want = [...queued];
-      queued = new Set();
-      waiting = null;
-      if (supabase && want.length > 0) {
-        const { data } = await supabase.storage.from(BUCKET).createSignedUrls(want, 3600);
-        for (const d of data ?? []) {
-          if (d.path && d.signedUrl) links.set(d.path, { url: d.signedUrl, until: Date.now() + 3300_000 });
-        }
-      }
-      done();
-    });
-  });
-  return waiting;
-}
-
-/** A drawable link for a photo path, or null while it is being fetched. */
-export async function photoLink(path: string): Promise<string | null> {
-  const have = links.get(path);
-  if (have && have.until > Date.now()) return have.url;
-  queued.add(path);
-  await flush();
-  const got = links.get(path)?.url ?? null;
-  // Only a link an <img> can safely be pointed at, as with contest photos.
-  return got && /^(https:|blob:)/.test(got) ? got : null;
-}
+/** A drawable link for a photo path, or null while it cannot be had. */
+export const photoLink = signedLinker(BUCKET);

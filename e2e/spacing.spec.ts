@@ -301,6 +301,30 @@ function reply(fn: string, args: Record<string, unknown>, path: string): unknown
           right: ['Alpha', 'Beta', 'Gamma', 'Delta', 'Epsilon', 'Zeta'],
         },
       };
+    // Something of every kind featured on the home page, long titles and all.
+    case 'home_features':
+      return {
+        ok: true,
+        features: [
+          { id: 'f1', kind: 'giveaway', ref: 'g1', blurb: 'Win two seats in section 112: answer five questions about ownership', image: null,
+            item: { title: 'Brewers vs Cubs, the last home game of the season', status: 'open', entries_close_at: `${plus(3)}T17:00:00Z` } },
+          { id: 'f2', kind: 'session', ref: SESSION, blurb: '', image: null, item: { title: 'Friday Trivia', state: 'live', mode: 'live' } },
+          { id: 'f3', kind: 'contest', ref: 'c1', blurb: '', image: null, item: { title: 'Desk Photos', phase: 'voting', votes_close_on: plus(4) } },
+        ],
+      };
+    case 'home_features_sheet':
+      return {
+        ok: true,
+        can: { session: true, giveaway: true, contest: true, tournament: true },
+        features: [
+          { id: 'f1', kind: 'giveaway', ref: 'g1', blurb: 'Win two seats in section 112', image: null, item: { title: 'Brewers vs Cubs' },
+            title: 'Brewers vs Cubs, the last home game of the season', starts_at: null, ends_at: `${plus(3)}T17:00:00Z`,
+            position: 0, showing: true, why_not: null },
+          { id: 'f2', kind: 'contest', ref: 'c1', blurb: '', image: null, item: null, title: 'Desk Photos',
+            starts_at: `${plus(2)}T09:00:00Z`, ends_at: null, position: 1, showing: false, why_not: 'not until its start' },
+        ],
+        choices: { session: [], giveaway: [], contest: [], tournament: [] },
+      };
     case 'item_avatars':
       return {
         ok: true, anonymous: 2,
@@ -387,7 +411,7 @@ const PAGES: [string, string][] = [
   ['giveaway judged and decided', '/giveaways/g4'],
   ['giveaway being rated', '/giveaways/g5'],
   ['giveaway rated, pool set', '/giveaways/g6'],
-  ...['site', 'games', 'lists', 'weave', 'passages', 'pins', 'coverage', 'tournaments', 'contests', 'people'].map(
+  ...['site', 'games', 'lists', 'weave', 'passages', 'pins', 'coverage', 'tournaments', 'contests', 'featured', 'people'].map(
     (tab): [string, string] => [`admin ${tab}`, `/admin/${tab}`]
   ),
   ...['site', 'games', 'privacy'].map((tab): [string, string] => [`settings ${tab}`, `/settings/${tab}`]),

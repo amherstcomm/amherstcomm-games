@@ -58,6 +58,7 @@ export const ADMIN_TABS = [
   'coverage',
   'tournaments',
   'contests',
+  'featured',
   'people',
 ] as const;
 export type AdminTab = (typeof ADMIN_TABS)[number];
@@ -207,6 +208,7 @@ export const ADMIN_TITLE: Record<AdminTab, string> = {
   coverage: 'Coverage',
   tournaments: 'Tournaments',
   contests: 'Contests',
+  featured: 'Featured',
   people: 'Who may do what',
 };
 

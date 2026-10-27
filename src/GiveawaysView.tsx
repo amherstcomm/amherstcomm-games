@@ -69,7 +69,7 @@ import {
   type LogEntry,
   type WinnerStatus,
 } from '@/giveaways';
-import type { GiveawayView } from '@/routes';
+import { pathOf, type GiveawayView } from '@/routes';
 
 const FIELD =
   'w-full rounded-lg bg-white/5 border border-white/15 px-3 py-2 text-sm text-slate-200 ' +
@@ -967,7 +967,12 @@ function OneGiveaway({ id, link }: { id: string; link: GiveawayLink }) {
 
       {manage && g.status === 'open' && (
         <section className={`${CARD} mt-6`} aria-label="Running it">
-          <h2 className="text-sm font-semibold text-slate-200">Running it</h2>
+          <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+            <h2 className="text-sm font-semibold text-slate-200">Running it</h2>
+            <a href={pathOf({ kind: 'admin', tab: 'featured' })} className="text-xs text-accent hover:underline">
+              Feature on the home page
+            </a>
+          </div>
           {editing ? (
             <GiveawayEditor
               id={id}

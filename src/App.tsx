@@ -65,6 +65,7 @@ import { readLiveSessions } from '@/live';
 import ReportActionView from '@/ReportActionView';
 
 import HomeView from '@/HomeView';
+import FeaturedStrip from '@/FeaturedStrip';
 import RouteLink from '@/RouteLink';
 import SquaresGame, { type SquaresGameHandle } from '@/SquaresGame';
 import CryptogramGame, { type CryptogramGameHandle } from '@/CryptogramGame';
@@ -1278,6 +1279,9 @@ function App() {
           </>
         ) : (
           <>
+          {/* What organisers have featured: trivia, giveaways, contests,
+              tournaments. Above the round's line, which is automatic. */}
+          {atHome && <FeaturedStrip link={pageLink} sessionsOn={sessionsOn} />}
           {/* A round being on is worth a line on the front page: it is the one
               thing here with a deadline. */}
           {atHome && rounds && rounds.length > 0 && (
