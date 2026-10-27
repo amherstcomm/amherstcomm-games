@@ -26,6 +26,18 @@
 set -euo pipefail
 
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Supabase loads pg-safeupdate for the API's role, which refuses a DELETE or
+# UPDATE with no WHERE clause at all -- even inside a function, even on a temp
+# table. This Postgres has no such module, so a bare one passes every test here
+# and fails on the first real call. Refused up front instead: empty a temp
+# table with truncate, and give anything else a WHERE.
+bare=$(grep -nEi '^\s*(delete from|update)\s[^;]*;\s*$' "$here/../schema.sql" | grep -vi 'where' || true)
+if [ -n "$bare" ]; then
+  echo "FAIL: a DELETE or UPDATE with no WHERE clause, which Supabase refuses:"
+  echo "$bare"
+  exit 1
+fi
 name="games-schema-test"
 
 docker rm -f "$name" >/dev/null 2>&1 || true
