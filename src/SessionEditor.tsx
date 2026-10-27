@@ -1186,6 +1186,12 @@ function SessionEditorFor({ session }: { session: string }) {
         </p>
       </div>
 
+      <p className="mb-6 -mt-2 text-xs">
+        <a href={pathOf({ kind: 'admin', tab: 'featured' })} className="text-accent hover:underline">
+          Feature this on the home page
+        </a>
+      </p>
+
       {/* Who picked what, as avatars on the answers: for the fun of the room
           seeing itself. Anybody who answers anonymously is only a count. */}
       <div className="mb-6 -mt-2">

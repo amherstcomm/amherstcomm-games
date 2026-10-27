@@ -22,6 +22,7 @@ import AdminPins from '@/AdminPins';
 import ThemeCoverage from '@/ThemeCoverage';
 import AdminTournaments from '@/AdminTournaments';
 import AdminContests from '@/AdminContests';
+import AdminFeatured from '@/AdminFeatured';
 
 const FIELD =
   'w-full rounded-lg bg-white/5 border border-white/15 px-3 py-2 text-sm text-slate-200 ' +
@@ -220,6 +221,8 @@ const PANEL: Record<AdminTab, () => JSX.Element> = {
   // and pays a round, and nowhere near the sessions because it is not one: a
   // contest is judged on a photograph rather than answered.
   contests: AdminContests,
+  // After everything it can feature: trivia, giveaways, contests, tournaments.
+  featured: AdminFeatured,
   people: AdminPeople,
 };
 

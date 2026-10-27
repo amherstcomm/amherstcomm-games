@@ -23396,3 +23396,279 @@ as $fn$
         '[]'::jsonb))
   end
 $fn$;
+
+-- ===========================================================================
+-- Featured on the home page
+-- ===========================================================================
+--
+-- An organiser puts a trivia session, a giveaway, a contest or a tournament
+-- at the top of the home page: a card with its own blurb and picture if they
+-- like, from and until when they like. It goes by itself when its dates pass
+-- or the thing itself is over -- a session closed, a giveaway drawn, a
+-- contest past voting, a tournament ended -- so nobody has to remember to
+-- take it down.
+--
+-- Whoever runs a kind of thing may feature it: games.setup for sessions,
+-- contests and tournaments, giveaways.manage for giveaways.
+create table if not exists public.home_features (
+  id uuid primary key default gen_random_uuid(),
+  kind text not null check (kind in ('session', 'giveaway', 'contest', 'tournament')),
+  ref uuid not null,
+  blurb text not null default '' check (char_length(blurb) <= 200),
+  image_path text,
+  starts_at timestamptz,
+  ends_at timestamptz,
+  position int not null default 0,
+  created_by uuid references auth.users (id) on delete set null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (kind, ref)
+);
+alter table public.home_features enable row level security;
+revoke all on public.home_features from public, anon, authenticated;
+
+create or replace function public.can_feature(p_kind text)
+returns boolean
+language sql
+stable
+security definer
+set search_path = ''
+as $fn$
+  select case p_kind
+    when 'giveaway' then public.can('giveaways.manage')
+    when 'session' then public.can('games.setup')
+    when 'contest' then public.can('games.setup')
+    when 'tournament' then public.can('games.setup')
+    else false end
+$fn$;
+revoke all on function public.can_feature(text) from public, anon;
+grant execute on function public.can_feature(text) to authenticated;
+
+-- Card pictures: a private bucket like the others, written only by people
+-- who may feature something, read by anybody signed in.
+do $$
+begin
+  if to_regnamespace('storage') is null then
+    raise notice 'no storage schema here; skipping the featured bucket';
+    return;
+  end if;
+  insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+  values ('featured', 'featured', false, 2097152, array['image/jpeg', 'image/png', 'image/webp'])
+  on conflict (id) do update
+    set public = false, file_size_limit = 2097152, allowed_mime_types = excluded.allowed_mime_types;
+
+  execute $p$drop policy if exists "featured pictures are readable" on storage.objects$p$;
+  execute $p$create policy "featured pictures are readable" on storage.objects
+    for select to authenticated using (bucket_id = 'featured')$p$;
+  execute $p$drop policy if exists "a featured picture goes in its maker's folder" on storage.objects$p$;
+  execute $p$create policy "a featured picture goes in its maker's folder" on storage.objects
+    for insert to authenticated
+    with check (bucket_id = 'featured'
+                and (storage.foldername(name))[1] = (select auth.uid())::text
+                and (public.can('games.setup') or public.can('giveaways.manage')))$p$;
+  execute $p$drop policy if exists "a featured picture is its maker's to take down" on storage.objects$p$;
+  execute $p$create policy "a featured picture is its maker's to take down" on storage.objects
+    for delete to authenticated
+    using (bucket_id = 'featured' and (storage.foldername(name))[1] = (select auth.uid())::text)$p$;
+end $$;
+
+-- What a card says about the thing itself, and whether it is still on: null
+-- when it is gone, over, or not for the reader to see.
+create or replace function public.home_feature_item(p_kind text, p_ref uuid)
+returns jsonb
+language plpgsql
+stable
+security definer
+set search_path = ''
+as $fn$
+declare
+  sess public.sessions;
+  g public.giveaways;
+  c public.contests;
+  t public.tournaments;
+  v_state text;
+  v_phase text;
+begin
+  if p_kind = 'session' then
+    select * into sess from public.sessions where id = p_ref;
+    if sess.id is null then return null; end if;
+    v_state := public.scheduled_state(sess);
+    -- not before it is ready, not after it is over, and a giveaway's own
+    -- trivia only for that giveaway's entrants
+    if v_state in ('draft', 'closed') or not public.session_open_to_me(sess.id) then return null; end if;
+    return jsonb_build_object('title', sess.title, 'state', v_state, 'mode', sess.mode,
+                              'opens_at', sess.opens_at, 'closes_at', sess.closes_at);
+  elsif p_kind = 'giveaway' then
+    select * into g from public.giveaways where id = p_ref;
+    if g.id is null or g.status in ('drawn', 'cancelled') then return null; end if;
+    return jsonb_build_object('title', g.title, 'prize', g.prize, 'status', g.status, 'mode', g.mode,
+                              'entries_close_at', g.entries_close_at, 'event_on', g.event_on,
+                              'entered', exists (select 1 from public.giveaway_entries e
+                                                 join public.giveaway_people pp on pp.id = e.person_id
+                                                 where e.giveaway_id = g.id and pp.user_id = (select auth.uid())));
+  elsif p_kind = 'contest' then
+    select * into c from public.contests where id = p_ref;
+    if c.id is null then return null; end if;
+    v_phase := public.contest_phase(c);
+    if v_phase = 'over' then return null; end if;
+    return jsonb_build_object('title', c.name, 'phase', v_phase, 'prize', c.prize,
+                              'entries_open_on', c.entries_open_on, 'entries_close_on', c.entries_close_on,
+                              'votes_open_on', c.votes_open_on, 'votes_close_on', c.votes_close_on);
+  elsif p_kind = 'tournament' then
+    select * into t from public.tournaments where id = p_ref;
+    if t.id is null or t.ends_on < public.puzzle_day() then return null; end if;
+    return jsonb_build_object('title', t.name, 'prize', t.prize, 'starts_on', t.starts_on, 'ends_on', t.ends_on,
+                              'on', public.puzzle_day() between t.starts_on and t.ends_on);
+  end if;
+  return null;
+end;
+$fn$;
+revoke all on function public.home_feature_item(text, uuid) from public, anon, authenticated;
+
+-- The home page's strip: what is featured now, for the reader, in order.
+create or replace function public.home_features()
+returns jsonb
+language sql
+stable
+security definer
+set search_path = ''
+as $fn$
+  select case when not public.can('games.play') then jsonb_build_object('ok', false, 'reason', 'not allowed')
+  else jsonb_build_object('ok', true, 'features', coalesce((
+    select jsonb_agg(jsonb_build_object('id', f.id, 'kind', f.kind, 'ref', f.ref, 'blurb', f.blurb,
+                                        'image', f.image_path, 'item', x.item)
+                     order by f.position, f.created_at desc)
+    from public.home_features f
+    cross join lateral (select public.home_feature_item(f.kind, f.ref) as item) x
+    where (f.starts_at is null or now() >= f.starts_at)
+      and (f.ends_at is null or now() < f.ends_at)
+      and x.item is not null), '[]'::jsonb))
+  end
+$fn$;
+revoke all on function public.home_features() from public, anon;
+grant execute on function public.home_features() to authenticated;
+
+-- The organiser's page: everything featured, on or not and why, and what
+-- there is that they could feature.
+create or replace function public.home_features_sheet()
+returns jsonb
+language sql
+stable
+security definer
+set search_path = ''
+as $fn$
+  select case when not (public.can('games.setup') or public.can('giveaways.manage'))
+    then jsonb_build_object('ok', false, 'reason', 'not allowed')
+  else jsonb_build_object('ok', true,
+    'can', jsonb_build_object('session', public.can_feature('session'), 'giveaway', public.can_feature('giveaway'),
+                              'contest', public.can_feature('contest'), 'tournament', public.can_feature('tournament')),
+    'features', coalesce((
+      select jsonb_agg(jsonb_build_object(
+               'id', f.id, 'kind', f.kind, 'ref', f.ref, 'blurb', f.blurb, 'image', f.image_path,
+               'starts_at', f.starts_at, 'ends_at', f.ends_at, 'position', f.position,
+               'item', x.item,
+               'title', coalesce(x.item->>'title',
+                 case f.kind
+                   when 'session' then (select s.title from public.sessions s where s.id = f.ref)
+                   when 'giveaway' then (select g.title from public.giveaways g where g.id = f.ref)
+                   when 'contest' then (select c.name from public.contests c where c.id = f.ref)
+                   when 'tournament' then (select t.name from public.tournaments t where t.id = f.ref) end),
+               'showing', x.item is not null and (f.starts_at is null or now() >= f.starts_at)
+                          and (f.ends_at is null or now() < f.ends_at),
+               'why_not', case
+                 when x.item is null then 'over, or not open yet'
+                 when f.starts_at is not null and now() < f.starts_at then 'not until its start'
+                 when f.ends_at is not null and now() >= f.ends_at then 'its dates have passed' end)
+             order by f.position, f.created_at desc)
+      from public.home_features f
+      cross join lateral (select public.home_feature_item(f.kind, f.ref) as item) x), '[]'::jsonb),
+    -- what could be featured, by kind, newest first
+    'choices', jsonb_build_object(
+      'session', coalesce((select jsonb_agg(jsonb_build_object('id', s.id, 'title', s.title,
+                                              'state', public.scheduled_state(s)) order by s.created_at desc)
+                           from public.sessions s where public.scheduled_state(s) <> 'closed'), '[]'::jsonb),
+      'giveaway', coalesce((select jsonb_agg(jsonb_build_object('id', g.id, 'title', g.title, 'state', g.status)
+                                              order by g.created_at desc)
+                            from public.giveaways g where g.status not in ('drawn', 'cancelled')), '[]'::jsonb),
+      'contest', coalesce((select jsonb_agg(jsonb_build_object('id', c.id, 'title', c.name,
+                                             'state', public.contest_phase(c)) order by c.entries_open_on desc)
+                           from public.contests c where public.contest_phase(c) <> 'over'), '[]'::jsonb),
+      'tournament', coalesce((select jsonb_agg(jsonb_build_object('id', t.id, 'title', t.name,
+                                                'state', case when public.puzzle_day() >= t.starts_on then 'on' else 'soon' end)
+                                              order by t.starts_on)
+                              from public.tournaments t where t.ends_on >= public.puzzle_day()), '[]'::jsonb)))
+  end
+$fn$;
+revoke all on function public.home_features_sheet() from public, anon;
+grant execute on function public.home_features_sheet() to authenticated;
+
+create or replace function public.save_home_feature(
+  p_kind text, p_ref uuid, p_blurb text default '', p_image text default null,
+  p_starts_at timestamptz default null, p_ends_at timestamptz default null, p_position int default 0)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $fn$
+declare
+  v_id uuid;
+  v_exists boolean;
+begin
+  if not public.can_feature(p_kind) then
+    return jsonb_build_object('ok', false, 'reason', 'not allowed');
+  end if;
+  -- worked out first: a CASE's own THEN would end an IF's condition early
+  v_exists := case p_kind
+       when 'session' then exists (select 1 from public.sessions where id = p_ref)
+       when 'giveaway' then exists (select 1 from public.giveaways where id = p_ref)
+       when 'contest' then exists (select 1 from public.contests where id = p_ref)
+       when 'tournament' then exists (select 1 from public.tournaments where id = p_ref)
+       else false end;
+  if not v_exists then
+    return jsonb_build_object('ok', false, 'reason', 'no such thing to feature');
+  end if;
+  if char_length(btrim(coalesce(p_blurb, ''))) > 200 then
+    return jsonb_build_object('ok', false, 'reason', 'the blurb is at most 200 characters');
+  end if;
+  if p_starts_at is not null and p_ends_at is not null and p_ends_at <= p_starts_at then
+    return jsonb_build_object('ok', false, 'reason', 'it cannot finish before it starts');
+  end if;
+  if p_image is not null and p_image !~ ('^' || (select auth.uid())::text || '/feature-[0-9a-f-]{36}\.(webp|jpg|png)$')
+     and p_image is distinct from (select image_path from public.home_features where kind = p_kind and ref = p_ref) then
+    return jsonb_build_object('ok', false, 'reason', 'that picture is not one you uploaded');
+  end if;
+  insert into public.home_features (kind, ref, blurb, image_path, starts_at, ends_at, position, created_by)
+  values (p_kind, p_ref, btrim(coalesce(p_blurb, '')), p_image, p_starts_at, p_ends_at, coalesce(p_position, 0),
+          (select auth.uid()))
+  on conflict (kind, ref) do update
+    set blurb = excluded.blurb, image_path = excluded.image_path, starts_at = excluded.starts_at,
+        ends_at = excluded.ends_at, position = excluded.position, updated_at = now()
+  returning id into v_id;
+  return jsonb_build_object('ok', true, 'id', v_id);
+end;
+$fn$;
+revoke all on function public.save_home_feature(text, uuid, text, text, timestamptz, timestamptz, int) from public, anon;
+grant execute on function public.save_home_feature(text, uuid, text, text, timestamptz, timestamptz, int) to authenticated;
+
+create or replace function public.remove_home_feature(p_id uuid)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $fn$
+declare
+  v_kind text;
+begin
+  select kind into v_kind from public.home_features where id = p_id;
+  if v_kind is null then
+    return jsonb_build_object('ok', false, 'reason', 'it is not featured');
+  end if;
+  if not public.can_feature(v_kind) then
+    return jsonb_build_object('ok', false, 'reason', 'not allowed');
+  end if;
+  delete from public.home_features where id = p_id;
+  return jsonb_build_object('ok', true);
+end;
+$fn$;
+revoke all on function public.remove_home_feature(uuid) from public, anon;
+grant execute on function public.remove_home_feature(uuid) to authenticated;
