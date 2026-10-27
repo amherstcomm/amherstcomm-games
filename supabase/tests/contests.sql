@@ -332,8 +332,55 @@ select pg_temp.check('and deleting a contest takes its entries',
   (select j->>'ok' from dropped) = 'true'
   and (select count(*) from public.contest_entries where contest_id = (select id from onbehalf)) = 0);
 
+-- ---------------------------------------------------------------------------
+-- Closing at a time of day
+-- ---------------------------------------------------------------------------
+-- An hour either side of now, Eastern, as the organiser would type it.
+create temp table eastern as
+  select date_trunc('minute', now() at time zone 'America/New_York') - interval '1 hour' gone_by,
+         date_trunc('minute', now() at time zone 'America/New_York') + interval '1 hour' to_come;
+
+create temp table timed as
+  select (public.save_contest(null, 'Closes at a time', null,
+                              pg_temp.d(-3), (select to_come::date from eastern),
+                              pg_temp.d(5), pg_temp.d(6),
+                              'players', true, false, 3, null,
+                              (select to_come::time from eastern), time '15:00')->>'id')::uuid id;
+select pg_temp.check('entering with a closing time an hour off is still open',
+  (select pg_temp.seen(id)->'contest'->>'phase' from timed) = 'entries');
+select pg_temp.check('and the page is told the times',
+  (select pg_temp.seen(id)->'contest'->>'entries_close_time' from timed)
+    = (select to_char(to_come::time, 'HH24:MI:SS') from eastern)
+  and (select pg_temp.seen(id)->'contest'->>'votes_close_time' from timed) = '15:00:00');
+
+select public.save_contest((select id from timed), 'Closes at a time', null,
+                           pg_temp.d(-3), (select gone_by::date from eastern),
+                           pg_temp.d(5), pg_temp.d(6),
+                           'players', true, false, 3, null,
+                           (select gone_by::time from eastern), null);
+select pg_temp.check('an hour past it, entering has closed though the day has not',
+  (select pg_temp.seen(id)->'contest'->>'phase' from timed) = 'judging');
+select pg_temp.check('and a part without a time runs to the end of its day',
+  (select pg_temp.seen(id)->'contest'->>'votes_close_time' from timed) is null);
+
+select pg_temp.check('voting has to close after entering does, to the minute',
+  (public.save_contest(null, 'Same day', null, pg_temp.d(0), pg_temp.d(3),
+                       pg_temp.d(3), pg_temp.d(3), 'players', true, false, 3, null,
+                       time '15:00', time '14:00')->>'reason')
+    = 'voting has to close after entering does');
+select pg_temp.check('but on the same day, after it, is fine',
+  (public.save_contest(null, 'Same day', null, pg_temp.d(0), pg_temp.d(3),
+                       pg_temp.d(3), pg_temp.d(3), 'players', true, false, 3, null,
+                       time '12:00', time '17:00')->>'ok') = 'true');
+select pg_temp.check('and a part cannot close before its first day starts',
+  (public.save_contest(null, 'Too early', null, pg_temp.d(2), pg_temp.d(2),
+                       pg_temp.d(3), pg_temp.d(4), 'players', true, false, 3, null,
+                       time '01:00', null)->>'reason')
+    = 'each part has to close after it opens');
+
 -- Leave nothing behind: these dates overlap what later files set up.
+delete from public.contests where name = 'Same day';
 delete from public.contests
- where id in ((select id from pk), (select id from later), (select id from shut));
+ where id in ((select id from pk), (select id from later), (select id from shut), (select id from timed));
 
 \echo '--- contest checks passed ---'

@@ -11,7 +11,7 @@
 // each window has to end on or after it starts.
 import { useCallback, useEffect, useState } from 'react';
 import Waiting from '@/Waiting';
-import { deleteContest, PHASE_WORD, readContests, saveContest, type ContestRow } from '@/contests';
+import { deleteContest, PHASE_WORD, readContests, saveContest, timeWord, type ContestRow } from '@/contests';
 
 const FIELD =
   'w-full rounded-lg bg-white/5 border border-white/15 px-3 py-2 text-sm text-slate-200 ' +
@@ -28,6 +28,9 @@ type Form = {
   entriesClose: string;
   votesOpen: string;
   votesClose: string;
+  /** "HH:MM", or empty for the end of the day */
+  entriesCloseTime: string;
+  votesCloseTime: string;
   whoEnters: 'players' | 'admins';
   entrantsShown: boolean;
   votersShown: boolean;
@@ -43,6 +46,8 @@ const blank = (): Form => ({
   entriesClose: '',
   votesOpen: '',
   votesClose: '',
+  entriesCloseTime: '',
+  votesCloseTime: '',
   whoEnters: 'players',
   entrantsShown: true,
   votersShown: false,
@@ -58,6 +63,8 @@ const formOf = (c: ContestRow): Form => ({
   entriesClose: c.entries_close_on,
   votesOpen: c.votes_open_on,
   votesClose: c.votes_close_on,
+  entriesCloseTime: c.entries_close_time?.slice(0, 5) ?? '',
+  votesCloseTime: c.votes_close_time?.slice(0, 5) ?? '',
   whoEnters: c.who_enters,
   entrantsShown: c.entrants_shown,
   votersShown: c.voters_shown,
@@ -65,7 +72,8 @@ const formOf = (c: ContestRow): Form => ({
   prize: c.prize ?? '',
 });
 
-const span = (from: string, until: string) => (from === until ? from : `${from} to ${until}`);
+const span = (from: string, until: string, at: string | null) =>
+  (from === until ? from : `${from} to ${until}`) + (at ? ` at ${timeWord(at)}` : '');
 
 export default function AdminContests() {
   const [rows, setRows] = useState<ContestRow[] | null>(null);
@@ -186,6 +194,14 @@ export default function AdminContests() {
                 value={form.entriesClose}
                 onChange={(e) => setForm({ ...form, entriesClose: e.target.value })}
               />
+              <span className="text-xs text-slate-400">at</span>
+              <input
+                type="time"
+                className={FIELD + ' w-auto'}
+                aria-label="Entries close at"
+                value={form.entriesCloseTime}
+                onChange={(e) => setForm({ ...form, entriesCloseTime: e.target.value })}
+              />
             </div>
           </fieldset>
 
@@ -207,7 +223,18 @@ export default function AdminContests() {
                 value={form.votesClose}
                 onChange={(e) => setForm({ ...form, votesClose: e.target.value })}
               />
+              <span className="text-xs text-slate-400">at</span>
+              <input
+                type="time"
+                className={FIELD + ' w-auto'}
+                aria-label="Voting closes at"
+                value={form.votesCloseTime}
+                onChange={(e) => setForm({ ...form, votesCloseTime: e.target.value })}
+              />
             </div>
+            <p className="text-xs text-slate-400 mt-1">
+              A closing time is Eastern; leave it empty to stay open to the end of that day.
+            </p>
             <p className="text-xs text-slate-400 mt-1">
               Voting starts once entering has finished — otherwise the entries that arrived
               first collect every vote cast before the rest were in.
@@ -315,8 +342,8 @@ export default function AdminContests() {
                 <div>
                   <p className="font-semibold text-slate-200 text-sm">{c.name}</p>
                   <p className="text-xs text-slate-400">
-                    {PHASE_WORD[c.phase]} · entries {span(c.entries_open_on, c.entries_close_on)} ·
-                    voting {span(c.votes_open_on, c.votes_close_on)}
+                    {PHASE_WORD[c.phase]} · entries {span(c.entries_open_on, c.entries_close_on, c.entries_close_time)} ·
+                    voting {span(c.votes_open_on, c.votes_close_on, c.votes_close_time)}
                   </p>
                   <p className="text-xs text-slate-400">
                     {c.entries} {c.entries === 1 ? 'entry' : 'entries'} ·{' '}

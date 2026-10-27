@@ -24,6 +24,10 @@ export type Contest = {
   entries_close_on: string;
   votes_open_on: string;
   votes_close_on: string;
+  /** when entering closes on its last day, Eastern; null is the end of the day */
+  entries_close_time: string | null;
+  /** when voting closes on its last day, the same way */
+  votes_close_time: string | null;
   /** the people themselves, or an organiser on their behalf */
   who_enters: 'players' | 'admins';
   /** whether whose entry it is appears on screen */
@@ -60,8 +64,14 @@ export type ContestOn = {
   entries_close_on: string;
   votes_open_on: string;
   votes_close_on: string;
+  entries_close_time: string | null;
+  votes_close_time: string | null;
   entries: number;
 };
+
+/** A closing time as somebody reads it: "3:00 PM". The server sends "15:00:00". */
+export const timeWord = (t: string) =>
+  new Date(`2000-01-01T${t}`).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
 
 export const BUCKET = 'contest-entries';
 
@@ -321,6 +331,9 @@ export async function saveContest(c: {
   entriesClose: string;
   votesOpen: string;
   votesClose: string;
+  /** "HH:MM", or empty for the end of the day */
+  entriesCloseTime?: string;
+  votesCloseTime?: string;
   whoEnters: 'players' | 'admins';
   entrantsShown: boolean;
   votersShown: boolean;
@@ -341,6 +354,8 @@ export async function saveContest(c: {
     p_voters_shown: c.votersShown,
     p_picks: c.picks,
     p_prize: (c.prize ?? '').trim() || null,
+    p_entries_close_time: c.entriesCloseTime || null,
+    p_votes_close_time: c.votesCloseTime || null,
   });
   if (error) return { ok: false, reason: error.message };
   return data as { ok: boolean; reason?: string; id?: string };

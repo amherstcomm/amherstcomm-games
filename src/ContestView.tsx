@@ -17,6 +17,7 @@ import {
   readEntrySheet,
   readResults,
   PHASE_WORD,
+  timeWord,
   readContest,
   readContestsOn,
   saveEntry,
@@ -47,16 +48,20 @@ const dayWord = (d: string) =>
 
 /** What is happening to this contest next, in a sentence. The dates are all
  *  on screen anyway; this is the one that matters today. */
-function deadline(c: Pick<Contest, 'phase' | 'entries_close_on' | 'votes_open_on' | 'votes_close_on'>) {
+const closeWord = (d: string, t: string | null) => (t ? `${dayWord(d)} at ${timeWord(t)}` : dayWord(d));
+
+function deadline(
+  c: Pick<Contest, 'phase' | 'entries_close_on' | 'votes_open_on' | 'votes_close_on' | 'entries_close_time' | 'votes_close_time'>
+) {
   switch (c.phase) {
     case 'soon':
       return null;
     case 'entries':
-      return `Entries close ${dayWord(c.entries_close_on)}.`;
+      return `Entries close ${closeWord(c.entries_close_on, c.entries_close_time)}.`;
     case 'judging':
       return `Voting opens ${dayWord(c.votes_open_on)}.`;
     case 'voting':
-      return `Voting closes ${dayWord(c.votes_close_on)}.`;
+      return `Voting closes ${closeWord(c.votes_close_on, c.votes_close_time)}.`;
     case 'over':
       return 'This one has finished.';
   }

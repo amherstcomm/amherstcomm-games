@@ -569,3 +569,38 @@ test('a blind contest still names entrants to the organiser managing them', asyn
   // And still numbered, not named, in the gallery everybody reads.
   await expect(page.getByText('Entry 1')).toBeVisible();
 });
+
+test('a closing time is part of the deadline', async ({ page }) => {
+  await stub(page, { ...VOTING, votes_close_time: '15:00:00' });
+  await page.goto('/contest/c1');
+  await expect(page.getByText(/Voting closes .+ at 3:00\sPM\./)).toBeVisible();
+});
+
+test('without one it is just the day', async ({ page }) => {
+  await stub(page, { ...VOTING, votes_close_time: null });
+  await page.goto('/contest/c1');
+  await expect(page.getByText(/Voting closes \w+, \w+ \d+\.$/)).toBeVisible();
+});
+
+test('an organiser sets when voting closes, to the minute', async ({ page }) => {
+  let sent: Record<string, unknown> | null = null;
+  await page.route('**/rest/v1/rpc/contests_sheet', (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ ok: true, contests: [{ ...VOTING, entries_close_time: null, votes_close_time: '15:00:00', entries: 2 }] }),
+    })
+  );
+  await page.route('**/rest/v1/rpc/save_contest', (route) => {
+    sent = JSON.parse(route.request().postData() ?? '{}');
+    return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, id: 'c1' }) });
+  });
+  await page.goto('/admin/contests');
+  await expect(page.getByText(/voting .+ at 3:00\sPM/)).toBeVisible();
+  await page.getByRole('button', { name: 'Edit' }).click();
+  await expect(page.getByLabel('Voting closes at')).toHaveValue('15:00');
+  await expect(page.getByLabel('Entries close at')).toHaveValue('');
+  await page.getByLabel('Voting closes at').fill('17:30');
+  await page.getByRole('button', { name: 'Save' }).click();
+  await expect.poll(() => sent).toMatchObject({ p_votes_close_time: '17:30', p_entries_close_time: null });
+});
