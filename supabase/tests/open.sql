@@ -280,4 +280,34 @@ select pg_temp.check('a missed question is a dot on the board, not a zero',
        from jsonb_array_elements(
          (public.session_scores(((select v->>'id' from t where k='tsess'))::uuid))->'standings') e));
 
+-- ---------------------------------------------------------------------------
+-- Added after it started
+-- ---------------------------------------------------------------------------
+-- Nothing presents an open session's questions one at a time, so one written
+-- after the start has to be released as it is written or it is never asked.
+set session "test.uid" = '11111111-1111-1111-1111-111111111111';
+insert into t select 'late', public.create_session('Built while running', 'strict', 'open');
+select public.advance_session(((select v->>'id' from t where k='late'))::uuid, 'start');
+insert into t select 'lateq', public.save_item(
+  ((select v->>'id' from t where k='late'))::uuid, null, 'choice', 'Late',
+  '{"options":["a","b"]}'::jsonb, '{"correct":["a"]}'::jsonb);
+select pg_temp.check('a question added to a running open session is open at once',
+  (select state from public.items
+   where id = ((select v->>'id' from t where k='lateq'))::uuid) = 'open');
+set session "test.uid" = '33333333-3333-3333-3333-333333333333';
+insert into t select 'laten', public.current_item(((select v->>'id' from t where k='late'))::uuid);
+select pg_temp.check('so a player is asked it, rather than told that is all of them',
+  (select v->>'state' from t where k='laten') = 'open'
+  and (select v->>'prompt' from t where k='laten') = 'Late');
+
+set session "test.uid" = '11111111-1111-1111-1111-111111111111';
+insert into t select 'latelive', public.create_session('A host runs this', 'strict');
+select public.advance_session(((select v->>'id' from t where k='latelive'))::uuid, 'start');
+insert into t select 'latelq', public.save_item(
+  ((select v->>'id' from t where k='latelive'))::uuid, null, 'choice', 'Waits',
+  '{"options":["a","b"]}'::jsonb, '{"correct":["a"]}'::jsonb);
+select pg_temp.check('while one added to a hosted session waits for the host',
+  (select state from public.items
+   where id = ((select v->>'id' from t where k='latelq'))::uuid) = 'pending');
+
 \echo '--- open session checks passed ---'

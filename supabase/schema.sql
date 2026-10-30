@@ -25253,3 +25253,43 @@ $fn$;
 
 revoke all on function public.delete_contest_entry(uuid) from public, anon;
 grant execute on function public.delete_contest_entry(uuid) to authenticated;
+
+-- ---------------------------------------------------------------------------
+-- A question added to an open session that is already running
+-- ---------------------------------------------------------------------------
+--
+-- Starting an open session releases its questions in one go, and that was the
+-- only thing that ever did: nobody presents them one at a time. So a question
+-- written after the start stayed pending for good, and a session built that
+-- way told everybody "that is all of them" before asking a thing. Released as
+-- it is added instead, whichever path adds it.
+create or replace function public.open_item_in_running_session()
+returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $fn$
+begin
+  if new.state = 'pending' and exists (
+    select 1 from public.sessions s
+    where s.id = new.session_id and s.mode = 'open' and s.state = 'live') then
+    new.state := 'open';
+  end if;
+  return new;
+end;
+$fn$;
+
+revoke all on function public.open_item_in_running_session() from public, anon, authenticated;
+
+drop trigger if exists item_opens_in_running_session on public.items;
+create trigger item_opens_in_running_session
+  before insert on public.items
+  for each row execute function public.open_item_in_running_session();
+
+-- And the ones already caught that way.
+update public.items i
+   set state = 'open'
+  from public.sessions s
+ where i.session_id = s.id
+   and s.mode = 'open' and s.state = 'live'
+   and i.state = 'pending';
