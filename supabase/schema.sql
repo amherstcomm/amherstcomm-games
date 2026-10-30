@@ -25253,3 +25253,164 @@ $fn$;
 
 revoke all on function public.delete_contest_entry(uuid) from public, anon;
 grant execute on function public.delete_contest_entry(uuid) to authenticated;
+
+-- ---------------------------------------------------------------------------
+-- A question added to an open session that is already running
+-- ---------------------------------------------------------------------------
+--
+-- Starting an open session releases its questions in one go, and that was the
+-- only thing that ever did: nobody presents them one at a time. So a question
+-- written after the start stayed pending for good, and a session built that
+-- way told everybody "that is all of them" before asking a thing. Released as
+-- it is added instead, whichever path adds it.
+create or replace function public.open_item_in_running_session()
+returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $fn$
+begin
+  if new.state = 'pending' and exists (
+    select 1 from public.sessions s
+    where s.id = new.session_id and s.mode = 'open' and s.state = 'live') then
+    new.state := 'open';
+  end if;
+  return new;
+end;
+$fn$;
+
+revoke all on function public.open_item_in_running_session() from public, anon, authenticated;
+
+drop trigger if exists item_opens_in_running_session on public.items;
+create trigger item_opens_in_running_session
+  before insert on public.items
+  for each row execute function public.open_item_in_running_session();
+
+-- And the ones already caught that way.
+update public.items i
+   set state = 'open'
+  from public.sessions s
+ where i.session_id = s.id
+   and s.mode = 'open' and s.state = 'live'
+   and i.state = 'pending';
+
+-- ---------------------------------------------------------------------------
+-- Reopening an open session that never actually started
+-- ---------------------------------------------------------------------------
+
+create or replace function public.advance_session(p_session uuid, p_action text, p_item uuid default null)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $fn$
+declare
+  sess public.sessions;
+  target uuid;
+begin
+  if not public.hosts_session(p_session) then
+    return jsonb_build_object('ok', false, 'reason', 'not allowed');
+  end if;
+  select * into sess from public.sessions where id = p_session;
+
+  -- Both of these are the schedule's too, which is why neither is written out
+  -- here any more — see open_session and close_session, and apply_schedule for
+  -- the clock that calls them.
+  if p_action = 'start' then
+    perform public.open_session(p_session);
+    return jsonb_build_object('ok', true, 'state', 'live');
+
+  elsif p_action = 'close' then
+    perform public.close_session(p_session);
+    return jsonb_build_object('ok', true, 'state', 'closed');
+
+  -- Undoing a close, everything it did. Asked for after a session counting in
+  -- a running round was found closed with nobody remembering closing it, and
+  -- the only way back was SQL -- which, written the obvious way, put the
+  -- session back to live with every question still locked, so every answer
+  -- was refused.
+  --
+  -- close_session locks whatever was open. In a session played on your own
+  -- time that was every question, so every locked one opens again; in a
+  -- presented one it was the question on screen, which is the one whose lock
+  -- carries the close's own timestamp -- an earlier lock, from the presenter,
+  -- stays.
+  --
+  -- A closing time already past is cleared, or the next sweep would shut it
+  -- again within the minute. And a closed session's code can be given to a
+  -- new one, so if it has been, this one takes a fresh code rather than two
+  -- live sessions answering to the same one.
+  elsif p_action = 'reopen' then
+    if sess.state <> 'closed' then
+      return jsonb_build_object('ok', false, 'reason', 'it is not closed');
+    end if;
+    update public.items
+       set state = 'open', locked_at = null
+     where session_id = p_session and state = 'locked'
+       and (sess.mode = 'open' or locked_at = sess.closed_at);
+    -- An open session whose window passed unvisited went straight from draft
+    -- to closed, so nothing ever released its questions: close_session only
+    -- locks what was open. Reopening is then its first real start.
+    update public.items
+       set state = 'open'
+     where session_id = p_session and state = 'pending' and sess.mode = 'open';
+    update public.sessions
+       set state = 'live',
+           started_at = coalesce(started_at, now()),
+           closed_at = null,
+           moved_at = now(),
+           closes_at = case when closes_at <= now() then null else closes_at end,
+           code = case
+             when exists (select 1 from public.sessions o
+                          where o.id <> p_session and o.code = sess.code and o.state <> 'closed')
+               then public.new_session_code()
+             else code
+           end
+     where id = p_session;
+    return jsonb_build_object('ok', true, 'state', 'live',
+      'schedule_cleared', coalesce(sess.closes_at <= now(), false),
+      'code', (select s.code from public.sessions s where s.id = p_session));
+
+  -- show, lock and reveal are the presenter's, and an open session has none.
+  elsif sess.mode = 'open' then
+    return jsonb_build_object('ok', false, 'reason', 'this session runs without a presenter');
+
+  elsif p_action = 'show' then
+    target := coalesce(p_item, (
+      select i.id from public.items i
+      where i.session_id = p_session and i.state = 'pending'
+      order by i.position limit 1
+    ));
+    if target is null then
+      return jsonb_build_object('ok', false, 'reason', 'nothing left to show');
+    end if;
+    update public.items set state = 'locked', locked_at = coalesce(locked_at, now())
+    where session_id = p_session and state = 'open' and id <> target;
+    update public.items set state = 'open', opened_at = coalesce(opened_at, now())
+    where id = target and session_id = p_session;
+    update public.sessions set current_item = target, moved_at = now() where id = p_session;
+    return jsonb_build_object('ok', true, 'item', target);
+
+  elsif p_action = 'lock' then
+    update public.items set state = 'locked', locked_at = now()
+    where session_id = p_session and state = 'open';
+    update public.sessions set moved_at = now() where id = p_session;
+    return jsonb_build_object('ok', true);
+
+  elsif p_action = 'reveal' then
+    update public.items set state = 'revealed', locked_at = coalesce(locked_at, now())
+    where session_id = p_session and id = coalesce(p_item, sess.current_item)
+      and state in ('open', 'locked');
+    if not found then
+      return jsonb_build_object('ok', false, 'reason', 'nothing to reveal');
+    end if;
+    update public.sessions set moved_at = now() where id = p_session;
+    return jsonb_build_object('ok', true);
+  end if;
+
+  return jsonb_build_object('ok', false, 'reason', 'no such action');
+end;
+$fn$;
+
+revoke all on function public.advance_session(uuid, text, uuid) from public, anon;
+grant execute on function public.advance_session(uuid, text, uuid) to authenticated;
