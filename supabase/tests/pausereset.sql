@@ -52,6 +52,7 @@ insert into t select 'live', public.create_session('Run from the front');
 -- Pausing
 -- ---------------------------------------------------------------------------
 set session "test.uid" = '0d000000-0000-0000-0000-000000000002';
+select public.begin_playing(pg_temp.id('sess'));
 insert into t select 'first', public.current_item(pg_temp.id('sess'));
 select pg_temp.check('the first question is served as usual',
   (select v->>'state' from t where k = 'first') = 'open'
@@ -199,6 +200,9 @@ select pg_temp.check('and leaves them unpaused, for a fresh start',
   not exists (select 1 from public.session_pauses
               where session_id = pg_temp.id('sess') and user_id = '0d000000-0000-0000-0000-000000000002'));
 set session "test.uid" = '0d000000-0000-0000-0000-000000000002';
+select pg_temp.check('a reset puts them back at the start button',
+  public.current_item(pg_temp.id('sess'))->>'state' = 'ready');
+select public.begin_playing(pg_temp.id('sess'));
 insert into t select 'again', public.current_item(pg_temp.id('sess'));
 select pg_temp.check('so their next visit starts at question one',
   (select (v->>'id')::uuid from t where k = 'again') = pg_temp.id('q1'));

@@ -24,8 +24,25 @@ export type LiveItem = {
   /** `done` is open-mode only: they have answered everything there is.
    *  `paused` is open-mode only too: they asked to stop after a question, and
    *  the next one is held back -- not served, its clock not started -- until
-   *  they resume. */
-  state: 'not-live' | 'waiting' | 'open' | 'locked' | 'revealed' | 'done' | 'paused' | 'giveaway-only';
+   *  they resume.
+   *  `ready` is open-mode only: nothing has been served to them yet, and nothing
+   *  will be until they press Start. */
+  state:
+    | 'not-live'
+    | 'waiting'
+    | 'open'
+    | 'locked'
+    | 'revealed'
+    | 'done'
+    | 'paused'
+    | 'ready'
+    | 'giveaway-only';
+  /** for `ready`: what they are about to start */
+  title?: string;
+  /** for `ready`: how many of the questions have a clock */
+  timed?: number;
+  /** for `ready`: the clock, when every question has the same one */
+  seconds_each?: number | null;
   /** for `giveaway-only`: the giveaway whose trivia this is, to enter first */
   giveaway?: string | null;
   /** which kind of session this came from — the screen differs, so it has to
@@ -338,6 +355,27 @@ export async function pauseSession(
   const { data, error } = await supabase.rpc('pause_session', { p_session: session, p_on: on });
   if (error) return { ok: false, reason: error.message };
   return data as { ok: boolean; reason?: string; paused?: boolean };
+}
+
+/** Start a session played on your own time. Until this, current_item answers
+ *  `ready` and serves nothing, so this is what deals the first question and
+ *  starts its clock. */
+export async function beginPlaying(session: string): Promise<{ ok: boolean; reason?: string }> {
+  if (!supabase) return { ok: false, reason: 'not connected' };
+  const { data, error } = await supabase.rpc('begin_playing', { p_session: session });
+  if (error) return { ok: false, reason: error.message };
+  return data as { ok: boolean; reason?: string };
+}
+
+/** What they are about to start, in one line. */
+export function readyLine(item: Pick<LiveItem, 'total' | 'timed' | 'seconds_each'>): string {
+  const total = item.total ?? 0;
+  const timed = item.timed ?? 0;
+  const count = `${total} ${total === 1 ? 'question' : 'questions'}`;
+  if (item.seconds_each) return `${count}, ${item.seconds_each} seconds ${total === 1 ? 'to answer' : 'each'}.`;
+  if (timed === 0) return `${count}, no time limit.`;
+  if (timed === total) return `${count}, each with its own time limit.`;
+  return `${count}, ${timed} of them timed.`;
 }
 
 export async function readCurrentItem(session: string): Promise<LiveItem> {

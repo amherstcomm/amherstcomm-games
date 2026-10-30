@@ -112,6 +112,7 @@ select pg_temp.check('nor get in with its code',
   public.session_by_code('gvtriv')->>'ok' = 'false');
 
 select pg_temp.as_('09000000-0000-0000-0000-000000000002');
+select public.begin_playing('09000000-0000-0000-0000-0000000000a4');
 select pg_temp.check('while an entrant is served its question, and in by its code',
   public.current_item('09000000-0000-0000-0000-0000000000a4')->>'state' = 'open'
   and public.session_by_code('gvtriv')->>'ok' = 'true');

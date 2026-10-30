@@ -29,7 +29,9 @@ import {
   advance,
   onSessionMoved,
   readCurrentItem,
+  beginPlaying,
   pauseSession,
+  readyLine,
   readItemWinner,
   readLeaderboard,
   readMyStanding,
@@ -1099,6 +1101,17 @@ export default function LiveSession({ session, host }: { session: string; host: 
     if (res.ok) void pull();
   }
 
+  async function begin() {
+    setSending(true);
+    const res = await beginPlaying(session);
+    setSending(false);
+    if (!res.ok) {
+      setNote(res.reason ?? 'That did not work');
+      return;
+    }
+    void pull();
+  }
+
   async function togglePause() {
     const want = !pauseArmed;
     setPauseArmed(want);
@@ -1174,6 +1187,8 @@ export default function LiveSession({ session, host }: { session: string; host: 
   // What is on screen, which in open mode is the held marked question after
   // they answer rather than the next one the server would serve.
   const answering = shown.state === 'open' && !expired;
+  /** Nothing to count: "Question 1 of 20" over a Start button is one too many. */
+  const notUnderway = shown.state === 'not-live' || shown.state === 'ready';
   const move = host ? nextMove(door ?? { ok: false }) : null;
   const others = host ? otherMoves(door ?? { ok: false }) : [];
 
@@ -1304,7 +1319,7 @@ export default function LiveSession({ session, host }: { session: string; host: 
 
       {/* Where they are in it. Their own progress, which nobody else's affects
           — the whole difference between this and a room moving together. */}
-      {item.mode === 'open' && (item.total ?? 0) > 0 && shown.state !== 'not-live' && (
+      {item.mode === 'open' && (item.total ?? 0) > 0 && !notUnderway && (
         <p className="text-xs uppercase tracking-wider text-slate-500 mb-2">
           {shown.state === 'done'
             ? `All ${item.total} answered`
@@ -1312,6 +1327,26 @@ export default function LiveSession({ session, host }: { session: string; host: 
               ? `Paused before question ${(item.done ?? 0) + 1} of ${item.total}`
               : `Question ${(item.done ?? 0) + 1} of ${item.total}`}
         </p>
+      )}
+
+      {/* Not started: the question and its clock wait for this button, because
+          opening the page should not be what starts anybody's time. */}
+      {shown.state === 'ready' && !host && (
+        <div className="py-10 text-center">
+          <h1 className="text-xl sm:text-2xl font-bold text-white">{shown.title}</h1>
+          <p className="text-slate-300 mt-2">{readyLine(shown)}</p>
+          <p className="text-sm text-slate-400 mt-1">
+            Your time starts when you press Start, and you can pause between questions.
+          </p>
+          <button
+            type="button"
+            disabled={sending}
+            onClick={() => void begin()}
+            className="mt-5 w-full h-11 rounded-xl bg-emerald-400 text-ink font-semibold disabled:opacity-60"
+          >
+            Start
+          </button>
+        </div>
       )}
 
       {/* Paused: nothing is in front of them, so nothing is being timed. The

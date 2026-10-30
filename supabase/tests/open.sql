@@ -77,6 +77,7 @@ select pg_temp.check('there is nothing to show, lock or reveal',
 -- Ada is served one at a time, and her clock is hers
 -- ---------------------------------------------------------------------------
 set session "test.uid" = '33333333-3333-3333-3333-333333333333';
+select public.begin_playing(((select v->>'id' from t where k='sess'))::uuid);
 insert into t select 'a1', public.current_item(((select v->>'id' from t where k='sess'))::uuid);
 select pg_temp.check('she is given the first question',
   (select v->>'id' from t where k='a1') = (select v->>'id' from t where k='q1'));
@@ -140,6 +141,7 @@ update public.responses set submitted_at = '2026-10-01 09:00:04+00'
 where user_id = '33333333-3333-3333-3333-333333333333';
 
 set session "test.uid" = '44444444-4444-4444-4444-444444444444';
+select public.begin_playing(((select v->>'id' from t where k='sess'))::uuid);
 select public.current_item(((select v->>'id' from t where k='sess'))::uuid);
 select public.answer_item(((select v->>'id' from t where k='q1'))::uuid, '"a"'::jsonb);
 update public.item_served set served_at = '2026-10-01 17:00:00+00'
@@ -232,6 +234,7 @@ insert into t select 'tq2', public.save_item(
 select public.advance_session(((select v->>'id' from t where k='tsess'))::uuid, 'start');
 
 set session "test.uid" = '33333333-3333-3333-3333-333333333333';
+select public.begin_playing(((select v->>'id' from t where k='tsess'))::uuid);
 select pg_temp.check('the timed one is served first',
   (public.current_item(((select v->>'id' from t where k='tsess'))::uuid)->>'id')
     = (select v->>'id' from t where k='tq1'));
@@ -295,6 +298,7 @@ select pg_temp.check('a question added to a running open session is open at once
   (select state from public.items
    where id = ((select v->>'id' from t where k='lateq'))::uuid) = 'open');
 set session "test.uid" = '33333333-3333-3333-3333-333333333333';
+select public.begin_playing(((select v->>'id' from t where k='late'))::uuid);
 insert into t select 'laten', public.current_item(((select v->>'id' from t where k='late'))::uuid);
 select pg_temp.check('so a player is asked it, rather than told that is all of them',
   (select v->>'state' from t where k='laten') = 'open'

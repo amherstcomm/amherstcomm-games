@@ -25414,3 +25414,214 @@ $fn$;
 
 revoke all on function public.advance_session(uuid, text, uuid) from public, anon;
 grant execute on function public.advance_session(uuid, text, uuid) to authenticated;
+
+-- ---------------------------------------------------------------------------
+-- A start button for sessions played on your own time
+-- ---------------------------------------------------------------------------
+-- Opening the page used to be what started it: current_item serves, so the
+-- first question and its clock were running before anybody had read the title.
+-- Held on the server like a pause, so a reload or a second device lands on the
+-- same button rather than past it. The test is whether anything has been
+-- served to them in this session, so somebody part-way through is not asked
+-- again, and a reset -- which clears what was served -- starts them over.
+create or replace function public.begin_playing(p_session uuid)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $fn$
+declare
+  sess public.sessions;
+  me uuid := (select auth.uid());
+  first_item uuid;
+begin
+  perform public.apply_schedule(p_session);
+  select * into sess from public.sessions where id = p_session;
+  if me is null then
+    return jsonb_build_object('ok', false, 'reason', 'not signed in');
+  end if;
+  if sess.id is null or sess.state <> 'live' or sess.mode <> 'open' then
+    return jsonb_build_object('ok', false, 'reason', 'it is not running');
+  end if;
+  if public.runs_session(p_session) then
+    return jsonb_build_object('ok', false, 'reason', 'you are running this one');
+  end if;
+  if not public.session_open_to_me(p_session) then
+    return jsonb_build_object('ok', false, 'reason', 'not allowed');
+  end if;
+  -- Only a first start deals anything: from here on a question is dealt by
+  -- finishing the last one, and a pause holds that back.
+  if not exists (select 1 from public.item_served sv
+                 join public.items i on i.id = sv.item_id
+                 where i.session_id = p_session and sv.user_id = me) then
+    select i.id into first_item
+    from public.items i
+    where i.session_id = p_session
+      and i.state <> 'pending'
+      and not public.finished_item(i.id, me)
+      and not public.expired_for(i.id, me)
+    order by i.position
+    limit 1;
+    if first_item is not null then
+      insert into public.item_served (item_id, user_id) values (first_item, me)
+      on conflict (item_id, user_id) do nothing;
+    end if;
+  end if;
+  return jsonb_build_object('ok', true);
+end;
+$fn$;
+
+revoke all on function public.begin_playing(uuid) from public, anon;
+grant execute on function public.begin_playing(uuid) to authenticated;
+
+create or replace function public.current_item(p_session uuid)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $fn$
+declare
+  sess public.sessions;
+  me uuid := (select auth.uid());
+  it public.items;
+  yours boolean;
+  n_total int;
+  n_timed int;
+  fewest int;
+  most int;
+begin
+  -- The clock before the question: a survey whose closing time has passed is
+  -- shut, whether or not anybody has been by since.
+  perform public.apply_schedule(p_session);
+  select * into sess from public.sessions where id = p_session;
+  if sess.id is null then
+    return jsonb_build_object('state', 'not-live', 'now', now(), 'yours', false);
+  end if;
+  yours := public.runs_session(p_session);
+  -- A giveaway's trivia is its entrants' alone: anybody else is told to enter
+  -- the giveaway, and where, rather than shown a question they cannot answer.
+  if not public.session_open_to_me(p_session) then
+    return jsonb_build_object('state', 'giveaway-only', 'now', now(), 'yours', false,
+                              'giveaway', public.giveaway_of_session(p_session));
+  end if;
+  if sess.state <> 'live' then
+    -- `shared` travels with the refusal, because the screen that says "this is
+    -- not running" is the same screen that should offer the way to see how it
+    -- went — and it has nothing else to ask.
+    return jsonb_build_object('state', 'not-live', 'now', now(), 'yours', yours,
+                              'shared', sess.share_results and sess.state = 'closed');
+  end if;
+
+  if sess.mode = 'open' then
+    if me is null or yours then
+      return jsonb_build_object('state', 'not-live', 'mode', 'open', 'now', now(),
+                                'yours', yours);
+    end if;
+    select i.* into it
+    from public.items i
+    where i.session_id = p_session
+      and i.state <> 'pending'
+      -- Finished rather than merely written against — a word game writes a row
+      -- per guess, and the old test took the board away after the first one.
+      and not public.finished_item(i.id, me)
+      -- see the note above: a question whose window has closed is behind them
+      and not public.expired_for(i.id, me)
+    order by i.position
+    limit 1;
+    if it.id is null then
+      return jsonb_build_object(
+        'state', 'done', 'mode', 'open', 'now', now(), 'yours', false,
+        'total', (select count(*) from public.items i where i.session_id = p_session
+                  and i.state <> 'pending'));
+    end if;
+    -- Not started: nothing has been put in front of them yet, so opening the
+    -- page puts nothing in front of them either. begin_playing is what deals
+    -- the first question and starts its clock.
+    if not exists (select 1 from public.item_served sv
+                   join public.items i on i.id = sv.item_id
+                   where i.session_id = p_session and sv.user_id = me) then
+      select count(*),
+             count(public.item_seconds(i.payload)),
+             min(public.item_seconds(i.payload)),
+             max(public.item_seconds(i.payload))
+        into n_total, n_timed, fewest, most
+      from public.items i
+      where i.session_id = p_session and i.state <> 'pending';
+      return jsonb_build_object(
+        'state', 'ready', 'mode', 'open', 'now', now(), 'yours', false,
+        'title', sess.title,
+        'total', n_total,
+        'timed', n_timed,
+        -- only when one number is true of all of them
+        'seconds_each', case when n_timed = n_total and fewest = most then fewest end);
+    end if;
+    -- Paused, and this question not yet in front of them: say so rather than
+    -- serve it, so its clock does not start until they come back. One already
+    -- served -- the question they were on when they paused -- is theirs to
+    -- finish, which is what "pause after this question" means.
+    if exists (select 1 from public.session_pauses sp
+               where sp.session_id = p_session and sp.user_id = me)
+       and not exists (select 1 from public.item_served sv
+                       where sv.item_id = it.id and sv.user_id = me) then
+      return jsonb_build_object(
+        'state', 'paused', 'mode', 'open', 'now', now(), 'yours', false, 'paused', true,
+        'total', (select count(*) from public.items i where i.session_id = p_session
+                  and i.state <> 'pending'),
+        'done', (select count(*) from public.items i
+               where i.session_id = p_session and i.state <> 'pending'
+                 and (public.finished_item(i.id, me)
+                      or public.expired_for(i.id, me))));
+    end if;
+
+    insert into public.item_served (item_id, user_id) values (it.id, me)
+    on conflict (item_id, user_id) do nothing;
+
+    return jsonb_build_object(
+      'state', 'open', 'mode', 'open', 'yours', false,
+      'id', it.id, 'kind', it.kind, 'prompt', it.prompt,
+      -- their own order of the options, when the session shuffles them
+      'payload', public.served_payload(it.kind, it.payload, sess.shuffle_options, it.id::text || me::text),
+      'position', it.position,
+      'opened_at', public.started_at(it.id, me),
+      'seconds', public.item_seconds(it.payload),
+      'now', now(),
+      'mine', null,
+      'answer', null,
+      -- whether "pause after this question" is set, so the switch shows it
+      'paused', exists (select 1 from public.session_pauses sp
+                        where sp.session_id = p_session and sp.user_id = me),
+      'total', (select count(*) from public.items i where i.session_id = p_session
+                and i.state <> 'pending'),
+      -- how many are behind them, answered or timed out, so "Question 3 of 6"
+      -- keeps counting while a skipped one still counts as gone
+      'done', (select count(*) from public.items i
+               where i.session_id = p_session and i.state <> 'pending'
+                 and (public.finished_item(i.id, me)
+                      or public.expired_for(i.id, me))));
+  end if;
+
+  if sess.current_item is null then
+    return jsonb_build_object('state', 'waiting', 'mode', 'live', 'now', now(), 'yours', yours);
+  end if;
+  select * into it from public.items
+  where id = sess.current_item and state <> 'pending';
+  if it.id is null then
+    return jsonb_build_object('state', 'waiting', 'mode', 'live', 'now', now(), 'yours', yours);
+  end if;
+
+  return jsonb_build_object(
+    'state', it.state, 'mode', 'live', 'yours', yours,
+    'id', it.id, 'kind', it.kind, 'prompt', it.prompt,
+    -- the room's one order of the options, the projector's included
+    'payload', public.served_payload(it.kind, it.payload, sess.shuffle_options, it.id::text),
+    'position', it.position,
+    'opened_at', it.opened_at,
+    'seconds', public.item_seconds(it.payload),
+    'now', now(),
+    'mine', (select r.value from public.responses r
+             where r.item_id = it.id and r.user_id = me),
+    'answer', case when it.state = 'revealed'
+                   then (select a.answer from public.item_answers a where a.item_id = it.id)
+              end);
+end;
+$fn$;

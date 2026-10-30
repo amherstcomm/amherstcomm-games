@@ -25,7 +25,10 @@ end $$;
 create or replace function pg_temp.as_(who text) returns void
 language sql as $$ select set_config('test.uid', who, false) $$;
 create or replace function pg_temp.options(p_session uuid) returns jsonb
-language sql as $$ select public.current_item(p_session)->'payload'->'options' $$;
+language sql as $$
+  select public.begin_playing(p_session);
+  select public.current_item(p_session)->'payload'->'options';
+$$;
 
 -- Six options, so two orders agreeing by chance is one in seven hundred.
 insert into public.sessions (id, title, host, state, mode) values

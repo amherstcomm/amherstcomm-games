@@ -115,6 +115,7 @@ select pg_temp.check('and they cannot answer it either',
     = 'you are running this one');
 
 set session "test.uid" = '33333333-3333-3333-3333-333333333333';
+select public.begin_playing(((select v->>'id' from t where k='open'))::uuid);
 select pg_temp.check('while a player is served it as before',
   (public.current_item(((select v->>'id' from t where k='open'))::uuid)->>'id')
     = (select v->>'id' from t where k='oq'));
