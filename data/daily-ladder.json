@@ -1,0 +1,21 @@
+{
+  "date": "2026-10-31",
+  "byDifficulty": {
+    "easy": {
+      "from": "like",
+      "to": "same",
+      "par": 3
+    },
+    "hard": {
+      "from": "jute",
+      "to": "rope",
+      "par": 5
+    },
+    "extreme": {
+      "from": "grit",
+      "to": "guts",
+      "par": 8
+    }
+  },
+  "fetchedAt": "2026-10-31T14:34:15.600Z"
+}

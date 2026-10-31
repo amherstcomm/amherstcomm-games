@@ -1,0 +1,84 @@
+{
+  "date": "2026-10-31",
+  "byDifficulty": {
+    "easy": {
+      "prompts": [
+        {
+          "x": "shake",
+          "y": "state"
+        },
+        {
+          "x": "black",
+          "y": "ward"
+        },
+        {
+          "x": "flood",
+          "y": "house"
+        },
+        {
+          "x": "copper",
+          "y": "band"
+        },
+        {
+          "x": "wonder",
+          "y": "mark"
+        }
+      ],
+      "answers": "WyJkb3duIiwib3V0IiwibGlnaHQiLCJoZWFkIiwibGFuZCJd",
+      "hints": 3
+    },
+    "hard": {
+      "prompts": [
+        {
+          "x": "arm",
+          "y": "man"
+        },
+        {
+          "x": "ten",
+          "y": "hill"
+        },
+        {
+          "x": "blue",
+          "y": "land"
+        },
+        {
+          "x": "hold",
+          "y": "seer"
+        },
+        {
+          "x": "handy",
+          "y": "handle"
+        }
+      ],
+      "answers": "WyJjaGFpciIsImFudCIsImdyYXNzIiwib3ZlciIsIm1hbiJd",
+      "hints": 1
+    },
+    "extreme": {
+      "prompts": [
+        {
+          "x": "here",
+          "y": "shave"
+        },
+        {
+          "x": "star",
+          "y": "walk"
+        },
+        {
+          "x": "speed",
+          "y": "side"
+        },
+        {
+          "x": "flower",
+          "y": "time"
+        },
+        {
+          "x": "spar",
+          "y": "boat"
+        }
+      ],
+      "answers": "WyJhZnRlciIsImJvYXJkIiwid2F5IiwiYmVkIiwicm93Il0=",
+      "hints": 0
+    }
+  },
+  "fetchedAt": "2026-10-31T14:34:18.443Z"
+}

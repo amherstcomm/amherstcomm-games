@@ -1,0 +1,33 @@
+{
+  "date": "2026-10-31",
+  "byDifficulty": {
+    "easy": {
+      "sides": [
+        "uoa",
+        "eib",
+        "nrc",
+        "dtm"
+      ],
+      "par": 2
+    },
+    "hard": {
+      "sides": [
+        "wln",
+        "ieg",
+        "arp",
+        "syc"
+      ],
+      "par": 2
+    },
+    "extreme": {
+      "sides": [
+        "nes",
+        "hdi",
+        "ybg",
+        "alu"
+      ],
+      "par": 2
+    }
+  },
+  "fetchedAt": "2026-10-31T14:34:18.443Z"
+}

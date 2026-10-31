@@ -1,0 +1,162 @@
+{
+  "date": "2026-10-31",
+  "byDifficulty": {
+    "easy": [
+      {
+        "from": "share",
+        "to": "stock",
+        "par": 4
+      },
+      {
+        "from": "cat",
+        "to": "guy",
+        "par": 3
+      },
+      {
+        "from": "blink",
+        "to": "flash",
+        "par": 4
+      },
+      {
+        "from": "hat",
+        "to": "lid",
+        "par": 3
+      },
+      {
+        "from": "cot",
+        "to": "leg",
+        "par": 3
+      },
+      {
+        "from": "bend",
+        "to": "kink",
+        "par": 3
+      },
+      {
+        "from": "howl",
+        "to": "wail",
+        "par": 4
+      },
+      {
+        "from": "lay",
+        "to": "set",
+        "par": 3
+      },
+      {
+        "from": "many",
+        "to": "more",
+        "par": 3
+      },
+      {
+        "from": "bust",
+        "to": "tear",
+        "par": 4
+      }
+    ],
+    "hard": [
+      {
+        "from": "pull",
+        "to": "push",
+        "par": 5
+      },
+      {
+        "from": "lead",
+        "to": "take",
+        "par": 5
+      },
+      {
+        "from": "bump",
+        "to": "find",
+        "par": 5
+      },
+      {
+        "from": "hulk",
+        "to": "loom",
+        "par": 5
+      },
+      {
+        "from": "prod",
+        "to": "spur",
+        "par": 6
+      },
+      {
+        "from": "lean",
+        "to": "thin",
+        "par": 5
+      },
+      {
+        "from": "clip",
+        "to": "trot",
+        "par": 6
+      },
+      {
+        "from": "flog",
+        "to": "whip",
+        "par": 5
+      },
+      {
+        "from": "dupe",
+        "to": "gull",
+        "par": 5
+      },
+      {
+        "from": "face",
+        "to": "nose",
+        "par": 5
+      }
+    ],
+    "extreme": [
+      {
+        "from": "feller",
+        "to": "logger",
+        "par": 8
+      },
+      {
+        "from": "flap",
+        "to": "fuss",
+        "par": 7
+      },
+      {
+        "from": "star",
+        "to": "whiz",
+        "par": 7
+      },
+      {
+        "from": "phase",
+        "to": "stage",
+        "par": 7
+      },
+      {
+        "from": "gawk",
+        "to": "lump",
+        "par": 7
+      },
+      {
+        "from": "grow",
+        "to": "turn",
+        "par": 8
+      },
+      {
+        "from": "downy",
+        "to": "hairy",
+        "par": 7
+      },
+      {
+        "from": "lean",
+        "to": "trim",
+        "par": 7
+      },
+      {
+        "from": "grade",
+        "to": "place",
+        "par": 8
+      },
+      {
+        "from": "jolly",
+        "to": "merry",
+        "par": 8
+      }
+    ]
+  },
+  "fetchedAt": "2026-10-31T14:34:53.812Z"
+}

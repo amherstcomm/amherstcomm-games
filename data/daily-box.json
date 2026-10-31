@@ -1,0 +1,33 @@
+{
+  "date": "2026-10-31",
+  "byDifficulty": {
+    "easy": {
+      "sides": [
+        "nds",
+        "glh",
+        "crk",
+        "iea"
+      ],
+      "par": 2
+    },
+    "hard": {
+      "sides": [
+        "dis",
+        "zpr",
+        "aeo",
+        "lcn"
+      ],
+      "par": 2
+    },
+    "extreme": {
+      "sides": [
+        "rod",
+        "iay",
+        "lnv",
+        "cet"
+      ],
+      "par": 2
+    }
+  },
+  "fetchedAt": "2026-10-31T14:34:15.600Z"
+}

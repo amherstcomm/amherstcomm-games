@@ -1,0 +1,21 @@
+{
+  "date": "2026-10-31",
+  "byDifficulty": {
+    "easy": {
+      "from": "plod",
+      "to": "slog",
+      "par": 3
+    },
+    "hard": {
+      "from": "news",
+      "to": "word",
+      "par": 6
+    },
+    "extreme": {
+      "from": "chip",
+      "to": "nick",
+      "par": 7
+    }
+  },
+  "fetchedAt": "2026-10-31T14:34:18.443Z"
+}

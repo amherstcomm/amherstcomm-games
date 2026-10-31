@@ -1,0 +1,84 @@
+{
+  "date": "2026-10-31",
+  "byDifficulty": {
+    "easy": {
+      "prompts": [
+        {
+          "x": "horse",
+          "y": "hole"
+        },
+        {
+          "x": "way",
+          "y": "show"
+        },
+        {
+          "x": "frame",
+          "y": "force"
+        },
+        {
+          "x": "hand",
+          "y": "post"
+        },
+        {
+          "x": "cross",
+          "y": "haul"
+        }
+      ],
+      "answers": "WyJtYW4iLCJzaWRlIiwid29yayIsIm91dCIsIm92ZXIiXQ==",
+      "hints": 3
+    },
+    "hard": {
+      "prompts": [
+        {
+          "x": "crow",
+          "y": "man"
+        },
+        {
+          "x": "repent",
+          "y": "acid"
+        },
+        {
+          "x": "belt",
+          "y": "side"
+        },
+        {
+          "x": "pass",
+          "y": "ray"
+        },
+        {
+          "x": "war",
+          "y": "well"
+        }
+      ],
+      "answers": "WyJiYXIiLCJhbnQiLCJ3YXkiLCJwb3J0IiwiZmFyZSJd",
+      "hints": 1
+    },
+    "extreme": {
+      "prompts": [
+        {
+          "x": "count",
+          "y": "state"
+        },
+        {
+          "x": "cease",
+          "y": "cracker"
+        },
+        {
+          "x": "craftsman",
+          "y": "yard"
+        },
+        {
+          "x": "feed",
+          "y": "log"
+        },
+        {
+          "x": "copper",
+          "y": "master"
+        }
+      ],
+      "answers": "WyJkb3duIiwiZmlyZSIsInNoaXAiLCJiYWNrIiwiaGVhZCJd",
+      "hints": 0
+    }
+  },
+  "fetchedAt": "2026-10-31T14:34:15.600Z"
+}
