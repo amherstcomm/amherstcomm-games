@@ -1,0 +1,84 @@
+{
+  "date": "2026-11-06",
+  "byDifficulty": {
+    "easy": {
+      "prompts": [
+        {
+          "x": "spear",
+          "y": "room"
+        },
+        {
+          "x": "patch",
+          "y": "bench"
+        },
+        {
+          "x": "hold",
+          "y": "kill"
+        },
+        {
+          "x": "swim",
+          "y": "ability"
+        },
+        {
+          "x": "paper",
+          "y": "drop"
+        }
+      ],
+      "answers": "WyJoZWFkIiwid29yayIsIm92ZXIiLCJzdWl0IiwiYmFjayJd",
+      "hints": 3
+    },
+    "hard": {
+      "prompts": [
+        {
+          "x": "governor",
+          "y": "load"
+        },
+        {
+          "x": "sell",
+          "y": "reach"
+        },
+        {
+          "x": "heart",
+          "y": "neck"
+        },
+        {
+          "x": "post",
+          "y": "handle"
+        },
+        {
+          "x": "repent",
+          "y": "acid"
+        }
+      ],
+      "answers": "WyJzaGlwIiwib3V0IiwiYnJlYWsiLCJtYW4iLCJhbnQiXQ==",
+      "hints": 1
+    },
+    "extreme": {
+      "prompts": [
+        {
+          "x": "off",
+          "y": "back"
+        },
+        {
+          "x": "text",
+          "y": "keeper"
+        },
+        {
+          "x": "win",
+          "y": "day"
+        },
+        {
+          "x": "road",
+          "y": "wife"
+        },
+        {
+          "x": "pay",
+          "y": "shoot"
+        }
+      ],
+      "answers": "WyJzZXQiLCJib29rIiwic29tZSIsImhvdXNlIiwib2ZmIl0=",
+      "hints": 0
+    }
+  },
+  "fetchedAt": "2026-11-06T15:57:30.872Z"
+}

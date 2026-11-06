@@ -1,0 +1,21 @@
+{
+  "date": "2026-11-06",
+  "byDifficulty": {
+    "easy": {
+      "from": "ripped",
+      "to": "soaked",
+      "par": 4
+    },
+    "hard": {
+      "from": "guts",
+      "to": "sand",
+      "par": 5
+    },
+    "extreme": {
+      "from": "barb",
+      "to": "jibe",
+      "par": 7
+    }
+  },
+  "fetchedAt": "2026-11-06T15:57:27.723Z"
+}

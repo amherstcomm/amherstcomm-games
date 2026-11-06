@@ -1,0 +1,162 @@
+{
+  "date": "2026-11-06",
+  "byDifficulty": {
+    "easy": [
+      {
+        "from": "bask",
+        "to": "like",
+        "par": 4
+      },
+      {
+        "from": "putter",
+        "to": "tinker",
+        "par": 4
+      },
+      {
+        "from": "hand",
+        "to": "palm",
+        "par": 4
+      },
+      {
+        "from": "earn",
+        "to": "sack",
+        "par": 4
+      },
+      {
+        "from": "quiver",
+        "to": "shiver",
+        "par": 4
+      },
+      {
+        "from": "tons",
+        "to": "wads",
+        "par": 4
+      },
+      {
+        "from": "bash",
+        "to": "sock",
+        "par": 4
+      },
+      {
+        "from": "boss",
+        "to": "brag",
+        "par": 3
+      },
+      {
+        "from": "dust",
+        "to": "junk",
+        "par": 3
+      },
+      {
+        "from": "care",
+        "to": "wish",
+        "par": 4
+      }
+    ],
+    "hard": [
+      {
+        "from": "scant",
+        "to": "skimp",
+        "par": 6
+      },
+      {
+        "from": "face",
+        "to": "nose",
+        "par": 5
+      },
+      {
+        "from": "loads",
+        "to": "rafts",
+        "par": 6
+      },
+      {
+        "from": "dupe",
+        "to": "gull",
+        "par": 5
+      },
+      {
+        "from": "heap",
+        "to": "slew",
+        "par": 5
+      },
+      {
+        "from": "cart",
+        "to": "grip",
+        "par": 5
+      },
+      {
+        "from": "chew",
+        "to": "plug",
+        "par": 6
+      },
+      {
+        "from": "jail",
+        "to": "poky",
+        "par": 6
+      },
+      {
+        "from": "past",
+        "to": "then",
+        "par": 6
+      },
+      {
+        "from": "reef",
+        "to": "sail",
+        "par": 6
+      }
+    ],
+    "extreme": [
+      {
+        "from": "mass",
+        "to": "slew",
+        "par": 7
+      },
+      {
+        "from": "clay",
+        "to": "tile",
+        "par": 8
+      },
+      {
+        "from": "glint",
+        "to": "spark",
+        "par": 8
+      },
+      {
+        "from": "house",
+        "to": "porch",
+        "par": 7
+      },
+      {
+        "from": "welt",
+        "to": "whip",
+        "par": 8
+      },
+      {
+        "from": "tree",
+        "to": "wood",
+        "par": 8
+      },
+      {
+        "from": "blamed",
+        "to": "cursed",
+        "par": 8
+      },
+      {
+        "from": "creep",
+        "to": "sneak",
+        "par": 7
+      },
+      {
+        "from": "drab",
+        "to": "dull",
+        "par": 8
+      },
+      {
+        "from": "dress",
+        "to": "primp",
+        "par": 8
+      }
+    ]
+  },
+  "fetchedAt": "2026-11-06T15:58:23.700Z"
+}

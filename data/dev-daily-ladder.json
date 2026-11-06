@@ -1,0 +1,21 @@
+{
+  "date": "2026-11-06",
+  "byDifficulty": {
+    "easy": {
+      "from": "pond",
+      "to": "pool",
+      "par": 4
+    },
+    "hard": {
+      "from": "rock",
+      "to": "sway",
+      "par": 5
+    },
+    "extreme": {
+      "from": "brisk",
+      "to": "fresh",
+      "par": 8
+    }
+  },
+  "fetchedAt": "2026-11-06T15:57:30.872Z"
+}

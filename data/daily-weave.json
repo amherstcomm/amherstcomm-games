@@ -1,0 +1,54 @@
+{
+  "date": "2026-11-06",
+  "byDifficulty": {
+    "easy": {
+      "clue": "On the rise",
+      "cols": 6,
+      "board": [
+        "fdbabc",
+        "oaesra",
+        "crbukg",
+        "barmeu",
+        "oicpet",
+        "ccetct",
+        "hhieth",
+        "eaalla"
+      ],
+      "answers": "eyJzcGFuZ3JhbSI6eyJ3IjoiYnJlYWRiYXNrZXQiLCJwYXRoIjpbMTgsMTMsOCw3LDEsMiwzLDksMTYsMjIsMjldfSwid29yZHMiOlt7InciOiJmb2NhY2NpYSIsInBhdGgiOlswLDYsMTIsMTksMjYsMzEsMzgsNDNdfSx7InciOiJiYWd1ZXR0ZSIsInBhdGgiOls0LDExLDE3LDIzLDI4LDM1LDQwLDM5XX0seyJ3IjoiY3J1bXBldCIsInBhdGgiOls1LDEwLDE1LDIxLDI3LDMyLDMzXX0seyJ3IjoiYnJpb2NoZSIsInBhdGgiOlsxNCwyMCwyNSwyNCwzMCwzNiw0Ml19LHsidyI6ImNoYWxsYWgiLCJwYXRoIjpbMzQsNDEsNDcsNDYsNDUsNDQsMzddfV19"
+    },
+    "hard": {
+      "clue": "Paint swatches",
+      "cols": 7,
+      "board": [
+        "omavstl",
+        "caeucae",
+        "hzumear",
+        "ergratl",
+        "dowhreo",
+        "lrooeel",
+        "olcocil",
+        "coirnvn",
+        "larmsoe"
+      ],
+      "answers": "eyJzcGFuZ3JhbSI6eyJ3IjoiY29sb3J3aGVlbCIsInBhdGgiOls0OSw0Miw0MywzNywzNiwzMCwzMSwzOSw0MCw0OF19LCJ3b3JkcyI6W3sidyI6Im9jaHJlIiwicGF0aCI6WzAsNywxNCwyMiwyMV19LHsidyI6Im1hdXZlIiwicGF0aCI6WzEsMiwxMCwzLDldfSx7InciOiJzY2FybGV0IiwicGF0aCI6WzQsMTEsMTksMjAsMjcsMzMsMjZdfSx7InciOiJ0ZWFsIiwicGF0aCI6WzUsMTMsMTIsNl19LHsidyI6ImF6dXJlIiwicGF0aCI6WzgsMTUsMTYsMjQsMThdfSx7InciOiJtYXJvb24iLCJwYXRoIjpbMTcsMjUsMzIsMzgsNDUsNTNdfSx7InciOiJnb2xkIiwicGF0aCI6WzIzLDI5LDM1LDI4XX0seyJ3Ijoib2xpdmUiLCJwYXRoIjpbMzQsNDEsNDcsNTQsNjJdfSx7InciOiJjb3JhbCIsInBhdGgiOls0NCw1MCw1OCw1Nyw1Nl19LHsidyI6ImNyaW1zb24iLCJwYXRoIjpbNDYsNTIsNTEsNTksNjAsNjEsNTVdfV19"
+    },
+    "extreme": {
+      "clue": "On the side",
+      "cols": 8,
+      "board": [
+        "pklevwas",
+        "ricigiba",
+        "elnehrpe",
+        "suisgsas",
+        "rypaamtv",
+        "alilruoy",
+        "oisktast",
+        "nocaenra",
+        "cdhtettr",
+        "puimards"
+      ],
+      "answers": "eyJzcGFuZ3JhbSI6eyJ3IjoiY29uZGltZW50cyIsInBhdGgiOls2NCw1Nyw1Niw2NSw3NCw3NSw2OCw2MSw3MCw3OV19LCJ3b3JkcyI6W3sidyI6InBpY2tsZSIsInBhdGgiOlswLDksMTAsMSwyLDNdfSx7InciOiJ2aW5lZ2FyIiwicGF0aCI6WzQsMTEsMTgsMTksMjgsMzUsNDRdfSx7InciOiJ3YXNhYmkiLCJwYXRoIjpbNSw2LDcsMTUsMTQsMTNdfSx7InciOiJyZWxpc2giLCJwYXRoIjpbOCwxNiwxNywyNiwyNywyMF19LHsidyI6ImdyYXZ5IiwicGF0aCI6WzEyLDIxLDMwLDM5LDQ3XX0seyJ3IjoicGVzdG8iLCJwYXRoIjpbMjIsMjMsMzEsMzgsNDZdfSx7InciOiJzeXJ1cCIsInBhdGgiOlsyNCwzMywzMiwyNSwzNF19LHsidyI6InNhbHNhIiwicGF0aCI6WzI5LDM2LDQzLDUwLDU5XX0seyJ3IjoibXVzdGFyZCIsInBhdGgiOlszNyw0NSw1NCw1NSw2Myw3MSw3OF19LHsidyI6ImFpb2xpIiwicGF0aCI6WzQwLDQ5LDQ4LDQxLDQyXX0seyJ3Ijoia2V0Y2h1cCIsInBhdGgiOls1MSw2MCw2Nyw1OCw2Niw3Myw3Ml19LHsidyI6InRhcnRhciIsInBhdGgiOls1Miw1Myw2Miw2OSw3Niw3N119XX0="
+    }
+  },
+  "fetchedAt": "2026-11-06T15:57:27.723Z"
+}

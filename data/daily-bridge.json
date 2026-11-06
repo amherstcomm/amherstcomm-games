@@ -1,0 +1,84 @@
+{
+  "date": "2026-11-06",
+  "byDifficulty": {
+    "easy": {
+      "prompts": [
+        {
+          "x": "turn",
+          "y": "bear"
+        },
+        {
+          "x": "wash",
+          "y": "patient"
+        },
+        {
+          "x": "bed",
+          "y": "handle"
+        },
+        {
+          "x": "author",
+          "y": "shape"
+        },
+        {
+          "x": "copper",
+          "y": "light"
+        }
+      ],
+      "answers": "WyJvdmVyIiwib3V0IiwicGFuIiwic2hpcCIsImhlYWQiXQ==",
+      "hints": 3
+    },
+    "hard": {
+      "prompts": [
+        {
+          "x": "cease",
+          "y": "wall"
+        },
+        {
+          "x": "account",
+          "y": "eater"
+        },
+        {
+          "x": "hatch",
+          "y": "log"
+        },
+        {
+          "x": "low",
+          "y": "play"
+        },
+        {
+          "x": "free",
+          "y": "pick"
+        }
+      ],
+      "answers": "WyJmaXJlIiwiYW50IiwiYmFjayIsImRvd24iLCJoYW5kIl0=",
+      "hints": 1
+    },
+    "extreme": {
+      "prompts": [
+        {
+          "x": "crow",
+          "y": "rack"
+        },
+        {
+          "x": "child",
+          "y": "wise"
+        },
+        {
+          "x": "under",
+          "y": "proof"
+        },
+        {
+          "x": "bell",
+          "y": "scotch"
+        },
+        {
+          "x": "brother",
+          "y": "wink"
+        }
+      ],
+      "answers": "WyJiYXIiLCJsaWtlIiwid2F0ZXIiLCJob3AiLCJob29kIl0=",
+      "hints": 0
+    }
+  },
+  "fetchedAt": "2026-11-06T15:57:27.723Z"
+}

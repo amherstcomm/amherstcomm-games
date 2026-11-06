@@ -1,0 +1,33 @@
+{
+  "date": "2026-11-06",
+  "byDifficulty": {
+    "easy": {
+      "sides": [
+        "tlg",
+        "sbo",
+        "ryh",
+        "uki"
+      ],
+      "par": 2
+    },
+    "hard": {
+      "sides": [
+        "rlg",
+        "aeb",
+        "ihx",
+        "tnz"
+      ],
+      "par": 2
+    },
+    "extreme": {
+      "sides": [
+        "sci",
+        "thm",
+        "rpl",
+        "eoy"
+      ],
+      "par": 2
+    }
+  },
+  "fetchedAt": "2026-11-06T15:57:27.723Z"
+}
