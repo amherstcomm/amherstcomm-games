@@ -14,7 +14,7 @@ import { PALETTES, PaletteContext, resolveTheme, TEXT_SCALES, THEME_MODES, useTh
 import { PrefsContext } from '@/prefs';
 import OnboardingCard from '@/OnboardingCard';
 import { useModalA11y } from '@/useModalA11y';
-import { Camera, Combine, Flag as FlagIcon, Gift, Radio, SlidersHorizontal } from 'lucide-react';
+import { Camera, Combine, Flag as FlagIcon, Gavel, Gift, Radio, SlidersHorizontal } from 'lucide-react';
 import BridgeGame, { type BridgeGameHandle } from '@/BridgeGame';
 import GameMenu from '@/GameMenu';
 import LadderIcon from '@/LadderIcon';
@@ -37,6 +37,8 @@ import { entryGame, entryRoute } from '@/routing/entry';
 import ContestView from '@/ContestView';
 import { readContestsOn } from '@/contests';
 import GiveawaysView from '@/GiveawaysView';
+import AuctionsView from '@/AuctionsView';
+import { readAuctions } from '@/auctions';
 import { readGiveaways, readGiveawayTriviaSessions } from '@/giveaways';
 import {
   gameFeature, FEED_NAME, GAME_NAME } from '@/games';
@@ -284,6 +286,7 @@ function App() {
     nav.page.kind === 'contest' ||
     // Not a game, so a tournament locking the site does not lock it out.
     nav.page.kind === 'giveaways' ||
+    nav.page.kind === 'auctions' ||
     nav.page.kind === 'admin' ||
     nav.page.kind === 'join' ||
     nav.page.kind === 'scores'
@@ -339,6 +342,8 @@ function App() {
   // for either.
   const [giveawaysNow, setGiveawaysNow] = useState(0);
   const [canGive, setCanGive] = useState(false);
+  // Auctions taking bids, on the same terms: run by the same people.
+  const [auctionsNow, setAuctionsNow] = useState(0);
   const [learnMode, setLearnMode] = useState(entryGame()?.view === 'learn');
   const [theme, setTheme] = useState<ThemeMode>(initial.theme);
   const [palette, setPalette] = useState<Palette>(initial.palette);
@@ -373,6 +378,7 @@ function App() {
       setContestsNow(0);
       setGiveawaysNow(0);
       setCanGive(false);
+      setAuctionsNow(0);
       return;
     }
     let alive = true;
@@ -389,6 +395,9 @@ function App() {
       if (!alive || !got.ok) return;
       setGiveawaysNow(got.giveaways.filter((g) => g.status === 'open' || g.status === 'drawing').length);
       setCanGive(got.can_manage);
+    });
+    void readAuctions().then((got) => {
+      if (alive && got.ok) setAuctionsNow(got.auctions.filter((a) => a.state === 'open').length);
     });
     window.addEventListener('focus', count);
     return () => {
@@ -1267,6 +1276,7 @@ function App() {
           {reportPage?.kind === 'giveaways' && (
             <GiveawaysView giveaway={reportPage.giveaway} view={reportPage.view} link={pageLink} />
           )}
+          {reportPage?.kind === 'auctions' && <AuctionsView auction={reportPage.auction} link={pageLink} />}
           {reportPage?.kind === 'admin' && <AdminSettings
               tab={reportPage.tab}
               tabLink={(tab) => pageLink({ kind: 'admin', tab })}
@@ -1729,6 +1739,15 @@ function App() {
               >
                 <Gift className="w-3.5 h-3.5" aria-hidden="true" />
                 {giveawaysNow > 0 ? `Giveaways (${giveawaysNow})` : 'Giveaways'}
+              </RouteLink>
+            )}
+            {(auctionsNow > 0 || canGive) && (
+              <RouteLink
+                {...pageLink({ kind: 'auctions', auction: null })}
+                className="inline-flex items-center gap-1.5 text-accent hover:brightness-110 transition"
+              >
+                <Gavel className="w-3.5 h-3.5" aria-hidden="true" />
+                {auctionsNow > 0 ? `Auctions (${auctionsNow})` : 'Auctions'}
               </RouteLink>
             )}
             {canSetUp && sessionsOn && (

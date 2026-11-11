@@ -81,7 +81,9 @@ test('and one that joins both is taken', async ({ page }) => {
 test('a hint is spent on one prompt and comes out of the budget', async ({ page }) => {
   await page.goto('/daily/bridge');
   await expect(page.getByText(/3 left/)).toBeVisible();
-  await page.getByRole('button', { name: 'Length' }).click();
+  // exact: a prompt can contain the word itself ("length ? crack" did), and
+  // a prompt is a button too
+  await page.getByRole('button', { name: 'Length', exact: true }).click();
   await expect(page.getByText(/2 left/)).toBeVisible();
   // exactly one row now states a length; the other four are untouched
   await expect(rows(page).filter({ hasText: /\d+ letters/ })).toHaveCount(1);

@@ -129,6 +129,9 @@ export type Route =
   // replayed -- the last on its own address because it goes on a screen, or
   // gets recorded, and a link to it is the thing somebody sends round.
   | { kind: 'giveaways'; giveaway: string | null; view: GiveawayView }
+  // An auction, or the list of them. Its own address because one gets sent
+  // round in an email, and somebody outbid comes back to it.
+  | { kind: 'auctions'; auction: string | null }
   // A live session. Two addresses for the same room: the one everybody opens,
   // and the presenter's, which shows the answer and the controls. Separate
   // addresses rather than a mode on one page, because the presenter's screen
@@ -181,6 +184,8 @@ export function pathOf(route: Route): string {
       if (route.view === 'history') return '/giveaways/history';
       if (!route.giveaway) return '/giveaways';
       return route.view === 'replay' ? `/giveaways/${route.giveaway}/replay` : `/giveaways/${route.giveaway}`;
+    case 'auctions':
+      return route.auction ? `/auctions/${route.auction}` : '/auctions';
     case 'live':
       return route.host ? `/live/${route.session}/host` : `/live/${route.session}`;
     case 'sessions':
@@ -253,6 +258,8 @@ export function titleOf(route: Route): string {
       return `Contest${suffix}`;
     case 'giveaways':
       return `${route.view === 'history' ? 'Giveaway history' : route.view === 'replay' ? 'The drawing' : 'Giveaways'}${suffix}`;
+    case 'auctions':
+      return `Auctions${suffix}`;
     case 'live':
       // The presenter's title says so, because this address goes on a
       // projector and the tab is the last thing anyone checks before it does.
@@ -328,6 +335,9 @@ export function parsePath(pathname: string): Route | null {
   // /contest and /contest/<id>. A bare /contest is the list, which is what an
   // address somebody half-remembers should land on.
   if (first === 'contest') return { kind: 'contest', contest: second || null };
+
+  // /auctions and /auctions/<id>.
+  if (first === 'auctions') return { kind: 'auctions', auction: second || null };
 
   // /giveaways, /giveaways/history, /giveaways/<id> and /giveaways/<id>/replay.
   if (first === 'giveaways') {

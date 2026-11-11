@@ -165,6 +165,8 @@ describe('the overlay table', () => {
       'contest',
       // and giveaways, whose drawings get sent round as links
       'giveaways',
+      // and auctions, sent round the same way and come back to when outbid
+      'auctions',
       // a live session is a page you stay on, not something over a board
       'live',
       // and so is building one — Back from the editor should leave it, not
