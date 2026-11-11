@@ -25625,3 +25625,710 @@ begin
               end);
 end;
 $fn$;
+
+-- ---------------------------------------------------------------------------
+-- Auctions
+-- ---------------------------------------------------------------------------
+--
+-- Somebody donates a signed ball, a day off, a parking spot, and the company
+-- bids on it. The money is real and changes hands somewhere else -- cash, a
+-- cheque, payroll -- so what this keeps is who bid what and when, who won, and
+-- whether they have paid. Nothing here takes a payment.
+--
+-- An auction holds items. Most share the auction's closing time; any item may
+-- close on its own, which is also how a single item is put up on its own: an
+-- auction with one thing in it.
+--
+-- Two ways of bidding, chosen per auction:
+--
+--   open     everybody sees the highest bid, and a bid has to beat it by the
+--            item's increment
+--   sealed   one bid each, changed or taken back until it closes; nobody sees
+--            anybody else's until then, and the highest wins -- the earliest of
+--            them on a tie
+--
+-- And two ways of ending an open one: on the dot, or -- extend_minutes above
+-- zero -- with a late bid pushing the close back, so the last second is not
+-- the only one that counts. A sealed bid cannot be sniped, because there is
+-- nothing to see to snipe, so a sealed item always closes on time.
+--
+-- Whole dollars. An internal auction is bid in fives and tens, and an integer
+-- is one less thing to round.
+--
+-- Run by whoever runs giveaways: the same people, holding the same prizes.
+
+create table if not exists public.auctions (
+  id uuid primary key default gen_random_uuid(),
+  title text not null check (char_length(btrim(title)) between 1 and 80),
+  blurb text check (blurb is null or char_length(blurb) <= 2000),
+  -- How the winners pay, in the organiser's words: who to, by when, how.
+  payment_note text check (payment_note is null or char_length(payment_note) <= 500),
+  bidding text not null default 'open' check (bidding in ('open', 'sealed')),
+  -- Zero is a hard close.
+  extend_minutes int not null default 2 check (extend_minutes between 0 and 30),
+  opens_at timestamptz not null,
+  closes_at timestamptz not null,
+  created_by uuid references auth.users (id) on delete set null,
+  created_at timestamptz not null default now(),
+  check (closes_at > opens_at)
+);
+
+create table if not exists public.auction_items (
+  id uuid primary key default gen_random_uuid(),
+  auction_id uuid not null references public.auctions (id) on delete cascade,
+  title text not null check (char_length(btrim(title)) between 1 and 80),
+  blurb text check (blurb is null or char_length(blurb) <= 1000),
+  donated_by text check (donated_by is null or char_length(donated_by) <= 120),
+  image_path text check (image_path is null or char_length(image_path) <= 400),
+  starting_bid int not null default 1 check (starting_bid between 1 and 1000000),
+  -- How much an open bid has to beat the last one by.
+  increment int not null default 1 check (increment between 1 and 100000),
+  -- Its own close, or null for the auction's.
+  closes_at timestamptz,
+  -- Where late bids have pushed the close to. Kept apart from closes_at so
+  -- that the time the organiser set is still the time the organiser set.
+  extended_to timestamptz,
+  paid_at timestamptz,
+  position int not null default 0,
+  created_at timestamptz not null default now()
+);
+create index if not exists auction_items_auction_idx
+  on public.auction_items (auction_id, position, created_at);
+
+create table if not exists public.auction_bids (
+  id uuid primary key default gen_random_uuid(),
+  item_id uuid not null references public.auction_items (id) on delete cascade,
+  bidder uuid not null references auth.users (id) on delete cascade,
+  amount int not null check (amount between 1 and 1000000),
+  created_at timestamptz not null default now()
+);
+create index if not exists auction_bids_item_idx
+  on public.auction_bids (item_id, amount desc, created_at);
+
+-- Everything an organiser did, and every bid taken off, in order. Money is
+-- involved, so "who removed my bid" has to have an answer.
+create table if not exists public.auction_log (
+  id bigint generated always as identity primary key,
+  at timestamptz not null default now(),
+  actor uuid references auth.users (id) on delete set null,
+  auction_id uuid references public.auctions (id) on delete set null,
+  action text not null,
+  detail jsonb not null default '{}'::jsonb
+);
+create index if not exists auction_log_auction_idx on public.auction_log (auction_id, id);
+
+alter table public.auctions enable row level security;
+alter table public.auction_items enable row level security;
+alter table public.auction_bids enable row level security;
+alter table public.auction_log enable row level security;
+revoke all on public.auctions, public.auction_items, public.auction_bids, public.auction_log
+  from public, anon, authenticated;
+
+create or replace function public.auction_note(p_auction uuid, p_action text, p_detail jsonb)
+returns void
+language sql
+security definer
+set search_path = ''
+as $fn$
+  insert into public.auction_log (actor, auction_id, action, detail)
+  values ((select auth.uid()), p_auction, p_action, coalesce(p_detail, '{}'::jsonb))
+$fn$;
+revoke all on function public.auction_note(uuid, text, jsonb) from public, anon, authenticated;
+
+-- When an item closes: its own time or the auction's, unless a late bid has
+-- pushed it later.
+create or replace function public.auction_item_closes(i public.auction_items)
+returns timestamptz
+language sql
+stable
+set search_path = ''
+as $fn$
+  select greatest(coalesce(i.closes_at, a.closes_at), i.extended_to)
+  from public.auctions a where a.id = i.auction_id
+$fn$;
+
+create or replace function public.auction_item_state(i public.auction_items)
+returns text
+language sql
+stable
+set search_path = ''
+as $fn$
+  select case
+    when now() < a.opens_at then 'soon'
+    when now() < public.auction_item_closes(i) then 'open'
+    else 'closed'
+  end
+  from public.auctions a where a.id = i.auction_id
+$fn$;
+
+-- What a person is called on an organiser's screen.
+create or replace function public.auction_person(p_user uuid)
+returns jsonb
+language sql
+stable
+security definer
+set search_path = ''
+as $fn$
+  select jsonb_build_object(
+    'id', u.id,
+    'name', coalesce((select p.display_name from public.profiles p where p.id = u.id), u.email),
+    'email', u.email)
+  from auth.users u where u.id = p_user
+$fn$;
+revoke all on function public.auction_person(uuid) from public, anon, authenticated;
+
+/*
+ * The auctions somebody can see. Bidders see one from the moment it opens to
+ * a fortnight after its last item closes -- long enough to find out they won
+ * and how to pay. Organisers see all of them, including the ones being set up.
+ */
+create or replace function public.auctions_list()
+returns jsonb
+language sql
+stable
+security definer
+set search_path = ''
+as $fn$
+  with a as (
+    select x.*,
+           coalesce((select max(public.auction_item_closes(i)) from public.auction_items i
+                     where i.auction_id = x.id), x.closes_at) as ends_at,
+           (select count(*) from public.auction_items i where i.auction_id = x.id) as n_items,
+           (select count(*) from public.auction_bids b
+            join public.auction_items i on i.id = b.item_id
+            where i.auction_id = x.id) as n_bids
+    from public.auctions x
+  )
+  select case
+    when (select auth.uid()) is null then jsonb_build_object('ok', false, 'reason', 'not signed in')
+    else jsonb_build_object(
+      'ok', true,
+      'can_manage', public.can('giveaways.manage'),
+      'auctions', coalesce((
+        select jsonb_agg(jsonb_build_object(
+                 'id', a.id, 'title', a.title, 'bidding', a.bidding,
+                 'opens_at', a.opens_at, 'ends_at', a.ends_at,
+                 'state', case when now() < a.opens_at then 'soon'
+                               when now() < a.ends_at then 'open'
+                               else 'closed' end,
+                 'items', a.n_items, 'bids', a.n_bids)
+               order by (now() >= a.ends_at), a.ends_at)
+        from a
+        where public.can('giveaways.manage')
+           or (a.opens_at <= now() and a.ends_at > now() - interval '14 days')), '[]'::jsonb))
+  end
+$fn$;
+revoke all on function public.auctions_list() from public, anon;
+grant execute on function public.auctions_list() to authenticated;
+
+/*
+ * One auction, as the person looking at it may see it.
+ *
+ * Open bidding shows the highest bid and the least the next one can be.
+ * Sealed shows how many have bid and nothing else until it closes -- not the
+ * highest, not whether yours is it. Nobody sees who anybody else is: a bidder
+ * is told whether they are winning, and an organiser, who has to collect the
+ * money, sees everybody.
+ */
+create or replace function public.auction_view(p_auction uuid)
+returns jsonb
+language plpgsql
+stable
+security definer
+set search_path = ''
+as $fn$
+declare
+  me uuid := (select auth.uid());
+  manage boolean := public.can('giveaways.manage');
+  a public.auctions;
+  v_items jsonb;
+  v_state text;
+begin
+  if me is null then
+    return jsonb_build_object('ok', false, 'reason', 'not signed in');
+  end if;
+  select * into a from public.auctions where id = p_auction;
+  if a.id is null or (not manage and now() < a.opens_at) then
+    return jsonb_build_object('ok', false, 'reason', 'no such auction');
+  end if;
+
+  select coalesce(jsonb_agg(z.item order by z.position, z.created_at), '[]'::jsonb)
+    into v_items
+  from (
+    select i.position, i.created_at,
+      jsonb_build_object(
+        'id', i.id, 'title', i.title, 'blurb', i.blurb, 'donated_by', i.donated_by,
+        'image_path', i.image_path, 'starting_bid', i.starting_bid, 'increment', i.increment,
+        'closes_at', s.closes,
+        'own_close', i.closes_at is not null,
+        'extended', i.extended_to is not null and i.extended_to > coalesce(i.closes_at, a.closes_at),
+        'state', s.state,
+        'bids', (select count(*) from public.auction_bids b where b.item_id = i.id),
+        'high', case when a.bidding = 'open' or s.state = 'closed' then top.amount end,
+        'min_bid', case when s.state <> 'closed' then
+                     case when a.bidding = 'open' and top.id is not null
+                          then top.amount + i.increment else i.starting_bid end end,
+        'my_bid', mine.amount,
+        'leading', case when (a.bidding = 'open' or s.state = 'closed') and mine.amount is not null
+                        then top.bidder = me end,
+        'won', s.state = 'closed' and top.bidder = me,
+        'paid', i.paid_at is not null)
+      || case when manage then jsonb_build_object(
+           'leader', case when top.id is not null then public.auction_person(top.bidder) end,
+           'leader_bid', top.amount,
+           'paid_at', i.paid_at,
+           'bid_list', coalesce((
+             select jsonb_agg(jsonb_build_object(
+                      'id', b.id, 'amount', b.amount, 'at', b.created_at,
+                      'who', public.auction_person(b.bidder))
+                    order by b.amount desc, b.created_at)
+             from public.auction_bids b where b.item_id = i.id), '[]'::jsonb))
+         else '{}'::jsonb end as item
+    from public.auction_items i
+    cross join lateral (select public.auction_item_state(i) as state,
+                               public.auction_item_closes(i) as closes) s
+    left join lateral (select b.* from public.auction_bids b where b.item_id = i.id
+                       order by b.amount desc, b.created_at, b.id limit 1) top on true
+    left join lateral (select max(b.amount) as amount from public.auction_bids b
+                       where b.item_id = i.id and b.bidder = me) mine on true
+    where i.auction_id = a.id
+  ) z;
+
+  v_state := case
+    when now() < a.opens_at then 'soon'
+    when now() < coalesce((select max(public.auction_item_closes(i)) from public.auction_items i
+                           where i.auction_id = a.id), a.closes_at) then 'open'
+    else 'closed' end;
+
+  return jsonb_build_object(
+    'ok', true,
+    'can_manage', manage,
+    'auction', jsonb_build_object(
+      'id', a.id, 'title', a.title, 'blurb', a.blurb, 'payment_note', a.payment_note,
+      'bidding', a.bidding, 'extend_minutes', a.extend_minutes,
+      'opens_at', a.opens_at, 'closes_at', a.closes_at, 'state', v_state),
+    'items', v_items,
+    'log', case when manage then coalesce((
+      select jsonb_agg(jsonb_build_object(
+               'at', l.at, 'action', l.action, 'detail', l.detail,
+               'actor', (select coalesce(p.display_name, u.email) from auth.users u
+                         left join public.profiles p on p.id = u.id where u.id = l.actor))
+             order by l.id desc)
+      from (select * from public.auction_log where auction_id = a.id
+            order by id desc limit 100) l), '[]'::jsonb) end);
+end;
+$fn$;
+revoke all on function public.auction_view(uuid) from public, anon;
+grant execute on function public.auction_view(uuid) to authenticated;
+
+/*
+ * A bid.
+ *
+ * The item's row is locked first, so two people bidding the same amount in the
+ * same second are put in an order rather than both told they lead. Open: it
+ * has to beat the highest by the increment, and the highest bidder cannot bid
+ * against themselves. Sealed: a second bid replaces the first, and counts from
+ * when it was changed for the tie-break, since that is when it was made.
+ */
+create or replace function public.place_auction_bid(p_item uuid, p_amount int)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $fn$
+declare
+  me uuid := (select auth.uid());
+  i public.auction_items;
+  a public.auctions;
+  top public.auction_bids;
+  v_state text;
+  v_least int;
+  pushed boolean := false;
+begin
+  if me is null then
+    return jsonb_build_object('ok', false, 'reason', 'sign in to bid');
+  end if;
+  select * into i from public.auction_items where id = p_item for update;
+  if i.id is null then
+    return jsonb_build_object('ok', false, 'reason', 'no such item');
+  end if;
+  select * into a from public.auctions where id = i.auction_id;
+  v_state := public.auction_item_state(i);
+  if v_state = 'soon' then
+    return jsonb_build_object('ok', false, 'reason', 'bidding has not opened yet');
+  elsif v_state = 'closed' then
+    return jsonb_build_object('ok', false, 'reason', 'bidding on this has closed');
+  end if;
+  if p_amount is null or p_amount < 1 or p_amount > 1000000 then
+    return jsonb_build_object('ok', false, 'reason', 'that is not an amount that can be bid');
+  end if;
+
+  if a.bidding = 'open' then
+    select * into top from public.auction_bids b where b.item_id = p_item
+    order by b.amount desc, b.created_at, b.id limit 1;
+    if top.bidder = me then
+      return jsonb_build_object('ok', false, 'reason', 'you are already the highest bidder');
+    end if;
+    v_least := case when top.id is null then i.starting_bid else top.amount + i.increment end;
+    if p_amount < v_least then
+      return jsonb_build_object('ok', false, 'reason', format('the least you can bid now is $%s', v_least),
+                                'min_bid', v_least);
+    end if;
+    insert into public.auction_bids (item_id, bidder, amount) values (p_item, me, p_amount);
+    -- A bid inside the last few minutes moves the close to a few minutes from
+    -- now, so whoever it beat has the same few minutes to answer.
+    if a.extend_minutes > 0
+       and public.auction_item_closes(i) - now() < make_interval(mins => a.extend_minutes) then
+      update public.auction_items
+         set extended_to = now() + make_interval(mins => a.extend_minutes)
+       where id = p_item;
+      pushed := true;
+    end if;
+  else
+    if p_amount < i.starting_bid then
+      return jsonb_build_object('ok', false, 'reason', format('bids on this start at $%s', i.starting_bid),
+                                'min_bid', i.starting_bid);
+    end if;
+    update public.auction_bids set amount = p_amount, created_at = now()
+     where item_id = p_item and bidder = me;
+    if not found then
+      insert into public.auction_bids (item_id, bidder, amount) values (p_item, me, p_amount);
+    end if;
+  end if;
+
+  return jsonb_build_object('ok', true, 'extended', pushed);
+end;
+$fn$;
+revoke all on function public.place_auction_bid(uuid, int) from public, anon;
+grant execute on function public.place_auction_bid(uuid, int) to authenticated;
+
+-- Taking a sealed bid back, while it is still open. An open bid stays: others
+-- have bid against it, and taking it away would leave them bidding against
+-- nothing. An organiser can still remove one -- see remove_auction_bid.
+create or replace function public.withdraw_auction_bid(p_item uuid)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $fn$
+declare
+  me uuid := (select auth.uid());
+  i public.auction_items;
+begin
+  select * into i from public.auction_items where id = p_item for update;
+  if me is null or i.id is null then
+    return jsonb_build_object('ok', false, 'reason', 'no such item');
+  end if;
+  if (select bidding from public.auctions where id = i.auction_id) <> 'sealed' then
+    return jsonb_build_object('ok', false, 'reason', 'only a sealed bid can be taken back');
+  end if;
+  if public.auction_item_state(i) <> 'open' then
+    return jsonb_build_object('ok', false, 'reason', 'bidding on this has closed');
+  end if;
+  delete from public.auction_bids where item_id = p_item and bidder = me;
+  return jsonb_build_object('ok', true);
+end;
+$fn$;
+revoke all on function public.withdraw_auction_bid(uuid) from public, anon;
+grant execute on function public.withdraw_auction_bid(uuid) to authenticated;
+
+-- ---------------------------------------------------------------------------
+-- Running one
+-- ---------------------------------------------------------------------------
+
+create or replace function public.save_auction(
+  p_id uuid,
+  p_title text,
+  p_blurb text,
+  p_payment_note text,
+  p_bidding text,
+  p_extend_minutes int,
+  p_opens_at timestamptz,
+  p_closes_at timestamptz
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $fn$
+declare
+  old public.auctions;
+  v_id uuid;
+begin
+  if not public.can('giveaways.manage') then
+    return jsonb_build_object('ok', false, 'reason', 'not allowed');
+  end if;
+  if char_length(btrim(coalesce(p_title, ''))) not between 1 and 80 then
+    return jsonb_build_object('ok', false, 'reason', 'it needs a name, up to 80 characters');
+  end if;
+  if p_bidding not in ('open', 'sealed') then
+    return jsonb_build_object('ok', false, 'reason', 'bidding is open or sealed');
+  end if;
+  if p_opens_at is null or p_closes_at is null then
+    return jsonb_build_object('ok', false, 'reason', 'it needs an opening and a closing time');
+  end if;
+  if p_closes_at <= p_opens_at then
+    return jsonb_build_object('ok', false, 'reason', 'it has to close after it opens');
+  end if;
+  if coalesce(p_extend_minutes, 0) not between 0 and 30 then
+    return jsonb_build_object('ok', false, 'reason', 'a late bid can add up to 30 minutes');
+  end if;
+
+  if p_id is null then
+    insert into public.auctions (title, blurb, payment_note, bidding, extend_minutes,
+                                 opens_at, closes_at, created_by)
+    values (btrim(p_title), nullif(btrim(p_blurb), ''), nullif(btrim(p_payment_note), ''),
+            p_bidding, coalesce(p_extend_minutes, 0), p_opens_at, p_closes_at, (select auth.uid()))
+    returning id into v_id;
+    perform public.auction_note(v_id, 'created', jsonb_build_object('title', btrim(p_title)));
+    return jsonb_build_object('ok', true, 'id', v_id);
+  end if;
+
+  select * into old from public.auctions where id = p_id for update;
+  if old.id is null then
+    return jsonb_build_object('ok', false, 'reason', 'no such auction');
+  end if;
+  -- Switching between open and sealed with bids in would turn bids made in
+  -- the open into secrets, or the other way round.
+  if p_bidding <> old.bidding and exists (
+       select 1 from public.auction_bids b join public.auction_items i on i.id = b.item_id
+       where i.auction_id = p_id) then
+    return jsonb_build_object('ok', false, 'reason', 'it has bids, so it cannot switch between open and sealed');
+  end if;
+  update public.auctions
+     set title = btrim(p_title), blurb = nullif(btrim(p_blurb), ''),
+         payment_note = nullif(btrim(p_payment_note), ''), bidding = p_bidding,
+         extend_minutes = coalesce(p_extend_minutes, 0),
+         opens_at = p_opens_at, closes_at = p_closes_at
+   where id = p_id;
+  -- A new closing time is a new plan: what late bids had added to the old
+  -- one goes, on the items that close with the auction.
+  if p_closes_at <> old.closes_at then
+    update public.auction_items set extended_to = null
+     where auction_id = p_id and closes_at is null;
+  end if;
+  perform public.auction_note(p_id, 'changed', jsonb_build_object(
+    'title', btrim(p_title),
+    'closes_at', case when p_closes_at <> old.closes_at then p_closes_at end));
+  return jsonb_build_object('ok', true, 'id', p_id);
+end;
+$fn$;
+revoke all on function public.save_auction(uuid, text, text, text, text, int, timestamptz, timestamptz)
+  from public, anon;
+grant execute on function public.save_auction(uuid, text, text, text, text, int, timestamptz, timestamptz)
+  to authenticated;
+
+create or replace function public.delete_auction(p_id uuid)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $fn$
+declare
+  a public.auctions;
+begin
+  if not public.can('giveaways.manage') then
+    return jsonb_build_object('ok', false, 'reason', 'not allowed');
+  end if;
+  select * into a from public.auctions where id = p_id;
+  if a.id is null then
+    return jsonb_build_object('ok', false, 'reason', 'no such auction');
+  end if;
+  perform public.auction_note(p_id, 'deleted', jsonb_build_object(
+    'title', a.title,
+    'bids', (select count(*) from public.auction_bids b join public.auction_items i on i.id = b.item_id
+             where i.auction_id = p_id)));
+  delete from public.auctions where id = p_id;
+  return jsonb_build_object('ok', true);
+end;
+$fn$;
+revoke all on function public.delete_auction(uuid) from public, anon;
+grant execute on function public.delete_auction(uuid) to authenticated;
+
+create or replace function public.save_auction_item(
+  p_auction uuid,
+  p_item uuid,
+  p_title text,
+  p_blurb text,
+  p_donated_by text,
+  p_image_path text,
+  p_starting_bid int,
+  p_increment int,
+  p_closes_at timestamptz
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $fn$
+declare
+  a public.auctions;
+  old public.auction_items;
+  v_id uuid;
+begin
+  if not public.can('giveaways.manage') then
+    return jsonb_build_object('ok', false, 'reason', 'not allowed');
+  end if;
+  select * into a from public.auctions where id = p_auction;
+  if a.id is null then
+    return jsonb_build_object('ok', false, 'reason', 'no such auction');
+  end if;
+  if char_length(btrim(coalesce(p_title, ''))) not between 1 and 80 then
+    return jsonb_build_object('ok', false, 'reason', 'it needs a name, up to 80 characters');
+  end if;
+  if coalesce(p_starting_bid, 0) not between 1 and 1000000 then
+    return jsonb_build_object('ok', false, 'reason', 'bidding has to start at $1 or more');
+  end if;
+  if coalesce(p_increment, 0) not between 1 and 100000 then
+    return jsonb_build_object('ok', false, 'reason', 'each bid has to go up by at least $1');
+  end if;
+  if p_closes_at is not null and p_closes_at <= a.opens_at then
+    return jsonb_build_object('ok', false, 'reason', 'it has to close after the auction opens');
+  end if;
+
+  if p_item is null then
+    insert into public.auction_items (auction_id, title, blurb, donated_by, image_path,
+                                      starting_bid, increment, closes_at, position)
+    values (p_auction, btrim(p_title), nullif(btrim(p_blurb), ''), nullif(btrim(p_donated_by), ''),
+            p_image_path, p_starting_bid, p_increment, p_closes_at,
+            coalesce((select max(position) + 1 from public.auction_items where auction_id = p_auction), 0))
+    returning id into v_id;
+    perform public.auction_note(p_auction, 'item added', jsonb_build_object('item', btrim(p_title)));
+    return jsonb_build_object('ok', true, 'id', v_id);
+  end if;
+
+  select * into old from public.auction_items where id = p_item and auction_id = p_auction for update;
+  if old.id is null then
+    return jsonb_build_object('ok', false, 'reason', 'no such item');
+  end if;
+  update public.auction_items
+     set title = btrim(p_title), blurb = nullif(btrim(p_blurb), ''),
+         donated_by = nullif(btrim(p_donated_by), ''), image_path = p_image_path,
+         starting_bid = p_starting_bid, increment = p_increment, closes_at = p_closes_at,
+         extended_to = case when p_closes_at is distinct from old.closes_at then null
+                            else extended_to end
+   where id = p_item;
+  perform public.auction_note(p_auction, 'item changed', jsonb_build_object('item', btrim(p_title)));
+  return jsonb_build_object('ok', true, 'id', p_item);
+end;
+$fn$;
+revoke all on function public.save_auction_item(uuid, uuid, text, text, text, text, int, int, timestamptz)
+  from public, anon;
+grant execute on function public.save_auction_item(uuid, uuid, text, text, text, text, int, int, timestamptz)
+  to authenticated;
+
+create or replace function public.delete_auction_item(p_item uuid)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $fn$
+declare
+  i public.auction_items;
+begin
+  if not public.can('giveaways.manage') then
+    return jsonb_build_object('ok', false, 'reason', 'not allowed');
+  end if;
+  select * into i from public.auction_items where id = p_item;
+  if i.id is null then
+    return jsonb_build_object('ok', false, 'reason', 'no such item');
+  end if;
+  perform public.auction_note(i.auction_id, 'item deleted', jsonb_build_object(
+    'item', i.title, 'bids', (select count(*) from public.auction_bids where item_id = p_item)));
+  delete from public.auction_items where id = p_item;
+  return jsonb_build_object('ok', true);
+end;
+$fn$;
+revoke all on function public.delete_auction_item(uuid) from public, anon;
+grant execute on function public.delete_auction_item(uuid) to authenticated;
+
+-- An organiser taking a bid off: a typo, a bid made in somebody else's name,
+-- or a winner who will not pay -- after which the next highest is the winner.
+-- Logged with who and how much, because it is somebody's money.
+create or replace function public.remove_auction_bid(p_bid uuid)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $fn$
+declare
+  b public.auction_bids;
+  i public.auction_items;
+begin
+  if not public.can('giveaways.manage') then
+    return jsonb_build_object('ok', false, 'reason', 'not allowed');
+  end if;
+  select * into b from public.auction_bids where id = p_bid;
+  if b.id is null then
+    return jsonb_build_object('ok', false, 'reason', 'no such bid');
+  end if;
+  select * into i from public.auction_items where id = b.item_id for update;
+  perform public.auction_note(i.auction_id, 'bid removed', jsonb_build_object(
+    'item', i.title, 'amount', b.amount, 'bid_at', b.created_at,
+    'bidder', public.auction_person(b.bidder)->>'name'));
+  delete from public.auction_bids where id = p_bid;
+  -- Paid was the old winner paying; it is not the new one's.
+  update public.auction_items set paid_at = null where id = i.id and paid_at is not null;
+  return jsonb_build_object('ok', true);
+end;
+$fn$;
+revoke all on function public.remove_auction_bid(uuid) from public, anon;
+grant execute on function public.remove_auction_bid(uuid) to authenticated;
+
+create or replace function public.set_auction_item_paid(p_item uuid, p_paid boolean)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $fn$
+declare
+  i public.auction_items;
+begin
+  if not public.can('giveaways.manage') then
+    return jsonb_build_object('ok', false, 'reason', 'not allowed');
+  end if;
+  select * into i from public.auction_items where id = p_item for update;
+  if i.id is null then
+    return jsonb_build_object('ok', false, 'reason', 'no such item');
+  end if;
+  if public.auction_item_state(i) <> 'closed' or not exists (
+       select 1 from public.auction_bids where item_id = p_item) then
+    return jsonb_build_object('ok', false, 'reason', 'only a sold item can be paid for');
+  end if;
+  update public.auction_items set paid_at = case when p_paid then now() end where id = p_item;
+  perform public.auction_note(i.auction_id, case when p_paid then 'paid' else 'not paid' end,
+    jsonb_build_object('item', i.title));
+  return jsonb_build_object('ok', true);
+end;
+$fn$;
+revoke all on function public.set_auction_item_paid(uuid, boolean) from public, anon;
+grant execute on function public.set_auction_item_paid(uuid, boolean) to authenticated;
+
+-- Item pictures: a private bucket like the others, read by anybody signed in,
+-- written only by people who run auctions, each into their own folder.
+do $$
+begin
+  if to_regnamespace('storage') is null then
+    raise notice 'no storage schema here; skipping the auction bucket';
+    return;
+  end if;
+  insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+  values ('auction-items', 'auction-items', false, 10485760,
+          array['image/jpeg', 'image/png', 'image/webp'])
+  on conflict (id) do update
+    set public = false, file_size_limit = 10485760, allowed_mime_types = excluded.allowed_mime_types;
+
+  execute $p$drop policy if exists "auction pictures are readable" on storage.objects$p$;
+  execute $p$create policy "auction pictures are readable" on storage.objects
+    for select to authenticated using (bucket_id = 'auction-items')$p$;
+  execute $p$drop policy if exists "an auction picture goes in its maker's folder" on storage.objects$p$;
+  execute $p$create policy "an auction picture goes in its maker's folder" on storage.objects
+    for insert to authenticated
+    with check (bucket_id = 'auction-items'
+                and (storage.foldername(name))[1] = (select auth.uid())::text
+                and public.can('giveaways.manage'))$p$;
+  execute $p$drop policy if exists "an auction picture is its maker's to take down" on storage.objects$p$;
+  execute $p$create policy "an auction picture is its maker's to take down" on storage.objects
+    for delete to authenticated
+    using (bucket_id = 'auction-items' and (storage.foldername(name))[1] = (select auth.uid())::text)$p$;
+end $$;

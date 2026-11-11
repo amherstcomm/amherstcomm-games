@@ -266,7 +266,7 @@ test('the people page hands somebody the running of giveaways, without a role', 
   const pat = page.locator('li', { hasText: 'Pat from HR' });
   // click, not check: the box shows what the server says, and this stub
   // does not change its answer
-  await pat.getByRole('checkbox', { name: 'Runs giveaways' }).click();
+  await pat.getByRole('checkbox', { name: 'Runs giveaways and auctions' }).click();
   await expect.poll(() => sent.find((s) => s.fn === 'set_person_capability')?.args).toEqual({
     p_user: 'u-pat', p_capability: 'giveaways.manage', p_on: true,
   });
