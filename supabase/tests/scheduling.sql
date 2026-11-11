@@ -82,7 +82,7 @@ where id = ((select v#>>'{}' from t where k='sweep'))::uuid;
 -- an open session — being the one who set it is the point of not being in it.
 set session "test.uid" = '33333333-3333-3333-3333-333333333333';
 select pg_temp.check('a window that passed while the site was quiet opens at the first visit',
-  (public.current_item(((select v#>>'{}' from t where k='sweep'))::uuid)->>'state') = 'open');
+  (public.current_item(((select v#>>'{}' from t where k='sweep'))::uuid)->>'state') = 'ready');
 set session "test.uid" = '11111111-1111-1111-1111-111111111111';
 
 -- ---------------------------------------------------------------------------
@@ -96,6 +96,7 @@ insert into t select 'shut-item', to_jsonb((select id from public.items
 set session "test.uid" = '33333333-3333-3333-3333-333333333333';
 -- Served first, because in an open session being served is what starts the
 -- clock on the question — see current_item.
+select public.begin_playing(((select v#>>'{}' from t where k='shut'))::uuid);
 select public.current_item(((select v#>>'{}' from t where k='shut'))::uuid);
 select pg_temp.check('while it is open, it can be answered',
   (public.answer_item(((select v#>>'{}' from t where k='shut-item'))::uuid, '"2021"')->>'ok')

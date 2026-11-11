@@ -37,6 +37,7 @@ insert into t select 'q2', public.save_item(pg_temp.id('sess'), null, 'choice', 
 select public.advance_session(pg_temp.id('sess'), 'start');
 
 set session "test.uid" = '0e000000-0000-0000-0000-000000000002';
+select public.begin_playing(pg_temp.id('sess'));
 select public.current_item(pg_temp.id('sess'));
 insert into t select 'a1', public.answer_item(pg_temp.id('q1'), '"a"'::jsonb);
 select pg_temp.check('a player answers the first question',
@@ -150,6 +151,7 @@ select pg_temp.check('extending it and reopening it releases its questions',
   and (select state from public.sessions where id = pg_temp.id('missed')) = 'live'
   and (select started_at is not null from public.sessions where id = pg_temp.id('missed')));
 set session "test.uid" = '0e000000-0000-0000-0000-000000000002';
+select public.begin_playing(pg_temp.id('missed'));
 insert into t select 'mnext', public.current_item(pg_temp.id('missed'));
 select pg_temp.check('so a player is asked it',
   (select v->>'state' from t where k = 'mnext') = 'open');

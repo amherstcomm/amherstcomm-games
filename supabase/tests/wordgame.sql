@@ -189,6 +189,7 @@ insert into public.words (word, len, sorted) values ('planet', 6, 'aelnpt')
 on conflict do nothing;
 
 set session "test.uid" = '33333333-3333-3333-3333-333333333333';
+select public.begin_playing(((select v->>'id' from t where k='open'))::uuid);
 select pg_temp.check('the board is what gets served first',
   (public.current_item(((select v->>'id' from t where k='open'))::uuid)->>'prompt')
     = 'Guess the word');
@@ -217,6 +218,7 @@ insert into t select 'after2', public.save_item(
   '{"options":["yes"]}'::jsonb, null);
 select public.advance_session(((select v->>'id' from t where k='open2'))::uuid, 'start');
 set session "test.uid" = '33333333-3333-3333-3333-333333333333';
+select public.begin_playing(((select v->>'id' from t where k='open2'))::uuid);
 select public.current_item(((select v->>'id' from t where k='open2'))::uuid);
 select public.guess_word(((select v->>'id' from t where k='og2'))::uuid, 'planet');
 select pg_temp.check('one of two guesses leaves them on the board',
