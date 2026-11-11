@@ -131,6 +131,30 @@ select pg_temp.check('in a presented session only the question the close caught 
   (select state from public.items where id = pg_temp.id('p1')) = 'locked'
   and (select state from public.items where id = pg_temp.id('p2')) = 'open');
 
-delete from public.sessions where id in (pg_temp.id('sess'), pg_temp.id('new'), pg_temp.id('live'));
+-- A window that passed with nobody visiting: the clock takes the session from
+-- draft straight to closed, so its questions were never released. Giving it a
+-- later end and reopening it has to release them, or it goes live with nothing
+-- to ask and tells everybody "that is all of them".
+insert into t select 'missed', public.create_session('Never visited', 'strict', 'open');
+insert into t select 'm1', public.save_item(pg_temp.id('missed'), null, 'choice', 'One',
+  '{"options":["a","b"]}'::jsonb, '{"correct":["a"]}'::jsonb);
+select public.set_session_schedule(pg_temp.id('missed'), now() - interval '2 days', now() - interval '1 day');
+select pg_temp.check('a window that passed unvisited closes it without releasing anything',
+  (select state from public.sessions where id = pg_temp.id('missed')) = 'closed'
+  and (select state from public.items where id = pg_temp.id('m1')) = 'pending'
+  and (select started_at is null from public.sessions where id = pg_temp.id('missed')));
+select public.set_session_schedule(pg_temp.id('missed'), null, now() + interval '7 days');
+select public.advance_session(pg_temp.id('missed'), 'reopen');
+select pg_temp.check('extending it and reopening it releases its questions',
+  (select state from public.items where id = pg_temp.id('m1')) = 'open'
+  and (select state from public.sessions where id = pg_temp.id('missed')) = 'live'
+  and (select started_at is not null from public.sessions where id = pg_temp.id('missed')));
+set session "test.uid" = '0e000000-0000-0000-0000-000000000002';
+insert into t select 'mnext', public.current_item(pg_temp.id('missed'));
+select pg_temp.check('so a player is asked it',
+  (select v->>'state' from t where k = 'mnext') = 'open');
+set session "test.uid" = '0e000000-0000-0000-0000-000000000001';
+
+delete from public.sessions where id in (pg_temp.id('sess'), pg_temp.id('new'), pg_temp.id('live'), pg_temp.id('missed'));
 
 \echo '--- reopening checks passed ---'
