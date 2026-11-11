@@ -5,8 +5,13 @@
 // have already played, and an honest account of what became of it.
 import { expect, test } from './fixtures';
 
+// The site's day, not the calendar's: it rolls at 3:15 a.m. Eastern, as the
+// page does (puzzleDayEt). Midnight here failed every run between 12:00 and
+// 3:15 a.m. Eastern, when the page still called it yesterday.
 const easternToday = () =>
-  new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York' }).format(new Date());
+  new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York' }).format(
+    new Date(Date.now() - (3 * 60 + 15) * 60_000)
+  );
 const plus = (date: string, n: number) =>
   new Date(new Date(`${date}T12:00:00Z`).getTime() + n * 86_400_000).toISOString().slice(0, 10);
 
