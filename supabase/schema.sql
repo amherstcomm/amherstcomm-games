@@ -26332,3 +26332,683 @@ begin
     for delete to authenticated
     using (bucket_id = 'auction-items' and (storage.foldername(name))[1] = (select auth.uid())::text)$p$;
 end $$;
+
+-- ---------------------------------------------------------------------------
+-- Auctions, continued: several pictures an item, the items' order, the home
+-- page, and email
+-- ---------------------------------------------------------------------------
+
+-- Pictures, in the organiser's order; the first is the one people see first.
+-- They replace image_path, whose one picture becomes the first of them.
+alter table public.auction_items add column if not exists pictures text[] not null default '{}';
+do $$
+begin
+  if exists (select 1 from information_schema.columns
+             where table_schema = 'public' and table_name = 'auction_items' and column_name = 'image_path') then
+    execute 'update public.auction_items set pictures = array[image_path] where image_path is not null and cardinality(pictures) = 0';
+    execute 'alter table public.auction_items drop column image_path';
+  end if;
+end $$;
+alter table public.auction_items drop constraint if exists auction_items_pictures_check;
+alter table public.auction_items add constraint auction_items_pictures_check check (cardinality(pictures) <= 8);
+
+-- When the winner of an item was told so; null until then. Taking the winning
+-- bid off clears it, so whoever wins instead is told too.
+alter table public.auction_items add column if not exists won_mailed_at timestamptz;
+
+create or replace function public.auction_view(p_auction uuid)
+returns jsonb
+language plpgsql
+stable
+security definer
+set search_path = ''
+as $fn$
+declare
+  me uuid := (select auth.uid());
+  manage boolean := public.can('giveaways.manage');
+  a public.auctions;
+  v_items jsonb;
+  v_state text;
+begin
+  if me is null then
+    return jsonb_build_object('ok', false, 'reason', 'not signed in');
+  end if;
+  select * into a from public.auctions where id = p_auction;
+  if a.id is null or (not manage and now() < a.opens_at) then
+    return jsonb_build_object('ok', false, 'reason', 'no such auction');
+  end if;
+
+  select coalesce(jsonb_agg(z.item order by z.position, z.created_at), '[]'::jsonb)
+    into v_items
+  from (
+    select i.position, i.created_at,
+      jsonb_build_object(
+        'id', i.id, 'title', i.title, 'blurb', i.blurb, 'donated_by', i.donated_by,
+        'pictures', to_jsonb(i.pictures), 'starting_bid', i.starting_bid, 'increment', i.increment,
+        'closes_at', s.closes,
+        'own_close', i.closes_at is not null,
+        'extended', i.extended_to is not null and i.extended_to > coalesce(i.closes_at, a.closes_at),
+        'state', s.state,
+        'bids', (select count(*) from public.auction_bids b where b.item_id = i.id),
+        'high', case when a.bidding = 'open' or s.state = 'closed' then top.amount end,
+        'min_bid', case when s.state <> 'closed' then
+                     case when a.bidding = 'open' and top.id is not null
+                          then top.amount + i.increment else i.starting_bid end end,
+        'my_bid', mine.amount,
+        'leading', case when (a.bidding = 'open' or s.state = 'closed') and mine.amount is not null
+                        then top.bidder = me end,
+        'won', s.state = 'closed' and top.bidder = me,
+        'paid', i.paid_at is not null)
+      || case when manage then jsonb_build_object(
+           'leader', case when top.id is not null then public.auction_person(top.bidder) end,
+           'leader_bid', top.amount,
+           'paid_at', i.paid_at,
+           'bid_list', coalesce((
+             select jsonb_agg(jsonb_build_object(
+                      'id', b.id, 'amount', b.amount, 'at', b.created_at,
+                      'who', public.auction_person(b.bidder))
+                    order by b.amount desc, b.created_at)
+             from public.auction_bids b where b.item_id = i.id), '[]'::jsonb))
+         else '{}'::jsonb end as item
+    from public.auction_items i
+    cross join lateral (select public.auction_item_state(i) as state,
+                               public.auction_item_closes(i) as closes) s
+    left join lateral (select b.* from public.auction_bids b where b.item_id = i.id
+                       order by b.amount desc, b.created_at, b.id limit 1) top on true
+    left join lateral (select max(b.amount) as amount from public.auction_bids b
+                       where b.item_id = i.id and b.bidder = me) mine on true
+    where i.auction_id = a.id
+  ) z;
+
+  v_state := case
+    when now() < a.opens_at then 'soon'
+    when now() < coalesce((select max(public.auction_item_closes(i)) from public.auction_items i
+                           where i.auction_id = a.id), a.closes_at) then 'open'
+    else 'closed' end;
+
+  return jsonb_build_object(
+    'ok', true,
+    'can_manage', manage,
+    'auction', jsonb_build_object(
+      'id', a.id, 'title', a.title, 'blurb', a.blurb, 'payment_note', a.payment_note,
+      'bidding', a.bidding, 'extend_minutes', a.extend_minutes,
+      'opens_at', a.opens_at, 'closes_at', a.closes_at, 'state', v_state),
+    'items', v_items,
+    'log', case when manage then coalesce((
+      select jsonb_agg(jsonb_build_object(
+               'at', l.at, 'action', l.action, 'detail', l.detail,
+               'actor', (select coalesce(p.display_name, u.email) from auth.users u
+                         left join public.profiles p on p.id = u.id where u.id = l.actor))
+             order by l.id desc)
+      from (select * from public.auction_log where auction_id = a.id
+            order by id desc limit 100) l), '[]'::jsonb) end);
+end;
+$fn$;
+
+revoke all on function public.auction_view(uuid) from public, anon;
+grant execute on function public.auction_view(uuid) to authenticated;
+
+
+-- The one-picture version goes: a parameter cannot change type in place.
+drop function if exists public.save_auction_item(uuid, uuid, text, text, text, text, int, int, timestamptz);
+
+create or replace function public.save_auction_item(
+  p_auction uuid,
+  p_item uuid,
+  p_title text,
+  p_blurb text,
+  p_donated_by text,
+  p_pictures text[],
+  p_starting_bid int,
+  p_increment int,
+  p_closes_at timestamptz
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $fn$
+declare
+  a public.auctions;
+  old public.auction_items;
+  v_id uuid;
+begin
+  if not public.can('giveaways.manage') then
+    return jsonb_build_object('ok', false, 'reason', 'not allowed');
+  end if;
+  select * into a from public.auctions where id = p_auction;
+  if a.id is null then
+    return jsonb_build_object('ok', false, 'reason', 'no such auction');
+  end if;
+  if char_length(btrim(coalesce(p_title, ''))) not between 1 and 80 then
+    return jsonb_build_object('ok', false, 'reason', 'it needs a name, up to 80 characters');
+  end if;
+  if coalesce(p_starting_bid, 0) not between 1 and 1000000 then
+    return jsonb_build_object('ok', false, 'reason', 'bidding has to start at $1 or more');
+  end if;
+  if coalesce(p_increment, 0) not between 1 and 100000 then
+    return jsonb_build_object('ok', false, 'reason', 'each bid has to go up by at least $1');
+  end if;
+  if cardinality(coalesce(p_pictures, '{}')) > 8 then
+    return jsonb_build_object('ok', false, 'reason', 'an item can have up to 8 pictures');
+  end if;
+  -- Paths the uploader writes, and nothing else: a picture is somebody's
+  -- folder in the auction bucket, not anywhere the caller likes.
+  if exists (select 1 from unnest(coalesce(p_pictures, '{}')) x
+             where x is null or x !~ '^[0-9a-f-]{36}/item-[0-9a-f-]{36}\.(jpg|png|webp)$') then
+    return jsonb_build_object('ok', false, 'reason', 'that is not a picture that was uploaded here');
+  end if;
+  if p_closes_at is not null and p_closes_at <= a.opens_at then
+    return jsonb_build_object('ok', false, 'reason', 'it has to close after the auction opens');
+  end if;
+
+  if p_item is null then
+    insert into public.auction_items (auction_id, title, blurb, donated_by, pictures,
+                                      starting_bid, increment, closes_at, position)
+    values (p_auction, btrim(p_title), nullif(btrim(p_blurb), ''), nullif(btrim(p_donated_by), ''),
+            coalesce(p_pictures, '{}'), p_starting_bid, p_increment, p_closes_at,
+            coalesce((select max(position) + 1 from public.auction_items where auction_id = p_auction), 0))
+    returning id into v_id;
+    perform public.auction_note(p_auction, 'item added', jsonb_build_object('item', btrim(p_title)));
+    return jsonb_build_object('ok', true, 'id', v_id);
+  end if;
+
+  select * into old from public.auction_items where id = p_item and auction_id = p_auction for update;
+  if old.id is null then
+    return jsonb_build_object('ok', false, 'reason', 'no such item');
+  end if;
+  update public.auction_items
+     set title = btrim(p_title), blurb = nullif(btrim(p_blurb), ''),
+         donated_by = nullif(btrim(p_donated_by), ''), pictures = coalesce(p_pictures, '{}'),
+         starting_bid = p_starting_bid, increment = p_increment, closes_at = p_closes_at,
+         extended_to = case when p_closes_at is distinct from old.closes_at then null
+                            else extended_to end
+   where id = p_item;
+  perform public.auction_note(p_auction, 'item changed', jsonb_build_object('item', btrim(p_title)));
+  return jsonb_build_object('ok', true, 'id', p_item);
+end;
+$fn$;
+
+revoke all on function public.save_auction_item(uuid, uuid, text, text, text, text[], int, int, timestamptz)
+  from public, anon;
+grant execute on function public.save_auction_item(uuid, uuid, text, text, text, text[], int, int, timestamptz)
+  to authenticated;
+
+
+-- The items in the order given, which has to be every item in the auction,
+-- each once: a list that has gone stale behind somebody else's change is
+-- refused rather than half applied.
+create or replace function public.order_auction_items(p_auction uuid, p_items uuid[])
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $fn$
+begin
+  if not public.can('giveaways.manage') then
+    return jsonb_build_object('ok', false, 'reason', 'not allowed');
+  end if;
+  if not exists (select 1 from public.auctions where id = p_auction) then
+    return jsonb_build_object('ok', false, 'reason', 'no such auction');
+  end if;
+  if coalesce(cardinality(p_items), 0) <> (select count(*) from public.auction_items where auction_id = p_auction)
+     or (select count(distinct x) from unnest(p_items) x) <> cardinality(p_items)
+     or exists (select 1 from unnest(p_items) x
+                where not exists (select 1 from public.auction_items i
+                                  where i.id = x and i.auction_id = p_auction)) then
+    return jsonb_build_object('ok', false, 'reason', 'the items have changed; reload and try again');
+  end if;
+  update public.auction_items i set position = o.n - 1
+    from unnest(p_items) with ordinality o(id, n)
+   where i.id = o.id and i.auction_id = p_auction;
+  return jsonb_build_object('ok', true);
+end;
+$fn$;
+revoke all on function public.order_auction_items(uuid, uuid[]) from public, anon;
+grant execute on function public.order_auction_items(uuid, uuid[]) to authenticated;
+
+
+-- Email: a bidder told when they are outbid, and a winner told they won.
+--
+-- The database only queues. A timer on the VM (ops/send-auction-mail.sh)
+-- claims what is waiting, sends it through Office 365 or Resend, and says how
+-- it went. Queued rather than sent from here because Postgres cannot send mail,
+-- and a bid should never wait on, or fail with, a mail server.
+--
+-- One waiting note per person, item and kind: outbid five times before the
+-- next run is one email, not five. And a note is checked again at the moment
+-- it is claimed -- somebody who has bid back to the top, or an item that has
+-- closed, is not told they are outbid; a winner whose bid an organiser took
+-- off is not told they won.
+create table if not exists public.auction_mail (
+  id bigint generated always as identity primary key,
+  kind text not null check (kind in ('outbid', 'won')),
+  user_id uuid not null references auth.users (id) on delete cascade,
+  item_id uuid not null references public.auction_items (id) on delete cascade,
+  created_at timestamptz not null default now(),
+  claimed_at timestamptz,
+  attempts int not null default 0,
+  done_at timestamptz,
+  outcome text check (outcome in ('sent', 'skipped', 'failed')),
+  last_error text
+);
+create unique index if not exists auction_mail_waiting_idx
+  on public.auction_mail (kind, user_id, item_id) where done_at is null;
+alter table public.auction_mail enable row level security;
+revoke all on public.auction_mail from public, anon, authenticated;
+
+create or replace function public.place_auction_bid(p_item uuid, p_amount int)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $fn$
+declare
+  me uuid := (select auth.uid());
+  i public.auction_items;
+  a public.auctions;
+  top public.auction_bids;
+  v_state text;
+  v_least int;
+  pushed boolean := false;
+begin
+  if me is null then
+    return jsonb_build_object('ok', false, 'reason', 'sign in to bid');
+  end if;
+  select * into i from public.auction_items where id = p_item for update;
+  if i.id is null then
+    return jsonb_build_object('ok', false, 'reason', 'no such item');
+  end if;
+  select * into a from public.auctions where id = i.auction_id;
+  v_state := public.auction_item_state(i);
+  if v_state = 'soon' then
+    return jsonb_build_object('ok', false, 'reason', 'bidding has not opened yet');
+  elsif v_state = 'closed' then
+    return jsonb_build_object('ok', false, 'reason', 'bidding on this has closed');
+  end if;
+  if p_amount is null or p_amount < 1 or p_amount > 1000000 then
+    return jsonb_build_object('ok', false, 'reason', 'that is not an amount that can be bid');
+  end if;
+
+  if a.bidding = 'open' then
+    select * into top from public.auction_bids b where b.item_id = p_item
+    order by b.amount desc, b.created_at, b.id limit 1;
+    if top.bidder = me then
+      return jsonb_build_object('ok', false, 'reason', 'you are already the highest bidder');
+    end if;
+    v_least := case when top.id is null then i.starting_bid else top.amount + i.increment end;
+    if p_amount < v_least then
+      return jsonb_build_object('ok', false, 'reason', format('the least you can bid now is $%s', v_least),
+                                'min_bid', v_least);
+    end if;
+    insert into public.auction_bids (item_id, bidder, amount) values (p_item, me, p_amount);
+    -- Whoever was on top is not any more, and hears about it.
+    if top.id is not null then
+      insert into public.auction_mail (kind, user_id, item_id) values ('outbid', top.bidder, p_item)
+      on conflict (kind, user_id, item_id) where done_at is null do nothing;
+    end if;
+    -- A bid inside the last few minutes moves the close to a few minutes from
+    -- now, so whoever it beat has the same few minutes to answer.
+    if a.extend_minutes > 0
+       and public.auction_item_closes(i) - now() < make_interval(mins => a.extend_minutes) then
+      update public.auction_items
+         set extended_to = now() + make_interval(mins => a.extend_minutes)
+       where id = p_item;
+      pushed := true;
+    end if;
+  else
+    if p_amount < i.starting_bid then
+      return jsonb_build_object('ok', false, 'reason', format('bids on this start at $%s', i.starting_bid),
+                                'min_bid', i.starting_bid);
+    end if;
+    update public.auction_bids set amount = p_amount, created_at = now()
+     where item_id = p_item and bidder = me;
+    if not found then
+      insert into public.auction_bids (item_id, bidder, amount) values (p_item, me, p_amount);
+    end if;
+  end if;
+
+  return jsonb_build_object('ok', true, 'extended', pushed);
+end;
+$fn$;
+
+revoke all on function public.place_auction_bid(uuid, int) from public, anon;
+grant execute on function public.place_auction_bid(uuid, int) to authenticated;
+
+create or replace function public.remove_auction_bid(p_bid uuid)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $fn$
+declare
+  b public.auction_bids;
+  i public.auction_items;
+  v_top boolean;
+begin
+  if not public.can('giveaways.manage') then
+    return jsonb_build_object('ok', false, 'reason', 'not allowed');
+  end if;
+  select * into b from public.auction_bids where id = p_bid;
+  if b.id is null then
+    return jsonb_build_object('ok', false, 'reason', 'no such bid');
+  end if;
+  select * into i from public.auction_items where id = b.item_id for update;
+  v_top := b.id = (select x.id from public.auction_bids x where x.item_id = i.id
+                   order by x.amount desc, x.created_at, x.id limit 1);
+  perform public.auction_note(i.auction_id, 'bid removed', jsonb_build_object(
+    'item', i.title, 'amount', b.amount, 'bid_at', b.created_at,
+    'bidder', public.auction_person(b.bidder)->>'name'));
+  delete from public.auction_bids where id = p_bid;
+  -- Only the top bid matters to these. Paid was the old winner paying, and
+  -- is not the new one's; and the new one has not been told they won.
+  if v_top then
+    update public.auction_items set paid_at = null, won_mailed_at = null
+     where id = i.id and (paid_at is not null or won_mailed_at is not null);
+  end if;
+  return jsonb_build_object('ok', true);
+end;
+$fn$;
+
+revoke all on function public.remove_auction_bid(uuid) from public, anon;
+grant execute on function public.remove_auction_bid(uuid) to authenticated;
+
+
+-- What the mail timer sends next, claimed so a second run does not send it
+-- again. Service role only: it hands back people's addresses.
+create or replace function public.auction_mail_claim(p_limit int default 20)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $fn$
+declare
+  v jsonb;
+begin
+  -- Winners of whatever has closed since the last look. A day back at most,
+  -- so the first run after this ships does not write to last month's winners,
+  -- and a timer that was off for a week does not either.
+  insert into public.auction_mail (kind, user_id, item_id)
+  select 'won', top.bidder, i.id
+  from public.auction_items i
+  cross join lateral (select public.auction_item_closes(i) as closes) c
+  join lateral (select b.bidder from public.auction_bids b where b.item_id = i.id
+                order by b.amount desc, b.created_at, b.id limit 1) top on true
+  where i.won_mailed_at is null and c.closes <= now() and c.closes > now() - interval '1 day'
+  on conflict do nothing;
+  update public.auction_items i set won_mailed_at = now()
+   where i.won_mailed_at is null
+     and public.auction_item_closes(i) <= now()
+     and exists (select 1 from public.auction_bids b where b.item_id = i.id);
+
+  -- What no longer holds is not sent.
+  update public.auction_mail m set done_at = now(), outcome = 'skipped', claimed_at = null
+   where m.done_at is null
+     and (
+       not exists (select 1 from auth.users u where u.id = m.user_id and coalesce(u.email, '') <> '')
+       or exists (
+         select 1 from public.auction_items i
+         left join lateral (select b.bidder from public.auction_bids b where b.item_id = i.id
+                            order by b.amount desc, b.created_at, b.id limit 1) top on true
+         where i.id = m.item_id
+           and case m.kind
+                 when 'outbid' then public.auction_item_state(i) = 'closed' or top.bidder = m.user_id
+                 when 'won' then top.bidder is distinct from m.user_id
+               end));
+
+  with picked as (
+    select m.id from public.auction_mail m
+    where m.done_at is null and m.attempts < 5
+      and (m.claimed_at is null or m.claimed_at < now() - interval '10 minutes')
+    order by m.id
+    limit greatest(coalesce(p_limit, 20), 1)
+    for update skip locked
+  ), marked as (
+    update public.auction_mail m set claimed_at = now(), attempts = m.attempts + 1
+      from picked where m.id = picked.id
+    returning m.id, m.kind, m.user_id, m.item_id
+  )
+  select coalesce(jsonb_agg(jsonb_build_object(
+           'id', k.id, 'kind', k.kind, 'to', u.email,
+           'name', coalesce(p.display_name, ''),
+           'item', i.title, 'auction', a.title, 'auction_id', a.id,
+           'high', top.amount, 'min_bid', top.amount + i.increment,
+           'closes_at', public.auction_item_closes(i),
+           'payment_note', a.payment_note)
+         order by k.id), '[]'::jsonb)
+    into v
+  from marked k
+  join auth.users u on u.id = k.user_id
+  left join public.profiles p on p.id = u.id
+  join public.auction_items i on i.id = k.item_id
+  join public.auctions a on a.id = i.auction_id
+  left join lateral (select b.amount from public.auction_bids b where b.item_id = i.id
+                     order by b.amount desc, b.created_at, b.id limit 1) top on true;
+  return jsonb_build_object('ok', true, 'mail', v);
+end;
+$fn$;
+revoke all on function public.auction_mail_claim(int) from public, anon, authenticated;
+grant execute on function public.auction_mail_claim(int) to service_role;
+
+-- How a claimed note went: null is sent. A failure goes back in the queue,
+-- tried again ten minutes on -- a mail server that said no a second ago will
+-- probably say it again -- five tries in all.
+create or replace function public.auction_mail_done(p_id bigint, p_error text default null)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $fn$
+begin
+  update public.auction_mail
+     set claimed_at = case when p_error is null then null else now() end,
+         last_error = p_error,
+         done_at = case when p_error is null or attempts >= 5 then now() end,
+         outcome = case when p_error is null then 'sent' when attempts >= 5 then 'failed' end
+   where id = p_id and done_at is null;
+  return jsonb_build_object('ok', found);
+end;
+$fn$;
+revoke all on function public.auction_mail_done(bigint, text) from public, anon, authenticated;
+grant execute on function public.auction_mail_done(bigint, text) to service_role;
+
+
+-- An auction on the home page, from when bidding opens until its last item
+-- closes, featured by whoever runs auctions.
+alter table public.home_features drop constraint if exists home_features_kind_check;
+alter table public.home_features add constraint home_features_kind_check
+  check (kind in ('session', 'giveaway', 'contest', 'tournament', 'auction'));
+
+create or replace function public.can_feature(p_kind text)
+returns boolean
+language sql
+stable
+security definer
+set search_path = ''
+as $fn$
+  select case p_kind
+    when 'giveaway' then public.can('giveaways.manage')
+    when 'auction' then public.can('giveaways.manage')
+    when 'session' then public.can('games.setup')
+    when 'contest' then public.can('games.setup')
+    when 'tournament' then public.can('games.setup')
+    else false end
+$fn$;
+
+revoke all on function public.can_feature(text) from public, anon;
+grant execute on function public.can_feature(text) to authenticated;
+
+create or replace function public.home_feature_item(p_kind text, p_ref uuid)
+returns jsonb
+language plpgsql
+stable
+security definer
+set search_path = ''
+as $fn$
+declare
+  sess public.sessions;
+  g public.giveaways;
+  c public.contests;
+  t public.tournaments;
+  au public.auctions;
+  v_ends timestamptz;
+  v_state text;
+  v_phase text;
+begin
+  if p_kind = 'session' then
+    select * into sess from public.sessions where id = p_ref;
+    if sess.id is null then return null; end if;
+    v_state := public.scheduled_state(sess);
+    -- not before it is ready, not after it is over, and a giveaway's own
+    -- trivia only for that giveaway's entrants
+    if v_state in ('draft', 'closed') or not public.session_open_to_me(sess.id) then return null; end if;
+    return jsonb_build_object('title', sess.title, 'state', v_state, 'mode', sess.mode,
+                              'opens_at', sess.opens_at, 'closes_at', sess.closes_at);
+  elsif p_kind = 'giveaway' then
+    select * into g from public.giveaways where id = p_ref;
+    if g.id is null or g.status in ('drawn', 'cancelled') then return null; end if;
+    return jsonb_build_object('title', g.title, 'prize', g.prize, 'status', g.status, 'mode', g.mode,
+                              'entries_close_at', g.entries_close_at, 'event_on', g.event_on,
+                              'entered', exists (select 1 from public.giveaway_entries e
+                                                 join public.giveaway_people pp on pp.id = e.person_id
+                                                 where e.giveaway_id = g.id and pp.user_id = (select auth.uid())));
+  elsif p_kind = 'contest' then
+    select * into c from public.contests where id = p_ref;
+    if c.id is null then return null; end if;
+    v_phase := public.contest_phase(c);
+    if v_phase = 'over' then return null; end if;
+    return jsonb_build_object('title', c.name, 'phase', v_phase, 'prize', c.prize,
+                              'entries_open_on', c.entries_open_on, 'entries_close_on', c.entries_close_on,
+                              'votes_open_on', c.votes_open_on, 'votes_close_on', c.votes_close_on,
+                              'entries_close_at', c.entries_close_at,
+                              'votes_close_at', c.votes_close_at);
+  elsif p_kind = 'tournament' then
+    select * into t from public.tournaments where id = p_ref;
+    if t.id is null or t.ends_on < public.puzzle_day() then return null; end if;
+    return jsonb_build_object('title', t.name, 'prize', t.prize, 'starts_on', t.starts_on, 'ends_on', t.ends_on,
+                              'on', public.puzzle_day() between t.starts_on and t.ends_on);
+  elsif p_kind = 'auction' then
+    select * into au from public.auctions where id = p_ref;
+    if au.id is null or now() < au.opens_at then return null; end if;
+    v_ends := coalesce((select max(public.auction_item_closes(i)) from public.auction_items i
+                        where i.auction_id = au.id), au.closes_at);
+    if now() >= v_ends then return null; end if;
+    return jsonb_build_object('title', au.title, 'bidding', au.bidding, 'closes_at', v_ends,
+                              'items', (select count(*) from public.auction_items i where i.auction_id = au.id));
+  end if;
+  return null;
+end;
+$fn$;
+
+revoke all on function public.home_feature_item(text, uuid) from public, anon, authenticated;
+
+create or replace function public.home_features_sheet()
+returns jsonb
+language sql
+stable
+security definer
+set search_path = ''
+as $fn$
+  select case when not (public.can('games.setup') or public.can('giveaways.manage'))
+    then jsonb_build_object('ok', false, 'reason', 'not allowed')
+  else jsonb_build_object('ok', true,
+    'can', jsonb_build_object('session', public.can_feature('session'), 'giveaway', public.can_feature('giveaway'),
+                              'contest', public.can_feature('contest'), 'tournament', public.can_feature('tournament'),
+                              'auction', public.can_feature('auction')),
+    'features', coalesce((
+      select jsonb_agg(jsonb_build_object(
+               'id', f.id, 'kind', f.kind, 'ref', f.ref, 'blurb', f.blurb, 'image', f.image_path,
+               'starts_at', f.starts_at, 'ends_at', f.ends_at, 'position', f.position,
+               'item', x.item,
+               'title', coalesce(x.item->>'title',
+                 case f.kind
+                   when 'session' then (select s.title from public.sessions s where s.id = f.ref)
+                   when 'giveaway' then (select g.title from public.giveaways g where g.id = f.ref)
+                   when 'contest' then (select c.name from public.contests c where c.id = f.ref)
+                   when 'tournament' then (select t.name from public.tournaments t where t.id = f.ref)
+                   when 'auction' then (select x.title from public.auctions x where x.id = f.ref) end),
+               'showing', x.item is not null and (f.starts_at is null or now() >= f.starts_at)
+                          and (f.ends_at is null or now() < f.ends_at),
+               'why_not', case
+                 when x.item is null then 'over, or not open yet'
+                 when f.starts_at is not null and now() < f.starts_at then 'not until its start'
+                 when f.ends_at is not null and now() >= f.ends_at then 'its dates have passed' end)
+             order by f.position, f.created_at desc)
+      from public.home_features f
+      cross join lateral (select public.home_feature_item(f.kind, f.ref) as item) x), '[]'::jsonb),
+    -- what could be featured, by kind, newest first
+    'choices', jsonb_build_object(
+      'session', coalesce((select jsonb_agg(jsonb_build_object('id', s.id, 'title', s.title,
+                                              'state', public.scheduled_state(s)) order by s.created_at desc)
+                           from public.sessions s where public.scheduled_state(s) <> 'closed'), '[]'::jsonb),
+      'giveaway', coalesce((select jsonb_agg(jsonb_build_object('id', g.id, 'title', g.title, 'state', g.status)
+                                              order by g.created_at desc)
+                            from public.giveaways g where g.status not in ('drawn', 'cancelled')), '[]'::jsonb),
+      'contest', coalesce((select jsonb_agg(jsonb_build_object('id', c.id, 'title', c.name,
+                                             'state', public.contest_phase(c)) order by c.entries_open_on desc)
+                           from public.contests c where public.contest_phase(c) <> 'over'), '[]'::jsonb),
+      'tournament', coalesce((select jsonb_agg(jsonb_build_object('id', t.id, 'title', t.name,
+                                                'state', case when public.puzzle_day() >= t.starts_on then 'on' else 'soon' end)
+                                              order by t.starts_on)
+                              from public.tournaments t where t.ends_on >= public.puzzle_day()), '[]'::jsonb),
+      'auction', coalesce((select jsonb_agg(jsonb_build_object('id', x.id, 'title', x.title,
+                                             'state', case when now() < x.opens_at then 'soon' else 'open' end)
+                                           order by x.opens_at desc)
+                           from public.auctions x
+                           where now() < coalesce((select max(public.auction_item_closes(i)) from public.auction_items i
+                                                   where i.auction_id = x.id), x.closes_at)), '[]'::jsonb)))
+  end
+$fn$;
+
+revoke all on function public.home_features_sheet() from public, anon;
+grant execute on function public.home_features_sheet() to authenticated;
+
+create or replace function public.save_home_feature(
+  p_kind text, p_ref uuid, p_blurb text default '', p_image text default null,
+  p_starts_at timestamptz default null, p_ends_at timestamptz default null, p_position int default 0)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $fn$
+declare
+  v_id uuid;
+  v_exists boolean;
+begin
+  if not public.can_feature(p_kind) then
+    return jsonb_build_object('ok', false, 'reason', 'not allowed');
+  end if;
+  -- worked out first: a CASE's own THEN would end an IF's condition early
+  v_exists := case p_kind
+       when 'session' then exists (select 1 from public.sessions where id = p_ref)
+       when 'giveaway' then exists (select 1 from public.giveaways where id = p_ref)
+       when 'contest' then exists (select 1 from public.contests where id = p_ref)
+       when 'tournament' then exists (select 1 from public.tournaments where id = p_ref)
+       when 'auction' then exists (select 1 from public.auctions where id = p_ref)
+       else false end;
+  if not v_exists then
+    return jsonb_build_object('ok', false, 'reason', 'no such thing to feature');
+  end if;
+  if char_length(btrim(coalesce(p_blurb, ''))) > 200 then
+    return jsonb_build_object('ok', false, 'reason', 'the blurb is at most 200 characters');
+  end if;
+  if p_starts_at is not null and p_ends_at is not null and p_ends_at <= p_starts_at then
+    return jsonb_build_object('ok', false, 'reason', 'it cannot finish before it starts');
+  end if;
+  if p_image is not null and p_image !~ ('^' || (select auth.uid())::text || '/feature-[0-9a-f-]{36}\.(webp|jpg|png)$')
+     and p_image is distinct from (select image_path from public.home_features where kind = p_kind and ref = p_ref) then
+    return jsonb_build_object('ok', false, 'reason', 'that picture is not one you uploaded');
+  end if;
+  insert into public.home_features (kind, ref, blurb, image_path, starts_at, ends_at, position, created_by)
+  values (p_kind, p_ref, btrim(coalesce(p_blurb, '')), p_image, p_starts_at, p_ends_at, coalesce(p_position, 0),
+          (select auth.uid()))
+  on conflict (kind, ref) do update
+    set blurb = excluded.blurb, image_path = excluded.image_path, starts_at = excluded.starts_at,
+        ends_at = excluded.ends_at, position = excluded.position, updated_at = now()
+  returning id into v_id;
+  return jsonb_build_object('ok', true, 'id', v_id);
+end;
+$fn$;
+
+revoke all on function public.save_home_feature(text, uuid, text, text, timestamptz, timestamptz, int) from public, anon;
+grant execute on function public.save_home_feature(text, uuid, text, text, timestamptz, timestamptz, int) to authenticated;

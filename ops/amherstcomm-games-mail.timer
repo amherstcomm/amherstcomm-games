@@ -1,0 +1,15 @@
+# Every minute: an outbid email is worth sending while there is still time to
+# bid back, and with a late-bid extension of a couple of minutes, a minute is
+# the most it can afford to wait.
+#
+# Not Persistent: a minute missed while the VM was off is caught by the next.
+
+[Unit]
+Description=Look for auction emails to send
+
+[Timer]
+OnCalendar=*-*-* *:*:00
+AccuracySec=5s
+
+[Install]
+WantedBy=timers.target

@@ -4,6 +4,7 @@
 // it closes, who may see whose bid. What the page owes: to say where the
 // reader stands, to ask before a bid that commits them to paying, to say why
 // one was refused, and to give the organiser the names and the money owed.
+import AxeBuilder from '@axe-core/playwright';
 import { expect, test } from './fixtures';
 
 const AUCTION = '7a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d';
@@ -39,7 +40,7 @@ const BALL = {
   title: 'Signed Brewers ball',
   blurb: null,
   donated_by: 'The front office',
-  image_path: null,
+  pictures: [],
   starting_bid: 10,
   increment: 5,
   closes_at: soon(30),
@@ -252,4 +253,88 @@ test('signed out, the list says to sign in', async ({ page }) => {
   await server(page, () => ({}), { auctions_list: () => ({ ok: false, reason: 'not signed in' }) });
   await page.goto('/auctions');
   await expect(page.getByText('Sign in to see the auctions and bid.')).toBeVisible();
+});
+
+const PICS = ['u-me/item-11111111-1111-1111-1111-111111111111.jpg',
+              'u-me/item-22222222-2222-2222-2222-222222222222.jpg',
+              'u-me/item-33333333-3333-3333-3333-333333333333.jpg'];
+
+test('an item with several pictures offers each of them', async ({ page }) => {
+  await signedIn(page);
+  await server(page, () => ({ ok: true, can_manage: false, auction: AUCTION_ROW, items: [{ ...BALL, pictures: PICS }] }));
+  await page.goto(`/auctions/${AUCTION}`);
+  const pictures = page.getByRole('list', { name: 'Pictures of Signed Brewers ball' });
+  await expect(pictures.getByRole('button')).toHaveCount(3);
+  await expect(pictures.getByRole('button', { name: 'Show picture 1 of 3' })).toHaveAttribute('aria-pressed', 'true');
+  await pictures.getByRole('button', { name: 'Show picture 3 of 3' }).click();
+  await expect(pictures.getByRole('button', { name: 'Show picture 3 of 3' })).toHaveAttribute('aria-pressed', 'true');
+  await expect(pictures.getByRole('button', { name: 'Show picture 1 of 3' })).toHaveAttribute('aria-pressed', 'false');
+});
+
+test('one picture is just the picture, with nothing to pick from', async ({ page }) => {
+  await signedIn(page);
+  await server(page, () => ({ ok: true, can_manage: false, auction: AUCTION_ROW, items: [{ ...BALL, pictures: [PICS[0]] }] }));
+  await page.goto(`/auctions/${AUCTION}`);
+  await expect(page.getByRole('article', { name: 'Signed Brewers ball' })).toBeVisible();
+  await expect(page.getByRole('list', { name: /Pictures of/ })).toHaveCount(0);
+});
+
+test('an organiser puts the pictures in order, takes one off, and saves the rest', async ({ page }) => {
+  await signedIn(page);
+  const sent = await server(page, () => ({
+    ok: true, can_manage: true, auction: AUCTION_ROW, items: [{ ...BALL, pictures: PICS, bid_list: [] }], log: [],
+  }), { save_auction_item: () => ({ ok: true, id: 'i-ball' }) });
+  await page.goto(`/auctions/${AUCTION}`);
+  await page.getByRole('article', { name: 'Signed Brewers ball' }).getByRole('button', { name: 'Change', exact: true }).click();
+  const form = page.getByRole('form', { name: 'Change Signed Brewers ball' });
+  await expect(form.getByText('Pictures (3 of 8)')).toBeVisible();
+  await expect(form.getByRole('button', { name: 'Move picture 1 earlier' })).toBeDisabled();
+  await form.getByRole('button', { name: 'Move picture 3 earlier' }).click();
+  await form.getByRole('button', { name: 'Remove picture 1' }).click();
+  await expect(form.getByText('Pictures (2 of 8)')).toBeVisible();
+  await expect(form.getByLabel('Add pictures')).toBeVisible();
+  await form.getByRole('button', { name: 'Save' }).click();
+  await expect.poll(() => sent.find((s) => s.fn === 'save_auction_item')?.args.p_pictures).toEqual([PICS[2], PICS[1]]);
+});
+
+test('an organiser moves an item, and the server is sent the whole new order', async ({ page }) => {
+  await signedIn(page);
+  const items = [
+    { ...BALL, id: 'i-1', title: 'First thing', bid_list: [] },
+    { ...BALL, id: 'i-2', title: 'Second thing', bid_list: [] },
+    { ...BALL, id: 'i-3', title: 'Third thing', bid_list: [] },
+  ];
+  const sent = await server(page, () => ({ ok: true, can_manage: true, auction: AUCTION_ROW, items, log: [] }), {
+    order_auction_items: () => ({ ok: true }),
+  });
+  await page.goto(`/auctions/${AUCTION}`);
+  await expect(page.getByRole('button', { name: 'Move First thing earlier' })).toBeDisabled();
+  await expect(page.getByRole('button', { name: 'Move Third thing later' })).toBeDisabled();
+  await page.getByRole('button', { name: 'Move Third thing earlier' }).click();
+  await expect.poll(() => sent.find((s) => s.fn === 'order_auction_items')?.args).toEqual({
+    p_auction: AUCTION,
+    p_items: ['i-1', 'i-3', 'i-2'],
+  });
+});
+
+test('a bidder is offered no way to move anything', async ({ page }) => {
+  await signedIn(page);
+  await server(page, () => ({ ok: true, can_manage: false, auction: AUCTION_ROW, items: [BALL] }));
+  await page.goto(`/auctions/${AUCTION}`);
+  await expect(page.getByRole('button', { name: /^Move / })).toHaveCount(0);
+});
+
+test('the organiser view, gallery and picture editor open, has no WCAG A/AA violations axe can see', async ({ page }) => {
+  await signedIn(page);
+  const items = [
+    { ...BALL, id: 'i-1', title: 'First thing', pictures: PICS, bid_list: [] },
+    { ...BALL, id: 'i-2', title: 'Second thing', bid_list: [] },
+  ];
+  await server(page, () => ({ ok: true, can_manage: true, auction: AUCTION_ROW, items, log: [] }));
+  await page.goto(`/auctions/${AUCTION}`);
+  await page.getByRole('article', { name: 'First thing' }).getByRole('button', { name: 'Change', exact: true }).click();
+  await expect(page.getByRole('form', { name: 'Change First thing' })).toBeVisible();
+  const results = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa']).analyze();
+  const summary = results.violations.map((v) => ({ id: v.id, nodes: v.nodes.length, sample: v.nodes[0]?.html.slice(0, 120) }));
+  expect(summary, JSON.stringify(summary, null, 2)).toEqual([]);
 });

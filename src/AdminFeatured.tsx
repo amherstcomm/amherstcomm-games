@@ -16,7 +16,7 @@ import {
   type FeatureRow,
 } from '@/featured';
 
-const KINDS: FeatureKind[] = ['session', 'giveaway', 'contest', 'tournament'];
+const KINDS: FeatureKind[] = ['session', 'giveaway', 'contest', 'tournament', 'auction'];
 const FIELD = 'w-full h-10 rounded-lg bg-white/5 border border-white/15 px-3 text-sm text-slate-200';
 const BUTTON =
   'inline-flex items-center px-4 h-10 rounded-lg text-sm font-semibold bg-white/5 border border-white/10 text-slate-300 hover:bg-white/10 disabled:opacity-50';
@@ -55,7 +55,7 @@ export default function AdminFeatured() {
     <div className="space-y-6">
       <p className="text-sm text-slate-400">
         Cards at the top of the home page, in the order below. Each goes by itself when its dates pass
-        or the thing is over: a session closed, a giveaway drawn, a contest past voting, a tournament ended.
+        or the thing is over: a session closed, a giveaway drawn, a contest past voting, a tournament ended, an auction closed.
       </p>
 
       {editing ? (

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Are the two publish timers installed, switched on, and succeeding?
+# Are the publish and mail timers installed, switched on, and succeeding?
 #
 # Part of ops/preflight.sh, and runnable on its own. Written because the
 # requests timer went uninstalled for a week: every "Republish this day" sat on
@@ -72,5 +72,6 @@ check() {
 
 check amherstcomm-games-puzzles "the nightly publish"
 check amherstcomm-games-requests "days asked for from the admin portal"
+check amherstcomm-games-mail "auction emails"
 
 exit "$failed"

@@ -1,0 +1,25 @@
+# Send the auction emails: "you've been outbid" and "you won".
+#
+# The database queues them; this claims what is waiting and sends it through
+# Office 365 or Resend, whichever MAIL_TRANSPORT in ops/publish.env names.
+#
+# Install alongside the other two (edit the paths and user as there):
+#   sudo cp ops/amherstcomm-games-mail.* /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now amherstcomm-games-mail.timer
+#
+# Watch it:
+#   journalctl -u amherstcomm-games-mail -f
+
+[Unit]
+Description=Send auction emails
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+User=rtetzloff
+WorkingDirectory=/home/rtetzloff/git/amherstcomm-games
+# Through bash for the reason the puzzle unit gives: the executable bit is set
+# in the index but this repository is authored where chmod records nothing.
+ExecStart=/bin/bash /home/rtetzloff/git/amherstcomm-games/ops/send-auction-mail.sh
