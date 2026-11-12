@@ -12,7 +12,7 @@ import { promisify } from 'node:util';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 const run = promisify(execFile);
-const NAMES = ['amherstcomm-games-puzzles', 'amherstcomm-games-requests'];
+const NAMES = ['amherstcomm-games-puzzles', 'amherstcomm-games-requests', 'amherstcomm-games-mail'];
 const STARTED = 'Sat 2026-09-19 10:46:03 CDT';
 
 let dir: string;
@@ -91,12 +91,12 @@ afterEach(() => {
   rmSync(units, { recursive: true, force: true });
 });
 
-describe('checking the publish timers', () => {
-  it('passes when both are installed, running and succeeding', async () => {
+describe('checking the publish and mail timers', () => {
+  it('passes when all three are installed, running and succeeding', async () => {
     state();
     const { code, out } = await check();
     expect(code, out).toBe(0);
-    expect(out.match(/^PASS/gm)).toHaveLength(4);
+    expect(out.match(/^PASS/gm)).toHaveLength(NAMES.length * 2);
     expect(out).not.toMatch(/^(FAIL|note)/m);
   });
 

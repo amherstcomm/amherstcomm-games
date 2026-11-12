@@ -31,7 +31,8 @@ export type AuctionItem = {
   title: string;
   blurb: string | null;
   donated_by: string | null;
-  image_path: string | null;
+  /** storage paths, in the organiser's order; the first is shown first */
+  pictures: string[];
   starting_bid: number;
   increment: number;
   /** when it closes, late bids included */
@@ -139,7 +140,7 @@ export type ItemForm = {
   title: string;
   blurb: string;
   donatedBy: string;
-  imagePath: string | null;
+  pictures: string[];
   startingBid: number;
   increment: number;
   /** company-clock datetime-local, or empty to close with the auction */
@@ -153,13 +154,16 @@ export const saveItem = (auction: string, f: ItemForm) =>
     p_title: f.title.trim(),
     p_blurb: f.blurb.trim() || null,
     p_donated_by: f.donatedBy.trim() || null,
-    p_image_path: f.imagePath,
+    p_pictures: f.pictures,
     p_starting_bid: f.startingBid,
     p_increment: f.increment,
     p_closes_at: instant(f.closesAt),
   });
 
 export const deleteItem = (id: string) => call('delete_auction_item', { p_item: id });
+/** Every item in the auction, in the order they should be shown. */
+export const orderItems = (auction: string, items: string[]) =>
+  call('order_auction_items', { p_auction: auction, p_items: items });
 export const removeBid = (id: string) => call('remove_auction_bid', { p_bid: id });
 export const setPaid = (item: string, paid: boolean) =>
   call('set_auction_item_paid', { p_item: item, p_paid: paid });
@@ -170,6 +174,8 @@ export const BUCKET = 'auction-items';
 export const pictureLink = signedLinker(BUCKET);
 
 const PICTURES = ['image/jpeg', 'image/png', 'image/webp'];
+/** The most an item can have; the server holds the same line. */
+export const MAX_PICTURES = 8;
 export const PICTURE_ACCEPT = PICTURES.join(',');
 
 /** Into the uploader's own folder, which is what the bucket's policy checks. */
@@ -212,6 +218,16 @@ export function standing(i: AuctionItem, bidding: Bidding): string | null {
   if (i.my_bid == null) return null;
   if (bidding === 'sealed') return `Your sealed bid: ${dollars(i.my_bid)}.`;
   return i.leading ? 'You are the highest bidder.' : `You have been outbid. Your bid was ${dollars(i.my_bid)}.`;
+}
+
+/** A list with the entry at `from` moved one place, `by` -1 or +1; the same
+ *  list when that would go off either end. */
+export function nudge<T>(list: T[], from: number, by: -1 | 1): T[] {
+  const to = from + by;
+  if (from < 0 || from >= list.length || to < 0 || to >= list.length) return list;
+  const next = list.slice();
+  [next[from], next[to]] = [next[to], next[from]];
+  return next;
 }
 
 /** What the log says happened, for the organiser's page. */

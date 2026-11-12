@@ -2409,7 +2409,7 @@ journalctl -u amherstcomm-games-requests -f      # watch one go through
 **Without this timer the button still files requests, and nothing publishes
 them** — the page will say *waiting* indefinitely. That is the one way this can
 look like it works and not; `systemctl list-timers | grep amherstcomm` shows
-both timers when it is installed.
+it beside the others when it is installed.
 
 The same rule as the command: a day that has started asks first, and goes only
 when confirmed. The server enforces it too, since the page is the part anybody
@@ -2654,6 +2654,49 @@ every check passed.
 
 `ops/preview-month.sh` is the other half of the same question: preflight says
 the pipeline is whole, the preview says what it will actually publish.
+
+### Auction emails
+
+Bidders are emailed when somebody outbids them, and winners when an item
+closes. The database queues each one (`auction_mail`); a third timer on this VM
+claims what is waiting every minute and sends it. Somebody outbid five times
+between two runs gets one email, and an email that has stopped being true by
+the time it is sent -- they bid back to the top, the item closed, an organiser
+took the winning bid off -- is dropped rather than sent. A failure is tried
+again ten minutes later, five tries in all; `journalctl` names the address and
+the server's answer.
+
+Fill in the mail block of `ops/publish.env` (the example has every setting),
+then install the timer beside the other two:
+
+```sh
+sudo cp ops/amherstcomm-games-mail.* /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now amherstcomm-games-mail.timer
+journalctl -u amherstcomm-games-mail -f
+```
+
+**Office 365** is `MAIL_TRANSPORT=smtp` with `smtp.office365.com` on 587,
+signed in as a licensed mailbox (a shared mailbox cannot sign in). Two things
+Microsoft switches off by default have to be on: *Authenticated SMTP* for that
+mailbox (Microsoft 365 admin centre → the user → Mail → Manage email apps),
+and SMTP AUTH for the tenant, which security defaults disable. `MAIL_FROM` is
+that mailbox, or one it has Send As rights on.
+
+Without a mailbox to sign in as, an Office 365 connector that accepts mail from
+this VM's public IP does the same job: `SMTP_HOST` is the tenant's MX host,
+`SMTP_PORT=25`, and `SMTP_USER` and `SMTP_PASS` stay empty.
+
+**Resend** is `MAIL_TRANSPORT=resend` with `RESEND_API_KEY`, and a `MAIL_FROM`
+on a domain verified there.
+
+With `MAIL_TRANSPORT` empty nothing is sent and the emails wait, so the timer
+can go in before the mailbox is ready. Waiting outbid emails are dropped once
+they stop being true. Winner emails are queued only for items that closed in
+the past day.
+
+To check that sending works, run `bash ops/send-auction-mail.sh` by hand once.
+It prints how many it sent and failed when there was anything to send.
 
 ### The other workflows
 

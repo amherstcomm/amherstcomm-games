@@ -6,11 +6,13 @@
 // log. On one page rather than an admin tab, the way giveaways are, because
 // the person running it is usually watching it at the same time.
 import { useCallback, useEffect, useState } from 'react';
+import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, X } from 'lucide-react';
 import Waiting from '@/Waiting';
 import RouteLink from '@/RouteLink';
 import { drawable, officeZoneWord } from '@/contests';
 import { toOfficeInput } from '@/schedule';
 import {
+  MAX_PICTURES,
   STATE_WORD,
   PICTURE_ACCEPT,
   deleteAuction,
@@ -18,6 +20,8 @@ import {
   dollars,
   logWords,
   moment,
+  nudge,
+  orderItems,
   pictureLink,
   placeBid,
   readAuction,
@@ -241,9 +245,20 @@ function OneAuction({ id, link }: { id: string; link: AuctionLink }) {
         </p>
       ) : (
         <ul className="mt-6 grid gap-4 sm:grid-cols-2">
-          {items.map((i) => (
+          {items.map((i, n) => (
             <li key={i.id}>
-              <ItemCard item={i} auction={a} manage={manage} onChange={load} />
+              <ItemCard
+                item={i}
+                auction={a}
+                manage={manage}
+                onChange={load}
+                place={{ first: n === 0, last: n === items.length - 1 }}
+                onMove={async (by) => {
+                  const res = await orderItems(a.id, nudge(items.map((x) => x.id), n, by));
+                  if (!res.ok) window.alert(res.reason ?? 'That did not work');
+                  await load();
+                }}
+              />
             </li>
           ))}
         </ul>
@@ -323,16 +338,55 @@ function Picture({ path, alt }: { path: string | null; alt: string }) {
   );
 }
 
+/** An item's pictures: the one being looked at, and the others to pick from
+ *  underneath when there are others. */
+function Gallery({ paths, title }: { paths: string[]; title: string }) {
+  const [shown, setShown] = useState(0);
+  if (paths.length === 0) return null;
+  const at = Math.min(shown, paths.length - 1);
+  const many = paths.length > 1;
+  return (
+    <div className="space-y-2">
+      <Picture path={paths[at]} alt={many ? `${title}, picture ${at + 1} of ${paths.length}` : title} />
+      {many && (
+        <ul className="flex gap-2 overflow-x-auto pb-1" aria-label={`Pictures of ${title}`}>
+          {paths.map((p, n) => (
+            <li key={`${n}-${p}`} className="shrink-0">
+              <button
+                type="button"
+                aria-label={`Show picture ${n + 1} of ${paths.length}`}
+                aria-pressed={n === at}
+                className={`block w-14 rounded-lg border-2 ${n === at ? 'border-accent' : 'border-transparent hover:border-white/30'}`}
+                onClick={() => setShown(n)}
+              >
+                <Picture path={p} alt="" />
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+const ICON_BUTTON =
+  'inline-flex items-center justify-center w-9 h-9 rounded-lg bg-white/10 border border-white/15 ' +
+  'text-slate-200 hover:bg-white/15 disabled:opacity-30';
+
 function ItemCard({
   item: i,
   auction: a,
   manage,
   onChange,
+  place,
+  onMove,
 }: {
   item: AuctionItem;
   auction: Auction;
   manage: boolean;
   onChange: () => Promise<void>;
+  place: { first: boolean; last: boolean };
+  onMove: (by: -1 | 1) => Promise<void>;
 }) {
   const [amount, setAmount] = useState('');
   const [busy, setBusy] = useState(false);
@@ -371,7 +425,7 @@ function ItemCard({
 
   return (
     <article className={`${CARD} h-full flex flex-col gap-2`} aria-label={i.title}>
-      <Picture path={i.image_path} alt={i.title} />
+      <Gallery paths={i.pictures} title={i.title} />
       <h2 className="text-base font-semibold text-white">{i.title}</h2>
       {i.donated_by && <p className="text-xs text-slate-400 -mt-1">Donated by {i.donated_by}</p>}
       {i.blurb && <p className="text-sm text-slate-300 whitespace-pre-line">{i.blurb}</p>}
@@ -481,6 +535,26 @@ function ItemCard({
             </details>
           )}
           <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              className={ICON_BUTTON}
+              disabled={place.first}
+              aria-label={`Move ${i.title} earlier`}
+              title="Earlier"
+              onClick={() => void onMove(-1)}
+            >
+              <ArrowUp className="w-4 h-4" aria-hidden="true" />
+            </button>
+            <button
+              type="button"
+              className={ICON_BUTTON}
+              disabled={place.last}
+              aria-label={`Move ${i.title} later`}
+              title="Later"
+              onClick={() => void onMove(1)}
+            >
+              <ArrowDown className="w-4 h-4" aria-hidden="true" />
+            </button>
             <button type="button" className={BUTTON} onClick={() => setEditing((e) => !e)}>
               {editing ? 'Close' : 'Change'}
             </button>
@@ -712,7 +786,7 @@ function ItemEditor({
     title: item?.title ?? '',
     blurb: item?.blurb ?? '',
     donatedBy: item?.donated_by ?? '',
-    imagePath: item?.image_path ?? null,
+    pictures: item?.pictures ?? [],
     startingBid: item?.starting_bid ?? 1,
     increment: item?.increment ?? 1,
     closesAt: item?.own_close ? toOfficeInput(item.closes_at) : '',
@@ -748,36 +822,79 @@ function ItemEditor({
         <input className={FIELD} value={f.donatedBy} maxLength={120} onChange={(e) => set('donatedBy', e.target.value)} />
       </label>
       <div className="block">
-        <span className={LABEL}>Picture</span>
-        <div className="flex flex-wrap items-center gap-3">
-          {f.imagePath && (
-            <div className="w-32">
-              <Picture path={f.imagePath} alt="" />
-            </div>
-          )}
+        <span className={LABEL}>
+          Pictures ({f.pictures.length} of {MAX_PICTURES}). The first is the one people see first.
+        </span>
+        {f.pictures.length > 0 && (
+          <ul className="flex flex-wrap gap-3 mb-2" aria-label="Pictures">
+            {f.pictures.map((p, n) => (
+              <li key={`${n}-${p}`} className="w-28 space-y-1">
+                <Picture path={p} alt={`Picture ${n + 1}`} />
+                <div className="flex gap-1">
+                  <button
+                    type="button"
+                    className={ICON_BUTTON}
+                    disabled={n === 0}
+                    aria-label={`Move picture ${n + 1} earlier`}
+                    onClick={() => set('pictures', nudge(f.pictures, n, -1))}
+                  >
+                    <ArrowLeft className="w-4 h-4" aria-hidden="true" />
+                  </button>
+                  <button
+                    type="button"
+                    className={ICON_BUTTON}
+                    disabled={n === f.pictures.length - 1}
+                    aria-label={`Move picture ${n + 1} later`}
+                    onClick={() => set('pictures', nudge(f.pictures, n, 1))}
+                  >
+                    <ArrowRight className="w-4 h-4" aria-hidden="true" />
+                  </button>
+                  <button
+                    type="button"
+                    className={ICON_BUTTON}
+                    aria-label={`Remove picture ${n + 1}`}
+                    onClick={() => set('pictures', f.pictures.filter((_, k) => k !== n))}
+                  >
+                    <X className="w-4 h-4" aria-hidden="true" />
+                  </button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+        {f.pictures.length < MAX_PICTURES && (
           <input
             type="file"
+            multiple
             accept={PICTURE_ACCEPT}
-            aria-label="Picture"
+            aria-label="Add pictures"
             className="text-sm text-slate-300"
             onChange={async (e) => {
-              const file = e.target.files?.[0];
-              if (!file) return;
+              const input = e.target;
+              const room = MAX_PICTURES - f.pictures.length;
+              const files = Array.from(input.files ?? []);
+              if (files.length === 0) return;
               setBusy(true);
-              const res = await uploadItemPicture(file);
+              setProblem(null);
+              const added: string[] = [];
+              for (const file of files.slice(0, room)) {
+                const res = await uploadItemPicture(file);
+                if (res.ok) added.push(res.path);
+                else setProblem(`${file.name}: ${res.reason ?? 'that picture did not upload'}`);
+              }
               setBusy(false);
-              if (res.ok) set('imagePath', res.path);
-              else setProblem(res.reason ?? 'That picture did not upload');
+              input.value = '';
+              setF((x) => ({ ...x, pictures: [...x.pictures, ...added].slice(0, MAX_PICTURES) }));
+              if (files.length > room) {
+                setProblem(`Only ${MAX_PICTURES} pictures fit, so the last ${files.length - room} were left out.`);
+              }
             }}
           />
-          {f.imagePath && (
-            <button type="button" className={BUTTON} onClick={() => set('imagePath', null)}>
-              No picture
-            </button>
-          )}
-        </div>
+        )}
       </div>
-      <div className="grid gap-3 sm:grid-cols-3">
+      {/* Two across at most: this form sits inside an item card as often as
+          on the page, and three across there cut the date field in half. */}
+      <div className="grid gap-3 grid-cols-2">
         <label className="block">
           <span className={LABEL}>Bids start at ($)</span>
           <input
@@ -802,7 +919,7 @@ function ItemEditor({
             />
           </label>
         )}
-        <label className="block">
+        <label className="block col-span-2">
           <span className={LABEL}>Closes at ({zone})</span>
           <input className={FIELD} type="datetime-local" value={f.closesAt} onChange={(e) => set('closesAt', e.target.value)} />
           <span className="block text-xs text-slate-500 mt-1">Empty closes it with the auction.</span>

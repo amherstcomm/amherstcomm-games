@@ -55,6 +55,22 @@ test('the home page draws a card for each featured thing, linking to it', async 
   await expect(cards.nth(3).getByRole('link', { name: 'Play' })).toHaveAttribute('href', '/tournament');
 });
 
+test('an auction is featured with its items, its close and a way to bid', async ({ page }) => {
+  await server(page, {
+    home_features: {
+      ok: true,
+      features: [{ id: 'f5', kind: 'auction', ref: 'a1', blurb: 'For the food bank', image: null,
+                   item: { title: 'Holiday Auction', bidding: 'open', closes_at: soon, items: 12 } }],
+    },
+  });
+  await page.goto('/');
+  const card = page.getByRole('region', { name: 'Featured' }).getByRole('article');
+  await expect(card).toContainText('Auction');
+  await expect(card).toContainText('Holiday Auction');
+  await expect(card).toContainText('12 items · bidding until');
+  await expect(card.getByRole('link', { name: 'Bid' })).toHaveAttribute('href', '/auctions/a1');
+});
+
 test('with sessions switched off, the trivia card goes with them', async ({ page }) => {
   await server(page, { home_features: FEATURES, read_availability: ['site:sessions'] });
   await page.goto('/');

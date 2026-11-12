@@ -1,5 +1,5 @@
-// What is featured on the home page: a trivia session, a giveaway, a contest
-// or a tournament, put there by whoever runs it, with a blurb and a picture
+// What is featured on the home page: a trivia session, a giveaway, a contest,
+// a tournament or an auction, put there by whoever runs it, with a blurb and a picture
 // if they like, between dates if they like. The server decides what shows
 // (home_features); this reads it, and words each card.
 import { supabase } from '@/supabase';
@@ -9,13 +9,14 @@ import { closingWord } from '@/contests';
 
 export type FeaturePage = Exclude<Page, { kind: 'game' }>;
 
-export type FeatureKind = 'session' | 'giveaway' | 'contest' | 'tournament';
+export type FeatureKind = 'session' | 'giveaway' | 'contest' | 'tournament' | 'auction';
 
 export const KIND_WORD: Record<FeatureKind, string> = {
   session: 'Trivia',
   giveaway: 'Giveaway',
   contest: 'Contest',
   tournament: 'Tournament',
+  auction: 'Auction',
 };
 
 /** What the server says about the thing itself; which fields depends on the kind. */
@@ -43,6 +44,9 @@ export type FeatureItem = {
   starts_on?: string;
   ends_on?: string;
   on?: boolean;
+  // auction: closes_at above is when its last item closes
+  bidding?: 'open' | 'sealed';
+  items?: number;
 };
 
 export type Feature = {
@@ -163,6 +167,8 @@ export function featureRoute(f: Pick<Feature, 'kind' | 'ref'>): FeaturePage {
       return { kind: 'contest', contest: f.ref };
     case 'tournament':
       return { kind: 'tournament', slug: null };
+    case 'auction':
+      return { kind: 'auctions', auction: f.ref };
   }
 }
 
@@ -194,5 +200,13 @@ export function cardWords(f: Pick<Feature, 'kind' | 'item'>): { status: string; 
       return it.on
         ? { status: it.ends_on ? `On now · ends ${day(it.ends_on)}` : 'On now', action: 'Play' }
         : { status: it.starts_on ? `Starts ${day(it.starts_on)}` : 'Coming soon', action: 'See it' };
+    case 'auction': {
+      const n = it.items ?? 0;
+      const things = `${n} ${n === 1 ? 'item' : 'items'}`;
+      return {
+        status: it.closes_at ? `${things} · bidding until ${when(it.closes_at)}` : `${things} · taking bids`,
+        action: 'Bid',
+      };
+    }
   }
 }
