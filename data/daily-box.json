@@ -1,0 +1,33 @@
+{
+  "date": "2026-11-13",
+  "byDifficulty": {
+    "easy": {
+      "sides": [
+        "eto",
+        "nml",
+        "ars",
+        "hcu"
+      ],
+      "par": 2
+    },
+    "hard": {
+      "sides": [
+        "eon",
+        "atm",
+        "irw",
+        "dcp"
+      ],
+      "par": 2
+    },
+    "extreme": {
+      "sides": [
+        "ezf",
+        "bau",
+        "ort",
+        "nsv"
+      ],
+      "par": 2
+    }
+  },
+  "fetchedAt": "2026-11-13T16:29:01.668Z"
+}

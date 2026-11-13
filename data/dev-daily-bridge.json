@@ -1,0 +1,84 @@
+{
+  "date": "2026-11-13",
+  "byDifficulty": {
+    "easy": {
+      "prompts": [
+        {
+          "x": "fur",
+          "y": "hand"
+        },
+        {
+          "x": "hand",
+          "y": "down"
+        },
+        {
+          "x": "dog",
+          "y": "keeper"
+        },
+        {
+          "x": "high",
+          "y": "lord"
+        },
+        {
+          "x": "scholar",
+          "y": "shape"
+        }
+      ],
+      "answers": "WyJsb25nIiwic2hha2UiLCJob3VzZSIsImxhbmQiLCJzaGlwIl0=",
+      "hints": 3
+    },
+    "hard": {
+      "prompts": [
+        {
+          "x": "pull",
+          "y": "cry"
+        },
+        {
+          "x": "pocket",
+          "y": "keeper"
+        },
+        {
+          "x": "tooth",
+          "y": "pocket"
+        },
+        {
+          "x": "southeast",
+          "y": "robe"
+        },
+        {
+          "x": "swim",
+          "y": "ability"
+        }
+      ],
+      "answers": "WyJvdXQiLCJib29rIiwicGljayIsIndhcmQiLCJzdWl0Il0=",
+      "hints": 1
+    },
+    "extreme": {
+      "prompts": [
+        {
+          "x": "stop",
+          "y": "power"
+        },
+        {
+          "x": "cut",
+          "y": "stroke"
+        },
+        {
+          "x": "handle",
+          "y": "bell"
+        },
+        {
+          "x": "end",
+          "y": "mark"
+        },
+        {
+          "x": "some",
+          "y": "table"
+        }
+      ],
+      "answers": "WyJvdmVyIiwiYmFjayIsImJhciIsImVhciIsInRpbWUiXQ==",
+      "hints": 0
+    }
+  },
+  "fetchedAt": "2026-11-13T16:29:03.586Z"
+}

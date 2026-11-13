@@ -1,0 +1,162 @@
+{
+  "date": "2026-11-13",
+  "byDifficulty": {
+    "easy": [
+      {
+        "from": "cake",
+        "to": "coat",
+        "par": 4
+      },
+      {
+        "from": "hook",
+        "to": "soak",
+        "par": 3
+      },
+      {
+        "from": "gob",
+        "to": "yap",
+        "par": 3
+      },
+      {
+        "from": "many",
+        "to": "more",
+        "par": 3
+      },
+      {
+        "from": "bend",
+        "to": "road",
+        "par": 3
+      },
+      {
+        "from": "mass",
+        "to": "pile",
+        "par": 4
+      },
+      {
+        "from": "cart",
+        "to": "hale",
+        "par": 3
+      },
+      {
+        "from": "cows",
+        "to": "herd",
+        "par": 4
+      },
+      {
+        "from": "most",
+        "to": "near",
+        "par": 4
+      },
+      {
+        "from": "furled",
+        "to": "rolled",
+        "par": 4
+      }
+    ],
+    "hard": [
+      {
+        "from": "more",
+        "to": "much",
+        "par": 5
+      },
+      {
+        "from": "bread",
+        "to": "flour",
+        "par": 6
+      },
+      {
+        "from": "dent",
+        "to": "nick",
+        "par": 5
+      },
+      {
+        "from": "mate",
+        "to": "pair",
+        "par": 5
+      },
+      {
+        "from": "backed",
+        "to": "coated",
+        "par": 6
+      },
+      {
+        "from": "horn",
+        "to": "tusk",
+        "par": 6
+      },
+      {
+        "from": "bully",
+        "to": "dandy",
+        "par": 6
+      },
+      {
+        "from": "poke",
+        "to": "prod",
+        "par": 6
+      },
+      {
+        "from": "dope",
+        "to": "weed",
+        "par": 6
+      },
+      {
+        "from": "goon",
+        "to": "lump",
+        "par": 6
+      }
+    ],
+    "extreme": [
+      {
+        "from": "goofy",
+        "to": "silly",
+        "par": 7
+      },
+      {
+        "from": "lifted",
+        "to": "raised",
+        "par": 7
+      },
+      {
+        "from": "goof",
+        "to": "zany",
+        "par": 8
+      },
+      {
+        "from": "goon",
+        "to": "thug",
+        "par": 8
+      },
+      {
+        "from": "deck",
+        "to": "ship",
+        "par": 7
+      },
+      {
+        "from": "dress",
+        "to": "primp",
+        "par": 8
+      },
+      {
+        "from": "even",
+        "to": "flat",
+        "par": 8
+      },
+      {
+        "from": "barb",
+        "to": "jibe",
+        "par": 7
+      },
+      {
+        "from": "jolly",
+        "to": "merry",
+        "par": 8
+      },
+      {
+        "from": "ooze",
+        "to": "seep",
+        "par": 8
+      }
+    ]
+  },
+  "fetchedAt": "2026-11-13T16:29:40.204Z"
+}

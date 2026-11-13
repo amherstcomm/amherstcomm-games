@@ -1,0 +1,84 @@
+{
+  "date": "2026-11-13",
+  "byDifficulty": {
+    "easy": {
+      "prompts": [
+        {
+          "x": "road",
+          "y": "keeper"
+        },
+        {
+          "x": "over",
+          "y": "rider"
+        },
+        {
+          "x": "pro",
+          "y": "hand"
+        },
+        {
+          "x": "cut",
+          "y": "spring"
+        },
+        {
+          "x": "walk",
+          "y": "rage"
+        }
+      ],
+      "answers": "WyJob3VzZSIsImpveSIsImxvbmciLCJvZmYiLCJvdXQiXQ==",
+      "hints": 3
+    },
+    "hard": {
+      "prompts": [
+        {
+          "x": "hold",
+          "y": "eat"
+        },
+        {
+          "x": "off",
+          "y": "ear"
+        },
+        {
+          "x": "fore",
+          "y": "end"
+        },
+        {
+          "x": "good",
+          "y": "power"
+        },
+        {
+          "x": "king",
+          "y": "cushion"
+        }
+      ],
+      "answers": "WyJvdmVyIiwiZW5kIiwibGVnIiwid2lsbCIsInBpbiJd",
+      "hints": 1
+    },
+    "extreme": {
+      "prompts": [
+        {
+          "x": "red",
+          "y": "room"
+        },
+        {
+          "x": "birth",
+          "y": "dreamer"
+        },
+        {
+          "x": "hobby",
+          "y": "radish"
+        },
+        {
+          "x": "rest",
+          "y": "coat"
+        },
+        {
+          "x": "play",
+          "y": "mate"
+        }
+      ],
+      "answers": "WyJoZWFkIiwiZGF5IiwiaG9yc2UiLCJyYWluIiwicm9vbSJd",
+      "hints": 0
+    }
+  },
+  "fetchedAt": "2026-11-13T16:29:01.668Z"
+}
