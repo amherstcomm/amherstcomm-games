@@ -28063,3 +28063,29 @@ end;
 $fn$;
 revoke all on function public.recognition_mail_done(bigint, text) from public, anon, authenticated;
 grant execute on function public.recognition_mail_done(bigint, text) to service_role;
+
+-- ---------------------------------------------------------------------------
+-- A cleared setting is cleared
+-- ---------------------------------------------------------------------------
+-- read_site_settings() used to leave an empty row out, so the client fell
+-- through to the value the site was built with -- and the build on the VM says
+-- "Employee Ownership Month", so emptying the subtitle in November changed
+-- nothing. The settings page promised "Nothing under the site name"; it could
+-- not deliver it.
+--
+-- Now a row is returned as it stands, empty or not, and the client decides
+-- what empty means per key: nothing, for the subtitle, the notice and the
+-- contact address; the build value, for the timezone, which cannot be
+-- nothing. A key with no row at all still falls back, as before.
+create or replace function public.read_site_settings()
+returns jsonb
+language sql
+stable
+security definer
+set search_path = ''
+as $fn$
+  select coalesce(jsonb_object_agg(s.key, btrim(s.value)), '{}'::jsonb)
+  from public.site_settings s
+$fn$;
+revoke all on function public.read_site_settings() from public;
+grant execute on function public.read_site_settings() to anon, authenticated;

@@ -1,12 +1,10 @@
 // What this deployment says about itself.
 //
 // The rule under test is the three-source order — row, then what this browser
-// saw last time, then the build value — and the thing most worth pinning is
-// that an *empty* row and *no* row mean the same thing. They have to: that is
-// what lets a cleared setting fall back to the build value instead of
-// rendering a blank masthead, and it is enforced in two places (the server
-// leaves empty rows out, this leaves empty strings out) which is exactly the
-// arrangement that drifts.
+// saw last time, then the build value — and what an empty row means: nothing,
+// for the subtitle, the notice and the contact address, so clearing the
+// subtitle takes it off the masthead; the build value, for the timezone, which
+// cannot be nothing. No row at all still means the build value.
 import { beforeEach, describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -41,15 +39,26 @@ describe('falling back', () => {
     expect(setting('subtitle')).toBe('Employee Ownership Month');
   });
 
-  // The whole reason empties are dropped rather than stored as "".
-  it('treats an empty row as no row at all', () => {
+  // What was wrong: emptying the subtitle in November brought back the
+  // "Employee Ownership Month" the site was built with.
+  it('takes a cleared subtitle as no subtitle, whatever the build says', () => {
     __setSettingsForTest({ subtitle: '' });
-    expect(setting('subtitle')).toBe(SITE_SUBTITLE_FALLBACK);
+    expect(setting('subtitle')).toBe('');
   });
 
-  it('and whitespace as empty, because it was typed rather than meant', () => {
+  it('and whitespace as cleared, because it was typed rather than meant', () => {
     __setSettingsForTest({ subtitle: '   ' });
-    expect(setting('subtitle')).toBe(SITE_SUBTITLE_FALLBACK);
+    expect(setting('subtitle')).toBe('');
+  });
+
+  it('the same for the contact address', () => {
+    __setSettingsForTest({ contact_email: '' });
+    expect(setting('contact_email')).toBe('');
+  });
+
+  it('but a cleared timezone falls back, because the company has to have a clock', () => {
+    __setSettingsForTest({ office_zone: '' });
+    expect(setting('office_zone')).toBe(OFFICE_ZONE_FALLBACK);
   });
 
   it('trims what it keeps', () => {

@@ -15,7 +15,8 @@ import {
   type Feature,
   type FeaturePage,
 } from '@/featured';
-import { answered, readBoard, type Board } from '@/whiteboard';
+import { AvatarStack } from '@/Avatar';
+import { answerChoice, answered, readBoard, type Board } from '@/whiteboard';
 
 export default function FeaturedStrip({
   link,
@@ -54,7 +55,8 @@ export default function FeaturedStrip({
                       ${one ? '' : 'sm:grid sm:grid-cols-2 sm:overflow-visible'}`}>
         {board && (
           <li className={`snap-start shrink-0 ${one ? 'w-full' : 'w-[85%] sm:w-auto'}`}>
-            <BoardCard board={board} link={link} />
+            <BoardCard board={board} link={link}
+                       onAnswered={() => void readBoard().then((got) => setBoard(got.ok && got.question ? got : null))} />
           </li>
         )}
         {shown.map((f) => (
@@ -67,26 +69,89 @@ export default function FeaturedStrip({
   );
 }
 
-/** This week's whiteboard question, and whether the reader has answered. */
-function BoardCard({ board, link }: { board: Board; link: (p: FeaturePage) => { to: string; onGo: () => void } }) {
+/** This week's whiteboard question. A pick-an-answer one is answered right
+ *  here, and once it is, the card is the board: the pictures under each
+ *  choice, with nothing more to press. A written one needs the page to type
+ *  on, and shows everybody's pictures once answered. */
+function BoardCard({ board, link, onAnswered }: {
+  board: Board;
+  link: (p: FeaturePage) => { to: string; onGo: () => void };
+  onAnswered: () => void;
+}) {
   const q = board.question!;
   const mine = board.mine;
-  const said = mine ? (q.kind === 'choice' ? q.options[mine.choice ?? 0] : null) : null;
+  const answers = board.answers ?? null;
   const n = board.count ?? 0;
+  const [busy, setBusy] = useState(false);
+  const [problem, setProblem] = useState<string | null>(null);
+  const full = link({ kind: 'whiteboard', question: null });
+  const picks = (choice: number | null) =>
+    (answers ?? [])
+      .filter((a) => choice === null || a.choice === choice)
+      .map((a) => ({ option: String(a.choice ?? ''), user: a.user, name: a.name, avatar: a.avatar }));
+
   return (
-    <article className="h-full flex flex-col rounded-xl border border-accent/30 bg-accent/5 overflow-hidden">
-      <div className="flex-1 flex flex-col gap-1 p-4">
+    <article className="h-full flex flex-col rounded-xl border border-accent/30 bg-accent/5 overflow-hidden"
+             aria-label="This week’s question">
+      <div className="flex-1 flex flex-col gap-2 p-4">
         <p className="text-xs font-semibold uppercase tracking-wider text-accent">This week’s question</p>
         <h2 className="text-base font-semibold text-white break-words">{q.prompt}</h2>
-        <p className="text-xs text-slate-400">
-          {mine ? (said ? `You said ${said} · ` : 'You answered · ') : ''}
-          {n > 0 ? answered(n) : 'Be the first to answer'}
-        </p>
-        <div className="mt-auto pt-2">
-          <RouteLink {...link({ kind: 'whiteboard', question: null })}
-                     className="inline-flex items-center px-4 h-10 rounded-lg text-sm font-semibold bg-accent text-slate-950 hover:brightness-110">
-            {mine ? 'See the board' : 'Answer'}
-          </RouteLink>
+
+        {answers ? (
+          q.kind === 'choice' ? (
+            <ul className="space-y-1.5" aria-label="Who picked what">
+              {q.options.map((o, k) => {
+                const here = picks(k);
+                return (
+                  <li key={k} className="flex items-center justify-between gap-2 min-h-8">
+                    <span className={`text-sm ${mine?.choice === k ? 'font-semibold text-emerald-300' : 'text-slate-200'}`}>
+                      {o} <span className="text-xs text-slate-400 tabular-nums">{here.length}</span>
+                    </span>
+                    <AvatarStack picks={here} max={6} />
+                  </li>
+                );
+              })}
+            </ul>
+          ) : (
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-xs text-slate-400">{answered(answers.length)}</span>
+              <AvatarStack picks={picks(null)} max={8} />
+            </div>
+          )
+        ) : q.kind === 'choice' ? (
+          <div className="flex flex-wrap gap-2" role="group" aria-label="Your answer">
+            {q.options.map((o, k) => (
+              <button key={k} type="button" disabled={busy}
+                      className="px-3 h-9 rounded-full text-sm font-semibold border bg-white/5 border-white/20 text-slate-200 hover:bg-white/15 disabled:opacity-50"
+                      onClick={async () => {
+                        setBusy(true);
+                        const res = await answerChoice(q.id, k);
+                        setBusy(false);
+                        if (!res.ok) return setProblem(res.reason ?? 'That did not go in');
+                        onAnswered();
+                      }}>
+                {o}
+              </button>
+            ))}
+          </div>
+        ) : null}
+
+        {problem && <p className="text-xs text-rose-300" role="status">{problem}</p>}
+        {!answers && (
+          <p className="text-xs text-slate-400">{n > 0 ? `${answered(n)}. Answer to see who said what.` : 'Be the first to answer.'}</p>
+        )}
+
+        <div className="mt-auto pt-1">
+          {!answers && q.kind === 'text' ? (
+            <RouteLink {...full}
+                       className="inline-flex items-center px-4 h-10 rounded-lg text-sm font-semibold bg-accent text-slate-950 hover:brightness-110">
+              Answer
+            </RouteLink>
+          ) : (
+            <RouteLink {...full} className="text-xs text-accent hover:underline">
+              {answers && q.kind === 'text' ? 'Read the answers' : 'The whiteboard'}
+            </RouteLink>
+          )}
         </div>
       </div>
     </article>

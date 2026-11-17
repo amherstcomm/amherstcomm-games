@@ -188,19 +188,47 @@ test('the writer turns a suggestion into next week’s question', async ({ page 
   });
 });
 
-test('this week’s question is the first card on the home page', async ({ page }) => {
+test('this week’s question is the first card on the home page, answered right there', async ({ page }) => {
   await signedIn(page);
-  await server(page, {
-    whiteboard_view: () => ({ ok: true, can_manage: false, week_of: WEEK, question: LAUNDRY, count: 3,
-                              mine: null, answers: null, past: [] }),
+  let mine: { choice: number; body: null } | null = null;
+  const sent = await server(page, {
+    whiteboard_view: () => ({
+      ok: true, can_manage: false, week_of: WEEK, question: LAUNDRY, count: mine ? 4 : 3, mine,
+      answers: mine ? [...PEOPLE, { user: 'u-me', name: 'Me Myself', avatar: null, choice: mine.choice, body: null }] : null,
+      past: [],
+    }),
+    answer_whiteboard: (args) => {
+      mine = { choice: args.p_choice as number, body: null };
+      return { ok: true };
+    },
     home_features: () => ({ ok: true, features: [] }),
   });
   await page.goto('/');
-  const card = page.getByRole('region', { name: 'Featured' }).getByRole('article');
-  await expect(card).toHaveCount(1);
-  await expect(card).toContainText('This week’s question');
+  const card = page.getByRole('region', { name: 'Featured' }).getByRole('article', { name: 'This week’s question' });
   await expect(card).toContainText('Do you sort your laundry?');
-  await expect(card).toContainText('3 people have answered');
+  await expect(card).toContainText('3 people have answered. Answer to see who said what.');
+  await card.getByRole('button', { name: 'Never' }).click();
+  await expect.poll(() => sent.find((s) => s.fn === 'answer_whiteboard')?.args).toEqual({
+    p_question: 'q-laundry', p_choice: 2, p_body: null,
+  });
+  // the board, with nothing more to press
+  const board = card.getByRole('list', { name: 'Who picked what' });
+  await expect(board.getByRole('img', { name: 'Picked by Ann Lee, Cy Ortiz' })).toBeVisible();
+  await expect(board.getByRole('img', { name: 'Picked by Bo Jensen, Me Myself' })).toBeVisible();
+  await expect(card.getByRole('button', { name: 'Never' })).toHaveCount(0);
+  await expect(card.getByRole('link', { name: 'The whiteboard' })).toHaveAttribute('href', '/whiteboard');
+});
+
+test('a written question on the home card sends people to the page to type', async ({ page }) => {
+  await signedIn(page);
+  await server(page, {
+    whiteboard_view: () => ({ ok: true, can_manage: false, week_of: WEEK,
+      question: { ...LAUNDRY, kind: 'text', options: [], prompt: 'Best thing you did this weekend?' },
+      count: 0, mine: null, answers: null, past: [] }),
+    home_features: () => ({ ok: true, features: [] }),
+  });
+  await page.goto('/');
+  const card = page.getByRole('article', { name: 'This week’s question' });
   await expect(card.getByRole('link', { name: 'Answer' })).toHaveAttribute('href', '/whiteboard');
 });
 
@@ -236,4 +264,17 @@ test('a written answer is the picture and the words, with the name on a tap', as
   await expect(page.getByRole('button', { name: 'Ann Lee' })).toHaveAttribute('title', 'Ann Lee');
   await page.getByRole('button', { name: 'Ann Lee' }).click();
   await expect(page.getByRole('status').filter({ hasText: 'Ann Lee' })).toBeVisible();
+});
+
+test('the site logo is the way home', async ({ page }) => {
+  await signedIn(page);
+  await server(page, {
+    whiteboard_view: () => ({ ok: true, can_manage: false, week_of: WEEK, question: null, past: [] }),
+    home_features: () => ({ ok: true, features: [] }),
+  });
+  await page.goto('/whiteboard');
+  const home = page.getByRole('link', { name: /, home$/ });
+  await expect(home).toHaveAttribute('href', '/');
+  await home.click();
+  await expect(page).toHaveURL(/\/$/);
 });
