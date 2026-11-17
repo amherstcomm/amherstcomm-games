@@ -2655,10 +2655,12 @@ every check passed.
 `ops/preview-month.sh` is the other half of the same question: preflight says
 the pipeline is whole, the preview says what it will actually publish.
 
-### Auction emails
+### Auction and recognition emails
 
 Bidders are emailed when somebody outbids them, and winners when an item
-closes. The database queues each one (`auction_mail`); a third timer on this VM
+closes. Somebody nominated for recognition is emailed when a reviewer posts
+the nomination to the wall, and again if it wins an award round; those queue
+in `recognition_mail` and go out through the same timer. The database queues each one (`auction_mail`); a third timer on this VM
 claims what is waiting every minute and sends it. Somebody outbid five times
 between two runs gets one email, and an email that has stopped being true by
 the time it is sent -- they bid back to the top, the item closed, an organiser

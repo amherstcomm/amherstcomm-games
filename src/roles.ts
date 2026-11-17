@@ -78,6 +78,7 @@ export const CAPABILITIES = [
   // also held by a person on their own -- see capability_grants
   'giveaways.manage',
   'whiteboard.manage',
+  'recognition.manage',
 ] as const;
 export type Capability = (typeof CAPABILITIES)[number];
 

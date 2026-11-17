@@ -14,7 +14,7 @@ import { PALETTES, PaletteContext, resolveTheme, TEXT_SCALES, THEME_MODES, useTh
 import { PrefsContext } from '@/prefs';
 import OnboardingCard from '@/OnboardingCard';
 import { useModalA11y } from '@/useModalA11y';
-import { Camera, Combine, Flag as FlagIcon, Gavel, Gift, MessageCircleQuestion, Radio, SlidersHorizontal } from 'lucide-react';
+import { Award, Camera, Combine, Flag as FlagIcon, Gavel, Gift, MessageCircleQuestion, Radio, SlidersHorizontal } from 'lucide-react';
 import BridgeGame, { type BridgeGameHandle } from '@/BridgeGame';
 import GameMenu from '@/GameMenu';
 import LadderIcon from '@/LadderIcon';
@@ -41,6 +41,8 @@ import AuctionsView from '@/AuctionsView';
 import { readAuctions } from '@/auctions';
 import WhiteboardView from '@/WhiteboardView';
 import { readBoard } from '@/whiteboard';
+import RecognitionView from '@/RecognitionView';
+import { readWaiting } from '@/recognition';
 import { readGiveaways, readGiveawayTriviaSessions } from '@/giveaways';
 import {
   gameFeature, FEED_NAME, GAME_NAME } from '@/games';
@@ -290,6 +292,7 @@ function App() {
     nav.page.kind === 'giveaways' ||
     nav.page.kind === 'auctions' ||
     nav.page.kind === 'whiteboard' ||
+    nav.page.kind === 'recognition' ||
     nav.page.kind === 'admin' ||
     nav.page.kind === 'join' ||
     nav.page.kind === 'scores'
@@ -350,6 +353,8 @@ function App() {
   // Whether there is a whiteboard question up this week, or this person
   // writes them: the footer link shows for either.
   const [boardOn, setBoardOn] = useState(false);
+  // Nominations waiting for this person to review: none unless they review.
+  const [nominationsWaiting, setNominationsWaiting] = useState(0);
   const [learnMode, setLearnMode] = useState(entryGame()?.view === 'learn');
   const [theme, setTheme] = useState<ThemeMode>(initial.theme);
   const [palette, setPalette] = useState<Palette>(initial.palette);
@@ -386,6 +391,7 @@ function App() {
       setCanGive(false);
       setAuctionsNow(0);
       setBoardOn(false);
+      setNominationsWaiting(0);
       return;
     }
     let alive = true;
@@ -407,6 +413,7 @@ function App() {
       if (alive && got.ok) setAuctionsNow(got.auctions.filter((a) => a.state === 'open').length);
     });
     void readBoard().then((got) => alive && setBoardOn(got.ok && (!!got.question || !!got.can_manage)));
+    void readWaiting().then((n) => alive && setNominationsWaiting(n));
     window.addEventListener('focus', count);
     return () => {
       alive = false;
@@ -1286,6 +1293,7 @@ function App() {
           )}
           {reportPage?.kind === 'auctions' && <AuctionsView auction={reportPage.auction} link={pageLink} />}
           {reportPage?.kind === 'whiteboard' && <WhiteboardView question={reportPage.question} link={pageLink} />}
+          {reportPage?.kind === 'recognition' && <RecognitionView />}
           {reportPage?.kind === 'admin' && <AdminSettings
               tab={reportPage.tab}
               tabLink={(tab) => pageLink({ kind: 'admin', tab })}
@@ -1766,6 +1774,17 @@ function App() {
               >
                 <MessageCircleQuestion className="w-3.5 h-3.5" aria-hidden="true" />
                 Whiteboard
+              </RouteLink>
+            )}
+            {/* Everybody signed in: nominating is for all staff. A reviewer
+                sees how many wait. */}
+            {session && (
+              <RouteLink
+                {...pageLink({ kind: 'recognition' })}
+                className="inline-flex items-center gap-1.5 text-accent hover:brightness-110 transition"
+              >
+                <Award className="w-3.5 h-3.5" aria-hidden="true" />
+                {nominationsWaiting > 0 ? `Recognition (${nominationsWaiting})` : 'Recognition'}
               </RouteLink>
             )}
             {canSetUp && sessionsOn && (
