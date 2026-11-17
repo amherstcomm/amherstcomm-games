@@ -51,11 +51,11 @@ select pg_temp.check('setting one with spacing round it is allowed',
 select pg_temp.check('and the spacing was typing, not meaning',
   public.read_site_settings()->>'announcement' = 'Round 3 opens Friday');
 
--- An empty row and an unset row have to mean the same thing, because that is
--- what lets the client fall through to its build value in both cases.
+-- A cleared row is answered as cleared, so the client can tell "set to
+-- nothing" from "never set": the first is no subtitle, the second the build's.
 select public.set_site_setting('announcement', '');
-select pg_temp.check('clearing one takes it out of the answer entirely',
-  not (public.read_site_settings() ? 'announcement'));
+select pg_temp.check('clearing one answers it as empty, not as missing',
+  public.read_site_settings()->>'announcement' = '');
 select pg_temp.check('though the row stays, carrying who cleared it',
   (select updated_by from public.site_settings where key = 'announcement')
     = '11111111-1111-1111-1111-111111111111');

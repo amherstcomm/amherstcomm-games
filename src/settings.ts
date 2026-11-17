@@ -44,6 +44,11 @@ const FALLBACK: Record<SettingKey, string> = {
   office_zone: OFFICE_ZONE_FALLBACK,
 };
 
+/** Keys where a row cleared to nothing means nothing -- no subtitle, no
+ *  notice, no address -- rather than the build value. The timezone is not one:
+ *  the company has to have a clock, so an empty one falls back. */
+const EMPTY_MEANS_NOTHING: ReadonlySet<SettingKey> = new Set(['subtitle', 'announcement', 'contact_email']);
+
 const CACHE_KEY = 'anagrimoire:site-settings:v1';
 
 type Rows = Partial<Record<SettingKey, string>>;
@@ -53,10 +58,12 @@ function clean(raw: unknown): Rows {
   const out: Rows = {};
   for (const key of SETTING_KEYS) {
     const v = (raw as Record<string, unknown>)[key];
-    // Empty is not a value, it is the absence of one — the server leaves empty
-    // rows out for the same reason, so an unset row and an unset variable mean
-    // the same thing.
-    if (typeof v === 'string' && v.trim() !== '') out[key] = v.trim();
+    if (typeof v !== 'string') continue;
+    // A row cleared to nothing is kept as nothing where nothing is a thing the
+    // site can be -- emptying the subtitle has to take it off the masthead,
+    // not bring back the one the site was built with. Elsewhere, empty is the
+    // absence of a value, and the build value stands.
+    if (v.trim() !== '' || EMPTY_MEANS_NOTHING.has(key)) out[key] = v.trim();
   }
   return out;
 }

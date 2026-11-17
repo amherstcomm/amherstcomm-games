@@ -1161,7 +1161,15 @@ function App() {
               because the text beside it already names the heading.
               Dimensions on the tag so it can't shove the page down as it
               loads. */}
-          <h1 className="mb-4 flex flex-wrap items-center justify-center gap-x-3 sm:gap-x-4 gap-y-1">
+          <h1 className="mb-4">
+          {/* The whole lockup is the way home, as a site's name is everywhere
+              else; named for where it goes, since the mark is decorative and
+              the name alone would read as just the name. */}
+          <RouteLink
+            {...pageLink({ kind: 'home' })}
+            label={`${SITE_NAME}, home`}
+            className="inline-flex flex-wrap items-center justify-center gap-x-3 sm:gap-x-4 gap-y-1 rounded-xl"
+          >
             {/* The mark is the company swish, drawn transparent — so the
                 rounded tile and drop shadow that framed the old filled logo
                 are gone. Framing a glyph that has no edges only draws a box
@@ -1180,6 +1188,7 @@ function App() {
             <span className="pb-[0.4em] -mb-[0.4em] text-4xl sm:text-5xl font-bold tracking-tight bg-gradient-to-br from-white via-white to-slate-400 bg-clip-text text-transparent">
               {SITE_NAME}
             </span>
+          </RouteLink>
           </h1>
           {/* The event this run is for, when there is one. Empty is the
               ordinary state and renders nothing rather than an empty line —
