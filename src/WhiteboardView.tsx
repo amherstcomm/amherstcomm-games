@@ -166,6 +166,7 @@ function QuestionCard({ board, q, manage, onChange }: { board: Board; q: Questio
             <form
               onSubmit={(e) => {
                 e.preventDefault();
+                if (!words.trim()) return setNote('Write an answer first.');
                 void send(answerWords(q.id, words));
               }}
             >
@@ -176,7 +177,7 @@ function QuestionCard({ board, q, manage, onChange }: { board: Board; q: Questio
               </label>
               <div className="mt-2 flex items-center justify-between gap-3">
                 <span className="text-xs text-slate-500 tabular-nums">{words.length} / {MAX_WORDS}</span>
-                <button type="submit" className={PRIMARY} disabled={busy || !words.trim()}>
+                <button type="submit" className={PRIMARY} disabled={busy}>
                   {mine ? 'Save my answer' : 'Answer'}
                 </button>
               </div>
@@ -352,6 +353,7 @@ function Suggest() {
       <form
         onSubmit={async (e) => {
           e.preventDefault();
+          if (!text.trim()) return setNote('Write a question first.');
           setBusy(true);
           const res = await suggestQuestion(text);
           setBusy(false);
@@ -367,7 +369,7 @@ function Suggest() {
         </label>
         <div className="mt-2 flex items-center justify-between gap-3">
           <p className="text-xs text-slate-300" role="status">{note}</p>
-          <button type="submit" className={BUTTON} disabled={busy || !text.trim()}>Suggest it</button>
+          <button type="submit" className={BUTTON} disabled={busy}>Suggest it</button>
         </div>
       </form>
     </section>

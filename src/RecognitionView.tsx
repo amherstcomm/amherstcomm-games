@@ -219,6 +219,7 @@ function NominateForm({ onDone }: { onDone: (sent: boolean) => void }) {
       onSubmit={async (e) => {
         e.preventDefault();
         if (!who) return setProblem('Pick who you are nominating.');
+        if (story.trim().length < 20) return setProblem('Say what they did: at least 20 characters.');
         setBusy(true);
         const res = await nominate(who.user, story, showName);
         setBusy(false);
@@ -246,7 +247,7 @@ function NominateForm({ onDone }: { onDone: (sent: boolean) => void }) {
       </label>
       {problem && <p className="text-sm text-rose-300">{problem}</p>}
       <div className="flex gap-2">
-        <button type="submit" className={PRIMARY} disabled={busy || !who || story.trim().length < 20}>Send it</button>
+        <button type="submit" className={PRIMARY} disabled={busy}>Send it</button>
         <button type="button" className={BUTTON} onClick={() => onDone(false)}>Cancel</button>
       </div>
     </form>
