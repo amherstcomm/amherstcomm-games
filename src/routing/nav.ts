@@ -43,6 +43,7 @@ export type Page =
   | { kind: 'contest'; contest: string | null }
   | { kind: 'giveaways'; giveaway: string | null; view: GiveawayView }
   | { kind: 'auctions'; auction: string | null }
+  | { kind: 'whiteboard'; question: string | null }
   | { kind: 'live'; session: string; host: boolean }
   | { kind: 'sessions'; session?: string }
   | { kind: 'admin'; tab: AdminTab }
@@ -154,6 +155,8 @@ export function navOf(route: Route, last: Tabs = DEFAULT_TABS): { nav: Nav; game
       return { nav: page({ kind: 'giveaways', giveaway: route.giveaway, view: route.view }), game: null };
     case 'auctions':
       return { nav: page({ kind: 'auctions', auction: route.auction }), game: null };
+    case 'whiteboard':
+      return { nav: page({ kind: 'whiteboard', question: route.question }), game: null };
     case 'admin':
       return {
         nav: { page: { kind: 'admin', tab: route.tab }, overlays: [], last: { ...last, admin: route.tab } },

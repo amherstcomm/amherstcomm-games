@@ -132,6 +132,8 @@ export type Route =
   // An auction, or the list of them. Its own address because one gets sent
   // round in an email, and somebody outbid comes back to it.
   | { kind: 'auctions'; auction: string | null }
+  // The whiteboard: this week's question, or a past week's by its id.
+  | { kind: 'whiteboard'; question: string | null }
   // A live session. Two addresses for the same room: the one everybody opens,
   // and the presenter's, which shows the answer and the controls. Separate
   // addresses rather than a mode on one page, because the presenter's screen
@@ -186,6 +188,8 @@ export function pathOf(route: Route): string {
       return route.view === 'replay' ? `/giveaways/${route.giveaway}/replay` : `/giveaways/${route.giveaway}`;
     case 'auctions':
       return route.auction ? `/auctions/${route.auction}` : '/auctions';
+    case 'whiteboard':
+      return route.question ? `/whiteboard/${route.question}` : '/whiteboard';
     case 'live':
       return route.host ? `/live/${route.session}/host` : `/live/${route.session}`;
     case 'sessions':
@@ -260,6 +264,8 @@ export function titleOf(route: Route): string {
       return `${route.view === 'history' ? 'Giveaway history' : route.view === 'replay' ? 'The drawing' : 'Giveaways'}${suffix}`;
     case 'auctions':
       return `Auctions${suffix}`;
+    case 'whiteboard':
+      return `Whiteboard${suffix}`;
     case 'live':
       // The presenter's title says so, because this address goes on a
       // projector and the tab is the last thing anyone checks before it does.
@@ -338,6 +344,9 @@ export function parsePath(pathname: string): Route | null {
 
   // /auctions and /auctions/<id>.
   if (first === 'auctions') return { kind: 'auctions', auction: second || null };
+
+  // /whiteboard and /whiteboard/<id>.
+  if (first === 'whiteboard') return { kind: 'whiteboard', question: second || null };
 
   // /giveaways, /giveaways/history, /giveaways/<id> and /giveaways/<id>/replay.
   if (first === 'giveaways') {

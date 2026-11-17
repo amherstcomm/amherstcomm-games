@@ -77,11 +77,19 @@ export function initials(name: string | null | undefined): string {
   return (first + last).toUpperCase();
 }
 
+/** Behind white initials: the same hues one shade darker, because several of
+ *  the mid-tones above put white text under 4.5:1 -- emerald was 3.8, amber
+ *  2.9. Every one of these clears it; tests/unit/avatars.test.ts measures. */
+export const INITIALS_COLORS = [
+  '#1d4ed8', '#0e7490', '#047857', '#4d7c0f', '#a16207',
+  '#c2410c', '#b91c1c', '#be185d', '#7e22ce', '#475569',
+];
+
 /** The same colour for the same person every time, from their id. */
 export function colorFor(seed: string | null | undefined): string {
   let h = 0;
   for (const ch of seed ?? '') h = (h * 31 + ch.charCodeAt(0)) >>> 0;
-  return COLORS[h % COLORS.length];
+  return INITIALS_COLORS[h % INITIALS_COLORS.length];
 }
 
 type Answer<T = object> = ({ ok: true } & T) | { ok: false; reason: string };

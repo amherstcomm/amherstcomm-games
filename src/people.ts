@@ -84,7 +84,10 @@ export async function setPersonRole(
 /** The capabilities that can be handed to one person rather than to a rung,
  *  and what each is called on the page. The server's list is the check on
  *  capability_grants; this one only decides what to draw. */
-export const PERSON_GRANTS = { 'giveaways.manage': 'Runs giveaways and auctions' } as const;
+export const PERSON_GRANTS = {
+  'giveaways.manage': 'Runs giveaways and auctions',
+  'whiteboard.manage': 'Writes whiteboard questions',
+} as const;
 export type PersonGrant = keyof typeof PERSON_GRANTS;
 
 export async function setPersonCapability(

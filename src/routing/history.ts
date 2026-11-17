@@ -43,6 +43,7 @@ export const IS_OVERLAY: Record<Route['kind'], boolean> = {
   // likewise: a page with its own address, sent round in a message
   giveaways: false,
   auctions: false,
+  whiteboard: false,
   // a page you stay on for the length of a session, not something over a board
   live: false,
   sessions: false,

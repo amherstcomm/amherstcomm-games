@@ -2314,7 +2314,8 @@ insert into public.capabilities (capability, min_role, description) values
   ('users.manage',       'games.admin', 'Grant and revoke privileges'),
   ('permissions.manage', 'games.admin', 'Change what each privilege unlocks'),
   ('site.settings',      'games.admin', 'Change the site settings'),
-  ('giveaways.manage',   'games.admin', 'Run giveaways: set them up, enter people, draw winners')
+  ('giveaways.manage',   'games.admin', 'Run giveaways: set them up, enter people, draw winners'),
+  ('whiteboard.manage',  'games.admin', 'Write the weekly whiteboard question and read suggestions')
 on conflict (capability) do nothing;
 
 -- permissions.manage cannot be handed below admin.
@@ -27012,3 +27013,499 @@ $fn$;
 
 revoke all on function public.save_home_feature(text, uuid, text, text, timestamptz, timestamptz, int) from public, anon;
 grant execute on function public.save_home_feature(text, uuid, text, text, timestamptz, timestamptz, int) to authenticated;
+
+-- ===========================================================================
+-- The whiteboard
+-- ===========================================================================
+--
+-- One question a week for everybody -- "Do you sort your laundry?" -- and the
+-- faces of who answered what. A get-to-know-each-other thing, not a quiz:
+-- nothing is right or wrong, and nothing is scored.
+--
+-- A question is either pick-an-answer (two to six choices, the board grouping
+-- faces under each) or a short written answer (faces beside what each person
+-- wrote). Whoever writes it decides which.
+--
+-- You see the board once you have answered, so the crowd does not decide for
+-- you; until then, how many have. Past weeks are open to everybody, and stay
+-- up. An answer can be changed or taken back until the week ends.
+--
+-- The week is the company's: Monday to Sunday on the office_zone clock. A
+-- question is scheduled for a week by its Monday, at most one a week; a week
+-- with nothing scheduled has no question, which is a choice rather than a
+-- gap to fill.
+--
+-- Anybody who plays can suggest a question. Writing them, scheduling them and
+-- reading the suggestions is whiteboard.manage, which administrators hold and
+-- which can be handed to one person on the people page, like giveaways.
+
+alter table public.capability_grants drop constraint if exists capability_grants_capability_check;
+alter table public.capability_grants add constraint capability_grants_capability_check
+  check (capability in ('giveaways.manage', 'whiteboard.manage'));
+create or replace function public.set_person_capability(p_user uuid, p_capability text, p_on boolean)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $fn$
+begin
+  if not public.can('users.manage') then
+    return jsonb_build_object('ok', false, 'reason', 'not allowed');
+  end if;
+  if p_user is null or not exists (select 1 from auth.users u where u.id = p_user) then
+    return jsonb_build_object('ok', false, 'reason', 'no such person');
+  end if;
+  if p_capability is null or p_capability not in ('giveaways.manage', 'whiteboard.manage') then
+    return jsonb_build_object('ok', false, 'reason', 'that cannot be handed to one person');
+  end if;
+  if p_on then
+    insert into public.capability_grants (user_id, capability, granted_by)
+    values (p_user, p_capability, (select auth.uid()))
+    on conflict (user_id, capability) do nothing;
+  else
+    delete from public.capability_grants g where g.user_id = p_user and g.capability = p_capability;
+  end if;
+  insert into public.giveaway_log (actor, action, detail)
+  values ((select auth.uid()), case when p_on then 'granted' else 'revoked' end,
+          jsonb_build_object('capability', p_capability, 'user', p_user,
+                             'name', public.giveaway_account_name(p_user)));
+  return jsonb_build_object('ok', true);
+end;
+$fn$;
+
+-- The company clock, for the server: the office_zone setting when it names a
+-- zone Postgres knows, else Chicago -- the same fallback the browser has.
+create or replace function public.office_zone()
+returns text
+language sql
+stable
+security definer
+set search_path = ''
+as $fn$
+  select coalesce(
+    (select s.value from public.site_settings s
+     where s.key = 'office_zone' and s.value <> ''
+       and exists (select 1 from pg_catalog.pg_timezone_names z where z.name = s.value)),
+    'America/Chicago')
+$fn$;
+revoke all on function public.office_zone() from public, anon, authenticated;
+
+-- The Monday of the week a moment falls in, on the company clock.
+create or replace function public.whiteboard_week(p_at timestamptz default now())
+returns date
+language sql
+stable
+security definer
+set search_path = ''
+as $fn$
+  select date_trunc('week', p_at at time zone public.office_zone())::date
+$fn$;
+revoke all on function public.whiteboard_week(timestamptz) from public, anon, authenticated;
+
+create table if not exists public.whiteboard_suggestions (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid references auth.users (id) on delete set null,
+  prompt text not null check (char_length(btrim(prompt)) between 1 and 200),
+  status text not null default 'new' check (status in ('new', 'used', 'dismissed')),
+  created_at timestamptz not null default now()
+);
+
+create table if not exists public.whiteboard_questions (
+  id uuid primary key default gen_random_uuid(),
+  prompt text not null check (char_length(btrim(prompt)) between 1 and 200),
+  kind text not null check (kind in ('choice', 'text')),
+  options text[] not null default '{}',
+  -- The Monday of its week, or null while it waits for one.
+  week_of date unique check (week_of is null or extract(isodow from week_of) = 1),
+  suggestion_id uuid references public.whiteboard_suggestions (id) on delete set null,
+  created_by uuid references auth.users (id) on delete set null,
+  created_at timestamptz not null default now(),
+  check ((kind = 'choice' and cardinality(options) between 2 and 6)
+         or (kind = 'text' and cardinality(options) = 0))
+);
+
+create table if not exists public.whiteboard_answers (
+  question_id uuid not null references public.whiteboard_questions (id) on delete cascade,
+  user_id uuid not null references auth.users (id) on delete cascade,
+  -- Which choice, counted from 0; or what they wrote. One or the other.
+  choice int check (choice is null or choice between 0 and 5),
+  body text check (body is null or char_length(btrim(body)) between 1 and 280),
+  answered_at timestamptz not null default now(),
+  primary key (question_id, user_id),
+  check ((choice is null) <> (body is null))
+);
+
+alter table public.whiteboard_suggestions enable row level security;
+alter table public.whiteboard_questions enable row level security;
+alter table public.whiteboard_answers enable row level security;
+revoke all on public.whiteboard_suggestions, public.whiteboard_questions, public.whiteboard_answers
+  from public, anon, authenticated;
+
+/*
+ * The board: this week's question, or the one asked for, and the weeks gone.
+ *
+ * Who answered what comes back only to somebody who has answered it, an
+ * organiser, or anybody once its week is over. A question not yet asked is
+ * an organiser's to see.
+ */
+create or replace function public.whiteboard_view(p_question uuid default null)
+returns jsonb
+language plpgsql
+stable
+security definer
+set search_path = ''
+as $fn$
+declare
+  me uuid := (select auth.uid());
+  manage boolean := public.can('whiteboard.manage');
+  v_week date := public.whiteboard_week();
+  v_on boolean := public.avatars_on();
+  q public.whiteboard_questions;
+  mine public.whiteboard_answers;
+  v_current boolean;
+  v_past jsonb;
+begin
+  if me is null then
+    return jsonb_build_object('ok', false, 'reason', 'not signed in');
+  end if;
+  if not public.can('games.play') then
+    return jsonb_build_object('ok', false, 'reason', 'not allowed');
+  end if;
+
+  if p_question is null then
+    select * into q from public.whiteboard_questions where week_of = v_week;
+  else
+    select * into q from public.whiteboard_questions
+     where id = p_question and (week_of <= v_week or manage);
+  end if;
+
+  v_past := coalesce((
+    select jsonb_agg(jsonb_build_object(
+             'id', x.id, 'prompt', x.prompt, 'week_of', x.week_of,
+             'answers', (select count(*) from public.whiteboard_answers a where a.question_id = x.id))
+           order by x.week_of desc)
+    from public.whiteboard_questions x where x.week_of < v_week), '[]'::jsonb);
+
+  if q.id is null then
+    return jsonb_build_object('ok', true, 'can_manage', manage, 'week_of', v_week,
+                              'question', null, 'past', v_past);
+  end if;
+
+  v_current := q.week_of = v_week;
+  select * into mine from public.whiteboard_answers where question_id = q.id and user_id = me;
+
+  return jsonb_build_object(
+    'ok', true,
+    'can_manage', manage,
+    'week_of', v_week,
+    'question', jsonb_build_object(
+      'id', q.id, 'prompt', q.prompt, 'kind', q.kind, 'options', to_jsonb(q.options),
+      'week_of', q.week_of,
+      'state', case when q.week_of is null or q.week_of > v_week then 'later'
+                    when v_current then 'open' else 'closed' end,
+      'ends_at', case when q.week_of is not null
+                      then (q.week_of + 7)::timestamp at time zone public.office_zone() end),
+    'count', (select count(*) from public.whiteboard_answers a where a.question_id = q.id),
+    'mine', case when mine.user_id is not null
+                 then jsonb_build_object('choice', mine.choice, 'body', mine.body) end,
+    'answers', case when not v_current or mine.user_id is not null or manage then coalesce((
+      select jsonb_agg(jsonb_build_object(
+               'user', a.user_id,
+               'name', coalesce(p.display_name, split_part(u.email, '@', 1), 'Somebody'),
+               'avatar', public.avatar_json(p, v_on),
+               'choice', a.choice, 'body', a.body)
+             order by a.answered_at, a.user_id)
+      from public.whiteboard_answers a
+      join auth.users u on u.id = a.user_id
+      left join public.profiles p on p.id = a.user_id
+      where a.question_id = q.id), '[]'::jsonb) end,
+    'past', v_past);
+end;
+$fn$;
+revoke all on function public.whiteboard_view(uuid) from public, anon;
+grant execute on function public.whiteboard_view(uuid) to authenticated;
+
+-- An answer to this week's question, or a changed one. A choice or words,
+-- whichever the question asks for.
+create or replace function public.answer_whiteboard(p_question uuid, p_choice int default null, p_body text default null)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $fn$
+declare
+  me uuid := (select auth.uid());
+  q public.whiteboard_questions;
+  v_body text := nullif(btrim(coalesce(p_body, '')), '');
+begin
+  if me is null then
+    return jsonb_build_object('ok', false, 'reason', 'sign in to answer');
+  end if;
+  if not public.can('games.play') then
+    return jsonb_build_object('ok', false, 'reason', 'not allowed');
+  end if;
+  select * into q from public.whiteboard_questions where id = p_question;
+  if q.id is null or q.week_of is null or q.week_of > public.whiteboard_week() then
+    return jsonb_build_object('ok', false, 'reason', 'no such question');
+  end if;
+  if q.week_of < public.whiteboard_week() then
+    return jsonb_build_object('ok', false, 'reason', 'that week is over');
+  end if;
+  if q.kind = 'choice' then
+    if p_choice is null or p_choice < 0 or p_choice >= cardinality(q.options) then
+      return jsonb_build_object('ok', false, 'reason', 'pick one of the answers');
+    end if;
+    v_body := null;
+  else
+    if v_body is null then
+      return jsonb_build_object('ok', false, 'reason', 'write an answer');
+    end if;
+    if char_length(v_body) > 280 then
+      return jsonb_build_object('ok', false, 'reason', 'keep it to 280 characters');
+    end if;
+    p_choice := null;
+  end if;
+  insert into public.whiteboard_answers (question_id, user_id, choice, body)
+  values (q.id, me, p_choice, v_body)
+  on conflict (question_id, user_id) do update
+    set choice = excluded.choice, body = excluded.body, answered_at = now();
+  return jsonb_build_object('ok', true);
+end;
+$fn$;
+revoke all on function public.answer_whiteboard(uuid, int, text) from public, anon;
+grant execute on function public.answer_whiteboard(uuid, int, text) to authenticated;
+
+-- Taking your own answer back, while the week lasts.
+create or replace function public.withdraw_whiteboard_answer(p_question uuid)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $fn$
+declare
+  me uuid := (select auth.uid());
+begin
+  if me is null then
+    return jsonb_build_object('ok', false, 'reason', 'not signed in');
+  end if;
+  if not exists (select 1 from public.whiteboard_questions
+                 where id = p_question and week_of = public.whiteboard_week()) then
+    return jsonb_build_object('ok', false, 'reason', 'that week is over');
+  end if;
+  delete from public.whiteboard_answers where question_id = p_question and user_id = me;
+  return jsonb_build_object('ok', true);
+end;
+$fn$;
+revoke all on function public.withdraw_whiteboard_answer(uuid) from public, anon;
+grant execute on function public.withdraw_whiteboard_answer(uuid) to authenticated;
+
+-- An organiser taking somebody's written answer down. The board is for
+-- everybody to read, and words can go wrong.
+create or replace function public.remove_whiteboard_answer(p_question uuid, p_user uuid)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $fn$
+begin
+  if not public.can('whiteboard.manage') then
+    return jsonb_build_object('ok', false, 'reason', 'not allowed');
+  end if;
+  delete from public.whiteboard_answers where question_id = p_question and user_id = p_user;
+  return jsonb_build_object('ok', found);
+end;
+$fn$;
+revoke all on function public.remove_whiteboard_answer(uuid, uuid) from public, anon;
+grant execute on function public.remove_whiteboard_answer(uuid, uuid) to authenticated;
+
+-- A question somebody would like asked. Five waiting at a time each, so the
+-- inbox stays something a person can read.
+create or replace function public.suggest_whiteboard_question(p_prompt text)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $fn$
+declare
+  me uuid := (select auth.uid());
+  v_prompt text := btrim(coalesce(p_prompt, ''));
+begin
+  if me is null then
+    return jsonb_build_object('ok', false, 'reason', 'sign in to suggest one');
+  end if;
+  if not public.can('games.play') then
+    return jsonb_build_object('ok', false, 'reason', 'not allowed');
+  end if;
+  if char_length(v_prompt) not between 1 and 200 then
+    return jsonb_build_object('ok', false, 'reason', 'a question is up to 200 characters');
+  end if;
+  if (select count(*) from public.whiteboard_suggestions where user_id = me and status = 'new') >= 5 then
+    return jsonb_build_object('ok', false, 'reason', 'you have five waiting already; that is plenty to be going on with');
+  end if;
+  insert into public.whiteboard_suggestions (user_id, prompt) values (me, v_prompt);
+  return jsonb_build_object('ok', true);
+end;
+$fn$;
+revoke all on function public.suggest_whiteboard_question(text) from public, anon;
+grant execute on function public.suggest_whiteboard_question(text) to authenticated;
+
+-- The organiser's page: every question, asked or not, and the suggestions
+-- waiting.
+create or replace function public.whiteboard_sheet()
+returns jsonb
+language sql
+stable
+security definer
+set search_path = ''
+as $fn$
+  select case when not public.can('whiteboard.manage') then jsonb_build_object('ok', false, 'reason', 'not allowed')
+  else jsonb_build_object(
+    'ok', true,
+    'week_of', public.whiteboard_week(),
+    'questions', coalesce((
+      select jsonb_agg(jsonb_build_object(
+               'id', q.id, 'prompt', q.prompt, 'kind', q.kind, 'options', to_jsonb(q.options),
+               'week_of', q.week_of,
+               'answers', (select count(*) from public.whiteboard_answers a where a.question_id = q.id))
+             order by q.week_of desc nulls first, q.created_at desc)
+      from public.whiteboard_questions q), '[]'::jsonb),
+    'suggestions', coalesce((
+      select jsonb_agg(jsonb_build_object(
+               'id', x.id, 'prompt', x.prompt, 'at', x.created_at,
+               'from', coalesce((select p.display_name from public.profiles p where p.id = x.user_id),
+                                (select split_part(u.email, '@', 1) from auth.users u where u.id = x.user_id)))
+             order by x.created_at)
+      from public.whiteboard_suggestions x where x.status = 'new'), '[]'::jsonb))
+  end
+$fn$;
+revoke all on function public.whiteboard_sheet() from public, anon;
+grant execute on function public.whiteboard_sheet() to authenticated;
+
+/*
+ * Writing a question, or changing one. A week is its Monday; a week that has
+ * gone cannot be given a question, and a week has one at most. Once people
+ * have answered, the wording can still be mended but the kind of question and
+ * how many choices it has cannot: an answer is "the second choice", and the
+ * second choice has to stay a choice.
+ */
+create or replace function public.save_whiteboard_question(
+  p_id uuid,
+  p_prompt text,
+  p_kind text,
+  p_options text[],
+  p_week_of date,
+  p_suggestion uuid default null
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $fn$
+declare
+  old public.whiteboard_questions;
+  v_prompt text := btrim(coalesce(p_prompt, ''));
+  v_options text[];
+  v_id uuid;
+begin
+  if not public.can('whiteboard.manage') then
+    return jsonb_build_object('ok', false, 'reason', 'not allowed');
+  end if;
+  if char_length(v_prompt) not between 1 and 200 then
+    return jsonb_build_object('ok', false, 'reason', 'a question is up to 200 characters');
+  end if;
+  if p_kind not in ('choice', 'text') then
+    return jsonb_build_object('ok', false, 'reason', 'a question takes a choice or a written answer');
+  end if;
+  select coalesce(array_agg(btrim(o) order by n), '{}') into v_options
+    from unnest(coalesce(p_options, '{}')) with ordinality as t(o, n)
+   where btrim(o) <> '';
+  if p_kind = 'text' then
+    v_options := '{}';
+  elsif cardinality(v_options) not between 2 and 6 then
+    return jsonb_build_object('ok', false, 'reason', 'give it two to six answers to pick from');
+  elsif exists (select 1 from unnest(v_options) o where char_length(o) > 60) then
+    return jsonb_build_object('ok', false, 'reason', 'an answer to pick is up to 60 characters');
+  elsif (select count(distinct lower(o)) from unnest(v_options) o) < cardinality(v_options) then
+    return jsonb_build_object('ok', false, 'reason', 'two of the answers are the same');
+  end if;
+  if p_week_of is not null and extract(isodow from p_week_of) <> 1 then
+    return jsonb_build_object('ok', false, 'reason', 'a week is given by its Monday');
+  end if;
+
+  if p_id is not null then
+    select * into old from public.whiteboard_questions where id = p_id for update;
+    if old.id is null then
+      return jsonb_build_object('ok', false, 'reason', 'no such question');
+    end if;
+  end if;
+  if p_week_of is not null and p_week_of < public.whiteboard_week()
+     and p_week_of is distinct from old.week_of then
+    return jsonb_build_object('ok', false, 'reason', 'that week has gone');
+  end if;
+  if p_week_of is not null and exists (
+       select 1 from public.whiteboard_questions
+       where week_of = p_week_of and id is distinct from p_id) then
+    return jsonb_build_object('ok', false, 'reason', 'that week already has a question');
+  end if;
+  if old.id is not null and exists (select 1 from public.whiteboard_answers where question_id = old.id)
+     and (p_kind <> old.kind or cardinality(v_options) <> cardinality(old.options)) then
+    return jsonb_build_object('ok', false,
+      'reason', 'people have answered it, so the wording can change but not the kind or the number of answers');
+  end if;
+  if old.id is not null and old.week_of < public.whiteboard_week()
+     and p_week_of is distinct from old.week_of then
+    return jsonb_build_object('ok', false, 'reason', 'it has been asked; it stays in its week');
+  end if;
+
+  if old.id is null then
+    insert into public.whiteboard_questions (prompt, kind, options, week_of, suggestion_id, created_by)
+    values (v_prompt, p_kind, v_options, p_week_of, p_suggestion, (select auth.uid()))
+    returning id into v_id;
+  else
+    update public.whiteboard_questions
+       set prompt = v_prompt, kind = p_kind, options = v_options, week_of = p_week_of
+     where id = old.id;
+    v_id := old.id;
+  end if;
+  if p_suggestion is not null then
+    update public.whiteboard_suggestions set status = 'used' where id = p_suggestion;
+  end if;
+  return jsonb_build_object('ok', true, 'id', v_id);
+end;
+$fn$;
+revoke all on function public.save_whiteboard_question(uuid, text, text, text[], date, uuid) from public, anon;
+grant execute on function public.save_whiteboard_question(uuid, text, text, text[], date, uuid) to authenticated;
+
+create or replace function public.delete_whiteboard_question(p_id uuid)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $fn$
+begin
+  if not public.can('whiteboard.manage') then
+    return jsonb_build_object('ok', false, 'reason', 'not allowed');
+  end if;
+  delete from public.whiteboard_questions where id = p_id;
+  return jsonb_build_object('ok', found);
+end;
+$fn$;
+revoke all on function public.delete_whiteboard_question(uuid) from public, anon;
+grant execute on function public.delete_whiteboard_question(uuid) to authenticated;
+
+create or replace function public.dismiss_whiteboard_suggestion(p_id uuid)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $fn$
+begin
+  if not public.can('whiteboard.manage') then
+    return jsonb_build_object('ok', false, 'reason', 'not allowed');
+  end if;
+  update public.whiteboard_suggestions set status = 'dismissed' where id = p_id and status = 'new';
+  return jsonb_build_object('ok', found);
+end;
+$fn$;
+revoke all on function public.dismiss_whiteboard_suggestion(uuid) from public, anon;
+grant execute on function public.dismiss_whiteboard_suggestion(uuid) to authenticated;
