@@ -80,10 +80,17 @@ test('picking an answer shows everybody, grouped under what they picked', async 
     p_question: 'q-laundry', p_choice: 1, p_body: null,
   });
   await expect(page.getByText('You said: Sometimes')).toBeVisible();
-  await expect(page.getByRole('listitem', { name: 'Always: 2' })).toContainText('Ann Lee');
-  await expect(page.getByRole('listitem', { name: 'Always: 2' })).toContainText('Cy Ortiz');
-  await expect(page.getByRole('listitem', { name: 'Never: 1' })).toContainText('Bo Jensen');
-  await expect(page.getByRole('listitem', { name: 'Sometimes: 1' })).toContainText('Me Myself');
+  const always = page.getByRole('list', { name: 'Who picked Always' });
+  await expect(always.getByRole('button', { name: 'Ann Lee' })).toBeVisible();
+  await expect(always.getByRole('button', { name: 'Cy Ortiz' })).toBeVisible();
+  await expect(page.getByRole('list', { name: 'Who picked Never' }).getByRole('button', { name: 'Bo Jensen' })).toBeVisible();
+  await expect(page.getByRole('list', { name: 'Who picked Sometimes' }).getByRole('button', { name: 'Me Myself' })).toBeVisible();
+  // just the pictures: no name written on the board until one is asked for
+  await expect(page.getByText('Ann Lee', { exact: true })).toHaveCount(0);
+  await always.getByRole('button', { name: 'Ann Lee' }).click();
+  await expect(page.getByRole('status').filter({ hasText: 'Ann Lee' })).toBeVisible();
+  await always.getByRole('button', { name: 'Ann Lee' }).click();
+  await expect(page.getByRole('status').filter({ hasText: 'Ann Lee' })).toHaveCount(0);
   // nobody else's answer is anybody's to take down
   await expect(page.getByRole('button', { name: /answer down/ })).toHaveCount(0);
 
@@ -123,7 +130,7 @@ test('a past week shows its board to anybody, and offers no answering', async ({
   });
   await page.goto('/whiteboard/q-old');
   await expect(page.getByText(/the week of November 9 · over/i)).toBeVisible();
-  await expect(page.getByText('Ann Lee')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Ann Lee' })).toBeVisible();
   await expect(page.getByRole('group', { name: 'Your answer' })).toHaveCount(0);
   await expect(page.getByRole('link', { name: '← This week' })).toHaveAttribute('href', '/whiteboard');
 });
@@ -159,6 +166,8 @@ test('the writer turns a suggestion into next week’s question', async ({ page 
   });
   await page.goto('/whiteboard');
   // the writer sees the board without answering, and can take an answer down
+  // once a tap has said whose it is
+  await page.getByRole('button', { name: 'Bo Jensen' }).click();
   await expect(page.getByRole('button', { name: 'Take Bo Jensen’s answer down' })).toBeVisible();
 
   const writing = page.getByRole('region', { name: 'Writing the questions' });
@@ -208,4 +217,23 @@ test('the board, writer’s view, has no WCAG A/AA violations axe can see', asyn
   const results = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa']).analyze();
   const summary = results.violations.map((v) => ({ id: v.id, nodes: v.nodes.length, sample: v.nodes[0]?.html.slice(0, 400), why: v.nodes[0]?.failureSummary }));
   expect(summary, JSON.stringify(summary, null, 2)).toEqual([]);
+});
+
+test('a written answer is the picture and the words, with the name on a tap', async ({ page }) => {
+  await signedIn(page);
+  await server(page, {
+    whiteboard_view: () => ({
+      ok: true, can_manage: false, week_of: WEEK,
+      question: { ...LAUNDRY, id: 'q-weekend', kind: 'text', options: [], prompt: 'Best thing you did this weekend?' },
+      count: 1, mine: { choice: null, body: 'Slept in.' },
+      answers: [{ user: 'u-ann', name: 'Ann Lee', avatar: null, choice: null, body: 'Went to a Bucks game' }],
+      past: [],
+    }),
+  });
+  await page.goto('/whiteboard');
+  await expect(page.getByText('Went to a Bucks game')).toBeVisible();
+  await expect(page.getByText('Ann Lee', { exact: true })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Ann Lee' })).toHaveAttribute('title', 'Ann Lee');
+  await page.getByRole('button', { name: 'Ann Lee' }).click();
+  await expect(page.getByRole('status').filter({ hasText: 'Ann Lee' })).toBeVisible();
 });
