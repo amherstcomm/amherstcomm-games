@@ -77,6 +77,7 @@ export const CAPABILITIES = [
   'site.settings',
   // also held by a person on their own -- see capability_grants
   'giveaways.manage',
+  'whiteboard.manage',
 ] as const;
 export type Capability = (typeof CAPABILITIES)[number];
 

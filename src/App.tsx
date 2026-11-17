@@ -14,7 +14,7 @@ import { PALETTES, PaletteContext, resolveTheme, TEXT_SCALES, THEME_MODES, useTh
 import { PrefsContext } from '@/prefs';
 import OnboardingCard from '@/OnboardingCard';
 import { useModalA11y } from '@/useModalA11y';
-import { Camera, Combine, Flag as FlagIcon, Gavel, Gift, Radio, SlidersHorizontal } from 'lucide-react';
+import { Camera, Combine, Flag as FlagIcon, Gavel, Gift, MessageCircleQuestion, Radio, SlidersHorizontal } from 'lucide-react';
 import BridgeGame, { type BridgeGameHandle } from '@/BridgeGame';
 import GameMenu from '@/GameMenu';
 import LadderIcon from '@/LadderIcon';
@@ -39,6 +39,8 @@ import { readContestsOn } from '@/contests';
 import GiveawaysView from '@/GiveawaysView';
 import AuctionsView from '@/AuctionsView';
 import { readAuctions } from '@/auctions';
+import WhiteboardView from '@/WhiteboardView';
+import { readBoard } from '@/whiteboard';
 import { readGiveaways, readGiveawayTriviaSessions } from '@/giveaways';
 import {
   gameFeature, FEED_NAME, GAME_NAME } from '@/games';
@@ -287,6 +289,7 @@ function App() {
     // Not a game, so a tournament locking the site does not lock it out.
     nav.page.kind === 'giveaways' ||
     nav.page.kind === 'auctions' ||
+    nav.page.kind === 'whiteboard' ||
     nav.page.kind === 'admin' ||
     nav.page.kind === 'join' ||
     nav.page.kind === 'scores'
@@ -344,6 +347,9 @@ function App() {
   const [canGive, setCanGive] = useState(false);
   // Auctions taking bids, on the same terms: run by the same people.
   const [auctionsNow, setAuctionsNow] = useState(0);
+  // Whether there is a whiteboard question up this week, or this person
+  // writes them: the footer link shows for either.
+  const [boardOn, setBoardOn] = useState(false);
   const [learnMode, setLearnMode] = useState(entryGame()?.view === 'learn');
   const [theme, setTheme] = useState<ThemeMode>(initial.theme);
   const [palette, setPalette] = useState<Palette>(initial.palette);
@@ -379,6 +385,7 @@ function App() {
       setGiveawaysNow(0);
       setCanGive(false);
       setAuctionsNow(0);
+      setBoardOn(false);
       return;
     }
     let alive = true;
@@ -399,6 +406,7 @@ function App() {
     void readAuctions().then((got) => {
       if (alive && got.ok) setAuctionsNow(got.auctions.filter((a) => a.state === 'open').length);
     });
+    void readBoard().then((got) => alive && setBoardOn(got.ok && (!!got.question || !!got.can_manage)));
     window.addEventListener('focus', count);
     return () => {
       alive = false;
@@ -1277,6 +1285,7 @@ function App() {
             <GiveawaysView giveaway={reportPage.giveaway} view={reportPage.view} link={pageLink} />
           )}
           {reportPage?.kind === 'auctions' && <AuctionsView auction={reportPage.auction} link={pageLink} />}
+          {reportPage?.kind === 'whiteboard' && <WhiteboardView question={reportPage.question} link={pageLink} />}
           {reportPage?.kind === 'admin' && <AdminSettings
               tab={reportPage.tab}
               tabLink={(tab) => pageLink({ kind: 'admin', tab })}
@@ -1748,6 +1757,15 @@ function App() {
               >
                 <Gavel className="w-3.5 h-3.5" aria-hidden="true" />
                 {auctionsNow > 0 ? `Auctions (${auctionsNow})` : 'Auctions'}
+              </RouteLink>
+            )}
+            {boardOn && (
+              <RouteLink
+                {...pageLink({ kind: 'whiteboard', question: null })}
+                className="inline-flex items-center gap-1.5 text-accent hover:brightness-110 transition"
+              >
+                <MessageCircleQuestion className="w-3.5 h-3.5" aria-hidden="true" />
+                Whiteboard
               </RouteLink>
             )}
             {canSetUp && sessionsOn && (
