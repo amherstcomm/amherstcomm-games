@@ -251,14 +251,50 @@ function TakeDown({ q, a, onChange }: { q: Question; a: BoardAnswer; onChange: (
   );
 }
 
-/** Faces grouped under the choice each person picked. */
+/** One person on the board: just their picture. Their name is on hover, and
+ *  on a tap for a phone, which has no hover; a screen reader is read it. */
+function Face({ a, open, onToggle }: { a: BoardAnswer; open: boolean; onToggle: () => void }) {
+  return (
+    <button
+      type="button"
+      aria-label={a.name}
+      aria-expanded={open}
+      title={a.name}
+      onClick={onToggle}
+      className={`rounded-full ${open ? 'outline outline-2 outline-offset-2 outline-accent' : ''}`}
+    >
+      <Avatar avatar={a.avatar} name={a.name} seed={a.user} size="md" />
+    </button>
+  );
+}
+
+/** Whose name a tap has shown, one at a time across the board. */
+function useShown() {
+  const [shown, setShown] = useState<string | null>(null);
+  return { shown, toggle: (user: string) => setShown((was) => (was === user ? null : user)) };
+}
+
+/** The name a tap asked for, under the faces it belongs to, and for an
+ *  organiser the way to take that answer down. */
+function Named({ a, q, manage, onChange }: { a: BoardAnswer; q: Question; manage: boolean; onChange: () => Promise<void> }) {
+  return (
+    <p className="mt-1 flex items-center gap-1 text-sm text-slate-200" role="status">
+      {a.name}
+      {manage && <TakeDown q={q} a={a} onChange={onChange} />}
+    </p>
+  );
+}
+
+/** The pictures of who picked each choice, grouped under it. */
 function ChoiceBoard({ q, answers, manage, onChange }: { q: Question; answers: BoardAnswer[]; manage: boolean; onChange: () => Promise<void> }) {
   const total = answers.length || 1;
+  const { shown, toggle } = useShown();
   return (
     <ul className="mt-2 space-y-4">
       {q.options.map((o, n) => {
         const here = answers.filter((a) => a.choice === n);
         const share = Math.round((here.length / total) * 100);
+        const named = here.find((a) => a.user === shown);
         return (
           <li key={n} aria-label={`${o}: ${here.length}`}>
             <div className="flex items-baseline justify-between gap-3">
@@ -269,16 +305,15 @@ function ChoiceBoard({ q, answers, manage, onChange }: { q: Question; answers: B
               <div className="h-full bg-accent rounded-full" style={{ width: `${share}%` }} />
             </div>
             {here.length > 0 && (
-              <ul className="mt-2 flex flex-wrap gap-2">
+              <ul className="mt-2 flex flex-wrap gap-2" aria-label={`Who picked ${o}`}>
                 {here.map((a) => (
-                  <li key={a.user} className="flex items-center gap-1.5 rounded-full bg-white/5 border border-white/10 pl-0.5 pr-2 py-0.5">
-                    <Avatar avatar={a.avatar} name={a.name} seed={a.user} size="sm" />
-                    <span className="text-sm text-slate-200">{a.name}</span>
-                    {manage && <TakeDown q={q} a={a} onChange={onChange} />}
+                  <li key={a.user}>
+                    <Face a={a} open={shown === a.user} onToggle={() => toggle(a.user)} />
                   </li>
                 ))}
               </ul>
             )}
+            {named && <Named a={named} q={q} manage={manage} onChange={onChange} />}
           </li>
         );
       })}
@@ -286,20 +321,21 @@ function ChoiceBoard({ q, answers, manage, onChange }: { q: Question; answers: B
   );
 }
 
-/** Each face beside what that person wrote. */
+/** Each picture beside what that person wrote; the name, as on the other
+ *  board, on hover or a tap. */
 function WordsBoard({ q, answers, manage, onChange }: { q: Question; answers: BoardAnswer[]; manage: boolean; onChange: () => Promise<void> }) {
+  const { shown, toggle } = useShown();
   if (answers.length === 0) return null;
   return (
     <ul className="mt-2 grid gap-3 sm:grid-cols-2">
       {answers.map((a) => (
         <li key={a.user} className="flex gap-3 rounded-xl bg-white/5 border border-white/10 p-3">
-          <Avatar avatar={a.avatar} name={a.name} seed={a.user} size="md" />
-          <div className="min-w-0 flex-1">
-            <div className="flex items-start justify-between gap-2">
-              <p className="text-xs font-semibold text-slate-400">{a.name}</p>
-              {manage && <TakeDown q={q} a={a} onChange={onChange} />}
-            </div>
+          <span className="shrink-0">
+            <Face a={a} open={shown === a.user} onToggle={() => toggle(a.user)} />
+          </span>
+          <div className="min-w-0 flex-1 self-center">
             <p className="text-sm text-slate-200 break-words whitespace-pre-line">{a.body}</p>
+            {shown === a.user && <Named a={a} q={q} manage={manage} onChange={onChange} />}
           </div>
         </li>
       ))}
