@@ -45,6 +45,7 @@ export const IS_OVERLAY: Record<Route['kind'], boolean> = {
   auctions: false,
   whiteboard: false,
   recognition: false,
+  suggestions: false,
   // a page you stay on for the length of a session, not something over a board
   live: false,
   sessions: false,
