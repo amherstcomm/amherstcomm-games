@@ -28107,6 +28107,12 @@ grant execute on function public.read_site_settings() to anon, authenticated;
 -- holds only its hash, so even a copy of the database cannot be walked back
 -- to a person.
 --
+-- What this does not cover: the gateway in front of the database logs each
+-- request with its time and address, so somebody with access to the server
+-- could match a suggestion's time to a request. The page promises only what
+-- holds -- the name is not stored, and nobody using the site can see who sent
+-- it -- and not that it is unknowable.
+--
 -- A reader answers either to the sender alone, or on the "You said, we did"
 -- board everybody sees, which shows the suggestion without any name and what
 -- was done about it. The sender can write back either way.

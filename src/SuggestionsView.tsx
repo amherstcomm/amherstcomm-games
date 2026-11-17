@@ -139,7 +139,7 @@ function SendForm({ page, onSent }: { page: Page; onSent: () => Promise<void> })
         {sent.key ? (
           <>
             <p className="text-sm text-slate-300 mt-2">
-              It went in without your name, and nothing stored with it leads back to you. This browser will remember
+              It went in without your name, and nobody using the site can see who sent it. This browser will remember
               it so you can see any answer below. To check from anywhere else, keep this private link: anybody who
               has it can read the answers and write back.
             </p>
@@ -210,7 +210,7 @@ function SendForm({ page, onSent }: { page: Page; onSent: () => Promise<void> })
         <span>
           Leave my name off
           <span className="block text-xs text-slate-400">
-            Nothing stored with it will lead back to you, not even for the site’s administrators. You can still see
+            Your name isn’t stored with it, and nobody using the site can see who sent it. You can still see
             answers here, and write back.
           </span>
         </span>
