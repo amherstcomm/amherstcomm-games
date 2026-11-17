@@ -166,7 +166,10 @@ function SendForm({ page, onSent }: { page: Page; onSent: () => Promise<void> })
       aria-label="Leave a suggestion"
       onSubmit={async (e) => {
         e.preventDefault();
-        if (!box) return setProblem('Pick whose box.');
+        // Said rather than greyed out: a disabled button on the dark theme
+        // looks like any other, and pressing it did nothing at all.
+        if (!box) return setProblem('Pick whose box it goes in.');
+        if (body.trim().length < 10) return setProblem('Say a little more: at least 10 characters.');
         setBusy(true);
         const res = await submit(box, body, anonymous);
         setBusy(false);
@@ -204,6 +207,9 @@ function SendForm({ page, onSent }: { page: Page; onSent: () => Promise<void> })
       <label className="block">
         <span className={LABEL}>Your suggestion</span>
         <textarea className={FIELD} rows={5} maxLength={4000} value={body} onChange={(e) => setBody(e.target.value)} />
+        <span className="block text-xs text-slate-500 mt-1 tabular-nums">
+          {body.trim().length < 10 ? `At least 10 characters (${body.trim().length} so far)` : `${body.length} / 4,000`}
+        </span>
       </label>
       <label className="flex items-start gap-2 text-sm text-slate-200">
         <input type="checkbox" className="mt-1" checked={anonymous} onChange={(e) => setAnonymous(e.target.checked)} />
@@ -220,7 +226,7 @@ function SendForm({ page, onSent }: { page: Page; onSent: () => Promise<void> })
         never your name.
       </p>
       {problem && <p className="text-sm text-rose-300">{problem}</p>}
-      <button type="submit" className={PRIMARY} disabled={busy || !box || body.trim().length < 10}>Put it in the box</button>
+      <button type="submit" className={PRIMARY} disabled={busy}>Put it in the box</button>
     </form>
   );
 }

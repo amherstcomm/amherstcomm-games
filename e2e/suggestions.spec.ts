@@ -42,6 +42,26 @@ const BOXES = [
 ];
 const page0 = (extra: Record<string, unknown> = {}) => ({ ok: true, can_set_up: false, reads: false, boxes: BOXES, board: [], ...extra });
 
+test('pressing the button with something missing says what, rather than nothing', async ({ page }) => {
+  await signedIn(page);
+  const sent = await server(page, {
+    suggestion_page: () => page0(),
+    my_suggestions: () => ({ ok: true, suggestions: [] }),
+  });
+  await page.goto('/suggestions');
+  const form = page.getByRole('form', { name: 'Leave a suggestion' });
+  const button = form.getByRole('button', { name: 'Put it in the box' });
+  await expect(button).toBeEnabled();
+  await form.getByLabel('Your suggestion').fill('test');
+  await expect(form.getByText('At least 10 characters (4 so far)')).toBeVisible();
+  await button.click();
+  await expect(form.getByText('Pick whose box it goes in.')).toBeVisible();
+  await form.getByRole('radio', { name: /The CEO’s box/ }).check();
+  await button.click();
+  await expect(form.getByText('Say a little more: at least 10 characters.')).toBeVisible();
+  expect(sent.some((s) => s.fn === 'submit_suggestion')).toBe(false);
+});
+
 test('leaving one anonymously keeps its key and offers the private link', async ({ page }) => {
   await signedIn(page);
   const sent = await server(page, {

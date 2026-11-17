@@ -74,7 +74,8 @@ test('nominating: find them, say what they did, choose whether to be named', asy
   await form.getByLabel('Who are you nominating?').fill('Dana');
   await form.getByRole('button', { name: /Dana Kowalski/ }).click();
   await expect(form.getByText('Nominating')).toBeVisible();
-  await expect(form.getByRole('button', { name: 'Send it' })).toBeDisabled();
+  await form.getByRole('button', { name: 'Send it' }).click();
+  await expect(form.getByText('Say what they did: at least 20 characters.')).toBeVisible();
   await form.getByLabel('What did they do?').fill('Dana drove two hours to swap a failed ONT before a funeral home opened.');
   await form.getByLabel(/Show my name on the wall/).uncheck();
   await form.getByRole('button', { name: 'Send it' }).click();
