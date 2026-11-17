@@ -136,6 +136,8 @@ export type Route =
   | { kind: 'whiteboard'; question: string | null }
   // Recognition: nominating, the wall, and the award rounds. One page.
   | { kind: 'recognition' }
+  // The suggestion boxes. One page; an anonymous sender's key rides after a #.
+  | { kind: 'suggestions' }
   // A live session. Two addresses for the same room: the one everybody opens,
   // and the presenter's, which shows the answer and the controls. Separate
   // addresses rather than a mode on one page, because the presenter's screen
@@ -194,6 +196,8 @@ export function pathOf(route: Route): string {
       return route.question ? `/whiteboard/${route.question}` : '/whiteboard';
     case 'recognition':
       return '/recognition';
+    case 'suggestions':
+      return '/suggestions';
     case 'live':
       return route.host ? `/live/${route.session}/host` : `/live/${route.session}`;
     case 'sessions':
@@ -272,6 +276,8 @@ export function titleOf(route: Route): string {
       return `Whiteboard${suffix}`;
     case 'recognition':
       return `Recognition${suffix}`;
+    case 'suggestions':
+      return `Suggestion box${suffix}`;
     case 'live':
       // The presenter's title says so, because this address goes on a
       // projector and the tab is the last thing anyone checks before it does.
@@ -356,6 +362,9 @@ export function parsePath(pathname: string): Route | null {
 
   // /recognition.
   if (first === 'recognition') return { kind: 'recognition' };
+
+  // /suggestions.
+  if (first === 'suggestions') return { kind: 'suggestions' };
 
   // /giveaways, /giveaways/history, /giveaways/<id> and /giveaways/<id>/replay.
   if (first === 'giveaways') {

@@ -171,6 +171,8 @@ describe('the overlay table', () => {
       'whiteboard',
       // and recognition, the link a nominee is emailed
       'recognition',
+      // and the suggestion boxes, which an emailed reader comes back to
+      'suggestions',
       // a live session is a page you stay on, not something over a board
       'live',
       // and so is building one — Back from the editor should leave it, not

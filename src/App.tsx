@@ -14,7 +14,7 @@ import { PALETTES, PaletteContext, resolveTheme, TEXT_SCALES, THEME_MODES, useTh
 import { PrefsContext } from '@/prefs';
 import OnboardingCard from '@/OnboardingCard';
 import { useModalA11y } from '@/useModalA11y';
-import { Award, Camera, Combine, Flag as FlagIcon, Gavel, Gift, MessageCircleQuestion, Radio, SlidersHorizontal } from 'lucide-react';
+import { Award, Camera, Inbox as InboxIcon, Combine, Flag as FlagIcon, Gavel, Gift, MessageCircleQuestion, Radio, SlidersHorizontal } from 'lucide-react';
 import BridgeGame, { type BridgeGameHandle } from '@/BridgeGame';
 import GameMenu from '@/GameMenu';
 import LadderIcon from '@/LadderIcon';
@@ -43,6 +43,8 @@ import WhiteboardView from '@/WhiteboardView';
 import { readBoard } from '@/whiteboard';
 import RecognitionView from '@/RecognitionView';
 import { readWaiting } from '@/recognition';
+import SuggestionsView from '@/SuggestionsView';
+import { readUnread as readSuggestionsUnread } from '@/suggestions';
 import { readGiveaways, readGiveawayTriviaSessions } from '@/giveaways';
 import {
   gameFeature, FEED_NAME, GAME_NAME } from '@/games';
@@ -293,6 +295,7 @@ function App() {
     nav.page.kind === 'auctions' ||
     nav.page.kind === 'whiteboard' ||
     nav.page.kind === 'recognition' ||
+    nav.page.kind === 'suggestions' ||
     nav.page.kind === 'admin' ||
     nav.page.kind === 'join' ||
     nav.page.kind === 'scores'
@@ -355,6 +358,8 @@ function App() {
   const [boardOn, setBoardOn] = useState(false);
   // Nominations waiting for this person to review: none unless they review.
   const [nominationsWaiting, setNominationsWaiting] = useState(0);
+  // Suggestions unopened in a box this person reads: none unless they read one.
+  const [suggestionsUnread, setSuggestionsUnread] = useState(0);
   const [learnMode, setLearnMode] = useState(entryGame()?.view === 'learn');
   const [theme, setTheme] = useState<ThemeMode>(initial.theme);
   const [palette, setPalette] = useState<Palette>(initial.palette);
@@ -392,6 +397,7 @@ function App() {
       setAuctionsNow(0);
       setBoardOn(false);
       setNominationsWaiting(0);
+      setSuggestionsUnread(0);
       return;
     }
     let alive = true;
@@ -414,6 +420,7 @@ function App() {
     });
     void readBoard().then((got) => alive && setBoardOn(got.ok && (!!got.question || !!got.can_manage)));
     void readWaiting().then((n) => alive && setNominationsWaiting(n));
+    void readSuggestionsUnread().then((n) => alive && setSuggestionsUnread(n));
     window.addEventListener('focus', count);
     return () => {
       alive = false;
@@ -1303,6 +1310,7 @@ function App() {
           {reportPage?.kind === 'auctions' && <AuctionsView auction={reportPage.auction} link={pageLink} />}
           {reportPage?.kind === 'whiteboard' && <WhiteboardView question={reportPage.question} link={pageLink} />}
           {reportPage?.kind === 'recognition' && <RecognitionView />}
+          {reportPage?.kind === 'suggestions' && <SuggestionsView />}
           {reportPage?.kind === 'admin' && <AdminSettings
               tab={reportPage.tab}
               tabLink={(tab) => pageLink({ kind: 'admin', tab })}
@@ -1794,6 +1802,15 @@ function App() {
               >
                 <Award className="w-3.5 h-3.5" aria-hidden="true" />
                 {nominationsWaiting > 0 ? `Recognition (${nominationsWaiting})` : 'Recognition'}
+              </RouteLink>
+            )}
+            {session && (
+              <RouteLink
+                {...pageLink({ kind: 'suggestions' })}
+                className="inline-flex items-center gap-1.5 text-accent hover:brightness-110 transition"
+              >
+                <InboxIcon className="w-3.5 h-3.5" aria-hidden="true" />
+                {suggestionsUnread > 0 ? `Suggestion box (${suggestionsUnread})` : 'Suggestion box'}
               </RouteLink>
             )}
             {canSetUp && sessionsOn && (

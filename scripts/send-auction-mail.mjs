@@ -1,7 +1,8 @@
 // Send the emails that are waiting: run by the minute timer on the VM
 // (ops/amherstcomm-games-mail.*), safe to run by hand. Named for the first
-// thing that sent mail; it works every queue now -- auctions (outbid, won) and
-// recognition (a nomination posted, an award won).
+// thing that sent mail; it works every queue now -- auctions (outbid, won),
+// recognition (a nomination posted, an award won) and suggestion boxes (one
+// left in a reader's box, a reader's answer to a named sender).
 //
 // The database queues them and decides who is told what; this claims a batch
 // from each queue, sends each one, and reports back. A failure goes back in
@@ -19,6 +20,7 @@
 // that has stopped being true.
 import { compose, DEFAULT_ZONE } from './auction-mail.mjs';
 import { composeRecognition } from './recognition-mail.mjs';
+import { composeSuggestion } from './suggestion-mail.mjs';
 
 const env = process.env;
 const TRANSPORT = (env.MAIL_TRANSPORT ?? '').trim().toLowerCase();
@@ -94,6 +96,7 @@ const send =
 const QUEUES = [
   { name: 'auction', claim: 'auction_mail_claim', done: 'auction_mail_done', words: (m) => compose(m, { site: SITE, zone: ZONE }) },
   { name: 'recognition', claim: 'recognition_mail_claim', done: 'recognition_mail_done', words: (m) => composeRecognition(m, { site: SITE }) },
+  { name: 'suggestion', claim: 'suggestion_mail_claim', done: 'suggestion_mail_done', words: (m) => composeSuggestion(m, { site: SITE }) },
 ];
 
 let sent = 0;

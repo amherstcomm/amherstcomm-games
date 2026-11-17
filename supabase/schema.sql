@@ -28089,3 +28089,663 @@ as $fn$
 $fn$;
 revoke all on function public.read_site_settings() from public;
 grant execute on function public.read_site_settings() to anon, authenticated;
+
+-- ===========================================================================
+-- Suggestion boxes
+-- ===========================================================================
+--
+-- The physical boxes outside the CEO's and COO's doors, online. One box per
+-- person: the sender picks whose box, and only that box's readers read it --
+-- not administrators, not anybody else. An administrator (site.settings) sets
+-- the boxes up and says who reads each, and sees how many are in each, never
+-- what they say.
+--
+-- A sender can leave their name off. Then the suggestion is stored with no
+-- link to their account at all -- no user id, nothing that leads back -- and
+-- what lets them come back for a reply is a random key handed to them once:
+-- their browser keeps it, and they can keep the link it makes. The database
+-- holds only its hash, so even a copy of the database cannot be walked back
+-- to a person.
+--
+-- A reader answers either to the sender alone, or on the "You said, we did"
+-- board everybody sees, which shows the suggestion without any name and what
+-- was done about it. The sender can write back either way.
+
+create table if not exists public.suggestion_boxes (
+  id uuid primary key default gen_random_uuid(),
+  name text not null check (char_length(btrim(name)) between 1 and 80),
+  blurb text check (blurb is null or char_length(blurb) <= 500),
+  active boolean not null default true,
+  position int not null default 0,
+  created_at timestamptz not null default now()
+);
+
+create table if not exists public.suggestion_box_readers (
+  box_id uuid not null references public.suggestion_boxes (id) on delete cascade,
+  user_id uuid not null references auth.users (id) on delete cascade,
+  primary key (box_id, user_id)
+);
+
+create table if not exists public.suggestions (
+  id uuid primary key default gen_random_uuid(),
+  box_id uuid not null references public.suggestion_boxes (id) on delete cascade,
+  body text not null check (char_length(btrim(body)) between 10 and 4000),
+  -- Who sent it, when they put their name to it; null when they did not.
+  sender uuid references auth.users (id) on delete set null,
+  -- For an anonymous one: sha256 of the key the sender holds, and nothing else.
+  key_hash text unique,
+  read_at timestamptz,
+  archived boolean not null default false,
+  created_at timestamptz not null default now(),
+  check (sender is null or key_hash is null)
+);
+create index if not exists suggestions_box_idx on public.suggestions (box_id, created_at desc);
+
+create table if not exists public.suggestion_messages (
+  id uuid primary key default gen_random_uuid(),
+  suggestion_id uuid not null references public.suggestions (id) on delete cascade,
+  author text not null check (author in ('reader', 'sender')),
+  -- the reader who wrote it; never the sender, named or not
+  reader uuid references auth.users (id) on delete set null,
+  body text not null check (char_length(btrim(body)) between 1 and 4000),
+  -- a reader's answer on the "You said, we did" board
+  public boolean not null default false,
+  created_at timestamptz not null default now(),
+  check (author = 'reader' or (reader is null and not public))
+);
+create index if not exists suggestion_messages_idx on public.suggestion_messages (suggestion_id, created_at);
+
+create table if not exists public.suggestion_mail (
+  id bigint generated always as identity primary key,
+  kind text not null check (kind in ('new', 'reply')),
+  user_id uuid not null references auth.users (id) on delete cascade,
+  suggestion_id uuid not null references public.suggestions (id) on delete cascade,
+  created_at timestamptz not null default now(),
+  claimed_at timestamptz,
+  attempts int not null default 0,
+  done_at timestamptz,
+  outcome text check (outcome in ('sent', 'skipped', 'failed')),
+  last_error text
+);
+create unique index if not exists suggestion_mail_waiting_idx
+  on public.suggestion_mail (kind, user_id, suggestion_id) where done_at is null;
+
+alter table public.suggestion_boxes enable row level security;
+alter table public.suggestion_box_readers enable row level security;
+alter table public.suggestions enable row level security;
+alter table public.suggestion_messages enable row level security;
+alter table public.suggestion_mail enable row level security;
+revoke all on public.suggestion_boxes, public.suggestion_box_readers, public.suggestions,
+  public.suggestion_messages, public.suggestion_mail from public, anon, authenticated;
+
+create or replace function public.suggestion_key_hash(p_key text)
+returns text
+language sql
+immutable
+set search_path = ''
+as $fn$
+  select encode(sha256(convert_to(coalesce(p_key, ''), 'UTF8')), 'hex')
+$fn$;
+revoke all on function public.suggestion_key_hash(text) from public, anon, authenticated;
+
+create or replace function public.reads_box(p_box uuid)
+returns boolean
+language sql
+stable
+security definer
+set search_path = ''
+as $fn$
+  select exists (select 1 from public.suggestion_box_readers r
+                 where r.box_id = p_box and r.user_id = (select auth.uid()))
+$fn$;
+revoke all on function public.reads_box(uuid) from public, anon, authenticated;
+
+-- Somebody by name, for a reader's reply or a named sender.
+create or replace function public.suggestion_name(p_user uuid)
+returns text
+language sql
+stable
+security definer
+set search_path = ''
+as $fn$
+  select coalesce(p.display_name, split_part(u.email, '@', 1))
+  from auth.users u left join public.profiles p on p.id = u.id where u.id = p_user
+$fn$;
+revoke all on function public.suggestion_name(uuid) from public, anon, authenticated;
+
+-- A suggestion's thread, for somebody allowed to see all of it.
+create or replace function public.suggestion_thread(p_id uuid)
+returns jsonb
+language sql
+stable
+security definer
+set search_path = ''
+as $fn$
+  select coalesce(jsonb_agg(jsonb_build_object(
+           'id', m.id, 'author', m.author, 'body', m.body, 'public', m.public, 'at', m.created_at,
+           'by', case when m.author = 'reader' then public.suggestion_name(m.reader) end)
+         order by m.created_at, m.id), '[]'::jsonb)
+  from public.suggestion_messages m where m.suggestion_id = p_id
+$fn$;
+revoke all on function public.suggestion_thread(uuid) from public, anon, authenticated;
+
+/*
+ * The page, for anybody signed in: the boxes and who reads each, the "You
+ * said, we did" board, whether the reader reads any box, and whether they set
+ * boxes up.
+ */
+create or replace function public.suggestion_page()
+returns jsonb
+language plpgsql
+stable
+security definer
+set search_path = ''
+as $fn$
+declare
+  me uuid := (select auth.uid());
+  v_on boolean := public.avatars_on();
+begin
+  if me is null then
+    return jsonb_build_object('ok', false, 'reason', 'not signed in');
+  end if;
+  if not public.can('games.play') then
+    return jsonb_build_object('ok', false, 'reason', 'not allowed');
+  end if;
+  return jsonb_build_object(
+    'ok', true,
+    'can_set_up', public.can('site.settings'),
+    'reads', exists (select 1 from public.suggestion_box_readers where user_id = me),
+    'boxes', coalesce((
+      select jsonb_agg(jsonb_build_object(
+               'id', b.id, 'name', b.name, 'blurb', b.blurb,
+               'readers', coalesce((select jsonb_agg(public.recognition_person(r.user_id, v_on))
+                                    from public.suggestion_box_readers r where r.box_id = b.id), '[]'::jsonb))
+             order by b.position, b.name)
+      from public.suggestion_boxes b
+      where b.active and exists (select 1 from public.suggestion_box_readers r where r.box_id = b.id)), '[]'::jsonb),
+    'board', coalesce((
+      select jsonb_agg(x order by (x->>'at')::timestamptz desc)
+      from (select jsonb_build_object(
+                     'id', s.id, 'box', b.name, 'body', s.body, 'sent_at', s.created_at,
+                     'at', (select max(m.created_at) from public.suggestion_messages m
+                            where m.suggestion_id = s.id and m.public),
+                     'replies', (select jsonb_agg(jsonb_build_object(
+                                          'body', m.body, 'at', m.created_at, 'by', public.suggestion_name(m.reader))
+                                        order by m.created_at)
+                                 from public.suggestion_messages m where m.suggestion_id = s.id and m.public)) x
+            from public.suggestions s join public.suggestion_boxes b on b.id = s.box_id
+            where exists (select 1 from public.suggestion_messages m where m.suggestion_id = s.id and m.public)
+            limit 200) shown), '[]'::jsonb));
+end;
+$fn$;
+revoke all on function public.suggestion_page() from public, anon;
+grant execute on function public.suggestion_page() to authenticated;
+
+/*
+ * Putting one in. Anonymous: no sender is stored, and the answer carries a
+ * key the sender keeps -- the only way back to it. The day's total across
+ * everybody is capped, since an anonymous one cannot be capped per person
+ * without knowing the person.
+ */
+create or replace function public.submit_suggestion(p_box uuid, p_body text, p_anonymous boolean)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $fn$
+declare
+  me uuid := (select auth.uid());
+  v_body text := btrim(coalesce(p_body, ''));
+  v_key text;
+  v_id uuid;
+begin
+  if me is null then
+    return jsonb_build_object('ok', false, 'reason', 'sign in to make a suggestion');
+  end if;
+  if not public.can('games.play') then
+    return jsonb_build_object('ok', false, 'reason', 'not allowed');
+  end if;
+  if not exists (select 1 from public.suggestion_boxes b where b.id = p_box and b.active
+                 and exists (select 1 from public.suggestion_box_readers r where r.box_id = b.id)) then
+    return jsonb_build_object('ok', false, 'reason', 'pick a box');
+  end if;
+  if char_length(v_body) < 10 then
+    return jsonb_build_object('ok', false, 'reason', 'say a little more');
+  end if;
+  if char_length(v_body) > 4000 then
+    return jsonb_build_object('ok', false, 'reason', 'keep it to 4,000 characters');
+  end if;
+  if (select count(*) from public.suggestions where created_at > now() - interval '1 day') >= 300 then
+    return jsonb_build_object('ok', false, 'reason', 'the boxes are full for today; try again tomorrow');
+  end if;
+
+  if coalesce(p_anonymous, false) then
+    v_key := replace(gen_random_uuid()::text, '-', '') || replace(gen_random_uuid()::text, '-', '');
+    insert into public.suggestions (box_id, body, key_hash)
+    values (p_box, v_body, public.suggestion_key_hash(v_key))
+    returning id into v_id;
+  else
+    insert into public.suggestions (box_id, body, sender)
+    values (p_box, v_body, me)
+    returning id into v_id;
+  end if;
+
+  insert into public.suggestion_mail (kind, user_id, suggestion_id)
+  select 'new', r.user_id, v_id from public.suggestion_box_readers r where r.box_id = p_box
+  on conflict do nothing;
+
+  return jsonb_build_object('ok', true, 'id', v_id, 'key', v_key);
+end;
+$fn$;
+revoke all on function public.submit_suggestion(uuid, text, boolean) from public, anon;
+grant execute on function public.submit_suggestion(uuid, text, boolean) to authenticated;
+
+-- Whether this caller may act as a suggestion's sender: it is theirs by name,
+-- or they hold its key.
+create or replace function public.is_suggestion_sender(s public.suggestions, p_key text)
+returns boolean
+language sql
+stable
+security definer
+set search_path = ''
+as $fn$
+  select (s.sender is not null and s.sender = (select auth.uid()))
+      or (s.key_hash is not null and p_key is not null and s.key_hash = public.suggestion_key_hash(p_key))
+$fn$;
+revoke all on function public.is_suggestion_sender(public.suggestions, text) from public, anon, authenticated;
+
+-- The sender's own: those sent by name, and those whose keys this browser
+-- holds -- each with its whole thread.
+create or replace function public.my_suggestions(p_keys text[] default '{}')
+returns jsonb
+language sql
+stable
+security definer
+set search_path = ''
+as $fn$
+  select case when (select auth.uid()) is null then jsonb_build_object('ok', false, 'reason', 'not signed in')
+  else jsonb_build_object('ok', true, 'suggestions', coalesce((
+    select jsonb_agg(jsonb_build_object(
+             'id', s.id, 'box', b.name, 'body', s.body, 'at', s.created_at,
+             'anonymous', s.sender is null,
+             'key', k.key,
+             'read', s.read_at is not null,
+             'thread', public.suggestion_thread(s.id))
+           order by s.created_at desc)
+    from public.suggestions s
+    join public.suggestion_boxes b on b.id = s.box_id
+    left join lateral (select x as key from unnest(coalesce(p_keys, '{}')) x
+                       where s.key_hash = public.suggestion_key_hash(x) limit 1) k on true
+    where s.sender = (select auth.uid())
+       or s.key_hash in (select public.suggestion_key_hash(x) from unnest(coalesce(p_keys, '{}')) x)), '[]'::jsonb))
+  end
+$fn$;
+revoke all on function public.my_suggestions(text[]) from public, anon;
+grant execute on function public.my_suggestions(text[]) to authenticated;
+
+-- The sender writing back.
+create or replace function public.suggestion_follow_up(p_id uuid, p_key text, p_body text)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $fn$
+declare
+  s public.suggestions;
+  v_body text := btrim(coalesce(p_body, ''));
+begin
+  if (select auth.uid()) is null then
+    return jsonb_build_object('ok', false, 'reason', 'not signed in');
+  end if;
+  select * into s from public.suggestions where id = p_id;
+  if s.id is null or not public.is_suggestion_sender(s, p_key) then
+    return jsonb_build_object('ok', false, 'reason', 'no such suggestion');
+  end if;
+  if char_length(v_body) not between 1 and 4000 then
+    return jsonb_build_object('ok', false, 'reason', 'write something, up to 4,000 characters');
+  end if;
+  insert into public.suggestion_messages (suggestion_id, author, body) values (s.id, 'sender', v_body);
+  -- back to unread, so the readers see there is more
+  update public.suggestions set read_at = null, archived = false where id = s.id;
+  insert into public.suggestion_mail (kind, user_id, suggestion_id)
+  select 'new', r.user_id, s.id from public.suggestion_box_readers r where r.box_id = s.box_id
+  on conflict do nothing;
+  return jsonb_build_object('ok', true);
+end;
+$fn$;
+revoke all on function public.suggestion_follow_up(uuid, text, text) from public, anon;
+grant execute on function public.suggestion_follow_up(uuid, text, text) to authenticated;
+
+/*
+ * A reader's inbox: every box they read, and what is in it. Named senders by
+ * name; anonymous ones as nothing at all, because there is nothing.
+ */
+create or replace function public.suggestion_inbox()
+returns jsonb
+language sql
+stable
+security definer
+set search_path = ''
+as $fn$
+  select case when (select auth.uid()) is null then jsonb_build_object('ok', false, 'reason', 'not signed in')
+  else jsonb_build_object('ok', true, 'boxes', coalesce((
+    select jsonb_agg(jsonb_build_object(
+             'id', b.id, 'name', b.name,
+             'suggestions', coalesce((
+               select jsonb_agg(jsonb_build_object(
+                        'id', s.id, 'body', s.body, 'at', s.created_at,
+                        'from', case when s.sender is not null then public.suggestion_name(s.sender) end,
+                        'anonymous', s.sender is null,
+                        'read', s.read_at is not null, 'archived', s.archived,
+                        'thread', public.suggestion_thread(s.id))
+                      order by s.archived, (s.read_at is null) desc, s.created_at desc)
+               from public.suggestions s where s.box_id = b.id), '[]'::jsonb))
+           order by b.position, b.name)
+    from public.suggestion_boxes b
+    join public.suggestion_box_readers r on r.box_id = b.id and r.user_id = (select auth.uid())), '[]'::jsonb))
+  end
+$fn$;
+revoke all on function public.suggestion_inbox() from public, anon;
+grant execute on function public.suggestion_inbox() to authenticated;
+
+-- How many a reader has not opened, for the footer.
+create or replace function public.suggestions_unread()
+returns int
+language sql
+stable
+security definer
+set search_path = ''
+as $fn$
+  select count(*)::int from public.suggestions s
+  join public.suggestion_box_readers r on r.box_id = s.box_id and r.user_id = (select auth.uid())
+  where s.read_at is null and not s.archived
+$fn$;
+revoke all on function public.suggestions_unread() from public, anon;
+grant execute on function public.suggestions_unread() to authenticated;
+
+-- A reader marking one read or unread, filing it away or back, or throwing it out.
+create or replace function public.mark_suggestion(p_id uuid, p_read boolean default null, p_archived boolean default null)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $fn$
+declare
+  s public.suggestions;
+begin
+  select * into s from public.suggestions where id = p_id;
+  if s.id is null or not public.reads_box(s.box_id) then
+    return jsonb_build_object('ok', false, 'reason', 'no such suggestion');
+  end if;
+  update public.suggestions
+     set read_at = case when p_read is null then read_at when p_read then coalesce(read_at, now()) end,
+         archived = coalesce(p_archived, archived)
+   where id = p_id;
+  return jsonb_build_object('ok', true);
+end;
+$fn$;
+revoke all on function public.mark_suggestion(uuid, boolean, boolean) from public, anon;
+grant execute on function public.mark_suggestion(uuid, boolean, boolean) to authenticated;
+
+create or replace function public.delete_suggestion(p_id uuid)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $fn$
+declare
+  s public.suggestions;
+begin
+  select * into s from public.suggestions where id = p_id;
+  if s.id is null or not public.reads_box(s.box_id) then
+    return jsonb_build_object('ok', false, 'reason', 'no such suggestion');
+  end if;
+  delete from public.suggestions where id = p_id;
+  return jsonb_build_object('ok', true);
+end;
+$fn$;
+revoke all on function public.delete_suggestion(uuid) from public, anon;
+grant execute on function public.delete_suggestion(uuid) to authenticated;
+
+/*
+ * A reader's answer: to the sender alone, or on the "You said, we did" board
+ * for everybody, which puts the suggestion there too, without a name. A
+ * named sender is emailed either way; an anonymous one finds it on the page.
+ */
+create or replace function public.reply_to_suggestion(p_id uuid, p_body text, p_public boolean)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $fn$
+declare
+  s public.suggestions;
+  v_body text := btrim(coalesce(p_body, ''));
+begin
+  select * into s from public.suggestions where id = p_id;
+  if s.id is null or not public.reads_box(s.box_id) then
+    return jsonb_build_object('ok', false, 'reason', 'no such suggestion');
+  end if;
+  if char_length(v_body) not between 1 and 4000 then
+    return jsonb_build_object('ok', false, 'reason', 'write something, up to 4,000 characters');
+  end if;
+  insert into public.suggestion_messages (suggestion_id, author, reader, body, public)
+  values (s.id, 'reader', (select auth.uid()), v_body, coalesce(p_public, false));
+  update public.suggestions set read_at = coalesce(read_at, now()) where id = s.id;
+  if s.sender is not null then
+    insert into public.suggestion_mail (kind, user_id, suggestion_id)
+    values ('reply', s.sender, s.id)
+    on conflict do nothing;
+  end if;
+  return jsonb_build_object('ok', true);
+end;
+$fn$;
+revoke all on function public.reply_to_suggestion(uuid, text, boolean) from public, anon;
+grant execute on function public.reply_to_suggestion(uuid, text, boolean) to authenticated;
+
+-- Moving a reader's answer on or off the board, or taking it back.
+create or replace function public.set_suggestion_reply(p_message uuid, p_public boolean default null, p_delete boolean default false)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $fn$
+declare
+  m public.suggestion_messages;
+begin
+  select * into m from public.suggestion_messages where id = p_message;
+  if m.id is null or m.author <> 'reader'
+     or not public.reads_box((select box_id from public.suggestions where id = m.suggestion_id)) then
+    return jsonb_build_object('ok', false, 'reason', 'no such reply');
+  end if;
+  if p_delete then
+    delete from public.suggestion_messages where id = m.id;
+  elsif p_public is not null then
+    update public.suggestion_messages set public = p_public where id = m.id;
+  end if;
+  return jsonb_build_object('ok', true);
+end;
+$fn$;
+revoke all on function public.set_suggestion_reply(uuid, boolean, boolean) from public, anon;
+grant execute on function public.set_suggestion_reply(uuid, boolean, boolean) to authenticated;
+
+-- ---------------------------------------------------------------------------
+-- Setting the boxes up: an administrator, who sees counts and never contents
+-- ---------------------------------------------------------------------------
+create or replace function public.suggestion_boxes_sheet()
+returns jsonb
+language sql
+stable
+security definer
+set search_path = ''
+as $fn$
+  select case when not public.can('site.settings') then jsonb_build_object('ok', false, 'reason', 'not allowed')
+  else jsonb_build_object('ok', true, 'boxes', coalesce((
+    select jsonb_agg(jsonb_build_object(
+             'id', b.id, 'name', b.name, 'blurb', b.blurb, 'active', b.active, 'position', b.position,
+             'readers', coalesce((select jsonb_agg(jsonb_build_object(
+                                           'user', r.user_id, 'name', public.suggestion_name(r.user_id))
+                                         order by public.suggestion_name(r.user_id))
+                                  from public.suggestion_box_readers r where r.box_id = b.id), '[]'::jsonb),
+             'count', (select count(*) from public.suggestions s where s.box_id = b.id))
+           order by b.position, b.name)
+    from public.suggestion_boxes b), '[]'::jsonb))
+  end
+$fn$;
+revoke all on function public.suggestion_boxes_sheet() from public, anon;
+grant execute on function public.suggestion_boxes_sheet() to authenticated;
+
+create or replace function public.save_suggestion_box(
+  p_id uuid, p_name text, p_blurb text, p_readers uuid[], p_active boolean default true, p_position int default 0)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $fn$
+declare
+  v_id uuid := p_id;
+begin
+  if not public.can('site.settings') then
+    return jsonb_build_object('ok', false, 'reason', 'not allowed');
+  end if;
+  if char_length(btrim(coalesce(p_name, ''))) not between 1 and 80 then
+    return jsonb_build_object('ok', false, 'reason', 'it needs a name, up to 80 characters');
+  end if;
+  if coalesce(cardinality(p_readers), 0) = 0 then
+    return jsonb_build_object('ok', false, 'reason', 'somebody has to read it');
+  end if;
+  if exists (select 1 from unnest(p_readers) x where not exists (select 1 from auth.users u where u.id = x)) then
+    return jsonb_build_object('ok', false, 'reason', 'one of the readers is not somebody who has signed in');
+  end if;
+  if v_id is null then
+    insert into public.suggestion_boxes (name, blurb, active, position)
+    values (btrim(p_name), nullif(btrim(coalesce(p_blurb, '')), ''), coalesce(p_active, true), coalesce(p_position, 0))
+    returning id into v_id;
+  else
+    update public.suggestion_boxes
+       set name = btrim(p_name), blurb = nullif(btrim(coalesce(p_blurb, '')), ''),
+           active = coalesce(p_active, true), position = coalesce(p_position, 0)
+     where id = v_id;
+    if not found then
+      return jsonb_build_object('ok', false, 'reason', 'no such box');
+    end if;
+    delete from public.suggestion_box_readers where box_id = v_id and user_id <> all (p_readers);
+  end if;
+  insert into public.suggestion_box_readers (box_id, user_id)
+  select v_id, x from unnest(p_readers) x
+  on conflict do nothing;
+  return jsonb_build_object('ok', true, 'id', v_id);
+end;
+$fn$;
+revoke all on function public.save_suggestion_box(uuid, text, text, uuid[], boolean, int) from public, anon;
+grant execute on function public.save_suggestion_box(uuid, text, text, uuid[], boolean, int) to authenticated;
+
+-- A box with nothing in it can go; one with suggestions is switched off
+-- instead, because what is in it is somebody's and not the administrator's.
+create or replace function public.delete_suggestion_box(p_id uuid)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $fn$
+begin
+  if not public.can('site.settings') then
+    return jsonb_build_object('ok', false, 'reason', 'not allowed');
+  end if;
+  if exists (select 1 from public.suggestions where box_id = p_id) then
+    return jsonb_build_object('ok', false,
+      'reason', 'it has suggestions in it, which are its readers'' to deal with; switch it off instead');
+  end if;
+  delete from public.suggestion_boxes where id = p_id;
+  return jsonb_build_object('ok', found);
+end;
+$fn$;
+revoke all on function public.delete_suggestion_box(uuid) from public, anon;
+grant execute on function public.delete_suggestion_box(uuid) to authenticated;
+
+-- ---------------------------------------------------------------------------
+-- Email: a reader told something is in their box; a named sender told of a reply
+-- ---------------------------------------------------------------------------
+create or replace function public.suggestion_mail_claim(p_limit int default 20)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $fn$
+declare
+  v jsonb;
+begin
+  update public.suggestion_mail m set done_at = now(), outcome = 'skipped', claimed_at = null
+   where m.done_at is null
+     and (not exists (select 1 from auth.users u where u.id = m.user_id and coalesce(u.email, '') <> '')
+          -- a reader no longer reading that box
+          or (m.kind = 'new' and not exists (
+                select 1 from public.suggestions s
+                join public.suggestion_box_readers r on r.box_id = s.box_id and r.user_id = m.user_id
+                where s.id = m.suggestion_id)));
+
+  with picked as (
+    select m.id from public.suggestion_mail m
+    where m.done_at is null and m.attempts < 5
+      and (m.claimed_at is null or m.claimed_at < now() - interval '10 minutes')
+    order by m.id
+    limit greatest(coalesce(p_limit, 20), 1)
+    for update skip locked
+  ), marked as (
+    update public.suggestion_mail m set claimed_at = now(), attempts = m.attempts + 1
+      from picked where m.id = picked.id
+    returning m.id, m.kind, m.user_id, m.suggestion_id
+  )
+  select coalesce(jsonb_agg(jsonb_build_object(
+           'id', k.id, 'kind', k.kind, 'to', u.email,
+           'name', coalesce(p.display_name, ''),
+           'box', b.name,
+           -- to a reader, the suggestion and who sent it, if anybody did; to
+           -- a sender, the latest answer
+           'body', case when k.kind = 'new'
+                        then coalesce((select m.body from public.suggestion_messages m
+                                       where m.suggestion_id = s.id and m.author = 'sender'
+                                       order by m.created_at desc limit 1), s.body)
+                        else (select m.body from public.suggestion_messages m
+                              where m.suggestion_id = s.id and m.author = 'reader'
+                              order by m.created_at desc limit 1) end,
+           'follow_up', k.kind = 'new' and exists (select 1 from public.suggestion_messages m
+                                                   where m.suggestion_id = s.id and m.author = 'sender'),
+           'from', case when k.kind = 'new' and s.sender is not null then public.suggestion_name(s.sender) end,
+           'by', case when k.kind = 'reply' then (select public.suggestion_name(m.reader) from public.suggestion_messages m
+                                                  where m.suggestion_id = s.id and m.author = 'reader'
+                                                  order by m.created_at desc limit 1) end,
+           'public', case when k.kind = 'reply' then (select m.public from public.suggestion_messages m
+                                                      where m.suggestion_id = s.id and m.author = 'reader'
+                                                      order by m.created_at desc limit 1) end)
+         order by k.id), '[]'::jsonb)
+    into v
+  from marked k
+  join auth.users u on u.id = k.user_id
+  left join public.profiles p on p.id = u.id
+  join public.suggestions s on s.id = k.suggestion_id
+  join public.suggestion_boxes b on b.id = s.box_id;
+  return jsonb_build_object('ok', true, 'mail', v);
+end;
+$fn$;
+revoke all on function public.suggestion_mail_claim(int) from public, anon, authenticated;
+grant execute on function public.suggestion_mail_claim(int) to service_role;
+
+create or replace function public.suggestion_mail_done(p_id bigint, p_error text default null)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $fn$
+begin
+  update public.suggestion_mail
+     set claimed_at = case when p_error is null then null else now() end,
+         last_error = p_error,
+         done_at = case when p_error is null or attempts >= 5 then now() end,
+         outcome = case when p_error is null then 'sent' when attempts >= 5 then 'failed' end
+   where id = p_id and done_at is null;
+  return jsonb_build_object('ok', found);
+end;
+$fn$;
+revoke all on function public.suggestion_mail_done(bigint, text) from public, anon, authenticated;
+grant execute on function public.suggestion_mail_done(bigint, text) to service_role;
