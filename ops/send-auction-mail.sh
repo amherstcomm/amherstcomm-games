@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Send the auction emails that are waiting. Run by the minute timer; safe to
+# Send the emails that are waiting -- auctions and recognition. Run by the minute timer; safe to
 # run by hand, and does nothing when nothing is waiting -- or when
 # MAIL_TRANSPORT is not set in ops/publish.env, in which case they stay queued.
 set -euo pipefail

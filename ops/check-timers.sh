@@ -72,6 +72,6 @@ check() {
 
 check amherstcomm-games-puzzles "the nightly publish"
 check amherstcomm-games-requests "days asked for from the admin portal"
-check amherstcomm-games-mail "auction emails"
+check amherstcomm-games-mail "auction and recognition emails"
 
 exit "$failed"

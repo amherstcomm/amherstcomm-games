@@ -2315,7 +2315,8 @@ insert into public.capabilities (capability, min_role, description) values
   ('permissions.manage', 'games.admin', 'Change what each privilege unlocks'),
   ('site.settings',      'games.admin', 'Change the site settings'),
   ('giveaways.manage',   'games.admin', 'Run giveaways: set them up, enter people, draw winners'),
-  ('whiteboard.manage',  'games.admin', 'Write the weekly whiteboard question and read suggestions')
+  ('whiteboard.manage',  'games.admin', 'Write the weekly whiteboard question and read suggestions'),
+  ('recognition.manage', 'games.admin', 'Review nominations, post them to the wall, and pick award winners')
 on conflict (capability) do nothing;
 
 -- permissions.manage cannot be handed below admin.
@@ -27509,3 +27510,556 @@ end;
 $fn$;
 revoke all on function public.dismiss_whiteboard_suggestion(uuid) from public, anon;
 grant execute on function public.dismiss_whiteboard_suggestion(uuid) to authenticated;
+
+-- ===========================================================================
+-- Recognition: nominating each other for acting like an owner
+-- ===========================================================================
+--
+-- Anybody can nominate anybody else -- staff and managers alike; the site
+-- knows nobody's manager and does not need to -- by saying what they did. A
+-- nomination waits for the people who review them (recognition.manage), who
+-- post it to the wall everybody sees, or do not. Posting tells the nominee,
+-- by email.
+--
+-- The nominator decides whether their name goes on the wall with it.
+-- Reviewers always see who it was: a nomination is somebody's word about
+-- somebody, and the people acting on it have to be able to ask.
+--
+-- Awards are rounds the reviewers open, with whatever dates they choose --
+-- a month, a quarter, Employee Ownership Month -- and a winner they pick from
+-- the posted nominations made within those dates. The winner is told, and is
+-- on the wall as that round's winner.
+--
+-- Nobody reviews a nomination about themselves, or picks themselves.
+
+alter table public.capability_grants drop constraint if exists capability_grants_capability_check;
+alter table public.capability_grants add constraint capability_grants_capability_check
+  check (capability in ('giveaways.manage', 'whiteboard.manage', 'recognition.manage'));
+create or replace function public.set_person_capability(p_user uuid, p_capability text, p_on boolean)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $fn$
+begin
+  if not public.can('users.manage') then
+    return jsonb_build_object('ok', false, 'reason', 'not allowed');
+  end if;
+  if p_user is null or not exists (select 1 from auth.users u where u.id = p_user) then
+    return jsonb_build_object('ok', false, 'reason', 'no such person');
+  end if;
+  if p_capability is null or p_capability not in ('giveaways.manage', 'whiteboard.manage', 'recognition.manage') then
+    return jsonb_build_object('ok', false, 'reason', 'that cannot be handed to one person');
+  end if;
+  if p_on then
+    insert into public.capability_grants (user_id, capability, granted_by)
+    values (p_user, p_capability, (select auth.uid()))
+    on conflict (user_id, capability) do nothing;
+  else
+    delete from public.capability_grants g where g.user_id = p_user and g.capability = p_capability;
+  end if;
+  insert into public.giveaway_log (actor, action, detail)
+  values ((select auth.uid()), case when p_on then 'granted' else 'revoked' end,
+          jsonb_build_object('capability', p_capability, 'user', p_user,
+                             'name', public.giveaway_account_name(p_user)));
+  return jsonb_build_object('ok', true);
+end;
+$fn$;
+
+create table if not exists public.recognition_nominations (
+  id uuid primary key default gen_random_uuid(),
+  nominee uuid not null references auth.users (id) on delete cascade,
+  nominator uuid references auth.users (id) on delete set null,
+  story text not null check (char_length(btrim(story)) between 20 and 2000),
+  -- whether the wall says who nominated
+  show_name boolean not null default true,
+  status text not null default 'waiting' check (status in ('waiting', 'posted', 'declined')),
+  -- for the reviewers only: why it was not posted, or anything to remember
+  review_note text check (review_note is null or char_length(review_note) <= 500),
+  reviewed_by uuid references auth.users (id) on delete set null,
+  reviewed_at timestamptz,
+  posted_at timestamptz,
+  created_at timestamptz not null default now(),
+  check (nominee is distinct from nominator)
+);
+create index if not exists recognition_nominations_status_idx
+  on public.recognition_nominations (status, created_at desc);
+
+create table if not exists public.recognition_rounds (
+  id uuid primary key default gen_random_uuid(),
+  title text not null check (char_length(btrim(title)) between 1 and 80),
+  blurb text check (blurb is null or char_length(blurb) <= 1000),
+  -- Nominations made on these days, on the company clock, are in the running.
+  starts_on date not null,
+  ends_on date not null,
+  winner_id uuid references public.recognition_nominations (id) on delete set null,
+  winner_note text check (winner_note is null or char_length(winner_note) <= 500),
+  announced_at timestamptz,
+  created_by uuid references auth.users (id) on delete set null,
+  created_at timestamptz not null default now(),
+  check (ends_on >= starts_on)
+);
+
+create table if not exists public.recognition_mail (
+  id bigint generated always as identity primary key,
+  kind text not null check (kind in ('posted', 'award')),
+  user_id uuid not null references auth.users (id) on delete cascade,
+  nomination_id uuid not null references public.recognition_nominations (id) on delete cascade,
+  round_id uuid references public.recognition_rounds (id) on delete cascade,
+  created_at timestamptz not null default now(),
+  claimed_at timestamptz,
+  attempts int not null default 0,
+  done_at timestamptz,
+  outcome text check (outcome in ('sent', 'skipped', 'failed')),
+  last_error text
+);
+create unique index if not exists recognition_mail_waiting_idx
+  on public.recognition_mail (kind, user_id, nomination_id) where done_at is null;
+
+alter table public.recognition_nominations enable row level security;
+alter table public.recognition_rounds enable row level security;
+alter table public.recognition_mail enable row level security;
+revoke all on public.recognition_nominations, public.recognition_rounds, public.recognition_mail
+  from public, anon, authenticated;
+
+-- Somebody as a card shows them: id, name, avatar.
+create or replace function public.recognition_person(p_user uuid, p_on boolean)
+returns jsonb
+language sql
+stable
+security definer
+set search_path = ''
+as $fn$
+  select jsonb_build_object(
+    'user', u.id,
+    'name', coalesce(p.display_name, split_part(u.email, '@', 1)),
+    'avatar', public.avatar_json(p, p_on))
+  from auth.users u left join public.profiles p on p.id = u.id
+  where u.id = p_user
+$fn$;
+revoke all on function public.recognition_person(uuid, boolean) from public, anon, authenticated;
+
+-- The day a nomination was made, on the company clock: what puts it in a round.
+create or replace function public.recognition_day(p_at timestamptz)
+returns date
+language sql
+stable
+security definer
+set search_path = ''
+as $fn$
+  select (p_at at time zone public.office_zone())::date
+$fn$;
+revoke all on function public.recognition_day(timestamptz) from public, anon, authenticated;
+
+/*
+ * The page: the rounds, the wall, the reader's own nominations -- and, for a
+ * reviewer, what is waiting, what has been decided, and each round's
+ * candidates.
+ */
+create or replace function public.recognition_view()
+returns jsonb
+language plpgsql
+stable
+security definer
+set search_path = ''
+as $fn$
+declare
+  me uuid := (select auth.uid());
+  review boolean := public.can('recognition.manage');
+  v_on boolean := public.avatars_on();
+  v_today date := (now() at time zone public.office_zone())::date;
+begin
+  if me is null then
+    return jsonb_build_object('ok', false, 'reason', 'not signed in');
+  end if;
+  if not public.can('games.play') then
+    return jsonb_build_object('ok', false, 'reason', 'not allowed');
+  end if;
+
+  return jsonb_build_object(
+    'ok', true,
+    'can_review', review,
+    'me', me,
+    'rounds', coalesce((
+      select jsonb_agg(jsonb_build_object(
+               'id', r.id, 'title', r.title, 'blurb', r.blurb,
+               'starts_on', r.starts_on, 'ends_on', r.ends_on,
+               'state', case when v_today < r.starts_on then 'soon'
+                             when v_today <= r.ends_on then 'open' else 'closed' end,
+               'winner', case when r.announced_at is not null and w.id is not null then jsonb_build_object(
+                           'nomination', w.id,
+                           'who', public.recognition_person(w.nominee, v_on),
+                           'story', w.story,
+                           'note', r.winner_note,
+                           'announced_at', r.announced_at) end)
+             order by r.starts_on desc)
+      from public.recognition_rounds r
+      left join public.recognition_nominations w on w.id = r.winner_id and w.status = 'posted'
+      where review or v_today >= r.starts_on), '[]'::jsonb),
+    'wall', coalesce((
+      select jsonb_agg(x order by (x->>'at')::timestamptz desc)
+      from (select jsonb_build_object(
+                     'id', n.id,
+                     'who', public.recognition_person(n.nominee, v_on),
+                     'story', n.story,
+                     'from', case when n.show_name then public.recognition_person(n.nominator, v_on) end,
+                     'at', n.posted_at,
+                     'awards', coalesce((select jsonb_agg(r.title order by r.starts_on)
+                                         from public.recognition_rounds r
+                                         where r.winner_id = n.id and r.announced_at is not null), '[]'::jsonb)) x
+            from public.recognition_nominations n
+            where n.status = 'posted'
+            order by n.posted_at desc
+            limit 300) recent), '[]'::jsonb),
+    'mine', coalesce((
+      select jsonb_agg(jsonb_build_object(
+               'id', n.id, 'who', public.recognition_person(n.nominee, v_on), 'story', n.story,
+               'show_name', n.show_name, 'status', n.status, 'at', n.created_at)
+             order by n.created_at desc)
+      from public.recognition_nominations n where n.nominator = me), '[]'::jsonb),
+    'review', case when review then jsonb_build_object(
+      'nominations', coalesce((
+        select jsonb_agg(jsonb_build_object(
+                 'id', n.id,
+                 'who', public.recognition_person(n.nominee, v_on),
+                 'from', public.recognition_person(n.nominator, v_on),
+                 'story', n.story, 'show_name', n.show_name, 'status', n.status,
+                 'note', n.review_note, 'at', n.created_at, 'day', public.recognition_day(n.created_at),
+                 'reviewed_by', (select coalesce(p.display_name, split_part(u.email, '@', 1))
+                                 from auth.users u left join public.profiles p on p.id = u.id
+                                 where u.id = n.reviewed_by),
+                 'about_me', n.nominee = me)
+               order by (n.status = 'waiting') desc, n.created_at desc)
+        from (select * from public.recognition_nominations
+              order by (status = 'waiting') desc, created_at desc limit 300) n), '[]'::jsonb),
+      'waiting', (select count(*) from public.recognition_nominations where status = 'waiting')) end);
+end;
+$fn$;
+revoke all on function public.recognition_view() from public, anon;
+grant execute on function public.recognition_view() to authenticated;
+
+-- How many are waiting, for the footer: nothing for somebody who does not review.
+create or replace function public.recognition_waiting()
+returns int
+language sql
+stable
+security definer
+set search_path = ''
+as $fn$
+  select case when public.can('recognition.manage')
+              then (select count(*)::int from public.recognition_nominations
+                    where status = 'waiting' and nominee <> (select auth.uid()))
+              else 0 end
+$fn$;
+revoke all on function public.recognition_waiting() from public, anon;
+grant execute on function public.recognition_waiting() to authenticated;
+
+-- A nomination. Ten waiting at a time each, so one enthusiastic person does
+-- not bury the reviewers.
+create or replace function public.nominate(p_nominee uuid, p_story text, p_show_name boolean default true)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $fn$
+declare
+  me uuid := (select auth.uid());
+  v_story text := btrim(coalesce(p_story, ''));
+  v_id uuid;
+begin
+  if me is null then
+    return jsonb_build_object('ok', false, 'reason', 'sign in to nominate somebody');
+  end if;
+  if not public.can('games.play') then
+    return jsonb_build_object('ok', false, 'reason', 'not allowed');
+  end if;
+  if p_nominee is null or not exists (select 1 from auth.users where id = p_nominee) then
+    return jsonb_build_object('ok', false, 'reason', 'pick who you are nominating');
+  end if;
+  if p_nominee = me then
+    return jsonb_build_object('ok', false, 'reason', 'you cannot nominate yourself');
+  end if;
+  if char_length(v_story) < 20 then
+    return jsonb_build_object('ok', false, 'reason', 'say what they did, in a sentence or two');
+  end if;
+  if char_length(v_story) > 2000 then
+    return jsonb_build_object('ok', false, 'reason', 'keep it to 2,000 characters');
+  end if;
+  if (select count(*) from public.recognition_nominations where nominator = me and status = 'waiting') >= 10 then
+    return jsonb_build_object('ok', false, 'reason', 'you have ten waiting for review already');
+  end if;
+  insert into public.recognition_nominations (nominee, nominator, story, show_name)
+  values (p_nominee, me, v_story, coalesce(p_show_name, true))
+  returning id into v_id;
+  return jsonb_build_object('ok', true, 'id', v_id);
+end;
+$fn$;
+revoke all on function public.nominate(uuid, text, boolean) from public, anon;
+grant execute on function public.nominate(uuid, text, boolean) to authenticated;
+
+-- Taking your own back, before anybody has decided on it.
+create or replace function public.withdraw_nomination(p_id uuid)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $fn$
+declare
+  me uuid := (select auth.uid());
+begin
+  if me is null then
+    return jsonb_build_object('ok', false, 'reason', 'not signed in');
+  end if;
+  delete from public.recognition_nominations where id = p_id and nominator = me and status = 'waiting';
+  if not found then
+    return jsonb_build_object('ok', false, 'reason', 'it has been reviewed, so it is not yours to take back now');
+  end if;
+  return jsonb_build_object('ok', true);
+end;
+$fn$;
+revoke all on function public.withdraw_nomination(uuid) from public, anon;
+grant execute on function public.withdraw_nomination(uuid) to authenticated;
+
+/*
+ * Posting a nomination to the wall, or not -- including taking a posted one
+ * down, or posting one declined earlier. The first time one is posted, the
+ * nominee is emailed.
+ */
+create or replace function public.review_nomination(p_id uuid, p_post boolean, p_note text default null)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $fn$
+declare
+  me uuid := (select auth.uid());
+  n public.recognition_nominations;
+  v_note text := nullif(btrim(coalesce(p_note, '')), '');
+begin
+  if not public.can('recognition.manage') then
+    return jsonb_build_object('ok', false, 'reason', 'not allowed');
+  end if;
+  select * into n from public.recognition_nominations where id = p_id for update;
+  if n.id is null then
+    return jsonb_build_object('ok', false, 'reason', 'no such nomination');
+  end if;
+  if n.nominee = me then
+    return jsonb_build_object('ok', false, 'reason', 'somebody else reviews nominations about you');
+  end if;
+  if char_length(coalesce(v_note, '')) > 500 then
+    return jsonb_build_object('ok', false, 'reason', 'keep the note to 500 characters');
+  end if;
+  update public.recognition_nominations
+     set status = case when p_post then 'posted' else 'declined' end,
+         review_note = coalesce(v_note, review_note),
+         reviewed_by = me, reviewed_at = now(),
+         posted_at = case when p_post then coalesce(posted_at, now()) else posted_at end
+   where id = p_id;
+  if p_post and n.posted_at is null then
+    insert into public.recognition_mail (kind, user_id, nomination_id)
+    values ('posted', n.nominee, n.id)
+    on conflict (kind, user_id, nomination_id) where done_at is null do nothing;
+  end if;
+  -- Taken down, it cannot stand as a round's winner either.
+  if not p_post then
+    update public.recognition_rounds set winner_id = null, announced_at = null where winner_id = p_id;
+  end if;
+  return jsonb_build_object('ok', true);
+end;
+$fn$;
+revoke all on function public.review_nomination(uuid, boolean, text) from public, anon;
+grant execute on function public.review_nomination(uuid, boolean, text) to authenticated;
+
+create or replace function public.save_recognition_round(
+  p_id uuid, p_title text, p_blurb text, p_starts_on date, p_ends_on date)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $fn$
+declare
+  v_id uuid;
+begin
+  if not public.can('recognition.manage') then
+    return jsonb_build_object('ok', false, 'reason', 'not allowed');
+  end if;
+  if char_length(btrim(coalesce(p_title, ''))) not between 1 and 80 then
+    return jsonb_build_object('ok', false, 'reason', 'it needs a name, up to 80 characters');
+  end if;
+  if p_starts_on is null or p_ends_on is null then
+    return jsonb_build_object('ok', false, 'reason', 'it needs a first and a last day');
+  end if;
+  if p_ends_on < p_starts_on then
+    return jsonb_build_object('ok', false, 'reason', 'it has to end after it starts');
+  end if;
+  if char_length(coalesce(p_blurb, '')) > 1000 then
+    return jsonb_build_object('ok', false, 'reason', 'keep the description to 1,000 characters');
+  end if;
+  if p_id is null then
+    insert into public.recognition_rounds (title, blurb, starts_on, ends_on, created_by)
+    values (btrim(p_title), nullif(btrim(p_blurb), ''), p_starts_on, p_ends_on, (select auth.uid()))
+    returning id into v_id;
+    return jsonb_build_object('ok', true, 'id', v_id);
+  end if;
+  update public.recognition_rounds
+     set title = btrim(p_title), blurb = nullif(btrim(p_blurb), ''), starts_on = p_starts_on, ends_on = p_ends_on
+   where id = p_id;
+  if not found then
+    return jsonb_build_object('ok', false, 'reason', 'no such round');
+  end if;
+  -- A winner made outside the new dates is not a winner of them.
+  update public.recognition_rounds r set winner_id = null, announced_at = null
+   where r.id = p_id and r.winner_id is not null
+     and not exists (select 1 from public.recognition_nominations n where n.id = r.winner_id
+                     and public.recognition_day(n.created_at) between r.starts_on and r.ends_on);
+  return jsonb_build_object('ok', true, 'id', p_id);
+end;
+$fn$;
+revoke all on function public.save_recognition_round(uuid, text, text, date, date) from public, anon;
+grant execute on function public.save_recognition_round(uuid, text, text, date, date) to authenticated;
+
+create or replace function public.delete_recognition_round(p_id uuid)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $fn$
+begin
+  if not public.can('recognition.manage') then
+    return jsonb_build_object('ok', false, 'reason', 'not allowed');
+  end if;
+  delete from public.recognition_rounds where id = p_id;
+  return jsonb_build_object('ok', found);
+end;
+$fn$;
+revoke all on function public.delete_recognition_round(uuid) from public, anon;
+grant execute on function public.delete_recognition_round(uuid) to authenticated;
+
+/*
+ * A round's winner: a posted nomination made within its dates. Picking one
+ * announces it and emails the winner; null takes the winner back off.
+ */
+create or replace function public.pick_round_winner(p_round uuid, p_nomination uuid, p_note text default null)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $fn$
+declare
+  me uuid := (select auth.uid());
+  r public.recognition_rounds;
+  n public.recognition_nominations;
+  v_note text := nullif(btrim(coalesce(p_note, '')), '');
+begin
+  if not public.can('recognition.manage') then
+    return jsonb_build_object('ok', false, 'reason', 'not allowed');
+  end if;
+  select * into r from public.recognition_rounds where id = p_round for update;
+  if r.id is null then
+    return jsonb_build_object('ok', false, 'reason', 'no such round');
+  end if;
+  if p_nomination is null then
+    update public.recognition_rounds set winner_id = null, winner_note = null, announced_at = null where id = r.id;
+    return jsonb_build_object('ok', true);
+  end if;
+  select * into n from public.recognition_nominations where id = p_nomination;
+  if n.id is null or n.status <> 'posted' then
+    return jsonb_build_object('ok', false, 'reason', 'only a nomination on the wall can win');
+  end if;
+  if public.recognition_day(n.created_at) not between r.starts_on and r.ends_on then
+    return jsonb_build_object('ok', false, 'reason', 'that nomination was made outside this round''s dates');
+  end if;
+  if n.nominee = me then
+    return jsonb_build_object('ok', false, 'reason', 'somebody else picks when you are in the running');
+  end if;
+  if char_length(coalesce(v_note, '')) > 500 then
+    return jsonb_build_object('ok', false, 'reason', 'keep the note to 500 characters');
+  end if;
+  update public.recognition_rounds
+     set winner_id = n.id, winner_note = v_note,
+         announced_at = case when winner_id is distinct from n.id then now() else coalesce(announced_at, now()) end
+   where id = r.id;
+  if r.winner_id is distinct from n.id then
+    insert into public.recognition_mail (kind, user_id, nomination_id, round_id)
+    values ('award', n.nominee, n.id, r.id)
+    on conflict (kind, user_id, nomination_id) where done_at is null do nothing;
+  end if;
+  return jsonb_build_object('ok', true);
+end;
+$fn$;
+revoke all on function public.pick_round_winner(uuid, uuid, text) from public, anon;
+grant execute on function public.pick_round_winner(uuid, uuid, text) to authenticated;
+
+-- What the mail timer sends next, the same way as auction_mail_claim: what no
+-- longer holds is skipped -- taken down, or no longer the winner -- and what
+-- is claimed is not handed to the next run for ten minutes.
+create or replace function public.recognition_mail_claim(p_limit int default 20)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $fn$
+declare
+  v jsonb;
+begin
+  update public.recognition_mail m set done_at = now(), outcome = 'skipped', claimed_at = null
+   where m.done_at is null
+     and (
+       not exists (select 1 from auth.users u where u.id = m.user_id and coalesce(u.email, '') <> '')
+       or not exists (select 1 from public.recognition_nominations n where n.id = m.nomination_id and n.status = 'posted')
+       or (m.kind = 'award' and not exists (select 1 from public.recognition_rounds r
+                                            where r.id = m.round_id and r.winner_id = m.nomination_id)));
+
+  with picked as (
+    select m.id from public.recognition_mail m
+    where m.done_at is null and m.attempts < 5
+      and (m.claimed_at is null or m.claimed_at < now() - interval '10 minutes')
+    order by m.id
+    limit greatest(coalesce(p_limit, 20), 1)
+    for update skip locked
+  ), marked as (
+    update public.recognition_mail m set claimed_at = now(), attempts = m.attempts + 1
+      from picked where m.id = picked.id
+    returning m.id, m.kind, m.user_id, m.nomination_id, m.round_id
+  )
+  select coalesce(jsonb_agg(jsonb_build_object(
+           'id', k.id, 'kind', k.kind, 'to', u.email,
+           'name', coalesce(p.display_name, ''),
+           'story', n.story,
+           'from', case when n.show_name then
+                     (select coalesce(pp.display_name, split_part(uu.email, '@', 1))
+                      from auth.users uu left join public.profiles pp on pp.id = uu.id
+                      where uu.id = n.nominator) end,
+           'round', r.title,
+           'note', r.winner_note)
+         order by k.id), '[]'::jsonb)
+    into v
+  from marked k
+  join auth.users u on u.id = k.user_id
+  left join public.profiles p on p.id = u.id
+  join public.recognition_nominations n on n.id = k.nomination_id
+  left join public.recognition_rounds r on r.id = k.round_id;
+  return jsonb_build_object('ok', true, 'mail', v);
+end;
+$fn$;
+revoke all on function public.recognition_mail_claim(int) from public, anon, authenticated;
+grant execute on function public.recognition_mail_claim(int) to service_role;
+
+create or replace function public.recognition_mail_done(p_id bigint, p_error text default null)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $fn$
+begin
+  update public.recognition_mail
+     set claimed_at = case when p_error is null then null else now() end,
+         last_error = p_error,
+         done_at = case when p_error is null or attempts >= 5 then now() end,
+         outcome = case when p_error is null then 'sent' when attempts >= 5 then 'failed' end
+   where id = p_id and done_at is null;
+  return jsonb_build_object('ok', found);
+end;
+$fn$;
+revoke all on function public.recognition_mail_done(bigint, text) from public, anon, authenticated;
+grant execute on function public.recognition_mail_done(bigint, text) to service_role;

@@ -1,9 +1,11 @@
-// Send the auction emails that are waiting: run by the minute timer on the VM
-// (ops/amherstcomm-games-mail.*), safe to run by hand.
+// Send the emails that are waiting: run by the minute timer on the VM
+// (ops/amherstcomm-games-mail.*), safe to run by hand. Named for the first
+// thing that sent mail; it works every queue now -- auctions (outbid, won) and
+// recognition (a nomination posted, an award won).
 //
-// The database queues them (auction_mail) and decides who is told what; this
-// claims a batch, sends each one, and reports back. A failure goes back in the
-// queue for the next run, five tries in all.
+// The database queues them and decides who is told what; this claims a batch
+// from each queue, sends each one, and reports back. A failure goes back in
+// the queue for the next run, five tries in all.
 //
 // Two ways out, by MAIL_TRANSPORT:
 //
@@ -16,12 +18,13 @@
 // later sends what is still worth sending -- the database drops an outbid note
 // that has stopped being true.
 import { compose, DEFAULT_ZONE } from './auction-mail.mjs';
+import { composeRecognition } from './recognition-mail.mjs';
 
 const env = process.env;
 const TRANSPORT = (env.MAIL_TRANSPORT ?? '').trim().toLowerCase();
 
 if (!TRANSPORT) {
-  console.log('MAIL_TRANSPORT is not set, so auction emails stay queued');
+  console.log('MAIL_TRANSPORT is not set, so emails stay queued');
   process.exit(0);
 }
 
@@ -87,34 +90,51 @@ const send =
       throw new Error(`MAIL_TRANSPORT is "${TRANSPORT}"; it is smtp or resend`);
     })();
 
+// Each queue: how to claim from it, how to say how it went, and the words.
+const QUEUES = [
+  { name: 'auction', claim: 'auction_mail_claim', done: 'auction_mail_done', words: (m) => compose(m, { site: SITE, zone: ZONE }) },
+  { name: 'recognition', claim: 'recognition_mail_claim', done: 'recognition_mail_done', words: (m) => composeRecognition(m, { site: SITE }) },
+];
+
 let sent = 0;
 let failed = 0;
-// A batch at a time until the queue is empty: a closing auction can produce a
-// few dozen at once, and a minute is long to wait for the second twenty.
-for (;;) {
-  const got = await rpc('auction_mail_claim', { p_limit: 20 });
-  const batch = Array.isArray(got?.mail) ? got.mail : [];
-  if (batch.length === 0) break;
-  for (const m of batch) {
+for (const q of QUEUES) {
+  // A batch at a time until the queue is empty: a closing auction can produce
+  // a few dozen at once, and a minute is long to wait for the second twenty.
+  for (;;) {
+    let batch;
     try {
-      await send(compose(m, { site: SITE, zone: ZONE }));
-      await rpc('auction_mail_done', { p_id: m.id, p_error: null });
-      sent++;
+      const got = await rpc(q.claim, { p_limit: 20 });
+      batch = Array.isArray(got?.mail) ? got.mail : [];
     } catch (e) {
-      const why = String(e?.message ?? e).slice(0, 500);
-      console.error(`::warning::auction email ${m.id} (${m.kind}) to ${m.to} did not go: ${why}`);
-      await rpc('auction_mail_done', { p_id: m.id, p_error: why });
-      failed++;
+      // One queue the database does not have yet -- a pull ahead of the
+      // schema -- is no reason to leave the others unsent.
+      console.error(`::warning::could not read the ${q.name} queue: ${String(e?.message ?? e).slice(0, 300)}`);
+      break;
     }
+    if (batch.length === 0) break;
+    for (const m of batch) {
+      try {
+        await send(q.words(m));
+        await rpc(q.done, { p_id: m.id, p_error: null });
+        sent++;
+      } catch (e) {
+        const why = String(e?.message ?? e).slice(0, 500);
+        console.error(`::warning::${q.name} email ${m.id} (${m.kind}) to ${m.to} did not go: ${why}`);
+        await rpc(q.done, { p_id: m.id, p_error: why });
+        failed++;
+      }
+    }
+    // Everything so far failing is the mail server, not the messages; the
+    // rest can wait for the next minute rather than all be tried now. (A
+    // failed one is not handed back for ten minutes, so this does not retry.)
+    if (failed > 0 && sent === 0) break;
   }
-  // Everything so far failing is the mail server, not the messages; the rest
-  // can wait for the next minute rather than all be tried now. (A failed one
-  // is not handed back for ten minutes, so this loop does not retry it.)
   if (failed > 0 && sent === 0) break;
 }
 
 send.close?.();
-if (sent || failed) console.log(`auction emails: ${sent} sent, ${failed} failed`);
+if (sent || failed) console.log(`emails: ${sent} sent, ${failed} failed`);
 // Set rather than exited with: process.exit while the SMTP connection is still
 // closing aborts Node on Windows, and is abrupt everywhere else.
 process.exitCode = failed > 0 && sent === 0 ? 1 : 0;

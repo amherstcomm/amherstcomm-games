@@ -134,6 +134,8 @@ export type Route =
   | { kind: 'auctions'; auction: string | null }
   // The whiteboard: this week's question, or a past week's by its id.
   | { kind: 'whiteboard'; question: string | null }
+  // Recognition: nominating, the wall, and the award rounds. One page.
+  | { kind: 'recognition' }
   // A live session. Two addresses for the same room: the one everybody opens,
   // and the presenter's, which shows the answer and the controls. Separate
   // addresses rather than a mode on one page, because the presenter's screen
@@ -190,6 +192,8 @@ export function pathOf(route: Route): string {
       return route.auction ? `/auctions/${route.auction}` : '/auctions';
     case 'whiteboard':
       return route.question ? `/whiteboard/${route.question}` : '/whiteboard';
+    case 'recognition':
+      return '/recognition';
     case 'live':
       return route.host ? `/live/${route.session}/host` : `/live/${route.session}`;
     case 'sessions':
@@ -266,6 +270,8 @@ export function titleOf(route: Route): string {
       return `Auctions${suffix}`;
     case 'whiteboard':
       return `Whiteboard${suffix}`;
+    case 'recognition':
+      return `Recognition${suffix}`;
     case 'live':
       // The presenter's title says so, because this address goes on a
       // projector and the tab is the last thing anyone checks before it does.
@@ -347,6 +353,9 @@ export function parsePath(pathname: string): Route | null {
 
   // /whiteboard and /whiteboard/<id>.
   if (first === 'whiteboard') return { kind: 'whiteboard', question: second || null };
+
+  // /recognition.
+  if (first === 'recognition') return { kind: 'recognition' };
 
   // /giveaways, /giveaways/history, /giveaways/<id> and /giveaways/<id>/replay.
   if (first === 'giveaways') {

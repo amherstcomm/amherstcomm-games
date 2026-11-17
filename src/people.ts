@@ -87,6 +87,7 @@ export async function setPersonRole(
 export const PERSON_GRANTS = {
   'giveaways.manage': 'Runs giveaways and auctions',
   'whiteboard.manage': 'Writes whiteboard questions',
+  'recognition.manage': 'Reviews nominations',
 } as const;
 export type PersonGrant = keyof typeof PERSON_GRANTS;
 
