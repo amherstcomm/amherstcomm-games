@@ -87,10 +87,18 @@ test('picking an answer shows everybody, grouped under what they picked', async 
   await expect(page.getByRole('list', { name: 'Who picked Sometimes' }).getByRole('button', { name: 'Me Myself' })).toBeVisible();
   // just the pictures: no name written on the board until one is asked for
   await expect(page.getByText('Ann Lee', { exact: true })).toHaveCount(0);
+  // hovering grows the picture and shows the name above it
+  await always.getByRole('button', { name: 'Ann Lee' }).hover();
+  await expect(page.getByRole('tooltip', { name: 'Ann Lee' })).toBeVisible();
+  await expect(always.getByRole('button', { name: 'Ann Lee' })).toHaveClass(/scale-125/);
+  await page.mouse.move(0, 0);
+  await expect(page.getByRole('tooltip', { name: 'Ann Lee' })).toHaveCount(0);
+  // a tap keeps it open, and tapping again closes it
   await always.getByRole('button', { name: 'Ann Lee' }).click();
-  await expect(page.getByRole('status').filter({ hasText: 'Ann Lee' })).toBeVisible();
+  await expect(page.getByRole('dialog', { name: 'Ann Lee' })).toBeVisible();
   await always.getByRole('button', { name: 'Ann Lee' }).click();
-  await expect(page.getByRole('status').filter({ hasText: 'Ann Lee' })).toHaveCount(0);
+  await page.mouse.move(0, 0);
+  await expect(page.getByRole('dialog', { name: 'Ann Lee' })).toHaveCount(0);
   // nobody else's answer is anybody's to take down
   await expect(page.getByRole('button', { name: /answer down/ })).toHaveCount(0);
 
@@ -261,9 +269,56 @@ test('a written answer is the picture and the words, with the name on a tap', as
   await page.goto('/whiteboard');
   await expect(page.getByText('Went to a Bucks game')).toBeVisible();
   await expect(page.getByText('Ann Lee', { exact: true })).toHaveCount(0);
-  await expect(page.getByRole('button', { name: 'Ann Lee' })).toHaveAttribute('title', 'Ann Lee');
   await page.getByRole('button', { name: 'Ann Lee' }).click();
-  await expect(page.getByRole('status').filter({ hasText: 'Ann Lee' })).toBeVisible();
+  await expect(page.getByRole('dialog', { name: 'Ann Lee' })).toBeVisible();
+});
+
+test('a picture can be reported from the board, and an administrator can take it down', async ({ page }) => {
+  await signedIn(page);
+  let admin = false;
+  const sent = await server(page, {
+    whiteboard_view: () => ({ ok: true, can_manage: false, week_of: WEEK, question: LAUNDRY, count: 3,
+                              mine: { choice: 0, body: null }, answers: PEOPLE, past: [] }),
+    my_capabilities: () => (admin ? ['games.play', 'users.manage'] : ['games.play']),
+    report_avatar: () => ({ ok: true, recorded: true, ticket: 'abc' }),
+    set_person_avatar: () => ({ ok: true }),
+  });
+  await page.goto('/whiteboard');
+  // initials are nothing to object to
+  await page.getByRole('button', { name: 'Ann Lee' }).click();
+  await expect(page.getByRole('dialog', { name: 'Ann Lee' }).getByRole('button')).toHaveCount(0);
+  await page.keyboard.press('Escape');
+  // a picture is
+  await page.getByRole('button', { name: 'Bo Jensen' }).click();
+  // the open card reads, in the light theme the tests run in
+  const results = await new AxeBuilder({ page }).include('[role="dialog"]').withTags(['wcag2a', 'wcag2aa']).analyze();
+  expect(results.violations.map((v) => v.id)).toEqual([]);
+  page.once('dialog', (d) => void d.accept('not for work'));
+  await page.getByRole('dialog', { name: 'Bo Jensen' }).getByRole('button', { name: 'Report this picture' }).click();
+  await expect.poll(() => sent.find((s) => s.fn === 'report_avatar')?.args).toEqual({ p_user: 'u-bo', p_reason: 'not for work' });
+
+  admin = true;
+  await page.reload();
+  await page.getByRole('button', { name: 'Bo Jensen' }).click();
+  page.on('dialog', (d) => void d.accept());
+  await page.getByRole('dialog', { name: 'Bo Jensen' }).getByRole('button', { name: 'Take the picture down' }).click();
+  await expect.poll(() => sent.find((s) => s.fn === 'set_person_avatar')?.args).toEqual({ p_user: 'u-bo', p_blocked: true });
+});
+
+test('the enlarged picture stays on a phone screen, even at the edge', async ({ page }) => {
+  await signedIn(page);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await server(page, {
+    whiteboard_view: () => ({ ok: true, can_manage: false, week_of: WEEK, question: LAUNDRY, count: 3,
+                              mine: { choice: 0, body: null }, answers: PEOPLE, past: [] }),
+  });
+  await page.goto('/whiteboard');
+  await page.getByRole('list', { name: 'Who picked Always' }).getByRole('button', { name: 'Ann Lee' }).click();
+  const box = await page.getByRole('dialog', { name: 'Ann Lee' }).boundingBox();
+  expect(box!.x).toBeGreaterThanOrEqual(0);
+  expect(box!.x + box!.width).toBeLessThanOrEqual(390);
+  const w = await page.evaluate(() => [document.documentElement.scrollWidth, window.innerWidth]);
+  expect(w[0]).toBeLessThanOrEqual(w[1]);
 });
 
 test('the site logo is the way home', async ({ page }) => {

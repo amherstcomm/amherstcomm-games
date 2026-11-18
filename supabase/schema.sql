@@ -28755,3 +28755,43 @@ end;
 $fn$;
 revoke all on function public.suggestion_mail_done(bigint, text) from public, anon, authenticated;
 grant execute on function public.suggestion_mail_done(bigint, text) to service_role;
+
+-- ---------------------------------------------------------------------------
+-- Reporting a picture
+-- ---------------------------------------------------------------------------
+-- Anybody signed in can report somebody's avatar as unsavoury. It goes to the
+-- report queue as a player report, with the picture as it was when reported --
+-- snapshotted, so changing it afterwards does not change the evidence. Taking
+-- it down is the administrators' (set_person_avatar), from the queue or the
+-- people page; the reporter is recorded as reports always record them, and
+-- never shown on the page.
+create or replace function public.report_avatar(p_user uuid, p_reason text default null)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $fn$
+declare
+  p public.profiles;
+begin
+  if (select auth.uid()) is null then
+    return jsonb_build_object('ok', false, 'reason', 'sign in to report a picture');
+  end if;
+  select * into p from public.profiles where id = p_user;
+  if p.id is null or p.avatar_kind is null or p.avatar_blocked then
+    return jsonb_build_object('ok', false, 'reason', 'there is no picture to report');
+  end if;
+  return public.file_report(
+    'player',
+    'avatar:' || p.id::text,
+    jsonb_build_object(
+      'profile', p.id,
+      'name', coalesce(p.display_name, ''),
+      'what', 'avatar',
+      'avatar', jsonb_build_object('kind', p.avatar_kind, 'value', p.avatar_value, 'color', p.avatar_color)),
+    p_reason,
+    null);
+end;
+$fn$;
+revoke all on function public.report_avatar(uuid, text) from public, anon;
+grant execute on function public.report_avatar(uuid, text) to authenticated;
