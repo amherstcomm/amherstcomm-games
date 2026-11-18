@@ -31490,3 +31490,117 @@ end;
 $fn$;
 revoke all on function public.set_session_points(uuid, text) from public, anon;
 grant execute on function public.set_session_points(uuid, text) to authenticated;
+
+-- ---------------------------------------------------------------------------
+-- Compare, finished (November 2026; the survey spec, step 5)
+-- ---------------------------------------------------------------------------
+--
+-- A row can be pictures: one per option, uploaded by whoever builds the
+-- session, read by anybody signed in -- a floor plan, a uniform, a logo.
+
+create or replace function public.compare_payload_problem(p jsonb)
+returns text
+language plpgsql
+immutable
+set search_path = ''
+as $fn$
+declare
+  opts jsonb := p -> 'options';
+  rws jsonb := p -> 'rows';
+  ids text[];
+  o jsonb;
+  r jsonb;
+  v jsonb;
+  oid text;
+begin
+  if jsonb_typeof(opts) is distinct from 'array' or jsonb_array_length(opts) not between 2 and 4 then
+    return 'A comparison needs two to four options.';
+  end if;
+  select array_agg(x ->> 'id') into ids from jsonb_array_elements(opts) x;
+  if exists (select 1 from unnest(ids) i where coalesce(btrim(i), '') = '' or i = 'none')
+     or cardinality(ids) <> (select count(distinct i) from unnest(ids) i) then
+    return 'Each option needs an id of its own.';
+  end if;
+  for o in select x from jsonb_array_elements(opts) x loop
+    if coalesce(btrim(o ->> 'name'), '') = '' then
+      return 'Every option needs a name.';
+    end if;
+    if char_length(o ->> 'name') > 60 or char_length(coalesce(o ->> 'subtitle', '')) > 80 then
+      return 'Option names are 60 characters at most, and subtitles 80.';
+    end if;
+  end loop;
+  if jsonb_typeof(rws) is distinct from 'array' or jsonb_array_length(rws) not between 1 and 15 then
+    return 'A comparison needs one to fifteen rows.';
+  end if;
+  for r in select x from jsonb_array_elements(rws) x loop
+    if coalesce(btrim(r ->> 'label'), '') = '' then
+      return 'Every row needs a label.';
+    end if;
+    if char_length(r ->> 'label') > 80 then
+      return 'Row labels are 80 characters at most.';
+    end if;
+    if coalesce(r ->> 'kind', 'text') not in ('text', 'months', 'image') then
+      return 'A row is text, a year of months, or pictures.';
+    end if;
+    if coalesce(r ->> 'differs', 'auto') not in ('auto', 'yes', 'no') then
+      return 'A row differs automatically, always or never.';
+    end if;
+    if jsonb_typeof(r -> 'values') is distinct from 'object' then
+      return format('Row "%s" needs a value for each option.', r ->> 'label');
+    end if;
+    foreach oid in array ids loop
+      v := r -> 'values' -> oid;
+      if coalesce(r ->> 'kind', 'text') = 'text' then
+        if jsonb_typeof(v) is distinct from 'string' or char_length(v #>> '{}') > 300 then
+          return format('Row "%s" needs a value for each option, 300 characters at most.', r ->> 'label');
+        end if;
+      elsif r ->> 'kind' = 'image' then
+        -- a picture in the session-pictures bucket, in its uploader's folder
+        if jsonb_typeof(v) is distinct from 'string'
+           or (v #>> '{}') !~ '^[0-9a-f-]{36}/[A-Za-z0-9._-]{1,120}$' then
+          return format('Row "%s" needs a picture for each option.', r ->> 'label');
+        end if;
+      elsif jsonb_typeof(v) is distinct from 'array' or jsonb_array_length(v) <> 12
+            or exists (select 1 from jsonb_array_elements(v) n
+                       where jsonb_typeof(n) <> 'number'
+                          or (n #>> '{}')::numeric not between 0 and 9
+                          or (n #>> '{}')::numeric <> trunc((n #>> '{}')::numeric)) then
+        return format('Row "%s" needs twelve whole numbers, 0 to 9, for each option.', r ->> 'label');
+      end if;
+    end loop;
+  end loop;
+  return null;
+end;
+$fn$;
+revoke all on function public.compare_payload_problem(jsonb) from public, anon;
+grant execute on function public.compare_payload_problem(jsonb) to authenticated;
+
+-- The pictures: a private bucket like the others, written only by people who
+-- build sessions, each into their own folder, and read by anybody signed in,
+-- since anybody signed in may be answering.
+do $$
+begin
+  if to_regnamespace('storage') is null then
+    raise notice 'no storage schema here; skipping the session pictures bucket';
+    return;
+  end if;
+  insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+  values ('session-pictures', 'session-pictures', false, 10485760,
+          array['image/jpeg', 'image/png', 'image/webp'])
+  on conflict (id) do update
+    set public = false, file_size_limit = 10485760, allowed_mime_types = excluded.allowed_mime_types;
+
+  execute $p$drop policy if exists "session pictures are readable" on storage.objects$p$;
+  execute $p$create policy "session pictures are readable" on storage.objects
+    for select to authenticated using (bucket_id = 'session-pictures')$p$;
+  execute $p$drop policy if exists "a session picture goes in its maker's folder" on storage.objects$p$;
+  execute $p$create policy "a session picture goes in its maker's folder" on storage.objects
+    for insert to authenticated
+    with check (bucket_id = 'session-pictures'
+                and (storage.foldername(name))[1] = (select auth.uid())::text
+                and public.can('games.setup'))$p$;
+  execute $p$drop policy if exists "a session picture is its maker's to take down" on storage.objects$p$;
+  execute $p$create policy "a session picture is its maker's to take down" on storage.objects
+    for delete to authenticated
+    using (bucket_id = 'session-pictures' and (storage.foldername(name))[1] = (select auth.uid())::text)$p$;
+end $$;

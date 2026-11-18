@@ -5,16 +5,64 @@
 // question will show it, and clicking it overrides that: "auto" until the
 // author says otherwise, then "differs" or "same" whatever the cells say.
 import { useState } from 'react';
-import { Plus, X } from 'lucide-react';
+import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, ClipboardPaste, ImagePlus, Plus, X } from 'lucide-react';
 import {
   MAX_OPTIONS,
   MAX_ROWS,
   MIN_OPTIONS,
+  moveItem,
   nextId,
+  parseCompareSheet,
   rowDiffers,
   type ComparePayload,
   type CompareRow,
 } from '@/compare';
+import SessionPicture from '@/SessionPicture';
+import { PICTURE_ACCEPT, uploadSessionPicture } from '@/sessionPictures';
+
+/** A small square button for moving an option or a row one place. */
+function Move({ label, onClick, disabled, children }: {
+  label: string;
+  onClick: () => void;
+  disabled: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <button type="button" onClick={onClick} disabled={disabled} aria-label={label} title={label}
+            className="shrink-0 w-7 h-7 inline-flex items-center justify-center rounded-lg text-slate-400 hover:bg-white/5 hover:text-white disabled:opacity-30">
+      {children}
+    </button>
+  );
+}
+
+/** One option's picture in a picture row: the picture once there is one, and a
+ *  way to choose or replace it. */
+function PictureCell({ path, label, onPath }: { path: string; label: string; onPath: (p: string) => void }) {
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState('');
+  return (
+    <div className="space-y-1">
+      {path && <SessionPicture path={path} alt={label} className="w-full aspect-[4/3]" />}
+      <label className={`inline-flex items-center gap-1 px-2.5 h-8 rounded-lg text-xs font-semibold border border-white/15 text-slate-200 hover:bg-white/5 cursor-pointer ${busy ? 'opacity-60' : ''}`}>
+        <ImagePlus className="w-3.5 h-3.5" aria-hidden="true" />
+        {busy ? 'Uploading…' : path ? 'Replace' : 'Choose a picture'}
+        <input type="file" accept={PICTURE_ACCEPT} className="sr-only" aria-label={`${label}: picture`} disabled={busy}
+               onChange={async (e) => {
+                 const file = e.target.files?.[0];
+                 e.target.value = '';
+                 if (!file) return;
+                 setBusy(true);
+                 const res = await uploadSessionPicture(file);
+                 setBusy(false);
+                 if (!res.ok) return setNote(res.reason);
+                 setNote('');
+                 onPath(res.path);
+               }} />
+      </label>
+      {note && <p role="status" className="text-[0.6875rem] text-amber-300">{note}</p>}
+    </div>
+  );
+}
 
 const FIELD =
   'w-full rounded-lg bg-white/5 border border-white/15 px-2.5 py-1.5 text-sm text-slate-200 ' +
@@ -60,13 +108,27 @@ export default function CompareEditor({ value, onChange }: {
       }),
     });
   }
-  function addRow(kind: 'text' | 'months') {
+  function addRow(kind: 'text' | 'months' | 'image') {
     if (rows.length >= MAX_ROWS) return;
     const id = nextId(rows.map((r) => r.id), 'row');
     const row: CompareRow = kind === 'months'
       ? { id, label: '', kind, values: Object.fromEntries(options.map((o) => [o.id, Array(12).fill(2)])), differs: 'auto' }
       : { id, label: '', kind, values: Object.fromEntries(options.map((o) => [o.id, ''])), differs: 'auto' };
     set({ rows: [...rows, row] });
+  }
+
+  // Pasting a table from a spreadsheet: names across the first line, labels
+  // down the first column. It replaces what is there, so it says so first.
+  const [pasting, setPasting] = useState(false);
+  const [pasted, setPasted] = useState('');
+  const [pasteNote, setPasteNote] = useState('');
+  function applyPaste() {
+    const got = parseCompareSheet(pasted);
+    if (!got.ok) return setPasteNote(got.reason);
+    set({ options: got.options, rows: got.rows });
+    setPasting(false);
+    setPasted('');
+    setPasteNote('');
   }
 
   return (
@@ -90,6 +152,17 @@ export default function CompareEditor({ value, onChange }: {
                 <th scope="col" className="text-left text-xs font-semibold text-slate-400 w-[30%]">Row</th>
                 {options.map((o, i) => (
                   <th key={o.id} scope="col" className="align-top">
+                    {/* Moving an option moves its whole column, values and all. */}
+                    <div className="flex justify-center gap-1 mb-1">
+                      <Move label={`Move ${o.name || `option ${i + 1}`} left`} disabled={i === 0}
+                            onClick={() => set({ options: moveItem(options, i, -1) })}>
+                        <ArrowLeft className="w-4 h-4" aria-hidden="true" />
+                      </Move>
+                      <Move label={`Move ${o.name || `option ${i + 1}`} right`} disabled={i === options.length - 1}
+                            onClick={() => set({ options: moveItem(options, i, 1) })}>
+                        <ArrowRight className="w-4 h-4" aria-hidden="true" />
+                      </Move>
+                    </div>
                     <div className="flex gap-1">
                       <input className={`${FIELD} font-semibold`} value={o.name} maxLength={60}
                              aria-label={`Option ${i + 1} name`} placeholder={`Option ${i + 1}`}
@@ -107,6 +180,7 @@ export default function CompareEditor({ value, onChange }: {
                   </th>
                 ))}
                 <th scope="col" className="text-left text-xs font-semibold text-slate-400 w-20">Differs?</th>
+                <td className="w-14" />
                 <td className="w-8" />
               </tr>
             </thead>
@@ -134,6 +208,11 @@ export default function CompareEditor({ value, onChange }: {
                             onValid={(counts) => setRow(i, { ...r, values: { ...r.values, [o.id]: counts } })}
                           />
                         </td>
+                      ) : r.kind === 'image' ? (
+                        <td key={o.id} className="align-top">
+                          <PictureCell path={r.values[o.id] ?? ''} label={`${r.label || `Row ${i + 1}`}, ${o.name || o.id}`}
+                                       onPath={(path) => setRow(i, { ...r, values: { ...r.values, [o.id]: path } })} />
+                        </td>
                       ) : (
                         <td key={o.id} className="align-top">
                           <input className={FIELD} value={r.values[o.id] ?? ''} maxLength={300}
@@ -150,6 +229,18 @@ export default function CompareEditor({ value, onChange }: {
                         {differs ? 'differs' : 'same'}
                         {r.differs && r.differs !== 'auto' && <span className="block text-[0.625rem] font-normal text-slate-500">set by you</span>}
                       </button>
+                    </td>
+                    <td className="align-top">
+                      <div className="flex">
+                        <Move label={`Move ${r.label || `row ${i + 1}`} up`} disabled={i === 0}
+                              onClick={() => set({ rows: moveItem(rows, i, -1) })}>
+                          <ArrowUp className="w-4 h-4" aria-hidden="true" />
+                        </Move>
+                        <Move label={`Move ${r.label || `row ${i + 1}`} down`} disabled={i === rows.length - 1}
+                              onClick={() => set({ rows: moveItem(rows, i, 1) })}>
+                          <ArrowDown className="w-4 h-4" aria-hidden="true" />
+                        </Move>
+                      </div>
                     </td>
                     <td className="align-top">
                       {rows.length > 1 && (
@@ -173,10 +264,38 @@ export default function CompareEditor({ value, onChange }: {
           <button type="button" className={SMALL} onClick={() => addRow('months')} disabled={rows.length >= MAX_ROWS}>
             <Plus className="w-4 h-4" aria-hidden="true" /> Year of months
           </button>
+          <button type="button" className={SMALL} onClick={() => addRow('image')} disabled={rows.length >= MAX_ROWS}>
+            <Plus className="w-4 h-4" aria-hidden="true" /> Picture row
+          </button>
           <button type="button" className={SMALL} onClick={addOption} disabled={options.length >= MAX_OPTIONS}>
             <Plus className="w-4 h-4" aria-hidden="true" /> Option
           </button>
+          <button type="button" className={SMALL} aria-expanded={pasting} onClick={() => setPasting((p) => !p)}>
+            <ClipboardPaste className="w-4 h-4" aria-hidden="true" /> Paste from a spreadsheet
+          </button>
         </div>
+        {pasting && (
+          <div className="mt-3 rounded-xl border border-white/15 p-3 space-y-2">
+            <label className="block">
+              <span className="block text-sm text-slate-200">
+                Copy the table from your spreadsheet and paste it here: option names across the first line,
+                row labels down the first column.
+              </span>
+              <textarea value={pasted} onChange={(e) => setPasted(e.target.value)} rows={6}
+                        className={`${FIELD} mt-2 font-mono text-xs`}
+                        placeholder={'\tBi-weekly\tSemi-monthly\nPaychecks a year\t26\t24'} />
+            </label>
+            <p className="text-xs text-slate-400">This replaces the options and rows above.</p>
+            <div className="flex flex-wrap items-center gap-2">
+              <button type="button" onClick={applyPaste}
+                      className="px-3 h-9 rounded-lg text-sm font-semibold bg-accent text-slate-950 hover:brightness-110">
+                Use this table
+              </button>
+              <button type="button" className={SMALL} onClick={() => { setPasting(false); setPasteNote(''); }}>Cancel</button>
+            </div>
+            {pasteNote && <p role="status" className="text-sm text-amber-300">{pasteNote}</p>}
+          </div>
+        )}
       </div>
 
       <fieldset className="space-y-2">

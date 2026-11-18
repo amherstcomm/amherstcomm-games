@@ -191,3 +191,82 @@ test('an author builds one in the grid, and it saves as the table it shows', asy
     p_answer: null,
   });
 });
+
+async function compareEditor(page: import('@playwright/test').Page) {
+  const saved: Record<string, unknown>[] = [];
+  const sheet = {
+    ok: true,
+    session: { id: SESSION, title: 'Pay schedule', state: 'draft', late_join: 'strict', current_item: null,
+               code: null, mode: 'open', qa: false, shared: false, points: 'off' },
+    kinds: [{ kind: 'compare', description: 'x', scored: false }],
+    items: [],
+  };
+  await page.route('**/rest/v1/rpc/**', (route) => {
+    const url = route.request().url();
+    if (url.includes('save_item')) saved.push(JSON.parse(route.request().postData() ?? '{}'));
+    const body = url.includes('save_item') ? { ok: true, id: 'new' } : url.includes('session_sheet') ? sheet : [];
+    return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });
+  });
+  await page.goto(`/sessions/${SESSION}`);
+  await page.getByRole('button', { name: 'Add a question' }).click();
+  await page.getByRole('button', { name: 'Compare', exact: true }).click();
+  await page.getByRole('textbox', { name: 'Question' }).fill('Which pay schedule would you prefer?');
+  return saved;
+}
+
+test('a table pasted from a spreadsheet becomes the options and rows', async ({ page }) => {
+  const saved = await compareEditor(page);
+  await page.getByRole('button', { name: 'Paste from a spreadsheet' }).click();
+  const box = page.getByRole('textbox', { name: /Copy the table from your spreadsheet/ });
+  await box.fill('Bi-weekly, Semi-monthly' + String.fromCharCode(10) + '26, 24');
+  await page.getByRole('button', { name: 'Use this table' }).click();
+  await expect(page.getByRole('status').filter({ hasText: 'tabs' }))
+    .toHaveText('Cells need tabs between them: copy them straight from the spreadsheet.');
+
+  await box.fill('\tBi-weekly\tSemi-monthly\nPaychecks a year\t26\t24\nWhen you are paid\tEvery other Friday\tTwice a month');
+  await page.getByRole('button', { name: 'Use this table' }).click();
+  await expect(page.getByRole('textbox', { name: 'Option 2 name' })).toHaveValue('Semi-monthly');
+  await expect(page.getByRole('textbox', { name: 'When you are paid, Semi-monthly' })).toHaveValue('Twice a month');
+
+  await page.getByRole('button', { name: 'Add question' }).click();
+  await expect.poll(() => saved.length).toBe(1);
+  expect((saved[0].p_payload as { rows: unknown[] }).rows).toHaveLength(2);
+});
+
+test('options move left and right, rows up and down, and save in that order', async ({ page }) => {
+  const saved = await compareEditor(page);
+  await page.getByRole('button', { name: 'Paste from a spreadsheet' }).click();
+  await page.getByRole('textbox', { name: /Copy the table from your spreadsheet/ })
+    .fill('\tBi-weekly\tSemi-monthly\nPaychecks a year\t26\t24\nWhen you are paid\tFridays\tThe 15th');
+  await page.getByRole('button', { name: 'Use this table' }).click();
+
+  // the first option cannot go further left, and the last row no further down
+  await expect(page.getByRole('button', { name: 'Move Bi-weekly left' })).toBeDisabled();
+  await expect(page.getByRole('button', { name: 'Move When you are paid down' })).toBeDisabled();
+
+  await page.getByRole('button', { name: 'Move Bi-weekly right' }).click();
+  await expect(page.getByRole('textbox', { name: 'Option 1 name' })).toHaveValue('Semi-monthly');
+  // the column moves with it
+  await expect(page.getByRole('textbox', { name: 'Paychecks a year, Semi-monthly' })).toHaveValue('24');
+  await page.getByRole('button', { name: 'Move When you are paid up' }).click();
+  await expect(page.getByRole('textbox', { name: 'Row 1 label' })).toHaveValue('When you are paid');
+
+  await page.getByRole('button', { name: 'Add question' }).click();
+  await expect.poll(() => saved.length).toBe(1);
+  const p = saved[0].p_payload as { options: { name: string }[]; rows: { label: string }[] };
+  expect(p.options.map((o) => o.name)).toEqual(['Semi-monthly', 'Bi-weekly']);
+  expect(p.rows.map((r) => r.label)).toEqual(['When you are paid', 'Paychecks a year']);
+});
+
+test('a picture row asks for a picture for each option before it can be saved', async ({ page }) => {
+  await compareEditor(page);
+  await page.getByRole('textbox', { name: 'Option 1 name' }).fill('Plan A');
+  await page.getByRole('textbox', { name: 'Option 2 name' }).fill('Plan B');
+  await page.getByRole('textbox', { name: 'Row 1 label' }).fill('Monthly cost');
+  await page.getByRole('textbox', { name: 'Monthly cost, Plan A' }).fill('$80');
+  await page.getByRole('textbox', { name: 'Monthly cost, Plan B' }).fill('$120');
+  await page.getByRole('button', { name: 'Picture row' }).click();
+  await page.getByRole('textbox', { name: 'Row 2 label' }).fill('Card');
+  await expect(page.getByText('Choose a picture')).toHaveCount(2);
+  await expect(page.getByText('Row "Card" needs a picture for each option.')).toBeVisible();
+});

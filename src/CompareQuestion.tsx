@@ -15,6 +15,7 @@
 // can be changed while the question is open.
 import { useEffect, useState } from 'react';
 import type { LiveItem } from '@/live';
+import SessionPicture from '@/SessionPicture';
 import {
   asCompare,
   letter,
@@ -56,6 +57,10 @@ function Dots({ counts, label }: { counts: number[]; label: string }) {
 }
 
 function Cell({ row, option }: { row: CompareRow; option: CompareOption }) {
+  if (row.kind === 'image') {
+    return <SessionPicture path={row.values[option.id] ?? ''} alt={`${row.label}: ${option.name}`}
+                           className="w-full max-w-[16rem] aspect-[4/3]" />;
+  }
   if (row.kind === 'months') {
     const counts = Array.isArray(row.values[option.id]) ? row.values[option.id] : [];
     return <Dots counts={counts} label={option.name} />;
