@@ -9,8 +9,10 @@
 // had three and a half" only settles it if the half can be pointed at. Half a
 // question is now a real score, so this matters more than it did.
 import PrivateAnswers from '@/PrivateAnswers';
+import SplitResults from '@/SplitResults';
+import { readSplitQuestions, type SplitList } from '@/split';
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
-import { ArrowLeft, ArrowRight, BarChart3, Loader2, Play, Trophy, X } from 'lucide-react';
+import { ArrowLeft, ArrowRight, BarChart3, Loader2, Play, Split as SplitIcon, Trophy, X } from 'lucide-react';
 import {
   readSessionResults,
   readSessionScores,
@@ -32,7 +34,7 @@ const mark = (n: number | undefined) =>
  *  tabs rather than two pages because they are the same question asked twice —
  *  and because the thing on the wall should not need a second link found and
  *  typed while a room waits. */
-type View = 'standings' | 'results';
+type View = 'standings' | 'results' | 'split';
 
 const CONTROL =
   'inline-flex items-center justify-center gap-1.5 px-3 h-9 rounded-lg text-sm font-semibold border';
@@ -179,6 +181,13 @@ export default function Scoreboard({ session }: { session: string }) {
    *  question, because the choice depends on the answers: a handful of
    *  sentences is a list, two hundred one-word answers is a cloud. */
   const [clouds, setClouds] = useState<Record<string, boolean>>({});
+  /** What the results can be split by, if this viewer may: the host and site
+   *  admins. Asked once; anybody else gets a refusal and no button. */
+  const [splitBy, setSplitBy] = useState<SplitList | null>(null);
+  useEffect(() => {
+    void readSplitQuestions(session).then(setSplitBy);
+  }, [session]);
+  const canSplit = splitBy?.ok === true && splitBy.questions.length > 0;
 
   const pull = useCallback(async () => {
     setBoard(await readSessionScores(session));
@@ -344,6 +353,7 @@ export default function Scoreboard({ session }: { session: string }) {
             ...(results?.privacy === 'full' || results?.keeps_score === false
               ? [] : [['standings', 'Who won', Trophy] as const]),
             ['results', 'How each question went', BarChart3],
+            ...(canSplit ? [['split', 'Split by an answer', SplitIcon] as const] : []),
           ] as const
         ).map(([v, label, Icon]) => (
           <button
@@ -399,6 +409,8 @@ export default function Scoreboard({ session }: { session: string }) {
             </section>
           ))}
         </div>
+      ) : view === 'split' && splitBy?.ok ? (
+        <SplitResults session={session} questions={splitBy.questions} />
       ) : (
         standingsTable
       )}

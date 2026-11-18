@@ -9,9 +9,12 @@
 import { useId, useState } from 'react';
 import { ChevronDown, Lock } from 'lucide-react';
 
-export default function AnonymityBanner({ minResults, showComments }: {
+export default function AnonymityBanner({ minResults, showComments, splitFloor }: {
   /** how many answers the results wait for */
   minResults: number;
+  /** the smallest group the host sees broken down when splitting the results;
+   *  0 is every group */
+  splitFloor: number;
   /** whether the reasons people give are shown in the results at all */
   showComments: boolean;
 }) {
@@ -46,6 +49,13 @@ export default function AnonymityBanner({ minResults, showComments }: {
               <ol className="list-decimal pl-5 space-y-1.5">
                 <li>We record that you answered, so nobody can answer twice. That record says nothing about what you picked.</li>
                 <li>Your answers are saved separately, with no name and no time.</li>
+                <li>
+                  Your answers in this survey are linked to each other, but not to you, so the person running it
+                  can see how people who gave one answer answered the rest.{' '}
+                  {splitFloor > 1
+                    ? `A group smaller than ${splitFloor} is never broken down.`
+                    : 'Every group can be broken down, however small, so in a small group your answers may stand out.'}
+                </li>
                 <li>
                   This browser keeps a private key for this survey. It goes with each answer so we can check
                   the answer is yours to change, and it is never stored on our side. From another browser, or

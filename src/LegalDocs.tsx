@@ -306,7 +306,11 @@ export function PrivacyPolicy() {
         them to you. Your browser keeps a private key for that survey so you can change
         your answers: it is sent with each answer to check the answer is yours, and it
         is never stored on our side. Results stay hidden until enough people have
-        answered for no single answer to stand out.
+        answered for no single answer to stand out. Your answers within one survey
+        are linked to each other, by a code made from that key, so its host and our
+        admins can see how people who gave one answer answered the others; that
+        code leads to no name. Each survey says above its questions how small a
+        group can be broken down this way.
       </P>
 
       <H>Site-wide numbers</H>

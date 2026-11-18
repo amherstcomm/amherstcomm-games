@@ -3,13 +3,16 @@
 // anonymous, where nobody can link an answer to a person. Chosen before
 // anybody answers and fixed once anybody has; what the database does about it
 // is in schema.sql, "Fully anonymous surveys".
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Lock } from 'lucide-react';
 
 export type PrivacyMeta = {
   privacy?: 'room' | 'full';
   min_results?: number;
   show_comments?: boolean;
+  /** split results: whether small groups are held back, and from what size */
+  split_hide?: boolean;
+  split_min?: number;
   /** how many people have answered at all */
   answered?: number;
   /** trivia for a giveaway or a tournament round, which is scored by name */
@@ -19,13 +22,43 @@ export type PrivacyMeta = {
 export default function SurveyPrivacy({ meta, busy, onSet }: {
   meta: PrivacyMeta;
   busy: boolean;
-  onSet: (change: { privacy?: 'room' | 'full'; minResults?: number; showComments?: boolean }) => void;
+  onSet: (change: {
+    privacy?: 'room' | 'full';
+    minResults?: number;
+    showComments?: boolean;
+    splitHide?: boolean;
+    splitMin?: number;
+  }) => void;
 }) {
   const privacy = meta.privacy ?? 'room';
   const answered = (meta.answered ?? 0) > 0;
   const min = meta.min_results ?? 5;
   const [minText, setMinText] = useState(String(min));
   const [note, setNote] = useState('');
+  const full = privacy === 'full';
+  const splitHide = meta.split_hide ?? full;
+  const splitMin = meta.split_min ?? (full ? Math.max(5, min) : 5);
+  const [splitText, setSplitText] = useState(String(splitMin));
+  const [splitNote, setSplitNote] = useState('');
+  useEffect(() => setSplitText(String(splitMin)), [splitMin]);
+  // A fully anonymous survey told the people answering it a size; once any of
+  // them have, it can get stricter and not looser. The server says so too.
+  const splitLocked = full && answered;
+
+  function toggleSplit(on: boolean) {
+    if (!on && splitLocked) {
+      return setSplitNote(`People have answered under a promise that groups under ${splitMin} are held back, so this stays on.`);
+    }
+    setSplitNote('');
+    onSet({ splitHide: on });
+  }
+  function saveSplit() {
+    const n = Number(splitText);
+    if (!Number.isInteger(n) || n < 1 || n > 1000) return setSplitNote('A number of people from 1 to 1000.');
+    if (splitLocked && n < splitMin) return setSplitNote(`People have answered, so it can go up from ${splitMin} but not down.`);
+    setSplitNote('');
+    onSet({ splitMin: n });
+  }
 
   function saveMin() {
     const n = Number(minText);
@@ -106,6 +139,45 @@ export default function SurveyPrivacy({ meta, busy, onSet }: {
           </span>
         </span>
       </label>
+
+      {/* Split results: "of those who said yes to 1, how did they answer 2".
+          Small groups are the question, and a survey of twenty has plenty. */}
+      <div className="space-y-2">
+        <label className="flex items-start gap-2.5 text-sm text-slate-200">
+          <input type="checkbox" className="mt-1" checked={splitHide} disabled={busy}
+                 onChange={(e) => toggleSplit(e.target.checked)} />
+          <span>
+            Hold back small groups when the results are split
+            <span className="block text-xs text-slate-400">
+              {splitHide
+                ? full
+                  ? 'A group smaller than this is not broken down, and the banner above every question says so.'
+                  : 'A group smaller than this is not broken down.'
+                : full
+                  ? 'Every group is broken down, however small, and the banner above every question says so.'
+                  : 'Every group is broken down, however small. Only you and site admins see splits.'}
+            </span>
+          </span>
+        </label>
+        {splitHide && (
+          <div className="pl-7">
+            <label className="flex flex-wrap items-center gap-2 text-sm text-slate-200">
+              Smallest group shown
+              <input value={splitText} inputMode="numeric" aria-label="Smallest group shown when splitting results"
+                     onChange={(e) => setSplitText(e.target.value.replace(/[^0-9]/g, '').slice(0, 4))}
+                     className="w-16 h-8 rounded-lg bg-white/5 border border-white/15 px-2 text-sm text-slate-200" />
+              people
+            </label>
+            {splitText !== String(splitMin) && (
+              <button type="button" onClick={saveSplit} disabled={busy}
+                      className="mt-2 px-3 h-8 rounded-lg text-xs font-semibold bg-accent text-slate-950">
+                Save
+              </button>
+            )}
+          </div>
+        )}
+        {splitNote && <p role="status" className="pl-7 text-xs text-amber-300">{splitNote}</p>}
+      </div>
     </section>
   );
 }

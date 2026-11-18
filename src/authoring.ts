@@ -69,6 +69,11 @@ export type Sheet = {
     points?: 'on' | 'off';
     min_results?: number;
     show_comments?: boolean;
+    /** split results: whether small groups are held back, from what size,
+     *  and the two together (0 when nothing is held back) */
+    split_hide?: boolean;
+    split_min?: number;
+    split_floor?: number;
     answered?: number;
     attached?: boolean;
   };
