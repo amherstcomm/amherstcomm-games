@@ -24,6 +24,7 @@ import {
   BOARD_LABELS,
   type Boards,
 } from '@/leaderboard';
+import ScrollRow, { RowItem } from '@/ScrollRow';
 import type { Mode } from '@/storage';
 
 const ICONS: Record<Slug, typeof Grid3x3> = {
@@ -189,7 +190,8 @@ export default function HomeView({
               />
             </span>
           </h2>
-          <div className="grid gap-2 sm:grid-cols-2">
+          {shownBoards.length > 0 && (
+          <ScrollRow label="Today's boards">
             {shownBoards.map((g) => {
               const rows = boards![g];
               const label = BOARD_LABELS[g];
@@ -198,10 +200,10 @@ export default function HomeView({
               // being 14th is still an answer to "how did I do?"
               const below = myIndex >= 3 ? rows[myIndex] : null;
               return (
+                <RowItem key={g}>
                 <button
-                  key={g}
                   onClick={onBoards}
-                  className="w-full text-left rounded-xl bg-white/5 border border-white/10 p-4 hover:bg-white/10 hover:border-white/20 transition-colors"
+                  className="w-full h-full flex flex-col justify-start text-left rounded-xl bg-white/5 border border-white/10 p-4 hover:bg-white/10 hover:border-white/20 transition-colors"
                 >
                   <span className="flex items-center gap-2 mb-2 text-sm font-semibold text-white">
                     <Trophy className="w-4 h-4 text-accent shrink-0" />
@@ -264,19 +266,29 @@ export default function HomeView({
                     )}
                   </ol>
                 </button>
+                </RowItem>
               );
             })}
-          </div>
+            {/* The last card: everything behind these, the week and month. */}
+            <RowItem>
+              <button
+                onClick={onBoards}
+                className="w-full h-full min-h-28 flex flex-col justify-end gap-1 text-left rounded-xl border border-white/15 p-4 text-accent font-semibold hover:bg-white/5 transition-colors"
+              >
+                See all the boards
+                <span className="text-xs font-normal text-slate-400">and the week and month behind them</span>
+              </button>
+            </RowItem>
+          </ScrollRow>
+          )}
           {shownBoards.length === 0 && (
             <p className="text-sm text-slate-400">
               Nobody has finished a puzzle at this difficulty today. Be first.
             </p>
           )}
-          <p className="mt-2 text-xs text-slate-500">
-            {me
-              ? 'See all the boards, and the week and month behind them.'
-              : 'Set a display name to take part — see all the boards.'}
-          </p>
+          {!me && (
+            <p className="mt-2 text-xs text-slate-500">Set a display name to take part.</p>
+          )}
         </section>
       )}
     </div>

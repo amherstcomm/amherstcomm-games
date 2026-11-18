@@ -65,3 +65,34 @@ test('a board ranked on time shows the time, on the front page and the panel', a
   const panel = page.locator('li', { hasText: 'Anagrimoire' }).filter({ hasText: '1 solved' });
   await expect(panel.first()).toContainText('best 1:35');
 });
+
+// Every board with anybody on it, in one row that scrolls sideways -- not
+// only the boards for games you have played, which left somebody who had
+// played nothing with a single board and no way to see the rest from here.
+test('every board with entries is in the row, with a last card for all of them', async ({ page }) => {
+  await page.goto('/');
+  const row = page.getByRole('group', { name: "Today's boards" });
+  // the stub has rows on every board, and nothing has been played here
+  await expect.poll(() => row.locator(':scope > ul > li').count()).toBeGreaterThan(3);
+  await expect(row.getByRole('button', { name: /See all the boards/ })).toBeVisible();
+  // it scrolls inside itself; the page does not
+  const w = await page.evaluate(() => [document.documentElement.scrollWidth, window.innerWidth]);
+  expect(w[0]).toBeLessThanOrEqual(w[1]);
+});
+
+test('the arrows and the arrow keys move the row, and the left arrow appears once moved', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.goto('/');
+  const row = page.getByRole('group', { name: "Today's boards" });
+  await expect(page.getByRole('button', { name: "Scroll Today's boards right" })).toBeVisible();
+  await expect(page.getByRole('button', { name: "Scroll Today's boards left" })).toHaveCount(0);
+  await page.getByRole('button', { name: "Scroll Today's boards right" }).click();
+  await expect.poll(() => row.evaluate((el) => el.scrollLeft)).toBeGreaterThan(0);
+  await expect(page.getByRole('button', { name: "Scroll Today's boards left" })).toBeVisible();
+  const before = await row.evaluate((el) => el.scrollLeft);
+  await row.focus();
+  await page.keyboard.press('ArrowLeft');
+  await expect.poll(() => row.evaluate((el) => el.scrollLeft)).toBeLessThan(before);
+  // the keys moved the row, not the site to another game
+  await expect(page).toHaveURL(/\/$/);
+});
