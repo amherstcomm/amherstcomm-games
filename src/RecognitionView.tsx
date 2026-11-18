@@ -7,6 +7,7 @@ import Avatar from '@/Avatar';
 import PersonFace, { PictureActions } from '@/PersonFace';
 import { useCanTakeDown } from '@/useCanTakeDown';
 import Waiting from '@/Waiting';
+import PageWithRail, { RAIL_LABEL, RailCard } from '@/PageWithRail';
 import PersonSearch from '@/PersonSearch';
 import type { Entrant } from '@/contests';
 import {
@@ -38,9 +39,9 @@ const BUTTON =
 const PRIMARY =
   'inline-flex items-center justify-center px-4 h-9 rounded-lg text-sm font-semibold ' +
   'bg-accent text-slate-950 hover:brightness-110 disabled:opacity-50';
-const CARD = 'rounded-xl border border-white/15 bg-white/5 p-4';
+const CARD = 'rounded-2xl border border-white/10 bg-slate-900 p-4';
 const LABEL = 'block text-xs font-semibold text-slate-400 mb-1';
-const H2 = 'text-sm font-semibold text-slate-200';
+const H2 = 'text-xs font-semibold text-slate-400 uppercase tracking-wider';
 
 const posted = (at: string) =>
   new Date(at).toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric' });
@@ -71,20 +72,48 @@ export default function RecognitionView() {
   const mine = page.mine ?? [];
 
   return (
-    <div className="max-w-3xl mx-auto px-4 py-8 space-y-8">
+    <PageWithRail
+      section="Together"
+      title="Recognition"
+      blurb="Seen somebody acting like an owner? Say what they did. Reviewers post nominations to the wall, and the person you nominated is told."
+      rail={
+        <>
+          {mine.length > 0 && (
+            <section aria-label="Your nominations" className="rounded-2xl border border-white/10 bg-slate-900 p-4">
+              <h2 className={RAIL_LABEL}>Your nominations</h2>
+              <ul className="mt-3 space-y-2">
+                {mine.map((n) => <MineItem key={n.id} n={n} onChange={load} />)}
+              </ul>
+            </section>
+          )}
+          {rounds.length > 0 && (
+            <RailCard label="Award rounds">
+              <ul className="divide-y divide-white/10 -my-1.5">
+                {rounds.map((r) => (
+                  <li key={r.id} className="py-1.5">
+                    <div className="flex items-baseline justify-between gap-3 text-sm">
+                      <span className="text-slate-200 min-w-0">{r.title}</span>
+                      <span className={`shrink-0 text-xs font-semibold ${r.state === 'open' ? 'text-accent' : 'text-slate-400'}`}>
+                        {r.state === 'soon' ? 'Not started' : r.state === 'open' ? 'Open' : 'Closed'}
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-500">{roundDates(r)}</p>
+                  </li>
+                ))}
+              </ul>
+            </RailCard>
+          )}
+        </>
+      }
+    >
       <div>
-        <h1 className="text-xl font-semibold text-slate-200">Recognition</h1>
-        <p className="text-sm text-slate-400">
-          Seen somebody acting like an owner? Say what they did. Reviewers post nominations to the wall, and the
-          person you nominated is told.
-        </p>
         {open.map((r) => (
-          <p key={r.id} className="mt-3 text-sm text-slate-200">
+          <p key={r.id} className="mb-3 text-sm text-slate-200">
             <span className="font-semibold">{r.title}:</span> nominations made {roundDates(r)} are in the running for
             the award.{r.blurb ? ` ${r.blurb}` : ''}
           </p>
         ))}
-        <div className="mt-4">
+        <div>
           {nominating ? (
             <NominateForm
               onDone={async (sent) => {
@@ -143,15 +172,7 @@ export default function RecognitionView() {
         )}
       </section>
 
-      {mine.length > 0 && (
-        <section aria-label="Your nominations">
-          <h2 className={H2}>Your nominations</h2>
-          <ul className="mt-2 space-y-2">
-            {mine.map((n) => <MineItem key={n.id} n={n} onChange={load} />)}
-          </ul>
-        </section>
-      )}
-    </div>
+    </PageWithRail>
   );
 }
 

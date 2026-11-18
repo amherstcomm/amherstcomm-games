@@ -5,6 +5,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { X } from 'lucide-react';
 import Avatar from '@/Avatar';
 import Waiting from '@/Waiting';
+import PageWithRail, { RailCard } from '@/PageWithRail';
 import PersonSearch from '@/PersonSearch';
 import type { Entrant } from '@/contests';
 import {
@@ -40,9 +41,9 @@ const BUTTON =
 const PRIMARY =
   'inline-flex items-center justify-center px-4 h-9 rounded-lg text-sm font-semibold ' +
   'bg-accent text-slate-950 hover:brightness-110 disabled:opacity-50';
-const CARD = 'rounded-xl border border-white/15 bg-white/5 p-4';
+const CARD = 'rounded-2xl border border-white/10 bg-slate-900 p-4';
 const LABEL = 'block text-xs font-semibold text-slate-400 mb-1';
-const H2 = 'text-sm font-semibold text-slate-200';
+const H2 = 'text-xs font-semibold text-slate-400 uppercase tracking-wider';
 
 export default function SuggestionsView() {
   const [page, setPage] = useState<Page | null>(null);
@@ -78,13 +79,23 @@ export default function SuggestionsView() {
 
   const board = page.board ?? [];
   return (
-    <div className="max-w-3xl mx-auto px-4 py-8 space-y-8">
-      <div>
-        <h1 className="text-xl font-semibold text-slate-200">Suggestion box</h1>
-        <p className="text-sm text-slate-400">
-          Like the boxes outside the offices: pick whose box, say what you think, and put your name to it or don’t.
-        </p>
-      </div>
+    <PageWithRail
+      section="Together"
+      title="Suggestion box"
+      blurb="Like the boxes outside the offices: pick whose box, say what you think, and put your name to it or don’t."
+      rail={
+        <>
+          {mine.length > 0 && <MineList mine={mine} onChange={load} />}
+          <RailCard label="Leaving your name off">
+            <p className="text-sm text-slate-400">
+              Your name isn’t stored with it, and nobody using the site can see who sent it. This browser remembers
+              it so you can see answers and write back. To check from anywhere else, keep the private link you
+              are given: anybody who has it can read the answers and write back.
+            </p>
+          </RailCard>
+        </>
+      }
+    >
 
       {(page.boxes ?? []).length === 0 ? (
         <p className={`${CARD} text-sm text-slate-300`}>There are no suggestion boxes up yet.</p>
@@ -116,10 +127,8 @@ export default function SuggestionsView() {
         )}
       </section>
 
-      {mine.length > 0 && <MineList mine={mine} onChange={load} />}
-
       {page.can_set_up && <Setup onChange={load} />}
-    </div>
+    </PageWithRail>
   );
 }
 
@@ -250,9 +259,9 @@ function Thread({ thread, me }: { thread: Message[]; me: 'reader' | 'sender' }) 
 
 function MineList({ mine, onChange }: { mine: Mine[]; onChange: () => Promise<void> }) {
   return (
-    <section aria-label="Your suggestions">
-      <h2 className={H2}>Your suggestions</h2>
-      <ul className="mt-2 space-y-3">
+    <section aria-label="Your suggestions" className="rounded-2xl border border-white/10 bg-slate-900 p-4">
+      <h2 className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Your suggestions</h2>
+      <ul className="mt-3 space-y-3">
         {mine.map((m) => <MineItem key={m.id} m={m} onChange={onChange} />)}
       </ul>
     </section>
