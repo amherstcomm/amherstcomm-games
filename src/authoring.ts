@@ -33,6 +33,10 @@ export type SheetItem = {
   /** how many people have answered — the reason an item can be deleted but not
    *  edited once it has been shown */
   responses: number;
+  /** its own say on keeping score: follow the session, or on, or off */
+  scoring?: 'inherit' | 'on' | 'off';
+  /** whether it keeps score, all things considered */
+  keeps_score?: boolean;
 };
 
 export type ItemKind = { kind: string; description: string; scored: boolean };
@@ -61,6 +65,8 @@ export type Sheet = {
     closes_at: string | null;
     /** how private its answers are; see SurveyPrivacy.tsx */
     privacy?: 'room' | 'full';
+    /** whether it keeps score; a survey usually does not */
+    points?: 'on' | 'off';
     min_results?: number;
     show_comments?: boolean;
     answered?: number;
@@ -193,6 +199,8 @@ export async function saveItem(args: {
   points?: number;
   penaltyWrong?: boolean;
   penaltySkip?: boolean;
+  /** its own say on keeping score; absent leaves it as it was */
+  scoring?: 'inherit' | 'on' | 'off';
 }): Promise<{ ok: boolean; id?: string; reason?: string }> {
   if (!supabase) return fail('not connected');
   const { data, error } = await supabase.rpc('save_item', {
@@ -205,6 +213,7 @@ export async function saveItem(args: {
     p_points: args.points ?? 1,
     p_penalty_wrong: args.penaltyWrong ?? false,
     p_penalty_skip: args.penaltySkip ?? false,
+    p_scoring: args.scoring ?? null,
   });
   if (error) return fail(error.message);
   return (data as { ok: boolean; id?: string; reason?: string }) ?? fail('no answer');

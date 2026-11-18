@@ -30985,3 +30985,508 @@ as $fn$
              from public.sessions s where s.id = p_session)
 $fn$;
 revoke all on function public.anon_current_item(uuid, text) from public, anon, authenticated;
+
+-- ---------------------------------------------------------------------------
+-- Keep score (November 2026; the survey spec, step 4)
+-- ---------------------------------------------------------------------------
+--
+-- A survey should be able to run with no scoring at all, including on kinds
+-- that normally score. The session says whether it keeps score; a question can
+-- follow that, or say on or off for itself, so one scored question can sit in
+-- a survey or the reverse. A fully anonymous survey never keeps score: points
+-- need a person to attach them to.
+--
+-- Scoring already goes through one gate -- item_counts, which every standing,
+-- leaderboard, ranking and giveaway count asks -- so that gate is where this
+-- lives. A question that keeps no score is left out of all of them, has no
+-- clock (save_item drops it), and names no winner. A choice question can still
+-- carry a correct answer, revealed as before; it just earns nothing.
+--
+-- Ray's call on the default: a new session is asked "Trivia or survey?" -- a
+-- survey starts with scoring off. Existing sessions keep scoring.
+
+alter table public.sessions add column if not exists points text not null default 'on';
+do $$
+begin
+  if not exists (select 1 from pg_constraint where conname = 'sessions_points_check') then
+    alter table public.sessions add constraint sessions_points_check check (points in ('on', 'off'));
+  end if;
+end $$;
+alter table public.items add column if not exists scoring text not null default 'inherit';
+do $$
+begin
+  if not exists (select 1 from pg_constraint where conname = 'items_scoring_check') then
+    alter table public.items add constraint items_scoring_check check (scoring in ('inherit', 'on', 'off'));
+  end if;
+end $$;
+
+-- Whether this question keeps score, all things considered.
+create or replace function public.item_scores(p_item uuid)
+returns boolean
+language sql
+stable
+security definer
+set search_path = ''
+as $fn$
+  select coalesce((
+    select k.scored
+       and s.privacy <> 'full'
+       and (i.scoring = 'on' or (i.scoring = 'inherit' and s.points = 'on'))
+    from public.items i
+    join public.sessions s on s.id = i.session_id
+    join public.item_kinds k on k.kind = i.kind
+    where i.id = p_item), false)
+$fn$;
+revoke all on function public.item_scores(uuid) from public, anon, authenticated;
+
+create or replace function public.item_counts(p_item uuid)
+returns boolean
+language sql
+stable
+set search_path = ''
+as $fn$
+  select exists (
+    select 1
+    from public.items i
+    join public.sessions s on s.id = i.session_id
+    join public.item_kinds k on k.kind = i.kind
+    where i.id = p_item and k.scored
+      and public.item_scores(i.id)
+      and (i.state = 'revealed' or (s.mode = 'open' and i.state <> 'pending'))
+  )
+$fn$;
+
+create or replace function public.item_winner(p_item uuid)
+returns jsonb
+language sql
+stable
+security definer
+set search_path = ''
+as $fn$
+  select case
+    when not public.hosts_session((select session_id from public.items where id = p_item))
+      then jsonb_build_object('ok', false, 'reason', 'not allowed')
+    when not exists (select 1 from public.items where id = p_item and state = 'revealed')
+      then jsonb_build_object('ok', false, 'reason', 'not revealed yet')
+    -- nobody wins a question that keeps no score, so there is nobody to name
+    when not public.item_scores(p_item)
+      then jsonb_build_object('ok', true, 'name', null, 'correct', 0, 'unscored', true)
+    else coalesce((
+      select jsonb_build_object(
+        'ok', true,
+        'name', coalesce(p.display_name, 'Someone'),
+        'seconds', ip.seconds,
+        'correct', (select count(*) from public.item_points(p_item) w
+                    where w.points >= (select i.points from public.items i where i.id = p_item)))
+      from public.item_points(p_item) ip
+      left join public.profiles p on p.id = ip.user_id
+      where ip.points >= (select i.points from public.items i where i.id = p_item)
+      order by ip.seconds nulls last
+      limit 1),
+      -- Nobody with full marks: the best there was, if it was worth anything.
+      coalesce((
+        select jsonb_build_object(
+          'ok', true, 'name', null, 'correct', 0,
+          'best', jsonb_build_object(
+            'name', coalesce(p.display_name, 'Someone'),
+            'points', trim_scale(round(ip.points, 2)),
+            'of', trim_scale((select i.points from public.items i where i.id = p_item))))
+        from public.item_points(p_item) ip
+        left join public.profiles p on p.id = ip.user_id
+        where ip.points > 0
+        order by ip.points desc, ip.seconds nulls last
+        limit 1),
+        jsonb_build_object('ok', true, 'name', null, 'correct', 0)))
+  end
+$fn$;
+revoke all on function public.item_winner(uuid) from public, anon;
+grant execute on function public.item_winner(uuid) to authenticated;
+
+drop function if exists public.save_item(uuid, uuid, text, text, jsonb, jsonb, numeric, boolean, boolean);
+create or replace function public.save_item(
+  p_session uuid,
+  p_item uuid,
+  p_kind text,
+  p_prompt text,
+  p_payload jsonb default '{}'::jsonb,
+  p_answer jsonb default null,
+  p_points numeric default 1,
+  p_penalty_wrong boolean default false,
+  p_penalty_skip boolean default false,
+  p_scoring text default null
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $fn$
+declare
+  target uuid;
+  prior_state text;
+  is_scored boolean;
+  body jsonb;
+  problem text;
+  v_scoring text;
+  keeps_score boolean;
+begin
+  if not public.hosts_session(p_session) then
+    return jsonb_build_object('ok', false, 'reason', 'not allowed');
+  end if;
+  select k.scored into is_scored from public.item_kinds k where k.kind = p_kind;
+  if is_scored is null then
+    return jsonb_build_object('ok', false, 'reason', 'no such kind of question');
+  end if;
+  if coalesce(btrim(p_prompt), '') = '' then
+    return jsonb_build_object('ok', false, 'reason', 'a question needs to say something');
+  end if;
+
+  if coalesce(p_points, 1) <= 0 or coalesce(p_points, 1) > 100 then
+    return jsonb_build_object('ok', false, 'reason',
+      'a question is worth more than nothing and at most a hundred points');
+  end if;
+
+  body := coalesce(p_payload, '{}'::jsonb);
+
+  -- Whether this question keeps score: its own say, or the session's. A kind
+  -- with no right answer never does and has no say; a fully anonymous survey
+  -- never does either.
+  v_scoring := case when not is_scored then 'inherit'
+                  else coalesce(p_scoring, (select i.scoring from public.items i where i.id = p_item), 'inherit') end;
+  if v_scoring not in ('inherit', 'on', 'off') then
+    return jsonb_build_object('ok', false, 'reason', 'a question keeps score, does not, or follows the survey');
+  end if;
+  select is_scored and s.privacy <> 'full'
+         and (v_scoring = 'on' or (v_scoring = 'inherit' and s.points = 'on'))
+    into keeps_score
+  from public.sessions s where s.id = p_session;
+  -- No score, no clock: a countdown is a race, and a question nobody can win
+  -- is not one. A poll in a round that keeps score may still have one, as it
+  -- always could; in a survey that keeps none, nothing does. Dropped here so
+  -- the room is never shown one.
+  if not (case when is_scored then keeps_score
+               else exists (select 1 from public.sessions s
+                            where s.id = p_session and s.points = 'on' and s.privacy <> 'full') end) then
+    body := body - 'seconds';
+  end if;
+
+  -- A comparison is a table the room reads across, so a missing cell is a
+  -- question that cannot be drawn. Checked here as well as in the editor,
+  -- because the editor is not the only thing that can call this.
+  -- A word game marks each guess against the person making it, which a fully
+  -- anonymous survey has no way to do.
+  if p_kind = 'game' and exists (select 1 from public.sessions s
+                                 where s.id = p_session and s.privacy = 'full') then
+    return jsonb_build_object('ok', false, 'reason',
+      'a word game cannot go in a fully anonymous survey: it has to know whose guesses are whose');
+  end if;
+
+  if p_kind = 'compare' then
+    problem := public.compare_payload_problem(body);
+    if problem is not null then
+      return jsonb_build_object('ok', false, 'reason', problem);
+    end if;
+  end if;
+
+  -- A word game drawn from a themed list rather than typed.
+  --
+  -- The draw happens here, once, and what it drew is stored with the answer —
+  -- so the round is fixed the moment it is saved, and deleting the list later
+  -- does not take the question apart. The list travels in `answer` and never in
+  -- the payload: the payload goes to the room, and naming the list a six-letter
+  -- word came out of nearly gives it away.
+  if p_kind = 'game' and (p_answer ->> 'list') is not null then
+    declare
+      drawn text;
+      want int := nullif(p_answer ->> 'length', '')::int;
+    begin
+      drawn := public.draw_word((p_answer ->> 'list')::uuid, want);
+      if drawn is null then
+        return jsonb_build_object('ok', false, 'reason',
+          case when want is null then 'that list has no words in it'
+               else format('that list has no %s-letter words in it', want) end);
+      end if;
+      p_answer := jsonb_build_object('word', drawn, 'list', p_answer ->> 'list');
+      -- The board is drawn from the payload before the room knows anything
+      -- else, so the length has to follow the word that was actually drawn.
+      body := jsonb_set(body, '{length}', to_jsonb(length(drawn)));
+    end;
+  end if;
+
+  -- See the note above: the room is shown the payload, so the payload must not
+  -- be the answer in a different arrangement.
+  if p_kind = 'rank' and jsonb_typeof(body -> 'options') = 'array' then
+    body := jsonb_set(body, '{options}',
+                      public.shuffled(body -> 'options', p_answer -> 'order'));
+  elsif p_kind = 'match' and jsonb_typeof(body -> 'right') = 'array' then
+    -- Only the right-hand column moves. The left one is the list of things
+    -- being asked about and reordering it would just reword the question.
+    body := jsonb_set(body, '{right}', public.shuffled(body -> 'right'));
+  end if;
+
+  if p_item is not null then
+    select i.state into prior_state
+    from public.items i where i.id = p_item and i.session_id = p_session;
+    if prior_state is null then
+      return jsonb_build_object('ok', false, 'reason', 'no such question in this session');
+    end if;
+    if prior_state <> 'pending' then
+      return jsonb_build_object('ok', false, 'reason',
+        'this one has already been shown - delete it and add another instead');
+    end if;
+    update public.items
+      set scoring = v_scoring,
+          kind = p_kind,
+          prompt = left(btrim(p_prompt), 500),
+          payload = body,
+          points = coalesce(p_points, 1),
+          penalty_wrong = coalesce(p_penalty_wrong, false),
+          penalty_skip = coalesce(p_penalty_skip, false)
+    where id = p_item;
+    target := p_item;
+  else
+    insert into public.items (session_id, position, kind, prompt, payload,
+                              points, penalty_wrong, penalty_skip, scoring)
+    values (p_session,
+            coalesce((select max(i.position) + 1 from public.items i
+                      where i.session_id = p_session), 1),
+            p_kind, left(btrim(p_prompt), 500), body,
+            coalesce(p_points, 1),
+            coalesce(p_penalty_wrong, false),
+            coalesce(p_penalty_skip, false),
+            v_scoring)
+    returning id into target;
+  end if;
+
+  if p_answer is null or p_answer = 'null'::jsonb or not is_scored then
+    delete from public.item_answers where item_id = target;
+  else
+    insert into public.item_answers (item_id, answer) values (target, p_answer)
+    on conflict (item_id) do update set answer = excluded.answer;
+  end if;
+
+  return jsonb_build_object('ok', true, 'id', target);
+end;
+$fn$;
+revoke all on function public.save_item(uuid, uuid, text, text, jsonb, jsonb, numeric, boolean, boolean, text) from public, anon;
+grant execute on function public.save_item(uuid, uuid, text, text, jsonb, jsonb, numeric, boolean, boolean, text) to authenticated;
+
+create or replace function public.session_sheet(p_session uuid)
+returns jsonb
+language sql
+stable
+security definer
+set search_path = ''
+as $fn$
+  select case
+    when not public.hosts_session(p_session)
+      then jsonb_build_object('ok', false, 'reason', 'not allowed')
+    else jsonb_build_object(
+      'ok', true,
+      'session', (select jsonb_build_object(
+         'id', s.id, 'title', s.title, 'state', public.scheduled_state(s),
+         'late_join', s.late_join, 'current_item', s.current_item,
+         'code', s.code, 'mode', s.mode, 'qa', s.qa,
+         'shared', s.share_results, 'opens_at', s.opens_at, 'closes_at', s.closes_at,
+         'shuffle', s.shuffle_options, 'avatars', s.avatars,
+         'privacy', s.privacy, 'min_results', s.min_results, 'show_comments', s.show_comments,
+         'points', s.points,
+         -- answered at all, by anybody: the moment privacy stops being a choice
+         'answered', public.session_answered(s.id),
+         'attached', exists (select 1 from public.giveaway_sessions g where g.session_id = s.id)
+                  or exists (select 1 from public.tournament_round_sessions t where t.session_id = s.id))
+       from public.sessions s where s.id = p_session),
+      'kinds', (select jsonb_agg(jsonb_build_object(
+                  'kind', k.kind, 'description', k.description, 'scored', k.scored)
+                order by k.kind)
+                from public.item_kinds k),
+      'items', coalesce(
+        (select jsonb_agg(jsonb_build_object(
+           'id', i.id, 'position', i.position, 'kind', i.kind, 'prompt', i.prompt,
+           'payload', i.payload, 'state', i.state,
+           'points', trim_scale(i.points),
+           'penalty_wrong', i.penalty_wrong,
+           'penalty_skip', i.penalty_skip,
+           'scoring', i.scoring,
+           'keeps_score', public.item_scores(i.id),
+           'answer', (select a.answer from public.item_answers a where a.item_id = i.id),
+           'responses', (select count(*) from public.answers_for(i.id) r)
+         ) order by i.position)
+         from public.items i where i.session_id = p_session),
+        '[]'::jsonb))
+  end
+$fn$;
+revoke all on function public.session_sheet(uuid) from public, anon;
+grant execute on function public.session_sheet(uuid) to authenticated;
+
+create or replace function public.session_results(p_session uuid)
+returns jsonb
+language sql
+stable
+security definer
+set search_path = ''
+as $fn$
+  select case
+    when not public.may_see_results(p_session)
+      then jsonb_build_object('ok', false, 'reason', 'not allowed')
+    else jsonb_build_object(
+      'ok', true,
+      'title', (select s.title from public.sessions s where s.id = p_session),
+      'state', (select s.state from public.sessions s where s.id = p_session),
+      'mode', (select s.mode from public.sessions s where s.id = p_session),
+      'shared', (select s.share_results from public.sessions s where s.id = p_session),
+      'privacy', (select s.privacy from public.sessions s where s.id = p_session),
+      -- whether anybody can have won: no "who won" for a survey that keeps no score
+      'keeps_score', exists (select 1 from public.items i
+                             join public.item_kinds k on k.kind = i.kind
+                             where i.session_id = p_session and k.scored and public.item_scores(i.id)),
+      'min_results', (select s.min_results from public.sessions s where s.id = p_session),
+      -- how many have answered at all; never who
+      'answered', (select count(*) from public.survey_participation sp where sp.session_id = p_session),
+      -- Everything that has been shown, scored or not: a survey has no score
+      -- and is the question most worth a chart. In a live session that means
+      -- revealed; in an open one, anything that has been opened at all.
+      'items', coalesce((
+        select jsonb_agg(jsonb_build_object(
+                 'id', i.id, 'position', i.position, 'kind', i.kind, 'prompt', i.prompt,
+                 'chart', public.item_chart(i.id))
+               order by i.position)
+        from public.items i
+        join public.sessions s on s.id = i.session_id
+        where i.session_id = p_session
+          and (i.state = 'revealed' or (s.mode = 'open' and i.state <> 'pending'))),
+        '[]'::jsonb)
+    )
+  end
+$fn$;
+revoke all on function public.session_results(uuid) from public, anon;
+grant execute on function public.session_results(uuid) to authenticated;
+
+create or replace function public.set_session_privacy(
+  p_session uuid,
+  p_privacy text default null,
+  p_min_results int default null,
+  p_show_comments boolean default null
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $fn$
+declare
+  sess public.sessions;
+  answered boolean;
+begin
+  if not public.hosts_session(p_session) then
+    return jsonb_build_object('ok', false, 'reason', 'not allowed');
+  end if;
+  select * into sess from public.sessions where id = p_session;
+  answered := public.session_answered(p_session) > 0;
+  if p_privacy is not null and p_privacy not in ('room', 'full') then
+    return jsonb_build_object('ok', false, 'reason', 'privacy is room or full');
+  end if;
+  if p_privacy is not null and p_privacy <> sess.privacy then
+    if answered then
+      return jsonb_build_object('ok', false, 'reason',
+        'people have already answered, so how private this survey is can no longer change');
+    end if;
+    if p_privacy = 'full' then
+      if exists (select 1 from public.items i where i.session_id = p_session and i.kind = 'game') then
+        return jsonb_build_object('ok', false, 'reason',
+          'take the word game out first: it has to know whose guesses are whose');
+      end if;
+      if exists (select 1 from public.giveaway_sessions g where g.session_id = p_session)
+         or exists (select 1 from public.tournament_round_sessions t where t.session_id = p_session) then
+        return jsonb_build_object('ok', false, 'reason',
+          'trivia for a giveaway or a tournament is scored by name, so it cannot be fully anonymous');
+      end if;
+    end if;
+  end if;
+  if p_min_results is not null then
+    if p_min_results < 5 or p_min_results > 1000 then
+      return jsonb_build_object('ok', false, 'reason', 'results wait for at least five answers');
+    end if;
+    if answered and p_min_results < sess.min_results then
+      return jsonb_build_object('ok', false, 'reason',
+        'people have already answered, so the minimum can go up but not down');
+    end if;
+  end if;
+  update public.sessions
+     set privacy = coalesce(p_privacy, privacy),
+         min_results = coalesce(p_min_results, min_results),
+         show_comments = coalesce(p_show_comments, show_comments),
+         -- the room's questions and the avatars on the answers both carry names
+         qa = case when coalesce(p_privacy, privacy) = 'full' then false else qa end,
+         -- points need a person to attach them to, which full privacy removes
+         points = case when coalesce(p_privacy, privacy) = 'full' then 'off' else points end,
+         avatars = case when coalesce(p_privacy, privacy) = 'full' then 'off' else avatars end
+   where id = p_session;
+  return jsonb_build_object('ok', true);
+end;
+$fn$;
+revoke all on function public.set_session_privacy(uuid, text, int, boolean) from public, anon;
+grant execute on function public.set_session_privacy(uuid, text, int, boolean) to authenticated;
+
+create or replace function public.refuse_anonymous_trivia()
+returns trigger
+language plpgsql
+set search_path = ''
+as $fn$
+begin
+  if exists (select 1 from public.sessions s where s.id = new.session_id and s.privacy = 'full') then
+    raise exception 'a fully anonymous survey cannot be scored for a giveaway or a tournament';
+  end if;
+  -- and one that keeps no score has nothing to give a giveaway or a round
+  if exists (select 1 from public.sessions s where s.id = new.session_id and s.points = 'off') then
+    raise exception 'a session that keeps no score cannot be scored for a giveaway or a tournament';
+  end if;
+  return new;
+end;
+$fn$;
+
+-- Switching it. Before anybody has answered, because after that it would
+-- rewrite who won. Off takes the clocks off its questions -- a countdown is a
+-- race, and a survey is not one -- except a question that keeps score on its
+-- own say.
+create or replace function public.set_session_points(p_session uuid, p_points text)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $fn$
+declare
+  sess public.sessions;
+begin
+  if not public.hosts_session(p_session) then
+    return jsonb_build_object('ok', false, 'reason', 'not allowed');
+  end if;
+  select * into sess from public.sessions where id = p_session;
+  if p_points not in ('on', 'off') then
+    return jsonb_build_object('ok', false, 'reason', 'a session keeps score or does not');
+  end if;
+  if p_points = sess.points then
+    return jsonb_build_object('ok', true);
+  end if;
+  if p_points = 'on' and sess.privacy = 'full' then
+    return jsonb_build_object('ok', false, 'reason', 'fully anonymous surveys can''t keep score');
+  end if;
+  if public.session_answered(p_session) > 0 then
+    return jsonb_build_object('ok', false, 'reason',
+      'people have already answered, so whether it keeps score can no longer change');
+  end if;
+  if p_points = 'off'
+     and (exists (select 1 from public.giveaway_sessions g where g.session_id = p_session)
+          or exists (select 1 from public.tournament_round_sessions t where t.session_id = p_session)) then
+    return jsonb_build_object('ok', false, 'reason',
+      'this is trivia for a giveaway or a tournament, which is scored, so it has to keep score');
+  end if;
+  update public.sessions set points = p_points where id = p_session;
+  if p_points = 'off' then
+    update public.items
+       set payload = payload - 'seconds'
+     where session_id = p_session and scoring <> 'on' and payload ? 'seconds';
+  end if;
+  return jsonb_build_object('ok', true);
+end;
+$fn$;
+revoke all on function public.set_session_points(uuid, text) from public, anon;
+grant execute on function public.set_session_points(uuid, text) to authenticated;
