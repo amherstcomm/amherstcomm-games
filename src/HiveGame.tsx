@@ -8,6 +8,8 @@ import {
 } from 'react';
 import { CornerDownLeft, Delete, RefreshCw, Shuffle, Timer } from 'lucide-react';
 import { formatElapsed, useUpTimer } from '@/useUpTimer';
+import { useRailSlot } from '@/railSlot';
+import { InRail, RailPanel, WordChips } from '@/RailPanel';
 import {
   onDifficultyChange,
   resolveDifficulty,
@@ -470,6 +472,9 @@ const HiveGame = forwardRef<
   const loading =
     (store.dailyMode ? !record && !dailyError : !record || !commonWords) || syncing;
 
+  // Beside the board on a wide page, the game's own panel goes in the rail.
+  const rail = useRailSlot();
+
   return (
     <div className="text-center">
       {/* A round has no practice board and no daily to switch to. */}
@@ -494,6 +499,7 @@ const HiveGame = forwardRef<
       {record && (
         <>
           {/* score + rank */}
+          {!rail && (
           <div className="mb-4 flex items-center justify-center gap-4 text-xs text-slate-400">
             <span className="text-amber-300 font-semibold text-sm">{rank}</span>
             <span className="inline-flex items-center gap-1.5 tabular-nums">
@@ -508,6 +514,7 @@ const HiveGame = forwardRef<
               <span className="text-slate-500">{store.dailyDate}</span>
             )}
           </div>
+          )}
 
           {/* current entry */}
           <div className="relative mb-4 mx-auto max-w-sm h-12 px-4 rounded-xl bg-white/5 border-2 border-white/10 flex items-center justify-center overflow-hidden">
@@ -580,7 +587,7 @@ const HiveGame = forwardRef<
                 New hive
               </button>
             )}
-            {record.found.length > 0 && (
+            {!rail && record.found.length > 0 && (
               <ShareButton
                 build={() =>
                   buildShare({
@@ -617,7 +624,7 @@ const HiveGame = forwardRef<
           </div>
 
           {/* found words */}
-          {record.found.length > 0 && (
+          {!rail && record.found.length > 0 && (
             <div className="mt-3 text-left max-w-md mx-auto">
               <p className="mb-2 text-xs font-medium text-slate-400 uppercase tracking-wider text-center">
                 Found <span className="text-slate-600">· {record.found.length}</span>
@@ -668,6 +675,46 @@ const HiveGame = forwardRef<
             {themedNow.length > 0 && ` Today's letters come from a theme — its words are worth +${THEME_BONUS} each.`}
             {store.dailyMode && ' A fresh daily hive arrives about 15 minutes after 3:00 a.m. Eastern.'}
           </p>
+          {rail && (
+            <InRail slot={rail}>
+              <RailPanel label="Your progress" figure={<span className="text-amber-300 font-semibold">{rank}</span>}>
+                <div className="h-1.5 rounded-full bg-white/10 overflow-hidden" aria-hidden="true">
+                  <div className="h-full bg-amber-400 rounded-full" style={{ width: `${Math.min(100, Math.round((score / Math.max(1, geniusAt)) * 100))}%` }} />
+                </div>
+                <p className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-400 tabular-nums">
+                  <span>{score} / {maxScore} pts</span>
+                  <span>Genius at {geniusAt}</span>
+                  <span className="inline-flex items-center gap-1"><Timer className="w-3.5 h-3.5" aria-hidden="true" />{formatElapsed(record.elapsedMs ?? 0)}</span>
+                </p>
+                <p className="mt-3 mb-2 text-xs text-slate-400">
+                  {record.found.length} {record.found.length === 1 ? 'word' : 'words'} found
+                  {answers && <span className="text-slate-500"> of {answers.size}</span>}
+                </p>
+                {record.found.length > 0 && <WordChips words={[...record.found].sort()} strong={isPangram} />}
+                {record.found.length > 0 && (
+                  <div className="mt-3">
+                    <ShareButton
+                      build={() =>
+                        buildShare({
+                          game: GAME_NAME.bee.full,
+                          slug: 'hive',
+                          daily: store.dailyMode,
+                          date: store.dailyDate,
+                          body: [
+                            rank,
+                            `${score}/${maxScore} pts · ${record.found.length} words`,
+                            ...(record.found.filter(isPangram).length
+                              ? [`${record.found.filter(isPangram).length} pangram${record.found.filter(isPangram).length === 1 ? '' : 's'}`]
+                              : []),
+                          ],
+                        })
+                      }
+                    />
+                  </div>
+                )}
+              </RailPanel>
+            </InRail>
+          )}
         </>
       )}
     </div>

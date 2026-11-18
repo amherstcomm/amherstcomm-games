@@ -55,13 +55,15 @@ export function GameRail({ games }: { games: RailGame[] }) {
 }
 
 /** This game's board(s) at this difficulty, and what to do about the puzzle. */
-export function GameSide({ boards: which, level, levelWord, onBoards, report }: {
+export function GameSide({ boards: which, level, levelWord, onBoards, report, slotRef }: {
   boards: BoardGame[];
   level: Difficulty;
   levelWord: string;
   onBoards: () => void;
   /** the report-a-problem control, which knows which puzzle this is */
   report: ReactNode;
+  /** where the game's own panel is portalled to (railSlot.ts) */
+  slotRef?: (el: HTMLDivElement | null) => void;
 }) {
   const [boards, setBoards] = useState<Boards | null>(null);
   const [me, setMe] = useState<string | null>(null);
@@ -76,6 +78,7 @@ export function GameSide({ boards: which, level, levelWord, onBoards, report }: 
 
   return (
     <div className="space-y-4">
+      <div ref={slotRef} className="space-y-4 empty:hidden" />
       {which.map((g) => {
         const rows = boards?.[g] ?? [];
         const label = BOARD_LABELS[g];

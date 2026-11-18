@@ -46,6 +46,7 @@ import { readUnread as readSuggestionsUnread } from '@/suggestions';
 import SiteBar, { type BarItem, type Section } from '@/SiteBar';
 import { GameRail, GameSide, type RailGame } from '@/GamePageRails';
 import { MODE_BOARDS } from '@/leaderboard';
+import { RailSlotContext } from '@/railSlot';
 import { allDailyStatus } from '@/dailyStatus';
 import { readMyAvatar, type Avatar as AvatarData } from '@/avatars';
 import { fetchDisplayName } from '@/leaderboard';
@@ -355,6 +356,8 @@ function App() {
   const [suggestionsUnread, setSuggestionsUnread] = useState(0);
   // Who is signed in, as the bar's avatar button draws them.
   const [you, setYou] = useState<{ avatar: AvatarData | null; name: string } | null>(null);
+  // The rail's slot for the game's own panel (railSlot.ts).
+  const [railSlot, setRailSlot] = useState<HTMLElement | null>(null);
   const [learnMode, setLearnMode] = useState(entryGame()?.view === 'learn');
   const [theme, setTheme] = useState<ThemeMode>(initial.theme);
   const [palette, setPalette] = useState<Palette>(initial.palette);
@@ -1345,6 +1348,7 @@ function App() {
           )}
 
           {!atHome && (
+          <RailSlotContext.Provider value={inRound ? null : railSlot}>
           <div className={`grid gap-6 ${inRound
             ? 'lg:grid-cols-[minmax(0,1fr)]'
             : 'lg:grid-cols-[minmax(0,1fr)_18.75rem] xl:grid-cols-[13.75rem_minmax(0,1fr)_18.75rem]'}`}>
@@ -1719,6 +1723,7 @@ function App() {
                 level={level}
                 levelWord={DIFFICULTY_LABEL[level]}
                 onBoards={() => openOverlay({ kind: 'stats', tab: 'boards' })}
+                slotRef={setRailSlot}
                 report={
                   <ReportMenu
                     context={{
@@ -1735,6 +1740,7 @@ function App() {
             </div>
           )}
           </div>
+          </RailSlotContext.Provider>
           )}
 
           </>
