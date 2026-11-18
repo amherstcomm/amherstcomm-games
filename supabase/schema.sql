@@ -30880,3 +30880,108 @@ create trigger giveaway_sessions_not_anonymous before insert or update on public
 drop trigger if exists tournament_sessions_not_anonymous on public.tournament_round_sessions;
 create trigger tournament_sessions_not_anonymous before insert or update on public.tournament_round_sessions
   for each row execute function public.refuse_anonymous_trivia();
+
+-- ---------------------------------------------------------------------------
+-- Saying how it works (November 2026; the survey spec, step 3)
+-- ---------------------------------------------------------------------------
+--
+-- The banner on a fully anonymous survey says how many answers it waits for
+-- and whether reasons are shown, so the question it is on carries both: the
+-- survey's own numbers, not a promise written once in the page.
+
+create or replace function public.anon_current_item_base(p_session uuid, p_key text)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $fn$
+declare
+  sess public.sessions;
+  it public.items;
+  me uuid := (select auth.uid());
+  yours boolean;
+  key_ok boolean;
+  bound boolean;
+  n_total int;
+begin
+  select * into sess from public.sessions where id = p_session;
+  yours := public.runs_session(p_session);
+  key_ok := public.anon_key_ok(p_session, p_key);
+  bound := exists (select 1 from public.survey_participation sp
+                   where sp.session_id = p_session and sp.user_id = me);
+  select count(*) into n_total from public.items i
+  where i.session_id = p_session and i.state <> 'pending';
+
+  if sess.mode = 'live' then
+    if sess.current_item is null then
+      return jsonb_build_object('state', 'waiting', 'mode', 'live', 'privacy', 'full', 'now', now(), 'yours', yours);
+    end if;
+    select * into it from public.items where id = sess.current_item and state <> 'pending';
+    if it.id is null then
+      return jsonb_build_object('state', 'waiting', 'mode', 'live', 'privacy', 'full', 'now', now(), 'yours', yours);
+    end if;
+    return jsonb_build_object(
+      'state', it.state, 'mode', 'live', 'privacy', 'full', 'yours', yours,
+      'key_lost', bound and not key_ok,
+      'id', it.id, 'kind', it.kind, 'prompt', it.prompt,
+      'payload', public.served_payload(it.kind, it.payload, sess.shuffle_options, it.id::text),
+      'position', it.position,
+      'opened_at', null, 'seconds', null, 'now', now(),
+      'mine', case when key_ok then
+                (select a.value from public.survey_answers a
+                 where a.item_id = it.id and a.answer_key = public.anon_answer_key(it.id, p_key)) end,
+      'answer', case when it.state = 'revealed'
+                     then (select a.answer from public.item_answers a where a.item_id = it.id) end);
+  end if;
+
+  if me is null or yours then
+    return jsonb_build_object('state', 'not-live', 'mode', 'open', 'privacy', 'full', 'now', now(), 'yours', yours);
+  end if;
+  -- They answered from a browser that is not this one, or that has forgotten
+  -- the key. What they gave still counts; this one cannot add to it or change
+  -- it, and is told so rather than shown questions it cannot answer.
+  if bound and not key_ok then
+    return jsonb_build_object('state', 'done', 'mode', 'open', 'privacy', 'full', 'key_lost', true,
+                              'now', now(), 'yours', false, 'total', n_total);
+  end if;
+  select i.* into it
+  from public.items i
+  where i.session_id = p_session
+    and i.state <> 'pending'
+    and not (key_ok and exists (select 1 from public.survey_answers a
+                                where a.item_id = i.id
+                                  and a.answer_key = public.anon_answer_key(i.id, p_key)))
+  order by i.position
+  limit 1;
+  if it.id is null then
+    return jsonb_build_object('state', 'done', 'mode', 'open', 'privacy', 'full',
+                              'now', now(), 'yours', false, 'total', n_total);
+  end if;
+  return jsonb_build_object(
+    'state', 'open', 'mode', 'open', 'privacy', 'full', 'yours', false,
+    'id', it.id, 'kind', it.kind, 'prompt', it.prompt,
+    'payload', public.served_payload(it.kind, it.payload, sess.shuffle_options, it.id::text || me::text),
+    'position', it.position,
+    'opened_at', null, 'seconds', null, 'now', now(),
+    'mine', null, 'answer', null, 'paused', false,
+    'total', n_total,
+    'done', (select count(*) from public.items i
+             where i.session_id = p_session and i.state <> 'pending'
+               and key_ok
+               and exists (select 1 from public.survey_answers a
+                           where a.item_id = i.id and a.answer_key = public.anon_answer_key(i.id, p_key))));
+end;
+$fn$;
+revoke all on function public.anon_current_item_base(uuid, text) from public, anon, authenticated;
+
+create or replace function public.anon_current_item(p_session uuid, p_key text)
+returns jsonb
+language sql
+security definer
+set search_path = ''
+as $fn$
+  select public.anon_current_item_base(p_session, p_key)
+         || (select jsonb_build_object('min_results', s.min_results, 'show_comments', s.show_comments)
+             from public.sessions s where s.id = p_session)
+$fn$;
+revoke all on function public.anon_current_item(uuid, text) from public, anon, authenticated;
