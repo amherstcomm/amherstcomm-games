@@ -299,6 +299,8 @@ function App() {
   /** Pages meant to be looked at from across a room rather than read. The
    *  presenter's half of a live session and the scoreboard; the participant's
    *  half is a phone in a hand and stays narrow. */
+  // feature pages laid out with a rail beside them (PageWithRail)
+  const withRail = (['whiteboard', 'recognition', 'suggestions'] as const).some((k) => nav.page.kind === k);
   const forTheRoom =
     (nav.page.kind === 'live' && nav.page.host) ||
     nav.page.kind === 'scores' ||
@@ -1200,7 +1202,7 @@ function App() {
         id="main"
         tabIndex={-1}
         className={`relative mx-auto px-5 py-10 sm:py-16 outline-none ${
-          forTheRoom || (atHome && !reportPage && !lockedHere) ? 'max-w-6xl'
+          forTheRoom || withRail || (atHome && !reportPage && !lockedHere) ? 'max-w-6xl'
             : !atHome && !reportPage && !lockedHere ? 'max-w-[82rem]' : 'max-w-3xl'
         } ${kbOpen ? 'pb-64 sm:pb-64' : ''}`}
       >

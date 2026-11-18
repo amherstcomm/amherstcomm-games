@@ -7,6 +7,7 @@ import PersonFace, { PictureActions } from '@/PersonFace';
 import { useCanTakeDown } from '@/useCanTakeDown';
 import Waiting from '@/Waiting';
 import RouteLink from '@/RouteLink';
+import PageWithRail, { RAIL_CARD, RAIL_LABEL } from '@/PageWithRail';
 import {
   answerChoice,
   answered,
@@ -37,7 +38,7 @@ const BUTTON =
 const PRIMARY =
   'inline-flex items-center justify-center px-4 h-9 rounded-lg text-sm font-semibold ' +
   'bg-accent text-slate-950 hover:brightness-110 disabled:opacity-50';
-const CARD = 'rounded-xl border border-white/15 bg-white/5 p-4';
+const CARD = 'rounded-2xl border border-white/10 bg-slate-900 p-4';
 const LABEL = 'block text-xs font-semibold text-slate-400 mb-1';
 const MAX_WORDS = 280;
 
@@ -66,17 +67,41 @@ export default function WhiteboardView({ question, link }: { question: string | 
   const q = board.question ?? null;
   const manage = !!board.can_manage;
   return (
-    <div className="max-w-3xl mx-auto px-4 py-8 space-y-8">
-      <div>
-        {question && (
-          <RouteLink {...link({ kind: 'whiteboard', question: null })} className="text-sm text-accent hover:brightness-110">
-            ← This week
-          </RouteLink>
-        )}
-        <h1 className="text-xl font-semibold text-slate-200 mt-1">Whiteboard</h1>
-        <p className="text-sm text-slate-400">A question a week, to get to know each other a little.</p>
-      </div>
-
+    <PageWithRail
+      section="Together"
+      title="Whiteboard"
+      blurb="A question a week, to get to know each other a little."
+      top={question && (
+        <RouteLink {...link({ kind: 'whiteboard', question: null })} className="inline-block mb-3 text-sm text-accent hover:brightness-110">
+          ← This week
+        </RouteLink>
+      )}
+      rail={
+        <>
+          <Suggest />
+          {(board.past ?? []).length > 0 && (
+            <section aria-label="Weeks gone" className={RAIL_CARD}>
+              <h2 className={RAIL_LABEL}>Weeks gone</h2>
+              <ul className="mt-2 divide-y divide-white/10">
+                {board.past!.map((p) => (
+                  <li key={p.id}>
+                    <RouteLink
+                      {...link({ kind: 'whiteboard', question: p.id })}
+                      className={`block py-2.5 group ${p.id === q?.id ? 'text-accent' : ''}`}
+                    >
+                      <span className="block text-sm font-semibold text-slate-200 group-hover:text-accent">{p.prompt}</span>
+                      <span className="block text-xs text-slate-400 mt-0.5 first-letter:uppercase">
+                        {weekWord(p.week_of)} · {p.answers} {p.answers === 1 ? 'answer' : 'answers'}
+                      </span>
+                    </RouteLink>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
+        </>
+      }
+    >
       {q ? (
         <QuestionCard board={board} q={q} manage={manage} onChange={load} />
       ) : (
@@ -86,30 +111,7 @@ export default function WhiteboardView({ question, link }: { question: string | 
       )}
 
       {manage && <Writer thisWeek={board.week_of ?? ''} onChange={load} />}
-
-      <Suggest />
-
-      {(board.past ?? []).length > 0 && (
-        <section aria-label="Weeks gone">
-          <h2 className="text-sm font-semibold text-slate-200">Weeks gone</h2>
-          <ul className="mt-2 space-y-2">
-            {board.past!.map((p) => (
-              <li key={p.id}>
-                <RouteLink
-                  {...link({ kind: 'whiteboard', question: p.id })}
-                  className="block rounded-xl border border-white/15 bg-white/5 px-4 py-3 hover:bg-white/10"
-                >
-                  <span className="block text-xs text-slate-400 first-letter:uppercase">
-                    {weekWord(p.week_of)} · {p.answers} {p.answers === 1 ? 'answer' : 'answers'}
-                  </span>
-                  <span className="block text-sm font-semibold text-slate-200 mt-0.5">{p.prompt}</span>
-                </RouteLink>
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
-    </div>
+    </PageWithRail>
   );
 }
 
@@ -330,7 +332,7 @@ function Suggest() {
   const [note, setNote] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   return (
-    <section className={CARD} aria-label="Suggest a question">
+    <section className={RAIL_CARD} aria-label="Suggest a question">
       <form
         onSubmit={async (e) => {
           e.preventDefault();
@@ -344,7 +346,8 @@ function Suggest() {
         }}
       >
         <label className="block">
-          <span className="block text-sm font-semibold text-slate-200 mb-2">Got a question you would like everybody to answer?</span>
+          <span className={`block ${RAIL_LABEL}`}>Got a question?</span>
+          <span className="block text-sm text-slate-400 mt-1.5 mb-2">Suggest one for everybody to answer.</span>
           <input className={FIELD} value={text} maxLength={200} placeholder="Pineapple on pizza: yes or no?"
                  onChange={(e) => setText(e.target.value)} />
         </label>
