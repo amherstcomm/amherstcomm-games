@@ -328,7 +328,7 @@ export default function AccountModal({
                   onClick={() => onTab(id)}
                   aria-current={tab === id ? 'page' : undefined}
                   className={`px-4 h-9 rounded-lg text-sm font-semibold transition-colors
-                    ${tab === id ? 'bg-emerald-400 text-ink' : 'text-slate-300 hover:bg-white/10'}`}
+                    ${tab === id ? 'bg-accent text-slate-950' : 'text-slate-300 hover:bg-white/10'}`}
                 >
                   {label}
                 </button>

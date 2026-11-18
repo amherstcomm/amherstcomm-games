@@ -431,129 +431,95 @@
 }
 
 
-/* Amherst — the company palette, measured off amherstcomm.net.
+/* Amherst -- the company palette, after the layout spec of November 2026.
  *
- * The ground is the brand navies: #000544 lifted just off black for the page,
- * #191D5C's neighbourhood for the panels. The accent is the brand sky #9CC3DF.
+ * The room is neutral slate rather than navy: a page (#0A0F1C), cards on it
+ * (#111827), and two edges (#1E293B, #334155). The brand is carried by one
+ * colour, a blue (#60A5FA): the primary button, the current item, the "you"
+ * rows, the focus ring. Green stays green and means done; amber (#F5B83D)
+ * means in progress -- so a status never shares a colour with the brand, and
+ * the found/present pair a Guess board is read by is the stock one again
+ * rather than the teal and orange it was moved to on navy.
  *
- * The brand red #ED1C23 is deliberately absent, and this is the interesting
- * part. It is not a contrast problem — ΔE 43.8 from rose-400 clears the floor
- * this file's tests impose with room to spare. It is a meaning problem:
- * rose-400 is what marks a wrong answer, and it is a red. An accent that is
- * also red reads as "something is wrong" to a person mid-board, no matter how
- * far apart a colour-difference formula puts them. The palette tests catch a
- * decorative palette *editing* a meaning-carrying hue; nothing catches one
- * standing next to it and borrowing the meaning.
+ * Red stays scarce, as before: the logo's, where it is the only red on the
+ * page and reads as the company rather than as an error.
  *
- * So the red keeps its job by staying scarce — it belongs to the logo and the
- * masthead rule, where it is the only red on the page and reads as the
- * company rather than as an error. Navy and sky are just as much the brand,
- * and unlike red they are not already spoken for. */
+ * Every pair is measured in tests/unit/palettes.test.ts. */
 :root[data-palette='amherst'] {
-  --c-slate-950: 10 14 40;
-  --c-slate-900: 20 26 62;
-  --c-slate-800: 32 40 88;
-  --c-slate-700: 46 58 118;
-  --c-slate-600: 132 142 176;
-  --c-slate-500: 148 158 190;
-  --c-slate-400: 166 176 206;
-  --c-slate-300: 216 224 242;
-  --c-slate-200: 232 238 250;
+  --c-slate-950: 10 15 28;
+  --c-slate-900: 17 24 39;
+  --c-slate-800: 30 41 59;
+  --c-slate-700: 51 65 85;
+  --c-slate-600: 120 134 158;
+  --c-slate-500: 132 147 168;
+  --c-slate-400: 148 163 184;
+  --c-slate-300: 203 213 225;
+  --c-slate-200: 226 232 240;
 
-  --c-ink: 10 14 40;
-  --c-focus: 156 195 223;
-  --c-accent: 156 195 223;
+  --c-ink: 10 15 28;
+  --c-focus: 96 165 250;
+  --c-accent: 96 165 250;
 
-  /* The one class of palette allowed to move the hues that carry meaning, and
-   * the reason it is allowed: mint green and lemon amber are not what this
-   * company looks like on navy. Emerald becomes teal and amber becomes a
-   * warmer gold — both shifted along their own hue, neither swapped for the
-   * other's.
-   *
-   * The distinction each pair has to keep is asserted, not assumed. Found
-   * against present is the one a player reads every turn; the spangram
-   * against a theme word is the one Ocean broke. Warm against cool survives
-   * both shifts, which is why they move in the directions they do rather than
-   * toward each other. */
-  --c-emerald-100: 204 251 241;
-  --c-emerald-200: 153 246 228;
-  --c-emerald-300: 94 234 212;
-  --c-emerald-400: 45 212 191;
-  --c-emerald-500: 20 184 166;
+  --c-emerald-100: 209 250 229;
+  --c-emerald-200: 167 243 208;
+  --c-emerald-300: 110 231 183;
+  --c-emerald-400: 52 211 153;
+  --c-emerald-500: 16 185 129;
 
-  --c-amber-100: 255 237 213;
-  --c-amber-200: 254 215 170;
-  --c-amber-300: 253 186 116;
-  --c-amber-400: 251 146 60;
-  --c-amber-500: 234 110 20;
+  /* in progress */
+  --c-amber-100: 254 243 199;
+  --c-amber-200: 253 230 138;
+  --c-amber-300: 252 211 77;
+  --c-amber-400: 245 184 61;
+  --c-amber-500: 245 158 11;
 
-  /* These are copies of the two hues above rather than references to them —
-   * success repeats emerald-400, span and chord-5 repeat amber-400, chord-4
-   * repeats emerald-400. Moving the ramps without moving these would put two
-   * different greens and two different golds on the same board, which is the
-   * kind of wrong that looks like a rendering bug rather than a decision. */
-  --c-success: 45 212 191;
-  --span: 251 146 60;
-  --chord-4: 45 212 191;
-  --chord-5: 251 146 60;
+  /* Copies of the two hues above by value, so they move with them. */
+  --c-success: 52 211 153;
+  --span: 245 184 61;
+  --chord-4: 52 211 153;
+  --chord-5: 245 184 61;
 }
 
-/* By day the ground inverts to a paper that still carries the hue, and the
- * accent becomes the navy itself — #191D5C at 12.9:1 on this page, where the
- * sky blue would have been far too pale to read. Same two brand colours,
- * trading places.
- *
- * The paper carries more of the navy than it did. It was #f4f7fd over panels of
- * #fcfdff — a white page with white cards on it, where the brand was only in
- * the text. The ground is #e6ecf8 now and the panels #f4f7fd: the page reads as
- * navy-tinted paper, a panel lifts off it by a step somebody can see, and the
- * edges at 700 went from a 1.4:1 whisper to something that draws a line. Every
- * pair is measured in tests/unit/palettes.test.ts; the text tiers all clear AA
- * with the deeper ground rather than in spite of it. */
+/* By day: the plain light page, with the blue deepened to #1D4ED8 so it reads
+ * on it (6.7:1 on white) -- the spec's accent-deep, doing the accent's job.
+ * Everything the dark block above moves is restated at its light value, since
+ * both selectors are one attribute on :root and the later block would
+ * otherwise win in light as well. */
 :root[data-theme='light'][data-palette='amherst'] {
-  --c-slate-950: 230 236 248;
-  --c-slate-900: 244 247 253;
-  --c-slate-800: 210 219 241;
-  --c-slate-700: 176 190 224;
-  --c-slate-600: 74 87 137;
-  --c-slate-500: 56 68 120;
-  --c-slate-400: 56 68 120;
-  --c-slate-300: 40 50 102;
-  --c-slate-200: 25 29 92;
+  --c-slate-950: 248 250 252;
+  --c-slate-900: 255 255 255;
+  --c-slate-800: 226 232 240;
+  --c-slate-700: 203 213 225;
+  --c-slate-600: 100 116 139;
+  --c-slate-500: 71 85 105;
+  --c-slate-400: 71 85 105;
+  --c-slate-300: 51 65 85;
+  --c-slate-200: 30 41 59;
 
-  --c-white: 25 29 92;
-  --c-focus: 25 29 92;
-  --c-accent: 25 29 92;
+  --c-white: 15 23 42;
+  --c-ink: 2 6 23;
+  --c-focus: 29 78 216;
+  --c-accent: 29 78 216;
 
+  --c-emerald-100: 6 78 59;
+  --c-emerald-200: 6 78 59;
+  --c-emerald-300: 6 95 70;
+  --c-emerald-400: 52 211 153;
 
-  /* By day these tiers invert: 100-300 are ink on a pale ground rather than
-   * fills on a dark one, so they go dark. amber-400 has to be restated here
-   * even though the block above sets it — both selectors are one attribute on
-   * :root, so specificity ties and the later block wins, which would leave a
-   * pale gold as text on white. */
-  --c-emerald-100: 4 71 68;
-  --c-emerald-200: 4 71 68;
-  --c-emerald-300: 6 88 82;
-
-  --c-amber-100: 124 45 18;
+  --c-amber-100: 120 53 15;
   --c-amber-200: 124 45 18;
-  --c-amber-300: 138 52 14;
-  /* This fill carries dark ink, so it is bounded from both sides: light enough
-   * for ink at 4.5:1, dark enough to read as an edge against the page at 3:1.
-   * 186 88 12 was the first try and axe measured it at 4.05 — the band is
-   * narrower for orange than it was for the amber this replaced, because
-   * orange is darker at the same saturation. */
-  --c-amber-400: 204 102 18;
+  --c-amber-300: 146 64 14;
+  --c-amber-400: 198 109 8;
 
-  /* the same copies, in their light-theme depths */
-  --c-success: 6 88 82;
-  --span: 180 84 10;
-  --chord-4: 6 100 94;
-  --chord-5: 180 84 10;
+  --c-success: 6 95 70;
+  --span: 198 109 8;
+  --chord-4: 6 95 70;
+  --chord-5: 198 109 8;
 }
 
 /* keep overscroll and the area behind the app in the active theme */
 body {
+  font-family: 'Inter Variable', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
   background-color: rgb(var(--c-slate-950));
 }
 

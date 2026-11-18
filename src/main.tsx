@@ -4,6 +4,7 @@ import App from './App.tsx';
 import { refreshSettings, setting } from '@/settings';
 import { refreshAvailability } from '@/availability';
 import { wireOfficeZone } from '@/schedule';
+import '@fontsource-variable/inter';
 import './index.css';
 
 // schedule.ts cannot import settings.ts — settings.ts imports it, for the
