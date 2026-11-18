@@ -62,7 +62,7 @@ const FIELD =
 const BUTTON =
   'inline-flex items-center justify-center px-3 h-9 rounded-lg text-sm font-semibold bg-white/10 border border-white/15 text-slate-200 hover:bg-white/15 disabled:opacity-50';
 const PRIMARY =
-  'inline-flex items-center justify-center px-4 h-10 rounded-lg text-sm font-semibold bg-emerald-400 text-ink hover:opacity-90 disabled:opacity-50';
+  'inline-flex items-center justify-center px-4 h-10 rounded-lg text-sm font-semibold bg-accent text-slate-950 hover:opacity-90 disabled:opacity-50';
 
 /** What goes in `payload` — what the room is shown — for each kind.
  *

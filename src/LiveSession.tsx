@@ -208,7 +208,7 @@ function Choice({
         <button
           onClick={() => onSend(picked)}
           disabled={sending || picked.length === 0}
-          className="w-full h-11 rounded-xl bg-emerald-400 text-ink font-semibold disabled:opacity-50"
+          className="w-full h-11 rounded-xl bg-accent text-slate-950 font-semibold disabled:opacity-50"
         >
           {sending ? 'Sending…' : 'Send answer'}
         </button>
@@ -275,7 +275,7 @@ function Match({
           <button
             onClick={() => onSend(pairs)}
             disabled={sending || Object.keys(pairs).length === 0}
-            className="w-full h-11 rounded-xl bg-emerald-400 text-ink font-semibold disabled:opacity-50"
+            className="w-full h-11 rounded-xl bg-accent text-slate-950 font-semibold disabled:opacity-50"
           >
             {sending ? 'Sending…' : 'Send answer'}
           </button>
@@ -349,7 +349,7 @@ function Guess({
           <button
             onClick={() => onSend(Number(text))}
             disabled={sending || !usable}
-            className="w-full h-11 rounded-xl bg-emerald-400 text-ink font-semibold disabled:opacity-50"
+            className="w-full h-11 rounded-xl bg-accent text-slate-950 font-semibold disabled:opacity-50"
           >
             {sending ? 'Sending…' : 'Send guess'}
           </button>
@@ -560,7 +560,7 @@ function Rank({
           <button
             onClick={() => onSend(order)}
             disabled={sending}
-            className="w-full h-11 rounded-xl bg-emerald-400 text-ink font-semibold disabled:opacity-50"
+            className="w-full h-11 rounded-xl bg-accent text-slate-950 font-semibold disabled:opacity-50"
           >
             {sending ? 'Sending…' : 'Send order'}
           </button>
@@ -828,7 +828,7 @@ function Ask({ onSend, sending }: { onSend: (value: unknown, anon: boolean) => v
           setText('');
         }}
         disabled={sending || text.trim().length === 0}
-        className="w-full h-11 rounded-xl bg-emerald-400 text-ink font-semibold disabled:opacity-50 inline-flex items-center justify-center gap-2"
+        className="w-full h-11 rounded-xl bg-accent text-slate-950 font-semibold disabled:opacity-50 inline-flex items-center justify-center gap-2"
       >
         <Send className="w-4 h-4" aria-hidden="true" />
         {sending ? 'Sending…' : 'Send'}
@@ -1258,7 +1258,7 @@ export default function LiveSession({ session, host }: { session: string; host: 
               {move && (
                 <button
                   onClick={() => void control(move.action)}
-                  className="w-full h-14 rounded-xl bg-emerald-400 text-ink font-semibold text-lg hover:opacity-90"
+                  className="w-full h-14 rounded-xl bg-accent text-slate-950 font-semibold text-lg hover:opacity-90"
                 >
                   {move.label}
                 </button>
@@ -1342,7 +1342,7 @@ export default function LiveSession({ session, host }: { session: string; host: 
             type="button"
             disabled={sending}
             onClick={() => void begin()}
-            className="mt-5 w-full h-11 rounded-xl bg-emerald-400 text-ink font-semibold disabled:opacity-60"
+            className="mt-5 w-full h-11 rounded-xl bg-accent text-slate-950 font-semibold disabled:opacity-60"
           >
             Start
           </button>
@@ -1361,7 +1361,7 @@ export default function LiveSession({ session, host }: { session: string; host: 
           <button
             type="button"
             onClick={() => void resume()}
-            className="mt-5 w-full h-11 rounded-xl bg-emerald-400 text-ink font-semibold"
+            className="mt-5 w-full h-11 rounded-xl bg-accent text-slate-950 font-semibold"
           >
             Resume
           </button>
@@ -1622,7 +1622,7 @@ export default function LiveSession({ session, host }: { session: string; host: 
             setNote('');
             void pull();
           }}
-          className="w-full h-11 mt-5 rounded-xl bg-emerald-400 text-ink font-semibold"
+          className="w-full h-11 mt-5 rounded-xl bg-accent text-slate-950 font-semibold"
         >
           {(item.done ?? 0) + 1 >= (item.total ?? 0)
             ? 'Finish'

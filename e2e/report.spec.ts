@@ -302,14 +302,17 @@ test('the address is not carried onto any surface that shows a report', async ({
   await expect(page.getByText('someone@example.com')).toHaveCount(0);
 });
 
-test('About can open the report menu, and Escape closes only the top one', async ({ page }) => {
+test('About can open the report menu, and Escape closes only that', async ({ page }) => {
   await page.goto('/about');
-  const about = page.getByRole('dialog', { name: 'About and FAQ' });
-  await expect(about).toBeVisible();
+  // a page since the layout spec, so the FAQ is the main content, not a dialog
+  const about = page.locator('main');
+  await expect(about.getByRole('heading', { level: 1, name: /^About / })).toBeVisible();
 
   // named in the sentence rather than described, so it can be used from where
   // it is explained
-  await about.getByRole('button', { name: 'Report a problem' }).click();
+  // the one in the FAQ's answer, not the footer's
+  await about.getByRole('paragraph').filter({ hasText: 'at the bottom of any page' })
+    .getByRole('button', { name: 'Report a problem' }).click();
   const chooser = page.getByRole('dialog', { name: /What would you like to report/ });
   await expect(chooser).toBeVisible();
 
@@ -318,10 +321,9 @@ test('About can open the report menu, and Escape closes only the top one', async
   // thing you meant to cancel.
   await page.keyboard.press('Escape');
   await expect(chooser).toHaveCount(0);
-  await expect(about).toBeVisible();
-
-  await page.keyboard.press('Escape');
-  await expect(about).toHaveCount(0);
+  // and the page you were reading is still there, at its address
+  await expect(about.getByRole('heading', { level: 1, name: /^About / })).toBeVisible();
+  await expect(page).toHaveURL(/\/about$/);
 });
 
 test('the legal pages route people to the form, and keep security off public code hosts', async ({ page }) => {
@@ -333,7 +335,7 @@ test('the legal pages route people to the form, and keep security off public cod
   // The rule worth pinning is that the form is always reachable, because it is
   // the route that needs no mailbox to exist.
   await page.goto('/legal/privacy');
-  const privacy = page.getByRole('dialog', { name: 'Legal and licenses' });
+  const privacy = page.locator('main');
 
   // three of them on this page, and role-name matching is case-insensitive, so
   // "The report form" also matches the two lowercase mentions
@@ -346,7 +348,7 @@ test('the legal pages route people to the form, and keep security off public cod
   await page.keyboard.press('Escape');
 
   await page.goto('/legal/terms');
-  const terms = page.getByRole('dialog', { name: 'Legal and licenses' });
+  const terms = page.locator('main');
   // Security reporting stays inside the company. Sending an employee to a
   // public code host to report a hole in an internal tool is the opposite of
   // the privacy the old advisory route existed to provide.

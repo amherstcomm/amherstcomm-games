@@ -60,9 +60,6 @@ export type BarProps = {
   you: { avatar: AvatarData | null; name: string; seed: string } | null;
   /** a tournament holding the site: no way out to the games but its own */
   locked: boolean;
-  /** a panel (stats, settings, legal...) is open over the page: the phone's
-   *  tabs step aside rather than sit under it, unusable */
-  covered?: boolean;
 };
 
 const STATUS_WORD = { done: 'Done', started: 'In progress', none: '' } as const;
@@ -327,7 +324,6 @@ export default function SiteBar(p: BarProps) {
       </header>
 
       {/* ---- phone: the tabs ---- */}
-      {!p.covered && (
       <nav aria-label="Site" className="md:hidden fixed bottom-0 inset-x-0 z-40 h-16 bg-slate-950/95 backdrop-blur border-t border-white/10">
         <ul className="h-full flex">
           <li className="flex-1">
@@ -354,7 +350,6 @@ export default function SiteBar(p: BarProps) {
           )}
         </ul>
       </nav>
-      )}
 
       {sheet === 'games' && <Sheet title="Games" items={games} extra={p.locked ? undefined : boardsItem} onClose={() => setSheet(null)} />}
       {sheet === 'together' && <Sheet title="Together" items={p.together} onClose={() => setSheet(null)} />}
