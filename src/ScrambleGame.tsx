@@ -25,6 +25,8 @@ import { fetchDailyData } from '@/dailyData';
 import DailyStats from '@/DailyStats';
 import MobileKeyInput from '@/MobileKeyInput';
 import ShareButton from '@/ShareButton';
+import { useRailSlot } from '@/railSlot';
+import { InRail, RailPanel, WordChips } from '@/RailPanel';
 import { GAME_NAME } from '@/games';
 import { dailyIntent } from '@/routing/entry';
 import { offerDailySwitch, reportDaily } from '@/dailyBus';
@@ -458,6 +460,9 @@ const ScrambleGame = forwardRef<
     });
   }, [record, current]);
 
+  // Beside the board on a wide page, the game's own panel goes in the rail.
+  const rail = useRailSlot();
+
   return (
     <div className="text-center">
       {/* A round has no practice board and no daily to switch to. */}
@@ -599,7 +604,7 @@ const ScrambleGame = forwardRef<
             )}
             {record.finished && (
               <>
-                <ShareButton
+                {!rail && <ShareButton
                   build={() =>
                     buildShare({
                       game: GAME_NAME.descramble.full,
@@ -612,7 +617,7 @@ const ScrambleGame = forwardRef<
                       ],
                     })
                   }
-                />
+                />}
                 {/* nothing to reveal into when the solver is hidden */}
                 {!store.dailyMode && (
                   <button
@@ -637,7 +642,7 @@ const ScrambleGame = forwardRef<
           </div>
 
           {/* found words */}
-          {record.found.length > 0 && (
+          {!rail && record.found.length > 0 && (
             <div className="mt-3 max-w-md mx-auto">
               <div className="flex flex-wrap justify-center gap-1.5">
                 {[...record.found].sort().map((w) => (
@@ -687,6 +692,44 @@ const ScrambleGame = forwardRef<
             {themedNow.length > 0 && ` Today's rack comes from a theme — its words are worth +${THEME_BONUS} each.`}
             {store.dailyMode && ' A fresh daily rack arrives about 15 minutes after 3:00 a.m. Eastern.'}
           </p>
+          {rail && (
+            <InRail slot={rail}>
+              <RailPanel label="Found" figure={`${record.found.length} ${record.found.length === 1 ? 'word' : 'words'}`}>
+                {record.found.length > 0 ? (
+                  <WordChips words={[...record.found].sort()} strong={(w) => w.length === record.rack.length} />
+                ) : (
+                  <p className="text-sm text-slate-400">{running ? 'Nothing yet. Type a word and press Enter.' : 'Start the clock to play.'}</p>
+                )}
+                {record.finished && (
+                  <div className="mt-3">
+                    <ShareButton
+                      build={() =>
+                        buildShare({
+                          game: GAME_NAME.descramble.full,
+                          slug: 'scramble',
+                          daily: store.dailyMode,
+                          date: store.dailyDate,
+                          body: [`${score}/${maxScore} pts`, `${record.found.length}/${answers?.length ?? 0} words`],
+                        })
+                      }
+                    />
+                  </div>
+                )}
+              </RailPanel>
+              {answers && answers.length > 0 && (
+                <RailPanel label="Longest possible">
+                  <p className="text-sm text-slate-300">
+                    {Math.max(...answers.map((w) => w.length))} letters
+                    {record.finished
+                      ? <>: <span className="font-semibold uppercase tracking-wide text-white">
+                          {answers.filter((w) => w.length === Math.max(...answers.map((x) => x.length))).slice(0, 3).join(', ')}
+                        </span></>
+                      : <span className="text-slate-500"> · revealed at the end</span>}
+                  </p>
+                </RailPanel>
+              )}
+            </InRail>
+          )}
         </>
       )}
     </div>
