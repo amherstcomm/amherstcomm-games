@@ -56,12 +56,12 @@ test('moving within a panel replaces, so Back is one step not one per tab', asyn
   // those is a real address. If they stacked, leaving a panel you had read
   // three tabs of would take four Backs.
   await page.goto('/daily/hive');
-  await page.getByRole('link', { name: 'Legal' }).click();
-  await expect(page).toHaveURL(/\/legal\/notices$/);
+  await page.locator('footer').getByRole('link', { name: 'Privacy' }).click();
+  await expect(page).toHaveURL(/\/legal\/privacy$/);
   const opened = await depth(page);
 
-  await page.getByRole('dialog').getByRole('button', { name: 'Privacy' }).click();
-  await expect(page).toHaveURL(/\/legal\/privacy$/);
+  await page.getByRole('dialog').getByRole('button', { name: 'Notices' }).click();
+  await expect(page).toHaveURL(/\/legal\/notices$/);
   await page.getByRole('dialog').getByRole('button', { name: 'Terms' }).click();
   await expect(page).toHaveURL(/\/legal\/terms$/);
   expect(await depth(page), 'two tab moves should add no entries').toBe(opened);
@@ -152,7 +152,7 @@ test('closing a deep-linked panel actually closes it', async ({ page }) => {
   await expect(page.getByRole('dialog')).toBeVisible();
 });
 
-test('a footer link goes where its href says', async ({ page }) => {
+test('a menu link goes where its href says', async ({ page }) => {
   // It didn't. The anchor rendered `to="/stats/overall"` while the click
   // handler opened whichever tab was last used, and the tab survives closing —
   // so after one visit to Boards, middle-click and left-click went to different
@@ -160,12 +160,16 @@ test('a footer link goes where its href says', async ({ page }) => {
   // the two cannot disagree; this test reported the fix itself, by being a
   // `test.fail` that unexpectedly passed.
   await page.goto('/');
+  // signed out, Stats is in the menu beside Sign in
+  const menu = page.getByRole('button', { name: 'Your stats and settings' });
+  await menu.click();
   await page.getByRole('link', { name: 'Stats' }).click();
   // plain buttons rather than a tablist — worth marking up properly one day,
   // but that is not what this test is about
   await page.getByRole('dialog').getByRole('button', { name: 'Boards' }).click();
   await page.getByRole('dialog').getByRole('button', { name: 'Close' }).click();
 
+  await menu.click();
   const stats = page.getByRole('link', { name: 'Stats' });
   const href = await stats.getAttribute('href');
   await stats.click();

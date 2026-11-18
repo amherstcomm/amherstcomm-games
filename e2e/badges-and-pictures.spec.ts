@@ -43,24 +43,30 @@ test('badges show what waits, and go once it is dealt with', async ({ page }) =>
     recognition_view: () => ({ ok: true, can_review: true, me: 'u-me', rounds: [], wall: [], mine: [],
                                review: { waiting: 3, nominations: [] } }),
   });
+  await page.setViewportSize({ width: 1280, height: 900 });
   await page.goto('/');
-  const footer = page.locator('footer');
-  await expect(footer.getByRole('link', { name: 'Recognition 3 waiting for review' })).toBeVisible();
-  await expect(footer.getByRole('link', { name: 'Suggestion box 2 new' })).toBeVisible();
+  // the menu says how many wait in it, and each item how many are its own
+  const together = page.getByRole('button', { name: /^Together/ });
+  await expect(together).toHaveAccessibleName(/Together 5 waiting/);
+  await together.click();
+  await expect(page.getByRole('link', { name: /Recognition.* 3 waiting for review/ })).toBeVisible();
+  await expect(page.getByRole('link', { name: /Suggestion box.* 2 new/ })).toBeVisible();
 
   // read elsewhere: the next page change asks again
   unread = 0;
-  await footer.getByRole('link', { name: /Recognition/ }).click();
-  await expect(footer.getByRole('link', { name: 'Suggestion box', exact: true })).toBeVisible();
+  await page.getByRole('link', { name: /Recognition/ }).click();
+  await expect(page.getByRole('button', { name: /^Together/ })).toHaveAccessibleName(/Together 3 waiting/);
 });
 
 test('nobody with nothing to review or read sees a badge', async ({ page }) => {
   await signedIn(page);
   await server(page, { recognition_waiting: () => 0, suggestions_unread: () => 0 });
+  await page.setViewportSize({ width: 1280, height: 900 });
   await page.goto('/');
-  const footer = page.locator('footer');
-  await expect(footer.getByRole('link', { name: 'Recognition', exact: true })).toBeVisible();
-  await expect(footer.getByRole('link', { name: 'Suggestion box', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: /^Together/ })).toHaveAccessibleName('Together');
+  await page.getByRole('button', { name: /^Together/ }).click();
+  await expect(page.getByRole('link', { name: /Recognition/ })).not.toContainText(/\d/);
+  await expect(page.getByRole('link', { name: /Suggestion box/ })).not.toContainText(/\d/);
 });
 
 test('a reported picture is shown in the queue, with the way to take it down', async ({ page }) => {

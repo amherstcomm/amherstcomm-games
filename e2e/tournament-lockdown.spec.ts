@@ -145,7 +145,7 @@ test('a tournament that keeps sessions open lets any session in', async ({ page 
 test('with no lock the front page is the front page', async ({ page }) => {
   await locked(page, { off: [] });
   await page.goto('/');
-  await expect(page.getByRole('navigation', { name: 'Game modes' })).toBeVisible();
+  await expect(page.getByRole('navigation', { name: 'Site' }).getByRole('button', { name: /^Games/ }).first()).toBeVisible();
 });
 
 // What organisers featured still leads the locked front page -- a contest and
