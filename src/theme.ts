@@ -125,8 +125,8 @@ export const PALETTE_SWATCHES: Record<Palette, string[]> = {
   // the real fills: this palette separates states by lightness, so a swatch
   // showing lightnesses it does not use gets the one thing that matters wrong
   mono: ['235 235 235', '210 210 210', '165 165 165', '150 150 150'],
-  // accent, found, present, and the navy the room is made of
-  amherst: ['156 195 223', '45 212 191', '251 146 60', '20 26 62'],
+  // accent, done, in progress, and the card the room is made of
+  amherst: ['96 165 250', '52 211 153', '245 184 61', '17 24 39'],
 };
 export const TEXT_SCALES: TextScale[] = ['normal', 'large', 'larger'];
 export const TEXT_SCALE_PCT: Record<TextScale, string> = {
