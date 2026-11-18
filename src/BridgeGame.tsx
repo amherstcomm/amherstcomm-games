@@ -22,7 +22,9 @@ import { store as siteStore } from '@/siteStorage';
 import { offerDailySwitch, reportDaily } from '@/dailyBus';
 import { dailyIntent } from '@/routing/entry';
 import { useDailySync } from '@/useDailySync';
-import { useUpTimer } from '@/useUpTimer';
+import { formatElapsed, useUpTimer } from '@/useUpTimer';
+import { useRailSlot } from '@/railSlot';
+import { InRail, RailPanel } from '@/RailPanel';
 import ShareButton from '@/ShareButton';
 import { GAME_NAME } from '@/games';
 import { buildShare } from '@/share';
@@ -281,6 +283,8 @@ const BridgeGame = forwardRef<BridgeGameHandle>(function BridgeGame(_props, ref)
     env: channelEnv(channel),
   });
 
+  // Beside the board on a wide page, the game's own panel goes in the rail.
+  const rail = useRailSlot();
   useUpTimer(!!record && !done, (delta) =>
     update((r) => ({ ...r, elapsedMs: (r.elapsedMs ?? 0) + delta }))
   );
@@ -443,11 +447,21 @@ const BridgeGame = forwardRef<BridgeGameHandle>(function BridgeGame(_props, ref)
 
   const left = Math.max(0, record.budget - record.spent);
   const current = record.prompts[at];
+  const shareIt = () => buildShare({
+    game: GAME_NAME.bridge.full,
+    slug: 'bridge',
+    daily: store.dailyMode,
+    date: store.dailyDate,
+    body: [
+      `${solvedCount}/${record.prompts.length}${record.spent ? ` · ${record.spent} hint${record.spent === 1 ? '' : 's'}` : ''}`,
+    ],
+  });
   const shown = revealed(record.answers[at] ?? '', record.hints[at] ?? NO_HINTS);
 
   return (
     <div className="max-w-md mx-auto">
       {toggle}
+      {!rail && (
       <div className="mb-3 flex items-center justify-center gap-4 text-xs text-slate-400">
         <span className="inline-flex items-center gap-1.5 tabular-nums">
           <Timer className="w-3.5 h-3.5 text-slate-500" />
@@ -467,6 +481,7 @@ const BridgeGame = forwardRef<BridgeGameHandle>(function BridgeGame(_props, ref)
           <span className="text-slate-500">{store.dailyDate}</span>
         )}
       </div>
+      )}
 
       <ol className="space-y-2" aria-label="bridges">
         {record.prompts.map((p, i) => {
@@ -579,17 +594,7 @@ const BridgeGame = forwardRef<BridgeGameHandle>(function BridgeGame(_props, ref)
             </ol>
           )}
           <div className="mt-3 flex flex-wrap items-center justify-center gap-2">
-            <ShareButton
-              build={() => buildShare({
-                game: GAME_NAME.bridge.full,
-                slug: 'bridge',
-                daily: store.dailyMode,
-                date: store.dailyDate,
-                body: [
-                  `${solvedCount}/${record.prompts.length}${record.spent ? ` · ${record.spent} hint${record.spent === 1 ? '' : 's'}` : ''}`,
-                ],
-              })}
-            />
+            {!rail && <ShareButton build={shareIt} />}
             {channel.kind === 'daily' && !store.dailyMode && (
               <button
                 onClick={newPractice}
@@ -600,6 +605,24 @@ const BridgeGame = forwardRef<BridgeGameHandle>(function BridgeGame(_props, ref)
             )}
           </div>
         </div>
+      )}
+      {rail && (
+        <InRail slot={rail}>
+          <RailPanel label="Your board" figure={`${solvedCount} / ${record.prompts.length} found`}>
+            <p className="flex items-center gap-1.5 text-sm text-slate-300 tabular-nums">
+              <Timer className="w-3.5 h-3.5 text-slate-500" aria-hidden="true" />
+              {formatElapsed(record.elapsedMs ?? 0)}
+              {store.dailyMode && store.dailyDate && <span className="ml-auto text-xs text-slate-500">{store.dailyDate}</span>}
+            </p>
+            {record.budget > 0 && (
+              <p className="mt-1 inline-flex items-center gap-1.5 text-xs text-slate-400">
+                <Lightbulb className="w-3.5 h-3.5 text-slate-500" aria-hidden="true" />
+                {left} {left === 1 ? 'hint' : 'hints'} left
+              </p>
+            )}
+            {done && <div className="mt-3"><ShareButton build={shareIt} /></div>}
+          </RailPanel>
+        </InRail>
       )}
     </div>
   );
