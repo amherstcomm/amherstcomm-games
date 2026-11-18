@@ -23,7 +23,16 @@ export type MonthsRow = {
   differs?: 'auto' | 'yes' | 'no';
   note?: string;
 };
-export type CompareRow = TextRow | MonthsRow;
+export type ImageRow = {
+  id: string;
+  label: string;
+  kind: 'image';
+  /** a path in the session-pictures bucket, per option */
+  values: Record<string, string>;
+  differs?: 'auto' | 'yes' | 'no';
+  note?: string;
+};
+export type CompareRow = TextRow | MonthsRow | ImageRow;
 export type ComparePayload = {
   options: CompareOption[];
   rows: CompareRow[];
@@ -33,6 +42,10 @@ export type ComparePayload = {
   shuffleOptions: boolean;
 };
 export type CompareAnswer = { pick: string; why: string | null };
+
+/** Where a picture row's pictures live: the uploader's folder in the
+ *  session-pictures bucket. The server holds the same shape. */
+export const PICTURE_PATH = /^[0-9a-f-]{36}\/[A-Za-z0-9._-]{1,120}$/;
 
 export const MIN_OPTIONS = 2;
 export const MAX_OPTIONS = 4;
@@ -89,6 +102,10 @@ export function compareProblem(p: ComparePayload): string | null {
         const v = r.values[id];
         if (typeof v !== 'string' || v.length > 300)
           return `Row "${r.label}" needs a value for each option, 300 characters at most.`;
+      } else if (r.kind === 'image') {
+        const v = r.values[id];
+        if (typeof v !== 'string' || !PICTURE_PATH.test(v))
+          return `Row "${r.label}" needs a picture for each option.`;
       } else {
         const v = r.values[id];
         if (!Array.isArray(v) || v.length !== 12 || v.some((n) => !Number.isInteger(n) || n < 0 || n > 9))
@@ -136,4 +153,44 @@ export function nextId(taken: string[], prefix: 'option' | 'row'): string {
     for (const c of 'abcdefghij') if (!taken.includes(c)) return c;
   }
   for (let n = 1; ; n++) if (!taken.includes(`r${n}`)) return `r${n}`;
+}
+
+/** A list with the entry at `from` moved one place; the same list when that
+ *  would go off either end. Options move left and right, rows up and down. */
+export function moveItem<T>(list: T[], from: number, by: -1 | 1): T[] {
+  const to = from + by;
+  if (from < 0 || from >= list.length || to < 0 || to >= list.length) return list;
+  const next = list.slice();
+  [next[from], next[to]] = [next[to], next[from]];
+  return next;
+}
+
+/** A table pasted from a spreadsheet: the first row the option names (after
+ *  an empty or labelling first cell), the first column the row labels, the
+ *  rest the values. Tabs between cells, which is what a spreadsheet copies.
+ *  Says what is wrong rather than guessing. */
+export function parseCompareSheet(text: string):
+  | { ok: true; options: CompareOption[]; rows: TextRow[] }
+  | { ok: false; reason: string } {
+  const lines = text.replace(/\r\n?/g, '\n').split('\n').filter((l) => l.trim() !== '');
+  if (lines.length < 2) return { ok: false, reason: 'Paste the option names on the first line and at least one row under them.' };
+  const grid = lines.map((l) => l.split('\t').map((c) => c.trim()));
+  if (grid[0].length < 2) return { ok: false, reason: 'Cells need tabs between them: copy them straight from the spreadsheet.' };
+  const names = grid[0].slice(1).filter((n, i, all) => n !== '' || i < all.length - 1);
+  if (names.length < MIN_OPTIONS || names.length > MAX_OPTIONS)
+    return { ok: false, reason: `The first line should name ${MIN_OPTIONS} to ${MAX_OPTIONS} options after its first cell; it names ${names.length}.` };
+  if (names.some((n) => n === '')) return { ok: false, reason: 'Every option on the first line needs a name.' };
+  const body = grid.slice(1);
+  if (body.length > MAX_ROWS) return { ok: false, reason: `That is ${body.length} rows; a comparison takes ${MAX_ROWS} at most.` };
+  const options: CompareOption[] = names.map((name, i) => ({ id: 'abcd'[i], name: name.slice(0, 60), subtitle: '' }));
+  const rows: TextRow[] = body.map((cells, n) => ({
+    id: `r${n + 1}`,
+    label: (cells[0] ?? '').slice(0, 80),
+    kind: 'text',
+    values: Object.fromEntries(options.map((o, i) => [o.id, (cells[i + 1] ?? '').slice(0, 300)])),
+    differs: 'auto',
+  }));
+  const unnamed = rows.findIndex((r) => r.label === '');
+  if (unnamed >= 0) return { ok: false, reason: `Row ${unnamed + 2} has no label in its first cell.` };
+  return { ok: true, options, rows };
 }

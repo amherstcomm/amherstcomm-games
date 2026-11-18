@@ -212,3 +212,19 @@ select pg_temp.check('a comparison set to shuffle shuffles its options and keeps
 select pg_temp.check('and one that is not left alone',
   public.served_payload('compare', (select v from t where k = 'pay'), false, 'seed')
     = (select v from t where k = 'pay'));
+
+-- ---------------------------------------------------------------------------
+-- Pictures
+-- ---------------------------------------------------------------------------
+select pg_temp.check('a row of pictures takes one in the bucket for each option',
+  public.compare_payload_problem(jsonb_set((select v from t where k = 'pay'), '{rows}', '[
+    {"id":"r9","label":"Floor plan","kind":"image",
+     "values":{"a":"54000000-0000-0000-0000-000000000001/plan-a.jpg","b":"54000000-0000-0000-0000-000000000001/plan-b.webp"}}]'))
+  is null);
+select pg_temp.check('and refuses one missing, or a path that is not one of ours',
+  public.compare_payload_problem(jsonb_set((select v from t where k = 'pay'), '{rows}', '[
+    {"id":"r9","label":"Floor plan","kind":"image","values":{"a":"54000000-0000-0000-0000-000000000001/plan-a.jpg","b":""}}]'))
+    = 'Row "Floor plan" needs a picture for each option.'
+  and public.compare_payload_problem(jsonb_set((select v from t where k = 'pay'), '{rows}', '[
+    {"id":"r9","label":"Floor plan","kind":"image","values":{"a":"../../etc/passwd","b":"x/y.jpg"}}]'))
+    = 'Row "Floor plan" needs a picture for each option.');

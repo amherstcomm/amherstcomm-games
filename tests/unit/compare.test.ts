@@ -5,10 +5,70 @@ import {
   compareProblem,
   letter,
   monthsLabel,
+  moveItem,
   nextId,
+  parseCompareSheet,
   rowDiffers,
   type ComparePayload,
 } from '@/compare';
+
+describe('moving an option or a row', () => {
+  it('swaps it with its neighbour', () => {
+    expect(moveItem(['a', 'b', 'c'], 0, 1)).toEqual(['b', 'a', 'c']);
+    expect(moveItem(['a', 'b', 'c'], 2, -1)).toEqual(['a', 'c', 'b']);
+  });
+
+  it('goes nowhere off either end', () => {
+    expect(moveItem(['a', 'b'], 0, -1)).toEqual(['a', 'b']);
+    expect(moveItem(['a', 'b'], 1, 1)).toEqual(['a', 'b']);
+  });
+});
+
+describe('a table pasted from a spreadsheet', () => {
+  // what Excel and Google Sheets put on the clipboard: tabs between cells,
+  // a line per row, and Windows line endings from Excel
+  const SHEET = '\tBi-weekly\tSemi-monthly\r\nPaychecks a year\t26\t24\r\nWhen you are paid\tEvery other Friday\tThe 15th and the last day\r\n';
+
+  it('takes the options from the first line and the rows from the rest', () => {
+    const got = parseCompareSheet(SHEET);
+    expect(got.ok).toBe(true);
+    if (!got.ok) return;
+    expect(got.options.map((o) => o.name)).toEqual(['Bi-weekly', 'Semi-monthly']);
+    expect(got.rows).toEqual([
+      { id: 'r1', label: 'Paychecks a year', kind: 'text', values: { a: '26', b: '24' }, differs: 'auto' },
+      { id: 'r2', label: 'When you are paid', kind: 'text',
+        values: { a: 'Every other Friday', b: 'The 15th and the last day' }, differs: 'auto' },
+    ]);
+  });
+
+  it('accepts a label in the corner cell', () => {
+    const got = parseCompareSheet('Pay schedule\tA\tB\nPaychecks\t26\t24');
+    expect(got.ok && got.options.map((o) => o.name)).toEqual(['A', 'B']);
+  });
+
+  it('says what is wrong rather than guessing', () => {
+    expect(parseCompareSheet('Bi-weekly, Semi-monthly\n26, 24')).toEqual({
+      ok: false, reason: 'Cells need tabs between them: copy them straight from the spreadsheet.',
+    });
+    expect(parseCompareSheet('\tOnly one\nRow\t1')).toMatchObject({ ok: false });
+    expect(parseCompareSheet('\tA\tB\n\t1\t2')).toEqual({ ok: false, reason: 'Row 2 has no label in its first cell.' });
+    expect(parseCompareSheet('\tA\tB')).toMatchObject({ ok: false });
+  });
+});
+
+describe('a row of pictures', () => {
+  it('needs one in the bucket for each option', () => {
+    const uid = '54000000-0000-0000-0000-000000000001';
+    const base: ComparePayload = {
+      options: [{ id: 'a', name: 'Plan A' }, { id: 'b', name: 'Plan B' }],
+      rows: [{ id: 'r1', label: 'Floor plan', kind: 'image', values: { a: `${uid}/a.jpg`, b: `${uid}/b.png` } }],
+      allowNoPreference: false, askWhy: false, markDifferences: true, shuffleOptions: false,
+    };
+    expect(compareProblem(base)).toBeNull();
+    expect(compareProblem({ ...base, rows: [{ ...base.rows[0], values: { a: `${uid}/a.jpg`, b: '' } }] }))
+      .toBe('Row "Floor plan" needs a picture for each option.');
+  });
+});
 
 const PAY: ComparePayload = {
   options: [
