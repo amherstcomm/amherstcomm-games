@@ -169,7 +169,7 @@ test('the locked front page still shows what is featured, less refused trivia', 
   );
   await page.goto('/');
   await expect(page.getByRole('heading', { name: /Ownership Cup/ })).toBeVisible();
-  const strip = page.getByRole('region', { name: 'Featured' });
+  const strip = page.getByRole('region', { name: 'Happening now' });
   await expect(strip.getByRole('article')).toHaveCount(1);
   await expect(strip.getByRole('link', { name: 'Enter' })).toHaveAttribute('href', '/contest/c1');
   await expect(strip).not.toContainText('All-hands quiz');

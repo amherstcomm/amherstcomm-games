@@ -7,13 +7,14 @@ test('shows all seven games', async ({ page }) => {
   await page.goto('/');
   const today = page.getByRole('main');
   for (const name of [
-    'Guess the Word',
+    'Guess',
     'Scramble',
     'Hive',
     'Boxed',
     'Grid',
     'Weave',
-    'Word Squares',
+    // the tiles carry the short names
+    'Squares',
   ]) {
     await expect(today.getByText(name, { exact: false }).first()).toBeVisible();
   }

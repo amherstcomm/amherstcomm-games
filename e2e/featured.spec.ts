@@ -41,7 +41,7 @@ const FEATURES = {
 test('the home page draws a card for each featured thing, linking to it', async ({ page }) => {
   await server(page, { home_features: FEATURES });
   await page.goto('/');
-  const strip = page.getByRole('region', { name: 'Featured' });
+  const strip = page.getByRole('region', { name: 'Happening now' });
   const cards = strip.getByRole('article');
   await expect(cards).toHaveCount(4);
   await expect(cards.nth(0)).toContainText('Trivia');
@@ -64,7 +64,7 @@ test('an auction is featured with its items, its close and a way to bid', async 
     },
   });
   await page.goto('/');
-  const card = page.getByRole('region', { name: 'Featured' }).getByRole('article');
+  const card = page.getByRole('region', { name: 'Happening now' }).getByRole('article');
   await expect(card).toContainText('Auction');
   await expect(card).toContainText('Holiday Auction');
   await expect(card).toContainText('12 items · bidding until');
@@ -74,7 +74,7 @@ test('an auction is featured with its items, its close and a way to bid', async 
 test('with sessions switched off, the trivia card goes with them', async ({ page }) => {
   await server(page, { home_features: FEATURES, read_availability: ['site:sessions'] });
   await page.goto('/');
-  const strip = page.getByRole('region', { name: 'Featured' });
+  const strip = page.getByRole('region', { name: 'Happening now' });
   await expect(strip.getByRole('article')).toHaveCount(3);
   await expect(strip).not.toContainText('Friday Trivia');
 });
@@ -83,7 +83,7 @@ test('nothing featured, no strip', async ({ page }) => {
   await server(page, { home_features: { ok: true, features: [] } });
   await page.goto('/');
   await expect(page.getByRole('heading', { level: 2 }).first()).toBeVisible();
-  await expect(page.getByRole('region', { name: 'Featured' })).toHaveCount(0);
+  await expect(page.getByRole('region', { name: 'Happening now' })).toHaveCount(0);
 });
 
 const SHEET = {

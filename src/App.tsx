@@ -1178,61 +1178,9 @@ function App() {
         id="main"
         tabIndex={-1}
         className={`relative mx-auto px-5 py-10 sm:py-16 outline-none ${
-          forTheRoom ? 'max-w-6xl' : 'max-w-3xl'
+          forTheRoom || (atHome && !reportPage && !lockedHere) ? 'max-w-6xl' : 'max-w-3xl'
         } ${kbOpen ? 'pb-64 sm:pb-64' : ''}`}
       >
-        {/* The big name and the event, on Home alone (the layout spec): on
-            every other page the bar carries the name, and the page starts at
-            its own content rather than below a masthead. */}
-        {atHome && !reportPage && (
-        <header className="text-center mb-8">
-          {/* The wordmark is a lockup rather than an image file: the mark is
-              the only part that has to be drawn, and the name is real text, so
-              it themes itself, follows the text-size setting, and can't render
-              in the wrong font on someone else's machine. The mark is alt=""
-              because the text beside it already names the heading.
-              Dimensions on the tag so it can't shove the page down as it
-              loads. */}
-          <h1 className="mb-4">
-          {/* The whole lockup is the way home, as a site's name is everywhere
-              else; named for where it goes, since the mark is decorative and
-              the name alone would read as just the name. */}
-          <RouteLink
-            {...pageLink({ kind: 'home' })}
-            label={`${SITE_NAME}, home`}
-            className="inline-flex flex-wrap items-center justify-center gap-x-3 sm:gap-x-4 gap-y-1 rounded-xl"
-          >
-            {/* The mark is the company swish, drawn transparent — so the
-                rounded tile and drop shadow that framed the old filled logo
-                are gone. Framing a glyph that has no edges only draws a box
-                around empty corners. */}
-            <img
-              src="/mark.svg"
-              alt=""
-              width={500}
-              height={500}
-              className="w-12 h-12 sm:w-16 sm:h-16 shrink-0"
-            />
-            {/* bg-clip-text paints inside the element's box, so a descender
-                needs padding below the line or it gets sliced off. The
-                matching negative margin keeps that padding out of the layout,
-                so the name still sits centred against the mark. */}
-            <span className="pb-[0.4em] -mb-[0.4em] text-4xl sm:text-5xl font-bold tracking-tight bg-gradient-to-br from-white via-white to-slate-400 bg-clip-text text-transparent">
-              {SITE_NAME}
-            </span>
-          </RouteLink>
-          </h1>
-          {/* The event this run is for, when there is one. Empty is the
-              ordinary state and renders nothing rather than an empty line —
-              which is why this is a guard and not a string that defaults to
-              something cheerful. */}
-          {subtitle && (
-            <p className="-mt-2 mb-4 text-sm sm:text-base font-semibold uppercase tracking-[0.18em] text-accent">
-              {subtitle}
-            </p>
-          )}
-        </header>
-        )}
         {/* A notice the site can put up and take down. Under the subtitle
             because it is the more perishable of the two — the subtitle names
             the month, this names the afternoon — and it renders nothing at
@@ -1350,18 +1298,6 @@ function App() {
           <>
           {/* What organisers have featured: trivia, giveaways, contests,
               tournaments. Above the round's line, which is automatic. */}
-          {atHome && <FeaturedStrip link={pageLink} sessionsOn={sessionsOn} sessionAllowed={sessionOpen} />}
-          {/* A round being on is worth a line on the front page: it is the one
-              thing here with a deadline. */}
-          {atHome && rounds && rounds.length > 0 && (
-            <RouteLink
-              {...pageLink({ kind: 'tournament', slug: null })}
-              className="mb-6 flex items-center gap-2 rounded-xl border border-accent/40 bg-accent/10 px-4 py-3 text-sm font-semibold text-white hover:bg-accent/20"
-            >
-              <Trophy className="w-4 h-4 text-accent shrink-0" aria-hidden="true" />
-              {roundsOn(rounds)}
-            </RouteLink>
-          )}
           {atHome && (
             <HomeView
               modes={shownModes}
@@ -1369,6 +1305,22 @@ function App() {
               onBoards={() => {
                 openOverlay({ kind: 'stats', tab: 'boards' });
               }}
+              name={session ? (you?.name ?? null) : null}
+              subtitle={subtitle}
+              happening={<FeaturedStrip link={pageLink} sessionsOn={sessionsOn} sessionAllowed={sessionOpen} />}
+              // A round being on is worth a line on the front page: it is the
+              // one thing here with a deadline.
+              notice={rounds && rounds.length > 0 ? (
+                <RouteLink
+                  {...pageLink({ kind: 'tournament', slug: null })}
+                  className="flex items-center gap-2 rounded-xl border border-accent/40 bg-accent/10 px-4 py-3 text-sm font-semibold text-white hover:bg-accent/20"
+                >
+                  <Trophy className="w-4 h-4 text-accent shrink-0" aria-hidden="true" />
+                  {roundsOn(rounds)}
+                </RouteLink>
+              ) : undefined}
+              recognition={session ? pageLink({ kind: 'recognition' }) : null}
+              suggestions={session ? pageLink({ kind: 'suggestions' }) : null}
             />
           )}
 

@@ -87,7 +87,9 @@ export default function ScrollRow({ label, children }: { label: string; children
   );
 }
 
-/** One card's place in a ScrollRow: a fixed width, snapping to the start. */
-export function RowItem({ children }: { children: ReactNode }) {
-  return <li className="snap-start shrink-0 w-[17rem] sm:w-80">{children}</li>;
+/** One card's place in a ScrollRow: a fixed width, snapping to the start --
+ *  or `width` for a row in a narrow column, where a card is most of it and the
+ *  next one peeks in. */
+export function RowItem({ children, width = 'w-[17rem] sm:w-80' }: { children: ReactNode; width?: string }) {
+  return <li className={`snap-start shrink-0 ${width}`}>{children}</li>;
 }
