@@ -40,7 +40,7 @@ export type Page =
   | { kind: 'recognition' }
   | { kind: 'suggestions' }
   | { kind: 'live'; session: string; host: boolean }
-  | { kind: 'sessions'; session?: string }
+  | { kind: 'sessions'; session?: string; preview?: boolean }
   | { kind: 'admin'; tab: AdminTab }
   | { kind: 'join'; code?: string }
   | { kind: 'scores'; session: string }
@@ -146,7 +146,7 @@ export function navOf(route: Route, last: Tabs = DEFAULT_TABS): { nav: Nav; game
     case 'legal':
       return { nav: page({ kind: 'legal', doc: route.doc }), game: null };
     case 'sessions':
-      return { nav: page({ kind: 'sessions', session: route.session }), game: null };
+      return { nav: page({ kind: 'sessions', session: route.session, preview: route.preview }), game: null };
     // A page either way. With a game named, App renders that game inside the
     // round's channel; without one, the round's own page. Neither is a game
     // route, because neither is the daily and the address bar should not say

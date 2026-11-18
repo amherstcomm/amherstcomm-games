@@ -119,7 +119,7 @@ function Waiting({ text }: { text: string }) {
  *  control with nothing to be right about — the difference is whether an
  *  answer ever arrives, and that is the server's business rather than this
  *  component's. */
-function Choice({
+export function Choice({
   item,
   onSend,
   sending,
@@ -229,7 +229,7 @@ function Choice({
  *  the wrong one here: half the room is on a phone, it needs a keyboard story
  *  that does not come for free, and the whole interaction has to work first
  *  time with no practice, in public, against a clock. */
-function Match({
+export function Match({
   item,
   onSend,
   sending,
@@ -297,7 +297,7 @@ function Match({
 /** Guess a number. Closest wins — which is not "close enough wins", and the
  *  screen says so, because those are two different games and only one of them
  *  is being played. */
-function Guess({
+export function Guess({
   item,
   onSend,
   sending,
@@ -380,7 +380,7 @@ function Guess({
 /** Put them in order. Up and down rather than dragging, for the reasons in
  *  Match — and because a button says what it does, which a drop target does
  *  not. */
-function Rank({
+export function Rank({
   item,
   onSend,
   sending,
@@ -812,7 +812,7 @@ function WordGame({
  *  says what it actually means — the room and the presenter see no name, an
  *  admin can still see who asked. Saying "anonymous" unqualified would be a
  *  bigger promise than the database keeps. */
-function Ask({ onSend, sending, fullyAnonymous, privateAnswers }: {
+export function Ask({ onSend, sending, fullyAnonymous, privateAnswers }: {
   onSend: (value: unknown, anon: boolean) => void;
   sending: boolean;
   /** read only by the host and site admins; see private_comments */

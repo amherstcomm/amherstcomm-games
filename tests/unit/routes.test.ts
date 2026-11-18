@@ -47,6 +47,7 @@ const EVERY_ROUTE: Route[] = [
   { kind: 'live', session: '5f7c2a10-3b4d-4e8f-9a12-6c0d1e2f3a4b', host: true },
   { kind: 'sessions' },
   { kind: 'sessions', session: '5f7c2a10-3b4d-4e8f-9a12-6c0d1e2f3a4b' },
+  { kind: 'sessions', session: '5f7c2a10-3b4d-4e8f-9a12-6c0d1e2f3a4b', preview: true },
   { kind: 'join' },
   { kind: 'join', code: 'K4TP' },
   { kind: 'scores', session: '5f7c2a10-3b4d-4e8f-9a12-6c0d1e2f3a4b' },

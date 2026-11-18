@@ -148,7 +148,9 @@ export type Route =
   // questions. One address either way, because the list exists to get you into
   // the editor and a separate /sessions/list would be a second name for the
   // same page.
-  | { kind: 'sessions'; session?: string }
+  // `preview` is the session as the people answering it will see it, before
+  // it opens: nothing picked there is sent.
+  | { kind: 'sessions'; session?: string; preview?: boolean }
   | { kind: 'admin'; tab: AdminTab }
   // The way in. `/join` is the list and the code box; `/join/<code>` is the
   // short address that fits on a slide and lands straight in the room.
@@ -201,7 +203,8 @@ export function pathOf(route: Route): string {
     case 'live':
       return route.host ? `/live/${route.session}/host` : `/live/${route.session}`;
     case 'sessions':
-      return route.session ? `/sessions/${route.session}` : '/sessions';
+      if (!route.session) return '/sessions';
+      return route.preview ? `/sessions/${route.session}/preview` : `/sessions/${route.session}`;
     case 'admin':
       return `/admin/${route.tab}`;
     case 'join':
@@ -283,7 +286,7 @@ export function titleOf(route: Route): string {
       // projector and the tab is the last thing anyone checks before it does.
       return route.host ? `Presenting${suffix}` : `Live${suffix}`;
     case 'sessions':
-      return `Sessions${suffix}`;
+      return route.preview ? `Preview${suffix}` : `Sessions${suffix}`;
     case 'admin':
       // Named by the tab, because six jobs share this address and a tab that
       // says "Site settings" while showing the word lists is a tab nobody can
@@ -383,7 +386,10 @@ export function parsePath(pathname: string): Route | null {
 
   // /sessions and /sessions/<id>. A bare /sessions is the list, so unlike
   // /live it does not need an id to mean something.
-  if (first === 'sessions') return { kind: 'sessions', session: second || undefined };
+  if (first === 'sessions') {
+    if (second && parts[2] === 'preview') return { kind: 'sessions', session: second, preview: true };
+    return { kind: 'sessions', session: second || undefined };
+  }
 
   // /join and /join/<code>. Bare is the form; with a code it resolves and goes.
   //

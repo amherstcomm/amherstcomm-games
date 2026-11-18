@@ -12,7 +12,7 @@ import SurveyPrivacy from '@/SurveyPrivacy';
 import CompareEditor from '@/CompareEditor';
 import { asCompare, blankCompare, type ComparePayload } from '@/compare';
 import { useCallback, useEffect, useState } from 'react';
-import { ArrowDown, ArrowUp, Loader2, Plus, Radio, Trash2 } from 'lucide-react';
+import { ArrowDown, ArrowUp, Eye, Loader2, Plus, Radio, Trash2 } from 'lucide-react';
 import ImportFromSheet from '@/ImportFromSheet';
 import ImportQuiz from '@/ImportQuiz';
 import { readChoice, readMatch, readOptions, saySo, TEMPLATES } from '@/tableImport';
@@ -1284,6 +1284,12 @@ function SessionEditorFor({ session }: { session: string }) {
         >
           <Radio className="w-4 h-4" aria-hidden="true" />
           {meta.mode === 'open' ? 'Open and close it' : 'Presenter screen'}
+        </a>
+        {/* Before it opens, "what a player sees" is a waiting screen; the
+            preview is the questions themselves, with nothing sent. */}
+        <a className={BUTTON + ' gap-1.5'} href={pathOf({ kind: 'sessions', session, preview: true })}>
+          <Eye className="w-4 h-4" aria-hidden="true" />
+          Preview
         </a>
         <a className={BUTTON} href={pathOf({ kind: 'live', session, host: false })}>
           {meta.mode === 'open' ? 'What a player sees' : 'What the room sees'}
