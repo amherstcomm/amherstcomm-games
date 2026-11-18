@@ -2,7 +2,7 @@ import { useCallback, useMemo, useState, useEffect, useRef } from 'react';
 import { X, BookOpen, Keyboard, Delete, Info, Gamepad2, CornerDownLeft, BarChart3, UserRound, Scale, Settings, Trophy } from 'lucide-react';
 import LearnMode, { type LearnModeHandle } from '@/LearnMode';
 import type { Session } from '@supabase/supabase-js';
-import StatsModal from '@/StatsModal';
+import StatsPage from '@/StatsPage';
 import AccountModal from '@/AccountModal';
 import { stashInvite } from '@/friends';
 import { OskContext } from '@/MobileKeyInput';
@@ -292,7 +292,8 @@ function App() {
     nav.page.kind === 'suggestions' ||
     nav.page.kind === 'admin' ||
     nav.page.kind === 'join' ||
-    nav.page.kind === 'scores'
+    nav.page.kind === 'scores' ||
+    nav.page.kind === 'stats'
       ? nav.page
       : null;
 
@@ -300,7 +301,7 @@ function App() {
    *  presenter's half of a live session and the scoreboard; the participant's
    *  half is a phone in a hand and stays narrow. */
   // feature pages laid out with a rail beside them (PageWithRail)
-  const withRail = (['whiteboard', 'recognition', 'suggestions', 'auctions', 'contest', 'tournament', 'join'] as const).some((k) => nav.page.kind === k) ||
+  const withRail = (['whiteboard', 'recognition', 'suggestions', 'auctions', 'contest', 'tournament', 'join', 'stats'] as const).some((k) => nav.page.kind === k) ||
     (nav.page.kind === 'giveaways' && !nav.page.giveaway && nav.page.view !== 'history');
   const forTheRoom =
     (nav.page.kind === 'live' && nav.page.host) ||
@@ -312,8 +313,6 @@ function App() {
   // whatever is anywhere on the stack.
   const legalOpen = !!overlay('legal');
   const legalTab = overlay('legal')?.doc ?? nav.last.legal;
-  const statsOpen = !!overlay('stats');
-  const statsTab = overlay('stats')?.tab ?? nav.last.stats;
   const settingsOpen = !!overlay('settings');
   const settingsTab = overlay('settings')?.tab ?? nav.last.settings;
   const accountOpen = !!overlay('account');
@@ -1124,7 +1123,7 @@ function App() {
                                     icon: <Radio className="w-4 h-4" />, go: pageLink({ kind: 'sessions' }) }] : []),
   ];
   const barMe: BarItem[] = [
-    { key: 'stats', label: 'Stats', icon: <BarChart3 className="w-4 h-4" />, go: overlayLink({ kind: 'stats', tab: nav.last.stats }) },
+    { key: 'stats', label: 'Stats', icon: <BarChart3 className="w-4 h-4" />, go: pageLink({ kind: 'stats', tab: nav.last.stats }) },
     { key: 'settings', label: 'Settings', icon: <Settings className="w-4 h-4" />, go: overlayLink({ kind: 'settings', tab: nav.last.settings }) },
     ...(supabase && session ? [{ key: 'account', label: 'Account and friends', icon: <UserRound className="w-4 h-4" />,
                                  go: overlayLink({ kind: 'account', tab: nav.last.account }) }] : []),
@@ -1153,6 +1152,7 @@ function App() {
     : kind === 'game' || kind === 'home' ? 'games'
     : kind === 'whiteboard' || kind === 'recognition' || kind === 'suggestions' ? 'together'
     : ['live', 'join', 'sessions', 'tournament', 'contest', 'giveaways', 'auctions'].includes(kind) ? 'events'
+    : kind === 'stats' ? 'boards'
     : null;
   const barTitle = atHome ? 'Today' : titleOf(currentRoute).replace(/ · .*$/, '').replace(/ — .*$/, '');
 
@@ -1177,7 +1177,7 @@ function App() {
         <SiteBar
           siteName={SITE_NAME}
           home={pageLink({ kind: 'home' })}
-          boards={overlayLink({ kind: 'stats', tab: 'boards' })}
+          boards={pageLink({ kind: 'stats', tab: 'boards' })}
           current={barSection}
           title={barTitle}
           titleSwitchesGame={!atHome && kind === 'game'}
@@ -1306,6 +1306,9 @@ function App() {
               tab={reportPage.tab}
               tabLink={(tab) => pageLink({ kind: 'admin', tab })}
             />}
+          {reportPage?.kind === 'stats' && (
+            <StatsPage signedIn={!!session} view={reportPage.tab} tabLink={(tab) => pageLink({ kind: 'stats', tab })} />
+          )}
           {sessionsOn && reportPage?.kind === 'join' && (
             <JoinSession code={reportPage.code} host={canSetUp ? pageLink({ kind: 'sessions' }) : undefined} />
           )}
@@ -1330,9 +1333,7 @@ function App() {
             <HomeView
               modes={shownModes}
               onOpen={openGame}
-              onBoards={() => {
-                openOverlay({ kind: 'stats', tab: 'boards' });
-              }}
+              onBoards={() => pageLink({ kind: 'stats', tab: 'boards' }).onGo()}
               name={session ? (you?.name ?? null) : null}
               subtitle={subtitle}
               happening={<FeaturedStrip link={pageLink} sessionsOn={sessionsOn} sessionAllowed={sessionOpen} />}
@@ -1727,7 +1728,7 @@ function App() {
                 boards={MODE_BOARDS[mode]}
                 level={level}
                 levelWord={DIFFICULTY_LABEL[level]}
-                onBoards={() => openOverlay({ kind: 'stats', tab: 'boards' })}
+                onBoards={() => pageLink({ kind: 'stats', tab: 'boards' }).onGo()}
                 slotRef={setRailSlot}
                 report={
                   <ReportMenu
@@ -1808,15 +1809,6 @@ function App() {
             <X className="w-4 h-4" />
           </button>
         </div>
-      )}
-
-      {statsOpen && (
-        <StatsModal
-          signedIn={!!session}
-          view={statsTab}
-          onView={(tab) => openOverlay({ kind: 'stats', tab })}
-          onClose={closeOverlay}
-        />
       )}
 
       {accountOpen && (
