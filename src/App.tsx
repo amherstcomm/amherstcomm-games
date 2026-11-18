@@ -70,6 +70,7 @@ import {
 } from '@/rounds';
 import LiveSession from '@/LiveSession';
 import SessionEditor from '@/SessionEditor';
+import SessionPreview from '@/SessionPreview';
 import AdminSettings from '@/AdminSettings';
 import JoinSession from '@/JoinSession';
 import Scoreboard from '@/Scoreboard';
@@ -1270,7 +1271,10 @@ function App() {
             sessionOpen(reportPage.session) && (
               <LiveSession session={reportPage.session} host={reportPage.host} />
             )}
-          {sessionsOn && reportPage?.kind === 'sessions' && <SessionEditor session={reportPage.session} />}
+          {sessionsOn && reportPage?.kind === 'sessions' && reportPage.preview && reportPage.session && (
+            <SessionPreview session={reportPage.session} />
+          )}
+          {sessionsOn && reportPage?.kind === 'sessions' && !reportPage.preview && <SessionEditor session={reportPage.session} />}
           {/* Not gated on sessions being on: a contest is not a session, and
               switching the quiz off in the middle of October should not take
               the pumpkins down with it. */}
