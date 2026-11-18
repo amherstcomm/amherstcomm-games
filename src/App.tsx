@@ -419,14 +419,33 @@ function App() {
       if (alive && got.ok) setAuctionsNow(got.auctions.filter((a) => a.state === 'open').length);
     });
     void readBoard().then((got) => alive && setBoardOn(got.ok && (!!got.question || !!got.can_manage)));
-    void readWaiting().then((n) => alive && setNominationsWaiting(n));
-    void readSuggestionsUnread().then((n) => alive && setSuggestionsUnread(n));
     window.addEventListener('focus', count);
     return () => {
       alive = false;
       window.removeEventListener('focus', count);
     };
   }, [session]);
+
+  // What waits for this person to deal with -- nominations to review,
+  // suggestions to read -- asked again on every page change and whenever the
+  // tab comes back, so a badge goes when the thing is dealt with rather than
+  // at the next reload. Nothing for somebody who reviews and reads nothing:
+  // the server answers 0.
+  const pageKey = JSON.stringify(nav.page);
+  useEffect(() => {
+    if (!session) return;
+    let alive = true;
+    const ask = () => {
+      void readWaiting().then((n) => alive && setNominationsWaiting(n));
+      void readSuggestionsUnread().then((n) => alive && setSuggestionsUnread(n));
+    };
+    ask();
+    window.addEventListener('focus', ask);
+    return () => {
+      alive = false;
+      window.removeEventListener('focus', ask);
+    };
+  }, [session, pageKey]);
 
   useTheme(theme, palette, textScale);
 
@@ -1801,7 +1820,8 @@ function App() {
                 className="inline-flex items-center gap-1.5 text-accent hover:brightness-110 transition"
               >
                 <Award className="w-3.5 h-3.5" aria-hidden="true" />
-                {nominationsWaiting > 0 ? `Recognition (${nominationsWaiting})` : 'Recognition'}
+                Recognition
+                <Badge n={nominationsWaiting} what="waiting for review" />
               </RouteLink>
             )}
             {session && (
@@ -1810,7 +1830,8 @@ function App() {
                 className="inline-flex items-center gap-1.5 text-accent hover:brightness-110 transition"
               >
                 <InboxIcon className="w-3.5 h-3.5" aria-hidden="true" />
-                {suggestionsUnread > 0 ? `Suggestion box (${suggestionsUnread})` : 'Suggestion box'}
+                Suggestion box
+                <Badge n={suggestionsUnread} what="new" />
               </RouteLink>
             )}
             {canSetUp && sessionsOn && (
@@ -2510,3 +2531,18 @@ function roundsOn(rounds: CurrentRound[]): string {
 }
 
 export default App;
+
+/** A count of what waits, as a badge on a footer link; nothing at zero. Read
+ *  out with what it counts, since "Recognition 3" says nothing. */
+function Badge({ n, what }: { n: number; what: string }) {
+  if (n <= 0) return null;
+  return (
+    // Fixed colours rather than theme tiers: a badge is the same red in either
+    // theme, and white on it is 6.6:1.
+    <span className="inline-flex items-center justify-center min-w-5 h-5 px-1.5 rounded-full text-[11px] font-bold leading-none tabular-nums"
+          style={{ background: '#be123c', color: '#ffffff' }}>
+      {n > 99 ? '99+' : n}
+      <span className="sr-only"> {what}</span>
+    </span>
+  );
+}

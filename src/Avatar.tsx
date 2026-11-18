@@ -2,8 +2,8 @@
 import { useEffect, useState } from 'react';
 import { colorFor, initials, photoLink, presetEmoji, type Avatar as AvatarData, type Pick } from '@/avatars';
 
-const SIZE = { sm: 'w-8 h-8 text-xs', md: 'w-10 h-10 text-sm', lg: 'w-16 h-16 text-2xl' } as const;
-const EMOJI = { sm: 'text-lg', md: 'text-xl', lg: 'text-4xl' } as const;
+const SIZE = { sm: 'w-8 h-8 text-xs', md: 'w-10 h-10 text-sm', lg: 'w-16 h-16 text-2xl', xl: 'w-28 h-28 text-4xl' } as const;
+const EMOJI = { sm: 'text-lg', md: 'text-xl', lg: 'text-4xl', xl: 'text-6xl' } as const;
 
 export default function Avatar({
   avatar,

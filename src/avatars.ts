@@ -120,6 +120,10 @@ export const setMyAvatar = (avatar: { kind: 'preset' | 'photo'; value: string; c
 export const setPersonAvatar = (user: string, blocked: boolean) =>
   call('set_person_avatar', { p_user: user, p_blocked: blocked });
 
+/** Reporting somebody's picture as unsavoury, to the administrators. */
+export const reportAvatar = (user: string, reason: string | null) =>
+  call<{ recorded?: boolean; ticket?: string }>('report_avatar', { p_user: user, p_reason: reason });
+
 export type Pick = { option: string; user: string; name: string | null; avatar: Avatar | null };
 
 /** Who picked what on a choice question, in a trivia set to show it. */

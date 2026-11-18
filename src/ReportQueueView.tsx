@@ -12,6 +12,8 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Flag } from 'lucide-react';
 import Waiting from '@/Waiting';
+import Avatar from '@/Avatar';
+import { setPersonAvatar, type Avatar as AvatarData } from '@/avatars';
 
 import { ownerReports, type QueuedReport } from '@/reports';
 
@@ -21,6 +23,7 @@ function summarise(r: QueuedReport): string {
   // browser -- so the verified summary would read "undefined · undefined".
   if (r.kind === 'puzzle' && r.trust === 'claimed') return `${e.game} · practice (claimed)`;
   if (r.kind === 'puzzle') return `${e.game} · ${e.difficulty} · ${e.date}`;
+  if (r.kind === 'player' && e.what === 'avatar') return `${String(e.name ?? '')}'s picture`;
   if (r.kind === 'player') return String(e.name ?? '');
   return String(e.reported_from || 'no page given');
 }
@@ -68,6 +71,7 @@ export default function ReportQueueView() {
               </span>
             </div>
             <p className="mt-1 text-xs text-slate-400 break-words">{summarise(r)}</p>
+            {r.kind === 'player' && r.evidence.what === 'avatar' && <ReportedPicture r={r} />}
             <p className="mt-1 text-sm text-slate-300 break-words">
               {r.reason || <span className="text-slate-600">(nothing said)</span>}
             </p>
@@ -82,6 +86,31 @@ export default function ReportQueueView() {
           </li>
         ))}
       </ul>
+    </div>
+  );
+}
+
+/** A reported picture as it was when reported, and the one thing to do about
+ *  it here. Closing the report is still "Handle it", which says what was done. */
+function ReportedPicture({ r }: { r: QueuedReport }) {
+  const [done, setDone] = useState<string | null>(null);
+  const user = String(r.evidence.profile ?? '');
+  const name = String(r.evidence.name ?? 'them');
+  return (
+    <div className="mt-2 flex flex-wrap items-center gap-3">
+      <Avatar avatar={(r.evidence.avatar ?? null) as AvatarData | null} name={name} seed={user} size="lg" />
+      {done ? (
+        <span className="text-xs text-emerald-300" role="status">{done}</span>
+      ) : (
+        <button type="button" className="text-xs font-semibold text-rose-300 hover:underline"
+                onClick={async () => {
+                  if (!window.confirm(`Take ${name}’s picture down? They will not be able to set another until you allow it on the people page.`)) return;
+                  const res = await setPersonAvatar(user, true);
+                  setDone(res.ok ? 'Taken down. Now handle the report to close it.' : (res.reason ?? 'That did not work'));
+                }}>
+          Take this picture down
+        </button>
+      )}
     </div>
   );
 }

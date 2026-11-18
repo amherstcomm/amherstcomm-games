@@ -4,6 +4,8 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Award } from 'lucide-react';
 import Avatar from '@/Avatar';
+import PersonFace, { PictureActions } from '@/PersonFace';
+import { useCanTakeDown } from '@/useCanTakeDown';
 import Waiting from '@/Waiting';
 import PersonSearch from '@/PersonSearch';
 import type { Entrant } from '@/contests';
@@ -163,10 +165,17 @@ function Who({ p, size = 'md' }: { p: Person; size?: 'sm' | 'md' }) {
 }
 
 function WallItem({ c }: { c: WallCard }) {
+  const admin = useCanTakeDown();
   return (
     <li className={CARD} aria-label={`${c.who.name}, nominated`}>
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <Who p={c.who} />
+        <span className="flex items-center gap-2 min-w-0">
+          <PersonFace user={c.who.user} name={c.who.name} avatar={c.who.avatar}
+                      actions={(close) => (
+                        <PictureActions user={c.who.user} name={c.who.name} avatar={c.who.avatar} admin={admin} close={close} />
+                      )} />
+          <span className="font-semibold text-slate-200 truncate">{c.who.name}</span>
+        </span>
         {c.awards.map((a) => (
           <span key={a} className="inline-flex items-center gap-1 rounded-full bg-accent/15 border border-accent/40 px-2 py-0.5 text-xs font-semibold text-accent">
             <Award className="w-3 h-3" aria-hidden="true" /> {a}
