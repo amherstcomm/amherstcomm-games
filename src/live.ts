@@ -258,6 +258,8 @@ export type SessionResults = {
   mode?: 'live' | 'open';
   /** 'full': fully anonymous, so counts only and nobody's standings */
   privacy?: 'room' | 'full';
+  /** whether any question keeps score, so whether anybody can have won */
+  keeps_score?: boolean;
   min_results?: number;
   /** how many people have answered at all */
   answered?: number;
@@ -360,6 +362,14 @@ export async function setSessionOptions(
   });
   if (error) return { ok: false, reason: error.message };
   return (data as { ok: boolean }) ?? { ok: false, reason: 'no answer' };
+}
+
+/** Whether a session keeps score. Off takes the clocks off its questions. */
+export async function setSessionPoints(session: string, points: 'on' | 'off'): Promise<{ ok: boolean; reason?: string }> {
+  if (!supabase) return { ok: false, reason: 'not connected' };
+  const { data, error } = await supabase.rpc('set_session_points', { p_session: session, p_points: points });
+  if (error) return { ok: false, reason: error.message };
+  return (data as { ok: boolean; reason?: string }) ?? { ok: false, reason: 'no answer' };
 }
 
 /** How private a session's answers are, the minimum before results show, and

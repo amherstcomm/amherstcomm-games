@@ -57,11 +57,13 @@ function Slides({
   onCloud,
   onLeave,
   anonymous,
+  noStandings,
 }: {
   items: NonNullable<SessionResults['items']>;
-  /** a fully anonymous survey: said on every slide, and no standings at the
-   *  end, since nobody was scored */
+  /** a fully anonymous survey: said on every slide */
   anonymous?: boolean;
+  /** no standings at the end, since nobody was scored */
+  noStandings?: boolean;
   standings: ReactNode;
   title: string;
   clouds: Record<string, boolean>;
@@ -70,7 +72,7 @@ function Slides({
 }) {
   const [at, setAt] = useState(0);
   /** One past the last question is the standings, where there are any. */
-  const last = anonymous ? Math.max(0, items.length - 1) : items.length;
+  const last = noStandings ? Math.max(0, items.length - 1) : items.length;
   const go = useCallback((d: -1 | 1) => setAt((n) => Math.min(last, Math.max(0, n + d))), [last]);
 
   useEffect(() => {
@@ -292,6 +294,7 @@ export default function Scoreboard({ session }: { session: string }) {
           onCloud={(id) => setClouds((c) => ({ ...c, [id]: !c[id] }))}
           onLeave={() => setSlides(false)}
           anonymous={results?.privacy === 'full'}
+          noStandings={results?.privacy === 'full' || results?.keeps_score === false}
         />
       </div>
     );
@@ -336,8 +339,9 @@ export default function Scoreboard({ session }: { session: string }) {
       <div className="flex flex-wrap gap-2 mb-6">
         {(
           [
-            // nobody is scored in a fully anonymous survey, so nobody won
-            ...(results?.privacy === 'full' ? [] : [['standings', 'Who won', Trophy] as const]),
+            // nobody is scored in a survey that keeps no score, so nobody won
+            ...(results?.privacy === 'full' || results?.keeps_score === false
+              ? [] : [['standings', 'Who won', Trophy] as const]),
             ['results', 'How each question went', BarChart3],
           ] as const
         ).map(([v, label, Icon]) => (

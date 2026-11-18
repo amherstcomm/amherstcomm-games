@@ -48,7 +48,7 @@ import {
   type SessionSummary,
 } from '@/authoring';
 import { JOIN_HOST, pathOf } from '@/routes';
-import { advance, setSessionOptions, setSessionPrivacy } from '@/live';
+import { advance, setSessionOptions, setSessionPoints, setSessionPrivacy } from '@/live';
 import { INTL_UNITS, formatGuess } from '@/guessFormat';
 import { describeWindow, fromOfficeInput, toOfficeInput } from '@/schedule';
 import { readWordLists, type WordList } from '@/wordLists';
@@ -173,9 +173,17 @@ function ItemForm({
   onSave,
   onCancel,
   busy,
+  scoredKinds,
+  sessionPoints,
+  privacy,
 }: {
   kinds: string[];
   item?: SheetItem;
+  /** the kinds that have a right answer, and so can keep score at all */
+  scoredKinds: string[];
+  /** whether the session keeps score, which a question follows unless told */
+  sessionPoints: 'on' | 'off';
+  privacy: 'room' | 'full';
   onSave: (args: {
     kind: string;
     prompt: string;
@@ -189,6 +197,8 @@ function ItemForm({
     points: number;
     penaltyWrong: boolean;
     penaltySkip: boolean;
+    /** its own say on keeping score */
+    scoring: 'inherit' | 'on' | 'off';
   }) => void;
   onCancel?: () => void;
   busy: boolean;
@@ -300,9 +310,19 @@ function ItemForm({
     drawLength,
     compare,
   });
-  // A comparison has no clock and no points: there is nothing to race to and
-  // nothing right to score.
-  const unscoredTable = kind === 'compare';
+  // Whether this question keeps score, worked out as the server does
+  // (item_scores): a kind with a right answer, not a fully anonymous survey,
+  // and on by its own say or by the session's.
+  const [scoring, setScoring] = useState<'inherit' | 'on' | 'off'>(item?.scoring ?? 'inherit');
+  const scoredKind = scoredKinds.includes(kind);
+  const keepsScore = scoredKind && privacy !== 'full'
+    && (scoring === 'on' || (scoring === 'inherit' && sessionPoints === 'on'));
+  // A countdown is a race. A question that keeps score may have one; a poll may
+  // in a round that keeps score; nothing does in a survey that keeps none, and
+  // a comparison never does.
+  const clockable = kind !== 'compare'
+    && (scoredKind ? keepsScore : sessionPoints === 'on' && privacy !== 'full');
+  const unscoredTable = !clockable;
   const clock = unscoredTable || seconds === '' ? null : secondsOf({ seconds: Number(seconds) });
   // Typed something that is not a usable clock — distinct from having left it
   // empty, which is a valid choice and the default.
@@ -720,7 +740,34 @@ function ItemForm({
         </>
       )}
 
-      {!unscoredTable && (
+      {/* A question with a right answer can keep score or not, whatever the
+          session does: one scored question in a survey, or the reverse.
+          Not offered in a fully anonymous survey, which never keeps score. */}
+      {scoredKind && privacy !== 'full' && (
+        <label className="block">
+          <span className="block text-xs uppercase tracking-wider text-slate-500">Keep score</span>
+          <select
+            value={scoring}
+            onChange={(e) => setScoring(e.target.value as 'inherit' | 'on' | 'off')}
+            className={FIELD + ' max-w-xs'}
+          >
+            <option value="inherit">
+              {sessionPoints === 'on' ? 'As the session does (keeps score)' : 'As the session does (no score)'}
+            </option>
+            <option value="on">Yes, this one scores</option>
+            <option value="off">No, it just asks</option>
+          </select>
+        </label>
+      )}
+      {scoredKind && !keepsScore && (
+        <p className="text-sm text-slate-400">
+          {privacy === 'full'
+            ? 'Fully anonymous surveys can’t keep score. The correct answer is still shown after.'
+            : 'No points and no clock. The correct answer is still shown after.'}
+        </p>
+      )}
+
+      {clockable && (
       <>
       {/* The clock is optional and off by default. A countdown is right for a
           scored round and wrong for "any questions for the board?", and the
@@ -749,6 +796,11 @@ function ItemForm({
         </p>
       )}
 
+      </>
+      )}
+
+      {keepsScore && (
+      <>
       <label className="block">
         <span className="block text-xs uppercase tracking-wider text-slate-500">
           Points
@@ -808,6 +860,7 @@ function ItemForm({
           onClick={() =>
             onSave({
               kind,
+              scoring: scoredKind ? scoring : 'inherit',
               points: worthOk ? worth : 1,
               penaltyWrong: partMarked ? false : penaltyWrong,
               penaltySkip,
@@ -862,6 +915,8 @@ function SessionList() {
   const [title, setTitle] = useState('');
   const [mode, setMode] = useState<SessionMode>('live');
   const [qa, setQa] = useState(true);
+  // Ray's call: asked when it is made. A survey starts keeping no score.
+  const [what, setWhat] = useState<'trivia' | 'survey'>('trivia');
   const [note, setNote] = useState('');
   const [busy, setBusy] = useState(false);
 
@@ -869,8 +924,21 @@ function SessionList() {
   useEffect(() => void pull(), [pull]);
 
   async function add() {
+    // Said, not greyed out.
+    if (!title.trim()) {
+      setNote('Give it a name first.');
+      return;
+    }
     setBusy(true);
     const res = await createSession(title.trim(), 'strict', mode, qa);
+    if (res.ok && what === 'survey') {
+      const off = await setSessionPoints(res.id!, 'off');
+      if (!off.ok) {
+        setBusy(false);
+        setNote(`It was made, but still keeps score: ${off.reason ?? 'that did not work'}`);
+        return;
+      }
+    }
     setBusy(false);
     if (!res.ok) {
       setNote(res.reason ?? 'That did not work');
@@ -900,6 +968,29 @@ function SessionList() {
             placeholder="Employee Ownership Month, week one"
           />
         </label>
+        <fieldset>
+          <legend className="text-xs uppercase tracking-wider text-slate-500 mb-1">What it is</legend>
+          <div className="flex flex-wrap gap-2">
+            {(
+              [
+                ['trivia', 'Trivia', 'Right answers, points and who won.'],
+                ['survey', 'Survey', 'What people think. No points, no clocks.'],
+              ] as const
+            ).map(([value, label, hint]) => (
+              <label key={value}
+                     className={`flex-1 min-w-[12rem] rounded-xl border p-3 cursor-pointer ${
+                       what === value ? 'border-accent bg-accent/10' : 'border-white/15 hover:bg-white/5'}`}>
+                <span className="flex items-center gap-2">
+                  <input type="radio" name="session-what" checked={what === value} onChange={() => setWhat(value)} />
+                  <span className="text-sm font-semibold text-slate-200">{label}</span>
+                </span>
+                <span className="block text-xs text-slate-400 mt-1 ml-6">{hint}</span>
+              </label>
+            ))}
+          </div>
+          <p className="text-xs text-slate-500 mt-1">Either can be changed later, until people answer.</p>
+        </fieldset>
+
         {/* The choice that shapes everything else about it, so it is made
             here rather than found later. */}
         <fieldset>
@@ -949,7 +1040,7 @@ function SessionList() {
             that it should not be there. sessions.late_join stays — it is
             harmless, and dropping a column to tidy a form is not a trade worth
             making. */}
-        <button className={PRIMARY} onClick={() => void add()} disabled={busy || !title.trim()}>
+        <button className={PRIMARY} onClick={() => void add()} disabled={busy}>
           <span className="inline-flex items-center gap-1.5">
             <Plus className="w-4 h-4" aria-hidden="true" /> Create
           </span>
@@ -1058,6 +1149,7 @@ function SessionEditorFor({ session }: { session: string }) {
   // right answer, and putting `open` between them made them look unrelated.
   const known = new Set(kinds.map((k) => k.kind));
   const offer = AUTHORABLE.filter((k) => known.has(k));
+  const scoredKinds = kinds.filter((k) => k.scored).map((k) => k.kind);
   const missing = kinds.length - offer.length;
 
   return (
@@ -1221,6 +1313,32 @@ function SessionEditorFor({ session }: { session: string }) {
         </a>
       </p>
 
+      {/* Whether anybody can win. A survey usually keeps no score; a fully
+          anonymous one cannot, since points need a person to go to. */}
+      <div className="mb-6 -mt-2">
+        <label className="flex items-center gap-2 text-xs text-slate-400">
+          <input
+            type="checkbox"
+            checked={(meta.points ?? 'on') === 'on'}
+            disabled={busy || meta.privacy === 'full' || (meta.answered ?? 0) > 0}
+            onChange={(e) => {
+              const on = e.target.checked;
+              void run(() => setSessionPoints(session, on ? 'on' : 'off'));
+            }}
+          />
+          Keep score
+        </label>
+        <p className="text-xs text-slate-500 mt-1 ml-6">
+          {meta.privacy === 'full'
+            ? 'Fully anonymous surveys can’t keep score.'
+            : (meta.answered ?? 0) > 0
+              ? 'People have answered, so this can no longer change.'
+              : (meta.points ?? 'on') === 'on'
+                ? 'Points, standings and who won. Each question can still say otherwise.'
+                : 'No points, no clocks, no standings: just what people said. Each question can still say otherwise.'}
+        </p>
+      </div>
+
       <SurveyPrivacy
         meta={meta}
         busy={busy}
@@ -1377,6 +1495,9 @@ function SessionEditorFor({ session }: { session: string }) {
                 <div className="mt-3">
                   <ItemForm
                     kinds={offer}
+                    scoredKinds={scoredKinds}
+                    sessionPoints={meta.points ?? 'on'}
+                    privacy={meta.privacy ?? 'room'}
                     item={item}
                     busy={busy}
                     onCancel={() => setEditing(null)}
@@ -1401,6 +1522,9 @@ function SessionEditorFor({ session }: { session: string }) {
         {adding ? (
           <ItemForm
             kinds={offer}
+            scoredKinds={scoredKinds}
+            sessionPoints={meta.points ?? 'on'}
+            privacy={meta.privacy ?? 'room'}
             busy={busy}
             onCancel={() => setAdding(false)}
             onSave={(args) => void run(() => saveItem({ session, ...args }))}

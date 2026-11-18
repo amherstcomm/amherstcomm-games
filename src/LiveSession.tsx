@@ -935,6 +935,8 @@ export default function LiveSession({ session, host }: { session: string; host: 
     seconds?: number | null;
     /** nobody had full marks: who came closest, and how close */
     best?: { name: string; points: number; of: number } | null;
+    /** the question keeps no score, so nobody won it */
+    unscored?: boolean;
   } | null>(
     null
   );
@@ -1643,7 +1645,7 @@ export default function LiveSession({ session, host }: { session: string; host: 
 
           {/* The tiebreak made visible, at the moment the room can still check it
               against what they just watched happen. */}
-          {host && item.state === 'revealed' && first && (
+          {host && item.state === 'revealed' && first && !first.unscored && (
             <p className="mt-5 text-sm text-slate-300 inline-flex items-center gap-1.5">
               <Trophy className="w-4 h-4 text-accent" aria-hidden="true" />
               {/* "Nobody got that one" over a ten-pair question somebody got
