@@ -85,4 +85,17 @@ for f in "$here"/*.sql; do
     status=1
   fi
 done
+
+# Once more, over the database the tests have just filled. A fresh database
+# has no rows for a constraint to reject, so a migration that tightens one
+# applies there and fails on the VM: the whiteboard section reset the
+# capability list to two entries, the first recognition.manage grant violated
+# it, and every apply after that failed whole (2026-11-17).
+filled=$(psql_ < "$here/../schema.sql" 2>&1 | grep -c 'ERROR' || true)
+echo "schema applied over the filled database: $filled errors"
+if [ "$filled" -ne 0 ]; then
+  echo "FAIL: schema.sql does not apply over a database with data in it"
+  psql_ < "$here/../schema.sql" 2>&1 | grep 'ERROR' | head
+  status=1
+fi
 exit "$status"
