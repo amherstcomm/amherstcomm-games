@@ -197,7 +197,7 @@ test('an organiser sees who won, what is owed, and can mark it paid or take a bi
   });
   await page.goto(`/auctions/${AUCTION}`);
 
-  const winners = page.getByRole('region', { name: 'Winners' });
+  const winners = page.getByRole('region', { name: 'Winners', exact: true });
   await expect(winners.getByText('bo@example.net')).toBeVisible();
   await expect(winners.getByText('$50 still to collect.')).toBeVisible();
   // the box shows what the server says, so it is clicked rather than checked
@@ -219,7 +219,7 @@ test('a bidder is shown nobody’s name', async ({ page }) => {
   await signedIn(page);
   await server(page, () => ({ ok: true, can_manage: false, auction: AUCTION_ROW, items: [BALL] }));
   await page.goto(`/auctions/${AUCTION}`);
-  await expect(page.getByRole('region', { name: 'Winners' })).toHaveCount(0);
+  await expect(page.getByRole('region', { name: 'Winners', exact: true })).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Change the auction' })).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Add an item' })).toHaveCount(0);
 });

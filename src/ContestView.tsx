@@ -34,6 +34,7 @@ import {
   type EntrySheetRow,
 } from '@/contests';
 import RouteLink from '@/RouteLink';
+import PageWithRail, { RailCard } from '@/PageWithRail';
 import PersonSearch from '@/PersonSearch';
 
 const FIELD =
@@ -80,7 +81,7 @@ export default function ContestView({
   link: ContestLink;
 }) {
   if (!contest) return <ContestList link={link} />;
-  return <OneContest id={contest} />;
+  return <OneContest id={contest} link={link} />;
 }
 
 /** How this page addresses another one: the app's own page link, narrowed to
@@ -98,20 +99,19 @@ function ContestList({ link }: { link: ContestLink }) {
 
   if (!rows) return <Waiting what="contests" />;
   return (
-    <div className="max-w-2xl mx-auto px-4 py-8">
-      <h1 className="text-xl font-semibold text-slate-200">Contests</h1>
+    <PageWithRail section="Events" title="Contests" blurb="Enter, and vote for your favourites.">
       {rows.length === 0 ? (
-        <p className="text-sm text-slate-400 mt-3">
+        <p className="text-sm text-slate-400">
           Nothing is running just now. A contest shows up here while it is taking entries and
           while people are voting.
         </p>
       ) : (
-        <ul className="mt-4 space-y-2">
+        <ul className="space-y-2">
           {rows.map((c) => (
             <li key={c.id}>
               <RouteLink
                 {...link({ kind: 'contest', contest: c.id })}
-                className="block rounded-xl border border-white/15 bg-white/5 px-4 py-3 hover:bg-white/10"
+                className="block rounded-2xl border border-white/10 bg-slate-900 px-4 py-3 hover:border-white/25"
               >
                 <span className="flex items-center justify-between gap-3">
                   <span className="font-semibold text-slate-200">{c.name}</span>
@@ -125,11 +125,11 @@ function ContestList({ link }: { link: ContestLink }) {
           ))}
         </ul>
       )}
-    </div>
+    </PageWithRail>
   );
 }
 
-function OneContest({ id }: { id: string }) {
+function OneContest({ id, link }: { id: string; link: ContestLink }) {
   const [contest, setContest] = useState<Contest | null>(null);
   const [entries, setEntries] = useState<ContestEntry[] | null>(null);
   const [links, setLinks] = useState<Record<string, string>>({});
@@ -139,6 +139,11 @@ function OneContest({ id }: { id: string }) {
   // would break the moment two people called theirs the same thing.
   const [ballot, setBallot] = useState<string[]>([]);
   const [results, setResults] = useState<ContestResults | null>(null);
+  // the others running, for the rail
+  const [others, setOthers] = useState<ContestOn[]>([]);
+  useEffect(() => {
+    void readContestsOn().then((rows) => setOthers(rows ?? []));
+  }, []);
 
   const load = useCallback(async () => {
     const got = await readContest(id);
@@ -169,26 +174,59 @@ function OneContest({ id }: { id: string }) {
 
   const mine = entries.find((e) => e.mine) ?? null;
 
+  const elsewhere = others.filter((c) => c.id !== contest.id);
   return (
-    <div className="max-w-3xl mx-auto px-4 py-8">
-      <h1 className="text-xl font-semibold text-slate-200">{contest.name}</h1>
-      <p className="text-xs text-slate-400 mt-1">
-        {PHASE_WORD[contest.phase]}
-        {deadline(contest) ? ` · ${deadline(contest)}` : ''}
-      </p>
-      {contest.blurb && <p className="text-sm text-slate-300 mt-3 whitespace-pre-line">{contest.blurb}</p>}
-      {contest.prize && (
-        <p className="text-sm text-amber-300 mt-2">
-          <span className="text-slate-400">On offer:</span> {contest.prize}
-        </p>
-      )}
-      {/* Said once, at the top, rather than on every tile: whether the names
-          are on the entries changes how somebody writes theirs. */}
-      {!contest.entrants_shown && (
-        <p className="text-xs text-slate-400 mt-2">
-          Entries are shown without names — nobody sees whose is whose.
-        </p>
-      )}
+    <PageWithRail
+      section="Events"
+      title={contest.name}
+      blurb={
+        <>
+          <span className="font-semibold text-slate-300">{PHASE_WORD[contest.phase]}</span>
+          {deadline(contest) ? ` · ${deadline(contest)}` : ''}
+        </>
+      }
+      top={
+        <RouteLink {...link({ kind: 'contest', contest: null })} className="inline-block mb-3 text-sm text-accent hover:brightness-110">
+          ← All contests
+        </RouteLink>
+      }
+      rail={
+        <>
+          {(contest.blurb || contest.prize || !contest.entrants_shown) && (
+            <RailCard label="About this contest">
+              {contest.blurb && <p className="text-sm text-slate-300 whitespace-pre-line">{contest.blurb}</p>}
+              {contest.prize && (
+                <p className="text-sm text-amber-300 mt-2 first:mt-0">
+                  <span className="text-slate-400">On offer:</span> {contest.prize}
+                </p>
+              )}
+              {/* Said once rather than on every tile: whether the names are on
+                  the entries changes how somebody writes theirs. */}
+              {!contest.entrants_shown && (
+                <p className="text-xs text-slate-400 mt-2 first:mt-0">
+                  Entries are shown without names — nobody sees whose is whose.
+                </p>
+              )}
+            </RailCard>
+          )}
+          {elsewhere.length > 0 && (
+            <RailCard label="Also running">
+              <ul className="divide-y divide-white/10 -my-1.5">
+                {elsewhere.map((c) => (
+                  <li key={c.id}>
+                    <RouteLink {...link({ kind: 'contest', contest: c.id })}
+                               className="py-1.5 flex items-baseline justify-between gap-3 text-sm group">
+                      <span className="min-w-0 text-slate-200 group-hover:text-accent">{c.name}</span>
+                      <span className="shrink-0 text-xs text-slate-400">{PHASE_WORD[c.phase]}</span>
+                    </RouteLink>
+                  </li>
+                ))}
+              </ul>
+            </RailCard>
+          )}
+        </>
+      }
+    >
 
       {/* Two different jobs behind the same permission. In 'players' mode
           this is one person's own entry; in 'admins' mode the organiser is
@@ -217,12 +255,13 @@ function OneContest({ id }: { id: string }) {
       )}
       {results?.ok && <Results contest={contest} results={results} />}
       {!contest.may_enter && contest.phase === 'entries' && contest.who_enters === 'admins' && (
-        <p className="text-sm text-slate-400 mt-4">
+        <p className="text-sm text-slate-400">
           An organiser is entering these on everyone&apos;s behalf — send them your photo.
         </p>
       )}
 
-      <h2 className="text-sm font-semibold text-slate-200 mt-8">
+      <section aria-label="The entries">
+      <h2 className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
         {entries.length} {entries.length === 1 ? 'entry' : 'entries'}
       </h2>
       {entries.length === 0 ? (
@@ -230,7 +269,7 @@ function OneContest({ id }: { id: string }) {
       ) : (
         <ul className="mt-3 grid gap-4 sm:grid-cols-2">
           {entries.map((e, i) => (
-            <li key={e.id} className="rounded-xl border border-white/15 bg-white/5 overflow-hidden">
+            <li key={e.id} className="rounded-2xl border border-white/10 bg-slate-900 overflow-hidden">
               {e.image_path && drawable(links[e.image_path]) ? (
                 <Media path={e.image_path} url={drawable(links[e.image_path]) as string} alt={e.title}
                        className="w-full aspect-[4/3] object-cover bg-white/5" />
@@ -259,7 +298,8 @@ function OneContest({ id }: { id: string }) {
           ))}
         </ul>
       )}
-    </div>
+      </section>
+    </PageWithRail>
   );
 }
 

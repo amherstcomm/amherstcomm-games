@@ -9,6 +9,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, X } from 'lucide-react';
 import Waiting from '@/Waiting';
 import RouteLink from '@/RouteLink';
+import PageWithRail, { RailCard } from '@/PageWithRail';
 import { drawable, officeZoneWord } from '@/contests';
 import { toOfficeInput } from '@/schedule';
 import {
@@ -50,7 +51,7 @@ const BUTTON =
 const PRIMARY =
   'inline-flex items-center justify-center px-4 h-9 rounded-lg text-sm font-semibold ' +
   'bg-accent text-slate-950 hover:brightness-110 disabled:opacity-50';
-const CARD = 'rounded-xl border border-white/15 bg-white/5 p-4';
+const CARD = 'rounded-2xl border border-white/10 bg-slate-900 p-4';
 const LABEL = 'block text-xs font-semibold text-slate-400 mb-1';
 
 /** Open bidding moves on other people's bids, so the page keeps up. */
@@ -88,22 +89,19 @@ function AuctionList({ link }: { link: AuctionLink }) {
 
   if (!rows) return <Waiting what="auctions" />;
   return (
-    <div className="max-w-2xl mx-auto px-4 py-8">
-      <div className="flex items-center justify-between gap-3">
-        <h1 className="text-xl font-semibold text-slate-200">Auctions</h1>
-        {canManage && !adding && (
-          <button type="button" className={BUTTON} onClick={() => setAdding(true)}>
-            New auction
-          </button>
-        )}
-      </div>
+    <PageWithRail section="Events" title="Auctions" blurb="Bid on what is up for auction.">
+      {canManage && !adding && (
+        <button type="button" className={BUTTON} onClick={() => setAdding(true)}>
+          New auction
+        </button>
+      )}
       {problem === 'not signed in' ? (
-        <p className="text-sm text-slate-400 mt-3">Sign in to see the auctions and bid.</p>
+        <p className="text-sm text-slate-400">Sign in to see the auctions and bid.</p>
       ) : problem ? (
-        <p className="text-sm text-rose-300 mt-3">{problem}</p>
+        <p className="text-sm text-rose-300">{problem}</p>
       ) : null}
       {adding && (
-        <div className="mt-4">
+        <div>
           <AuctionEditor
             auction={null}
             onDone={(id) => (id ? link({ kind: 'auctions', auction: id }).onGo() : setAdding(false))}
@@ -111,21 +109,21 @@ function AuctionList({ link }: { link: AuctionLink }) {
         </div>
       )}
       {!problem && rows.length === 0 && (
-        <p className="text-sm text-slate-400 mt-3">
+        <p className="text-sm text-slate-400">
           Nothing is up for auction just now. One shows up here once bidding opens.
         </p>
       )}
       {rows.length > 0 && (
-        <ul className="mt-4 space-y-2">
+        <ul className="space-y-2">
           {rows.map((a) => (
             <li key={a.id}>
               <RouteLink
                 {...link({ kind: 'auctions', auction: a.id })}
-                className="block rounded-xl border border-white/15 bg-white/5 px-4 py-3 hover:bg-white/10"
+                className="block rounded-2xl border border-white/10 bg-slate-900 px-4 py-3 hover:border-white/25"
               >
                 <span className="flex items-center justify-between gap-3">
                   <span className="font-semibold text-slate-200">{a.title}</span>
-                  <span className="text-xs text-slate-400">{STATE_WORD[a.state]}</span>
+                  <span className={`text-xs font-semibold ${a.state === 'open' ? 'text-amber-300' : 'text-slate-400'}`}>{STATE_WORD[a.state]}</span>
                 </span>
                 <span className="block text-xs text-slate-400 mt-1">
                   {a.items} {a.items === 1 ? 'item' : 'items'} · {a.bids} {a.bids === 1 ? 'bid' : 'bids'} ·{' '}
@@ -140,7 +138,7 @@ function AuctionList({ link }: { link: AuctionLink }) {
           ))}
         </ul>
       )}
-    </div>
+    </PageWithRail>
   );
 }
 
@@ -182,28 +180,58 @@ function OneAuction({ id, link }: { id: string; link: AuctionLink }) {
   const manage = !!page.can_manage;
   const sold = items.filter((i) => i.state === 'closed' && i.leader);
 
+  const bidOn = items.filter((i) => i.my_bid != null);
   return (
-    <div className="max-w-3xl mx-auto px-4 py-8">
-      <RouteLink {...link({ kind: 'auctions', auction: null })} className="text-sm text-accent hover:brightness-110">
-        ← All auctions
-      </RouteLink>
-
-      <div className="mt-3 flex items-start justify-between gap-3">
-        <h1 className="text-2xl font-bold text-white">{a.title}</h1>
-        <span className="shrink-0 text-xs text-slate-400 mt-2">{STATE_WORD[a.state]}</span>
-      </div>
-      <p className="text-sm text-slate-300 mt-1">{headline(a)}</p>
-      {a.blurb && <p className="text-sm text-slate-300 mt-3 whitespace-pre-line">{a.blurb}</p>}
-      <p className="text-xs text-slate-400 mt-3">{howItWorks(a)}</p>
-      {a.payment_note && (
-        <div className={`${CARD} mt-4`}>
-          <p className="text-xs uppercase tracking-wider text-slate-500 font-semibold">How winners pay</p>
-          <p className="text-sm text-slate-200 mt-1 whitespace-pre-line">{a.payment_note}</p>
-        </div>
-      )}
-
+    <PageWithRail
+      section="Events"
+      title={a.title}
+      blurb={
+        <>
+          <span className={`font-semibold ${a.state === 'open' ? 'text-amber-300' : 'text-slate-300'}`}>{STATE_WORD[a.state]}</span>
+          {' · '}{headline(a)}
+        </>
+      }
+      top={
+        <RouteLink {...link({ kind: 'auctions', auction: null })} className="inline-block mb-3 text-sm text-accent hover:brightness-110">
+          ← All auctions
+        </RouteLink>
+      }
+      rail={
+        <>
+          {bidOn.length > 0 && (
+            <RailCard label="Your bids">
+              <ul className="divide-y divide-white/10 -my-1.5">
+                {bidOn.map((i) => (
+                  <li key={i.id} className="py-1.5 flex items-baseline justify-between gap-3 text-sm">
+                    <span className="min-w-0 text-slate-200">{i.title}</span>
+                    <span className={`shrink-0 text-xs font-semibold tabular-nums ${
+                      i.won || i.leading ? 'text-emerald-300' : i.leading === false ? 'text-amber-300' : 'text-slate-400'
+                    }`}>
+                      {dollars(i.my_bid!)} · {i.won ? 'won' : i.state === 'closed' ? 'closed' : i.leading ? 'highest' : i.leading === false ? 'outbid' : 'sealed'}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </RailCard>
+          )}
+          {a.blurb && (
+            <RailCard label="What it is for">
+              <p className="text-sm text-slate-300 whitespace-pre-line">{a.blurb}</p>
+            </RailCard>
+          )}
+          <RailCard label="How the bidding works">
+            <p className="text-sm text-slate-400">{howItWorks(a)}</p>
+          </RailCard>
+          {a.payment_note && (
+            <RailCard label="How winners pay">
+              <p className="text-sm text-slate-200 whitespace-pre-line">{a.payment_note}</p>
+            </RailCard>
+          )}
+        </>
+      }
+    >
       {manage && (
-        <div className="mt-4 flex flex-wrap gap-2">
+        <div className="flex flex-wrap gap-2">
           <button type="button" className={BUTTON} onClick={() => setEditing((e) => !e)}>
             {editing ? 'Close the settings' : 'Change the auction'}
           </button>
@@ -226,7 +254,7 @@ function OneAuction({ id, link }: { id: string; link: AuctionLink }) {
         </div>
       )}
       {manage && editing && (
-        <div className="mt-4">
+        <div>
           <AuctionEditor
             auction={a}
             onDone={() => {
@@ -240,11 +268,11 @@ function OneAuction({ id, link }: { id: string; link: AuctionLink }) {
       {manage && sold.length > 0 && <Winners items={sold} onChange={load} />}
 
       {items.length === 0 ? (
-        <p className="text-sm text-slate-400 mt-6">
+        <p className="text-sm text-slate-400">
           {manage ? 'Nothing in it yet. Add the first item below.' : 'Nothing has been put up yet.'}
         </p>
       ) : (
-        <ul className="mt-6 grid gap-4 sm:grid-cols-2">
+        <ul className="grid gap-4 sm:grid-cols-2">
           {items.map((i, n) => (
             <li key={i.id}>
               <ItemCard
@@ -266,7 +294,7 @@ function OneAuction({ id, link }: { id: string; link: AuctionLink }) {
 
       {manage &&
         (adding ? (
-          <div className="mt-6">
+          <div>
             <ItemEditor
               auction={a}
               item={null}
@@ -277,14 +305,14 @@ function OneAuction({ id, link }: { id: string; link: AuctionLink }) {
             />
           </div>
         ) : (
-          <button type="button" className={`${BUTTON} mt-6`} onClick={() => setAdding(true)}>
+          <button type="button" className={BUTTON} onClick={() => setAdding(true)}>
             Add an item
           </button>
         ))}
 
       {manage && page.log && page.log.length > 0 && (
-        <section className="mt-10" aria-label="What has been done">
-          <h2 className="text-sm font-semibold text-slate-200">What has been done</h2>
+        <section className="pt-4" aria-label="What has been done">
+          <h2 className="text-xs font-semibold text-slate-400 uppercase tracking-wider">What has been done</h2>
           <ul className="mt-2 space-y-1 text-xs text-slate-400">
             {page.log.map((l, n) => (
               <li key={n}>
@@ -294,7 +322,7 @@ function OneAuction({ id, link }: { id: string; link: AuctionLink }) {
           </ul>
         </section>
       )}
-    </div>
+    </PageWithRail>
   );
 }
 
