@@ -7,7 +7,7 @@ import type { ReactNode } from 'react';
 export const RAIL_CARD = 'rounded-2xl border border-white/10 bg-slate-900 p-4';
 export const RAIL_LABEL = 'text-xs font-semibold text-slate-400 uppercase tracking-wider';
 
-export default function PageWithRail({ section, title, blurb, top, rail, children }: {
+export default function PageWithRail({ section, title, blurb, top, rail, wide = false, children }: {
   /** the bar menu it sits under: Together, Events */
   section: string;
   title: string;
@@ -15,6 +15,9 @@ export default function PageWithRail({ section, title, blurb, top, rail, childre
   /** above the title: a way back */
   top?: ReactNode;
   rail?: ReactNode;
+  /** without a rail, use the whole width rather than a reading measure: a
+   *  page of boards side by side, not a list */
+  wide?: boolean;
   children: ReactNode;
 }) {
   return (
@@ -26,7 +29,7 @@ export default function PageWithRail({ section, title, blurb, top, rail, childre
         {blurb && <div className="mt-1.5 text-sm sm:text-base text-slate-400 max-w-2xl">{blurb}</div>}
       </header>
       <div className={`grid gap-7 items-start ${rail ? 'lg:grid-cols-[minmax(0,1fr)_18.75rem]' : ''}`}>
-        <div className={`min-w-0 space-y-6 ${rail ? '' : 'max-w-3xl'}`}>{children}</div>
+        <div className={`min-w-0 space-y-6 ${rail || wide ? '' : 'max-w-3xl'}`}>{children}</div>
         {rail && <aside className="min-w-0 space-y-4" aria-label={`${title}: more`}>{rail}</aside>}
       </div>
     </div>

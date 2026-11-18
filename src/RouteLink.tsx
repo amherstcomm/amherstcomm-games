@@ -14,6 +14,7 @@ export function RouteLink({
   className,
   title,
   label,
+  current,
   children,
 }: {
   to: string;
@@ -22,6 +23,8 @@ export function RouteLink({
   title?: string;
   /** what a screen reader calls it, when its text alone would not say where it goes */
   label?: string;
+  /** the page you are on, among its siblings: a tab, a menu entry */
+  current?: boolean;
   children: ReactNode;
 }) {
   return (
@@ -29,6 +32,7 @@ export function RouteLink({
       href={to}
       title={title}
       aria-label={label}
+      aria-current={current ? 'page' : undefined}
       className={className}
       onClick={(e) => {
         if (e.defaultPrevented || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
