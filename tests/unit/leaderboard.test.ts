@@ -29,27 +29,31 @@ describe('boardsToShow', () => {
     expect(boardsToShow(boards(['weave']), ['weave'], { weave: 'started' })).toEqual(['weave']);
   });
 
-  it('finished and started sit side by side', () => {
-    const b = boards(['guess', 'hive']);
-    expect(boardsToShow(b, ['pattern', 'bee'], { pattern: 'done', bee: 'started' })).toEqual([
-      'guess',
-      'hive',
-    ]);
+  // What was asked for: somebody who has played nothing still sees every
+  // board with anybody on it, not the single busiest.
+  it('shows every board with anybody on it, played or not', () => {
+    const b = boards(['guess', 'weave']);
+    expect(boardsToShow(b, ['pattern', 'weave'], none)).toEqual(['guess', 'weave']);
   });
 
-  it('an untouched game shows nothing of its own', () => {
-    expect(boardsToShow(boards(['guess']), ['pattern'], { pattern: 'none' })).toEqual(['guess']); // fallback: busiest
+  it('your games first, then the rest busiest first', () => {
+    const b = boards(['guess', 'hive', 'weave']);
+    b.guess = [row, row, row];
+    b.hive = [row, row];
+    expect(boardsToShow(b, ['pattern', 'bee', 'weave'], { weave: 'started' })).toEqual(['weave', 'guess', 'hive']);
   });
 
-  it('nothing played falls back to the single busiest board', () => {
-    const b = boards(['guess', 'hive']);
-    b.hive = [row, row]; // busier
-    expect(boardsToShow(b, ['pattern', 'bee'], none)).toEqual(['hive']);
+  it('equally busy boards keep the games’ own order', () => {
+    expect(boardsToShow(boards(['guess', 'hive']), ['pattern', 'bee'], none)).toEqual(['guess', 'hive']);
   });
 
-  it('a played game whose board is empty is not shown empty', () => {
+  it('an empty board is not shown, played or not', () => {
     const b = boards(['guess']);
-    expect(boardsToShow(b, ['bee'], { bee: 'done' })).toEqual(['guess']); // hive board empty -> fallback
+    expect(boardsToShow(b, ['pattern', 'bee'], { bee: 'done' })).toEqual(['guess']);
+  });
+
+  it('nor a board for a game the site is not showing', () => {
+    expect(boardsToShow(boards(['guess', 'hive']), ['pattern'], none)).toEqual(['guess']);
   });
 
   it('squares can put you on both of its boards', () => {

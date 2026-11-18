@@ -61,32 +61,29 @@ const MODE_BOARDS: Record<Mode, BoardGame[]> = {
   cryptogram: ['cryptogram'],
 };
 
-/** The boards worth showing: the ones for games you finished today.
+/** Every board with somebody on it today, for the games this site shows, in
+ *  the order the home page's row puts them: the ones for games you have played
+ *  today first, then the rest busiest first.
  *
- *  This used to be a single card picked with find(), which sounds like "the
- *  most interesting board" and behaves like "whichever is first in the object"
- *  — always Guess, since it's listed first and is never empty. So the other
- *  five were unreachable from here no matter what happened on them.
+ *  It used to show only your own games' boards, or the single busiest when you
+ *  had played none -- so two people looking at the same page saw different
+ *  boards, and somebody who had not played saw one board of several. Ray
+ *  asked for all of them, in a row that scrolls sideways (2026-11-17).
  *
- *  Having played is what makes a board mean anything: a column of strangers'
- *  scores is a table, the same column with your morning in it is a result. If
- *  you haven't played yet there's no such reading, so we fall back to the
- *  busiest board as a taste of what's going on.
- *
- *  Played, not finished. Hive and Weave have no finish line we can see from
- *  here — a hive is over when you say it is — so they report "started" for
- *  ever and asking for "done" left them off the page permanently, however well
- *  you'd scored. Their rows were on the board the whole time. */
+ *  Yours first because a board with your morning in it is a result, and a
+ *  column of strangers' scores is a table: the result is what you came for.
+ *  Played, not finished: Hive and Weave have no finish line we can see from
+ *  here, so they report "started" for ever, and asking for "done" left them
+ *  off the page however well you'd scored. */
 export function boardsToShow(boards: Boards, modes: Mode[], status: Record<string, DailyState>): BoardGame[] {
-  const mine = modes
-    .filter((m) => status[m] === 'done' || status[m] === 'started')
-    .flatMap((m) => MODE_BOARDS[m] ?? [])
-    .filter((g) => boards[g]?.length);
-  if (mine.length) return mine;
-  const busiest = (Object.keys(boards) as BoardGame[])
-    .filter((g) => boards[g].length)
-    .sort((a, b) => boards[b].length - boards[a].length)[0];
-  return busiest ? [busiest] : [];
+  const shown = [...new Set(modes.flatMap((m) => MODE_BOARDS[m] ?? []))].filter((g) => boards[g]?.length);
+  const played = new Set(
+    modes.filter((m) => status[m] === 'done' || status[m] === 'started').flatMap((m) => MODE_BOARDS[m] ?? [])
+  );
+  const mine = shown.filter((g) => played.has(g));
+  // a stable sort, so equally busy boards keep the games' own order
+  const rest = shown.filter((g) => !played.has(g)).sort((a, b) => boards[b].length - boards[a].length);
+  return [...mine, ...rest];
 }
 
 export function emptyBoards(): Boards {
