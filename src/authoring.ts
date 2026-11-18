@@ -9,6 +9,7 @@
 //
 // Nothing here decides who may author. `can('games.setup')` decides, in the
 // database, on every call. What the client knows is only which buttons to draw.
+import { compareProblem, type ComparePayload } from '@/compare';
 import { supabase } from '@/supabase';
 
 /** One question, as its author sees it — including the answer, which the play
@@ -106,6 +107,7 @@ export const AUTHORABLE = [
   'number',
   'rank',
   'game',
+  'compare',
 ] as const;
 
 /** What each one is called on screen. A table rather than a chain of ternaries
@@ -118,6 +120,7 @@ export const KIND_LABEL: Record<(typeof AUTHORABLE)[number], string> = {
   number: 'Closest guess',
   rank: 'Ranking',
   game: 'Word game',
+  compare: 'Compare',
 };
 
 /** The word games a session can actually run.
@@ -405,9 +408,12 @@ export function problemWith(args: {
   list?: string;
   /** game only: how many letters to draw, when drawing */
   drawLength?: number;
+  /** compare only: the table being built */
+  compare?: ComparePayload;
 }): string | null {
   if (args.prompt.trim().length === 0) return 'The question needs some words.';
   if (args.kind === 'open') return null;
+  if (args.kind === 'compare') return args.compare ? compareProblem(args.compare) : 'Build the comparison first.';
 
   if (args.kind === 'game') {
     // Drawing from a list instead of typing one. There is no word to check —

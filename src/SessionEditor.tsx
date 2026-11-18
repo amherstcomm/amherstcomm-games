@@ -8,6 +8,8 @@
 // that session's questions. Same file because the list's only job is to get you
 // into the editor, and splitting them would mean two places that have to agree
 // about what a session looks like.
+import CompareEditor from '@/CompareEditor';
+import { asCompare, blankCompare, type ComparePayload } from '@/compare';
 import { useCallback, useEffect, useState } from 'react';
 import { ArrowDown, ArrowUp, Loader2, Plus, Radio, Trash2 } from 'lucide-react';
 import ImportFromSheet from '@/ImportFromSheet';
@@ -85,9 +87,15 @@ function payloadFor(
     cloud: boolean;
     list: string;
     drawLength: number;
+    compare: ComparePayload & { helper?: string };
   }
 ): Record<string, unknown> {
   switch (kind) {
+    case 'compare': {
+      // the helper line travels with the table, and only when there is one
+      const { helper, ...table } = parts.compare;
+      return helper?.trim() ? { ...table, helper: helper.trim() } : table;
+    }
     case 'choice':
       return { options: parts.options, multi: parts.multi };
     case 'survey':
@@ -186,6 +194,11 @@ function ItemForm({
 }) {
   const existing = item?.payload as ChoicePayload | undefined;
   const [kind, setKind] = useState(item?.kind ?? kinds[0] ?? 'choice');
+  // A comparison's table, kept whole while the author switches kinds and back.
+  const [compare, setCompare] = useState<ComparePayload & { helper?: string }>(() =>
+    item?.kind === 'compare'
+      ? { ...asCompare(item.payload), helper: (item.payload as { helper?: string } | undefined)?.helper ?? '' }
+      : { ...blankCompare(), helper: '' });
   const [prompt, setPrompt] = useState(item?.prompt ?? '');
   const [optionText, setOptionText] = useState((existing?.options ?? []).join('\n'));
   const [multi, setMulti] = useState(existing?.multi === true);
@@ -284,11 +297,15 @@ function ItemForm({
     word: gameWord,
     list: drawFrom,
     drawLength,
+    compare,
   });
-  const clock = seconds === '' ? null : secondsOf({ seconds: Number(seconds) });
+  // A comparison has no clock and no points: there is nothing to race to and
+  // nothing right to score.
+  const unscoredTable = kind === 'compare';
+  const clock = unscoredTable || seconds === '' ? null : secondsOf({ seconds: Number(seconds) });
   // Typed something that is not a usable clock — distinct from having left it
   // empty, which is a valid choice and the default.
-  const badClock = seconds !== '' && clock === null;
+  const badClock = !unscoredTable && seconds !== '' && clock === null;
 
   /** The three format fields collapsed back into the one shape the payload
    *  holds, so the preview and the save cannot disagree about it. */
@@ -334,6 +351,8 @@ function ItemForm({
           placeholder="What are you asking the room?"
         />
       </label>
+
+      {kind === 'compare' && <CompareEditor value={compare} onChange={setCompare} />}
 
       {(kind === 'choice' || kind === 'survey' || kind === 'rank') && (
         <>
@@ -700,6 +719,8 @@ function ItemForm({
         </>
       )}
 
+      {!unscoredTable && (
+      <>
       {/* The clock is optional and off by default. A countdown is right for a
           scored round and wrong for "any questions for the board?", and the
           same controls have to run both.
@@ -776,6 +797,8 @@ function ItemForm({
           Take the points off for no answer at all
         </label>
       </fieldset>
+      </>
+      )}
 
       <div className="flex items-center gap-2">
         <button
@@ -799,6 +822,7 @@ function ItemForm({
                   cloud: asCloud,
                   list: drawFrom,
                   drawLength,
+                  compare,
                 }),
                 // Omitted rather than sent as null: item_seconds() reads the key
                 // being absent as "no clock", and a key holding null would be
@@ -1181,7 +1205,7 @@ function SessionEditorFor({ session }: { session: string }) {
         </label>
         <p className="text-xs text-slate-500 mt-1 ml-6">
           {meta.mode === 'open'
-            ? 'Each player sees their own order of every multiple-choice and poll question.'
+            ? 'Each player sees their own order of every multiple-choice, poll and comparison question.'
             : 'The room sees one shuffled order, the same on every phone and on the projector.'}
         </p>
       </div>

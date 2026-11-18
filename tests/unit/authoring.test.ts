@@ -238,6 +238,7 @@ describe('AUTHORABLE', () => {
       'number',
       'rank',
       'game',
+      'compare',
     ]);
   });
 });

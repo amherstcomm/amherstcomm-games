@@ -21,7 +21,15 @@ import type { NumberPayload } from '@/authoring';
 
 export type Bar = { label: string; count: number; correct: boolean | null };
 export type Chart =
-  | { type: 'bars'; total: number; label?: string; bars: Bar[] }
+  | {
+      type: 'bars';
+      total: number;
+      label?: string;
+      bars: Bar[];
+      /** a comparison's reasons: each with the option its writer picked, in an
+       *  order that is neither who nor when, and never a name */
+      comments?: { pick: string; text: string }[];
+    }
   | {
       type: 'numbers';
       total: number;
@@ -213,6 +221,26 @@ function Texts({
   );
 }
 
+function Comments({ comments, big }: { comments: { pick: string; text: string }[]; big?: boolean }) {
+  return (
+    <div className="mt-5">
+      <p className={`uppercase tracking-wider text-slate-500 ${big ? 'text-sm' : 'text-xs'}`}>
+        Why, in their words <span className="normal-case tracking-normal">· shuffled, no names</span>
+      </p>
+      <ul className="mt-2 divide-y divide-white/10">
+        {comments.map((c, i) => (
+          <li key={i} className={`flex gap-3 py-2 ${big ? 'text-2xl' : 'text-sm'}`}>
+            <span className={`shrink-0 w-28 font-semibold uppercase tracking-wide text-accent ${big ? 'text-base' : 'text-xs'} pt-0.5`}>
+              {c.pick}
+            </span>
+            <span className="text-slate-200 min-w-0 break-words">“{c.text}”</span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 export default function ChartFor({
   chart,
   big,
@@ -228,7 +256,12 @@ export default function ChartFor({
   }
   switch (chart.type) {
     case 'bars':
-      return <Bars chart={chart} big={big} />;
+      return (
+        <>
+          <Bars chart={chart} big={big} />
+          {(chart.comments?.length ?? 0) > 0 && <Comments comments={chart.comments!} big={big} />}
+        </>
+      );
     case 'numbers':
       return <Numbers chart={chart} big={big} />;
     case 'texts':

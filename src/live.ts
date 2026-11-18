@@ -53,6 +53,10 @@ export type LiveItem = {
   done?: number;
   /** open mode: they have asked to stop after the question they are on */
   paused?: boolean;
+  /** open mode, a comparison gone back to: where it sits ("Question 2 of 6"),
+   *  which `done` cannot say for a question somebody has returned to */
+  number?: number;
+  revisit?: boolean;
   /** whether *this viewer* is the one running the session.
    *
    *  Not the same question as "is this the presenter's address", which is what
@@ -383,6 +387,23 @@ export async function readCurrentItem(session: string): Promise<LiveItem> {
   const { data, error } = await supabase.rpc('current_item', { p_session: session });
   if (error || !data) return { state: 'not-live' };
   return data as LiveItem;
+}
+
+/** The comparisons this person has answered in a session played on their own
+ *  time and may still change, in order -- what Back and Next move between. */
+export async function readCompareTrail(session: string): Promise<{ id: string; position: number }[]> {
+  if (!supabase) return [];
+  const { data, error } = await supabase.rpc('compare_trail', { p_session: session });
+  if (error || !Array.isArray(data)) return [];
+  return data as { id: string; position: number }[];
+}
+
+/** One of those, back in front of them with what they answered. */
+export async function revisitItem(item: string): Promise<LiveItem & { reason?: string }> {
+  if (!supabase) return { state: 'not-live' };
+  const { data, error } = await supabase.rpc('revisit_item', { p_item: item });
+  if (error || !data) return { state: 'not-live', reason: error?.message };
+  return data as LiveItem & { reason?: string };
 }
 
 export async function readPresenterView(item: string): Promise<PresenterView> {

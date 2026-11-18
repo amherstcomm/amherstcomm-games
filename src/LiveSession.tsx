@@ -38,6 +38,8 @@ import {
   playGuess,
   readGameState,
   readPresenterView,
+  readCompareTrail,
+  revisitItem,
   readSessionDoor,
   readTally,
   sendAnswer,
@@ -53,6 +55,7 @@ import { tallyLetters, useKeySink } from '@/keySink';
 import { formatGuess, guessAffixes } from '@/guessFormat';
 import type { NumberPayload } from '@/authoring';
 import QrCode from '@/QrCode';
+import CompareQuestion from '@/CompareQuestion';
 import AskPanel from '@/AskPanel';
 import MobileKeyInput from '@/MobileKeyInput';
 import { readSessionGiveaway } from '@/giveaways';
@@ -891,6 +894,13 @@ export default function LiveSession({ session, host }: { session: string; host: 
    *  at how they did, waiting to move on. Declared here rather than beside the
    *  other derived values because the poll below reads it. */
   const holding = !host && (justAnswered !== null || gameOver || outOfTime);
+  /** Open mode: a comparison gone back to with Back. The poll leaves it alone
+   *  while it is on screen -- current_item would hand them the next question
+   *  instead -- and Next decides where they go from it. */
+  const [revisiting, setRevisiting] = useState(false);
+  /** Open mode: the comparisons they have answered and may still change, for
+   *  Back and Next. */
+  const [trail, setTrail] = useState<{ id: string; position: number }[]>([]);
   /** Open mode: "pause after this question" is set. The server holds it -- it
    *  comes back on every question -- and this mirrors it so the switch can
    *  change before the next read does. */
@@ -1016,10 +1026,47 @@ export default function LiveSession({ session, host }: { session: string; host: 
     // question and starts its clock while they are still reading the last
     // one's answer. On a timed question that is seconds off the clock for
     // something they have not been shown yet.
-    if (holding) return;
+    if (holding || revisiting) return;
     const id = window.setInterval(() => void pull(), LIVE_POLL_MS);
     return () => window.clearInterval(id);
-  }, [pull, holding]);
+  }, [pull, holding, revisiting]);
+
+  // What Back can reach, read when a comparison comes up on your own time.
+  useEffect(() => {
+    if (host || item.mode !== 'open' || item.kind !== 'compare' || !item.id) return;
+    let alive = true;
+    void readCompareTrail(session).then((t) => alive && setTrail(t));
+    return () => {
+      alive = false;
+    };
+  }, [host, item.mode, item.kind, item.id, session]);
+
+  /** Back to the comparison before this one, or on to the one after it when
+   *  this was a step back -- and on to whatever is next when it was not. */
+  async function stepCompare(direction: 1 | -1) {
+    const t = await readCompareTrail(session);
+    setTrail(t);
+    const here = item.position ?? 0;
+    const target = direction < 0
+      ? [...t].reverse().find((x) => x.position < here)
+      : t.find((x) => x.position > here);
+    if (!target) {
+      setRevisiting(false);
+      void pull();
+      return;
+    }
+    const r = await revisitItem(target.id);
+    if (r.state !== 'open') {
+      setNote(r.reason ?? 'That one is closed now.');
+      setRevisiting(false);
+      void pull();
+      return;
+    }
+    itemId.current = r.id;
+    setNote('');
+    setItem(r);
+    setRevisiting(true);
+  }
 
 
   // Four times a second while a clock is running, and not at all otherwise. Not
@@ -1082,6 +1129,13 @@ export default function LiveSession({ session, host }: { session: string; host: 
     // Open mode hands the answer back with the acknowledgement, because nobody
     // is going to reveal it. Held here rather than re-read, so the marked
     // question stays on screen until they choose to move on.
+    // A comparison has nothing to mark, and stays changeable: on your own time
+    // it moves straight on -- to the next one gone back past, or the next
+    // question -- rather than holding a marked answer on screen.
+    if (res.ok && item.mode === 'open' && item.kind === 'compare') {
+      void stepCompare(1);
+      return;
+    }
     if (res.ok && item.mode === 'open') {
       setJustAnswered({ ...item, state: 'revealed', mine: value, answer: res.answer });
       // answered, so who else picked what may now be shown
@@ -1325,7 +1379,7 @@ export default function LiveSession({ session, host }: { session: string; host: 
             ? `All ${item.total} answered`
             : shown.state === 'paused'
               ? `Paused before question ${(item.done ?? 0) + 1} of ${item.total}`
-              : `Question ${(item.done ?? 0) + 1} of ${item.total}`}
+              : `Question ${item.number ?? (item.done ?? 0) + 1} of ${item.total}`}
         </p>
       )}
 
@@ -1500,6 +1554,21 @@ export default function LiveSession({ session, host }: { session: string; host: 
           {kind === 'match' && (
             <Match item={shown} onSend={(v) => void send(v)} sending={sending} readOnly={inert} />
           )}
+          {kind === 'compare' && (
+            <CompareQuestion
+              item={shown}
+              mode={item.mode === 'open' ? 'open' : 'live'}
+              onSend={(v) => void send(v)}
+              sending={sending}
+              readOnly={inert}
+              onBack={trail.some((x) => x.position < (shown.position ?? 0)) ? () => void stepCompare(-1) : undefined}
+              nextLabel={
+                trail.some((x) => x.position > (shown.position ?? 0))
+                  ? 'Next question'
+                  : (item.done ?? 0) + 1 >= (item.total ?? 0) ? 'Finish' : 'Next question'
+              }
+            />
+          )}
           {kind === 'number' && (
             <Guess item={shown} onSend={(v) => void send(v)} sending={sending} readOnly={inert} />
           )}
@@ -1521,7 +1590,7 @@ export default function LiveSession({ session, host }: { session: string; host: 
           {/* A kind the server knows about and this build does not. Says so
               rather than rendering an empty box: item_kinds is a table so a
               kind can be added ahead of the component that draws it. */}
-          {!['choice', 'survey', 'open', 'match', 'number', 'rank', 'game'].includes(kind) && (
+          {!['choice', 'survey', 'open', 'match', 'number', 'rank', 'game', 'compare'].includes(kind) && (
             <p className="text-sm text-slate-400">
               This kind of question ({kind}) is not supported by this version of the site
               yet.
