@@ -32329,3 +32329,458 @@ as $fn$
 $fn$;
 revoke all on function public.item_tally(uuid) from public, anon;
 grant execute on function public.item_tally(uuid) to authenticated;
+
+-- ---------------------------------------------------------------------------
+-- Split results (November 2026)
+-- ---------------------------------------------------------------------------
+--
+-- "Of the people who said yes to question 1, 14 said yes to question 2 and 3
+-- said no." The host and site admins only; shared results stay plain totals
+-- (Ray, 2026-11-18).
+--
+-- Answers are linked by person: in an ordinary session by the user, in a fully
+-- anonymous one by `respondent`, a hash of the browser's key that is never
+-- stored -- the same answers belong together and still to nobody. Answers
+-- given before this existed have no respondent and are left out of splits.
+--
+-- Small groups (Ray, 2026-11-18, on surveys of about 20): each survey says
+-- whether a group too small is held back, and how small is too small.
+-- Ordinary surveys show every group unless the author says otherwise -- the
+-- host and admins could always see who answered what there. Fully anonymous
+-- ones hold back groups under the survey's minimum unless the author sets a
+-- size, and once anybody has answered that can only get stricter: they
+-- answered under what the banner said. When exactly one group is held back,
+-- the next smallest is too, or the small one could be worked out by
+-- subtracting from the totals.
+
+alter table public.sessions add column if not exists split_hide boolean;
+alter table public.sessions add column if not exists split_min int;
+do $$ begin
+  alter table public.sessions add constraint sessions_split_min_range
+    check (split_min is null or split_min between 1 and 1000);
+exception when duplicate_object then null; end $$;
+
+-- The smallest group a split breaks down, all things considered: 0 when
+-- nothing is held back.
+create or replace function public.split_floor(p_session uuid)
+returns int
+language sql
+stable
+security definer
+set search_path = ''
+as $fn$
+  select case when coalesce(s.split_hide, s.privacy = 'full')
+              then coalesce(s.split_min, case when s.privacy = 'full' then greatest(5, s.min_results) else 5 end)
+              else 0 end
+  from public.sessions s where s.id = p_session
+$fn$;
+revoke all on function public.split_floor(uuid) from public, anon, authenticated;
+
+create or replace function public.set_split_groups(p_session uuid, p_hide boolean default null, p_min int default null)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $fn$
+declare
+  sess public.sessions;
+  was int;
+  now_floor int;
+begin
+  select * into sess from public.sessions where id = p_session;
+  if sess.id is null or not public.hosts_session(sess.id) then
+    return jsonb_build_object('ok', false, 'reason', 'not allowed');
+  end if;
+  if p_min is not null and (p_min < 1 or p_min > 1000) then
+    return jsonb_build_object('ok', false, 'reason', 'a group size from 1 to 1000');
+  end if;
+  was := public.split_floor(sess.id);
+  update public.sessions
+     set split_hide = coalesce(p_hide, split_hide),
+         split_min = coalesce(p_min, split_min)
+   where id = sess.id;
+  now_floor := public.split_floor(sess.id);
+  -- A fully anonymous survey promised a size on its banner; once anybody has
+  -- answered under it, it can only get stricter.
+  if sess.privacy = 'full' and public.session_answered(sess.id) > 0
+     and (now_floor = 0 or now_floor < was) and was > 0 then
+    update public.sessions set split_hide = sess.split_hide, split_min = sess.split_min where id = sess.id;
+    return jsonb_build_object('ok', false, 'reason',
+      'people have answered this survey under a promise that groups under ' || was
+      || ' are held back: that can go up, not down');
+  end if;
+  return jsonb_build_object('ok', true, 'floor', now_floor);
+end;
+$fn$;
+revoke all on function public.set_split_groups(uuid, boolean, int) from public, anon;
+grant execute on function public.set_split_groups(uuid, boolean, int) to authenticated;
+
+alter table public.survey_answers add column if not exists respondent text;
+
+create or replace function public.anon_respondent(p_session uuid, p_key text)
+returns text
+language sql
+immutable
+set search_path = ''
+as $fn$
+  select encode(sha256(convert_to('respondent:' || p_session::text || ':' || p_key, 'UTF8')), 'hex')
+$fn$;
+revoke all on function public.anon_respondent(uuid, text) from public, anon, authenticated;
+
+create or replace function public.answer_anonymously(p_item uuid, p_value jsonb, p_key text)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $fn$
+declare
+  it public.items;
+  sess public.sessions;
+  me uuid := (select auth.uid());
+  checked jsonb;
+  bound boolean;
+begin
+  perform public.apply_schedule((select i.session_id from public.items i where i.id = p_item));
+  select * into it from public.items where id = p_item;
+  if it.id is null then
+    return jsonb_build_object('ok', false, 'reason', 'no such item');
+  end if;
+  select * into sess from public.sessions where id = it.session_id;
+  if sess.privacy <> 'full' then
+    return jsonb_build_object('ok', false, 'reason', 'this survey is not fully anonymous');
+  end if;
+  if me is null then
+    return jsonb_build_object('ok', false, 'reason', 'not signed in');
+  end if;
+  if sess.state <> 'live' then
+    return jsonb_build_object('ok', false, 'reason', 'this session is not running');
+  end if;
+  if not public.session_open_to_me(sess.id) then
+    return jsonb_build_object('ok', false, 'reason', 'not allowed');
+  end if;
+  if public.runs_session(sess.id) then
+    return jsonb_build_object('ok', false, 'reason', 'you are running this one');
+  end if;
+  if it.state <> 'open' then
+    return jsonb_build_object('ok', false, 'reason', 'answers are closed for this one');
+  end if;
+  if it.kind = 'game' then
+    return jsonb_build_object('ok', false, 'reason', 'a word game cannot be answered anonymously');
+  end if;
+  if sess.mode = 'live' and sess.current_item is distinct from p_item then
+    return jsonb_build_object('ok', false, 'reason', 'that is not the question on screen');
+  end if;
+  if coalesce(p_key, '') !~ '^[0-9a-f]{64}$' then
+    return jsonb_build_object('ok', false, 'reason', 'this browser has no key to file the answer under');
+  end if;
+  bound := exists (select 1 from public.survey_participation sp
+                   where sp.session_id = sess.id and sp.user_id = me);
+  if bound and not public.anon_key_ok(sess.id, p_key) then
+    return jsonb_build_object('ok', false, 'key_lost', true, 'reason',
+      'your answers were saved from another browser, or one that has since forgotten its key: they still count, and this one cannot change them');
+  end if;
+
+  if it.kind = 'nps' then
+    checked := public.nps_value(it, p_value);
+    if not (checked ->> 'ok')::boolean then
+      return checked;
+    end if;
+    p_value := checked -> 'value';
+  end if;
+
+  if it.kind = 'compare' then
+    checked := public.compare_value(it, p_value);
+    if not (checked ->> 'ok')::boolean then
+      return checked;
+    end if;
+    p_value := checked -> 'value';
+  elsif sess.mode = 'open'
+        and exists (select 1 from public.survey_answers a
+                    where a.item_id = p_item and a.answer_key = public.anon_answer_key(p_item, p_key)) then
+    -- every other kind is answered once on your own time, as it is elsewhere
+    return jsonb_build_object('ok', false, 'reason', 'you have answered that one');
+  end if;
+
+  if not bound then
+    insert into public.survey_participation (session_id, user_id, key_check)
+    values (sess.id, me, public.anon_key_check(sess.id, p_key))
+    on conflict (session_id, user_id) do nothing;
+    -- two tabs answering for the first time at once, with different keys
+    if not public.anon_key_ok(sess.id, p_key) then
+      return jsonb_build_object('ok', false, 'key_lost', true, 'reason',
+        'another tab answered first with a different key; reload this one');
+    end if;
+  end if;
+
+  -- `respondent` links this answer to the same person's others in this
+  -- survey, and to nothing else: a third hash of the key, which is never
+  -- stored, so it leads back to no name. It is what lets the host split the
+  -- results by an answer.
+  insert into public.survey_answers (item_id, answer_key, value, respondent)
+  values (p_item, public.anon_answer_key(p_item, p_key), p_value,
+          public.anon_respondent(sess.id, p_key))
+  on conflict (item_id, answer_key) do update
+    set value = excluded.value, respondent = excluded.respondent;
+
+  return jsonb_build_object('ok', true, 'answer', null);
+end;
+$fn$;
+revoke all on function public.answer_anonymously(uuid, jsonb, text) from public, anon;
+grant execute on function public.answer_anonymously(uuid, jsonb, text) to authenticated;
+
+-- One item's answers with who gave them: a user id, or a respondent token.
+-- Never returned to a browser; session_split reads it and gives back counts.
+create or replace function public.split_answers(p_item uuid)
+returns table (who text, value jsonb)
+language sql
+stable
+security definer
+set search_path = ''
+as $fn$
+  select a.respondent, a.value
+  from public.survey_answers a
+  join public.items i on i.id = a.item_id
+  join public.sessions s on s.id = i.session_id
+  where a.item_id = p_item and s.privacy = 'full' and a.respondent is not null
+  union all
+  select r.user_id::text, r.value
+  from public.responses r
+  join public.items i on i.id = r.item_id
+  join public.sessions s on s.id = i.session_id
+  where r.item_id = p_item and s.privacy <> 'full'
+$fn$;
+revoke all on function public.split_answers(uuid) from public, anon, authenticated;
+
+-- Every answer an item can be split into or broken down by, in order:
+-- a choice's options, a comparison's options (and "No preference" where it
+-- was offered), an eNPS's three groups.
+create or replace function public.split_options(p_item uuid)
+returns table (label text, ord int)
+language sql
+stable
+set search_path = ''
+as $fn$
+  with it as (select i.kind, i.payload from public.items i where i.id = p_item)
+  select t.label, t.ord::int
+  from it, jsonb_array_elements_text(
+         case when it.kind in ('choice', 'survey') then it.payload -> 'options' else '[]'::jsonb end
+       ) with ordinality as t(label, ord)
+  union all
+  select t.opt ->> 'name', t.ord::int
+  from it, jsonb_array_elements(
+         case when it.kind = 'compare' then it.payload -> 'options' else '[]'::jsonb end
+       ) with ordinality as t(opt, ord)
+  union all
+  select 'No preference', 1000
+  from it where it.kind = 'compare' and coalesce((it.payload ->> 'allowNoPreference')::boolean, false)
+  union all
+  select g.label, g.ord
+  from it, (values ('Promoters (9-10)', 1), ('Passives (7-8)', 2), ('Detractors (0-6)', 3)) as g(label, ord)
+  where it.kind = 'nps'
+$fn$;
+revoke all on function public.split_options(uuid) from public, anon, authenticated;
+
+-- Which of those each person's answer falls under. A multiple-answer choice
+-- puts one person under several.
+create or replace function public.split_labels(p_item uuid)
+returns table (who text, label text, ord int)
+language sql
+stable
+security definer
+set search_path = ''
+as $fn$
+  with it as (select i.kind, i.payload from public.items i where i.id = p_item),
+  opts as (select * from public.split_options(p_item))
+  select a.who, o.label, o.ord
+  from public.split_answers(p_item) a, it, opts o
+  where it.kind in ('choice', 'survey')
+    and (a.value = to_jsonb(o.label) or a.value @> to_jsonb(o.label))
+  union all
+  select a.who, o.label, o.ord
+  from public.split_answers(p_item) a, it, opts o
+  where it.kind = 'compare'
+    and case when a.value ->> 'pick' = 'none' then o.label = 'No preference' and o.ord = 1000
+             else o.ord < 1000 and exists (
+               select 1 from jsonb_array_elements(it.payload -> 'options') x
+               where x ->> 'id' = a.value ->> 'pick' and x ->> 'name' = o.label) end
+  union all
+  select a.who, o.label, o.ord
+  from public.split_answers(p_item) a, it, opts o
+  where it.kind = 'nps'
+    and a.value ->> 'score' ~ '^[0-9]{1,2}$'
+    and o.ord = case when (a.value ->> 'score')::int >= 9 then 1
+                     when (a.value ->> 'score')::int >= 7 then 2 else 3 end
+$fn$;
+revoke all on function public.split_labels(uuid) from public, anon, authenticated;
+
+-- With no question named, the questions the results can be split by. With
+-- one, a group per answer to it and, for each group big enough, how that
+-- group answered every other question that can be counted this way.
+create or replace function public.session_split(p_session uuid, p_by uuid default null)
+returns jsonb
+language plpgsql
+stable
+security definer
+set search_path = ''
+as $fn$
+declare
+  sess public.sessions;
+  by_item public.items;
+  floor_n int;
+  result jsonb;
+begin
+  select * into sess from public.sessions where id = p_session;
+  if sess.id is null then
+    return jsonb_build_object('ok', false, 'reason', 'no such session');
+  end if;
+  if (select auth.uid()) is null
+     or not (public.hosts_session(sess.id) or public.can('users.manage')) then
+    return jsonb_build_object('ok', false, 'reason', 'only the host and site admins split the results');
+  end if;
+
+  if p_by is null then
+    return jsonb_build_object('ok', true, 'questions', coalesce((
+      select jsonb_agg(jsonb_build_object('id', i.id, 'position', i.position,
+                                          'prompt', i.prompt, 'kind', i.kind) order by i.position)
+      from public.items i
+      where i.session_id = sess.id and i.kind in ('choice', 'survey', 'compare', 'nps')), '[]'::jsonb));
+  end if;
+
+  select * into by_item from public.items where id = p_by and session_id = sess.id;
+  if by_item.id is null or by_item.kind not in ('choice', 'survey', 'compare', 'nps') then
+    return jsonb_build_object('ok', false, 'reason', 'the results cannot be split by that question');
+  end if;
+  if not public.results_open(sess.id) then
+    return jsonb_build_object('ok', false, 'reason', 'waiting',
+                              'answered', public.session_answered(sess.id),
+                              'needed', sess.min_results);
+  end if;
+
+  floor_n := public.split_floor(sess.id);
+
+  with labels as (
+    select * from public.split_labels(p_by)
+  ), grp as (
+    select o.label, o.ord,
+           (select count(distinct l.who) from labels l where l.label = o.label and l.ord = o.ord) as n
+    from public.split_options(p_by) o
+  ), small as (
+    select g.label, g.ord from grp g where g.n > 0 and g.n < floor_n
+  ), extra as (
+    select g.label, g.ord from grp g
+    where (select count(*) from small) = 1 and g.n >= floor_n
+    order by g.n, g.ord
+    limit 1
+  ), marked as (
+    select g.*,
+           case when (g.label, g.ord) in (select label, ord from small) then 'small'
+                when (g.label, g.ord) in (select label, ord from extra) then 'subtraction' end as hidden
+    from grp g
+  )
+  select jsonb_build_object(
+    'ok', true,
+    'privacy', sess.privacy,
+    'min', floor_n,
+    'by', jsonb_build_object('id', by_item.id, 'position', by_item.position,
+                             'prompt', by_item.prompt, 'kind', by_item.kind),
+    'unlinked', case when sess.privacy = 'full' then (
+                  select count(*) from public.survey_answers a
+                  where a.item_id = p_by and a.respondent is null) else 0 end,
+    'groups', coalesce(jsonb_agg(jsonb_build_object(
+      'label', m.label,
+      'n', m.n,
+      'hidden', m.hidden,
+      'questions', case when m.hidden is null and m.n > 0 then (
+        select coalesce(jsonb_agg(jsonb_build_object(
+                 'id', t.id, 'position', t.position, 'prompt', t.prompt, 'kind', t.kind,
+                 'answered', (select count(distinct tl.who) from public.split_labels(t.id) tl
+                              where tl.who in (select l.who from labels l
+                                               where l.label = m.label and l.ord = m.ord)),
+                 'cells', (select coalesce(jsonb_agg(jsonb_build_object(
+                                    'label', c.label,
+                                    'count', (select count(distinct tl.who) from public.split_labels(t.id) tl
+                                              where tl.label = c.label and tl.ord = c.ord
+                                                and tl.who in (select l.who from labels l
+                                                               where l.label = m.label and l.ord = m.ord)))
+                                  order by c.ord), '[]'::jsonb)
+                           from public.split_options(t.id) c))
+               order by t.position), '[]'::jsonb)
+        from public.items t
+        where t.session_id = sess.id and t.id <> p_by and t.kind in ('choice', 'survey', 'compare', 'nps')) end)
+      order by m.ord), '[]'::jsonb))
+  into result
+  from marked m;
+
+  return result;
+end;
+$fn$;
+revoke all on function public.session_split(uuid, uuid) from public, anon;
+grant execute on function public.session_split(uuid, uuid) to authenticated;
+
+-- The survey's split setting, where the author sets it and where the people
+-- answering are told it.
+create or replace function public.session_sheet(p_session uuid)
+returns jsonb
+language sql
+stable
+security definer
+set search_path = ''
+as $fn$
+  select case
+    when not public.hosts_session(p_session)
+      then jsonb_build_object('ok', false, 'reason', 'not allowed')
+    else jsonb_build_object(
+      'ok', true,
+      'session', (select jsonb_build_object(
+         'id', s.id, 'title', s.title, 'state', public.scheduled_state(s),
+         'late_join', s.late_join, 'current_item', s.current_item,
+         'code', s.code, 'mode', s.mode, 'qa', s.qa,
+         'shared', s.share_results, 'opens_at', s.opens_at, 'closes_at', s.closes_at,
+         'shuffle', s.shuffle_options, 'avatars', s.avatars,
+         'privacy', s.privacy, 'min_results', s.min_results, 'show_comments', s.show_comments,
+         'points', s.points,
+         -- whether a split holds back small groups, and from what size: 0 is none
+         'split_hide', coalesce(s.split_hide, s.privacy = 'full'),
+         'split_min', coalesce(s.split_min, case when s.privacy = 'full' then greatest(5, s.min_results) else 5 end),
+         'split_floor', public.split_floor(s.id),
+         -- answered at all, by anybody: the moment privacy stops being a choice
+         'answered', public.session_answered(s.id),
+         'attached', exists (select 1 from public.giveaway_sessions g where g.session_id = s.id)
+                  or exists (select 1 from public.tournament_round_sessions t where t.session_id = s.id))
+       from public.sessions s where s.id = p_session),
+      'kinds', (select jsonb_agg(jsonb_build_object(
+                  'kind', k.kind, 'description', k.description, 'scored', k.scored)
+                order by k.kind)
+                from public.item_kinds k),
+      'items', coalesce(
+        (select jsonb_agg(jsonb_build_object(
+           'id', i.id, 'position', i.position, 'kind', i.kind, 'prompt', i.prompt,
+           'payload', i.payload, 'state', i.state,
+           'points', trim_scale(i.points),
+           'penalty_wrong', i.penalty_wrong,
+           'penalty_skip', i.penalty_skip,
+           'scoring', i.scoring,
+           'keeps_score', public.item_scores(i.id),
+           'answer', (select a.answer from public.item_answers a where a.item_id = i.id),
+           'responses', (select count(*) from public.answers_for(i.id) r)
+         ) order by i.position)
+         from public.items i where i.session_id = p_session),
+        '[]'::jsonb))
+  end
+$fn$;
+revoke all on function public.session_sheet(uuid) from public, anon;
+grant execute on function public.session_sheet(uuid) to authenticated;
+
+create or replace function public.anon_current_item(p_session uuid, p_key text)
+returns jsonb
+language sql
+security definer
+set search_path = ''
+as $fn$
+  select public.anon_current_item_base(p_session, p_key)
+         || (select jsonb_build_object('min_results', s.min_results, 'show_comments', s.show_comments,
+                                    -- what the banner says about split results
+                                    'split_floor', public.split_floor(s.id))
+             from public.sessions s where s.id = p_session)
+$fn$;
+revoke all on function public.anon_current_item(uuid, text) from public, anon, authenticated;

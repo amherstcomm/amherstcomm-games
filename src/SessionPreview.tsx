@@ -95,7 +95,8 @@ export default function SessionPreview({ session }: { session: string }) {
       </div>
 
       {full && (
-        <AnonymityBanner minResults={meta.min_results ?? 5} showComments={meta.show_comments !== false} />
+        <AnonymityBanner minResults={meta.min_results ?? 5} showComments={meta.show_comments !== false}
+                         splitFloor={meta.split_floor ?? meta.min_results ?? 5} />
       )}
 
       {!items.length ? (

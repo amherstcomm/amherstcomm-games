@@ -938,12 +938,13 @@ export default function LiveSession({ session, host }: { session: string; host: 
   const [trail, setTrail] = useState<{ id: string; position: number }[]>([]);
   /** A fully anonymous survey's own numbers for its banner, kept from the last
    *  question that carried them -- one gone back to does not. */
-  const [anonInfo, setAnonInfo] = useState<{ min: number; comments: boolean } | null>(null);
+  const [anonInfo, setAnonInfo] = useState<{ min: number; comments: boolean; split: number } | null>(null);
   useEffect(() => {
     if (item.privacy === 'full' && item.min_results != null) {
-      setAnonInfo({ min: item.min_results, comments: item.show_comments !== false });
+      setAnonInfo({ min: item.min_results, comments: item.show_comments !== false,
+                    split: item.split_floor ?? item.min_results });
     }
-  }, [item.privacy, item.min_results, item.show_comments]);
+  }, [item.privacy, item.min_results, item.show_comments, item.split_floor]);
   /** Open mode: "pause after this question" is set. The server holds it -- it
    *  comes back on every question -- and this mirrors it so the switch can
    *  change before the next read does. */
@@ -1423,7 +1424,8 @@ export default function LiveSession({ session, host }: { session: string; host: 
           screen: the promise, where it is being relied on. */}
       {item.privacy === 'full' && (
         <AnonymityBanner minResults={anonInfo?.min ?? item.min_results ?? 5}
-                         showComments={anonInfo?.comments ?? item.show_comments !== false} />
+                         showComments={anonInfo?.comments ?? item.show_comments !== false}
+                         splitFloor={anonInfo?.split ?? item.split_floor ?? item.min_results ?? 5} />
       )}
 
       {/* Where they are in it. Their own progress, which nobody else's affects

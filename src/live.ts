@@ -69,6 +69,9 @@ export type LiveItem = {
    *  its results wait for, and whether reasons are shown at all */
   min_results?: number;
   show_comments?: boolean;
+  /** the smallest group the host can see broken down when splitting the
+   *  results; 0 is every group, however small */
+  split_floor?: number;
   /** whether *this viewer* is the one running the session.
    *
    *  Not the same question as "is this the presenter's address", which is what
@@ -376,9 +379,25 @@ export async function setSessionPoints(session: string, points: 'on' | 'off'): P
  *  whether the reasons people give are shown. Null leaves one alone. */
 export async function setSessionPrivacy(
   session: string,
-  change: { privacy?: 'room' | 'full'; minResults?: number; showComments?: boolean }
+  change: {
+    privacy?: 'room' | 'full';
+    minResults?: number;
+    showComments?: boolean;
+    /** split results: hold back small groups, and from what size */
+    splitHide?: boolean;
+    splitMin?: number;
+  }
 ): Promise<{ ok: boolean; reason?: string }> {
   if (!supabase) return { ok: false, reason: 'not connected' };
+  if (change.splitHide !== undefined || change.splitMin !== undefined) {
+    const { data, error } = await supabase.rpc('set_split_groups', {
+      p_session: session,
+      p_hide: change.splitHide ?? null,
+      p_min: change.splitMin ?? null,
+    });
+    if (error) return { ok: false, reason: error.message };
+    return (data as { ok: boolean; reason?: string }) ?? { ok: false, reason: 'no answer' };
+  }
   const { data, error } = await supabase.rpc('set_session_privacy', {
     p_session: session,
     p_privacy: change.privacy ?? null,
