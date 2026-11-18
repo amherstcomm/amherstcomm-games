@@ -36,8 +36,10 @@ export default function SurveyPrivacy({ meta, busy, onSet }: {
   const [minText, setMinText] = useState(String(min));
   const [note, setNote] = useState('');
   const full = privacy === 'full';
-  const splitHide = meta.split_hide ?? full;
-  const splitMin = meta.split_min ?? (full ? Math.max(5, min) : 5);
+  // Groups of one or two are always held back in a fully anonymous survey
+  // (Ray, 2026-11-18); 3 is where the size starts everywhere.
+  const splitHide = full || (meta.split_hide ?? false);
+  const splitMin = Math.max(full ? 3 : 1, meta.split_min ?? 3);
   const [splitText, setSplitText] = useState(String(splitMin));
   const [splitNote, setSplitNote] = useState('');
   useEffect(() => setSplitText(String(splitMin)), [splitMin]);
@@ -46,8 +48,8 @@ export default function SurveyPrivacy({ meta, busy, onSet }: {
   const splitLocked = full && answered;
 
   function toggleSplit(on: boolean) {
-    if (!on && splitLocked) {
-      return setSplitNote(`People have answered under a promise that groups under ${splitMin} are held back, so this stays on.`);
+    if (!on && full) {
+      return setSplitNote('A fully anonymous survey always holds back groups of one or two, so this stays on.');
     }
     setSplitNote('');
     onSet({ splitHide: on });
@@ -55,6 +57,7 @@ export default function SurveyPrivacy({ meta, busy, onSet }: {
   function saveSplit() {
     const n = Number(splitText);
     if (!Number.isInteger(n) || n < 1 || n > 1000) return setSplitNote('A number of people from 1 to 1000.');
+    if (full && n < 3) return setSplitNote('At least 3 in a fully anonymous survey, so nobody’s answers stand alone.');
     if (splitLocked && n < splitMin) return setSplitNote(`People have answered, so it can go up from ${splitMin} but not down.`);
     setSplitNote('');
     onSet({ splitMin: n });
@@ -153,9 +156,7 @@ export default function SurveyPrivacy({ meta, busy, onSet }: {
                 ? full
                   ? 'A group smaller than this is not broken down, and the banner above every question says so.'
                   : 'A group smaller than this is not broken down.'
-                : full
-                  ? 'Every group is broken down, however small, and the banner above every question says so.'
-                  : 'Every group is broken down, however small. Only you and site admins see splits.'}
+                : 'Every group is broken down, however small. Only you and site admins see splits.'}
             </span>
           </span>
         </label>

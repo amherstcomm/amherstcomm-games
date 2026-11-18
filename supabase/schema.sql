@@ -32784,3 +32784,218 @@ as $fn$
              from public.sessions s where s.id = p_session)
 $fn$;
 revoke all on function public.anon_current_item(uuid, text) from public, anon, authenticated;
+
+-- ---------------------------------------------------------------------------
+-- Split results: small groups, again (Ray, 2026-11-18)
+-- ---------------------------------------------------------------------------
+--
+-- "If there's an anonymous group of 20 people and four of them are in a small
+-- group, it's still very difficult to work out specific answers... if it's
+-- one, sure... always hide groups smaller than 3." So: in a fully anonymous
+-- survey groups of one or two are always held back, the author can raise that
+-- and cannot lower it, and the default is 3 rather than the survey's minimum.
+-- Ordinary surveys are as they were -- every group shown unless the author
+-- holds small ones back, from 3 by default. And the rule that held back the
+-- next smallest group alongside a lone small one is gone: at twenty people it
+-- hid most of what the split is for.
+
+create or replace function public.split_floor(p_session uuid)
+returns int
+language sql
+stable
+security definer
+set search_path = ''
+as $fn$
+  select case when s.privacy = 'full' then greatest(3, coalesce(s.split_min, 3))
+              when coalesce(s.split_hide, false) then coalesce(s.split_min, 3)
+              else 0 end
+  from public.sessions s where s.id = p_session
+$fn$;
+revoke all on function public.split_floor(uuid) from public, anon, authenticated;
+
+create or replace function public.set_split_groups(p_session uuid, p_hide boolean default null, p_min int default null)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $fn$
+declare
+  sess public.sessions;
+  was int;
+  now_floor int;
+begin
+  select * into sess from public.sessions where id = p_session;
+  if sess.id is null or not public.hosts_session(sess.id) then
+    return jsonb_build_object('ok', false, 'reason', 'not allowed');
+  end if;
+  if p_min is not null and (p_min < 1 or p_min > 1000) then
+    return jsonb_build_object('ok', false, 'reason', 'a group size from 1 to 1000');
+  end if;
+  if sess.privacy = 'full' and (p_hide is false or p_min < 3) then
+    return jsonb_build_object('ok', false, 'reason',
+      'a fully anonymous survey always holds back groups of one or two');
+  end if;
+  was := public.split_floor(sess.id);
+  update public.sessions
+     set split_hide = coalesce(p_hide, split_hide),
+         split_min = coalesce(p_min, split_min)
+   where id = sess.id;
+  now_floor := public.split_floor(sess.id);
+  -- A fully anonymous survey promised a size on its banner; once anybody has
+  -- answered under it, it can only get stricter.
+  if sess.privacy = 'full' and public.session_answered(sess.id) > 0 and now_floor < was then
+    update public.sessions set split_hide = sess.split_hide, split_min = sess.split_min where id = sess.id;
+    return jsonb_build_object('ok', false, 'reason',
+      'people have answered this survey under a promise that groups under ' || was
+      || ' are held back: that can go up, not down');
+  end if;
+  return jsonb_build_object('ok', true, 'floor', now_floor);
+end;
+$fn$;
+revoke all on function public.set_split_groups(uuid, boolean, int) from public, anon;
+grant execute on function public.set_split_groups(uuid, boolean, int) to authenticated;
+
+create or replace function public.session_split(p_session uuid, p_by uuid default null)
+returns jsonb
+language plpgsql
+stable
+security definer
+set search_path = ''
+as $fn$
+declare
+  sess public.sessions;
+  by_item public.items;
+  floor_n int;
+  result jsonb;
+begin
+  select * into sess from public.sessions where id = p_session;
+  if sess.id is null then
+    return jsonb_build_object('ok', false, 'reason', 'no such session');
+  end if;
+  if (select auth.uid()) is null
+     or not (public.hosts_session(sess.id) or public.can('users.manage')) then
+    return jsonb_build_object('ok', false, 'reason', 'only the host and site admins split the results');
+  end if;
+
+  if p_by is null then
+    return jsonb_build_object('ok', true, 'questions', coalesce((
+      select jsonb_agg(jsonb_build_object('id', i.id, 'position', i.position,
+                                          'prompt', i.prompt, 'kind', i.kind) order by i.position)
+      from public.items i
+      where i.session_id = sess.id and i.kind in ('choice', 'survey', 'compare', 'nps')), '[]'::jsonb));
+  end if;
+
+  select * into by_item from public.items where id = p_by and session_id = sess.id;
+  if by_item.id is null or by_item.kind not in ('choice', 'survey', 'compare', 'nps') then
+    return jsonb_build_object('ok', false, 'reason', 'the results cannot be split by that question');
+  end if;
+  if not public.results_open(sess.id) then
+    return jsonb_build_object('ok', false, 'reason', 'waiting',
+                              'answered', public.session_answered(sess.id),
+                              'needed', sess.min_results);
+  end if;
+
+  floor_n := public.split_floor(sess.id);
+
+  with labels as (
+    select * from public.split_labels(p_by)
+  ), grp as (
+    select o.label, o.ord,
+           (select count(distinct l.who) from labels l where l.label = o.label and l.ord = o.ord) as n
+    from public.split_options(p_by) o
+  ), marked as (
+    select g.*, case when g.n > 0 and g.n < floor_n then 'small' end as hidden
+    from grp g
+  )
+  select jsonb_build_object(
+    'ok', true,
+    'privacy', sess.privacy,
+    'min', floor_n,
+    'by', jsonb_build_object('id', by_item.id, 'position', by_item.position,
+                             'prompt', by_item.prompt, 'kind', by_item.kind),
+    'unlinked', case when sess.privacy = 'full' then (
+                  select count(*) from public.survey_answers a
+                  where a.item_id = p_by and a.respondent is null) else 0 end,
+    'groups', coalesce(jsonb_agg(jsonb_build_object(
+      'label', m.label,
+      'n', m.n,
+      'hidden', m.hidden,
+      'questions', case when m.hidden is null and m.n > 0 then (
+        select coalesce(jsonb_agg(jsonb_build_object(
+                 'id', t.id, 'position', t.position, 'prompt', t.prompt, 'kind', t.kind,
+                 'answered', (select count(distinct tl.who) from public.split_labels(t.id) tl
+                              where tl.who in (select l.who from labels l
+                                               where l.label = m.label and l.ord = m.ord)),
+                 'cells', (select coalesce(jsonb_agg(jsonb_build_object(
+                                    'label', c.label,
+                                    'count', (select count(distinct tl.who) from public.split_labels(t.id) tl
+                                              where tl.label = c.label and tl.ord = c.ord
+                                                and tl.who in (select l.who from labels l
+                                                               where l.label = m.label and l.ord = m.ord)))
+                                  order by c.ord), '[]'::jsonb)
+                           from public.split_options(t.id) c))
+               order by t.position), '[]'::jsonb)
+        from public.items t
+        where t.session_id = sess.id and t.id <> p_by and t.kind in ('choice', 'survey', 'compare', 'nps')) end)
+      order by m.ord), '[]'::jsonb))
+  into result
+  from marked m;
+
+  return result;
+end;
+$fn$;
+revoke all on function public.session_split(uuid, uuid) from public, anon;
+grant execute on function public.session_split(uuid, uuid) to authenticated;
+
+create or replace function public.session_sheet(p_session uuid)
+returns jsonb
+language sql
+stable
+security definer
+set search_path = ''
+as $fn$
+  select case
+    when not public.hosts_session(p_session)
+      then jsonb_build_object('ok', false, 'reason', 'not allowed')
+    else jsonb_build_object(
+      'ok', true,
+      'session', (select jsonb_build_object(
+         'id', s.id, 'title', s.title, 'state', public.scheduled_state(s),
+         'late_join', s.late_join, 'current_item', s.current_item,
+         'code', s.code, 'mode', s.mode, 'qa', s.qa,
+         'shared', s.share_results, 'opens_at', s.opens_at, 'closes_at', s.closes_at,
+         'shuffle', s.shuffle_options, 'avatars', s.avatars,
+         'privacy', s.privacy, 'min_results', s.min_results, 'show_comments', s.show_comments,
+         'points', s.points,
+         -- whether a split holds back small groups, and from what size: 0 is none
+         'split_hide', s.privacy = 'full' or coalesce(s.split_hide, false),
+         'split_min', case when s.privacy = 'full' then greatest(3, coalesce(s.split_min, 3))
+                           else coalesce(s.split_min, 3) end,
+         'split_floor', public.split_floor(s.id),
+         -- answered at all, by anybody: the moment privacy stops being a choice
+         'answered', public.session_answered(s.id),
+         'attached', exists (select 1 from public.giveaway_sessions g where g.session_id = s.id)
+                  or exists (select 1 from public.tournament_round_sessions t where t.session_id = s.id))
+       from public.sessions s where s.id = p_session),
+      'kinds', (select jsonb_agg(jsonb_build_object(
+                  'kind', k.kind, 'description', k.description, 'scored', k.scored)
+                order by k.kind)
+                from public.item_kinds k),
+      'items', coalesce(
+        (select jsonb_agg(jsonb_build_object(
+           'id', i.id, 'position', i.position, 'kind', i.kind, 'prompt', i.prompt,
+           'payload', i.payload, 'state', i.state,
+           'points', trim_scale(i.points),
+           'penalty_wrong', i.penalty_wrong,
+           'penalty_skip', i.penalty_skip,
+           'scoring', i.scoring,
+           'keeps_score', public.item_scores(i.id),
+           'answer', (select a.answer from public.item_answers a where a.item_id = i.id),
+           'responses', (select count(*) from public.answers_for(i.id) r)
+         ) order by i.position)
+         from public.items i where i.session_id = p_session),
+        '[]'::jsonb))
+  end
+$fn$;
+revoke all on function public.session_sheet(uuid) from public, anon;
+grant execute on function public.session_sheet(uuid) to authenticated;

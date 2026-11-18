@@ -20,7 +20,11 @@ const SPLIT = {
       { ...Q[2], answered: 5, cells: [{ label: 'Promoters (9-10)', count: 2 }, { label: 'Passives (7-8)', count: 1 },
                                      { label: 'Detractors (0-6)', count: 2 }] },
     ] },
-    { label: 'Unsure', n: 6, hidden: 'subtraction', questions: null },
+    { label: 'Unsure', n: 6, hidden: null, questions: [
+      { ...Q[1], answered: 6, cells: [{ label: 'Yes', count: 6 }, { label: 'No', count: 0 }] },
+      { ...Q[2], answered: 0, cells: [{ label: 'Promoters (9-10)', count: 0 }, { label: 'Passives (7-8)', count: 0 },
+                                     { label: 'Detractors (0-6)', count: 0 }] },
+    ] },
     { label: 'No', n: 3, hidden: 'small', questions: null },
   ],
 };
@@ -61,8 +65,8 @@ test('the host splits by an answer: a row per group, a column per answer', async
   await expect(yes.getByRole('cell').nth(0)).toHaveText('770%');
   await expect(yes.getByRole('cell').nth(1)).toHaveText('330%');
   await expect(q2.getByRole('row', { name: /^No/ })).toContainText('Fewer than 5: not shown');
-  await expect(q2.getByRole('row', { name: /^Unsure/ })).toContainText('Held back with the small group');
-  await expect(page.getByText(/the next smallest is held back too/)).toBeVisible();
+  await expect(q2.getByRole('row', { name: /^Unsure/ }).getByRole('cell').nth(0)).toHaveText('6100%');
+  await expect(page.getByText(/the next smallest/)).toHaveCount(0);
 
   // the eNPS table has its score per group: 2 promoters less 2 detractors
   const nps = page.getByRole('table').nth(1);
@@ -137,4 +141,17 @@ test('the author sets the size, and an anonymous survey with answers can only go
   await page.getByRole('button', { name: 'Save' }).click();
   await expect.poll(() => calls.find((c) => c.fn === 'set_split_groups')?.args)
     .toMatchObject({ p_hide: null, p_min: 8 });
+});
+
+test('a fully anonymous survey never shows a group of one or two, even before anyone answers', async ({ page }) => {
+  const calls = await editor(page, editorSheet('full', 0, { split_hide: true, split_min: 3 }));
+  await expect(page.getByRole('checkbox', { name: /Hold back small groups/ })).toBeChecked();
+  const size = page.getByRole('textbox', { name: 'Smallest group shown when splitting results' });
+  await expect(size).toHaveValue('3');
+  await size.fill('2');
+  await page.getByRole('button', { name: 'Save' }).click();
+  await expect(page.getByRole('status').filter({ hasText: 'At least 3 in a fully anonymous survey' })).toBeVisible();
+  await page.getByRole('checkbox', { name: /Hold back small groups/ }).click();
+  await expect(page.getByRole('status').filter({ hasText: 'always holds back groups of one or two' })).toBeVisible();
+  expect(calls.some((c) => c.fn === 'set_split_groups')).toBe(false);
 });

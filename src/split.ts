@@ -9,9 +9,8 @@ export type SplitQuestion = { id: string; position: number; prompt: string; kind
 export type SplitGroup = {
   label: string;
   n: number;
-  /** why it is not broken down: too few people in it, or the one other group
-   *  hidden so a small group cannot be worked out by subtraction */
-  hidden: 'small' | 'subtraction' | null;
+  /** 'small': fewer people in it than the survey's smallest group shown */
+  hidden: 'small' | null;
   questions:
     | (SplitQuestion & { answered: number; cells: { label: string; count: number }[] })[]
     | null;

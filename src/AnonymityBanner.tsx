@@ -12,8 +12,8 @@ import { ChevronDown, Lock } from 'lucide-react';
 export default function AnonymityBanner({ minResults, showComments, splitFloor }: {
   /** how many answers the results wait for */
   minResults: number;
-  /** the smallest group the host sees broken down when splitting the results;
-   *  0 is every group */
+  /** the smallest group the host sees broken down when splitting the
+   *  results: 3 or more in a fully anonymous survey */
   splitFloor: number;
   /** whether the reasons people give are shown in the results at all */
   showComments: boolean;
@@ -51,10 +51,8 @@ export default function AnonymityBanner({ minResults, showComments, splitFloor }
                 <li>Your answers are saved separately, with no name and no time.</li>
                 <li>
                   Your answers in this survey are linked to each other, but not to you, so the person running it
-                  can see how people who gave one answer answered the rest.{' '}
-                  {splitFloor > 1
-                    ? `A group smaller than ${splitFloor} is never broken down.`
-                    : 'Every group can be broken down, however small, so in a small group your answers may stand out.'}
+                  can see how people who gave one answer answered the rest. A group smaller than {splitFloor} is
+                  never broken down.
                 </li>
                 <li>
                   This browser keeps a private key for this survey. It goes with each answer so we can check
