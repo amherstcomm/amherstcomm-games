@@ -33,6 +33,9 @@ export type Chart =
        *  twice its minimum have answered or it has closed */
       comments_held?: boolean;
     }
+  /** an open question only the host and admins read: how many, and whether
+   *  this viewer is one of them */
+  | { type: 'private'; total: number; readable: boolean }
   /** a fully anonymous survey under its minimum: how many, and nothing else */
   | { type: 'hidden'; total: number; answered: number; needed: number }
   | {
@@ -256,6 +259,13 @@ export default function ChartFor({
   /** open questions only. Undefined defers to what the author chose. */
   cloud?: boolean;
 }) {
+  if (chart?.type === 'private') {
+    return (
+      <p className={`text-slate-400 ${big ? 'text-2xl' : 'text-sm'}`}>
+        {chart.total} {chart.total === 1 ? 'answer' : 'answers'}. Only the host and site admins read these.
+      </p>
+    );
+  }
   // Before the total check: a hidden result has answers, and says only how many.
   if (chart?.type === 'hidden') {
     return (

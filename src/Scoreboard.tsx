@@ -8,6 +8,7 @@
 // somebody in a room and the first question is "how" — "she had four and you
 // had three and a half" only settles it if the half can be pointed at. Half a
 // question is now a real score, so this matters more than it did.
+import PrivateAnswers from '@/PrivateAnswers';
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { ArrowLeft, ArrowRight, BarChart3, Loader2, Play, Trophy, X } from 'lucide-react';
 import {
@@ -382,7 +383,11 @@ export default function Scoreboard({ session }: { session: string }) {
                 {q.chart?.total != null && ` · ${q.chart.total} answered`}
               </p>
               <h2 className="text-lg sm:text-xl font-semibold text-white mb-3">{q.prompt}</h2>
-              <ChartFor chart={q.chart} cloud={clouds[q.id]} />
+              {q.chart?.type === 'private' ? (
+                <PrivateAnswers item={q.id} total={q.chart.total} readable={q.chart.readable} />
+              ) : (
+                <ChartFor chart={q.chart} cloud={clouds[q.id]} />
+              )}
               {q.chart?.type === 'texts' && (
                 <button
                   onClick={() => setClouds((c) => ({ ...c, [q.id]: !c[q.id] }))}

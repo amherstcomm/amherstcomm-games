@@ -811,25 +811,39 @@ function WordGame({
  *  says what it actually means — the room and the presenter see no name, an
  *  admin can still see who asked. Saying "anonymous" unqualified would be a
  *  bigger promise than the database keeps. */
-function Ask({ onSend, sending, fullyAnonymous }: {
+function Ask({ onSend, sending, fullyAnonymous, privateAnswers }: {
   onSend: (value: unknown, anon: boolean) => void;
   sending: boolean;
+  /** read only by the host and site admins; see private_comments */
+  privateAnswers?: boolean;
   /** a fully anonymous survey: no name goes with anything, so there is
    *  nothing to choose */
   fullyAnonymous?: boolean;
 }) {
   const [text, setText] = useState('');
   const [anon, setAnon] = useState(false);
+  const [note, setNote] = useState('');
   return (
     <div className="space-y-3">
       <textarea
         value={text}
-        onChange={(e) => setText(e.target.value.slice(0, 500))}
+        onChange={(e) => {
+          setText(e.target.value.slice(0, 500));
+          setNote('');
+        }}
         rows={3}
-        placeholder="What would you like to ask?"
+        aria-label="Your answer"
+        placeholder={privateAnswers ? 'Write your answer' : 'What would you like to ask?'}
         className="w-full px-4 py-3 rounded-xl bg-white/5 border border-white/15 text-white text-sm placeholder:text-slate-600 focus:outline-none focus:border-accent"
       />
-      {fullyAnonymous ? (
+      {privateAnswers ? (
+        // Said before they write, because it changes what they write.
+        <p className="text-xs text-slate-400">
+          {fullyAnonymous
+            ? 'Only the person running this and site admins read your answer, and it is never linked to your name.'
+            : 'Only the person running this and site admins read your answer. They see your name with it; nobody else sees it at all.'}
+        </p>
+      ) : fullyAnonymous ? (
         <p className="text-xs text-slate-400">
           Sent without your name. Leave out anything that would identify you if you want to stay anonymous.
         </p>
@@ -841,15 +855,21 @@ function Ask({ onSend, sending, fullyAnonymous }: {
       )}
       <button
         onClick={() => {
+          // Said, not greyed out.
+          if (!text.trim()) {
+            setNote('Write something first.');
+            return;
+          }
           onSend(text.trim(), anon);
           setText('');
         }}
-        disabled={sending || text.trim().length === 0}
+        disabled={sending}
         className="w-full h-11 rounded-xl bg-accent text-slate-950 font-semibold disabled:opacity-50 inline-flex items-center justify-center gap-2"
       >
         <Send className="w-4 h-4" aria-hidden="true" />
         {sending ? 'Sending…' : 'Send'}
       </button>
+      {note && <p role="status" className="text-sm text-amber-300">{note}</p>}
     </div>
   );
 }
@@ -1625,7 +1645,8 @@ export default function LiveSession({ session, host }: { session: string; host: 
             <WordGame item={shown} readOnly={inert} onFinished={finishGame} />
           )}
           {kind === 'open' && answering && !readOnly && (
-            <Ask onSend={(v, anon) => void send(v, anon)} sending={sending} fullyAnonymous={item.privacy === 'full'} />
+            <Ask onSend={(v, anon) => void send(v, anon)} sending={sending} fullyAnonymous={item.privacy === 'full'}
+                 privateAnswers={(shown.payload as { private?: boolean } | undefined)?.private === true} />
           )}
           {kind === 'open' && !answering && (
             <p className="text-sm text-slate-400">
@@ -1672,7 +1693,15 @@ export default function LiveSession({ session, host }: { session: string; host: 
             </div>
           )}
 
-          {host && view?.ok && kind === 'open' && (
+          {/* The projector never shows private answers: how many, and where
+              they are read. */}
+          {host && view?.ok && kind === 'open' && (shown.payload as { private?: boolean } | undefined)?.private === true && (
+            <p className="mt-6 text-sm text-slate-400">
+              Private: {view.answered ?? 0} {view.answered === 1 ? 'answer' : 'answers'} so far, read on the
+              results page by you and site admins.
+            </p>
+          )}
+          {host && view?.ok && kind === 'open' && (shown.payload as { private?: boolean } | undefined)?.private !== true && (
             <div className="mt-6 space-y-2">
               <p className="text-xs uppercase tracking-wider text-slate-500">Asked so far</p>
               {(view.responses ?? []).map((r, i) => (
