@@ -250,7 +250,7 @@ export default function SiteBar(p: BarProps) {
     <>
       {/* ---- desktop ---- */}
       <header className="hidden md:block sticky top-0 z-40 h-16 bg-slate-950/90 backdrop-blur border-b border-white/10">
-        <div className="max-w-6xl mx-auto h-full px-4 flex items-center gap-6">
+        <div className="max-w-[82rem] mx-auto h-full px-5 flex items-center gap-6">
           <RouteLink {...p.home} label={`${p.siteName}, home`} className="flex items-center gap-2.5 shrink-0 rounded-lg">
             <img src="/mark.svg" alt="" width={500} height={500} className="w-8 h-8" />
             <span className="text-base font-bold text-white whitespace-nowrap">{p.siteName}</span>

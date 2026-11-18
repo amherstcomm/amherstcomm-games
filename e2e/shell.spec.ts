@@ -27,12 +27,12 @@ test('a section with nothing in it is not drawn', async ({ page }) => {
   await expect(page.getByRole('button', { name: /^Events/ })).toHaveCount(0);
 });
 
-test('the big name is on Home, and only there', async ({ page }) => {
+test('each page is headed by what it is: Home by today, a game by its name', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.goto('/');
-  await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
+  await expect(page.getByRole('heading', { level: 1 })).toContainText(/^Good (morning|afternoon|evening)/);
   await page.goto('/daily/ladder');
-  await expect(page.getByRole('heading', { level: 1 })).toHaveCount(0);
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText('Word Ladder');
   // the bar's logo is still the way home
   await page.getByRole('link', { name: /, home$/ }).first().click();
   await expect(page).toHaveURL(/\/$/);
@@ -62,4 +62,19 @@ test('the bar with a menu open has no WCAG A/AA violations axe can see', async (
   const results = await new AxeBuilder({ page }).include('header').withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa']).analyze();
   const summary = results.violations.map((v) => ({ id: v.id, sample: v.nodes[0]?.html.slice(0, 200), why: v.nodes[0]?.failureSummary }));
   expect(summary, JSON.stringify(summary, null, 2)).toEqual([]);
+});
+
+test('a game sits between its rails: the day’s games, and its own board', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto('/daily/hive');
+  const rail = page.getByRole('navigation', { name: 'Today' });
+  await expect(rail.getByRole('link', { name: /Hive/ })).toHaveAttribute('class', /text-accent/);
+  await rail.getByRole('link', { name: /Word Ladder/ }).click();
+  await expect(page).toHaveURL(/\/daily\/ladder$/);
+  await expect(page.getByRole('heading', { name: /Word Ladder board/ })).toBeVisible();
+  // narrower, the rail gives way and the board drops below the game
+  await page.setViewportSize({ width: 1100, height: 900 });
+  await expect(rail).toBeHidden();
+  const w = await page.evaluate(() => [document.documentElement.scrollWidth, window.innerWidth]);
+  expect(w[0]).toBeLessThanOrEqual(w[1]);
 });

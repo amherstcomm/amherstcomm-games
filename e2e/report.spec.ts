@@ -9,7 +9,9 @@ import { expect, test } from './fixtures';
 
 /** Open the footer's report menu. */
 async function openReportMenu(page: import('@playwright/test').Page) {
-  const button = page.getByRole('button', { name: 'Report a problem' });
+  // the footer's: a game page has a second in its rail, and the footer's is
+  // the one on every page
+  const button = page.locator('footer').getByRole('button', { name: 'Report a problem' });
   await button.scrollIntoViewIfNeeded();
   await button.click();
   return button;
@@ -126,7 +128,7 @@ test('every game can be reported from, and so can the front page', async ({ page
   const missing: string[] = [];
   for (const slug of [...GAMES.map((g) => `/daily/${g}`), '/', '/stats/boards']) {
     await page.goto(slug);
-    if (!(await page.getByRole('button', { name: 'Report a problem' }).isVisible())) {
+    if (!(await page.locator('footer').getByRole('button', { name: 'Report a problem' }).isVisible())) {
       missing.push(slug);
     }
   }
@@ -379,7 +381,7 @@ test('the footer still works while the storage banner is asking', async ({ page 
 
   // Not a scroll-into-view and not a forced click: the ordinary one a visitor
   // makes, which is what fails when something transparent is over the top.
-  await page.getByRole('button', { name: 'Report a problem' }).click({ timeout: 5_000 });
+  await page.locator('footer').getByRole('button', { name: 'Report a problem' }).click({ timeout: 5_000 });
   await expect(page.getByRole('dialog', { name: /What would you like to report/i })).toBeVisible();
 });
 

@@ -44,6 +44,8 @@ import { readWaiting } from '@/recognition';
 import SuggestionsView from '@/SuggestionsView';
 import { readUnread as readSuggestionsUnread } from '@/suggestions';
 import SiteBar, { type BarItem, type Section } from '@/SiteBar';
+import { GameRail, GameSide, type RailGame } from '@/GamePageRails';
+import { MODE_BOARDS } from '@/leaderboard';
 import { allDailyStatus } from '@/dailyStatus';
 import { readMyAvatar, type Avatar as AvatarData } from '@/avatars';
 import { fetchDisplayName } from '@/leaderboard';
@@ -1122,6 +1124,23 @@ function App() {
                                  go: overlayLink({ kind: 'account', tab: nav.last.account }) }] : []),
     { key: 'keys', label: 'Keys', icon: <Keyboard className="w-4 h-4" />, go: overlayLink({ kind: 'panel', panel: 'keys' }) },
   ];
+  const railGames: RailGame[] = barGames.map((g) => ({
+    key: g.key,
+    slug: g.tile!,
+    label: g.label,
+    status: g.status ?? 'none',
+    current: !atHome && g.key === mode,
+    go: g.go,
+  }));
+  const dayWord = (d?: string) =>
+    d ? new Date(`${d}T12:00:00Z`).toLocaleDateString('en-US', { timeZone: 'UTC', weekday: 'short', month: 'short', day: 'numeric' }) : '';
+  const gameLabel = inRound
+    ? 'Tournament round'
+    : currentView === 'learn'
+      ? 'Learn'
+      : dailyByMode[mode]
+        ? `Daily${dateByMode[mode] ? ` · ${dayWord(dateByMode[mode])}` : ''}`
+        : 'Practice';
   const kind = nav.page.kind;
   const barSection: Section =
     atHome ? 'today'
@@ -1178,7 +1197,8 @@ function App() {
         id="main"
         tabIndex={-1}
         className={`relative mx-auto px-5 py-10 sm:py-16 outline-none ${
-          forTheRoom || (atHome && !reportPage && !lockedHere) ? 'max-w-6xl' : 'max-w-3xl'
+          forTheRoom || (atHome && !reportPage && !lockedHere) ? 'max-w-6xl'
+            : !atHome && !reportPage && !lockedHere ? 'max-w-[82rem]' : 'max-w-3xl'
         } ${kbOpen ? 'pb-64 sm:pb-64' : ''}`}
       >
         {/* A notice the site can put up and take down. Under the subtitle
@@ -1325,7 +1345,83 @@ function App() {
           )}
 
           {!atHome && (
-          <>
+          <div className={`grid gap-6 ${inRound
+            ? 'lg:grid-cols-[minmax(0,1fr)]'
+            : 'lg:grid-cols-[minmax(0,1fr)_18.75rem] xl:grid-cols-[13.75rem_minmax(0,1fr)_18.75rem]'}`}>
+          {/* Left: today's games, from the width at which the board still has
+              room beside both rails. Narrower, the bar's Games menu does it. */}
+          {!inRound && (
+            <div className="hidden xl:block">
+              <GameRail games={railGames} />
+            </div>
+          )}
+          <div className="min-w-0">
+          {/* The page's heading: which puzzle, which game, and the Play / Learn
+              switch beside it (the layout spec). */}
+          <div className="mb-5 flex flex-wrap items-end justify-between gap-x-6 gap-y-3">
+            {/* On a phone the bar's title already names the game; the heading
+                stays for a screen reader. */}
+            <div className="min-w-0 sr-only md:not-sr-only">
+              <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">{gameLabel}</p>
+              <h1 className="mt-1 text-2xl sm:text-3xl font-bold text-white">{GAME_NAME[mode].full}</h1>
+            </div>
+<div className={shownViews.length > 1 ? 'shrink-0' : 'hidden'}>
+            {/* wraps rather than overflowing: at 320px with the largest text
+                this row is wider than the viewport, and the page clips its
+                horizontal overflow, so Learn was cut off with no way to reach
+                it */}
+            <div className="inline-flex flex-wrap justify-center max-w-full rounded-xl bg-white/5 border border-white/10 p-1 gap-1">
+                {(
+                  [
+                    { view: 'play', label: 'Play', Icon: Gamepad2 },
+                    { view: 'learn', label: 'Learn', Icon: BookOpen },
+                  ] as const
+                )
+                  .filter(({ view }) => shownViews.includes(view))
+                  .map(({ view, label, Icon }) => {
+                  const active = currentView === view;
+                  const look = `inline-flex items-center gap-1.5 px-4 sm:px-5 h-10 rounded-lg text-sm font-semibold transition-all duration-150
+                        ${active
+                          ? 'bg-accent text-slate-950 shadow-lg shadow-accent/30'
+                          : 'text-slate-300 hover:bg-white/10'}`;
+                  if (inRound) {
+                    return (
+                      <button
+                        key={label}
+                        type="button"
+                        aria-pressed={active}
+                        onClick={() => goToView(view)}
+                        className={look}
+                      >
+                        <Icon className="w-4 h-4" />
+                        {label}
+                      </button>
+                    );
+                  }
+                  return (
+                    <RouteLink
+                      key={label}
+                      to={pathOf({
+                        kind: 'game',
+                        view,
+                        slug: MODE_SLUG[mode],
+                        daily: dailyByMode[mode],
+                      })}
+                      onGo={() => goToView(view)}
+                      className={`inline-flex items-center gap-1.5 px-4 sm:px-5 h-10 rounded-lg text-sm font-semibold transition-all duration-150
+                        ${active
+                          ? 'bg-accent text-slate-950 shadow-lg shadow-accent/30'
+                          : 'text-slate-300 hover:bg-white/10'}`}
+                    >
+                      <Icon className="w-4 h-4" />
+                      {label}
+                    </RouteLink>
+                  );
+                })}
+            </div>
+          </div>
+          </div>
+          <div className="sm:rounded-2xl sm:border sm:border-white/10 sm:bg-slate-900/60 sm:p-6">
           {/* On a round board: which round, what it asks, and the way back to the
               rest of it. Said above the board rather than in a corner, because
               "one attempt, the first finish counts" is the thing somebody needs
@@ -1406,61 +1502,6 @@ function App() {
               place rather than going to /learn, which would leave the round
               -- and is locked out while the tournament runs. The tutorial is
               its own demo boards, so it never touches the round's. */}
-          <section className={`mb-7 text-center ${shownViews.length > 1 ? '' : 'hidden'}`}>
-            {/* wraps rather than overflowing: at 320px with the largest text
-                this row is wider than the viewport, and the page clips its
-                horizontal overflow, so Learn was cut off with no way to reach
-                it */}
-            <div className="inline-flex flex-wrap justify-center max-w-full rounded-xl bg-white/5 border border-white/10 p-1 gap-1">
-                {(
-                  [
-                    { view: 'play', label: 'Play', Icon: Gamepad2 },
-                    { view: 'learn', label: 'Learn', Icon: BookOpen },
-                  ] as const
-                )
-                  .filter(({ view }) => shownViews.includes(view))
-                  .map(({ view, label, Icon }) => {
-                  const active = currentView === view;
-                  const look = `inline-flex items-center gap-1.5 px-4 sm:px-5 h-10 rounded-lg text-sm font-semibold transition-all duration-150
-                        ${active
-                          ? 'bg-accent text-slate-950 shadow-lg shadow-accent/30'
-                          : 'text-slate-300 hover:bg-white/10'}`;
-                  if (inRound) {
-                    return (
-                      <button
-                        key={label}
-                        type="button"
-                        aria-pressed={active}
-                        onClick={() => goToView(view)}
-                        className={look}
-                      >
-                        <Icon className="w-4 h-4" />
-                        {label}
-                      </button>
-                    );
-                  }
-                  return (
-                    <RouteLink
-                      key={label}
-                      to={pathOf({
-                        kind: 'game',
-                        view,
-                        slug: MODE_SLUG[mode],
-                        daily: dailyByMode[mode],
-                      })}
-                      onGo={() => goToView(view)}
-                      className={`inline-flex items-center gap-1.5 px-4 sm:px-5 h-10 rounded-lg text-sm font-semibold transition-all duration-150
-                        ${active
-                          ? 'bg-accent text-slate-950 shadow-lg shadow-accent/30'
-                          : 'text-slate-300 hover:bg-white/10'}`}
-                    >
-                      <Icon className="w-4 h-4" />
-                      {label}
-                    </RouteLink>
-                  );
-                })}
-            </div>
-          </section>
 
           {showDifficultySwitch && (
             <section className="mb-7 text-center">
@@ -1666,7 +1707,34 @@ function App() {
           </div>
           </BoardChannelContext.Provider>
           )}
-          </>
+          </div>
+          </div>
+          {/* Right: this game's board, and the way to report the puzzle. Below
+              the game when there is no room beside it; not on a round, whose
+              boards are the round's own. */}
+          {!inRound && (
+            <div className="min-w-0">
+              <GameSide
+                boards={MODE_BOARDS[mode]}
+                level={level}
+                levelWord={DIFFICULTY_LABEL[level]}
+                onBoards={() => openOverlay({ kind: 'stats', tab: 'boards' })}
+                report={
+                  <ReportMenu
+                    context={{
+                      game: FEED_NAME[mode],
+                      gameLabel: GAME_NAME[mode].full,
+                      date: dateByMode[mode],
+                      board: boardByMode[mode],
+                      level,
+                    }}
+                    className="inline-flex items-center gap-1.5 h-10 px-4 rounded-lg border border-white/15 text-slate-300 hover:bg-white/5 hover:text-white"
+                  />
+                }
+              />
+            </div>
+          )}
+          </div>
           )}
 
           </>
