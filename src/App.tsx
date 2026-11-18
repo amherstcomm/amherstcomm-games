@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState, useEffect, useRef } from 'react';
-import { X, BookOpen, Grid3x3, Shuffle, Hexagon, Keyboard, Delete, Info, Square, Gamepad2, CornerDownLeft, LayoutGrid, Puzzle, BarChart3, UserRound, Scale, Settings, Home, Table2, KeyRound, Trophy } from 'lucide-react';
+import { X, BookOpen, Keyboard, Delete, Info, Gamepad2, CornerDownLeft, BarChart3, UserRound, Scale, Settings, Trophy } from 'lucide-react';
 import LearnMode, { type LearnModeHandle } from '@/LearnMode';
 import type { Session } from '@supabase/supabase-js';
 import StatsModal from '@/StatsModal';
@@ -14,10 +14,8 @@ import { PALETTES, PaletteContext, resolveTheme, TEXT_SCALES, THEME_MODES, useTh
 import { PrefsContext } from '@/prefs';
 import OnboardingCard from '@/OnboardingCard';
 import { useModalA11y } from '@/useModalA11y';
-import { Award, Camera, Inbox as InboxIcon, Combine, Flag as FlagIcon, Gavel, Gift, MessageCircleQuestion, Radio, SlidersHorizontal } from 'lucide-react';
+import { Award, Camera, Inbox as InboxIcon, Flag as FlagIcon, Gavel, Gift, MessageCircleQuestion, Radio, SlidersHorizontal } from 'lucide-react';
 import BridgeGame, { type BridgeGameHandle } from '@/BridgeGame';
-import GameMenu from '@/GameMenu';
-import LadderIcon from '@/LadderIcon';
 import { supabase } from '@/supabase';
 import { autoSignIn } from '@/signIn';
 import { SITE_NAME } from '@/brand';
@@ -45,6 +43,10 @@ import RecognitionView from '@/RecognitionView';
 import { readWaiting } from '@/recognition';
 import SuggestionsView from '@/SuggestionsView';
 import { readUnread as readSuggestionsUnread } from '@/suggestions';
+import SiteBar, { type BarItem, type Section } from '@/SiteBar';
+import { allDailyStatus } from '@/dailyStatus';
+import { readMyAvatar, type Avatar as AvatarData } from '@/avatars';
+import { fetchDisplayName } from '@/leaderboard';
 import { readGiveaways, readGiveawayTriviaSessions } from '@/giveaways';
 import {
   gameFeature, FEED_NAME, GAME_NAME } from '@/games';
@@ -82,6 +84,7 @@ import {
   MODE_SLUG,
   modeOf,
   pathOf,
+  titleOf,
   type Route,
 } from '@/routes';
 import {
@@ -185,18 +188,6 @@ const MODES: { id: Mode; blurb: string; description: string; playDescription: st
   },
 ];
 
-const MODE_ICONS: Record<Mode, typeof Grid3x3> = {
-  pattern: Grid3x3,
-  descramble: Shuffle,
-  bee: Hexagon,
-  grid: LayoutGrid,
-  boxed: Square,
-  weave: Puzzle,
-  squares: Table2,
-  cryptogram: KeyRound,
-  ladder: LadderIcon,
-  bridge: Combine,
-};
 
 
 
@@ -360,6 +351,8 @@ function App() {
   const [nominationsWaiting, setNominationsWaiting] = useState(0);
   // Suggestions unopened in a box this person reads: none unless they read one.
   const [suggestionsUnread, setSuggestionsUnread] = useState(0);
+  // Who is signed in, as the bar's avatar button draws them.
+  const [you, setYou] = useState<{ avatar: AvatarData | null; name: string } | null>(null);
   const [learnMode, setLearnMode] = useState(entryGame()?.view === 'learn');
   const [theme, setTheme] = useState<ThemeMode>(initial.theme);
   const [palette, setPalette] = useState<Palette>(initial.palette);
@@ -398,6 +391,7 @@ function App() {
       setBoardOn(false);
       setNominationsWaiting(0);
       setSuggestionsUnread(0);
+      setYou(null);
       return;
     }
     let alive = true;
@@ -419,6 +413,11 @@ function App() {
       if (alive && got.ok) setAuctionsNow(got.auctions.filter((a) => a.state === 'open').length);
     });
     void readBoard().then((got) => alive && setBoardOn(got.ok && (!!got.question || !!got.can_manage)));
+    void Promise.all([readMyAvatar(), fetchDisplayName()]).then(([a, n]) => {
+      if (!alive) return;
+      const avatar = a.ok && !a.blocked && !a.off ? a.avatar : null;
+      setYou({ avatar, name: n || session.user.email?.split('@')[0] || 'You' });
+    });
     window.addEventListener('focus', count);
     return () => {
       alive = false;
@@ -1064,6 +1063,74 @@ function App() {
   // they were written for.
 
 
+  // A game, opened from anywhere: its daily, as the layout spec has it. The
+  // home cards and the bar's Games menu both come here.
+  function openGame(m: Mode) {
+    setAtHome(false);
+    setMode(m);
+    // not goToView: that reads `mode`, which is still the game we're leaving
+    // until this render commits
+    setLearnMode(false);
+    requestDaily(m, dailiesOn);
+  }
+
+  // ---- what the bar holds ----
+  const todayState = allDailyStatus(shownModes);
+  const barGames: BarItem[] = MODES.filter((m) => shownModes.includes(m.id)).map((m) => ({
+    key: m.id,
+    label: GAME_NAME[m.id].full,
+    tile: MODE_SLUG[m.id],
+    status: todayState[m.id] ?? 'none',
+    go: { to: pathOf({ kind: 'game', view: 'play', slug: MODE_SLUG[m.id], daily: true }), onGo: () => openGame(m.id) },
+  }));
+  const barTogether: BarItem[] = [
+    ...(boardOn ? [{ key: 'whiteboard', label: 'Whiteboard', note: 'A question a week',
+                     icon: <MessageCircleQuestion className="w-4 h-4" />,
+                     go: pageLink({ kind: 'whiteboard', question: null }) }] : []),
+    ...(session ? [
+      { key: 'recognition', label: 'Recognition', note: 'Acting like an owner', icon: <Award className="w-4 h-4" />,
+        go: pageLink({ kind: 'recognition' }), badge: nominationsWaiting, badgeWhat: 'waiting for review' },
+      { key: 'suggestions', label: 'Suggestion box', note: 'Signed or anonymous', icon: <InboxIcon className="w-4 h-4" />,
+        go: pageLink({ kind: 'suggestions' }), badge: suggestionsUnread, badgeWhat: 'new' },
+    ] : []),
+  ];
+  const barEvents: BarItem[] = [
+    ...(liveNow > 0 && sessionsOn ? [{ key: 'live', label: liveNow === 1 ? 'Live now' : `Live now (${liveNow})`,
+                                      icon: <Radio className="w-4 h-4" />, go: pageLink({ kind: 'join' }) }] : []),
+    ...(tournament ? [{ key: 'tournament', label: tournament.name, note: 'Tournament', icon: <Trophy className="w-4 h-4" />,
+                        go: pageLink({ kind: 'tournament', slug: null }) }] : []),
+    ...(contestsNow > 0 ? [{ key: 'contests', label: contestsNow === 1 ? 'The contest' : `Contests (${contestsNow})`,
+                             icon: <Camera className="w-4 h-4" />, go: pageLink({ kind: 'contest', contest: null }) }] : []),
+    ...(giveawaysNow > 0 || canGive ? [{ key: 'giveaways', label: giveawaysNow > 0 ? `Giveaways (${giveawaysNow})` : 'Giveaways',
+                                         icon: <Gift className="w-4 h-4" />,
+                                         go: pageLink({ kind: 'giveaways', giveaway: null, view: 'page' }) }] : []),
+    ...(auctionsNow > 0 || canGive ? [{ key: 'auctions', label: auctionsNow > 0 ? `Auctions (${auctionsNow})` : 'Auctions',
+                                        icon: <Gavel className="w-4 h-4" />, go: pageLink({ kind: 'auctions', auction: null }) }] : []),
+  ];
+  const barAdmin: BarItem[] = [
+    ...(canAdmin ? [{ key: 'settings', label: 'Site settings', icon: <SlidersHorizontal className="w-4 h-4" />,
+                      go: pageLink({ kind: 'admin', tab: nav.last.admin }) }] : []),
+    ...(owner ? [{ key: 'reports', label: 'Open reports', icon: <FlagIcon className="w-4 h-4" />,
+                   go: pageLink({ kind: 'reportQueue' }) }] : []),
+    ...(canSetUp && sessionsOn ? [{ key: 'sessions', label: 'Your sessions', note: 'Build and host trivia',
+                                    icon: <Radio className="w-4 h-4" />, go: pageLink({ kind: 'sessions' }) }] : []),
+  ];
+  const barMe: BarItem[] = [
+    { key: 'stats', label: 'Stats', icon: <BarChart3 className="w-4 h-4" />, go: overlayLink({ kind: 'stats', tab: nav.last.stats }) },
+    { key: 'settings', label: 'Settings', icon: <Settings className="w-4 h-4" />, go: overlayLink({ kind: 'settings', tab: nav.last.settings }) },
+    ...(supabase && session ? [{ key: 'account', label: 'Account and friends', icon: <UserRound className="w-4 h-4" />,
+                                 go: overlayLink({ kind: 'account', tab: nav.last.account }) }] : []),
+    { key: 'keys', label: 'Keys', icon: <Keyboard className="w-4 h-4" />, go: overlayLink({ kind: 'panel', panel: 'keys' }) },
+  ];
+  const kind = nav.page.kind;
+  const barSection: Section =
+    atHome ? 'today'
+    : kind === 'game' || kind === 'home' ? 'games'
+    : kind === 'whiteboard' || kind === 'recognition' || kind === 'suggestions' ? 'together'
+    : ['live', 'join', 'sessions', 'tournament', 'contest', 'giveaways', 'auctions'].includes(kind) ? 'events'
+    : null;
+  const barTitle = atHome ? 'Today' : titleOf(currentRoute).replace(/ · .*$/, '').replace(/ — .*$/, '');
+
   return (
     <PaletteContext.Provider value={palette}>
     <PrefsContext.Provider value={prefs}>
@@ -1079,88 +1146,27 @@ function App() {
         Skip to content
       </a>
 
-      {/* Top nav bar — gone entirely with one game. A bar holding a single
-          tab is a switch with one position, and dropping to just the wordmark
-          would only print the site's name directly above the h1 that already
-          says it. The page header below carries the identity instead. */}
-      {/* Not on the screen pointed at a room. A row of ten word games above a
-          trivia question is chrome, and on a projector it is also a way out of
-          the session sitting in front of forty people. It was a compact menu
-          here before the page was widened; widening it made the full row
-          appear, which is my doing rather than something to leave. The footer
-          still has Home, so the way back out has not gone. */}
-      {shownModes.length > 1 && !forTheRoom && !lockedToTournament && (
-      <nav
-        aria-label="Game modes"
-        className="sticky top-0 z-40 bg-slate-950/80 backdrop-blur border-b border-white/10"
-      >
-        {/* Nine tabs do not fit on one row at this width: the horizontal layout
-            wanted 888px inside a 768px bar, so it never fit at any viewport —
-            it squeezed, and "Word Ladder" ran out of its column on a phone.
-            Wrapping to two and three rows fixed the overflow and cost a third
-            of a phone screen, which is worse: this bar is sticky, so that is a
-            third of every screen, on every page, forever.
-
-            So the bar stops being a row of tabs when it cannot be one. Below
-            lg it is the game you are in plus a menu holding the rest — one
-            row, one height, however many games there are. The bar runs a
-            little wider than the content at lg and above, which is the width
-            at which nine full-size labels genuinely fit. */}
-        <div className="max-w-3xl lg:max-w-5xl mx-auto px-2 sm:px-5 flex items-center justify-center">
-          <div className="hidden lg:grid flex-1 gap-1 py-1.5"
-            style={{ gridTemplateColumns: `repeat(${shownModes.length}, minmax(0, 1fr))` }}
-          >
-            {MODES.filter((m) => shownModes.includes(m.id)).map((m) => {
-              const Icon = MODE_ICONS[m.id];
-              return (
-                <RouteLink
-                  key={m.id}
-                  to={pathOf({
-                    kind: 'game',
-                    view: currentView,
-                    slug: MODE_SLUG[m.id],
-                    daily: dailyByMode[m.id],
-                  })}
-                  onGo={() => {
-                    // picking a game from the nav is also how you leave home
-                    setAtHome(false);
-                    setMode(m.id);
-                  }}
-                  title={m.blurb}
-                  className={`flex flex-col items-center justify-center gap-0.5 px-1 py-1.5 rounded-lg whitespace-nowrap text-xs font-semibold transition-colors
-                    ${!atHome && mode === m.id
-                      ? 'bg-accent/15 text-accent'
-                      : 'text-slate-400 hover:text-white hover:bg-white/5'}`}
-                >
-                  <Icon className="w-5 h-5" />
-                  <span>{GAME_NAME[m.id].short}</span>
-                </RouteLink>
-              );
-            })}
-          </div>
-
-          {/* the same nine games, one row high */}
-          <div className="lg:hidden flex-1 py-1.5">
-            <GameMenu
-              modes={MODES.filter((m) => shownModes.includes(m.id))}
-              icons={MODE_ICONS}
-              current={atHome ? null : mode}
-              href={(id) =>
-                pathOf({
-                  kind: 'game',
-                  view: currentView,
-                  slug: MODE_SLUG[id],
-                  daily: dailyByMode[id],
-                })
-              }
-              onGo={(id) => {
-                setAtHome(false);
-                setMode(id);
-              }}
-            />
-          </div>
-        </div>
-      </nav>
+      {/* The bar: on every page but the screen pointed at a room, where it would
+          be chrome and a way out of the session in front of forty people. */}
+      {!forTheRoom && (
+        <SiteBar
+          siteName={SITE_NAME}
+          home={pageLink({ kind: 'home' })}
+          boards={overlayLink({ kind: 'stats', tab: 'boards' })}
+          current={barSection}
+          title={barTitle}
+          titleSwitchesGame={!atHome && kind === 'game'}
+          games={barGames}
+          together={barTogether}
+          events={barEvents}
+          admin={barAdmin}
+          me={barMe}
+          join={sessionsOn ? pageLink({ kind: 'join' }) : null}
+          signIn={supabase && !session ? { to: '/sign-in', onGo: () => openOverlay({ kind: 'account', tab: 'personal' }) } : null}
+          you={session && you ? { ...you, seed: session.user.id } : null}
+          locked={lockedToTournament}
+          covered={nav.overlays.length > 0}
+        />
       )}
 
       {/* Two widths. A board and a page of prose are read at arm's length and
@@ -1175,7 +1181,10 @@ function App() {
           forTheRoom ? 'max-w-6xl' : 'max-w-3xl'
         } ${kbOpen ? 'pb-64 sm:pb-64' : ''}`}
       >
-        {/* header */}
+        {/* The big name and the event, on Home alone (the layout spec): on
+            every other page the bar carries the name, and the page starts at
+            its own content rather than below a masthead. */}
+        {atHome && !reportPage && (
         <header className="text-center mb-8">
           {/* The wordmark is a lockup rather than an image file: the mark is
               the only part that has to be drawn, and the name is real text, so
@@ -1222,25 +1231,17 @@ function App() {
               {subtitle}
             </p>
           )}
-          {/* A notice the site can put up and take down. Under the subtitle
-              because it is the more perishable of the two — the subtitle names
-              the month, this names the afternoon — and it renders nothing at
-              all when there is none rather than reserving the space. */}
-          {announcement && (
-            <p className="mb-4 rounded-lg border border-accent/40 bg-accent/5 px-3 py-2 text-sm text-slate-200">
-              {announcement}
-            </p>
-          )}
-          {/* The strapline describes whichever game is loaded behind all this,
-              which on a report page is a game nobody asked for — a ticket
-              opened from an email introduced itself as "Play the themed tiling
-              puzzle". The wordmark stays, since it is the way home. */}
-          {!atHome && !reportPage && (
-            <p className="text-slate-400 max-w-md mx-auto text-sm sm:text-base">
-              {MODES.find((m) => m.id === mode)?.playDescription}
-            </p>
-          )}
         </header>
+        )}
+        {/* A notice the site can put up and take down. Under the subtitle
+            because it is the more perishable of the two — the subtitle names
+            the month, this names the afternoon — and it renders nothing at
+            all when there is none rather than reserving the space. */}
+        {announcement && (
+          <p className="mb-6 rounded-lg border border-accent/40 bg-accent/5 px-3 py-2 text-sm text-slate-200">
+            {announcement}
+          </p>
+        )}
 
         {/* A report page is the whole page. Gating the games and the home
             view left every other section standing — the Solve/Play/Learn
@@ -1364,14 +1365,7 @@ function App() {
           {atHome && (
             <HomeView
               modes={shownModes}
-              onOpen={(m) => {
-                setAtHome(false);
-                setMode(m);
-                // not goToView: that reads `mode`, which is still the game
-                // we're leaving until this render commits
-                setLearnMode(false);
-                requestDaily(m, dailiesOn);
-              }}
+              onOpen={openGame}
               onBoards={() => {
                 openOverlay({ kind: 'stats', tab: 'boards' });
               }}
@@ -1727,128 +1721,35 @@ function App() {
         )}
 
         {/* pb keeps the last row clear of the floating keyboard button */}
-        <footer className="mt-14 pb-24 sm:pb-4 text-center text-xs text-slate-500">
+        <footer className="mt-14 pb-24 md:pb-4 text-center text-xs text-slate-500">
           {/* The dictionary-size line lived here and described the solver:
               "searching 67,122 English words". With the solvers gone it was
               describing work nothing does, on every page including a report
               and a live session. */}
           {/* wraps into centered rows rather than one overflowing line */}
+          {/* What is left for the footer once the bar has the rest (the layout
+              spec): about the site, its terms, and the way to report a problem. */}
           <div className="mt-3 flex flex-wrap items-center justify-center gap-x-5 gap-y-2.5">
             <RouteLink
-              {...pageLink({ kind: 'home' })}
+              {...overlayLink({ kind: 'panel', panel: 'about' })}
               className="inline-flex items-center gap-1.5 hover:text-slate-300 transition-colors"
             >
-              <Home className="w-3.5 h-3.5" />
-              Home
+              <Info className="w-3.5 h-3.5" />
+              About &amp; FAQ
             </RouteLink>
-            {/* The footer is on every page by construction, which is the whole
-                reason this lives here: the previous home was a link on the
-                daily board, gated on a date the game had to volunteer, and six
-                of the ten games keep their date somewhere the gate never saw.
-                A control whose only job is to be findable cannot be somewhere
-                it might not appear. */}
-            {owner && (
-              <RouteLink
-                {...pageLink({ kind: 'reportQueue' })}
-                className="inline-flex items-center gap-1.5 text-accent hover:brightness-110 transition"
-              >
-                <FlagIcon className="w-3.5 h-3.5" aria-hidden="true" />
-                Open reports
-              </RouteLink>
-            )}
-            {/* The way into a session, on every page. Only while something is
-                running: a link that is usually a dead end teaches people to
-                ignore it, and this one has to be believed on the one afternoon
-                a month it matters. */}
-            {liveNow > 0 && sessionsOn && (
-              <RouteLink
-                {...pageLink({ kind: 'join' })}
-                className="inline-flex items-center gap-1.5 text-accent hover:brightness-110 transition"
-              >
-                <Radio className="w-3.5 h-3.5" aria-hidden="true" />
-                {liveNow === 1 ? 'Join the session' : `Join a session (${liveNow})`}
-              </RouteLink>
-            )}
-            {/* A contest is not a session, so it is not gated on sessions
-                being on -- and it is here rather than only on the front page
-                because entering one means leaving to find a photo and coming
-                back from wherever you landed. */}
-            {contestsNow > 0 && (
-              <RouteLink
-                {...pageLink({ kind: 'contest', contest: null })}
-                className="inline-flex items-center gap-1.5 text-accent hover:brightness-110 transition"
-              >
-                <Camera className="w-3.5 h-3.5" aria-hidden="true" />
-                {contestsNow === 1 ? 'The contest' : `Contests (${contestsNow})`}
-              </RouteLink>
-            )}
-            {(giveawaysNow > 0 || canGive) && (
-              <RouteLink
-                {...pageLink({ kind: 'giveaways', giveaway: null, view: 'page' })}
-                className="inline-flex items-center gap-1.5 text-accent hover:brightness-110 transition"
-              >
-                <Gift className="w-3.5 h-3.5" aria-hidden="true" />
-                {giveawaysNow > 0 ? `Giveaways (${giveawaysNow})` : 'Giveaways'}
-              </RouteLink>
-            )}
-            {(auctionsNow > 0 || canGive) && (
-              <RouteLink
-                {...pageLink({ kind: 'auctions', auction: null })}
-                className="inline-flex items-center gap-1.5 text-accent hover:brightness-110 transition"
-              >
-                <Gavel className="w-3.5 h-3.5" aria-hidden="true" />
-                {auctionsNow > 0 ? `Auctions (${auctionsNow})` : 'Auctions'}
-              </RouteLink>
-            )}
-            {boardOn && (
-              <RouteLink
-                {...pageLink({ kind: 'whiteboard', question: null })}
-                className="inline-flex items-center gap-1.5 text-accent hover:brightness-110 transition"
-              >
-                <MessageCircleQuestion className="w-3.5 h-3.5" aria-hidden="true" />
-                Whiteboard
-              </RouteLink>
-            )}
-            {/* Everybody signed in: nominating is for all staff. A reviewer
-                sees how many wait. */}
-            {session && (
-              <RouteLink
-                {...pageLink({ kind: 'recognition' })}
-                className="inline-flex items-center gap-1.5 text-accent hover:brightness-110 transition"
-              >
-                <Award className="w-3.5 h-3.5" aria-hidden="true" />
-                Recognition
-                <Badge n={nominationsWaiting} what="waiting for review" />
-              </RouteLink>
-            )}
-            {session && (
-              <RouteLink
-                {...pageLink({ kind: 'suggestions' })}
-                className="inline-flex items-center gap-1.5 text-accent hover:brightness-110 transition"
-              >
-                <InboxIcon className="w-3.5 h-3.5" aria-hidden="true" />
-                Suggestion box
-                <Badge n={suggestionsUnread} what="new" />
-              </RouteLink>
-            )}
-            {canSetUp && sessionsOn && (
-              <RouteLink
-                {...pageLink({ kind: 'sessions' })}
-                className="inline-flex items-center gap-1.5 text-accent hover:brightness-110 transition"
-              >
-                <Radio className="w-3.5 h-3.5" aria-hidden="true" />
-                Sessions
-              </RouteLink>
-            )}
-            {canAdmin && (
-              <RouteLink
-                {...pageLink({ kind: 'admin', tab: nav.last.admin })}
-                className="inline-flex items-center gap-1.5 text-accent hover:brightness-110 transition"
-              >
-                <SlidersHorizontal className="w-3.5 h-3.5" aria-hidden="true" />
-                Site settings
-              </RouteLink>
-            )}
+            <RouteLink
+              {...overlayLink({ kind: 'legal', doc: 'privacy' })}
+              className="inline-flex items-center gap-1.5 hover:text-slate-300 transition-colors"
+            >
+              Privacy
+            </RouteLink>
+            <RouteLink
+              {...overlayLink({ kind: 'legal', doc: 'terms' })}
+              className="inline-flex items-center gap-1.5 hover:text-slate-300 transition-colors"
+            >
+              <Scale className="w-3.5 h-3.5" />
+              Terms
+            </RouteLink>
             <ReportMenu
               context={{
                 game: FEED_NAME[mode],
@@ -1858,56 +1759,6 @@ function App() {
                 level,
               }}
             />
-            <RouteLink
-              {...overlayLink({ kind: 'stats', tab: nav.last.stats })}
-              className="inline-flex items-center gap-1.5 hover:text-slate-300 transition-colors"
-            >
-              <BarChart3 className="w-3.5 h-3.5" />
-              Stats
-            </RouteLink>
-            <RouteLink
-              {...overlayLink({ kind: 'settings', tab: nav.last.settings })}
-              className="inline-flex items-center gap-1.5 hover:text-slate-300 transition-colors"
-            >
-              <Settings className="w-3.5 h-3.5" />
-              Settings
-            </RouteLink>
-            <RouteLink
-              {...overlayLink({ kind: 'panel', panel: 'keys' })}
-              className="inline-flex items-center gap-1.5 hover:text-slate-300 transition-colors"
-            >
-              <Keyboard className="w-3.5 h-3.5" />
-              Keys
-            </RouteLink>
-            {supabase && (
-              <RouteLink
-                // Signed out there is only one tab to be on, and /sign-in is
-                // the friendlier address for it — but it has to be the address
-                // the click actually goes to, which is why the target is pinned
-                // rather than read from the remembered tab.
-                {...(session
-                  ? overlayLink({ kind: 'account', tab: nav.last.account })
-                  : { to: '/sign-in', onGo: () => openOverlay({ kind: 'account', tab: 'personal' }) })}
-                className="inline-flex items-center gap-1.5 hover:text-slate-300 transition-colors"
-              >
-                <UserRound className="w-3.5 h-3.5" />
-                {session ? 'Account' : 'Sign in'}
-              </RouteLink>
-            )}
-            <RouteLink
-              {...overlayLink({ kind: 'panel', panel: 'about' })}
-              className="inline-flex items-center gap-1.5 hover:text-slate-300 transition-colors"
-            >
-              <Info className="w-3.5 h-3.5" />
-              About &amp; FAQ
-            </RouteLink>
-            <RouteLink
-              {...overlayLink({ kind: 'legal', doc: nav.last.legal })}
-              className="inline-flex items-center gap-1.5 hover:text-slate-300 transition-colors"
-            >
-              <Scale className="w-3.5 h-3.5" />
-              Legal
-            </RouteLink>
           </div>
         </footer>
       </main>
@@ -2425,7 +2276,7 @@ function App() {
 
       {/* on-screen keyboard */}
       {kbOpen ? (
-        <div className="fixed bottom-0 inset-x-0 z-50 bg-slate-900/95 backdrop-blur border-t border-white/10 px-2 pt-3 pb-4">
+        <div className={`fixed inset-x-0 z-50 bg-slate-900/95 backdrop-blur border-t border-white/10 px-2 pt-3 pb-4 ${forTheRoom ? 'bottom-0' : 'bottom-16 md:bottom-0'}`}>
           <button
             onClick={() => setKbOpen(false)}
             aria-label="Hide keyboard"
@@ -2502,7 +2353,7 @@ function App() {
           onClick={() => setKbOpen(true)}
           aria-label="Show keyboard"
           title="Show on-screen keyboard"
-          className="fixed bottom-4 right-4 z-50 w-12 h-12 flex items-center justify-center rounded-full bg-slate-800 border border-white/15 text-slate-300 hover:text-white hover:bg-slate-700 hover:border-white/30 shadow-lg transition-colors"
+          className={`fixed ${forTheRoom ? 'bottom-4' : 'bottom-20 md:bottom-4'} right-4 z-50 w-12 h-12 flex items-center justify-center rounded-full bg-slate-800 border border-white/15 text-slate-300 hover:text-white hover:bg-slate-700 hover:border-white/30 shadow-lg transition-colors`}
         >
           <Keyboard className="w-5 h-5" />
         </button>
@@ -2528,18 +2379,3 @@ function roundsOn(rounds: CurrentRound[]): string {
 }
 
 export default App;
-
-/** A count of what waits, as a badge on a footer link; nothing at zero. Read
- *  out with what it counts, since "Recognition 3" says nothing. */
-function Badge({ n, what }: { n: number; what: string }) {
-  if (n <= 0) return null;
-  return (
-    // Fixed colours rather than theme tiers: a badge is the same red in either
-    // theme, and white on it is 6.6:1.
-    <span className="inline-flex items-center justify-center min-w-5 h-5 px-1.5 rounded-full text-[11px] font-bold leading-none tabular-nums"
-          style={{ background: '#be123c', color: '#ffffff' }}>
-      {n > 99 ? '99+' : n}
-      <span className="sr-only"> {what}</span>
-    </span>
-  );
-}
