@@ -7,7 +7,7 @@ import type { ReactNode } from 'react';
 import ReportMenu from '@/ReportMenu';
 import { useSetting } from '@/settings';
 
-export const LEGAL_UPDATED = '16 August 2026';
+export const LEGAL_UPDATED = '18 November 2026';
 
 // Three addresses rather than one, because they are three different queues and
 // a single inbox makes the wrong one the default. Privacy requests have to
@@ -138,6 +138,10 @@ export function PrivacyPolicy() {
         <li>
           While you&apos;re signed in, the token that keeps you signed in. Clearing
           this site&apos;s data signs you out, which is the same thing.
+        </li>
+        <li>
+          For each fully anonymous survey you answer, a private key that lets you
+          change your answers. See &ldquo;Trivia and surveys&rdquo; below.
         </li>
       </List>
       <P>
@@ -284,6 +288,25 @@ export function PrivacyPolicy() {
       <P>
         Clearing the name removes you from the boards immediately and permanently.
         Your own statistics carry on exactly as before; they just stop being public.
+      </P>
+
+      <H>Trivia and surveys</H>
+      <P>
+        When you answer a question in a trivia session or a survey, the answer is
+        stored with your account. Other participants don&apos;t see your name on it
+        unless the session shows avatars on the answers. An admin can see who
+        answered what, for prizes and follow-up.
+      </P>
+      <P>
+        A survey can instead be{' '}
+        <strong className="text-slate-300">fully anonymous</strong>, and says so above
+        every question. There, we record only that you took part, so nobody can answer
+        twice; your answers are stored separately with no name and no time, and nobody
+        &mdash; admins and the person who wrote the survey included &mdash; can link
+        them to you. Your browser keeps a private key for that survey so you can change
+        your answers: it is sent with each answer to check the answer is yours, and it
+        is never stored on our side. Results stay hidden until enough people have
+        answered for no single answer to stand out.
       </P>
 
       <H>Site-wide numbers</H>

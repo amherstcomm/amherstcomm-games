@@ -65,6 +65,10 @@ export type LiveItem = {
    *  from this one before it forgot its key: those answers stand, and this
    *  browser can neither add to nor change them */
   key_lost?: boolean;
+  /** a fully anonymous survey's own numbers, for its banner: how many answers
+   *  its results wait for, and whether reasons are shown at all */
+  min_results?: number;
+  show_comments?: boolean;
   /** whether *this viewer* is the one running the session.
    *
    *  Not the same question as "is this the presenter's address", which is what

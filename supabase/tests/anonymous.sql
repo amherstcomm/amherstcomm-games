@@ -251,3 +251,17 @@ select pg_temp.check('a session left alone is anonymous to the room only',
 select pg_temp.check('and will not take an answer by key',
   (public.answer_anonymously(pg_temp.id('pq'), '"Yes"'::jsonb, repeat('99', 32))->>'reason')
     = 'this survey is not fully anonymous');
+
+-- ---------------------------------------------------------------------------
+-- What the banner is told
+-- ---------------------------------------------------------------------------
+set session "test.uid" = '55000000-0000-0000-0000-000000000004';
+select pg_temp.check('the question carries the survey''s own minimum and whether reasons are shown',
+  (public.current_item(pg_temp.id('room'), null)->>'min_results')::int = 5
+  and (public.current_item(pg_temp.id('room'), null)->>'show_comments') = 'true');
+set session "test.uid" = '55000000-0000-0000-0000-000000000001';
+select public.set_session_privacy(pg_temp.id('room'), null, 7, false);
+set session "test.uid" = '55000000-0000-0000-0000-000000000004';
+select pg_temp.check('and follows them when the author changes them',
+  (public.current_item(pg_temp.id('room'), null)->>'min_results')::int = 7
+  and (public.current_item(pg_temp.id('room'), null)->>'show_comments') = 'false');

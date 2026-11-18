@@ -2,6 +2,7 @@
 // browser's key and never through answer_item, the same key every time, no
 // "hide my name" to choose, and plain words when the key is gone. The server's
 // side -- what is stored and what is refused -- is supabase/tests/anonymous.sql.
+import AxeBuilder from '@axe-core/playwright';
 import { expect, test } from './fixtures';
 
 const SESSION = '7b2c3d4e-5f60-4a7b-8c9d-0e1f2a3b4c5d';
@@ -14,7 +15,10 @@ const PAY = {
 
 type Call = { fn: string; args: Record<string, unknown> };
 
-async function anonymousSurvey(page: import('@playwright/test').Page, opts: { keyLost?: boolean } = {}) {
+async function anonymousSurvey(
+  page: import('@playwright/test').Page,
+  opts: { keyLost?: boolean; minResults?: number; showComments?: boolean } = {}
+) {
   const calls: Call[] = [];
   const answered = new Set<string>();
   const items = [
@@ -32,7 +36,8 @@ async function anonymousSurvey(page: import('@playwright/test').Page, opts: { ke
         ? { state: 'done', mode: 'open', privacy: 'full', key_lost: true, total: 2 }
         : next
           ? { state: 'open', mode: 'open', privacy: 'full', yours: false, ...next, seconds: null, opened_at: null,
-              now: new Date().toISOString(), mine: null, answer: null, paused: false, total: 2, done: answered.size }
+              now: new Date().toISOString(), mine: null, answer: null, paused: false, total: 2, done: answered.size,
+              min_results: opts.minResults ?? 5, show_comments: opts.showComments ?? true }
           : { state: 'done', mode: 'open', privacy: 'full', total: 2 };
     } else if (fn === 'answer_anonymously') {
       answered.add(args.p_item as string);
@@ -154,4 +159,40 @@ test('and it is fixed once people have, with the minimum able to go up but not d
   await min.fill('8');
   await card.getByRole('button', { name: 'Save' }).click();
   await expect.poll(() => calls.find((c) => c.fn === 'set_session_privacy')?.args).toMatchObject({ p_min_results: 8 });
+});
+
+test("every question says it is fully anonymous, and how, in the survey's own numbers", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await anonymousSurvey(page, { minResults: 7, showComments: false });
+  await page.goto(`/live/${SESSION}`);
+  const banner = page.getByRole('region', { name: 'Fully anonymous' });
+  await expect(banner).toContainText(
+    'Fully anonymous. Your answers are stored without your name. Nobody, including admins and the person who wrote this survey, can see what you picked.'
+  );
+  const how = banner.getByRole('button', { name: 'How this works' });
+  await expect(how).toHaveAttribute('aria-expanded', 'false');
+  await how.click();
+  await expect(how).toHaveAttribute('aria-expanded', 'true');
+  await expect(banner).toContainText('Results stay hidden until at least 7 people have answered.');
+  await expect(banner).toContainText('it is never stored on our side');
+  await expect(banner).toContainText('The reasons people give are not shown in the results.');
+  await expect(banner).toContainText('What software cannot do');
+  const results = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa']).analyze();
+  expect(results.violations.map((v) => v.id)).toEqual([]);
+});
+
+test('on a phone it says it in fewer words', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await anonymousSurvey(page);
+  await page.goto(`/live/${SESSION}`);
+  const banner = page.getByRole('region', { name: 'Fully anonymous' });
+  await expect(banner.getByText('Nobody, including admins, can see what you picked.')).toBeVisible();
+  await expect(banner.getByText(/the person who wrote this survey/)).toBeHidden();
+});
+
+test('and it stays on the screen that says the answers stand', async ({ page }) => {
+  await anonymousSurvey(page, { keyLost: true });
+  await page.goto(`/live/${SESSION}`);
+  await expect(page.getByText('Your answers are in.')).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Fully anonymous' })).toBeVisible();
 });
