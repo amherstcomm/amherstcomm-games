@@ -5,8 +5,9 @@
 // and the first finish counts. This page is the way in, and says plainly when
 // nothing is running, which is most of the year.
 import { useEffect, useState } from 'react';
-import { Camera, Trophy, MessagesSquare, Gift } from 'lucide-react';
+import { Camera, MessagesSquare, Gift } from 'lucide-react';
 import RouteLink from '@/RouteLink';
+import PageWithRail from '@/PageWithRail';
 import { BOARD_LABELS, type BoardGame } from '@/leaderboard';
 import {
   readTournamentStandings,
@@ -149,7 +150,7 @@ function ContestBoard({ contest }: { contest: RoundStandings['contests'][number]
 /** One round's leaderboards, one per game and one per session, labelled and
  *  worded the way the site's own boards are -- the same labels, so a round's
  *  Weave says "best 1:35" exactly as the everyday board would. */
-function RoundBoards({ round }: { round: RoundStandings }) {
+function RoundBoards({ round, stacked = false }: { round: RoundStandings; stacked?: boolean }) {
   const games = Object.entries(round.boards) as [BoardGame, RoundStandings['boards'][BoardGame]][];
   const trivia = round.trivia ?? [];
   const contests = round.contests ?? [];
@@ -157,7 +158,7 @@ function RoundBoards({ round }: { round: RoundStandings }) {
     return <p className="text-xs text-slate-400">Nobody has finished a board in this round yet.</p>;
   }
   return (
-    <div className="grid gap-2 sm:grid-cols-2">
+    <div className={`grid gap-2 ${stacked ? '' : 'sm:grid-cols-2'}`}>
       {games.map(([game, rows]) => {
         const label = BOARD_LABELS[game];
         if (!label) return null;
@@ -212,10 +213,12 @@ function RoundBoards({ round }: { round: RoundStandings }) {
 /** The tournament table and every started round's boards. Fetched here rather
  *  than handed down, because only this page wants them and a leaderboard read
  *  on every page load would be a query for nothing most of the year. */
-function Standings({ tournamentId, currentRounds }: { tournamentId: string; currentRounds: string[] }) {
+function useStandings(tournamentId: string | null): TournamentStandings | null | undefined {
   const [standings, setStandings] = useState<TournamentStandings | null | undefined>(undefined);
   useEffect(() => {
+    if (!tournamentId) return;
     let alive = true;
+    setStandings(undefined);
     void readTournamentStandings(tournamentId).then((res) => {
       if (alive) setStandings(res.ok ? res.standings : null);
     });
@@ -223,74 +226,93 @@ function Standings({ tournamentId, currentRounds }: { tournamentId: string; curr
       alive = false;
     };
   }, [tournamentId]);
+  return standings;
+}
 
-  if (standings === undefined) return <p className="mt-6 text-sm text-slate-400">Loading the standings…</p>;
+/** The tournament table: everybody's points across every round so far. */
+function StandingsTable({ standings }: { standings: TournamentStandings | null | undefined }) {
+  if (standings === undefined) return <p className="text-sm text-slate-400">Loading the standings…</p>;
   if (standings === null) return null;
+  return (
+    <section aria-label="Tournament table" className="rounded-2xl border border-white/10 bg-slate-900 p-4 sm:p-5">
+      <h2 className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Tournament table</h2>
+      <Prizes items={[['Overall prize', standings.tournament.prize]]} />
+      <p className="text-xs text-slate-400 mb-3">
+        Points for placing in each game of each round: 10 for first down to 1
+        for tenth, times what that round said the game was worth. Level on
+        points, more wins goes first.
+      </p>
+      {standings.table.length === 0 ? (
+        <p className="text-sm text-slate-400">No finishes yet.</p>
+      ) : (
+        <ol className="divide-y divide-white/10 text-sm">
+          {standings.table.map((row, i) => (
+            <li key={row.name} className="flex items-baseline gap-2 py-1.5 text-slate-300">
+              <span className="w-5 shrink-0 text-xs text-slate-500 tabular-nums">{i + 1}</span>
+              <span className="flex-1 min-w-0 truncate">{row.name}</span>
+              <span className="tabular-nums shrink-0 font-semibold text-white">{row.points} pts</span>
+              <span className="w-12 text-right text-xs text-slate-500 tabular-nums shrink-0">
+                {row.wins} win{row.wins === 1 ? '' : 's'}
+              </span>
+            </li>
+          ))}
+        </ol>
+      )}
+    </section>
+  );
+}
 
+/** Each round's boards: the ones on now, then the earlier ones folded away.
+ *  The rail's, beside the table rather than under it. */
+function RoundStandingsList({ standings, currentRounds }: {
+  standings: TournamentStandings | null | undefined;
+  currentRounds: string[];
+}) {
+  if (!standings) return null;
   // The rounds on today, and the ones before them. Several can be on at once
-  // now, and each gets its own boards; one on its own keeps the page it had.
+  // now, and each gets its own boards; one on its own keeps the name it had.
   const onNow = new Set(currentRounds);
   const current = standings.rounds.filter((r) => onNow.has(r.id));
   const earlier = standings.rounds.filter((r) => !onNow.has(r.id)).reverse();
-
+  const CARD = 'rounded-2xl border border-white/10 bg-slate-900 p-4';
   return (
-    <div className="mt-8 space-y-6">
-      <section aria-label="Tournament table">
-        <h3 className="text-base font-bold text-white mb-2">Tournament table</h3>
-        <Prizes items={[['Overall prize', standings.tournament.prize]]} />
-        <p className="text-xs text-slate-400 mb-2">
-          Points for placing in each game of each round: 10 for first down to 1
-          for tenth, times what that round said the game was worth. Level on
-          points, more wins goes first.
-        </p>
-        {standings.table.length === 0 ? (
-          <p className="text-sm text-slate-400">No finishes yet.</p>
-        ) : (
-          <ol className="space-y-1 text-sm">
-            {standings.table.map((row, i) => (
-              <li key={row.name} className="flex items-baseline gap-2 text-slate-300">
-                <span className="w-5 shrink-0 text-xs text-slate-500 tabular-nums">{i + 1}</span>
-                <span className="flex-1 min-w-0 truncate">{row.name}</span>
-                <span className="tabular-nums shrink-0 font-semibold text-white">{row.points} pts</span>
-                <span className="text-xs text-slate-500 tabular-nums shrink-0">
-                  {row.wins} win{row.wins === 1 ? '' : 's'}
-                </span>
-              </li>
-            ))}
-          </ol>
-        )}
-      </section>
-
+    <>
       {current.length === 1 && (
-        <section aria-label="This round's standings">
-          <h3 className="text-base font-bold text-white mb-2">This round</h3>
+        <section aria-label="This round's standings" className={CARD}>
+          <h2 className="text-xs font-semibold text-slate-400 uppercase tracking-wider">This round</h2>
           <Prizes items={[['This round', current[0].prize]]} />
-          <RoundBoards round={current[0]} />
+          <div className="mt-3"><RoundBoards round={current[0]} stacked /></div>
         </section>
       )}
       {current.length > 1 &&
         current.map((r) => (
-          <section key={r.id} aria-label={`Round ${r.number}'s standings`}>
-            <h3 className="text-base font-bold text-white mb-2">
+          <section key={r.id} aria-label={`Round ${r.number}'s standings`} className={CARD}>
+            <h2 className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
               Round {r.number} · {span(r.starts_on, r.ends_on)}
-            </h3>
+            </h2>
             <Prizes items={[['This round', r.prize]]} />
-            <RoundBoards round={r} />
+            <div className="mt-3"><RoundBoards round={r} stacked /></div>
           </section>
         ))}
-
-      {earlier.map((r) => (
-        <details key={r.id} className="rounded-xl border border-white/10 p-3">
-          <summary className="cursor-pointer text-sm font-semibold text-slate-200">
-            Round {r.number} · {span(r.starts_on, r.ends_on)}
-          </summary>
-          <div className="mt-3">
-            <Prizes items={[['Prize', r.prize]]} />
-            <RoundBoards round={r} />
+      {earlier.length > 0 && (
+        <section aria-label="Earlier rounds" className={CARD}>
+          <h2 className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Earlier rounds</h2>
+          <div className="mt-2 divide-y divide-white/10">
+            {earlier.map((r) => (
+              <details key={r.id} className="py-2">
+                <summary className="cursor-pointer text-sm font-semibold text-slate-200">
+                  Round {r.number} · {span(r.starts_on, r.ends_on)}
+                </summary>
+                <div className="mt-3">
+                  <Prizes items={[['Prize', r.prize]]} />
+                  <RoundBoards round={r} stacked />
+                </div>
+              </details>
+            ))}
           </div>
-        </details>
-      ))}
-    </div>
+        </section>
+      )}
+    </>
   );
 }
 
@@ -318,7 +340,7 @@ function RoundCards({
   label: string;
   className: string;
 }) {
-  const card = 'block rounded-xl bg-white/5 border border-white/10 p-4';
+  const card = 'block rounded-2xl bg-slate-900 border border-white/10 p-4';
   const live = card + ' hover:bg-white/10 hover:border-white/20 transition-colors';
   return (
     <ul className={`${className} grid gap-2 sm:grid-cols-2`} aria-label={label}>
@@ -424,45 +446,49 @@ export default function TournamentView({
    *  the same refusal the address itself gives */
   sessionsOn?: boolean;
 }) {
+  // Asked for before any of the early answers below, as hooks must be.
+  const tournamentId = rounds?.[0]?.tournament_id ?? tournament?.id ?? null;
+  const standings = useStandings(tournamentId);
+
   if (rounds === undefined) {
     return <p className="max-w-2xl mx-auto px-4 py-10 text-sm text-slate-400">Loading…</p>;
   }
+  const lockNote = (until: string) =>
+    locked && (
+      <p className="text-sm text-slate-400">Until {until}, the tournament is the only game on the site.</p>
+    );
+  const railFor = (current: string[]) =>
+    standings && standings.rounds.length > 0 ? <RoundStandingsList standings={standings} currentRounds={current} /> : undefined;
+
   // Between rounds of a tournament that is still running: its standings, and
   // when it picks up again. For a tournament holding the site this is the
   // whole site, so it has to say more than "nothing is on".
   if (rounds.length === 0 && tournament) {
     return (
-      <section className="max-w-2xl mx-auto px-4 py-6" aria-label="Between rounds">
-        <h2 className="text-xl font-bold text-white flex items-center gap-2">
-          <Trophy className="w-5 h-5 text-accent shrink-0" aria-hidden="true" />
-          {tournament.name}
-        </h2>
-        <p className="mt-2 text-sm text-slate-300">
-          {tournament.next_round_starts_on
-            ? `No round is on today. The next one starts ${tournament.next_round_starts_on}.`
-            : `No round is on today, and none is left to start. It ends ${tournament.ends_on}.`}
-        </p>
-        {locked && (
-          <p className="mt-1 text-sm text-slate-400">
-            Until {tournament.ends_on}, the tournament is the only game on the site.
+      <PageWithRail
+        section="Events"
+        title={tournament.name}
+        blurb="Between rounds."
+        rail={railFor([])}
+      >
+        <section aria-label="Between rounds" className="space-y-4">
+          <p className="text-sm text-slate-300">
+            {tournament.next_round_starts_on
+              ? `No round is on today. The next one starts ${tournament.next_round_starts_on}.`
+              : `No round is on today, and none is left to start. It ends ${tournament.ends_on}.`}
           </p>
-        )}
-        <Prizes items={[['Overall prize', tournament.prize]]} />
-        <Standings tournamentId={tournament.id} currentRounds={[]} />
-      </section>
+          {lockNote(tournament.ends_on)}
+          <Prizes items={[['Overall prize', tournament.prize]]} />
+          <StandingsTable standings={standings} />
+        </section>
+      </PageWithRail>
     );
   }
   if (rounds.length === 0) {
     return (
-      <section className="max-w-2xl mx-auto px-4 py-10">
-        <h2 className="text-xl font-bold text-white flex items-center gap-2">
-          <Trophy className="w-5 h-5 text-accent shrink-0" aria-hidden="true" />
-          Tournament
-        </h2>
-        <p className="mt-2 text-sm text-slate-400">
-          No tournament round is on today. The dailies are here as usual.
-        </p>
-      </section>
+      <PageWithRail section="Events" title="Tournament" blurb="No tournament round is on today. The dailies are here as usual.">
+        {null}
+      </PageWithRail>
     );
   }
 
@@ -473,65 +499,62 @@ export default function TournamentView({
   const [first] = rounds;
   const one = rounds.length === 1;
   return (
-    <section className="max-w-2xl mx-auto px-4 py-6" aria-label={one ? 'This round' : "Today's rounds"}>
-      <h2 className="text-xl font-bold text-white flex items-center gap-2">
-        <Trophy className="w-5 h-5 text-accent shrink-0" aria-hidden="true" />
-        {first.tournament}
-      </h2>
-      <p className="mt-1 text-sm text-slate-300">
-        {one
+    <PageWithRail
+      section="Events"
+      title={first.tournament}
+      blurb={
+        (one
           ? `Round ${first.number} of ${first.of} · ${span(first.starts_on, first.ends_on)} · `
-          : `${rounds.length} rounds are on · `}
-        {DIFFICULTY_LABEL[first.difficulty]}
-      </p>
-      {locked && (
-        <p className="mt-2 text-sm text-slate-400">
-          Until {first.tournament_ends_on}, the tournament is the only game on the site.
-        </p>
-      )}
-      <Prizes
-        items={
-          one
-            ? [
-                ['This round', first.prize],
-                ['Overall prize', first.tournament_prize],
-              ]
-            : [['Overall prize', first.tournament_prize]]
-        }
-      />
-      <p className="mt-2 text-sm text-slate-400">
-        {rounds.some((r) => (r.daily_games ?? []).length > 0)
-          ? 'Most games have one board for the whole round. Those marked "new board each day" have a fresh one every day, ranked across all of them. Either way you get one attempt at each board, and your first finish is the one that counts.'
-          : 'Each game has one board for the whole round. You get one attempt at it, and your first finish is the one that counts — so take your time before you start.'}
-      </p>
-
-      {one ? (
-        <RoundCards
-          round={first}
-          link={link}
-          sessionsOn={sessionsOn}
-          label="In this round"
-          className="mt-5"
+          : `${rounds.length} rounds are on · `) + DIFFICULTY_LABEL[first.difficulty]
+      }
+      rail={railFor(rounds.map((r) => r.round_id))}
+    >
+      <section aria-label={one ? 'This round' : "Today's rounds"}>
+        {lockNote(first.tournament_ends_on)}
+        <Prizes
+          items={
+            one
+              ? [
+                  ['This round', first.prize],
+                  ['Overall prize', first.tournament_prize],
+                ]
+              : [['Overall prize', first.tournament_prize]]
+          }
         />
-      ) : (
-        rounds.map((r) => (
-          <section key={r.round_id} className="mt-6" aria-label={`Round ${r.number}`}>
-            <h3 className="text-base font-bold text-white">
-              Round {r.number} of {r.of} · {span(r.starts_on, r.ends_on)}
-            </h3>
-            <Prizes items={[['This round', r.prize]]} />
-            <RoundCards
-              round={r}
-              link={link}
-              sessionsOn={sessionsOn}
-              label={`In round ${r.number}`}
-              className="mt-3"
-            />
-          </section>
-        ))
-      )}
+        <p className="mt-2 text-sm text-slate-400">
+          {rounds.some((r) => (r.daily_games ?? []).length > 0)
+            ? 'Most games have one board for the whole round. Those marked "new board each day" have a fresh one every day, ranked across all of them. Either way you get one attempt at each board, and your first finish is the one that counts.'
+            : 'Each game has one board for the whole round. You get one attempt at it, and your first finish is the one that counts — so take your time before you start.'}
+        </p>
 
-      <Standings tournamentId={first.tournament_id} currentRounds={rounds.map((r) => r.round_id)} />
-    </section>
+        {one ? (
+          <RoundCards
+            round={first}
+            link={link}
+            sessionsOn={sessionsOn}
+            label="In this round"
+            className="mt-5"
+          />
+        ) : (
+          rounds.map((r) => (
+            <section key={r.round_id} className="mt-6" aria-label={`Round ${r.number}`}>
+              <h3 className="text-base font-bold text-white">
+                Round {r.number} of {r.of} · {span(r.starts_on, r.ends_on)}
+              </h3>
+              <Prizes items={[['This round', r.prize]]} />
+              <RoundCards
+                round={r}
+                link={link}
+                sessionsOn={sessionsOn}
+                label={`In round ${r.number}`}
+                className="mt-3"
+              />
+            </section>
+          ))
+        )}
+      </section>
+
+      <StandingsTable standings={standings} />
+    </PageWithRail>
   );
 }

@@ -300,7 +300,7 @@ function App() {
    *  presenter's half of a live session and the scoreboard; the participant's
    *  half is a phone in a hand and stays narrow. */
   // feature pages laid out with a rail beside them (PageWithRail)
-  const withRail = (['whiteboard', 'recognition', 'suggestions', 'auctions', 'contest'] as const).some((k) => nav.page.kind === k) ||
+  const withRail = (['whiteboard', 'recognition', 'suggestions', 'auctions', 'contest', 'tournament', 'join'] as const).some((k) => nav.page.kind === k) ||
     (nav.page.kind === 'giveaways' && !nav.page.giveaway && nav.page.view !== 'history');
   const forTheRoom =
     (nav.page.kind === 'live' && nav.page.host) ||
@@ -1203,7 +1203,7 @@ function App() {
         id="main"
         tabIndex={-1}
         className={`relative mx-auto px-5 py-10 sm:py-16 outline-none ${
-          forTheRoom || withRail || (atHome && !reportPage && !lockedHere) ? 'max-w-6xl'
+          forTheRoom || withRail || lockedHere || (atHome && !reportPage && !lockedHere) ? 'max-w-6xl'
             : !atHome && !reportPage && !lockedHere ? 'max-w-[82rem]' : 'max-w-3xl'
         } ${kbOpen ? 'pb-64 sm:pb-64' : ''}`}
       >
@@ -1230,7 +1230,7 @@ function App() {
               have featured still leads it: a contest or a giveaway is not a
               game, and the lock was never meant to hide them. */}
           {lockedHere && atHome && (
-            <div className="max-w-2xl mx-auto px-4 pt-6">
+            <div className="mb-8">
               <FeaturedStrip link={pageLink} sessionsOn={sessionsOn} sessionAllowed={sessionOpen} />
             </div>
           )}
@@ -1306,7 +1306,9 @@ function App() {
               tab={reportPage.tab}
               tabLink={(tab) => pageLink({ kind: 'admin', tab })}
             />}
-          {sessionsOn && reportPage?.kind === 'join' && <JoinSession code={reportPage.code} />}
+          {sessionsOn && reportPage?.kind === 'join' && (
+            <JoinSession code={reportPage.code} host={canSetUp ? pageLink({ kind: 'sessions' }) : undefined} />
+          )}
           {sessionsOn &&
             reportPage?.kind === 'scores' &&
             sessionKnown &&

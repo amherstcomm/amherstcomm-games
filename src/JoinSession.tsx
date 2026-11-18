@@ -14,6 +14,8 @@ import { useCallback, useEffect, useState } from 'react';
 import { ArrowRight, Loader2, Radio } from 'lucide-react';
 import { readLiveSessions, resolveCode, type LiveSessionSummary } from '@/live';
 import { pathOf } from '@/routes';
+import RouteLink from '@/RouteLink';
+import PageWithRail, { RailCard } from '@/PageWithRail';
 
 /** Codes are four characters from an alphabet with no 0/O/1/I/L, so anything
  *  else somebody types — spaces, dashes, lower case — is noise to strip rather
@@ -21,7 +23,11 @@ import { pathOf } from '@/routes';
  *  like it is listening. */
 const clean = (raw: string) => raw.replace(/[^A-Za-z0-9]/g, '').toUpperCase().slice(0, 4);
 
-export default function JoinSession({ code }: { code?: string }) {
+export default function JoinSession({ code, host }: {
+  code?: string;
+  /** where whoever can build sessions goes to do it; absent for everybody else */
+  host?: { to: string; onGo: () => void };
+}) {
   const [sessions, setSessions] = useState<LiveSessionSummary[] | null>(null);
   const [typed, setTyped] = useState(clean(code ?? ''));
   const [note, setNote] = useState('');
@@ -63,45 +69,67 @@ export default function JoinSession({ code }: { code?: string }) {
   }, [code, go]);
 
   return (
-    <div className="max-w-md mx-auto px-4 py-10">
-      <h1 className="text-2xl font-bold text-white mb-1">Join a session</h1>
-      <p className="text-sm text-slate-400 mb-8">
-        Pick what is running, or type the code from the screen.
-      </p>
-
-      <label className="block mb-2">
-        <span className="text-xs uppercase tracking-wider text-slate-500">Code</span>
-        <input
-          value={typed}
-          onChange={(e) => {
-            setTyped(clean(e.target.value));
-            setNote('');
+    <PageWithRail
+      section="Events"
+      title="Join a session"
+      blurb="Type the code from the screen, or pick what is running."
+      rail={
+        host && (
+          <RailCard label="Running one?">
+            <p className="text-sm text-slate-400">Build the questions and host from your laptop.</p>
+            <RouteLink {...host} className="mt-2 inline-block text-sm font-semibold text-accent hover:underline">
+              Your sessions
+            </RouteLink>
+          </RailCard>
+        )
+      }
+    >
+      <section aria-label="Join with a code" className="rounded-2xl border border-white/10 bg-slate-900 p-5 sm:p-6">
+        <form
+          className="max-w-sm"
+          onSubmit={(e) => {
+            e.preventDefault();
+            // Said, not greyed out: a dimmed button on the dark theme looks
+            // like one that is broken.
+            if (typed.length !== 4) {
+              setNote(typed.length === 0 ? 'Type the four-letter code first.' : 'The code is four letters long.');
+              return;
+            }
+            void go(typed);
           }}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' && typed.length === 4) void go(typed);
-          }}
-          autoComplete="off"
-          autoCapitalize="characters"
-          spellCheck={false}
-          placeholder="ABCD"
-          className="w-full px-4 py-3 rounded-xl bg-white/5 border border-white/15 text-white text-2xl tracking-[0.4em] font-semibold text-center placeholder:text-slate-600 focus:outline-none focus:border-accent"
-        />
-      </label>
-      <button
-        onClick={() => void go(typed)}
-        disabled={busy || typed.length !== 4}
-        className="w-full h-11 rounded-xl bg-emerald-400 text-ink font-semibold disabled:opacity-50"
-      >
-        {busy ? 'Looking…' : 'Join'}
-      </button>
-      {note && (
-        <p className="text-sm text-danger mt-3" role="status">
-          {note}
-        </p>
-      )}
+        >
+          <label className="block mb-3">
+            <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">Code</span>
+            <input
+              value={typed}
+              onChange={(e) => {
+                setTyped(clean(e.target.value));
+                setNote('');
+              }}
+              autoComplete="off"
+              autoCapitalize="characters"
+              spellCheck={false}
+              placeholder="ABCD"
+              className="mt-1.5 w-full px-4 py-3 rounded-xl bg-white/5 border border-white/15 text-white text-3xl tracking-[0.4em] font-bold text-center placeholder:text-slate-600 focus:outline-none focus:border-accent"
+            />
+          </label>
+          <button
+            type="submit"
+            disabled={busy}
+            className="w-full h-11 rounded-xl bg-accent text-slate-950 font-semibold hover:brightness-110"
+          >
+            {busy ? 'Looking…' : 'Join'}
+          </button>
+          {note && (
+            <p className="text-sm text-danger mt-3" role="status">
+              {note}
+            </p>
+          )}
+        </form>
+      </section>
 
-      <div className="mt-10">
-        <p className="text-xs uppercase tracking-wider text-slate-500 mb-2">Running now</p>
+      <section aria-label="Running now">
+        <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">Running now</h2>
         {sessions === null && <Loader2 className="w-4 h-4 animate-spin text-slate-500" />}
         {sessions?.length === 0 && (
           <p className="text-sm text-slate-400">
@@ -114,18 +142,22 @@ export default function JoinSession({ code }: { code?: string }) {
             <li key={s.id}>
               <a
                 href={pathOf({ kind: 'live', session: s.id, host: false })}
-                className="flex items-center justify-between gap-3 rounded-xl border border-white/15 px-4 py-3 hover:bg-white/5"
+                className="flex items-center justify-between gap-3 rounded-2xl border border-white/10 bg-slate-900 px-4 py-3 hover:border-white/25"
               >
-                <span className="inline-flex items-center gap-2 min-w-0">
-                  <Radio className="w-4 h-4 text-accent shrink-0" aria-hidden="true" />
+                <span className="inline-flex items-center gap-3 min-w-0">
+                  <span className="inline-flex items-center gap-1 text-xs font-bold text-violet-300 shrink-0">
+                    <Radio className="w-3.5 h-3.5" aria-hidden="true" /> LIVE
+                  </span>
                   <span className="text-white font-medium truncate">{s.title}</span>
                 </span>
-                <ArrowRight className="w-4 h-4 text-slate-400 shrink-0" aria-hidden="true" />
+                <span className="inline-flex items-center gap-1 text-sm font-semibold text-accent shrink-0">
+                  Join <ArrowRight className="w-4 h-4" aria-hidden="true" />
+                </span>
               </a>
             </li>
           ))}
         </ul>
-      </div>
-    </div>
+      </section>
+    </PageWithRail>
   );
 }
