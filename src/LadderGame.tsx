@@ -31,7 +31,9 @@ import { store as siteStore } from '@/siteStorage';
 import { offerDailySwitch, reportDaily } from '@/dailyBus';
 import { dailyIntent } from '@/routing/entry';
 import { useDailySync } from '@/useDailySync';
-import { useUpTimer } from '@/useUpTimer';
+import { formatElapsed, useUpTimer } from '@/useUpTimer';
+import { useRailSlot } from '@/railSlot';
+import { InRail, RailPanel } from '@/RailPanel';
 import ShareButton from '@/ShareButton';
 import { GAME_NAME } from '@/games';
 import { buildShare } from '@/share';
@@ -249,6 +251,8 @@ const LadderGame = forwardRef<LadderGameHandle>(function LadderGame(_props, ref)
     env: channelEnv(channel),
   });
 
+  // Beside the board on a wide page, the game's own panel goes in the rail.
+  const rail = useRailSlot();
   useUpTimer(!!record && !done, (delta) =>
     update((r) => ({ ...r, elapsedMs: (r.elapsedMs ?? 0) + delta }))
   );
@@ -417,6 +421,7 @@ const LadderGame = forwardRef<LadderGameHandle>(function LadderGame(_props, ref)
   return (
     <div className="max-w-md mx-auto">
       {toggle}
+      {!rail && (
       <div className="mb-3 flex items-center justify-center gap-4 text-xs text-slate-400">
         <span className="inline-flex items-center gap-1.5 tabular-nums">
           <Timer className="w-3.5 h-3.5 text-slate-500" />
@@ -430,6 +435,7 @@ const LadderGame = forwardRef<LadderGameHandle>(function LadderGame(_props, ref)
           <span className="text-slate-500">{store.dailyDate}</span>
         )}
       </div>
+      )}
 
       <ol className="space-y-1.5" aria-label={`ladder from ${record.from} to ${record.to}`}>
         <li>
@@ -536,7 +542,7 @@ const LadderGame = forwardRef<LadderGameHandle>(function LadderGame(_props, ref)
               </span>
             )}
           </p>
-          {solved && (
+          {!rail && solved && (
             <ShareButton
               build={() =>
                 buildShare({
@@ -567,6 +573,36 @@ const LadderGame = forwardRef<LadderGameHandle>(function LadderGame(_props, ref)
         </div>
       )}
 
+      {rail && (
+        <InRail slot={rail}>
+          <RailPanel label="Your ladder" figure={`${steps} / ${record.par} steps`}>
+            <p className="flex items-center gap-1.5 text-sm text-slate-300 tabular-nums">
+              <Timer className="w-3.5 h-3.5 text-slate-500" aria-hidden="true" />
+              {formatElapsed(record.elapsedMs ?? 0)}
+              {store.dailyMode && store.dailyDate && <span className="ml-auto text-xs text-slate-500">{store.dailyDate}</span>}
+            </p>
+            <p className="mt-2 text-xs text-slate-400">
+              From <span className="font-semibold uppercase text-slate-200">{record.from}</span> to{' '}
+              <span className="font-semibold uppercase text-slate-200">{record.to}</span>, one letter at a time.
+            </p>
+            {solved && (
+              <div className="mt-3">
+                <ShareButton
+                  build={() =>
+                    buildShare({
+                      game: GAME_NAME.ladder.full,
+                      slug: 'ladder',
+                      daily: store.dailyMode,
+                      date: store.dailyDate,
+                      body: [`${steps} step${steps === 1 ? '' : 's'}${steps === record.par ? ' — par' : ''}`],
+                    })
+                  }
+                />
+              </div>
+            )}
+          </RailPanel>
+        </InRail>
+      )}
     </div>
   );
 });
