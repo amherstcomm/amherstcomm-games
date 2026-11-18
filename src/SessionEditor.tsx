@@ -88,12 +88,19 @@ function payloadFor(
     cloud: boolean;
     /** open only: answers read by the host and admins, and nobody else */
     privateAnswers: boolean;
+    nps: { lowLabel: string; highLabel: string; askWhy: boolean };
     list: string;
     drawLength: number;
     compare: ComparePayload & { helper?: string };
   }
 ): Record<string, unknown> {
   switch (kind) {
+    case 'nps':
+      return {
+        ...(parts.nps.lowLabel.trim() ? { lowLabel: parts.nps.lowLabel.trim() } : {}),
+        ...(parts.nps.highLabel.trim() ? { highLabel: parts.nps.highLabel.trim() } : {}),
+        askWhy: parts.nps.askWhy,
+      };
     case 'compare': {
       // the helper line travels with the table, and only when there is one
       const { helper, ...table } = parts.compare;
@@ -241,6 +248,12 @@ function ItemForm({
   const [penaltySkip, setPenaltySkip] = useState(item?.penalty_skip === true);
   const existingNumber = item?.payload as NumberPayload | undefined;
   const [unit, setUnit] = useState(existingNumber?.unit ?? '');
+  const npsStart = (item?.kind === 'nps' ? item.payload : {}) as { lowLabel?: string; highLabel?: string; askWhy?: boolean };
+  const [nps, setNps] = useState({
+    lowLabel: npsStart.lowLabel ?? 'Not at all likely',
+    highLabel: npsStart.highLabel ?? 'Extremely likely',
+    askWhy: npsStart.askWhy ?? true,
+  });
   const [privateAnswers, setPrivateAnswers] = useState(
     (item?.payload as { private?: boolean } | undefined)?.private === true
   );
@@ -380,6 +393,37 @@ function ItemForm({
       </label>
 
       {kind === 'compare' && <CompareEditor value={compare} onChange={setCompare} />}
+
+      {/* eNPS: the scale is always 0 to 10, which is what makes the score
+          comparable; only the words at its ends are the author's. */}
+      {kind === 'nps' && (
+        <div className="space-y-3">
+          <p className="text-xs text-slate-400">
+            A 0 to 10 scale. 9 and 10 count as promoters, 7 and 8 passives, 0 to 6 detractors; the score is
+            promoters less detractors, as a share of everybody who answered.
+          </p>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <label className="block">
+              <span className="block text-xs uppercase tracking-wider text-slate-500">Words under 0</span>
+              <input className={FIELD} value={nps.lowLabel} maxLength={40}
+                     onChange={(e) => setNps({ ...nps, lowLabel: e.target.value })} />
+            </label>
+            <label className="block">
+              <span className="block text-xs uppercase tracking-wider text-slate-500">Words under 10</span>
+              <input className={FIELD} value={nps.highLabel} maxLength={40}
+                     onChange={(e) => setNps({ ...nps, highLabel: e.target.value })} />
+            </label>
+          </div>
+          <label className="flex items-start gap-2.5 text-sm text-slate-200">
+            <input type="checkbox" className="mt-1" checked={nps.askWhy}
+                   onChange={(e) => setNps({ ...nps, askWhy: e.target.checked })} />
+            <span>
+              Ask why
+              <span className="block text-xs text-slate-400">An optional comment box, shown by group in the results</span>
+            </span>
+          </label>
+        </div>
+      )}
 
       {(kind === 'choice' || kind === 'survey' || kind === 'rank') && (
         <>
@@ -899,6 +943,7 @@ function ItemForm({
                   word: gameWord,
                   cloud: asCloud,
                   privateAnswers,
+                  nps,
                   list: drawFrom,
                   drawLength,
                   compare,

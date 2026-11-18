@@ -33,6 +33,18 @@ export type Chart =
        *  twice its minimum have answered or it has closed */
       comments_held?: boolean;
     }
+  /** eNPS: how many gave each score 0-10, the three groups, and the score */
+  | {
+      type: 'nps';
+      total: number;
+      counts: number[];
+      promoters: number;
+      passives: number;
+      detractors: number;
+      score: number | null;
+      comments?: { pick: string; text: string }[];
+      comments_held?: boolean;
+    }
   /** an open question only the host and admins read: how many, and whether
    *  this viewer is one of them */
   | { type: 'private'; total: number; readable: boolean }
@@ -249,6 +261,57 @@ function Comments({ comments, big }: { comments: { pick: string; text: string }[
   );
 }
 
+/** eNPS: the score, the three groups as one bar, and how the scores fell. */
+function Nps({ chart, big }: { chart: Extract<Chart, { type: 'nps' }>; big?: boolean }) {
+  const pct = (n: number) => (chart.total > 0 ? Math.round((100 * n) / chart.total) : 0);
+  const groups = [
+    { label: 'Promoters', sub: '9–10', n: chart.promoters, bar: 'bg-accent' },
+    { label: 'Passives', sub: '7–8', n: chart.passives, bar: 'bg-slate-500' },
+    { label: 'Detractors', sub: '0–6', n: chart.detractors, bar: 'bg-rose-400' },
+  ];
+  const top = Math.max(1, ...chart.counts);
+  const signed = chart.score == null ? '—' : chart.score > 0 ? `+${chart.score}` : String(chart.score);
+  return (
+    <div className="space-y-5">
+      <p className={big ? 'text-3xl' : 'text-lg'}>
+        <span className="text-slate-400">eNPS </span>
+        <span className={`font-bold text-white tabular-nums ${big ? 'text-6xl' : 'text-3xl'}`}>{signed}</span>
+        <span className={`ml-2 text-slate-500 ${big ? 'text-xl' : 'text-xs'}`}>from −100 to +100</span>
+      </p>
+      <div>
+        <div className="flex h-4 rounded overflow-hidden bg-white/5" aria-hidden="true">
+          {groups.map((g) => g.n > 0 && (
+            <span key={g.label} className={g.bar} style={{ width: `${pct(g.n)}%` }} />
+          ))}
+        </div>
+        <ul className={`mt-2 flex flex-wrap gap-x-5 gap-y-1 ${big ? 'text-xl' : 'text-sm'}`}>
+          {groups.map((g) => (
+            <li key={g.label} className="flex items-center gap-1.5 text-slate-300">
+              <span className={`w-2.5 h-2.5 rounded-sm ${g.bar}`} aria-hidden="true" />
+              {g.label} <span className="text-slate-500">({g.sub})</span>
+              <span className="tabular-nums text-white">{pct(g.n)}%</span>
+              <span className="tabular-nums text-slate-500">· {g.n}</span>
+            </li>
+          ))}
+        </ul>
+      </div>
+      {/* how the scores fell, 0 to 10: the shape the score is made from */}
+      <figure>
+        <div className="grid grid-cols-11 gap-1 items-end h-20" role="img"
+             aria-label={`Scores: ${chart.counts.map((n, i) => `${i}: ${n}`).join(', ')}`}>
+          {chart.counts.map((n, i) => (
+            <span key={i} className={`block rounded-t ${i >= 9 ? 'bg-accent' : i >= 7 ? 'bg-slate-500' : 'bg-rose-400'}`}
+                  style={{ height: `${Math.max(n > 0 ? 6 : 0, (n / top) * 100)}%` }} />
+          ))}
+        </div>
+        <div className="grid grid-cols-11 gap-1 mt-1 text-center text-xs text-slate-500 tabular-nums" aria-hidden="true">
+          {chart.counts.map((_, i) => <span key={i}>{i}</span>)}
+        </div>
+      </figure>
+    </div>
+  );
+}
+
 export default function ChartFor({
   chart,
   big,
@@ -294,6 +357,18 @@ export default function ChartFor({
       );
     case 'numbers':
       return <Numbers chart={chart} big={big} />;
+    case 'nps':
+      return (
+        <>
+          <Nps chart={chart} big={big} />
+          {(chart.comments?.length ?? 0) > 0 && <Comments comments={chart.comments!} big={big} />}
+          {chart.comments_held && (
+            <p className={`mt-4 text-slate-400 ${big ? 'text-lg' : 'text-sm'}`}>
+              The reasons people gave are shown when the survey closes, or sooner once twice the minimum have answered.
+            </p>
+          )}
+        </>
+      );
     case 'texts':
       return <Texts chart={chart} big={big} cloud={cloud} />;
     default:

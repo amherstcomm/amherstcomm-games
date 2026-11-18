@@ -31812,3 +31812,520 @@ as $fn$
 $fn$;
 revoke all on function public.presenter_view(uuid) from public, anon;
 grant execute on function public.presenter_view(uuid) to authenticated;
+
+-- ---------------------------------------------------------------------------
+-- eNPS (November 2026)
+-- ---------------------------------------------------------------------------
+--
+-- "How likely are you to recommend working here?", 0 to 10. 9 and 10 are
+-- promoters, 7 and 8 passives, 0 to 6 detractors, and the score is the share
+-- of promoters less the share of detractors, -100 to 100. Unscored -- nobody
+-- is right -- and, like a comparison, it can ask why (Ray, 2026-11-18): the
+-- reasons are shown with the group their writer fell in, never a name.
+--
+-- payload: { lowLabel?, highLabel?, askWhy }
+-- answer:  { score: 0-10, why: text | null }
+
+insert into public.item_kinds (kind, description, scored) values
+  ('nps', 'How likely to recommend, 0 to 10', false)
+on conflict (kind) do nothing;
+
+create or replace function public.nps_value(p_item public.items, p_value jsonb)
+returns jsonb
+language plpgsql
+immutable
+set search_path = ''
+as $fn$
+declare
+  score int;
+  why text;
+begin
+  if jsonb_typeof(p_value) is distinct from 'object'
+     or coalesce(p_value ->> 'score', '') !~ '^[0-9]{1,2}$'
+     or (p_value ->> 'score')::int > 10 then
+    return jsonb_build_object('ok', false, 'reason', 'pick a number from 0 to 10');
+  end if;
+  score := (p_value ->> 'score')::int;
+  why := nullif(btrim(coalesce(p_value ->> 'why', '')), '');
+  if not coalesce((p_item.payload ->> 'askWhy')::boolean, false) then
+    why := null;
+  end if;
+  if char_length(why) > 1000 then
+    return jsonb_build_object('ok', false, 'reason', 'keep the reason to 1000 characters');
+  end if;
+  return jsonb_build_object('ok', true, 'value', jsonb_build_object('score', score, 'why', why));
+end;
+$fn$;
+revoke all on function public.nps_value(public.items, jsonb) from public, anon, authenticated;
+
+create or replace function public.answer_item(
+  p_item uuid,
+  p_value jsonb,
+  p_anonymous boolean default false
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $fn$
+declare
+  it public.items;
+  sess public.sessions;
+  me uuid := (select auth.uid());
+  window_seconds int;
+  began timestamptz;
+  pick text;
+  why text;
+begin
+  -- The clock before the question: a survey whose closing time has passed is
+  -- shut, whether or not anybody has been by since.
+  perform public.apply_schedule(
+    (select i.session_id from public.items i where i.id = p_item));
+  select * into it from public.items where id = p_item;
+  if it.id is null then
+    return jsonb_build_object('ok', false, 'reason', 'no such item');
+  end if;
+  select * into sess from public.sessions where id = it.session_id;
+  -- A fully anonymous survey's answers go through answer_anonymously, with the
+  -- key, and never into responses beside a name.
+  if sess.privacy = 'full' then
+    return jsonb_build_object('ok', false, 'reason', 'this survey is fully anonymous; reload the page and answer again');
+  end if;
+  if sess.state <> 'live' then
+    return jsonb_build_object('ok', false, 'reason', 'this session is not running');
+  end if;
+  if not public.session_open_to_me(sess.id) then
+    return jsonb_build_object('ok', false, 'reason', 'this trivia is for the giveaway''s entrants: enter the giveaway first');
+  end if;
+  if public.runs_session(sess.id) then
+    return jsonb_build_object('ok', false, 'reason', 'you are running this one');
+  end if;
+  if it.state <> 'open' then
+    return jsonb_build_object('ok', false, 'reason', 'answers are closed for this one');
+  end if;
+
+  -- A comparison: one of the options, or "none" where the author allowed it,
+  -- and an optional reason. Kept to that shape here, because the chart and
+  -- the tally read it, and a reason sent to a question that did not ask for
+  -- one is dropped rather than stored.
+  if it.kind = 'compare' then
+    if jsonb_typeof(p_value) is distinct from 'object' then
+      return jsonb_build_object('ok', false, 'reason', 'pick one of the options');
+    end if;
+    pick := p_value ->> 'pick';
+    if pick is null
+       or (pick = 'none' and not coalesce((it.payload ->> 'allowNoPreference')::boolean, false))
+       or (pick <> 'none' and not exists (
+             select 1 from jsonb_array_elements(it.payload -> 'options') o where o ->> 'id' = pick)) then
+      return jsonb_build_object('ok', false, 'reason', 'pick one of the options');
+    end if;
+    why := nullif(btrim(coalesce(p_value ->> 'why', '')), '');
+    if not coalesce((it.payload ->> 'askWhy')::boolean, false) then
+      why := null;
+    end if;
+    if char_length(why) > 1000 then
+      return jsonb_build_object('ok', false, 'reason', 'keep the reason to 1000 characters');
+    end if;
+    p_value := jsonb_build_object('pick', pick, 'why', why);
+  end if;
+  if it.kind = 'nps' then
+    declare checked jsonb := public.nps_value(it, p_value);
+    begin
+      if not (checked ->> 'ok')::boolean then
+        return checked;
+      end if;
+      p_value := checked -> 'value';
+    end;
+  end if;
+
+  if sess.mode = 'open' then
+    -- A comparison may be changed until it closes: it has no right answer to
+    -- give away, and "you can change your answer" is what the screen promises.
+    if it.kind <> 'compare'
+       and exists (select 1 from public.responses r where r.item_id = p_item and r.user_id = me) then
+      return jsonb_build_object('ok', false, 'reason', 'you have answered that one');
+    end if;
+    if not exists (select 1 from public.item_served s
+                   where s.item_id = p_item and s.user_id = me) then
+      return jsonb_build_object('ok', false, 'reason', 'that is not the question in front of you');
+    end if;
+  elsif sess.current_item is distinct from p_item then
+    return jsonb_build_object('ok', false, 'reason', 'that is not the question on screen');
+  end if;
+
+  window_seconds := public.item_seconds(it.payload);
+  began := public.started_at(p_item, me);
+  if window_seconds is not null and began is not null
+     and now() > began + (window_seconds * interval '1 second') then
+    return jsonb_build_object('ok', false, 'reason', 'time is up for this one');
+  end if;
+
+  insert into public.responses (item_id, user_id, value, anonymous)
+  values (p_item, me, p_value, coalesce(p_anonymous, false))
+  on conflict (item_id, user_id) do update
+    set value = excluded.value,
+        anonymous = excluded.anonymous,
+        submitted_at = now();
+
+  return jsonb_build_object(
+    'ok', true,
+    'answer', case when sess.mode = 'open'
+                   then (select a.answer from public.item_answers a where a.item_id = p_item)
+              end);
+end;
+$fn$;
+revoke all on function public.answer_item(uuid, jsonb, boolean) from public, anon;
+grant execute on function public.answer_item(uuid, jsonb, boolean) to authenticated;
+
+create or replace function public.answer_anonymously(p_item uuid, p_value jsonb, p_key text)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $fn$
+declare
+  it public.items;
+  sess public.sessions;
+  me uuid := (select auth.uid());
+  checked jsonb;
+  bound boolean;
+begin
+  perform public.apply_schedule((select i.session_id from public.items i where i.id = p_item));
+  select * into it from public.items where id = p_item;
+  if it.id is null then
+    return jsonb_build_object('ok', false, 'reason', 'no such item');
+  end if;
+  select * into sess from public.sessions where id = it.session_id;
+  if sess.privacy <> 'full' then
+    return jsonb_build_object('ok', false, 'reason', 'this survey is not fully anonymous');
+  end if;
+  if me is null then
+    return jsonb_build_object('ok', false, 'reason', 'not signed in');
+  end if;
+  if sess.state <> 'live' then
+    return jsonb_build_object('ok', false, 'reason', 'this session is not running');
+  end if;
+  if not public.session_open_to_me(sess.id) then
+    return jsonb_build_object('ok', false, 'reason', 'not allowed');
+  end if;
+  if public.runs_session(sess.id) then
+    return jsonb_build_object('ok', false, 'reason', 'you are running this one');
+  end if;
+  if it.state <> 'open' then
+    return jsonb_build_object('ok', false, 'reason', 'answers are closed for this one');
+  end if;
+  if it.kind = 'game' then
+    return jsonb_build_object('ok', false, 'reason', 'a word game cannot be answered anonymously');
+  end if;
+  if sess.mode = 'live' and sess.current_item is distinct from p_item then
+    return jsonb_build_object('ok', false, 'reason', 'that is not the question on screen');
+  end if;
+  if coalesce(p_key, '') !~ '^[0-9a-f]{64}$' then
+    return jsonb_build_object('ok', false, 'reason', 'this browser has no key to file the answer under');
+  end if;
+  bound := exists (select 1 from public.survey_participation sp
+                   where sp.session_id = sess.id and sp.user_id = me);
+  if bound and not public.anon_key_ok(sess.id, p_key) then
+    return jsonb_build_object('ok', false, 'key_lost', true, 'reason',
+      'your answers were saved from another browser, or one that has since forgotten its key: they still count, and this one cannot change them');
+  end if;
+
+  if it.kind = 'nps' then
+    checked := public.nps_value(it, p_value);
+    if not (checked ->> 'ok')::boolean then
+      return checked;
+    end if;
+    p_value := checked -> 'value';
+  end if;
+
+  if it.kind = 'compare' then
+    checked := public.compare_value(it, p_value);
+    if not (checked ->> 'ok')::boolean then
+      return checked;
+    end if;
+    p_value := checked -> 'value';
+  elsif sess.mode = 'open'
+        and exists (select 1 from public.survey_answers a
+                    where a.item_id = p_item and a.answer_key = public.anon_answer_key(p_item, p_key)) then
+    -- every other kind is answered once on your own time, as it is elsewhere
+    return jsonb_build_object('ok', false, 'reason', 'you have answered that one');
+  end if;
+
+  if not bound then
+    insert into public.survey_participation (session_id, user_id, key_check)
+    values (sess.id, me, public.anon_key_check(sess.id, p_key))
+    on conflict (session_id, user_id) do nothing;
+    -- two tabs answering for the first time at once, with different keys
+    if not public.anon_key_ok(sess.id, p_key) then
+      return jsonb_build_object('ok', false, 'key_lost', true, 'reason',
+        'another tab answered first with a different key; reload this one');
+    end if;
+  end if;
+
+  insert into public.survey_answers (item_id, answer_key, value)
+  values (p_item, public.anon_answer_key(p_item, p_key), p_value)
+  on conflict (item_id, answer_key) do update set value = excluded.value;
+
+  return jsonb_build_object('ok', true, 'answer', null);
+end;
+$fn$;
+revoke all on function public.answer_anonymously(uuid, jsonb, text) from public, anon;
+grant execute on function public.answer_anonymously(uuid, jsonb, text) to authenticated;
+
+create or replace function public.item_chart_raw(p_item uuid)
+returns jsonb
+language sql
+stable
+set search_path = ''
+as $fn$
+  with it as (
+    select i.id, i.kind, i.payload, a.answer,
+           (select count(*) from public.answers_for(p_item) r where r.item_id = i.id) as answered
+    from public.items i
+    left join public.item_answers a on a.item_id = i.id
+    where i.id = p_item
+  )
+  select case (select kind from it)
+
+    -- Every option, including the ones nobody picked: a bar chart missing its
+    -- zeroes is a chart that quietly rewrites the question.
+    when 'choice' then jsonb_build_object(
+      'type', 'bars',
+      'total', (select answered from it),
+      'bars', coalesce((
+        select jsonb_agg(jsonb_build_object(
+                 'label', o,
+                 'count', (select count(*) from public.answers_for(p_item) r
+                           where r.item_id = p_item
+                             and (r.value = to_jsonb(o) or r.value @> to_jsonb(o))),
+                 'correct', (select answer -> 'correct' from it) @> to_jsonb(o))
+               order by ord)
+        from jsonb_array_elements_text((select payload -> 'options' from it))
+             with ordinality as t(o, ord)), '[]'::jsonb))
+
+    when 'survey' then jsonb_build_object(
+      'type', 'bars',
+      'total', (select answered from it),
+      'bars', coalesce((
+        select jsonb_agg(jsonb_build_object(
+                 'label', o,
+                 'count', (select count(*) from public.answers_for(p_item) r
+                           where r.item_id = p_item
+                             and (r.value = to_jsonb(o) or r.value @> to_jsonb(o))),
+                 'correct', null)
+               order by ord)
+        from jsonb_array_elements_text((select payload -> 'options' from it))
+             with ordinality as t(o, ord)), '[]'::jsonb))
+
+    -- One bar per pair: how many got that one right. Which wrong answer was
+    -- popular is a further question, and a chart that tried to show both would
+    -- show neither.
+    when 'match' then jsonb_build_object(
+      'type', 'bars',
+      'total', (select answered from it),
+      'label', 'Pairs got right',
+      'bars', coalesce((
+        select jsonb_agg(jsonb_build_object(
+                 'label', l || ' → ' || ((select answer -> 'pairs' from it) ->> l),
+                 'count', (select count(*) from public.answers_for(p_item) r
+                           where r.item_id = p_item
+                             and r.value ->> l = (select answer -> 'pairs' from it) ->> l),
+                 'correct', true)
+               order by l)
+        from jsonb_object_keys((select answer -> 'pairs' from it)) l), '[]'::jsonb))
+
+    -- Same again, by position rather than by pair.
+    when 'rank' then jsonb_build_object(
+      'type', 'bars',
+      'total', (select answered from it),
+      'label', 'Placed correctly',
+      'bars', coalesce((
+        select jsonb_agg(jsonb_build_object(
+                 'label', (ord::text) || '. ' || o,
+                 'count', (select count(*) from public.answers_for(p_item) r
+                           where r.item_id = p_item and r.value ->> (ord - 1)::int = o),
+                 'correct', true)
+               order by ord)
+        from jsonb_array_elements_text((select answer -> 'order' from it))
+             with ordinality as t(o, ord)), '[]'::jsonb))
+
+    -- Solved, and in how many. Six bars and a seventh for the ones who did not.
+    when 'game' then jsonb_build_object(
+      'type', 'bars',
+      'total', (select answered from it),
+      'label', 'Guesses taken',
+      'bars', coalesce((
+        select jsonb_agg(jsonb_build_object(
+                 'label', case when n > 0 then n::text else 'Not solved' end,
+                 'count', (select count(*) from public.answers_for(p_item) r
+                           where r.item_id = p_item
+                             and case
+                                   when n > 0 then coalesce((r.value ->> 'solved')::boolean, false)
+                                     and jsonb_array_length(r.value -> 'guesses') = n
+                                   else not coalesce((r.value ->> 'solved')::boolean, false)
+                                 end),
+                 'correct', n > 0)
+               order by case when n = 0 then 99 else n end)
+        from generate_series(0, coalesce(nullif((select payload ->> 'tries' from it), '')::int, 6)) n
+      ), '[]'::jsonb))
+
+    -- Not bars. Fifty guesses are fifty values on a line.
+    when 'number' then jsonb_build_object(
+      'type', 'numbers',
+      'total', (select answered from it),
+      'answer', (select public.as_number(answer -> 'value') from it),
+      'unit', (select payload -> 'unit' from it),
+      'currency', (select payload -> 'currency' from it),
+      'percent', (select payload -> 'percent' from it),
+      'values', coalesce((
+        select jsonb_agg(v order by v)
+        from (select public.as_number(r.value) as v from public.answers_for(p_item) r
+              where r.item_id = p_item) g
+        where v is not null), '[]'::jsonb))
+
+    -- Text, with the same promise presenter_view makes: no name on anything
+    -- somebody asked to be unnamed.
+    when 'open' then jsonb_build_object(
+      'type', 'texts',
+      'total', (select answered from it),
+      -- The author's choice, made when the question was written rather than
+      -- found on the results screen afterwards: "one word for this month" is a
+      -- cloud before anybody answers it.
+      'cloud', coalesce((select (payload ->> 'cloud')::boolean from it), false),
+      'texts', coalesce((
+        select jsonb_agg(jsonb_build_object(
+                 'value', r.value,
+                 'who', case when r.anonymous then null else p.display_name end)
+               -- in the order they came where there is an order; a fully
+               -- anonymous survey keeps no time, and the order of its rows
+               -- would be one, so it gets the hash instead
+               order by case when r.user_id is null then r.shuffle end, r.submitted_at)
+        from public.answers_for(p_item) r
+        left join public.profiles p on p.id = r.user_id
+        where r.item_id = p_item), '[]'::jsonb))
+
+    -- Every option in the order it was written, then "No preference" where it
+    -- was offered. The reasons come with the option each person picked and
+    -- nothing else: no name, no time, and in an order that is neither -- a
+    -- hash of who, which no reader can turn back into anybody.
+    when 'compare' then jsonb_build_object(
+      'type', 'bars',
+      'total', (select answered from it),
+      'bars', coalesce((
+        select jsonb_agg(b order by ord)
+        from (
+          select ord, jsonb_build_object(
+                   'label', o ->> 'name',
+                   'count', (select count(*) from public.answers_for(p_item) r
+                             where r.item_id = p_item and r.value ->> 'pick' = o ->> 'id'),
+                   'correct', null) as b
+          from jsonb_array_elements((select payload -> 'options' from it))
+               with ordinality as t(o, ord)
+          union all
+          select 99, jsonb_build_object(
+                   'label', 'No preference',
+                   'count', (select count(*) from public.answers_for(p_item) r
+                             where r.item_id = p_item and r.value ->> 'pick' = 'none'),
+                   'correct', null)
+          where coalesce(((select payload from it) ->> 'allowNoPreference')::boolean, false)
+        ) x), '[]'::jsonb),
+      'comments', coalesce((
+        select jsonb_agg(jsonb_build_object(
+                 'pick', coalesce(
+                           (select o ->> 'name'
+                            from jsonb_array_elements((select payload -> 'options' from it)) o
+                            where o ->> 'id' = r.value ->> 'pick'),
+                           'No preference'),
+                 'text', r.value ->> 'why')
+               order by r.shuffle)
+        from public.answers_for(p_item) r
+        where r.item_id = p_item and coalesce(r.value ->> 'why', '') <> ''), '[]'::jsonb))
+
+    -- eNPS: how many gave each score, the three groups, and the score -- the
+    -- share of promoters less the share of detractors, -100 to 100. The
+    -- reasons come with the group their writer was in, in hash order.
+    when 'nps' then (
+      with scores as (
+        select (r.value ->> 'score')::int as score, r.value ->> 'why' as why, r.shuffle
+        from public.answers_for(p_item) r
+        where r.value ->> 'score' ~ '^[0-9]{1,2}$'
+      ), totals as (
+        select count(*) as n,
+               count(*) filter (where score >= 9) as promoters,
+               count(*) filter (where score between 7 and 8) as passives,
+               count(*) filter (where score <= 6) as detractors
+        from scores
+      )
+      select jsonb_build_object(
+        'type', 'nps',
+        'total', (select n from totals),
+        'counts', (select jsonb_agg((select count(*) from scores s where s.score = g) order by g)
+                   from generate_series(0, 10) g),
+        'promoters', (select promoters from totals),
+        'passives', (select passives from totals),
+        'detractors', (select detractors from totals),
+        'score', (select case when n = 0 then null
+                         else round(100.0 * (promoters - detractors) / n)::int end from totals),
+        'comments', coalesce((
+          select jsonb_agg(jsonb_build_object(
+                   'pick', case when score >= 9 then 'Promoter' when score >= 7 then 'Passive' else 'Detractor' end,
+                   'text', why) order by shuffle)
+          from scores where coalesce(why, '') <> ''), '[]'::jsonb)))
+
+    else jsonb_build_object('type', 'none', 'total', (select answered from it))
+  end
+$fn$;
+revoke all on function public.item_chart_raw(uuid) from public, anon, authenticated;
+
+create or replace function public.item_tally(p_item uuid)
+returns jsonb
+language sql
+stable
+security definer
+set search_path = ''
+as $fn$
+  select case
+    when not exists (select 1 from public.items i where i.id = p_item and i.state = 'revealed')
+      then jsonb_build_object('ok', false, 'reason', 'not revealed yet')
+    -- never to the room: the tally of an open question is its answers
+    when public.is_private_item(p_item)
+      then jsonb_build_object('ok', false, 'reason', 'only the host and admins read these')
+    -- under the minimum, nothing: not even a tally that ticks as people answer
+    when not public.results_open((select i.session_id from public.items i where i.id = p_item))
+      then jsonb_build_object('ok', false, 'reason', 'not enough answers yet')
+    else jsonb_build_object(
+      'ok', true,
+      'total', (select count(*) from public.answers_for(p_item) r where r.item_id = p_item),
+      -- A comparison is counted by what was picked and named by the option,
+      -- never grouped by the whole answer: the reasons are in there, and
+      -- grouping by them would put each one on the projector with its count.
+      'counts', case
+        -- an eNPS tally is by score, never by the reason that came with it
+        when (select i.kind from public.items i where i.id = p_item) = 'nps' then coalesce(
+          (select jsonb_object_agg(v, n)
+           from (select r.value ->> 'score' as v, count(*) as n
+                 from public.answers_for(p_item) r group by 1) t),
+          '{}'::jsonb)
+        when (select i.kind from public.items i where i.id = p_item) = 'compare' then coalesce(
+          (select jsonb_object_agg(v, n)
+           from (select coalesce(
+                          (select o ->> 'name'
+                           from public.items i, jsonb_array_elements(i.payload -> 'options') o
+                           where i.id = p_item and o ->> 'id' = r.value ->> 'pick'),
+                          'No preference') as v,
+                        count(*) as n
+                 from public.answers_for(p_item) r where r.item_id = p_item
+                 group by 1) t),
+          '{}'::jsonb)
+        else coalesce(
+          (select jsonb_object_agg(v, n)
+           from (select r.value::text as v, count(*) as n
+                 from public.answers_for(p_item) r where r.item_id = p_item
+                 group by r.value::text) t),
+          '{}'::jsonb)
+      end
+    )
+  end
+$fn$;
+revoke all on function public.item_tally(uuid) from public, anon;
+grant execute on function public.item_tally(uuid) to authenticated;

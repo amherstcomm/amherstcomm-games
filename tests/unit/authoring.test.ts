@@ -239,6 +239,7 @@ describe('AUTHORABLE', () => {
       'rank',
       'game',
       'compare',
+      'nps',
     ]);
   });
 });

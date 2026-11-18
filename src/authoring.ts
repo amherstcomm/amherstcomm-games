@@ -120,6 +120,7 @@ export const AUTHORABLE = [
   'rank',
   'game',
   'compare',
+  'nps',
 ] as const;
 
 /** What each one is called on screen. A table rather than a chain of ternaries
@@ -133,6 +134,7 @@ export const KIND_LABEL: Record<(typeof AUTHORABLE)[number], string> = {
   rank: 'Ranking',
   game: 'Word game',
   compare: 'Compare',
+  nps: 'eNPS',
 };
 
 /** The word games a session can actually run.
@@ -427,7 +429,7 @@ export function problemWith(args: {
   compare?: ComparePayload;
 }): string | null {
   if (args.prompt.trim().length === 0) return 'The question needs some words.';
-  if (args.kind === 'open') return null;
+  if (args.kind === 'open' || args.kind === 'nps') return null;
   if (args.kind === 'compare') return args.compare ? compareProblem(args.compare) : 'Build the comparison first.';
 
   if (args.kind === 'game') {

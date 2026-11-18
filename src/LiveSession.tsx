@@ -10,6 +10,7 @@
 // no "hide it in the UI" branch here because there is nothing to hide: an
 // unrevealed item comes back with `answer` null, and that is enforced two
 // layers down in a table with no grant.
+import NpsQuestion from '@/NpsQuestion';
 import { AvatarStack } from '@/Avatar';
 import { readItemAvatars, type Pick } from '@/avatars';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -1619,6 +1620,10 @@ export default function LiveSession({ session, host }: { session: string; host: 
           {kind === 'match' && (
             <Match item={shown} onSend={(v) => void send(v)} sending={sending} readOnly={inert} />
           )}
+          {kind === 'nps' && (
+            <NpsQuestion item={shown} onSend={(v) => void send(v)} sending={sending} readOnly={inert}
+                         fullyAnonymous={item.privacy === 'full'} />
+          )}
           {kind === 'compare' && (
             <CompareQuestion
               item={shown}
@@ -1657,7 +1662,7 @@ export default function LiveSession({ session, host }: { session: string; host: 
           {/* A kind the server knows about and this build does not. Says so
               rather than rendering an empty box: item_kinds is a table so a
               kind can be added ahead of the component that draws it. */}
-          {!['choice', 'survey', 'open', 'match', 'number', 'rank', 'game', 'compare'].includes(kind) && (
+          {!['choice', 'survey', 'open', 'match', 'number', 'rank', 'game', 'compare', 'nps'].includes(kind) && (
             <p className="text-sm text-slate-400">
               This kind of question ({kind}) is not supported by this version of the site
               yet.
