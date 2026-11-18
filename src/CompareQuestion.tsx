@@ -71,6 +71,7 @@ export default function CompareQuestion({
   readOnly,
   onBack,
   nextLabel,
+  fullyAnonymous,
 }: {
   item: LiveItem;
   mode: 'live' | 'open';
@@ -83,6 +84,8 @@ export default function CompareQuestion({
   onBack?: () => void;
   /** open mode: "Next question" or "Finish" */
   nextLabel?: string;
+  /** a fully anonymous survey, which changes what the reason box promises */
+  fullyAnonymous?: boolean;
 }) {
   const p = asCompare(item.payload);
   const options = p.options;
@@ -301,7 +304,7 @@ export default function CompareQuestion({
         <div className="rounded-2xl border border-white/10 bg-slate-900 p-4">
           <label className="block">
             <span className="text-sm font-semibold text-white">Why?</span>{' '}
-            <span className="text-sm text-slate-400">Optional</span>
+            <span className="text-sm text-slate-400">{fullyAnonymous ? 'Optional, also anonymous' : 'Optional'}</span>
             <textarea
               value={why}
               onChange={(e) => setWhy(e.target.value.slice(0, MAX_WHY))}
@@ -312,7 +315,9 @@ export default function CompareQuestion({
             />
           </label>
           <p className="mt-1 text-xs text-slate-500">
-            Shown in the results with your pick, without your name.
+            {fullyAnonymous
+              ? 'Leave out anything that would identify you if you want to stay anonymous.'
+              : 'Shown in the results with your pick, without your name.'}
           </p>
           {live && open && why !== sentWhy && (
             <button type="button" onClick={sendWhy} disabled={sending}

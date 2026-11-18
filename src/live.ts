@@ -12,6 +12,7 @@
 // server refuses to send before the reveal, and a payload broadcast to the
 // room would go around that refusal entirely. There is nothing in the event to
 // leak.
+import { ensureSurveyKey, surveyKey } from '@/anonKey';
 import type { RealtimeChannel } from '@supabase/supabase-js';
 import { supabase } from '@/supabase';
 import type { Door } from '@/presenting';
@@ -57,6 +58,13 @@ export type LiveItem = {
    *  which `done` cannot say for a question somebody has returned to */
   number?: number;
   revisit?: boolean;
+  /** 'full': a fully anonymous survey -- answers go by this browser's key,
+   *  never beside a name (anonKey.ts) */
+  privacy?: 'room' | 'full';
+  /** a fully anonymous survey this person answered from another browser, or
+   *  from this one before it forgot its key: those answers stand, and this
+   *  browser can neither add to nor change them */
+  key_lost?: boolean;
   /** whether *this viewer* is the one running the session.
    *
    *  Not the same question as "is this the presenter's address", which is what
@@ -244,6 +252,11 @@ export type SessionResults = {
   title?: string;
   state?: 'draft' | 'live' | 'closed';
   mode?: 'live' | 'open';
+  /** 'full': fully anonymous, so counts only and nobody's standings */
+  privacy?: 'room' | 'full';
+  min_results?: number;
+  /** how many people have answered at all */
+  answered?: number;
   items?: { id: string; position: number; kind: string; prompt: string; chart: Chart }[];
 };
 
@@ -345,6 +358,23 @@ export async function setSessionOptions(
   return (data as { ok: boolean }) ?? { ok: false, reason: 'no answer' };
 }
 
+/** How private a session's answers are, the minimum before results show, and
+ *  whether the reasons people give are shown. Null leaves one alone. */
+export async function setSessionPrivacy(
+  session: string,
+  change: { privacy?: 'room' | 'full'; minResults?: number; showComments?: boolean }
+): Promise<{ ok: boolean; reason?: string }> {
+  if (!supabase) return { ok: false, reason: 'not connected' };
+  const { data, error } = await supabase.rpc('set_session_privacy', {
+    p_session: session,
+    p_privacy: change.privacy ?? null,
+    p_min_results: change.minResults ?? null,
+    p_show_comments: change.showComments ?? null,
+  });
+  if (error) return { ok: false, reason: error.message };
+  return (data as { ok: boolean; reason?: string }) ?? { ok: false, reason: 'no answer' };
+}
+
 /**
  * Stop after the question in front of you, or carry on. Held by the server,
  * so a reload or another device cannot step past it: the question already
@@ -384,7 +414,10 @@ export function readyLine(item: Pick<LiveItem, 'total' | 'timed' | 'seconds_each
 
 export async function readCurrentItem(session: string): Promise<LiveItem> {
   if (!supabase) return { state: 'not-live' };
-  const { data, error } = await supabase.rpc('current_item', { p_session: session });
+  // The key goes along whether or not the survey turns out to be anonymous:
+  // the server only reads it for one that is, and asking first would be a
+  // second round trip on every poll.
+  const { data, error } = await supabase.rpc('current_item', { p_session: session, p_key: surveyKey(session) });
   if (error || !data) return { state: 'not-live' };
   return data as LiveItem;
 }
@@ -393,15 +426,15 @@ export async function readCurrentItem(session: string): Promise<LiveItem> {
  *  time and may still change, in order -- what Back and Next move between. */
 export async function readCompareTrail(session: string): Promise<{ id: string; position: number }[]> {
   if (!supabase) return [];
-  const { data, error } = await supabase.rpc('compare_trail', { p_session: session });
+  const { data, error } = await supabase.rpc('compare_trail', { p_session: session, p_key: surveyKey(session) });
   if (error || !Array.isArray(data)) return [];
   return data as { id: string; position: number }[];
 }
 
 /** One of those, back in front of them with what they answered. */
-export async function revisitItem(item: string): Promise<LiveItem & { reason?: string }> {
+export async function revisitItem(session: string, item: string): Promise<LiveItem & { reason?: string }> {
   if (!supabase) return { state: 'not-live' };
-  const { data, error } = await supabase.rpc('revisit_item', { p_item: item });
+  const { data, error } = await supabase.rpc('revisit_item', { p_item: item, p_key: surveyKey(session) });
   if (error || !data) return { state: 'not-live', reason: error?.message };
   return data as LiveItem & { reason?: string };
 }
@@ -430,6 +463,23 @@ export async function sendAnswer(
   });
   if (error) return { ok: false, reason: error.message };
   return (data as { ok: boolean; reason?: string }) ?? { ok: false, reason: 'no answer' };
+}
+
+/** An answer to a fully anonymous survey: filed under this browser's key,
+ *  which is made here the first time. */
+export async function sendAnonymousAnswer(
+  session: string,
+  item: string,
+  value: unknown
+): Promise<{ ok: boolean; reason?: string; key_lost?: boolean; answer?: unknown }> {
+  if (!supabase) return { ok: false, reason: 'not connected' };
+  const { data, error } = await supabase.rpc('answer_anonymously', {
+    p_item: item,
+    p_value: value,
+    p_key: ensureSurveyKey(session),
+  });
+  if (error) return { ok: false, reason: error.message };
+  return (data as { ok: boolean; reason?: string; key_lost?: boolean; answer?: unknown }) ?? { ok: false, reason: 'no answer' };
 }
 
 /** Presenter controls. One call, because the states are a sequence and the

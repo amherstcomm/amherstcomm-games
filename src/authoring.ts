@@ -59,6 +59,12 @@ export type Sheet = {
     /** an open session's window, either end of which may be unset */
     opens_at: string | null;
     closes_at: string | null;
+    /** how private its answers are; see SurveyPrivacy.tsx */
+    privacy?: 'room' | 'full';
+    min_results?: number;
+    show_comments?: boolean;
+    answered?: number;
+    attached?: boolean;
   };
   kinds?: ItemKind[];
   items?: SheetItem[];

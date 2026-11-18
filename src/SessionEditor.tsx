@@ -8,6 +8,7 @@
 // that session's questions. Same file because the list's only job is to get you
 // into the editor, and splitting them would mean two places that have to agree
 // about what a session looks like.
+import SurveyPrivacy from '@/SurveyPrivacy';
 import CompareEditor from '@/CompareEditor';
 import { asCompare, blankCompare, type ComparePayload } from '@/compare';
 import { useCallback, useEffect, useState } from 'react';
@@ -47,7 +48,7 @@ import {
   type SessionSummary,
 } from '@/authoring';
 import { JOIN_HOST, pathOf } from '@/routes';
-import { advance, setSessionOptions } from '@/live';
+import { advance, setSessionOptions, setSessionPrivacy } from '@/live';
 import { INTL_UNITS, formatGuess } from '@/guessFormat';
 import { describeWindow, fromOfficeInput, toOfficeInput } from '@/schedule';
 import { readWordLists, type WordList } from '@/wordLists';
@@ -1176,6 +1177,7 @@ function SessionEditorFor({ session }: { session: string }) {
         <input
           type="checkbox"
           checked={meta.qa}
+          disabled={meta.privacy === 'full'}
           onChange={(e) => {
             // Read before the await, for the reason above.
             const on = e.target.checked;
@@ -1183,6 +1185,9 @@ function SessionEditorFor({ session }: { session: string }) {
           }}
         />
         Let the room ask questions of its own
+        {meta.privacy === 'full' && (
+          <span className="text-slate-500">(off in a fully anonymous survey, since questions carry a name)</span>
+        )}
       </label>
 
       {/* Multiple-choice and poll options, in a shuffled order rather than the
@@ -1216,6 +1221,12 @@ function SessionEditorFor({ session }: { session: string }) {
         </a>
       </p>
 
+      <SurveyPrivacy
+        meta={meta}
+        busy={busy}
+        onSet={(change) => void run(() => setSessionPrivacy(session, change))}
+      />
+
       {/* Who picked what, as avatars on the answers: for the fun of the room
           seeing itself. Anybody who answers anonymously is only a count. */}
       <div className="mb-6 -mt-2">
@@ -1224,6 +1235,7 @@ function SessionEditorFor({ session }: { session: string }) {
           <select
             className="h-8 rounded-lg bg-white/5 border border-white/15 px-2 text-xs text-slate-200"
             value={meta.avatars ?? 'off'}
+            disabled={meta.privacy === 'full'}
             onChange={(e) => {
               const v = e.target.value as 'off' | 'live' | 'reveal';
               void run(() => setSessionOptions(session, { avatars: v }));
@@ -1235,7 +1247,9 @@ function SessionEditorFor({ session }: { session: string }) {
           </select>
         </label>
         <p className="text-xs text-slate-500 mt-1">
-          {(meta.avatars ?? 'off') === 'off'
+          {meta.privacy === 'full'
+            ? 'Off in a fully anonymous survey: an avatar on an answer is a name on it.'
+            : (meta.avatars ?? 'off') === 'off'
             ? 'Multiple-choice and poll questions show counts only.'
             : meta.mode === 'open'
               ? 'Each player sees who picked what once they have answered, on their own screen.'
