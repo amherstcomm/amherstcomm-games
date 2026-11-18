@@ -27040,9 +27040,15 @@ grant execute on function public.save_home_feature(text, uuid, text, text, times
 -- reading the suggestions is whiteboard.manage, which administrators hold and
 -- which can be handed to one person on the people page, like giveaways.
 
+-- The whole list, not the list as it stood when this section was written. This
+-- file is applied from the top every time, so this line runs on a database
+-- that already holds grants of everything added further down -- and a list
+-- that stopped at whiteboard.manage rejected the first recognition.manage
+-- grant, failed the apply, and with it every statement after (2026-11-17).
+-- Every place this constraint is set says the same list.
 alter table public.capability_grants drop constraint if exists capability_grants_capability_check;
 alter table public.capability_grants add constraint capability_grants_capability_check
-  check (capability in ('giveaways.manage', 'whiteboard.manage'));
+  check (capability in ('giveaways.manage', 'whiteboard.manage', 'recognition.manage'));
 create or replace function public.set_person_capability(p_user uuid, p_capability text, p_on boolean)
 returns jsonb
 language plpgsql
