@@ -99,22 +99,19 @@ select pg_temp.as_user(2);
 select pg_temp.check('somebody who answered cannot change how small a group is shown',
   (public.set_split_groups(pg_temp.id('sess'), true, null)->>'ok') = 'false');
 select pg_temp.as_user(1);
-select pg_temp.check('the host can hold back small groups, from 5 unless they say',
-  (public.set_split_groups(pg_temp.id('sess'), true, null)->>'floor')::int = 5);
+select pg_temp.check('the host can hold back small groups, from 3 unless they say',
+  (public.set_split_groups(pg_temp.id('sess'), true, null)->>'floor')::int = 3);
+insert into t select 'size5', public.set_split_groups(pg_temp.id('sess'), null, 5);
 delete from t where k = 'split';
 insert into t select 'split', public.session_split(pg_temp.id('sess'), pg_temp.id('q1'));
-select pg_temp.check('a group of three is not broken down',
-  pg_temp.grp('split', 'No')->>'hidden' = 'small'
+select pg_temp.check('and sets the size: from 5, a group of three is not broken down',
+  (select v->>'ok' from t where k = 'size5') = 'true'
+  and (select (v->>'min')::int from t where k = 'split') = 5
+  and pg_temp.grp('split', 'No')->>'hidden' = 'small'
   and pg_temp.grp('split', 'No')->'questions' = 'null'::jsonb);
-select pg_temp.check('and the next smallest is hidden too, or the three could be had by subtraction',
-  pg_temp.grp('split', 'Unsure')->>'hidden' = 'subtraction'
-  and pg_temp.grp('split', 'Unsure')->'questions' = 'null'::jsonb
-  and pg_temp.grp('split', 'Yes')->'hidden' = 'null'::jsonb);
-insert into t select 'size3', public.set_split_groups(pg_temp.id('sess'), null, 3);
-select pg_temp.check('and the host sets the size: from 3, the three are shown again',
-  (select v->>'ok' from t where k = 'size3') = 'true'
-  and (public.session_split(pg_temp.id('sess'), pg_temp.id('q1')) -> 'groups' -> 2 ->> 'hidden') is null
-  and (public.session_split(pg_temp.id('sess'), pg_temp.id('q1')) ->> 'min')::int = 3);
+select pg_temp.check('and only that one: the six beside it are still shown',
+  pg_temp.grp('split', 'Unsure')->'hidden' = 'null'::jsonb
+  and pg_temp.cells('split', 'Unsure', 2) = '{"Yes":6,"No":0}'::jsonb);
 select pg_temp.check('the split names nobody',
   (select v::text from t where k = 'split') not like '%59000000%');
 
@@ -177,8 +174,13 @@ select pg_temp.check('the anonymous survey splits: of the six who picked A, four
   and pg_temp.cells('asplit', 'B', 2) = '{"X":6,"Y":0}'::jsonb);
 
 select public.set_session_privacy(pg_temp.id('anon'), null, 7);
+select pg_temp.check('an anonymous survey holds back groups under 3, whatever its minimum',
+  public.split_floor(pg_temp.id('anon')) = 3
+  and (public.session_sheet(pg_temp.id('anon')) -> 'session' ->> 'split_hide')::boolean);
+insert into t select 'a7', public.set_split_groups(pg_temp.id('anon'), null, 7);
 insert into t select 'araised', public.session_split(pg_temp.id('anon'), pg_temp.id('a1'));
-select pg_temp.check('a raised minimum is the smallest group shown, in an anonymous survey',
+select pg_temp.check('and the author can raise it: from 7, both groups of six are held back',
+  (select v->>'ok' from t where k = 'a7') = 'true' and
   (select (v->>'min')::int from t where k = 'araised') = 7
   and pg_temp.grp('araised', 'A')->>'hidden' = 'small'
   and pg_temp.grp('araised', 'B')->>'hidden' = 'small');
@@ -189,7 +191,7 @@ select pg_temp.check('answers from before linking are counted as left out, not g
   (public.session_split(pg_temp.id('anon'), pg_temp.id('a1'))->>'unlinked')::int = 1);
 
 select pg_temp.as_user(1);
-insert into t select 'lower', public.set_split_groups(pg_temp.id('anon'), null, 3);
+insert into t select 'lower', public.set_split_groups(pg_temp.id('anon'), null, 4);
 insert into t select 'off', public.set_split_groups(pg_temp.id('anon'), false, null);
 select pg_temp.check('once people have answered, an anonymous survey cannot show smaller groups',
   (select v->>'ok' from t where k = 'lower') = 'false'
@@ -204,9 +206,11 @@ select pg_temp.check('and the people answering are told the size',
 
 insert into t select 'fresh', public.create_session('Split small survey', 'strict', 'open');
 select public.set_session_privacy(pg_temp.id('fresh'), 'full');
-insert into t select 'one', public.set_split_groups(pg_temp.id('fresh'), null, 1);
+insert into t select 'one', public.set_split_groups(pg_temp.id('fresh'), null, 2);
 insert into t select 'none', public.set_split_groups(pg_temp.id('fresh'), false, null);
-select pg_temp.check('before anybody answers, an anonymous survey can show groups of any size',
-  (select (v->>'floor')::int from t where k = 'one') = 1
-  and (select (v->>'floor')::int from t where k = 'none') = 0
-  and (public.session_sheet(pg_temp.id('fresh')) -> 'session' ->> 'split_floor')::int = 0);
+insert into t select 'three', public.set_split_groups(pg_temp.id('fresh'), null, 3);
+select pg_temp.check('even before anybody answers, an anonymous survey never shows a group of one or two',
+  (select v->>'ok' from t where k = 'one') = 'false'
+  and (select v->>'ok' from t where k = 'none') = 'false'
+  and (select (v->>'floor')::int from t where k = 'three') = 3
+  and (public.session_sheet(pg_temp.id('fresh')) -> 'session' ->> 'split_floor')::int = 3);

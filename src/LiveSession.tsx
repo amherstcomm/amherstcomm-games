@@ -942,7 +942,7 @@ export default function LiveSession({ session, host }: { session: string; host: 
   useEffect(() => {
     if (item.privacy === 'full' && item.min_results != null) {
       setAnonInfo({ min: item.min_results, comments: item.show_comments !== false,
-                    split: item.split_floor ?? item.min_results });
+                    split: item.split_floor ?? 3 });
     }
   }, [item.privacy, item.min_results, item.show_comments, item.split_floor]);
   /** Open mode: "pause after this question" is set. The server holds it -- it
@@ -1425,7 +1425,7 @@ export default function LiveSession({ session, host }: { session: string; host: 
       {item.privacy === 'full' && (
         <AnonymityBanner minResults={anonInfo?.min ?? item.min_results ?? 5}
                          showComments={anonInfo?.comments ?? item.show_comments !== false}
-                         splitFloor={anonInfo?.split ?? item.split_floor ?? item.min_results ?? 5} />
+                         splitFloor={anonInfo?.split ?? item.split_floor ?? 3} />
       )}
 
       {/* Where they are in it. Their own progress, which nobody else's affects

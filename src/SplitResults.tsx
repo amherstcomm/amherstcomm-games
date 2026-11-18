@@ -81,8 +81,6 @@ function Tables({ split }: { split: Extract<Split, { ok: true }> }) {
         {anyHidden && (
           <p>
             A group of fewer than {split.min} is not broken down, so nobody&apos;s answers can be picked out.
-            {split.groups.some((g) => g.hidden === 'subtraction') &&
-              ' When only one group is that small, the next smallest is held back too, or the small one could be worked out from the totals.'}
           </p>
         )}
         {split.unlinked > 0 && (
@@ -156,7 +154,7 @@ function Tables({ split }: { split: Extract<Split, { ok: true }> }) {
                             </>
                           ) : (
                             <td colSpan={t.cells.length + (nps ? 1 : 0)} className="px-3 py-2 text-xs text-slate-500">
-                              {g.n === 0 ? 'Nobody' : g.hidden === 'subtraction' ? 'Held back with the small group' : `Fewer than ${split.min}: not shown`}
+                              {g.n === 0 ? 'Nobody' : `Fewer than ${split.min}: not shown`}
                             </td>
                           )}
                         </tr>
