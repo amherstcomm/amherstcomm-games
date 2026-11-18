@@ -479,6 +479,17 @@ export async function sendAnswer(
   return (data as { ok: boolean; reason?: string }) ?? { ok: false, reason: 'no answer' };
 }
 
+/** A private open question's answers, for its host and site admins only. */
+export async function readPrivateComments(item: string): Promise<
+  | { ok: true; privacy: 'room' | 'full'; comments: { text: string; who: string | null; at: string | null }[] }
+  | { ok: false; reason: string; answered?: number; needed?: number }
+> {
+  if (!supabase) return { ok: false, reason: 'not connected' };
+  const { data, error } = await supabase.rpc('private_comments', { p_item: item });
+  if (error || !data) return { ok: false, reason: error?.message ?? 'unavailable' };
+  return data as never;
+}
+
 /** An answer to a fully anonymous survey: filed under this browser's key,
  *  which is made here the first time. */
 export async function sendAnonymousAnswer(

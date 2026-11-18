@@ -31604,3 +31604,211 @@ begin
     for delete to authenticated
     using (bucket_id = 'session-pictures' and (storage.foldername(name))[1] = (select auth.uid())::text)$p$;
 end $$;
+
+-- ---------------------------------------------------------------------------
+-- Private comments (November 2026)
+-- ---------------------------------------------------------------------------
+--
+-- Feedback that should not be on a results page: an open question set to
+-- private is read by the session's host and by site admins (users.manage),
+-- and by nobody else -- not the results, not shared results, not the
+-- projector, not the room's tally. Ray's calls (2026-11-18): those readers;
+-- names follow the survey's privacy, so an ordinary survey's readers see who
+-- wrote it and a fully anonymous one's never do; and a switch on the open
+-- question rather than a kind of its own.
+--
+-- In a fully anonymous survey the comments still wait for its minimum, and
+-- come shuffled: a reader with three comments in front of them and a list of
+-- who has taken part could otherwise do the arithmetic.
+
+create or replace function public.is_private_item(p_item uuid)
+returns boolean
+language sql
+stable
+security definer
+set search_path = ''
+as $fn$
+  select coalesce((select i.kind = 'open' and coalesce((i.payload ->> 'private')::boolean, false)
+                   from public.items i where i.id = p_item), false)
+$fn$;
+revoke all on function public.is_private_item(uuid) from public, anon, authenticated;
+
+create or replace function public.may_read_private(p_item uuid)
+returns boolean
+language sql
+stable
+security definer
+set search_path = ''
+as $fn$
+  select (select auth.uid()) is not null
+     and (public.hosts_session((select i.session_id from public.items i where i.id = p_item))
+          or public.can('users.manage'))
+$fn$;
+revoke all on function public.may_read_private(uuid) from public, anon, authenticated;
+
+create or replace function public.private_comments(p_item uuid)
+returns jsonb
+language sql
+stable
+security definer
+set search_path = ''
+as $fn$
+  with sess as (
+    select s.* from public.sessions s join public.items i on i.session_id = s.id where i.id = p_item
+  )
+  select case
+    when not public.is_private_item(p_item)
+      then jsonb_build_object('ok', false, 'reason', 'that question is not private')
+    when not public.may_read_private(p_item)
+      then jsonb_build_object('ok', false, 'reason', 'only the host and admins read these')
+    when not public.results_open((select id from sess))
+      then jsonb_build_object('ok', false, 'reason', 'waiting',
+                              'answered', public.session_answered((select id from sess)),
+                              'needed', (select min_results from sess))
+    else jsonb_build_object(
+      'ok', true,
+      'privacy', (select privacy from sess),
+      'comments', coalesce((
+        select jsonb_agg(jsonb_build_object(
+                 'text', r.value #>> '{}',
+                 -- a fully anonymous survey has no name to give; an ordinary
+                 -- one's readers are the people who could always see it
+                 'who', case when r.user_id is null then null else p.display_name end,
+                 'at', r.submitted_at)
+               order by case when r.user_id is null then r.shuffle end, r.submitted_at)
+        from public.answers_for(p_item) r
+        left join public.profiles p on p.id = r.user_id), '[]'::jsonb))
+  end
+$fn$;
+revoke all on function public.private_comments(uuid) from public, anon;
+grant execute on function public.private_comments(uuid) to authenticated;
+
+create or replace function public.item_chart(p_item uuid)
+returns jsonb
+language sql
+stable
+security definer
+set search_path = ''
+as $fn$
+  with sess as (
+    select s.* from public.sessions s join public.items i on i.session_id = s.id where i.id = p_item
+  ), raw as (
+    select public.item_chart_raw(p_item) as c
+  )
+  select case
+    -- Answers only the host and admins read: a count here, and nothing else,
+    -- whatever the results are shared with. private_comments is the way in.
+    when (select i.kind = 'open' and coalesce((i.payload ->> 'private')::boolean, false)
+          from public.items i where i.id = p_item)
+      then jsonb_build_object('type', 'private',
+                              'total', (select count(*) from public.answers_for(p_item)),
+                              'readable', public.may_read_private(p_item))
+    when not public.results_open((select id from sess))
+      then jsonb_build_object('type', 'hidden',
+                              'total', (select count(*) from public.answers_for(p_item)),
+                              'answered', public.session_answered((select id from sess)),
+                              'needed', (select min_results from sess))
+    when (select c from raw) ? 'comments' and not public.comments_open((select id from sess))
+      then ((select c from raw) - 'comments')
+           || jsonb_build_object('comments', '[]'::jsonb,
+                                 'comments_held', (select show_comments from sess))
+    else (select c from raw)
+  end
+$fn$;
+revoke all on function public.item_chart(uuid) from public, anon, authenticated;
+
+create or replace function public.item_tally(p_item uuid)
+returns jsonb
+language sql
+stable
+security definer
+set search_path = ''
+as $fn$
+  select case
+    when not exists (select 1 from public.items i where i.id = p_item and i.state = 'revealed')
+      then jsonb_build_object('ok', false, 'reason', 'not revealed yet')
+    -- never to the room: the tally of an open question is its answers
+    when public.is_private_item(p_item)
+      then jsonb_build_object('ok', false, 'reason', 'only the host and admins read these')
+    -- under the minimum, nothing: not even a tally that ticks as people answer
+    when not public.results_open((select i.session_id from public.items i where i.id = p_item))
+      then jsonb_build_object('ok', false, 'reason', 'not enough answers yet')
+    else jsonb_build_object(
+      'ok', true,
+      'total', (select count(*) from public.answers_for(p_item) r where r.item_id = p_item),
+      -- A comparison is counted by what was picked and named by the option,
+      -- never grouped by the whole answer: the reasons are in there, and
+      -- grouping by them would put each one on the projector with its count.
+      'counts', case
+        when (select i.kind from public.items i where i.id = p_item) = 'compare' then coalesce(
+          (select jsonb_object_agg(v, n)
+           from (select coalesce(
+                          (select o ->> 'name'
+                           from public.items i, jsonb_array_elements(i.payload -> 'options') o
+                           where i.id = p_item and o ->> 'id' = r.value ->> 'pick'),
+                          'No preference') as v,
+                        count(*) as n
+                 from public.answers_for(p_item) r where r.item_id = p_item
+                 group by 1) t),
+          '{}'::jsonb)
+        else coalesce(
+          (select jsonb_object_agg(v, n)
+           from (select r.value::text as v, count(*) as n
+                 from public.answers_for(p_item) r where r.item_id = p_item
+                 group by r.value::text) t),
+          '{}'::jsonb)
+      end
+    )
+  end
+$fn$;
+revoke all on function public.item_tally(uuid) from public, anon;
+grant execute on function public.item_tally(uuid) to authenticated;
+
+create or replace function public.presenter_view(p_item uuid)
+returns jsonb
+language sql
+stable
+security definer
+set search_path = ''
+as $fn$
+  select case
+    when not public.hosts_session((select session_id from public.items where id = p_item))
+      then jsonb_build_object('ok', false, 'reason', 'not allowed')
+    -- The presenter's screen is a projector. Private answers are read through
+    -- private_comments, never put up on the wall; here they are a count.
+    when public.is_private_item(p_item)
+      then jsonb_build_object(
+        'ok', true,
+        'answered', (select count(*) from public.answers_for(p_item)),
+        'answer', null,
+        'responses', '[]'::jsonb)
+    -- Fully anonymous: how many, and nothing else. The list below is answers
+    -- in the order they came, which is who answered when.
+    when (select s.privacy from public.sessions s join public.items i on i.session_id = s.id
+          where i.id = p_item) = 'full'
+      then jsonb_build_object(
+        'ok', true,
+        'answered', (select count(*) from public.survey_answers a where a.item_id = p_item),
+        'answer', (select a.answer from public.item_answers a where a.item_id = p_item),
+        'responses', '[]'::jsonb)
+    else jsonb_build_object(
+      'ok', true,
+      'answered', (select count(*) from public.responses r where r.item_id = p_item),
+      -- the correct answer, which the presenter needs before the reveal in
+      -- order to run the reveal
+      'answer', (select a.answer from public.item_answers a where a.item_id = p_item),
+      'responses', coalesce(
+        (select jsonb_agg(jsonb_build_object(
+           'value', r.value,
+           'at', r.submitted_at,
+           'who', case when r.anonymous then null else p.display_name end
+         ) order by r.submitted_at)
+         from public.responses r
+         left join public.profiles p on p.id = r.user_id
+         where r.item_id = p_item),
+        '[]'::jsonb)
+    )
+  end
+$fn$;
+revoke all on function public.presenter_view(uuid) from public, anon;
+grant execute on function public.presenter_view(uuid) to authenticated;

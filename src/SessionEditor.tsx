@@ -86,6 +86,8 @@ function payloadFor(
     number: NumberPayload;
     word: string;
     cloud: boolean;
+    /** open only: answers read by the host and admins, and nobody else */
+    privateAnswers: boolean;
     list: string;
     drawLength: number;
     compare: ComparePayload & { helper?: string };
@@ -108,7 +110,8 @@ function payloadFor(
     case 'number':
       return parts.number;
     case 'open':
-      return parts.cloud ? { cloud: true } : {};
+      // private answers are read one by one, so never drawn as a cloud
+      return parts.privateAnswers ? { private: true } : parts.cloud ? { cloud: true } : {};
     case 'game':
       // length so the room can draw the board before it knows anything else,
       // and never the word
@@ -238,6 +241,9 @@ function ItemForm({
   const [penaltySkip, setPenaltySkip] = useState(item?.penalty_skip === true);
   const existingNumber = item?.payload as NumberPayload | undefined;
   const [unit, setUnit] = useState(existingNumber?.unit ?? '');
+  const [privateAnswers, setPrivateAnswers] = useState(
+    (item?.payload as { private?: boolean } | undefined)?.private === true
+  );
   const [asCloud, setAsCloud] = useState(
     (item?.payload as { cloud?: boolean } | undefined)?.cloud === true
   );
@@ -561,7 +567,25 @@ function ItemForm({
       {/* Decided with the question rather than found on the results screen
           afterwards. "One word for this month" is a cloud before anybody
           answers it. */}
+      {/* Feedback that should not be on a results page: read by the host and
+          site admins only, never shown to the room or in shared results. */}
       {kind === 'open' && (
+        <label className="flex items-start gap-2 text-xs text-slate-400">
+          <input
+            type="checkbox"
+            className="mt-0.5"
+            checked={privateAnswers}
+            onChange={(e) => setPrivateAnswers(e.target.checked)}
+          />
+          <span>
+            Only the host and site admins read the answers
+            <span className="block text-slate-500">
+              Never shown in the results, on the projector or to the room. People are told before they answer.
+            </span>
+          </span>
+        </label>
+      )}
+      {kind === 'open' && !privateAnswers && (
         <label className="flex items-center gap-2 text-xs text-slate-400">
           <input
             type="checkbox"
@@ -874,6 +898,7 @@ function ItemForm({
                   number: numberPayload(),
                   word: gameWord,
                   cloud: asCloud,
+                  privateAnswers,
                   list: drawFrom,
                   drawLength,
                   compare,
