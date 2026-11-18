@@ -26,7 +26,7 @@ export default function PageWithRail({ section, title, blurb, top, rail, childre
         {blurb && <div className="mt-1.5 text-sm sm:text-base text-slate-400 max-w-2xl">{blurb}</div>}
       </header>
       <div className={`grid gap-7 items-start ${rail ? 'lg:grid-cols-[minmax(0,1fr)_18.75rem]' : ''}`}>
-        <div className="min-w-0 space-y-6">{children}</div>
+        <div className={`min-w-0 space-y-6 ${rail ? '' : 'max-w-3xl'}`}>{children}</div>
         {rail && <aside className="min-w-0 space-y-4" aria-label={`${title}: more`}>{rail}</aside>}
       </div>
     </div>

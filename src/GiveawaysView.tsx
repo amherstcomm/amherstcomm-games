@@ -12,6 +12,7 @@ import { Suspense, lazy, useCallback, useEffect, useState } from 'react';
 import { CheckCircle2, Circle, CircleDashed } from 'lucide-react';
 import Waiting from '@/Waiting';
 import RouteLink from '@/RouteLink';
+import PageWithRail, { RailCard } from '@/PageWithRail';
 import GiveawayReplay from '@/GiveawayReplay';
 import GiveawayJudging from '@/GiveawayJudging';
 import PeoplePicker from '@/GiveawayPeoplePicker';
@@ -163,22 +164,32 @@ function GiveawayList({ link }: { link: GiveawayLink }) {
   const past = rows.filter((r) => r.status === 'drawn' || r.status === 'cancelled');
 
   return (
-    <div className="max-w-2xl mx-auto px-4 py-8">
-      <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-2">
-        <h1 className="text-xl font-semibold text-slate-200">Giveaways</h1>
-        <RouteLink
-          {...link({ kind: 'giveaways', giveaway: null, view: 'history' })}
-          className="text-sm text-accent hover:brightness-110"
-        >
-          Who has won what
-        </RouteLink>
-      </div>
-      <p className="text-sm text-slate-400 mt-2">
-        Tickets, prizes and other things we get to give away, drawn at random. Everybody starts with
-        the same chance; going to an event lowers your chance at the next, by less the longer ago it
-        was. Every drawing can be checked and replayed by anyone.
-      </p>
-
+    <PageWithRail
+      section="Events"
+      title="Giveaways"
+      blurb="Tickets, prizes and other things we get to give away, drawn at random."
+      rail={
+        <>
+          <RailCard label="How winners are chosen">
+            <p className="text-sm text-slate-400">
+              Everybody starts with the same chance; going to an event lowers your chance at the next, by less
+              the longer ago it was. Every drawing can be checked and replayed by anyone.
+            </p>
+          </RailCard>
+          <RailCard label="Earlier drawings">
+            <p className="text-sm text-slate-400">Every prize given away so far, and who it went to.</p>
+            <RouteLink
+              {...link({ kind: 'giveaways', giveaway: null, view: 'history' })}
+              className="mt-2 inline-block text-sm font-semibold text-accent hover:underline"
+            >
+              Who has won what
+            </RouteLink>
+          </RailCard>
+        </>
+      }
+    >
+      {canManage && (
+      <div className="space-y-4">
       {canManage &&
         (making ? (
           <GiveawayEditor
@@ -188,14 +199,17 @@ function GiveawayList({ link }: { link: GiveawayLink }) {
             }}
           />
         ) : (
-          <button type="button" className={`${BUTTON} mt-4`} onClick={() => setMaking(true)}>
+          <button type="button" className={BUTTON} onClick={() => setMaking(true)}>
             New giveaway
           </button>
         ))}
 
       {canManage && standard !== null && <StandardTerms saved={standard} onSaved={() => void load()} />}
+      </div>
+      )}
 
-      <h2 className="text-sm font-semibold text-slate-200 mt-6">Open now</h2>
+      <section aria-label="Open now">
+      <h2 className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Open now</h2>
       {open.length === 0 ? (
         <p className="text-sm text-slate-400 mt-2">Nothing is open just now.</p>
       ) : (
@@ -205,18 +219,19 @@ function GiveawayList({ link }: { link: GiveawayLink }) {
           ))}
         </ul>
       )}
+      </section>
 
       {past.length > 0 && (
-        <>
-          <h2 className="text-sm font-semibold text-slate-200 mt-8">Earlier</h2>
+        <section aria-label="Earlier">
+          <h2 className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Earlier</h2>
           <ul className="mt-2 space-y-2">
             {past.map((g) => (
               <SummaryRow key={g.id} g={g} link={link} />
             ))}
           </ul>
-        </>
+        </section>
       )}
-    </div>
+    </PageWithRail>
   );
 }
 
@@ -483,7 +498,7 @@ function SummaryRow({ g, link }: { g: GiveawaySummary; link: GiveawayLink }) {
     <li>
       <RouteLink
         {...link({ kind: 'giveaways', giveaway: g.id, view: 'page' })}
-        className="block rounded-xl border border-white/15 bg-white/5 px-4 py-3 hover:bg-white/10"
+        className="block rounded-2xl border border-white/10 bg-slate-900 px-4 py-3 hover:border-white/25"
       >
         <span className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
           <span className="font-semibold text-slate-200 min-w-0 break-words">{g.title}</span>

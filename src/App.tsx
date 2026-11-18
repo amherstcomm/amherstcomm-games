@@ -300,7 +300,8 @@ function App() {
    *  presenter's half of a live session and the scoreboard; the participant's
    *  half is a phone in a hand and stays narrow. */
   // feature pages laid out with a rail beside them (PageWithRail)
-  const withRail = (['whiteboard', 'recognition', 'suggestions'] as const).some((k) => nav.page.kind === k);
+  const withRail = (['whiteboard', 'recognition', 'suggestions', 'auctions', 'contest'] as const).some((k) => nav.page.kind === k) ||
+    (nav.page.kind === 'giveaways' && !nav.page.giveaway && nav.page.view !== 'history');
   const forTheRoom =
     (nav.page.kind === 'live' && nav.page.host) ||
     nav.page.kind === 'scores' ||
