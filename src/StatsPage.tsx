@@ -8,8 +8,7 @@ import {
   type StatsStore,
 } from '@/stats';
 import { formatElapsed } from '@/useUpTimer';
-import RouteLink from '@/RouteLink';
-import PageWithRail, { RailCard } from '@/PageWithRail';
+import PageWithRail, { PageTabs, RailCard } from '@/PageWithRail';
 import HistoryView from '@/HistoryView';
 import LeaderboardView from '@/LeaderboardView';
 
@@ -179,19 +178,7 @@ export default function StatsPage({
         ) : undefined
       }
     >
-        <nav aria-label="Stats" className="flex flex-wrap sm:inline-flex rounded-xl bg-slate-900 border border-white/10 p-1 gap-1">
-          {TABS.map(({ id, label }) => (
-            <RouteLink
-              key={id}
-              {...tabLink(id)}
-              current={view === id}
-              className={`flex-auto sm:flex-none text-center px-1 min-[360px]:px-1.5 sm:px-3.5 py-1.5 rounded-lg text-xs min-[360px]:text-[0.8125rem] sm:text-sm font-semibold transition-colors
-                ${view === id ? 'bg-accent text-slate-950' : 'text-slate-300 hover:bg-white/5 hover:text-white'}`}
-            >
-              {label}
-            </RouteLink>
-          ))}
-        </nav>
+        <PageTabs label="Stats" tabs={TABS} current={view} link={tabLink} />
 
         {view === 'history' && <HistoryView signedIn={signedIn} />}
         {view === 'boards' && <LeaderboardView signedIn={signedIn} />}

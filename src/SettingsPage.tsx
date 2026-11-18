@@ -1,5 +1,5 @@
-import { useRef, useState } from 'react';
-import { Check, Contrast, EyeOff, Gauge, Keyboard, Monitor, Moon, Sun, Type, X } from 'lucide-react';
+import { useState } from 'react';
+import { Check, Contrast, EyeOff, Gauge, Keyboard, Monitor, Moon, Sun, Type } from 'lucide-react';
 import { ALL_MODES, GAME_NAME } from '@/games';
 import KeyDiagram from '@/KeyDiagram';
 import {
@@ -27,7 +27,7 @@ import {
 } from '@/difficulty';
 import { PALETTE_SWATCHES } from '@/theme';
 import type { Palette, TextScale, ThemeMode } from '@/theme';
-import { useModalA11y } from '@/useModalA11y';
+import PageWithRail, { PageTabs } from '@/PageWithRail';
 
 // the nav's own names, so the switch reads like the thing it switches
 // 'mode' marks the entries that disappear when that game is hidden — pointing
@@ -94,7 +94,7 @@ function PaletteChoice({
       onClick={() => onPalette(opt.id)}
       aria-pressed={on}
       className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl border text-left transition-colors
-        ${on ? 'bg-amber-400/10 border-amber-400/40' : 'bg-white/5 border-white/10 hover:bg-white/10'}`}
+        ${on ? 'bg-accent/10 border-accent/50' : 'bg-white/5 border-white/10 hover:bg-white/10'}`}
     >
       <span className="flex-1 min-w-0">
         <span className="flex items-center gap-2 text-sm font-semibold text-white">
@@ -113,20 +113,17 @@ function Pill({
   onClick,
   disabled,
   title,
-  tone,
   children,
 }: {
   on: boolean;
   onClick: () => void;
   disabled?: boolean;
   title?: string;
-  tone: 'amber' | 'emerald';
   children: React.ReactNode;
 }) {
-  const lit =
-    tone === 'amber'
-      ? 'bg-amber-400/15 border-amber-400/40 text-amber-200'
-      : 'bg-emerald-400/15 border-emerald-400/40 text-emerald-200';
+  // One look for "on", whatever the row: it was amber for games and green
+  // for tabs, two colours for the same state.
+  const lit = 'bg-accent/15 border-accent/50 text-accent';
   return (
     <button
       onClick={onClick}
@@ -183,7 +180,7 @@ function Swatches({ tones }: { tones: string[] }) {
   );
 }
 
-export default function SettingsModal({
+export default function SettingsPage({
   theme,
   palette,
   textScale,
@@ -208,8 +205,7 @@ export default function SettingsModal({
   startPage,
   onStartPage,
   tab,
-  onTab,
-  onClose,
+  tabLink,
 }: {
   theme: ThemeMode;
   palette: Palette;
@@ -236,67 +232,35 @@ export default function SettingsModal({
   onStartPage: (s: StartPage) => void;
   /** the open tab, held by App so it can live in the address bar */
   tab: SettingsTab;
-  onTab: (t: SettingsTab) => void;
-  onClose: () => void;
+  tabLink: (t: SettingsTab) => { to: string; onGo: () => void };
 }) {
-  const dialogRef = useRef<HTMLDivElement>(null);
-  useModalA11y(dialogRef, onClose);
-
   // the open tab lives in App so it can live in the address bar too
 
   const [storage, setStorageState] = useState<StorageLevel>(storageLevel);
   const [level, setLevel] = useState<Difficulty>(difficulty);
   const [diffMode, setDiffMode] = useState(difficultyMode);
   return (
-    <div
-      className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
-      onClick={onClose}
+    <PageWithRail
+      section="Me"
+      title="Settings"
+      blurb={signedIn
+        ? 'Saved to your account, so they follow you across devices.'
+        : 'Saved in this browser. Sign in to carry them across devices.'}
     >
-      <div
-        ref={dialogRef}
-        tabIndex={-1}
-        role="dialog"
-        aria-modal="true"
-        aria-label="Settings"
-        onClick={(e) => e.stopPropagation()}
-        className="relative w-full max-w-sm max-h-[85vh] flex flex-col rounded-2xl bg-slate-900 border border-white/10 text-left shadow-2xl"
-      >
-        {/* Sits outside the scrolling area on purpose. This list is taller
-            than a phone, and a close button inside it slides off the top the
-            moment anyone scrolls. */}
-        <button
-          onClick={onClose}
-          aria-label="Close"
-          className="absolute top-4 right-4 z-10 w-8 h-8 flex items-center justify-center rounded-lg bg-slate-900/95 text-slate-400 hover:bg-slate-800 hover:text-white transition-colors"
-        >
-          <X className="w-4 h-4" />
-        </button>
-
-        <div className="overflow-y-auto p-6 sm:p-8">
-        <h2 className="text-xl font-bold mb-4">Settings</h2>
 
         {/* Two halves, because they answer different questions: how the site
             looks to you, and which of it you want. Long enough now that one
             list buried the games half under four appearance controls. */}
-        <div className="inline-flex flex-wrap rounded-xl bg-white/5 border border-white/10 p-1 gap-1 mb-5">
-          {(
-            [
-              { id: 'site', label: 'Site' },
-              { id: 'games', label: 'Games' },
-              { id: 'privacy', label: 'Privacy' },
-            ] as const
-          ).map(({ id, label }) => (
-            <button
-              key={id}
-              onClick={() => onTab(id)}
-              aria-current={tab === id ? 'page' : undefined}
-              className={`px-4 h-9 rounded-lg text-sm font-semibold transition-colors
-                ${tab === id ? 'bg-emerald-400 text-ink' : 'text-slate-300 hover:bg-white/10'}`}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
+        <PageTabs
+          label="Settings"
+          tabs={[
+            { id: 'site', label: 'Site' },
+            { id: 'games', label: 'Games' },
+            { id: 'privacy', label: 'Privacy' },
+          ]}
+          current={tab}
+          link={tabLink}
+        />
 
         <div className={`space-y-6 ${tab === 'site' ? '' : 'hidden'}`}>
           <div>
@@ -312,7 +276,7 @@ export default function SettingsModal({
                     aria-pressed={startPage === id}
                     className={`px-3 h-9 rounded-lg text-sm font-semibold transition-colors
                       ${startPage === id
-                        ? 'bg-amber-400 text-ink shadow-lg shadow-amber-500/30'
+                        ? 'bg-accent text-slate-950'
                         : 'bg-white/5 border border-white/10 text-slate-300 hover:bg-white/10'}`}
                   >
                     {label}
@@ -338,7 +302,7 @@ export default function SettingsModal({
                   aria-pressed={theme === id}
                   className={`inline-flex items-center gap-1.5 px-3 h-9 rounded-lg text-sm font-semibold transition-colors
                     ${theme === id
-                      ? 'bg-amber-400 text-ink shadow-lg shadow-amber-500/30'
+                      ? 'bg-accent text-slate-950'
                       : 'text-slate-300 hover:bg-white/10'}`}
                 >
                   <Icon className="w-4 h-4" />
@@ -387,7 +351,7 @@ export default function SettingsModal({
                   aria-pressed={textScale === id}
                   className={`px-3 h-9 rounded-lg font-semibold transition-colors ${size}
                     ${textScale === id
-                      ? 'bg-amber-400 text-ink shadow-lg shadow-amber-500/30'
+                      ? 'bg-accent text-slate-950'
                       : 'text-slate-300 hover:bg-white/10'}`}
                 >
                   {label}
@@ -422,7 +386,7 @@ export default function SettingsModal({
                   aria-pressed={storage === id}
                   className={`px-3 h-9 rounded-lg text-sm font-semibold transition-colors
                     ${storage === id
-                      ? 'bg-amber-400 text-ink shadow-lg shadow-amber-500/30'
+                      ? 'bg-accent text-slate-950'
                       : 'bg-white/5 border border-white/10 text-slate-300 hover:bg-white/10'}`}
                 >
                   {label}
@@ -456,7 +420,7 @@ export default function SettingsModal({
                   aria-pressed={level === id}
                   className={`px-3 h-9 rounded-lg text-sm font-semibold transition-colors
                     ${level === id
-                      ? 'bg-amber-400 text-ink shadow-lg shadow-amber-500/30'
+                      ? 'bg-accent text-slate-950'
                       : 'bg-white/5 border border-white/10 text-slate-300 hover:bg-white/10'}`}
                 >
                   {DIFFICULTY_LABEL[id]}
@@ -484,7 +448,7 @@ export default function SettingsModal({
                   aria-pressed={diffMode === id}
                   className={`px-3 h-9 rounded-lg text-sm font-semibold transition-colors
                     ${diffMode === id
-                      ? 'bg-white/15 border border-white/25 text-white'
+                      ? 'bg-accent border border-accent text-slate-950'
                       : 'bg-white/5 border border-white/10 text-slate-300 hover:bg-white/10'}`}
                 >
                   {label}
@@ -514,7 +478,6 @@ export default function SettingsModal({
                     onClick={() => onToggleMode(id)}
                     disabled={last}
                     title={last ? 'At least one game has to stay' : undefined}
-                    tone="amber"
                   >
                     {label}
                   </Pill>
@@ -532,7 +495,6 @@ export default function SettingsModal({
                     onClick={() => onToggleView(id)}
                     disabled={last}
                     title={last ? 'At least one tab has to stay' : undefined}
-                    tone="emerald"
                   >
                     {label}
                   </Pill>
@@ -543,7 +505,6 @@ export default function SettingsModal({
               <Pill
                 on={practiceAllowed}
                 onClick={() => onPracticeAllowed(!practiceAllowed)}
-                tone="emerald"
               >
                 Practice
               </Pill>
@@ -585,7 +546,7 @@ export default function SettingsModal({
                   aria-pressed={wordFilter === id}
                   className={`px-3 py-1.5 rounded-md text-xs font-semibold text-left transition-colors
                     ${wordFilter === id
-                      ? 'bg-white/15 text-white'
+                      ? 'bg-accent text-slate-950'
                       : 'text-slate-400 hover:text-white hover:bg-white/10'}`}
                 >
                   {label}
@@ -642,7 +603,6 @@ export default function SettingsModal({
                 <Pill
                   on={highlightMatches}
                   onClick={() => onHighlightMatches(!highlightMatches)}
-                  tone="emerald"
                 >
                   Highlight matching
                 </Pill>
@@ -674,7 +634,7 @@ export default function SettingsModal({
                   aria-pressed={navKeys === id}
                   className={`px-3 h-9 rounded-lg text-sm font-semibold transition-colors
                     ${navKeys === id
-                      ? 'bg-amber-400 text-ink shadow-lg shadow-amber-500/30'
+                      ? 'bg-accent text-slate-950'
                       : 'text-slate-300 hover:bg-white/10'}`}
                 >
                   {label}
@@ -692,13 +652,6 @@ export default function SettingsModal({
           )}
         </div>
 
-        <p className="text-xs text-slate-500 border-t border-white/10 pt-4 mt-6">
-          {signedIn
-            ? 'These settings are saved to your account and follow you across devices.'
-            : 'Saved in this browser. Sign in to carry them across devices.'}
-        </p>
-        </div>
-      </div>
-    </div>
+    </PageWithRail>
   );
 }

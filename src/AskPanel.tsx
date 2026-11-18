@@ -119,7 +119,7 @@ export default function AskPanel({ session, host }: { session: string; host: boo
                 <button
                   onClick={() => void send()}
                   disabled={busy || text.trim().length === 0}
-                  className="inline-flex items-center justify-center gap-1.5 px-3 h-9 rounded-lg text-sm font-semibold bg-emerald-400 text-ink disabled:opacity-50"
+                  className="inline-flex items-center justify-center gap-1.5 px-3 h-9 rounded-lg text-sm font-semibold bg-accent text-slate-950 disabled:opacity-50"
                 >
                   <Send className="w-4 h-4" aria-hidden="true" />
                   {busy ? 'Sending…' : 'Ask'}
