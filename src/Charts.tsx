@@ -29,7 +29,12 @@ export type Chart =
       /** a comparison's reasons: each with the option its writer picked, in an
        *  order that is neither who nor when, and never a name */
       comments?: { pick: string; text: string }[];
+      /** reasons there are, held back: a fully anonymous survey shows them once
+       *  twice its minimum have answered or it has closed */
+      comments_held?: boolean;
     }
+  /** a fully anonymous survey under its minimum: how many, and nothing else */
+  | { type: 'hidden'; total: number; answered: number; needed: number }
   | {
       type: 'numbers';
       total: number;
@@ -251,6 +256,15 @@ export default function ChartFor({
   /** open questions only. Undefined defers to what the author chose. */
   cloud?: boolean;
 }) {
+  // Before the total check: a hidden result has answers, and says only how many.
+  if (chart?.type === 'hidden') {
+    return (
+      <p className={`text-slate-400 ${big ? 'text-2xl' : 'text-sm'}`}>
+        Results show once {chart.needed} people have answered, so nobody's answer can be worked
+        out from a small count. {chart.answered} so far.
+      </p>
+    );
+  }
   if (!chart || chart.total === 0) {
     return <p className="text-sm text-slate-500">Nobody answered this one.</p>;
   }
@@ -260,6 +274,12 @@ export default function ChartFor({
         <>
           <Bars chart={chart} big={big} />
           {(chart.comments?.length ?? 0) > 0 && <Comments comments={chart.comments!} big={big} />}
+          {chart.comments_held && (
+            <p className={`mt-4 text-slate-400 ${big ? 'text-lg' : 'text-sm'}`}>
+              The reasons people gave are shown when the survey closes, or sooner once twice
+              the minimum have answered.
+            </p>
+          )}
         </>
       );
     case 'numbers':

@@ -428,8 +428,10 @@ test('every field caption sits above its input, not beside it', async ({ page })
   for (const kind of ['Multiple choice', 'Closest guess', 'Matching', 'Word game']) {
     await page.getByRole('button', { name: kind, exact: true }).click();
 
+    // Fields, not switches: a radio or a checkbox belongs beside its words,
+    // which is how the survey-privacy choices are drawn.
     const rows = await page
-      .locator('label:has(> span):has(input, textarea, select)')
+      .locator('label:has(> span):has(input:not([type="checkbox"]):not([type="radio"]), textarea, select)')
       .evaluateAll((labels) =>
         labels.map((el) => {
           const caption = el.querySelector(':scope > span') as HTMLElement | null;

@@ -43,6 +43,7 @@ import {
   readSessionDoor,
   readTally,
   sendAnswer,
+  sendAnonymousAnswer,
   type GuessRow,
   type Leaderboard,
   type LiveItem,
@@ -809,7 +810,13 @@ function WordGame({
  *  says what it actually means — the room and the presenter see no name, an
  *  admin can still see who asked. Saying "anonymous" unqualified would be a
  *  bigger promise than the database keeps. */
-function Ask({ onSend, sending }: { onSend: (value: unknown, anon: boolean) => void; sending: boolean }) {
+function Ask({ onSend, sending, fullyAnonymous }: {
+  onSend: (value: unknown, anon: boolean) => void;
+  sending: boolean;
+  /** a fully anonymous survey: no name goes with anything, so there is
+   *  nothing to choose */
+  fullyAnonymous?: boolean;
+}) {
   const [text, setText] = useState('');
   const [anon, setAnon] = useState(false);
   return (
@@ -821,10 +828,16 @@ function Ask({ onSend, sending }: { onSend: (value: unknown, anon: boolean) => v
         placeholder="What would you like to ask?"
         className="w-full px-4 py-3 rounded-xl bg-white/5 border border-white/15 text-white text-sm placeholder:text-slate-600 focus:outline-none focus:border-accent"
       />
-      <label className="flex items-center gap-2 text-xs text-slate-400">
-        <input type="checkbox" checked={anon} onChange={(e) => setAnon(e.target.checked)} />
-        Don&apos;t show my name to the room
-      </label>
+      {fullyAnonymous ? (
+        <p className="text-xs text-slate-400">
+          Sent without your name. Leave out anything that would identify you if you want to stay anonymous.
+        </p>
+      ) : (
+        <label className="flex items-center gap-2 text-xs text-slate-400">
+          <input type="checkbox" checked={anon} onChange={(e) => setAnon(e.target.checked)} />
+          Don&apos;t show my name to the room
+        </label>
+      )}
       <button
         onClick={() => {
           onSend(text.trim(), anon);
@@ -1055,7 +1068,7 @@ export default function LiveSession({ session, host }: { session: string; host: 
       void pull();
       return;
     }
-    const r = await revisitItem(target.id);
+    const r = await revisitItem(session, target.id);
     if (r.state !== 'open') {
       setNote(r.reason ?? 'That one is closed now.');
       setRevisiting(false);
@@ -1120,7 +1133,10 @@ export default function LiveSession({ session, host }: { session: string; host: 
   async function send(value: unknown, anon = false) {
     if (!item.id) return;
     setSending(true);
-    const res = await sendAnswer(item.id, value, anon);
+    // A fully anonymous survey answers by key, and never beside a name.
+    const res = item.privacy === 'full'
+      ? await sendAnonymousAnswer(session, item.id, value)
+      : await sendAnswer(item.id, value, anon);
     setSending(false);
     // Say when it did not land. A tick over a rejected answer is the failure
     // this whole flow exists to avoid — somebody who was told "sent" and
@@ -1422,7 +1438,18 @@ export default function LiveSession({ session, host }: { session: string; host: 
         </div>
       )}
 
-      {shown.state === 'done' && (
+      {shown.state === 'done' && item.key_lost && (
+        <div className="py-10 text-center">
+          <p className="text-lg text-white font-semibold">Your answers are in.</p>
+          <p className="text-sm text-slate-400 mt-1 max-w-md mx-auto">
+            You answered this survey from another browser, or this one has since forgotten the
+            key it saved them with. They still count. Because nothing links them to you, they
+            can only be changed from the browser that has the key.
+          </p>
+        </div>
+      )}
+
+      {shown.state === 'done' && !item.key_lost && (
         <div className="py-10 text-center">
           <p className="text-lg text-white font-semibold">That is all of them.</p>
           <p className="text-sm text-slate-400 mt-1">
@@ -1557,6 +1584,7 @@ export default function LiveSession({ session, host }: { session: string; host: 
           {kind === 'compare' && (
             <CompareQuestion
               item={shown}
+              fullyAnonymous={item.privacy === 'full'}
               mode={item.mode === 'open' ? 'open' : 'live'}
               onSend={(v) => void send(v)}
               sending={sending}
@@ -1579,7 +1607,7 @@ export default function LiveSession({ session, host }: { session: string; host: 
             <WordGame item={shown} readOnly={inert} onFinished={finishGame} />
           )}
           {kind === 'open' && answering && !readOnly && (
-            <Ask onSend={(v, anon) => void send(v, anon)} sending={sending} />
+            <Ask onSend={(v, anon) => void send(v, anon)} sending={sending} fullyAnonymous={item.privacy === 'full'} />
           )}
           {kind === 'open' && !answering && (
             <p className="text-sm text-slate-400">
@@ -1707,7 +1735,7 @@ export default function LiveSession({ session, host }: { session: string; host: 
           while looking at how it went, which is when somebody gets called
           away -- and not on the last question, after which there is nothing
           left to hold back. */}
-      {item.mode === 'open' && !host && !readOnly &&
+      {item.mode === 'open' && !host && !readOnly && item.privacy !== 'full' &&
         (shown.state === 'open' || holding) &&
         (item.done ?? 0) + 1 < (item.total ?? 0) && (
           <button

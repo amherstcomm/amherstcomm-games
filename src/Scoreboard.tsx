@@ -56,8 +56,12 @@ function Slides({
   clouds,
   onCloud,
   onLeave,
+  anonymous,
 }: {
   items: NonNullable<SessionResults['items']>;
+  /** a fully anonymous survey: said on every slide, and no standings at the
+   *  end, since nobody was scored */
+  anonymous?: boolean;
   standings: ReactNode;
   title: string;
   clouds: Record<string, boolean>;
@@ -65,8 +69,8 @@ function Slides({
   onLeave: () => void;
 }) {
   const [at, setAt] = useState(0);
-  /** One past the last question is the standings. */
-  const last = items.length;
+  /** One past the last question is the standings, where there are any. */
+  const last = anonymous ? Math.max(0, items.length - 1) : items.length;
   const go = useCallback((d: -1 | 1) => setAt((n) => Math.min(last, Math.max(0, n + d))), [last]);
 
   useEffect(() => {
@@ -92,7 +96,10 @@ function Slides({
   return (
     <div className="min-h-[70vh] flex flex-col">
       <div className="flex items-center justify-between gap-3 mb-6">
-        <p className="text-xs uppercase tracking-wider text-slate-500 truncate">{title}</p>
+        <p className="text-xs uppercase tracking-wider text-slate-500 truncate">
+          {title}
+          {anonymous && <span className="normal-case tracking-normal"> · Fully anonymous survey. Counts only, no names.</span>}
+        </p>
         <button
           onClick={onLeave}
           className={`${CONTROL} border-white/15 bg-white/10 text-slate-200 hover:bg-white/15 shrink-0`}
@@ -284,6 +291,7 @@ export default function Scoreboard({ session }: { session: string }) {
           clouds={clouds}
           onCloud={(id) => setClouds((c) => ({ ...c, [id]: !c[id] }))}
           onLeave={() => setSlides(false)}
+          anonymous={results?.privacy === 'full'}
         />
       </div>
     );
@@ -315,10 +323,21 @@ export default function Scoreboard({ session }: { session: string }) {
             }`}
       </p>
 
+      {/* Said where the results are read, because it is the one thing anybody
+          looking at them should know first. */}
+      {results?.privacy === 'full' && (
+        <p className="mb-6 rounded-2xl border border-accent/40 bg-accent/10 px-4 py-3 text-sm text-slate-200">
+          <span className="font-semibold text-white">Fully anonymous survey.</span>{' '}
+          These are counts only. There is no list of who answered what, and no export with
+          names, for anyone. {results.answered ?? 0} answered.
+        </p>
+      )}
+
       <div className="flex flex-wrap gap-2 mb-6">
         {(
           [
-            ['standings', 'Who won', Trophy],
+            // nobody is scored in a fully anonymous survey, so nobody won
+            ...(results?.privacy === 'full' ? [] : [['standings', 'Who won', Trophy] as const]),
             ['results', 'How each question went', BarChart3],
           ] as const
         ).map(([v, label, Icon]) => (

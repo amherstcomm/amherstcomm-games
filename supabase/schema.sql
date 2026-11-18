@@ -29440,3 +29440,1443 @@ end;
 $fn$;
 revoke all on function public.revisit_item(uuid) from public, anon;
 grant execute on function public.revisit_item(uuid) to authenticated;
+
+-- ---------------------------------------------------------------------------
+-- Fully anonymous surveys (November 2026; the survey spec, step 2)
+-- ---------------------------------------------------------------------------
+--
+-- Everywhere else in sessions, "anonymous" means anonymous to the room:
+-- responses keeps user_id, and item_responses_identified lets an admin see
+-- who answered what. Fine for trivia; not for pay, benefits or feedback on
+-- management, where people are answering to the ones who could look.
+--
+-- A session with privacy = 'full' keeps its answers somewhere else:
+--
+--   survey_participation (session, user, key_check)  that somebody answered
+--                                                     at all, and nothing
+--                                                     about what
+--   survey_answers (id, item, answer_key, value)     what was answered, with
+--                                                     no user and no time
+--
+-- The link between the two is a key only the person's browser holds: 32 random
+-- bytes, made the first time they answer and kept in its storage. Each answer
+-- is filed under sha256('answer:' item ':' key), so the same person finds and
+-- changes their own answer and nobody can go from an answer to a name. The key
+-- travels with each answer, is checked against key_check (sha256 of the key
+-- and the session) and is stored nowhere -- Ray's choice over sending only
+-- the per-question fingerprint, which would have let anybody who cleared their
+-- browser answer twice (2026-11-18). A person who loses the key keeps the
+-- answers they gave and cannot change them.
+--
+-- What does not exist for these: a list of who answered what, a name or a
+-- time on any answer, avatars on picks, questions from the room, scoring,
+-- word games, trivia attached to a giveaway or a tournament. Results are
+-- counts, nothing until min_results people have answered, and reasons only
+-- after the survey closes unless twice that many have.
+--
+-- Chosen before anybody answers, and fixed once anybody has.
+
+alter table public.sessions add column if not exists privacy text not null default 'room';
+do $$
+begin
+  if not exists (select 1 from pg_constraint where conname = 'sessions_privacy_check') then
+    alter table public.sessions add constraint sessions_privacy_check check (privacy in ('room', 'full'));
+  end if;
+end $$;
+alter table public.sessions add column if not exists min_results int not null default 5;
+do $$
+begin
+  if not exists (select 1 from pg_constraint where conname = 'sessions_min_results_check') then
+    alter table public.sessions add constraint sessions_min_results_check check (min_results between 5 and 1000);
+  end if;
+end $$;
+-- Ray's per-survey switch: reasons can be left out of the results entirely.
+alter table public.sessions add column if not exists show_comments boolean not null default true;
+
+create table if not exists public.survey_participation (
+  session_id uuid not null references public.sessions (id) on delete cascade,
+  user_id uuid not null references auth.users (id) on delete cascade,
+  -- sha256 of the session and the browser's key: proof the key is theirs,
+  -- and no way back to it
+  key_check text not null,
+  primary key (session_id, user_id)
+);
+alter table public.survey_participation enable row level security;
+revoke all on public.survey_participation from public, anon, authenticated;
+
+create table if not exists public.survey_answers (
+  id uuid primary key default gen_random_uuid(),
+  item_id uuid not null references public.items (id) on delete cascade,
+  answer_key text not null,
+  value jsonb not null,
+  unique (item_id, answer_key)
+);
+alter table public.survey_answers enable row level security;
+revoke all on public.survey_answers from public, anon, authenticated;
+
+create or replace function public.anon_key_check(p_session uuid, p_key text)
+returns text
+language sql
+immutable
+set search_path = ''
+as $fn$
+  select encode(sha256(convert_to('check:' || p_session::text || ':' || p_key, 'UTF8')), 'hex')
+$fn$;
+revoke all on function public.anon_key_check(uuid, text) from public, anon, authenticated;
+
+create or replace function public.anon_answer_key(p_item uuid, p_key text)
+returns text
+language sql
+immutable
+set search_path = ''
+as $fn$
+  select encode(sha256(convert_to('answer:' || p_item::text || ':' || p_key, 'UTF8')), 'hex')
+$fn$;
+revoke all on function public.anon_answer_key(uuid, text) from public, anon, authenticated;
+
+-- Whether this key is the one this person answered with -- or they have not
+-- answered yet, so any well-formed key is theirs to start with.
+create or replace function public.anon_key_ok(p_session uuid, p_key text)
+returns boolean
+language sql
+stable
+security definer
+set search_path = ''
+as $fn$
+  select coalesce(p_key ~ '^[0-9a-f]{64}$', false)
+     and coalesce((select sp.key_check = public.anon_key_check(p_session, p_key)
+                   from public.survey_participation sp
+                   where sp.session_id = p_session and sp.user_id = (select auth.uid())), true)
+$fn$;
+revoke all on function public.anon_key_ok(uuid, text) from public, anon, authenticated;
+
+-- How many people have answered a session at all. A fully anonymous one counts
+-- participants; any other, distinct people with a response.
+create or replace function public.session_answered(p_session uuid)
+returns bigint
+language sql
+stable
+security definer
+set search_path = ''
+as $fn$
+  select case when (select s.privacy from public.sessions s where s.id = p_session) = 'full'
+    then (select count(*) from public.survey_participation sp where sp.session_id = p_session)
+    else (select count(distinct r.user_id) from public.responses r
+          join public.items i on i.id = r.item_id where i.session_id = p_session)
+  end
+$fn$;
+revoke all on function public.session_answered(uuid) from public, anon, authenticated;
+
+-- Whether a session's results may be shown: always, unless it is fully
+-- anonymous and fewer than its minimum have answered.
+create or replace function public.results_open(p_session uuid)
+returns boolean
+language sql
+stable
+security definer
+set search_path = ''
+as $fn$
+  select coalesce((select s.privacy <> 'full'
+                          or public.session_answered(s.id) >= s.min_results
+                   from public.sessions s where s.id = p_session), false)
+$fn$;
+revoke all on function public.results_open(uuid) from public, anon, authenticated;
+
+-- And the reasons: never when the author switched them off; in a fully
+-- anonymous survey, once twice the minimum have answered or it has closed --
+-- a reason in a group of six is a reason somebody can place.
+create or replace function public.comments_open(p_session uuid)
+returns boolean
+language sql
+stable
+security definer
+set search_path = ''
+as $fn$
+  select coalesce((select s.show_comments
+                          and (s.privacy <> 'full'
+                               or s.state = 'closed'
+                               or public.session_answered(s.id) >= 2 * s.min_results)
+                   from public.sessions s where s.id = p_session), false)
+$fn$;
+revoke all on function public.comments_open(uuid) from public, anon, authenticated;
+
+-- One item's answers, from wherever this session keeps them, in one shape: the
+-- charts and the tally read this rather than responses, so a fully anonymous
+-- survey is drawn by the same code with no user and no time to draw. `shuffle`
+-- is an order that is neither who nor when.
+create or replace function public.answers_for(p_item uuid)
+returns table (item_id uuid, user_id uuid, value jsonb, anonymous boolean,
+               submitted_at timestamptz, shuffle text)
+language sql
+stable
+security definer
+set search_path = ''
+as $fn$
+  select a.item_id, null::uuid, a.value, true, null::timestamptz, md5(a.id::text)
+  from public.survey_answers a
+  join public.items i on i.id = a.item_id
+  join public.sessions s on s.id = i.session_id
+  where a.item_id = p_item and s.privacy = 'full'
+  union all
+  select r.item_id, r.user_id, r.value, r.anonymous, r.submitted_at,
+         md5(r.item_id::text || r.user_id::text)
+  from public.responses r
+  join public.items i on i.id = r.item_id
+  join public.sessions s on s.id = i.session_id
+  where r.item_id = p_item and s.privacy <> 'full'
+$fn$;
+revoke all on function public.answers_for(uuid) from public, anon, authenticated;
+
+-- A comparison's answer, checked and put in its one shape, or the reason not.
+create or replace function public.compare_value(p_item public.items, p_value jsonb)
+returns jsonb
+language plpgsql
+immutable
+set search_path = ''
+as $fn$
+declare
+  pick text;
+  why text;
+begin
+  if jsonb_typeof(p_value) is distinct from 'object' then
+    return jsonb_build_object('ok', false, 'reason', 'pick one of the options');
+  end if;
+  pick := p_value ->> 'pick';
+  if pick is null
+     or (pick = 'none' and not coalesce((p_item.payload ->> 'allowNoPreference')::boolean, false))
+     or (pick <> 'none' and not exists (
+           select 1 from jsonb_array_elements(p_item.payload -> 'options') o where o ->> 'id' = pick)) then
+    return jsonb_build_object('ok', false, 'reason', 'pick one of the options');
+  end if;
+  why := nullif(btrim(coalesce(p_value ->> 'why', '')), '');
+  if not coalesce((p_item.payload ->> 'askWhy')::boolean, false) then
+    why := null;
+  end if;
+  if char_length(why) > 1000 then
+    return jsonb_build_object('ok', false, 'reason', 'keep the reason to 1000 characters');
+  end if;
+  return jsonb_build_object('ok', true, 'value', jsonb_build_object('pick', pick, 'why', why));
+end;
+$fn$;
+revoke all on function public.compare_value(public.items, jsonb) from public, anon, authenticated;
+
+-- The question in front of somebody in a fully anonymous survey. Shaped like
+-- current_item's, with two differences: what they have answered is found by
+-- their key, and there is no clock -- a timer measures one person from the
+-- moment they were served, which is a record of who was where when.
+create or replace function public.anon_current_item(p_session uuid, p_key text)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $fn$
+declare
+  sess public.sessions;
+  it public.items;
+  me uuid := (select auth.uid());
+  yours boolean;
+  key_ok boolean;
+  bound boolean;
+  n_total int;
+begin
+  select * into sess from public.sessions where id = p_session;
+  yours := public.runs_session(p_session);
+  key_ok := public.anon_key_ok(p_session, p_key);
+  bound := exists (select 1 from public.survey_participation sp
+                   where sp.session_id = p_session and sp.user_id = me);
+  select count(*) into n_total from public.items i
+  where i.session_id = p_session and i.state <> 'pending';
+
+  if sess.mode = 'live' then
+    if sess.current_item is null then
+      return jsonb_build_object('state', 'waiting', 'mode', 'live', 'privacy', 'full', 'now', now(), 'yours', yours);
+    end if;
+    select * into it from public.items where id = sess.current_item and state <> 'pending';
+    if it.id is null then
+      return jsonb_build_object('state', 'waiting', 'mode', 'live', 'privacy', 'full', 'now', now(), 'yours', yours);
+    end if;
+    return jsonb_build_object(
+      'state', it.state, 'mode', 'live', 'privacy', 'full', 'yours', yours,
+      'key_lost', bound and not key_ok,
+      'id', it.id, 'kind', it.kind, 'prompt', it.prompt,
+      'payload', public.served_payload(it.kind, it.payload, sess.shuffle_options, it.id::text),
+      'position', it.position,
+      'opened_at', null, 'seconds', null, 'now', now(),
+      'mine', case when key_ok then
+                (select a.value from public.survey_answers a
+                 where a.item_id = it.id and a.answer_key = public.anon_answer_key(it.id, p_key)) end,
+      'answer', case when it.state = 'revealed'
+                     then (select a.answer from public.item_answers a where a.item_id = it.id) end);
+  end if;
+
+  if me is null or yours then
+    return jsonb_build_object('state', 'not-live', 'mode', 'open', 'privacy', 'full', 'now', now(), 'yours', yours);
+  end if;
+  -- They answered from a browser that is not this one, or that has forgotten
+  -- the key. What they gave still counts; this one cannot add to it or change
+  -- it, and is told so rather than shown questions it cannot answer.
+  if bound and not key_ok then
+    return jsonb_build_object('state', 'done', 'mode', 'open', 'privacy', 'full', 'key_lost', true,
+                              'now', now(), 'yours', false, 'total', n_total);
+  end if;
+  select i.* into it
+  from public.items i
+  where i.session_id = p_session
+    and i.state <> 'pending'
+    and not (key_ok and exists (select 1 from public.survey_answers a
+                                where a.item_id = i.id
+                                  and a.answer_key = public.anon_answer_key(i.id, p_key)))
+  order by i.position
+  limit 1;
+  if it.id is null then
+    return jsonb_build_object('state', 'done', 'mode', 'open', 'privacy', 'full',
+                              'now', now(), 'yours', false, 'total', n_total);
+  end if;
+  return jsonb_build_object(
+    'state', 'open', 'mode', 'open', 'privacy', 'full', 'yours', false,
+    'id', it.id, 'kind', it.kind, 'prompt', it.prompt,
+    'payload', public.served_payload(it.kind, it.payload, sess.shuffle_options, it.id::text || me::text),
+    'position', it.position,
+    'opened_at', null, 'seconds', null, 'now', now(),
+    'mine', null, 'answer', null, 'paused', false,
+    'total', n_total,
+    'done', (select count(*) from public.items i
+             where i.session_id = p_session and i.state <> 'pending'
+               and key_ok
+               and exists (select 1 from public.survey_answers a
+                           where a.item_id = i.id and a.answer_key = public.anon_answer_key(i.id, p_key))));
+end;
+$fn$;
+revoke all on function public.anon_current_item(uuid, text) from public, anon, authenticated;
+
+drop function if exists public.current_item(uuid);
+create or replace function public.current_item(p_session uuid, p_key text default null)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $fn$
+declare
+  sess public.sessions;
+  me uuid := (select auth.uid());
+  it public.items;
+  yours boolean;
+  n_total int;
+  n_timed int;
+  fewest int;
+  most int;
+begin
+  -- The clock before the question: a survey whose closing time has passed is
+  -- shut, whether or not anybody has been by since.
+  perform public.apply_schedule(p_session);
+  select * into sess from public.sessions where id = p_session;
+  if sess.id is null then
+    return jsonb_build_object('state', 'not-live', 'now', now(), 'yours', false);
+  end if;
+  yours := public.runs_session(p_session);
+  -- A giveaway's trivia is its entrants' alone: anybody else is told to enter
+  -- the giveaway, and where, rather than shown a question they cannot answer.
+  if not public.session_open_to_me(p_session) then
+    return jsonb_build_object('state', 'giveaway-only', 'now', now(), 'yours', false,
+                              'giveaway', public.giveaway_of_session(p_session));
+  end if;
+  if sess.state <> 'live' then
+    -- `shared` travels with the refusal, because the screen that says "this is
+    -- not running" is the same screen that should offer the way to see how it
+    -- went — and it has nothing else to ask.
+    return jsonb_build_object('state', 'not-live', 'now', now(), 'yours', yours,
+                              'shared', sess.share_results and sess.state = 'closed');
+  end if;
+
+  -- Fully anonymous: what they have answered is found by their key, never by
+  -- who they are -- see anon_current_item.
+  if sess.privacy = 'full' then
+    return public.anon_current_item(p_session, p_key);
+  end if;
+
+  if sess.mode = 'open' then
+    if me is null or yours then
+      return jsonb_build_object('state', 'not-live', 'mode', 'open', 'now', now(),
+                                'yours', yours);
+    end if;
+    select i.* into it
+    from public.items i
+    where i.session_id = p_session
+      and i.state <> 'pending'
+      -- Finished rather than merely written against — a word game writes a row
+      -- per guess, and the old test took the board away after the first one.
+      and not public.finished_item(i.id, me)
+      -- see the note above: a question whose window has closed is behind them
+      and not public.expired_for(i.id, me)
+    order by i.position
+    limit 1;
+    if it.id is null then
+      return jsonb_build_object(
+        'state', 'done', 'mode', 'open', 'now', now(), 'yours', false,
+        'total', (select count(*) from public.items i where i.session_id = p_session
+                  and i.state <> 'pending'));
+    end if;
+    -- Not started: nothing has been put in front of them yet, so opening the
+    -- page puts nothing in front of them either. begin_playing is what deals
+    -- the first question and starts its clock.
+    if not exists (select 1 from public.item_served sv
+                   join public.items i on i.id = sv.item_id
+                   where i.session_id = p_session and sv.user_id = me) then
+      select count(*),
+             count(public.item_seconds(i.payload)),
+             min(public.item_seconds(i.payload)),
+             max(public.item_seconds(i.payload))
+        into n_total, n_timed, fewest, most
+      from public.items i
+      where i.session_id = p_session and i.state <> 'pending';
+      return jsonb_build_object(
+        'state', 'ready', 'mode', 'open', 'now', now(), 'yours', false,
+        'title', sess.title,
+        'total', n_total,
+        'timed', n_timed,
+        -- only when one number is true of all of them
+        'seconds_each', case when n_timed = n_total and fewest = most then fewest end);
+    end if;
+    -- Paused, and this question not yet in front of them: say so rather than
+    -- serve it, so its clock does not start until they come back. One already
+    -- served -- the question they were on when they paused -- is theirs to
+    -- finish, which is what "pause after this question" means.
+    if exists (select 1 from public.session_pauses sp
+               where sp.session_id = p_session and sp.user_id = me)
+       and not exists (select 1 from public.item_served sv
+                       where sv.item_id = it.id and sv.user_id = me) then
+      return jsonb_build_object(
+        'state', 'paused', 'mode', 'open', 'now', now(), 'yours', false, 'paused', true,
+        'total', (select count(*) from public.items i where i.session_id = p_session
+                  and i.state <> 'pending'),
+        'done', (select count(*) from public.items i
+               where i.session_id = p_session and i.state <> 'pending'
+                 and (public.finished_item(i.id, me)
+                      or public.expired_for(i.id, me))));
+    end if;
+
+    insert into public.item_served (item_id, user_id) values (it.id, me)
+    on conflict (item_id, user_id) do nothing;
+
+    return jsonb_build_object(
+      'state', 'open', 'mode', 'open', 'yours', false,
+      'id', it.id, 'kind', it.kind, 'prompt', it.prompt,
+      -- their own order of the options, when the session shuffles them
+      'payload', public.served_payload(it.kind, it.payload, sess.shuffle_options, it.id::text || me::text),
+      'position', it.position,
+      'opened_at', public.started_at(it.id, me),
+      'seconds', public.item_seconds(it.payload),
+      'now', now(),
+      'mine', null,
+      'answer', null,
+      -- whether "pause after this question" is set, so the switch shows it
+      'paused', exists (select 1 from public.session_pauses sp
+                        where sp.session_id = p_session and sp.user_id = me),
+      'total', (select count(*) from public.items i where i.session_id = p_session
+                and i.state <> 'pending'),
+      -- how many are behind them, answered or timed out, so "Question 3 of 6"
+      -- keeps counting while a skipped one still counts as gone
+      'done', (select count(*) from public.items i
+               where i.session_id = p_session and i.state <> 'pending'
+                 and (public.finished_item(i.id, me)
+                      or public.expired_for(i.id, me))));
+  end if;
+
+  if sess.current_item is null then
+    return jsonb_build_object('state', 'waiting', 'mode', 'live', 'now', now(), 'yours', yours);
+  end if;
+  select * into it from public.items
+  where id = sess.current_item and state <> 'pending';
+  if it.id is null then
+    return jsonb_build_object('state', 'waiting', 'mode', 'live', 'now', now(), 'yours', yours);
+  end if;
+
+  return jsonb_build_object(
+    'state', it.state, 'mode', 'live', 'yours', yours,
+    'id', it.id, 'kind', it.kind, 'prompt', it.prompt,
+    -- the room's one order of the options, the projector's included
+    'payload', public.served_payload(it.kind, it.payload, sess.shuffle_options, it.id::text),
+    'position', it.position,
+    'opened_at', it.opened_at,
+    'seconds', public.item_seconds(it.payload),
+    'now', now(),
+    'mine', (select r.value from public.responses r
+             where r.item_id = it.id and r.user_id = me),
+    'answer', case when it.state = 'revealed'
+                   then (select a.answer from public.item_answers a where a.item_id = it.id)
+              end);
+end;
+$fn$;
+revoke all on function public.current_item(uuid, text) from public, anon;
+grant execute on function public.current_item(uuid, text) to authenticated;
+
+-- An answer to a fully anonymous survey. One request does both writes -- that
+-- they answered, and what -- so the two are never two requests a log could
+-- line up by time.
+create or replace function public.answer_anonymously(p_item uuid, p_value jsonb, p_key text)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $fn$
+declare
+  it public.items;
+  sess public.sessions;
+  me uuid := (select auth.uid());
+  checked jsonb;
+  bound boolean;
+begin
+  perform public.apply_schedule((select i.session_id from public.items i where i.id = p_item));
+  select * into it from public.items where id = p_item;
+  if it.id is null then
+    return jsonb_build_object('ok', false, 'reason', 'no such item');
+  end if;
+  select * into sess from public.sessions where id = it.session_id;
+  if sess.privacy <> 'full' then
+    return jsonb_build_object('ok', false, 'reason', 'this survey is not fully anonymous');
+  end if;
+  if me is null then
+    return jsonb_build_object('ok', false, 'reason', 'not signed in');
+  end if;
+  if sess.state <> 'live' then
+    return jsonb_build_object('ok', false, 'reason', 'this session is not running');
+  end if;
+  if not public.session_open_to_me(sess.id) then
+    return jsonb_build_object('ok', false, 'reason', 'not allowed');
+  end if;
+  if public.runs_session(sess.id) then
+    return jsonb_build_object('ok', false, 'reason', 'you are running this one');
+  end if;
+  if it.state <> 'open' then
+    return jsonb_build_object('ok', false, 'reason', 'answers are closed for this one');
+  end if;
+  if it.kind = 'game' then
+    return jsonb_build_object('ok', false, 'reason', 'a word game cannot be answered anonymously');
+  end if;
+  if sess.mode = 'live' and sess.current_item is distinct from p_item then
+    return jsonb_build_object('ok', false, 'reason', 'that is not the question on screen');
+  end if;
+  if coalesce(p_key, '') !~ '^[0-9a-f]{64}$' then
+    return jsonb_build_object('ok', false, 'reason', 'this browser has no key to file the answer under');
+  end if;
+  bound := exists (select 1 from public.survey_participation sp
+                   where sp.session_id = sess.id and sp.user_id = me);
+  if bound and not public.anon_key_ok(sess.id, p_key) then
+    return jsonb_build_object('ok', false, 'key_lost', true, 'reason',
+      'your answers were saved from another browser, or one that has since forgotten its key: they still count, and this one cannot change them');
+  end if;
+
+  if it.kind = 'compare' then
+    checked := public.compare_value(it, p_value);
+    if not (checked ->> 'ok')::boolean then
+      return checked;
+    end if;
+    p_value := checked -> 'value';
+  elsif sess.mode = 'open'
+        and exists (select 1 from public.survey_answers a
+                    where a.item_id = p_item and a.answer_key = public.anon_answer_key(p_item, p_key)) then
+    -- every other kind is answered once on your own time, as it is elsewhere
+    return jsonb_build_object('ok', false, 'reason', 'you have answered that one');
+  end if;
+
+  if not bound then
+    insert into public.survey_participation (session_id, user_id, key_check)
+    values (sess.id, me, public.anon_key_check(sess.id, p_key))
+    on conflict (session_id, user_id) do nothing;
+    -- two tabs answering for the first time at once, with different keys
+    if not public.anon_key_ok(sess.id, p_key) then
+      return jsonb_build_object('ok', false, 'key_lost', true, 'reason',
+        'another tab answered first with a different key; reload this one');
+    end if;
+  end if;
+
+  insert into public.survey_answers (item_id, answer_key, value)
+  values (p_item, public.anon_answer_key(p_item, p_key), p_value)
+  on conflict (item_id, answer_key) do update set value = excluded.value;
+
+  return jsonb_build_object('ok', true, 'answer', null);
+end;
+$fn$;
+revoke all on function public.answer_anonymously(uuid, jsonb, text) from public, anon;
+grant execute on function public.answer_anonymously(uuid, jsonb, text) to authenticated;
+
+create or replace function public.answer_item(
+  p_item uuid,
+  p_value jsonb,
+  p_anonymous boolean default false
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $fn$
+declare
+  it public.items;
+  sess public.sessions;
+  me uuid := (select auth.uid());
+  window_seconds int;
+  began timestamptz;
+  pick text;
+  why text;
+begin
+  -- The clock before the question: a survey whose closing time has passed is
+  -- shut, whether or not anybody has been by since.
+  perform public.apply_schedule(
+    (select i.session_id from public.items i where i.id = p_item));
+  select * into it from public.items where id = p_item;
+  if it.id is null then
+    return jsonb_build_object('ok', false, 'reason', 'no such item');
+  end if;
+  select * into sess from public.sessions where id = it.session_id;
+  -- A fully anonymous survey's answers go through answer_anonymously, with the
+  -- key, and never into responses beside a name.
+  if sess.privacy = 'full' then
+    return jsonb_build_object('ok', false, 'reason', 'this survey is fully anonymous; reload the page and answer again');
+  end if;
+  if sess.state <> 'live' then
+    return jsonb_build_object('ok', false, 'reason', 'this session is not running');
+  end if;
+  if not public.session_open_to_me(sess.id) then
+    return jsonb_build_object('ok', false, 'reason', 'this trivia is for the giveaway''s entrants: enter the giveaway first');
+  end if;
+  if public.runs_session(sess.id) then
+    return jsonb_build_object('ok', false, 'reason', 'you are running this one');
+  end if;
+  if it.state <> 'open' then
+    return jsonb_build_object('ok', false, 'reason', 'answers are closed for this one');
+  end if;
+
+  -- A comparison: one of the options, or "none" where the author allowed it,
+  -- and an optional reason. Kept to that shape here, because the chart and
+  -- the tally read it, and a reason sent to a question that did not ask for
+  -- one is dropped rather than stored.
+  if it.kind = 'compare' then
+    if jsonb_typeof(p_value) is distinct from 'object' then
+      return jsonb_build_object('ok', false, 'reason', 'pick one of the options');
+    end if;
+    pick := p_value ->> 'pick';
+    if pick is null
+       or (pick = 'none' and not coalesce((it.payload ->> 'allowNoPreference')::boolean, false))
+       or (pick <> 'none' and not exists (
+             select 1 from jsonb_array_elements(it.payload -> 'options') o where o ->> 'id' = pick)) then
+      return jsonb_build_object('ok', false, 'reason', 'pick one of the options');
+    end if;
+    why := nullif(btrim(coalesce(p_value ->> 'why', '')), '');
+    if not coalesce((it.payload ->> 'askWhy')::boolean, false) then
+      why := null;
+    end if;
+    if char_length(why) > 1000 then
+      return jsonb_build_object('ok', false, 'reason', 'keep the reason to 1000 characters');
+    end if;
+    p_value := jsonb_build_object('pick', pick, 'why', why);
+  end if;
+
+  if sess.mode = 'open' then
+    -- A comparison may be changed until it closes: it has no right answer to
+    -- give away, and "you can change your answer" is what the screen promises.
+    if it.kind <> 'compare'
+       and exists (select 1 from public.responses r where r.item_id = p_item and r.user_id = me) then
+      return jsonb_build_object('ok', false, 'reason', 'you have answered that one');
+    end if;
+    if not exists (select 1 from public.item_served s
+                   where s.item_id = p_item and s.user_id = me) then
+      return jsonb_build_object('ok', false, 'reason', 'that is not the question in front of you');
+    end if;
+  elsif sess.current_item is distinct from p_item then
+    return jsonb_build_object('ok', false, 'reason', 'that is not the question on screen');
+  end if;
+
+  window_seconds := public.item_seconds(it.payload);
+  began := public.started_at(p_item, me);
+  if window_seconds is not null and began is not null
+     and now() > began + (window_seconds * interval '1 second') then
+    return jsonb_build_object('ok', false, 'reason', 'time is up for this one');
+  end if;
+
+  insert into public.responses (item_id, user_id, value, anonymous)
+  values (p_item, me, p_value, coalesce(p_anonymous, false))
+  on conflict (item_id, user_id) do update
+    set value = excluded.value,
+        anonymous = excluded.anonymous,
+        submitted_at = now();
+
+  return jsonb_build_object(
+    'ok', true,
+    'answer', case when sess.mode = 'open'
+                   then (select a.answer from public.item_answers a where a.item_id = p_item)
+              end);
+end;
+$fn$;
+revoke all on function public.answer_anonymously(uuid, jsonb, text) from public, anon;
+revoke all on function public.answer_item(uuid, jsonb, boolean) from public, anon;
+grant execute on function public.answer_item(uuid, jsonb, boolean) to authenticated;
+
+create or replace function public.save_item(
+  p_session uuid,
+  p_item uuid,
+  p_kind text,
+  p_prompt text,
+  p_payload jsonb default '{}'::jsonb,
+  p_answer jsonb default null,
+  p_points numeric default 1,
+  p_penalty_wrong boolean default false,
+  p_penalty_skip boolean default false
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $fn$
+declare
+  target uuid;
+  prior_state text;
+  is_scored boolean;
+  body jsonb;
+  problem text;
+begin
+  if not public.hosts_session(p_session) then
+    return jsonb_build_object('ok', false, 'reason', 'not allowed');
+  end if;
+  select k.scored into is_scored from public.item_kinds k where k.kind = p_kind;
+  if is_scored is null then
+    return jsonb_build_object('ok', false, 'reason', 'no such kind of question');
+  end if;
+  if coalesce(btrim(p_prompt), '') = '' then
+    return jsonb_build_object('ok', false, 'reason', 'a question needs to say something');
+  end if;
+
+  if coalesce(p_points, 1) <= 0 or coalesce(p_points, 1) > 100 then
+    return jsonb_build_object('ok', false, 'reason',
+      'a question is worth more than nothing and at most a hundred points');
+  end if;
+
+  body := coalesce(p_payload, '{}'::jsonb);
+
+  -- A comparison is a table the room reads across, so a missing cell is a
+  -- question that cannot be drawn. Checked here as well as in the editor,
+  -- because the editor is not the only thing that can call this.
+  -- A word game marks each guess against the person making it, which a fully
+  -- anonymous survey has no way to do.
+  if p_kind = 'game' and exists (select 1 from public.sessions s
+                                 where s.id = p_session and s.privacy = 'full') then
+    return jsonb_build_object('ok', false, 'reason',
+      'a word game cannot go in a fully anonymous survey: it has to know whose guesses are whose');
+  end if;
+
+  if p_kind = 'compare' then
+    problem := public.compare_payload_problem(body);
+    if problem is not null then
+      return jsonb_build_object('ok', false, 'reason', problem);
+    end if;
+  end if;
+
+  -- A word game drawn from a themed list rather than typed.
+  --
+  -- The draw happens here, once, and what it drew is stored with the answer —
+  -- so the round is fixed the moment it is saved, and deleting the list later
+  -- does not take the question apart. The list travels in `answer` and never in
+  -- the payload: the payload goes to the room, and naming the list a six-letter
+  -- word came out of nearly gives it away.
+  if p_kind = 'game' and (p_answer ->> 'list') is not null then
+    declare
+      drawn text;
+      want int := nullif(p_answer ->> 'length', '')::int;
+    begin
+      drawn := public.draw_word((p_answer ->> 'list')::uuid, want);
+      if drawn is null then
+        return jsonb_build_object('ok', false, 'reason',
+          case when want is null then 'that list has no words in it'
+               else format('that list has no %s-letter words in it', want) end);
+      end if;
+      p_answer := jsonb_build_object('word', drawn, 'list', p_answer ->> 'list');
+      -- The board is drawn from the payload before the room knows anything
+      -- else, so the length has to follow the word that was actually drawn.
+      body := jsonb_set(body, '{length}', to_jsonb(length(drawn)));
+    end;
+  end if;
+
+  -- See the note above: the room is shown the payload, so the payload must not
+  -- be the answer in a different arrangement.
+  if p_kind = 'rank' and jsonb_typeof(body -> 'options') = 'array' then
+    body := jsonb_set(body, '{options}',
+                      public.shuffled(body -> 'options', p_answer -> 'order'));
+  elsif p_kind = 'match' and jsonb_typeof(body -> 'right') = 'array' then
+    -- Only the right-hand column moves. The left one is the list of things
+    -- being asked about and reordering it would just reword the question.
+    body := jsonb_set(body, '{right}', public.shuffled(body -> 'right'));
+  end if;
+
+  if p_item is not null then
+    select i.state into prior_state
+    from public.items i where i.id = p_item and i.session_id = p_session;
+    if prior_state is null then
+      return jsonb_build_object('ok', false, 'reason', 'no such question in this session');
+    end if;
+    if prior_state <> 'pending' then
+      return jsonb_build_object('ok', false, 'reason',
+        'this one has already been shown - delete it and add another instead');
+    end if;
+    update public.items
+      set kind = p_kind,
+          prompt = left(btrim(p_prompt), 500),
+          payload = body,
+          points = coalesce(p_points, 1),
+          penalty_wrong = coalesce(p_penalty_wrong, false),
+          penalty_skip = coalesce(p_penalty_skip, false)
+    where id = p_item;
+    target := p_item;
+  else
+    insert into public.items (session_id, position, kind, prompt, payload,
+                              points, penalty_wrong, penalty_skip)
+    values (p_session,
+            coalesce((select max(i.position) + 1 from public.items i
+                      where i.session_id = p_session), 1),
+            p_kind, left(btrim(p_prompt), 500), body,
+            coalesce(p_points, 1),
+            coalesce(p_penalty_wrong, false),
+            coalesce(p_penalty_skip, false))
+    returning id into target;
+  end if;
+
+  if p_answer is null or p_answer = 'null'::jsonb or not is_scored then
+    delete from public.item_answers where item_id = target;
+  else
+    insert into public.item_answers (item_id, answer) values (target, p_answer)
+    on conflict (item_id) do update set answer = excluded.answer;
+  end if;
+
+  return jsonb_build_object('ok', true, 'id', target);
+end;
+$fn$;
+revoke all on function public.save_item(uuid, uuid, text, text, jsonb, jsonb, numeric, boolean, boolean) from public, anon;
+grant execute on function public.save_item(uuid, uuid, text, text, jsonb, jsonb, numeric, boolean, boolean) to authenticated;
+
+create or replace function public.item_chart_raw(p_item uuid)
+returns jsonb
+language sql
+stable
+set search_path = ''
+as $fn$
+  with it as (
+    select i.id, i.kind, i.payload, a.answer,
+           (select count(*) from public.answers_for(p_item) r where r.item_id = i.id) as answered
+    from public.items i
+    left join public.item_answers a on a.item_id = i.id
+    where i.id = p_item
+  )
+  select case (select kind from it)
+
+    -- Every option, including the ones nobody picked: a bar chart missing its
+    -- zeroes is a chart that quietly rewrites the question.
+    when 'choice' then jsonb_build_object(
+      'type', 'bars',
+      'total', (select answered from it),
+      'bars', coalesce((
+        select jsonb_agg(jsonb_build_object(
+                 'label', o,
+                 'count', (select count(*) from public.answers_for(p_item) r
+                           where r.item_id = p_item
+                             and (r.value = to_jsonb(o) or r.value @> to_jsonb(o))),
+                 'correct', (select answer -> 'correct' from it) @> to_jsonb(o))
+               order by ord)
+        from jsonb_array_elements_text((select payload -> 'options' from it))
+             with ordinality as t(o, ord)), '[]'::jsonb))
+
+    when 'survey' then jsonb_build_object(
+      'type', 'bars',
+      'total', (select answered from it),
+      'bars', coalesce((
+        select jsonb_agg(jsonb_build_object(
+                 'label', o,
+                 'count', (select count(*) from public.answers_for(p_item) r
+                           where r.item_id = p_item
+                             and (r.value = to_jsonb(o) or r.value @> to_jsonb(o))),
+                 'correct', null)
+               order by ord)
+        from jsonb_array_elements_text((select payload -> 'options' from it))
+             with ordinality as t(o, ord)), '[]'::jsonb))
+
+    -- One bar per pair: how many got that one right. Which wrong answer was
+    -- popular is a further question, and a chart that tried to show both would
+    -- show neither.
+    when 'match' then jsonb_build_object(
+      'type', 'bars',
+      'total', (select answered from it),
+      'label', 'Pairs got right',
+      'bars', coalesce((
+        select jsonb_agg(jsonb_build_object(
+                 'label', l || ' → ' || ((select answer -> 'pairs' from it) ->> l),
+                 'count', (select count(*) from public.answers_for(p_item) r
+                           where r.item_id = p_item
+                             and r.value ->> l = (select answer -> 'pairs' from it) ->> l),
+                 'correct', true)
+               order by l)
+        from jsonb_object_keys((select answer -> 'pairs' from it)) l), '[]'::jsonb))
+
+    -- Same again, by position rather than by pair.
+    when 'rank' then jsonb_build_object(
+      'type', 'bars',
+      'total', (select answered from it),
+      'label', 'Placed correctly',
+      'bars', coalesce((
+        select jsonb_agg(jsonb_build_object(
+                 'label', (ord::text) || '. ' || o,
+                 'count', (select count(*) from public.answers_for(p_item) r
+                           where r.item_id = p_item and r.value ->> (ord - 1)::int = o),
+                 'correct', true)
+               order by ord)
+        from jsonb_array_elements_text((select answer -> 'order' from it))
+             with ordinality as t(o, ord)), '[]'::jsonb))
+
+    -- Solved, and in how many. Six bars and a seventh for the ones who did not.
+    when 'game' then jsonb_build_object(
+      'type', 'bars',
+      'total', (select answered from it),
+      'label', 'Guesses taken',
+      'bars', coalesce((
+        select jsonb_agg(jsonb_build_object(
+                 'label', case when n > 0 then n::text else 'Not solved' end,
+                 'count', (select count(*) from public.answers_for(p_item) r
+                           where r.item_id = p_item
+                             and case
+                                   when n > 0 then coalesce((r.value ->> 'solved')::boolean, false)
+                                     and jsonb_array_length(r.value -> 'guesses') = n
+                                   else not coalesce((r.value ->> 'solved')::boolean, false)
+                                 end),
+                 'correct', n > 0)
+               order by case when n = 0 then 99 else n end)
+        from generate_series(0, coalesce(nullif((select payload ->> 'tries' from it), '')::int, 6)) n
+      ), '[]'::jsonb))
+
+    -- Not bars. Fifty guesses are fifty values on a line.
+    when 'number' then jsonb_build_object(
+      'type', 'numbers',
+      'total', (select answered from it),
+      'answer', (select public.as_number(answer -> 'value') from it),
+      'unit', (select payload -> 'unit' from it),
+      'currency', (select payload -> 'currency' from it),
+      'percent', (select payload -> 'percent' from it),
+      'values', coalesce((
+        select jsonb_agg(v order by v)
+        from (select public.as_number(r.value) as v from public.answers_for(p_item) r
+              where r.item_id = p_item) g
+        where v is not null), '[]'::jsonb))
+
+    -- Text, with the same promise presenter_view makes: no name on anything
+    -- somebody asked to be unnamed.
+    when 'open' then jsonb_build_object(
+      'type', 'texts',
+      'total', (select answered from it),
+      -- The author's choice, made when the question was written rather than
+      -- found on the results screen afterwards: "one word for this month" is a
+      -- cloud before anybody answers it.
+      'cloud', coalesce((select (payload ->> 'cloud')::boolean from it), false),
+      'texts', coalesce((
+        select jsonb_agg(jsonb_build_object(
+                 'value', r.value,
+                 'who', case when r.anonymous then null else p.display_name end)
+               -- in the order they came where there is an order; a fully
+               -- anonymous survey keeps no time, and the order of its rows
+               -- would be one, so it gets the hash instead
+               order by case when r.user_id is null then r.shuffle end, r.submitted_at)
+        from public.answers_for(p_item) r
+        left join public.profiles p on p.id = r.user_id
+        where r.item_id = p_item), '[]'::jsonb))
+
+    -- Every option in the order it was written, then "No preference" where it
+    -- was offered. The reasons come with the option each person picked and
+    -- nothing else: no name, no time, and in an order that is neither -- a
+    -- hash of who, which no reader can turn back into anybody.
+    when 'compare' then jsonb_build_object(
+      'type', 'bars',
+      'total', (select answered from it),
+      'bars', coalesce((
+        select jsonb_agg(b order by ord)
+        from (
+          select ord, jsonb_build_object(
+                   'label', o ->> 'name',
+                   'count', (select count(*) from public.answers_for(p_item) r
+                             where r.item_id = p_item and r.value ->> 'pick' = o ->> 'id'),
+                   'correct', null) as b
+          from jsonb_array_elements((select payload -> 'options' from it))
+               with ordinality as t(o, ord)
+          union all
+          select 99, jsonb_build_object(
+                   'label', 'No preference',
+                   'count', (select count(*) from public.answers_for(p_item) r
+                             where r.item_id = p_item and r.value ->> 'pick' = 'none'),
+                   'correct', null)
+          where coalesce(((select payload from it) ->> 'allowNoPreference')::boolean, false)
+        ) x), '[]'::jsonb),
+      'comments', coalesce((
+        select jsonb_agg(jsonb_build_object(
+                 'pick', coalesce(
+                           (select o ->> 'name'
+                            from jsonb_array_elements((select payload -> 'options' from it)) o
+                            where o ->> 'id' = r.value ->> 'pick'),
+                           'No preference'),
+                 'text', r.value ->> 'why')
+               order by r.shuffle)
+        from public.answers_for(p_item) r
+        where r.item_id = p_item and coalesce(r.value ->> 'why', '') <> ''), '[]'::jsonb))
+
+    else jsonb_build_object('type', 'none', 'total', (select answered from it))
+  end
+$fn$;
+revoke all on function public.item_chart_raw(uuid) from public, anon, authenticated;
+
+-- What a result looks like for this session right now: nothing below the
+-- minimum except how many have answered, and the reasons only once they may
+-- be shown.
+create or replace function public.item_chart(p_item uuid)
+returns jsonb
+language sql
+stable
+security definer
+set search_path = ''
+as $fn$
+  with sess as (
+    select s.* from public.sessions s join public.items i on i.session_id = s.id where i.id = p_item
+  ), raw as (
+    select public.item_chart_raw(p_item) as c
+  )
+  select case
+    when not public.results_open((select id from sess))
+      then jsonb_build_object('type', 'hidden',
+                              'total', (select count(*) from public.answers_for(p_item)),
+                              'answered', public.session_answered((select id from sess)),
+                              'needed', (select min_results from sess))
+    when (select c from raw) ? 'comments' and not public.comments_open((select id from sess))
+      then ((select c from raw) - 'comments')
+           || jsonb_build_object('comments', '[]'::jsonb,
+                                 'comments_held', (select show_comments from sess))
+    else (select c from raw)
+  end
+$fn$;
+revoke all on function public.item_chart(uuid) from public, anon, authenticated;
+
+create or replace function public.item_tally(p_item uuid)
+returns jsonb
+language sql
+stable
+security definer
+set search_path = ''
+as $fn$
+  select case
+    when not exists (select 1 from public.items i where i.id = p_item and i.state = 'revealed')
+      then jsonb_build_object('ok', false, 'reason', 'not revealed yet')
+    -- under the minimum, nothing: not even a tally that ticks as people answer
+    when not public.results_open((select i.session_id from public.items i where i.id = p_item))
+      then jsonb_build_object('ok', false, 'reason', 'not enough answers yet')
+    else jsonb_build_object(
+      'ok', true,
+      'total', (select count(*) from public.answers_for(p_item) r where r.item_id = p_item),
+      -- A comparison is counted by what was picked and named by the option,
+      -- never grouped by the whole answer: the reasons are in there, and
+      -- grouping by them would put each one on the projector with its count.
+      'counts', case
+        when (select i.kind from public.items i where i.id = p_item) = 'compare' then coalesce(
+          (select jsonb_object_agg(v, n)
+           from (select coalesce(
+                          (select o ->> 'name'
+                           from public.items i, jsonb_array_elements(i.payload -> 'options') o
+                           where i.id = p_item and o ->> 'id' = r.value ->> 'pick'),
+                          'No preference') as v,
+                        count(*) as n
+                 from public.answers_for(p_item) r where r.item_id = p_item
+                 group by 1) t),
+          '{}'::jsonb)
+        else coalesce(
+          (select jsonb_object_agg(v, n)
+           from (select r.value::text as v, count(*) as n
+                 from public.answers_for(p_item) r where r.item_id = p_item
+                 group by r.value::text) t),
+          '{}'::jsonb)
+      end
+    )
+  end
+$fn$;
+revoke all on function public.item_tally(uuid) from public, anon;
+grant execute on function public.item_tally(uuid) to authenticated;
+
+create or replace function public.presenter_view(p_item uuid)
+returns jsonb
+language sql
+stable
+security definer
+set search_path = ''
+as $fn$
+  select case
+    when not public.hosts_session((select session_id from public.items where id = p_item))
+      then jsonb_build_object('ok', false, 'reason', 'not allowed')
+    -- Fully anonymous: how many, and nothing else. The list below is answers
+    -- in the order they came, which is who answered when.
+    when (select s.privacy from public.sessions s join public.items i on i.session_id = s.id
+          where i.id = p_item) = 'full'
+      then jsonb_build_object(
+        'ok', true,
+        'answered', (select count(*) from public.survey_answers a where a.item_id = p_item),
+        'answer', (select a.answer from public.item_answers a where a.item_id = p_item),
+        'responses', '[]'::jsonb)
+    else jsonb_build_object(
+      'ok', true,
+      'answered', (select count(*) from public.responses r where r.item_id = p_item),
+      -- the correct answer, which the presenter needs before the reveal in
+      -- order to run the reveal
+      'answer', (select a.answer from public.item_answers a where a.item_id = p_item),
+      'responses', coalesce(
+        (select jsonb_agg(jsonb_build_object(
+           'value', r.value,
+           'at', r.submitted_at,
+           'who', case when r.anonymous then null else p.display_name end
+         ) order by r.submitted_at)
+         from public.responses r
+         left join public.profiles p on p.id = r.user_id
+         where r.item_id = p_item),
+        '[]'::jsonb)
+    )
+  end
+$fn$;
+revoke all on function public.presenter_view(uuid) from public, anon;
+grant execute on function public.presenter_view(uuid) to authenticated;
+
+create or replace function public.item_responses_identified(p_item uuid)
+returns jsonb
+language sql
+stable
+security definer
+set search_path = ''
+as $fn$
+  select case
+    when not public.can('users.manage') then jsonb_build_object('ok', false, 'reason', 'not allowed')
+    -- The route behind an anonymous answer, and the one thing a fully
+    -- anonymous survey promises does not exist. It has nothing to read
+    -- anyway; this says so rather than returning an empty list that looks
+    -- like nobody answered.
+    when (select s.privacy from public.sessions s join public.items i on i.session_id = s.id
+          where i.id = p_item) = 'full'
+      then jsonb_build_object('ok', false, 'reason', 'this survey is fully anonymous: there is nobody to identify')
+    else jsonb_build_object(
+      'ok', true,
+      'responses', coalesce(
+        (select jsonb_agg(jsonb_build_object(
+           'value', r.value,
+           'at', r.submitted_at,
+           'anonymous', r.anonymous,
+           'who', p.display_name,
+           'user', r.user_id
+         ) order by r.submitted_at)
+         from public.responses r
+         left join public.profiles p on p.id = r.user_id
+         where r.item_id = p_item),
+        '[]'::jsonb)
+    )
+  end
+$fn$;
+revoke all on function public.item_responses_identified(uuid) from public, anon;
+grant execute on function public.item_responses_identified(uuid) to authenticated;
+
+create or replace function public.session_sheet(p_session uuid)
+returns jsonb
+language sql
+stable
+security definer
+set search_path = ''
+as $fn$
+  select case
+    when not public.hosts_session(p_session)
+      then jsonb_build_object('ok', false, 'reason', 'not allowed')
+    else jsonb_build_object(
+      'ok', true,
+      'session', (select jsonb_build_object(
+         'id', s.id, 'title', s.title, 'state', public.scheduled_state(s),
+         'late_join', s.late_join, 'current_item', s.current_item,
+         'code', s.code, 'mode', s.mode, 'qa', s.qa,
+         'shared', s.share_results, 'opens_at', s.opens_at, 'closes_at', s.closes_at,
+         'shuffle', s.shuffle_options, 'avatars', s.avatars,
+         'privacy', s.privacy, 'min_results', s.min_results, 'show_comments', s.show_comments,
+         -- answered at all, by anybody: the moment privacy stops being a choice
+         'answered', public.session_answered(s.id),
+         'attached', exists (select 1 from public.giveaway_sessions g where g.session_id = s.id)
+                  or exists (select 1 from public.tournament_round_sessions t where t.session_id = s.id))
+       from public.sessions s where s.id = p_session),
+      'kinds', (select jsonb_agg(jsonb_build_object(
+                  'kind', k.kind, 'description', k.description, 'scored', k.scored)
+                order by k.kind)
+                from public.item_kinds k),
+      'items', coalesce(
+        (select jsonb_agg(jsonb_build_object(
+           'id', i.id, 'position', i.position, 'kind', i.kind, 'prompt', i.prompt,
+           'payload', i.payload, 'state', i.state,
+           'points', trim_scale(i.points),
+           'penalty_wrong', i.penalty_wrong,
+           'penalty_skip', i.penalty_skip,
+           'answer', (select a.answer from public.item_answers a where a.item_id = i.id),
+           'responses', (select count(*) from public.answers_for(i.id) r)
+         ) order by i.position)
+         from public.items i where i.session_id = p_session),
+        '[]'::jsonb))
+  end
+$fn$;
+revoke all on function public.session_sheet(uuid) from public, anon;
+grant execute on function public.session_sheet(uuid) to authenticated;
+
+create or replace function public.session_results(p_session uuid)
+returns jsonb
+language sql
+stable
+security definer
+set search_path = ''
+as $fn$
+  select case
+    when not public.may_see_results(p_session)
+      then jsonb_build_object('ok', false, 'reason', 'not allowed')
+    else jsonb_build_object(
+      'ok', true,
+      'title', (select s.title from public.sessions s where s.id = p_session),
+      'state', (select s.state from public.sessions s where s.id = p_session),
+      'mode', (select s.mode from public.sessions s where s.id = p_session),
+      'shared', (select s.share_results from public.sessions s where s.id = p_session),
+      'privacy', (select s.privacy from public.sessions s where s.id = p_session),
+      'min_results', (select s.min_results from public.sessions s where s.id = p_session),
+      -- how many have answered at all; never who
+      'answered', (select count(*) from public.survey_participation sp where sp.session_id = p_session),
+      -- Everything that has been shown, scored or not: a survey has no score
+      -- and is the question most worth a chart. In a live session that means
+      -- revealed; in an open one, anything that has been opened at all.
+      'items', coalesce((
+        select jsonb_agg(jsonb_build_object(
+                 'id', i.id, 'position', i.position, 'kind', i.kind, 'prompt', i.prompt,
+                 'chart', public.item_chart(i.id))
+               order by i.position)
+        from public.items i
+        join public.sessions s on s.id = i.session_id
+        where i.session_id = p_session
+          and (i.state = 'revealed' or (s.mode = 'open' and i.state <> 'pending'))),
+        '[]'::jsonb)
+    )
+  end
+$fn$;
+revoke all on function public.session_results(uuid) from public, anon;
+grant execute on function public.session_results(uuid) to authenticated;
+
+create or replace function public.set_session_options(
+  p_session uuid,
+  p_qa boolean default null,
+  p_share_results boolean default null,
+  p_shuffle_options boolean default null,
+  p_avatars text default null
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $fn$
+begin
+  if not public.hosts_session(p_session) then
+    return jsonb_build_object('ok', false, 'reason', 'not allowed');
+  end if;
+  -- Questions from the room carry a name, and avatars on the answers are a
+  -- name on every pick: neither belongs in a fully anonymous survey.
+  if exists (select 1 from public.sessions s where s.id = p_session and s.privacy = 'full')
+     and (coalesce(p_qa, false) or coalesce(p_avatars, 'off') <> 'off') then
+    return jsonb_build_object('ok', false, 'reason',
+      'a fully anonymous survey has no questions from the room and no avatars on the answers');
+  end if;
+  if p_avatars is not null and p_avatars not in ('off', 'live', 'reveal') then
+    return jsonb_build_object('ok', false, 'reason', 'avatars are off, live, or at the reveal');
+  end if;
+  update public.sessions
+     set qa = coalesce(p_qa, qa),
+         avatars = coalesce(p_avatars, avatars),
+         share_results = coalesce(p_share_results, share_results),
+         shuffle_options = coalesce(p_shuffle_options, shuffle_options)
+   where id = p_session;
+  return jsonb_build_object('ok', true);
+end;
+$fn$;
+revoke all on function public.set_session_options(uuid, boolean, boolean, boolean, text) from public, anon;
+grant execute on function public.set_session_options(uuid, boolean, boolean, boolean, text) to authenticated;
+
+drop function if exists public.compare_trail(uuid);
+create or replace function public.compare_trail(p_session uuid, p_key text default null)
+returns jsonb
+language sql
+stable
+security definer
+set search_path = ''
+as $fn$
+  select coalesce(jsonb_agg(jsonb_build_object('id', i.id, 'position', i.position)
+                            order by i.position), '[]'::jsonb)
+  from public.items i
+  join public.sessions s on s.id = i.session_id
+  where i.session_id = p_session
+    -- answered: by them, or in a fully anonymous survey by their key
+    and case when s.privacy = 'full'
+             then public.anon_key_ok(s.id, p_key)
+                  and exists (select 1 from public.survey_answers a
+                              where a.item_id = i.id and a.answer_key = public.anon_answer_key(i.id, p_key))
+             else exists (select 1 from public.responses r
+                          where r.item_id = i.id and r.user_id = (select auth.uid()))
+        end
+    and i.kind = 'compare'
+    and i.state = 'open'
+    and s.state = 'live'
+    and s.mode = 'open'
+$fn$;
+revoke all on function public.compare_trail(uuid, text) from public, anon;
+grant execute on function public.compare_trail(uuid, text) to authenticated;
+
+drop function if exists public.revisit_item(uuid);
+create or replace function public.revisit_item(p_item uuid, p_key text default null)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $fn$
+declare
+  it public.items;
+  sess public.sessions;
+  me uuid := (select auth.uid());
+  mine jsonb;
+begin
+  perform public.apply_schedule((select i.session_id from public.items i where i.id = p_item));
+  select * into it from public.items where id = p_item;
+  if it.id is null or it.kind <> 'compare' then
+    return jsonb_build_object('state', 'none', 'reason', 'only a comparison can be changed');
+  end if;
+  select * into sess from public.sessions where id = it.session_id;
+  if sess.state <> 'live' or sess.mode <> 'open' or it.state <> 'open'
+     or not public.session_open_to_me(sess.id) or public.runs_session(sess.id) then
+    return jsonb_build_object('state', 'none', 'reason', 'that one is closed now');
+  end if;
+  if sess.privacy = 'full' then
+    if public.anon_key_ok(sess.id, p_key) then
+      select a.value into mine from public.survey_answers a
+      where a.item_id = p_item and a.answer_key = public.anon_answer_key(p_item, p_key);
+    end if;
+  else
+    select r.value into mine from public.responses r where r.item_id = p_item and r.user_id = me;
+  end if;
+  if mine is null then
+    return jsonb_build_object('state', 'none', 'reason', 'you have not answered that one');
+  end if;
+  return jsonb_build_object(
+    'state', 'open', 'mode', 'open', 'yours', false, 'revisit', true, 'privacy', sess.privacy,
+    'id', it.id, 'kind', it.kind, 'prompt', it.prompt,
+    'payload', public.served_payload(it.kind, it.payload, sess.shuffle_options, it.id::text || me::text),
+    'position', it.position,
+    'opened_at', case when sess.privacy = 'full' then null else public.started_at(it.id, me) end,
+    'seconds', null,
+    'now', now(),
+    'mine', mine,
+    'answer', null,
+    'paused', exists (select 1 from public.session_pauses sp
+                      where sp.session_id = sess.id and sp.user_id = me),
+    'total', (select count(*) from public.items i where i.session_id = sess.id
+              and i.state <> 'pending'),
+    -- where it sits, for "Question 2 of 6", which `done` cannot say for a
+    -- question somebody has gone back to
+    'number', (select count(*) from public.items i where i.session_id = sess.id
+               and i.state <> 'pending' and i.position <= it.position),
+    'done', case when sess.privacy = 'full'
+              then (select count(*) from public.items i
+                    where i.session_id = sess.id and i.state <> 'pending'
+                      and exists (select 1 from public.survey_answers a
+                                  where a.item_id = i.id and a.answer_key = public.anon_answer_key(i.id, p_key)))
+              else (select count(*) from public.items i
+                    where i.session_id = sess.id and i.state <> 'pending'
+                      and (public.finished_item(i.id, me) or public.expired_for(i.id, me)))
+            end);
+end;
+$fn$;
+revoke all on function public.revisit_item(uuid, text) from public, anon;
+grant execute on function public.revisit_item(uuid, text) to authenticated;
+
+-- Choosing it. Before anybody has answered, either way; after, not at all,
+-- because the answers already given were stored under the old promise. The
+-- minimum can go up at any time and down (never below five) only before.
+create or replace function public.set_session_privacy(
+  p_session uuid,
+  p_privacy text default null,
+  p_min_results int default null,
+  p_show_comments boolean default null
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $fn$
+declare
+  sess public.sessions;
+  answered boolean;
+begin
+  if not public.hosts_session(p_session) then
+    return jsonb_build_object('ok', false, 'reason', 'not allowed');
+  end if;
+  select * into sess from public.sessions where id = p_session;
+  answered := public.session_answered(p_session) > 0;
+  if p_privacy is not null and p_privacy not in ('room', 'full') then
+    return jsonb_build_object('ok', false, 'reason', 'privacy is room or full');
+  end if;
+  if p_privacy is not null and p_privacy <> sess.privacy then
+    if answered then
+      return jsonb_build_object('ok', false, 'reason',
+        'people have already answered, so how private this survey is can no longer change');
+    end if;
+    if p_privacy = 'full' then
+      if exists (select 1 from public.items i where i.session_id = p_session and i.kind = 'game') then
+        return jsonb_build_object('ok', false, 'reason',
+          'take the word game out first: it has to know whose guesses are whose');
+      end if;
+      if exists (select 1 from public.giveaway_sessions g where g.session_id = p_session)
+         or exists (select 1 from public.tournament_round_sessions t where t.session_id = p_session) then
+        return jsonb_build_object('ok', false, 'reason',
+          'trivia for a giveaway or a tournament is scored by name, so it cannot be fully anonymous');
+      end if;
+    end if;
+  end if;
+  if p_min_results is not null then
+    if p_min_results < 5 or p_min_results > 1000 then
+      return jsonb_build_object('ok', false, 'reason', 'results wait for at least five answers');
+    end if;
+    if answered and p_min_results < sess.min_results then
+      return jsonb_build_object('ok', false, 'reason',
+        'people have already answered, so the minimum can go up but not down');
+    end if;
+  end if;
+  update public.sessions
+     set privacy = coalesce(p_privacy, privacy),
+         min_results = coalesce(p_min_results, min_results),
+         show_comments = coalesce(p_show_comments, show_comments),
+         -- the room's questions and the avatars on the answers both carry names
+         qa = case when coalesce(p_privacy, privacy) = 'full' then false else qa end,
+         avatars = case when coalesce(p_privacy, privacy) = 'full' then 'off' else avatars end
+   where id = p_session;
+  return jsonb_build_object('ok', true);
+end;
+$fn$;
+revoke all on function public.set_session_privacy(uuid, text, int, boolean) from public, anon;
+grant execute on function public.set_session_privacy(uuid, text, int, boolean) to authenticated;
+
+-- Trivia scored for a giveaway or a tournament is scored by name. Refused at
+-- the table rather than in each of the places that attach a session, so a
+-- path added later cannot forget.
+create or replace function public.refuse_anonymous_trivia()
+returns trigger
+language plpgsql
+set search_path = ''
+as $fn$
+begin
+  if exists (select 1 from public.sessions s where s.id = new.session_id and s.privacy = 'full') then
+    raise exception 'a fully anonymous survey cannot be scored for a giveaway or a tournament';
+  end if;
+  return new;
+end;
+$fn$;
+drop trigger if exists giveaway_sessions_not_anonymous on public.giveaway_sessions;
+create trigger giveaway_sessions_not_anonymous before insert or update on public.giveaway_sessions
+  for each row execute function public.refuse_anonymous_trivia();
+drop trigger if exists tournament_sessions_not_anonymous on public.tournament_round_sessions;
+create trigger tournament_sessions_not_anonymous before insert or update on public.tournament_round_sessions
+  for each row execute function public.refuse_anonymous_trivia();
