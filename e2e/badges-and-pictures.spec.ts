@@ -65,8 +65,9 @@ test('nobody with nothing to review or read sees a badge', async ({ page }) => {
   await page.goto('/');
   await expect(page.getByRole('button', { name: /^Together/ })).toHaveAccessibleName('Together');
   await page.getByRole('button', { name: /^Together/ }).click();
-  await expect(page.getByRole('link', { name: /Recognition/ })).not.toContainText(/\d/);
-  await expect(page.getByRole('link', { name: /Suggestion box/ })).not.toContainText(/\d/);
+  const menu = page.getByRole('list', { name: 'Together' });
+  await expect(menu.getByRole('link', { name: /Recognition/ })).not.toContainText(/\d/);
+  await expect(menu.getByRole('link', { name: /Suggestion box/ })).not.toContainText(/\d/);
 });
 
 test('a reported picture is shown in the queue, with the way to take it down', async ({ page }) => {

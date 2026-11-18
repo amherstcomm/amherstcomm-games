@@ -1,13 +1,17 @@
-// The top of the home page: what organisers have featured, one card each --
-// what kind of thing, its picture, its title, their blurb, where it stands,
-// and a button. Side by side on a desk; swiped sideways on a phone.
+// "Happening now", on the home page (the layout spec): what organisers have
+// featured, one card each -- what kind of thing, in that kind's colour, its
+// picture if it has one, its title, their blurb, where it stands, and the way
+// in. Two across on a desk, one under another on a phone.
 //
 // This week's whiteboard question goes first, by itself: it is up every week
-// there is one, so nobody has to remember to feature it.
+// there is one, so nobody has to remember to feature it. Nothing happening,
+// and the section is not drawn.
 import { useEffect, useState } from 'react';
+import { ArrowRight } from 'lucide-react';
 import RouteLink from '@/RouteLink';
 import {
   KIND_WORD,
+  type FeatureKind,
   cardWords,
   featureRoute,
   pictureLink,
@@ -47,20 +51,21 @@ export default function FeaturedStrip({
   const shown = features.filter((f) => f.kind !== 'session' || (sessionsOn && sessionAllowed(f.ref)));
   const total = shown.length + (board ? 1 : 0);
   if (total === 0) return null;
-  const one = total === 1;
 
   return (
-    <section aria-label="Featured" className="mb-6">
-      <ul className={`flex gap-3 overflow-x-auto snap-x snap-mandatory pb-1
-                      ${one ? '' : 'sm:grid sm:grid-cols-2 sm:overflow-visible'}`}>
+    <section aria-labelledby="happening-heading">
+      <h2 id="happening-heading" className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">
+        Happening now
+      </h2>
+      <ul className="grid gap-3 sm:grid-cols-2">
         {board && (
-          <li className={`snap-start shrink-0 ${one ? 'w-full' : 'w-[85%] sm:w-auto'}`}>
+          <li>
             <BoardCard board={board} link={link}
                        onAnswered={() => void readBoard().then((got) => setBoard(got.ok && got.question ? got : null))} />
           </li>
         )}
         {shown.map((f) => (
-          <li key={f.id} className={`snap-start shrink-0 ${one ? 'w-full' : 'w-[85%] sm:w-auto'}`}>
+          <li key={f.id}>
             <Card f={f} link={link} />
           </li>
         ))}
@@ -68,6 +73,19 @@ export default function FeaturedStrip({
     </section>
   );
 }
+
+/** Each kind's colour, on its label: so a live session, the thing with a
+ *  clock on it, stands out from a giveaway at a glance -- and never by colour
+ *  alone, since the label says what it is. */
+const KIND_TONE: Record<FeatureKind, string> = {
+  session: 'text-violet-300',
+  giveaway: 'text-rose-300',
+  contest: 'text-sky-300',
+  tournament: 'text-sky-300',
+  auction: 'text-amber-300',
+};
+const CARD = 'h-full flex flex-col rounded-2xl border bg-slate-900 overflow-hidden';
+const GO = 'inline-flex items-center gap-1.5 text-sm font-semibold text-accent hover:underline';
 
 /** This week's whiteboard question. A pick-an-answer one is answered right
  *  here, and once it is, the card is the board: the pictures under each
@@ -91,11 +109,10 @@ function BoardCard({ board, link, onAnswered }: {
       .map((a) => ({ option: String(a.choice ?? ''), user: a.user, name: a.name, avatar: a.avatar }));
 
   return (
-    <article className="h-full flex flex-col rounded-xl border border-accent/30 bg-accent/5 overflow-hidden"
-             aria-label="This week’s question">
+    <article className={`${CARD} border-white/10`} aria-label="This week’s question">
       <div className="flex-1 flex flex-col gap-2 p-4">
-        <p className="text-xs font-semibold uppercase tracking-wider text-accent">This week’s question</p>
-        <h2 className="text-base font-semibold text-white break-words">{q.prompt}</h2>
+        <p className="text-xs font-semibold text-accent">Whiteboard · this week</p>
+        <h3 className="text-base font-semibold text-white break-words">{q.prompt}</h3>
 
         {answers ? (
           q.kind === 'choice' ? (
@@ -143,9 +160,9 @@ function BoardCard({ board, link, onAnswered }: {
 
         <div className="mt-auto pt-1">
           {!answers && q.kind === 'text' ? (
-            <RouteLink {...full}
-                       className="inline-flex items-center px-4 h-10 rounded-lg text-sm font-semibold bg-accent text-slate-950 hover:brightness-110">
+            <RouteLink {...full} className={GO}>
               Answer
+              <ArrowRight className="w-4 h-4" aria-hidden="true" />
             </RouteLink>
           ) : (
             <RouteLink {...full} className="text-xs text-accent hover:underline">
@@ -168,22 +185,25 @@ function Card({ f, link }: { f: Feature; link: (p: FeaturePage) => { to: string;
     };
   }, [f.image]);
   const { status, action } = cardWords(f);
+  const live = f.kind === 'session' && f.item.state === 'live';
   return (
-    <article className="h-full flex flex-col rounded-xl border border-accent/30 bg-accent/5 overflow-hidden">
+    <article className={`${CARD} ${live ? 'border-violet-400/50 bg-violet-400/10' : 'border-white/10'}`}>
       {f.image && (
         <div className="aspect-[16/9] bg-white/5">
           {url && <img src={url} alt="" className="w-full h-full object-cover" />}
         </div>
       )}
       <div className="flex-1 flex flex-col gap-1 p-4">
-        <p className="text-xs font-semibold uppercase tracking-wider text-accent">{KIND_WORD[f.kind]}</p>
-        <h2 className="text-base font-semibold text-white break-words">{f.item.title}</h2>
+        <p className={`text-xs font-semibold ${KIND_TONE[f.kind]}`}>
+          {live ? `LIVE · ${KIND_WORD[f.kind]}` : KIND_WORD[f.kind]}
+        </p>
+        <h3 className="text-base font-semibold text-white break-words">{f.item.title}</h3>
         {f.blurb && <p className="text-sm text-slate-300 break-words">{f.blurb}</p>}
         <p className="text-xs text-slate-400">{status}</p>
         <div className="mt-auto pt-2">
-          <RouteLink {...link(featureRoute(f))}
-                     className="inline-flex items-center px-4 h-10 rounded-lg text-sm font-semibold bg-accent text-slate-950 hover:brightness-110">
+          <RouteLink {...link(featureRoute(f))} className={GO}>
             {action}
+            <ArrowRight className="w-4 h-4" aria-hidden="true" />
           </RouteLink>
         </div>
       </div>

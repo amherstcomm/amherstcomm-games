@@ -212,7 +212,7 @@ test('this week’s question is the first card on the home page, answered right 
     home_features: () => ({ ok: true, features: [] }),
   });
   await page.goto('/');
-  const card = page.getByRole('region', { name: 'Featured' }).getByRole('article', { name: 'This week’s question' });
+  const card = page.getByRole('region', { name: 'Happening now' }).getByRole('article', { name: 'This week’s question' });
   await expect(card).toContainText('Do you sort your laundry?');
   await expect(card).toContainText('3 people have answered. Answer to see who said what.');
   await card.getByRole('button', { name: 'Never' }).click();
@@ -293,14 +293,21 @@ test('a picture can be reported from the board, and an administrator can take it
   // the open card reads, in the light theme the tests run in
   const results = await new AxeBuilder({ page }).include('[role="dialog"]').withTags(['wcag2a', 'wcag2aa']).analyze();
   expect(results.violations.map((v) => v.id)).toEqual([]);
-  page.once('dialog', (d) => void d.accept('not for work'));
+  // Two browser dialogs: the prompt for what is wrong, then the alert saying
+  // it went in. Both answered, and the alert waited for before the reload --
+  // reloading while it was still on its way failed one run in three.
+  const said: string[] = [];
+  page.on('dialog', (d) => {
+    said.push(d.type());
+    void (d.type() === 'prompt' ? d.accept('not for work') : d.accept());
+  });
   await page.getByRole('dialog', { name: 'Bo Jensen' }).getByRole('button', { name: 'Report this picture' }).click();
   await expect.poll(() => sent.find((s) => s.fn === 'report_avatar')?.args).toEqual({ p_user: 'u-bo', p_reason: 'not for work' });
+  await expect.poll(() => said).toEqual(['prompt', 'alert']);
 
   admin = true;
   await page.reload();
   await page.getByRole('button', { name: 'Bo Jensen' }).click();
-  page.on('dialog', (d) => void d.accept());
   await page.getByRole('dialog', { name: 'Bo Jensen' }).getByRole('button', { name: 'Take the picture down' }).click();
   await expect.poll(() => sent.find((s) => s.fn === 'set_person_avatar')?.args).toEqual({ p_user: 'u-bo', p_blocked: true });
 });
