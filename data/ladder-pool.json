@@ -1,0 +1,162 @@
+{
+  "date": "2026-11-20",
+  "byDifficulty": {
+    "easy": [
+      {
+        "from": "formed",
+        "to": "molded",
+        "par": 3
+      },
+      {
+        "from": "fix",
+        "to": "set",
+        "par": 3
+      },
+      {
+        "from": "furry",
+        "to": "hairy",
+        "par": 3
+      },
+      {
+        "from": "spate",
+        "to": "stack",
+        "par": 4
+      },
+      {
+        "from": "cart",
+        "to": "haul",
+        "par": 4
+      },
+      {
+        "from": "cod",
+        "to": "due",
+        "par": 4
+      },
+      {
+        "from": "earn",
+        "to": "sack",
+        "par": 4
+      },
+      {
+        "from": "jar",
+        "to": "lid",
+        "par": 4
+      },
+      {
+        "from": "just",
+        "to": "meet",
+        "par": 4
+      },
+      {
+        "from": "heap",
+        "to": "peck",
+        "par": 4
+      }
+    ],
+    "hard": [
+      {
+        "from": "coil",
+        "to": "curl",
+        "par": 5
+      },
+      {
+        "from": "loud",
+        "to": "soft",
+        "par": 5
+      },
+      {
+        "from": "jammed",
+        "to": "packed",
+        "par": 5
+      },
+      {
+        "from": "heaps",
+        "to": "piles",
+        "par": 6
+      },
+      {
+        "from": "huge",
+        "to": "vast",
+        "par": 6
+      },
+      {
+        "from": "pinch",
+        "to": "tinge",
+        "par": 5
+      },
+      {
+        "from": "flock",
+        "to": "spate",
+        "par": 6
+      },
+      {
+        "from": "neat",
+        "to": "tidy",
+        "par": 5
+      },
+      {
+        "from": "darn",
+        "to": "hoot",
+        "par": 5
+      },
+      {
+        "from": "peak",
+        "to": "rise",
+        "par": 6
+      }
+    ],
+    "extreme": [
+      {
+        "from": "eats",
+        "to": "grub",
+        "par": 8
+      },
+      {
+        "from": "keep",
+        "to": "lose",
+        "par": 7
+      },
+      {
+        "from": "poky",
+        "to": "slow",
+        "par": 7
+      },
+      {
+        "from": "new",
+        "to": "old",
+        "par": 8
+      },
+      {
+        "from": "deep",
+        "to": "late",
+        "par": 7
+      },
+      {
+        "from": "damned",
+        "to": "doomed",
+        "par": 8
+      },
+      {
+        "from": "flex",
+        "to": "hump",
+        "par": 7
+      },
+      {
+        "from": "lazy",
+        "to": "slow",
+        "par": 8
+      },
+      {
+        "from": "cart",
+        "to": "drag",
+        "par": 7
+      },
+      {
+        "from": "bide",
+        "to": "stay",
+        "par": 7
+      }
+    ]
+  },
+  "fetchedAt": "2026-11-20T17:01:14.306Z"
+}

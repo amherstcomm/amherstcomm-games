@@ -1,0 +1,54 @@
+{
+  "date": "2026-11-20",
+  "byDifficulty": {
+    "easy": {
+      "clue": "Jewelry box",
+      "cols": 6,
+      "board": [
+        "otones",
+        "nsjazi",
+        "mydeor",
+        "exonac",
+        "grbpel",
+        "buymrt",
+        "eraeoa",
+        "ylzpld"
+      ],
+      "answers": "eyJzcGFuZ3JhbSI6eyJ3IjoiZ2Vtc3RvbmVzIiwicGF0aCI6WzI0LDE4LDEyLDcsMSwyLDMsNCw1XX0sIndvcmRzIjpbeyJ3Ijoib255eCIsInBhdGgiOlswLDYsMTMsMTldfSx7InciOiJqYWRlIiwicGF0aCI6WzgsOSwxNCwxNV19LHsidyI6InppcmNvbiIsInBhdGgiOlsxMCwxMSwxNywyMywxNiwyMV19LHsidyI6Im9wYWwiLCJwYXRoIjpbMjAsMjcsMjIsMjldfSx7InciOiJydWJ5IiwicGF0aCI6WzI1LDMxLDI2LDMyXX0seyJ3IjoiZW1lcmFsZCIsInBhdGgiOlsyOCwzMywzOSwzNCw0MSw0Niw0N119LHsidyI6ImJlcnlsIiwicGF0aCI6WzMwLDM2LDM3LDQyLDQzXX0seyJ3IjoidG9wYXoiLCJwYXRoIjpbMzUsNDAsNDUsMzgsNDRdfV19"
+    },
+    "hard": {
+      "clue": "Paint swatches",
+      "cols": 7,
+      "board": [
+        "cbeieoh",
+        "ovimgrc",
+        "traoaae",
+        "aellzuo",
+        "letuclv",
+        "merwrei",
+        "arrhivl",
+        "ooomeee",
+        "clonson"
+      ],
+      "answers": "eyJzcGFuZ3JhbSI6eyJ3IjoiY29sb3J3aGVlbCIsInBhdGgiOls1Niw0OSw1Nyw1MCw0NCwzOCw0NSw1Myw1NCw0OF19LCJ3b3JkcyI6W3sidyI6ImNvcmFsIiwicGF0aCI6WzAsNywxNSwxNiwyNF19LHsidyI6ImJlaWdlIiwicGF0aCI6WzEsMiwzLDExLDRdfSx7InciOiJvY2hyZSIsInBhdGgiOls1LDEzLDYsMTIsMjBdfSx7InciOiJ2aW9sZXQiLCJwYXRoIjpbOCw5LDE3LDIzLDI5LDMwXX0seyJ3IjoibWF1dmUiLCJwYXRoIjpbMTAsMTgsMjYsMzQsNDBdfSx7InciOiJ0ZWFsIiwicGF0aCI6WzE0LDIyLDIxLDI4XX0seyJ3IjoiYXp1cmUiLCJwYXRoIjpbMTksMjUsMzEsMzcsMzZdfSx7InciOiJvbGl2ZSIsInBhdGgiOlsyNywzMyw0MSw0Nyw1NV19LHsidyI6ImNyaW1zb24iLCJwYXRoIjpbMzIsMzksNDYsNTIsNjAsNjEsNjJdfSx7InciOiJtYXJvb24iLCJwYXRoIjpbMzUsNDIsNDMsNTEsNTgsNTldfV19"
+    },
+    "extreme": {
+      "clue": "Solve the case",
+      "cols": 8,
+      "board": [
+        "aevidsle",
+        "slutence",
+        "toiidiut",
+        "aebwsdhe",
+        "kssiegsi",
+        "wputtfur",
+        "ehecsnog",
+        "ccosteey",
+        "turdiner",
+        "tilpuvit"
+      ],
+      "answers": "eyJzcGFuZ3JhbSI6eyJ3Ijoid2hvZHVuaXQiLCJwYXRoIjpbNDAsNDksNTgsNjcsNzYsNjksNzgsNzldfSwid29yZHMiOlt7InciOiJhbGliaSIsInBhdGgiOlswLDksMTgsMjYsMTldfSx7InciOiJldmlkZW5jZSIsInBhdGgiOlsxLDIsMyw0LDEyLDEzLDE0LDddfSx7InciOiJzbGV1dGgiLCJwYXRoIjpbNSw2LDE1LDIyLDIzLDMwXX0seyJ3Ijoic3Rha2VvdXQiLCJwYXRoIjpbOCwxNiwyNCwzMiwyNSwxNywxMCwxMV19LHsidyI6ImRpc2d1aXNlIiwicGF0aCI6WzIwLDIxLDI4LDM3LDQ2LDM5LDM4LDMxXX0seyJ3Ijoid2l0bmVzcyIsInBhdGgiOlsyNywzNSw0NCw1Myw2MSw1Miw1OV19LHsidyI6ImRldGVjdGl2ZSIsInBhdGgiOlsyOSwzNiw0Myw1MCw1MSw2MCw2OCw3Nyw3MF19LHsidyI6InN1c3BlY3QiLCJwYXRoIjpbMzMsNDIsMzQsNDEsNDgsNTYsNjRdfSx7InciOiJmb3JnZXJ5IiwicGF0aCI6WzQ1LDU0LDQ3LDU1LDYyLDcxLDYzXX0seyJ3IjoiY3VscHJpdCIsInBhdGgiOls1Nyw2NSw3NCw3NSw2Niw3Myw3Ml19XX0="
+    }
+  },
+  "fetchedAt": "2026-11-20T16:59:58.825Z"
+}

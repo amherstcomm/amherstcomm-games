@@ -1,0 +1,21 @@
+{
+  "date": "2026-11-20",
+  "byDifficulty": {
+    "easy": {
+      "from": "cling",
+      "to": "stick",
+      "par": 4
+    },
+    "hard": {
+      "from": "mush",
+      "to": "pulp",
+      "par": 5
+    },
+    "extreme": {
+      "from": "teeth",
+      "to": "tooth",
+      "par": 8
+    }
+  },
+  "fetchedAt": "2026-11-20T16:59:50.843Z"
+}

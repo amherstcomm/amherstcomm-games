@@ -1,0 +1,84 @@
+{
+  "date": "2026-11-20",
+  "byDifficulty": {
+    "easy": {
+      "prompts": [
+        {
+          "x": "hand",
+          "y": "put"
+        },
+        {
+          "x": "turn",
+          "y": "weight"
+        },
+        {
+          "x": "step",
+          "y": "care"
+        },
+        {
+          "x": "cross",
+          "y": "block"
+        },
+        {
+          "x": "pass",
+          "y": "case"
+        }
+      ],
+      "answers": "WyJvdXQiLCJvdmVyIiwiY2hpbGQiLCJyb2FkIiwiYm9vayJd",
+      "hints": 3
+    },
+    "hard": {
+      "prompts": [
+        {
+          "x": "dictator",
+          "y": "load"
+        },
+        {
+          "x": "trouble",
+          "y": "day"
+        },
+        {
+          "x": "flower",
+          "y": "time"
+        },
+        {
+          "x": "belt",
+          "y": "side"
+        },
+        {
+          "x": "clergy",
+          "y": "handle"
+        }
+      ],
+      "answers": "WyJzaGlwIiwic29tZSIsImJlZCIsIndheSIsIm1hbiJd",
+      "hints": 1
+    },
+    "extreme": {
+      "prompts": [
+        {
+          "x": "throw",
+          "y": "lash"
+        },
+        {
+          "x": "northwest",
+          "y": "robe"
+        },
+        {
+          "x": "honey",
+          "y": "beam"
+        },
+        {
+          "x": "whet",
+          "y": "self"
+        },
+        {
+          "x": "run",
+          "y": "size"
+        }
+      ],
+      "answers": "WyJiYWNrIiwid2FyZCIsIm1vb24iLCJoZXIiLCJkb3duIl0=",
+      "hints": 0
+    }
+  },
+  "fetchedAt": "2026-11-20T16:59:58.825Z"
+}

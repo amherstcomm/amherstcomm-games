@@ -1,0 +1,54 @@
+{
+  "date": "2026-11-20",
+  "byDifficulty": {
+    "easy": {
+      "clue": "Breakfast spread",
+      "cols": 6,
+      "board": [
+        "beomlt",
+        "lagiee",
+        "phtame",
+        "cackej",
+        "nunbum",
+        "oraciu",
+        "baecfi",
+        "stnonf"
+      ],
+      "answers": "eyJzcGFuZ3JhbSI6eyJ3IjoiYnJ1bmNodGltZSIsInBhdGgiOlszNiwzMSwyNSwyNCwxOCwxMywxNCw5LDE2LDE3XX0sIndvcmRzIjpbeyJ3IjoiYmFnZWwiLCJwYXRoIjpbMCw3LDgsMSw2XX0seyJ3Ijoib21lbGV0IiwicGF0aCI6WzIsMywxMCw0LDExLDVdfSx7InciOiJwYW5jYWtlIiwicGF0aCI6WzEyLDE5LDI2LDIwLDE1LDIxLDIyXX0seyJ3IjoianVpY2UiLCJwYXRoIjpbMjMsMjgsMzQsMzMsMzhdfSx7InciOiJiYWNvbiIsInBhdGgiOlsyNywzMiwzOSw0NSw0NF19LHsidyI6Im11ZmZpbiIsInBhdGgiOlsyOSwzNSw0MCw0Nyw0MSw0Nl19LHsidyI6Im9hdHMiLCJwYXRoIjpbMzAsMzcsNDMsNDJdfV19"
+    },
+    "hard": {
+      "clue": "Solve the case",
+      "cols": 7,
+      "board": [
+        "slthsek",
+        "eutuota",
+        "whdunit",
+        "closupa",
+        "uprisle",
+        "detmoic",
+        "wetnbtt",
+        "citseii",
+        "tivesev"
+      ],
+      "answers": "eyJzcGFuZ3JhbSI6eyJ3Ijoid2hvZHVuaXQiLCJwYXRoIjpbMTQsMTUsMjMsMTYsMTAsMTgsMTksMjBdfSwid29yZHMiOlt7InciOiJzbGV1dGgiLCJwYXRoIjpbMCwxLDcsOCwyLDNdfSx7InciOiJzdGFrZW91dCIsInBhdGgiOls0LDEyLDEzLDYsNSwxMSwxNyw5XX0seyJ3IjoiY3VscHJpdCIsInBhdGgiOlsyMSwyOCwyMiwyOSwzMCwzMSwzN119LHsidyI6InN1c3BlY3QiLCJwYXRoIjpbMjQsMjUsMzIsMjYsMzQsNDEsNDhdfSx7InciOiJhbGliaSIsInBhdGgiOlsyNywzMyw0MCw0Niw1NF19LHsidyI6ImRldGVjdGl2ZSIsInBhdGgiOlszNSwzNiw0NCw0Myw0OSw1Niw1Nyw1OCw1OV19LHsidyI6Im1vdGl2ZSIsInBhdGgiOlszOCwzOSw0Nyw1NSw2Miw2MV19LHsidyI6IndpdG5lc3MiLCJwYXRoIjpbNDIsNTAsNTEsNDUsNTMsNjAsNTJdfV19"
+    },
+    "extreme": {
+      "clue": "Under the hood",
+      "cols": 8,
+      "board": [
+        "bomkeira",
+        "traobald",
+        "uatbutie",
+        "axlhmroc",
+        "weerephr",
+        "riptoasi",
+        "enletisg",
+        "igmptssn",
+        "rnfuiooi",
+        "eelfnnti"
+      ],
+      "answers": "eyJzcGFuZ3JhbSI6eyJ3IjoiYXV0b21vYmlsZSIsInBhdGgiOlsyNCwxNiw4LDEsMiwxMSwxMiw1LDE0LDIzXX0sIndvcmRzIjpbeyJ3IjoiYnJha2UiLCJwYXRoIjpbMCw5LDEwLDMsNF19LHsidyI6InJhZGlhdG9yIiwicGF0aCI6WzYsNywxNSwyMiwxMywyMSwzMCwzOV19LHsidyI6ImF4bGUiLCJwYXRoIjpbMTcsMjUsMjYsMzRdfSx7InciOiJ0aHJvdHRsZSIsInBhdGgiOlsxOCwyNywzNSw0NCw1Miw0Myw1MCw1MV19LHsidyI6ImJ1bXBlciIsInBhdGgiOlsxOSwyMCwyOCwzNywzNiwyOV19LHsidyI6ImNoYXNzaXMiLCJwYXRoIjpbMzEsMzgsNDUsNDYsNTQsNTMsNjJdfSx7InciOiJ3aXBlciIsInBhdGgiOlszMiw0MSw0MiwzMyw0MF19LHsidyI6Imlnbml0aW9uIiwicGF0aCI6WzQ3LDU1LDYzLDcxLDc4LDc5LDcwLDc3XX0seyJ3IjoiZW5naW5lIiwicGF0aCI6WzQ4LDQ5LDU3LDU2LDY1LDcyXX0seyJ3IjoibXVmZmxlciIsInBhdGgiOls1OCw2Nyw3NSw2Niw3NCw3Myw2NF19LHsidyI6InBpc3RvbiIsInBhdGgiOls1OSw2OCw2MSw2MCw2OSw3Nl19XX0="
+    }
+  },
+  "fetchedAt": "2026-11-20T16:59:50.843Z"
+}

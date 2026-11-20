@@ -1,0 +1,84 @@
+{
+  "date": "2026-11-20",
+  "byDifficulty": {
+    "easy": {
+      "prompts": [
+        {
+          "x": "stop",
+          "y": "power"
+        },
+        {
+          "x": "buy",
+          "y": "set"
+        },
+        {
+          "x": "post",
+          "y": "time"
+        },
+        {
+          "x": "skin",
+          "y": "long"
+        },
+        {
+          "x": "clap",
+          "y": "walk"
+        }
+      ],
+      "answers": "WyJvdmVyIiwib3V0Iiwid2FyIiwiaGVhZCIsImJvYXJkIl0=",
+      "hints": 3
+    },
+    "hard": {
+      "prompts": [
+        {
+          "x": "hunch",
+          "y": "pack"
+        },
+        {
+          "x": "take",
+          "y": "spring"
+        },
+        {
+          "x": "chair",
+          "y": "power"
+        },
+        {
+          "x": "any",
+          "y": "side"
+        },
+        {
+          "x": "quarrel",
+          "y": "body"
+        }
+      ],
+      "answers": "WyJiYWNrIiwib2ZmIiwibWFuIiwid2F5Iiwic29tZSJd",
+      "hints": 1
+    },
+    "extreme": {
+      "prompts": [
+        {
+          "x": "heart",
+          "y": "lord"
+        },
+        {
+          "x": "foot",
+          "y": "park"
+        },
+        {
+          "x": "sister",
+          "y": "wink"
+        },
+        {
+          "x": "clock",
+          "y": "load"
+        },
+        {
+          "x": "court",
+          "y": "wreck"
+        }
+      ],
+      "answers": "WyJsYW5kIiwiYmFsbCIsImhvb2QiLCJ3b3JrIiwic2hpcCJd",
+      "hints": 0
+    }
+  },
+  "fetchedAt": "2026-11-20T16:59:50.843Z"
+}
