@@ -1,0 +1,21 @@
+{
+  "date": "2026-11-27",
+  "byDifficulty": {
+    "easy": {
+      "from": "hard",
+      "to": "tall",
+      "par": 4
+    },
+    "hard": {
+      "from": "chow",
+      "to": "eats",
+      "par": 6
+    },
+    "extreme": {
+      "from": "cheap",
+      "to": "flash",
+      "par": 8
+    }
+  },
+  "fetchedAt": "2026-11-27T18:14:53.967Z"
+}

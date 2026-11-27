@@ -1,0 +1,54 @@
+{
+  "date": "2026-11-27",
+  "byDifficulty": {
+    "easy": {
+      "clue": "Written in the stars",
+      "cols": 6,
+      "board": [
+        "cczodi",
+        "naerca",
+        "trular",
+        "gaubii",
+        "eisrae",
+        "msnisv",
+        "oocopi",
+        "hrogre"
+      ],
+      "answers": "eyJzcGFuZ3JhbSI6eyJ3IjoiaG9yb3Njb3BlIiwicGF0aCI6WzQyLDM3LDQzLDM2LDMxLDM4LDM5LDQwLDQ3XX0sIndvcmRzIjpbeyJ3IjoiY2FuY2VyIiwicGF0aCI6WzAsNyw2LDEsOCw5XX0seyJ3Ijoiem9kaWFjIiwicGF0aCI6WzIsMyw0LDUsMTEsMTBdfSx7InciOiJ0YXVydXMiLCJwYXRoIjpbMTIsMTksMTQsMTMsMjAsMjZdfSx7InciOiJsaWJyYSIsInBhdGgiOlsxNSwyMiwyMSwyNywyOF19LHsidyI6ImFyaWVzIiwicGF0aCI6WzE2LDE3LDIzLDI5LDM0XX0seyJ3IjoiZ2VtaW5pIiwicGF0aCI6WzE4LDI0LDMwLDI1LDMyLDMzXX0seyJ3IjoidmlyZ28iLCJwYXRoIjpbMzUsNDEsNDYsNDUsNDRdfV19"
+    },
+    "hard": {
+      "clue": "Deck the halls",
+      "cols": 7,
+      "board": [
+        "seirmst",
+        "lcageil",
+        "rerhnie",
+        "yoedeot",
+        "tultide",
+        "ilegowr",
+        "nearnde",
+        "nsmrnaa",
+        "telalth"
+      ],
+      "answers": "eyJzcGFuZ3JhbSI6eyJ3IjoieXVsZXRpZGUiLCJwYXRoIjpbMjEsMjksMzYsMzcsMzEsMzIsMzMsMzRdfSwid29yZHMiOlt7InciOiJzbGVpZ2giLCJwYXRoIjpbMCw3LDEsMiwxMCwxN119LHsidyI6InJlaW5kZWVyIiwicGF0aCI6WzMsMTEsMTksMTgsMjQsMjMsMTUsMTRdfSx7InciOiJtaXN0bGV0b2UiLCJwYXRoIjpbNCwxMiw1LDYsMTMsMjAsMjcsMjYsMjVdfSx7InciOiJjYXJvbCIsInBhdGgiOls4LDksMTYsMjIsMzBdfSx7InciOiJ0aW5zZWwiLCJwYXRoIjpbMjgsMzUsNDIsNTAsNTcsNThdfSx7InciOiJnYXJsYW5kIiwicGF0aCI6WzM4LDQ0LDUyLDYwLDU0LDQ2LDQ3XX0seyJ3Ijoib3JuYW1lbnQiLCJwYXRoIjpbMzksNDUsNTMsNTksNTEsNDMsNDksNTZdfSx7InciOiJ3cmVhdGgiLCJwYXRoIjpbNDAsNDEsNDgsNTUsNjEsNjJdfV19"
+    },
+    "extreme": {
+      "clue": "Cold-blooded companions",
+      "cols": 8,
+      "board": [
+        "ttmenior",
+        "urloclts",
+        "igutihes",
+        "repamask",
+        "pannenin",
+        "tycloeka",
+        "oitreckd",
+        "orshonoi",
+        "tveloale",
+        "iperizrd"
+      ],
+      "answers": "eyJzcGFuZ3JhbSI6eyJ3IjoicmVwdGlsZXMiLCJwYXRoIjpbMjQsMjUsMjYsMTksMjAsMTMsMjIsMTVdfSwid29yZHMiOlt7InciOiJ0dXJ0bGUiLCJwYXRoIjpbMCw4LDksMSwxMCwzXX0seyJ3IjoibW9uaXRvciIsInBhdGgiOlsyLDExLDQsNSwxNCw2LDddfSx7InciOiJjaGFtZWxlb24iLCJwYXRoIjpbMTIsMjEsMjksMjgsMzYsNDMsNTIsNDQsMzVdfSx7InciOiJpZ3VhbmEiLCJwYXRoIjpbMTYsMTcsMTgsMjcsMzQsMzNdfSx7InciOiJza2luayIsInBhdGgiOlsyMywzMSwzOCwzNyw0Nl19LHsidyI6InNuYWtlIiwicGF0aCI6WzMwLDM5LDQ3LDU0LDQ1XX0seyJ3IjoicHl0aG9uIiwicGF0aCI6WzMyLDQxLDUwLDU5LDY4LDYxXX0seyJ3IjoidG9ydG9pc2UiLCJwYXRoIjpbNDAsNDgsNTcsNjQsNTYsNDksNTgsNjZdfSx7InciOiJjcm9jb2RpbGUiLCJwYXRoIjpbNDIsNTEsNjAsNTMsNjIsNTUsNjMsNzAsNzFdfSx7InciOiJ2aXBlciIsInBhdGgiOls2NSw3Miw3Myw3NCw3NV19LHsidyI6ImxpemFyZCIsInBhdGgiOls2Nyw3Niw3Nyw2OSw3OCw3OV19XX0="
+    }
+  },
+  "fetchedAt": "2026-11-27T18:14:51.284Z"
+}

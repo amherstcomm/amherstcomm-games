@@ -1,0 +1,162 @@
+{
+  "date": "2026-11-27",
+  "byDifficulty": {
+    "easy": [
+      {
+        "from": "mass",
+        "to": "mint",
+        "par": 3
+      },
+      {
+        "from": "many",
+        "to": "some",
+        "par": 4
+      },
+      {
+        "from": "lash",
+        "to": "welt",
+        "par": 4
+      },
+      {
+        "from": "mail",
+        "to": "send",
+        "par": 4
+      },
+      {
+        "from": "bolt",
+        "to": "lock",
+        "par": 4
+      },
+      {
+        "from": "bone",
+        "to": "horn",
+        "par": 3
+      },
+      {
+        "from": "lack",
+        "to": "want",
+        "par": 4
+      },
+      {
+        "from": "cold",
+        "to": "cool",
+        "par": 4
+      },
+      {
+        "from": "gobs",
+        "to": "tons",
+        "par": 3
+      },
+      {
+        "from": "bar",
+        "to": "pub",
+        "par": 4
+      }
+    ],
+    "hard": [
+      {
+        "from": "best",
+        "to": "good",
+        "par": 5
+      },
+      {
+        "from": "plain",
+        "to": "stark",
+        "par": 6
+      },
+      {
+        "from": "bust",
+        "to": "flop",
+        "par": 6
+      },
+      {
+        "from": "haven",
+        "to": "oasis",
+        "par": 5
+      },
+      {
+        "from": "acid",
+        "to": "sour",
+        "par": 6
+      },
+      {
+        "from": "huge",
+        "to": "vast",
+        "par": 6
+      },
+      {
+        "from": "peak",
+        "to": "rise",
+        "par": 6
+      },
+      {
+        "from": "tang",
+        "to": "zest",
+        "par": 5
+      },
+      {
+        "from": "bats",
+        "to": "daft",
+        "par": 5
+      },
+      {
+        "from": "bold",
+        "to": "rash",
+        "par": 5
+      }
+    ],
+    "extreme": [
+      {
+        "from": "flip",
+        "to": "leaf",
+        "par": 7
+      },
+      {
+        "from": "pile",
+        "to": "slew",
+        "par": 8
+      },
+      {
+        "from": "puss",
+        "to": "slit",
+        "par": 7
+      },
+      {
+        "from": "beefy",
+        "to": "burly",
+        "par": 7
+      },
+      {
+        "from": "tree",
+        "to": "wood",
+        "par": 8
+      },
+      {
+        "from": "gawk",
+        "to": "goon",
+        "par": 7
+      },
+      {
+        "from": "bone",
+        "to": "cram",
+        "par": 8
+      },
+      {
+        "from": "burned",
+        "to": "cooked",
+        "par": 8
+      },
+      {
+        "from": "harsh",
+        "to": "rough",
+        "par": 8
+      },
+      {
+        "from": "bust",
+        "to": "raid",
+        "par": 7
+      }
+    ]
+  },
+  "fetchedAt": "2026-11-27T18:15:37.547Z"
+}

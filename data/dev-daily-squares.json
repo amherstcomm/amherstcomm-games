@@ -1,0 +1,90 @@
+{
+  "date": "2026-11-27",
+  "byDifficulty": {
+    "easy": {
+      "size": 4,
+      "cells": [
+        null,
+        "h",
+        "e",
+        "e",
+        null,
+        "o",
+        "m",
+        null,
+        "e",
+        null,
+        "i",
+        null,
+        null,
+        null,
+        null,
+        "s"
+      ],
+      "answer": "eyJyb3dzIjpbInRoZWUiLCJob21lIiwiZXZpbCIsIm5ldHMiXX0="
+    },
+    "hard": {
+      "size": 5,
+      "cells": [
+        "l",
+        null,
+        "n",
+        null,
+        "s",
+        null,
+        null,
+        null,
+        null,
+        "p",
+        null,
+        null,
+        "r",
+        "a",
+        null,
+        null,
+        null,
+        null,
+        "t",
+        null,
+        "s",
+        "l",
+        "e",
+        null,
+        null
+      ],
+      "answer": "eyJyb3dzIjpbImx1bmdzIiwidXN1cnAiLCJtdXJhbCIsInBhc3RhIiwic2xlZXQiXX0="
+    },
+    "extreme": {
+      "size": 5,
+      "cells": [
+        null,
+        "o",
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        "h",
+        null,
+        null,
+        "l",
+        null,
+        null,
+        "t",
+        "h",
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        "l",
+        null
+      ],
+      "answer": "eyJyb3dzIjpbImZvaXN0IiwibHVuY2giLCJpZ2xvbyIsInRoYXdzIiwic3R5bGUiXX0="
+    }
+  },
+  "fetchedAt": "2026-11-27T18:14:53.967Z"
+}

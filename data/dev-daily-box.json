@@ -1,0 +1,33 @@
+{
+  "date": "2026-11-27",
+  "byDifficulty": {
+    "easy": {
+      "sides": [
+        "obp",
+        "usk",
+        "tcl",
+        "ied"
+      ],
+      "par": 2
+    },
+    "hard": {
+      "sides": [
+        "sdt",
+        "nby",
+        "eal",
+        "ipo"
+      ],
+      "par": 2
+    },
+    "extreme": {
+      "sides": [
+        "rjm",
+        "net",
+        "ilc",
+        "afg"
+      ],
+      "par": 2
+    }
+  },
+  "fetchedAt": "2026-11-27T18:14:53.967Z"
+}

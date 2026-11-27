@@ -1,0 +1,21 @@
+{
+  "date": "2026-11-27",
+  "byDifficulty": {
+    "easy": {
+      "from": "bum",
+      "to": "rat",
+      "par": 3
+    },
+    "hard": {
+      "from": "potter",
+      "to": "tinker",
+      "par": 5
+    },
+    "extreme": {
+      "from": "frog",
+      "to": "toad",
+      "par": 7
+    }
+  },
+  "fetchedAt": "2026-11-27T18:14:51.284Z"
+}

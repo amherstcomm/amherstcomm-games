@@ -1,0 +1,84 @@
+{
+  "date": "2026-11-27",
+  "byDifficulty": {
+    "easy": {
+      "prompts": [
+        {
+          "x": "play",
+          "y": "shoot"
+        },
+        {
+          "x": "hunch",
+          "y": "slash"
+        },
+        {
+          "x": "chair",
+          "y": "grove"
+        },
+        {
+          "x": "life",
+          "y": "rail"
+        },
+        {
+          "x": "blow",
+          "y": "placement"
+        }
+      ],
+      "answers": "WyJvZmYiLCJiYWNrIiwibWFuIiwiZ3VhcmQiLCJvdXQiXQ==",
+      "hints": 3
+    },
+    "hard": {
+      "prompts": [
+        {
+          "x": "skin",
+          "y": "strong"
+        },
+        {
+          "x": "stream",
+          "y": "feed"
+        },
+        {
+          "x": "pass",
+          "y": "store"
+        },
+        {
+          "x": "child",
+          "y": "place"
+        },
+        {
+          "x": "foot",
+          "y": "father"
+        }
+      ],
+      "answers": "WyJoZWFkIiwibGluZSIsImJvb2siLCJiaXJ0aCIsInN0ZXAiXQ==",
+      "hints": 1
+    },
+    "extreme": {
+      "prompts": [
+        {
+          "x": "low",
+          "y": "fall"
+        },
+        {
+          "x": "hold",
+          "y": "use"
+        },
+        {
+          "x": "bed",
+          "y": "long"
+        },
+        {
+          "x": "patch",
+          "y": "book"
+        },
+        {
+          "x": "sad",
+          "y": "ounce"
+        }
+      ],
+      "answers": "WyJkb3duIiwib3ZlciIsInNpZGUiLCJ3b3JrIiwiZGVuIl0=",
+      "hints": 0
+    }
+  },
+  "fetchedAt": "2026-11-27T18:14:53.967Z"
+}

@@ -1,0 +1,84 @@
+{
+  "date": "2026-11-27",
+  "byDifficulty": {
+    "easy": {
+      "prompts": [
+        {
+          "x": "mark",
+          "y": "state"
+        },
+        {
+          "x": "play",
+          "y": "yard"
+        },
+        {
+          "x": "winter",
+          "y": "table"
+        },
+        {
+          "x": "gun",
+          "y": "work"
+        },
+        {
+          "x": "consult",
+          "y": "elope"
+        }
+      ],
+      "answers": "WyJkb3duIiwiYmFjayIsInRpbWUiLCJmaXJlIiwiYW50Il0=",
+      "hints": 3
+    },
+    "hard": {
+      "prompts": [
+        {
+          "x": "red",
+          "y": "stone"
+        },
+        {
+          "x": "body",
+          "y": "sheet"
+        },
+        {
+          "x": "print",
+          "y": "perform"
+        },
+        {
+          "x": "feat",
+          "y": "ring"
+        },
+        {
+          "x": "dog",
+          "y": "keeper"
+        }
+      ],
+      "answers": "WyJoZWFkIiwid29yayIsIm91dCIsImhlciIsImhvdXNlIl0=",
+      "hints": 1
+    },
+    "extreme": {
+      "prompts": [
+        {
+          "x": "trap",
+          "y": "man"
+        },
+        {
+          "x": "ring",
+          "y": "track"
+        },
+        {
+          "x": "under",
+          "y": "port"
+        },
+        {
+          "x": "knee",
+          "y": "ability"
+        },
+        {
+          "x": "child",
+          "y": "read"
+        }
+      ],
+      "answers": "WyJkb29yIiwic2lkZSIsInBhc3MiLCJjYXAiLCJwcm9vZiJd",
+      "hints": 0
+    }
+  },
+  "fetchedAt": "2026-11-27T18:14:51.284Z"
+}

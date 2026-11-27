@@ -1,0 +1,33 @@
+{
+  "date": "2026-11-27",
+  "byDifficulty": {
+    "easy": {
+      "sides": [
+        "ovt",
+        "ies",
+        "nrl",
+        "caf"
+      ],
+      "par": 2
+    },
+    "hard": {
+      "sides": [
+        "ezh",
+        "otr",
+        "isa",
+        "mnl"
+      ],
+      "par": 2
+    },
+    "extreme": {
+      "sides": [
+        "rah",
+        "ost",
+        "inl",
+        "ecm"
+      ],
+      "par": 2
+    }
+  },
+  "fetchedAt": "2026-11-27T18:14:51.284Z"
+}

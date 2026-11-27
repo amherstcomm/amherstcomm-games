@@ -1,0 +1,42 @@
+{
+  "date": "2026-11-27",
+  "byDifficulty": {
+    "easy": {
+      "center": "c",
+      "outers": [
+        "p",
+        "e",
+        "u",
+        "d",
+        "r",
+        "o"
+      ],
+      "words": 87
+    },
+    "hard": {
+      "center": "a",
+      "outers": [
+        "u",
+        "g",
+        "l",
+        "r",
+        "e",
+        "b"
+      ],
+      "words": 104
+    },
+    "extreme": {
+      "center": "a",
+      "outers": [
+        "e",
+        "n",
+        "p",
+        "t",
+        "l",
+        "i"
+      ],
+      "words": 117
+    }
+  },
+  "fetchedAt": "2026-11-27T18:14:53.967Z"
+}
